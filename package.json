@@ -1,0 +1,71 @@
+{
+  "name": "episode-metadata-api",
+  "version": "1.0.0",
+  "description": "Episode metadata storage API for Prime Studios - Styling Adventures w Lala",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "nodemon src/app.js",
+    "start": "node src/app.js",
+    "test": "cross-env NODE_ENV=test jest --coverage --runInBand",
+    "test:unit": "cross-env NODE_ENV=test jest tests/unit --runInBand",
+    "test:integration": "cross-env NODE_ENV=test jest tests/integration --runInBand",
+    "test:watch": "cross-env NODE_ENV=test jest --watch",
+    "lint": "eslint src/ tests/",
+    "lint:fix": "eslint src/ tests/ --fix",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
+    "migrate": "node-pg-migrate",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create",
+    "seed": "node scripts/seed.js",
+    "db:verify": "node scripts/verify-db.js",
+    "docker:build": "docker build -t episode-metadata-api:latest .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env episode-metadata-api:latest"
+  },
+  "keywords": [
+    "api",
+    "metadata",
+    "video",
+    "production",
+    "fashion",
+    "lifestyle"
+  ],
+  "author": "Prime Studios",
+  "license": "PROPRIETARY",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "@opensearch-project/opensearch": "^3.5.1",
+    "aws-sdk": "^2.1693.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.3.1",
+    "express": "^4.18.2",
+    "express-rate-limit": "^7.1.5",
+    "helmet": "^7.1.0",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.1.0",
+    "multer": "^2.0.2",
+    "node-pg-migrate": "^8.0.4",
+    "pg": "^8.16.3",
+    "pg-hstore": "^2.3.4",
+    "pg-pool": "^3.6.1",
+    "sequelize": "^6.37.7",
+    "sharp": "^0.34.5",
+    "sqlite3": "^5.1.7",
+    "uuid": "^9.0.1",
+    "winston": "^3.11.0",
+    "winston-cloudwatch": "^6.2.0"
+  },
+  "devDependencies": {
+    "cross-env": "^10.1.0",
+    "eslint": "^8.55.0",
+    "eslint-config-prettier": "^9.1.0",
+    "jest": "^29.7.0",
+    "nodemon": "^3.0.2",
+    "prettier": "^3.1.1",
+    "supertest": "^6.3.3"
+  }
+}

@@ -1,0 +1,2876 @@
+# Episode Metadata Storage Solution - Project Roadmap
+
+## Document Control
+
+**Version:** 1.0  
+**Date:** December 31, 2025  
+**Status:** Approved - Implementation Ready  
+**Related Documents:** 
+- Episode Metadata Requirements & Design v2.0
+- Episode Metadata Technical Architecture v1.0
+
+---
+
+## 1. Executive Summary
+
+This roadmap provides a detailed, step-by-step implementation plan for the Episode Metadata Storage Solution. It is organized into phases with specific tasks, commands, and code examples to guide developers through the complete build process.
+
+**Total Timeline:** 8-10 weeks  
+**Team Size:** 1-2 developers  
+**Methodology:** Agile sprints (2-week iterations)
+
+---
+
+## 2. Environment Strategy
+
+### 2.1 Three-Environment Architecture
+
+This project uses a **development → staging → production** pipeline for safe, reliable deployments.
+
+| Environment | Purpose | Infrastructure | Branch | Deployment | Cost/Month |
+|-------------|---------|----------------|--------|------------|------------|
+| **Development** | Local feature development | Docker containers | feature/* | Manual (npm run dev) | $0 |
+| **Staging** | Integration testing, QA, pre-production validation | AWS (smaller instances) | develop | Auto on merge | $150-250 |
+| **Production** | Live system, real users | AWS (production-grade, Multi-AZ) | main | Manual approval | $400-600 |
+
+### 2.2 Environment Differences
+
+| Component | Development | Staging | Production |
+|-----------|-------------|---------|------------|
+| **Database** | Local PostgreSQL | RDS db.t3.small (Single-AZ) | RDS db.t3.medium (Multi-AZ) |
+| **ECS Tasks** | N/A (local) | 1 task, 512 CPU, 1GB RAM | 2-4 tasks, 512 CPU, 1GB RAM, auto-scaling |
+| **S3 Buckets** | episode-metadata-storage-dev | episode-metadata-storage-staging | episode-metadata-storage-production |
+| **Cognito** | episode-metadata-users-dev | episode-metadata-users-staging | episode-metadata-users-production |
+| **Domain** | localhost:3000 | api-staging.example.com | api.example.com |
+| **SSL** | No | Yes (ACM certificate) | Yes (ACM certificate) |
+| **Backups** | No | 1 day retention | 7 day retention + monthly archives |
+| **Monitoring** | Console logs only | CloudWatch basic | CloudWatch + alarms + dashboards |
+| **Data** | Seed/fake data | Sanitized production clone | Real production data |
+
+### 2.3 Deployment Flow
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    DEVELOPMENT (Local)                           │
+│  Developer laptop → Docker → npm run dev → Local testing        │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                    git push feature/xyz
+                             │
+                             ▼
+                    ┌────────────────┐
+                    │  Pull Request  │
+                    │  to develop    │
+                    └────────┬───────┘
+                             │
+                      Code Review
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    STAGING (AWS)                                 │
+│  develop branch → GitHub Actions → Build → ECR → ECS Deploy     │
+│  → Automated tests → QA validation → Stakeholder review         │
+└────────────────────────────┬────────────────────────────────────┘
+                             │
+                    All tests pass
+                             │
+                             ▼
+                    ┌────────────────┐
+                    │  Pull Request  │
+                    │  to main       │
+                    └────────┬───────┘
+                             │
+                  Code Review + Approval
+                             │
+                             ▼
+┌─────────────────────────────────────────────────────────────────┐
+│                    PRODUCTION (AWS)                              │
+│  main branch → GitHub Actions → Build → ECR → Manual Approval   │
+│  → ECS Deploy → Health checks → Monitoring                      │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 2.4 Why Three Environments?
+
+**Development (Local):**
+- ✅ Fast feedback loop
+- ✅ Work offline
+- ✅ No AWS costs
+- ❌ Can't test AWS services (S3, Lambda, Cognito)
+- ❌ Different from production
+
+**Staging (AWS):**
+- ✅ Exact replica of production architecture
+- ✅ Test AWS integrations (S3, Lambda, SQS, Cognito)
+- ✅ Test database migrations safely
+- ✅ QA and stakeholder validation
+- ✅ Practice deployments and rollbacks
+- ✅ Load testing without affecting users
+- ✅ Test with realistic data
+- ❌ Costs ~$200/month
+
+**Production (AWS):**
+- ✅ Real user traffic
+- ✅ High availability (Multi-AZ)
+- ✅ Comprehensive backups
+- ✅ Full monitoring and alerting
+- ❌ Can't experiment or take risks
+- ❌ Costs ~$500/month
+
+### 2.5 Environment Promotion Strategy
+
+**Feature Development:**
+```bash
+# 1. Create feature branch from develop
+git checkout develop
+git pull
+git checkout -b feature/outfit-search
+
+# 2. Develop and test locally
+npm run dev
+npm test
+
+# 3. Push and create PR to develop
+git push origin feature/outfit-search
+# Create PR on GitHub
+
+# 4. After approval, merge to develop
+# GitHub Actions automatically deploys to STAGING
+
+# 5. Test in staging
+curl https://api-staging.example.com/api/v1/outfits
+npm run test:integration -- --baseUrl=https://api-staging.example.com
+
+# 6. If staging tests pass, create PR to main
+git checkout develop
+git pull
+git checkout -b release/v1.2.0
+git push origin release/v1.2.0
+# Create PR from release/v1.2.0 to main
+
+# 7. After approval, merge to main
+# GitHub Actions deploys to PRODUCTION (with manual approval gate)
+```
+
+### 2.6 Data Strategy by Environment
+
+**Development:**
+- Seed data via `npm run seed`
+- 10-20 sample episodes
+- 50-100 sample clips
+- 20-30 sample outfits
+- Fake names and data
+
+**Staging:**
+- **Option A**: Clone sanitized production data monthly
+- **Option B**: Curated realistic test dataset
+- Use same data structure as production
+- Scrub any PII if using production clone
+
+**Production:**
+- Real user data
+- Regular backups
+- Strict access controls
+- Audit logging
+
+---
+
+## 3. Project Phases Overview
+
+| Phase | Duration | Focus | Deliverables |
+|-------|----------|-------|--------------|
+| **Phase 0: Setup** | Week 1 | Infrastructure & repository setup | Dev/Staging/Prod AWS resources, Git repo, CI/CD pipeline |
+| **Phase 1: Foundation** | Week 2-3 | Database & core API | Database schema, authentication, basic CRUD |
+| **Phase 2: Core Features** | Week 4-5 | Episodes, outfits, clips | Main entities, relationships, search |
+| **Phase 3: Assets** | Week 6 | UI elements, backgrounds, components | Asset management, linking |
+| **Phase 4: Media** | Week 7 | File upload, thumbnails | S3 integration, thumbnail generation |
+| **Phase 5: Polish** | Week 8 | Testing, monitoring, docs | Tests, monitoring, deployment |
+| **Phase 6: Launch** | Week 9-10 | Staging → Production | Final testing, production deployment |
+
+---
+
+## 4. Phase 0: Infrastructure Setup - All Environments (Week 1)
+
+### 3.1 AWS Account Setup
+
+**Objective:** Prepare AWS infrastructure for ALL environments (dev, staging, production)
+
+**Important:** We'll create resources for development first, then replicate for staging and production with appropriate sizing.
+
+---
+
+#### 3.1.1 Environment Naming Convention
+
+All AWS resources follow this pattern:
+```
+resource-type-{environment}
+
+Examples:
+- episode-metadata-vpc-dev
+- episode-metadata-vpc-staging
+- episode-metadata-vpc-production
+- episode-metadata-db-dev
+- episode-metadata-db-staging
+- episode-metadata-db-production
+```
+
+---
+
+#### 3.1.2 Create VPCs (All Environments)
+
+**Development VPC:**
+
+```bash
+# Login to AWS Console
+# Navigate to us-east-1 region
+
+# Create VPC
+aws ec2 create-vpc \
+  --cidr-block 10.0.0.0/16 \
+  --tag-specifications 'ResourceType=vpc,Tags=[{Key=Name,Value=episode-metadata-vpc-dev},{Key=Environment,Value=development}]'
+
+# Note the VPC ID from output
+export VPC_ID_DEV=vpc-xxxxxxxxx
+
+# Create Internet Gateway
+aws ec2 create-internet-gateway \
+  --tag-specifications 'ResourceType=internet-gateway,Tags=[{Key=Name,Value=episode-metadata-igw-dev},{Key=Environment,Value=development}]'
+
+export IGW_ID_DEV=igw-xxxxxxxxx
+
+# Attach to VPC
+aws ec2 attach-internet-gateway \
+  --vpc-id $VPC_ID_DEV \
+  --internet-gateway-id $IGW_ID_DEV
+
+# Create Public Subnets
+aws ec2 create-subnet \
+  --vpc-id $VPC_ID_DEV \
+  --cidr-block 10.0.1.0/24 \
+  --availability-zone us-east-1a \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=episode-metadata-public-1a-dev}]'
+
+export PUBLIC_SUBNET_1A_DEV=subnet-xxxxxxxxx
+
+aws ec2 create-subnet \
+  --vpc-id $VPC_ID_DEV \
+  --cidr-block 10.0.2.0/24 \
+  --availability-zone us-east-1b \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=episode-metadata-public-1b-dev}]'
+
+export PUBLIC_SUBNET_1B_DEV=subnet-xxxxxxxxx
+
+# Create Private Subnets
+aws ec2 create-subnet \
+  --vpc-id $VPC_ID_DEV \
+  --cidr-block 10.0.10.0/24 \
+  --availability-zone us-east-1a \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=episode-metadata-private-1a-dev}]'
+
+export PRIVATE_SUBNET_1A_DEV=subnet-xxxxxxxxx
+
+aws ec2 create-subnet \
+  --vpc-id $VPC_ID_DEV \
+  --cidr-block 10.0.20.0/24 \
+  --availability-zone us-east-1b \
+  --tag-specifications 'ResourceType=subnet,Tags=[{Key=Name,Value=episode-metadata-private-1b-dev}]'
+
+export PRIVATE_SUBNET_1B_DEV=subnet-xxxxxxxxx
+
+# Create NAT Gateway (for private subnets)
+aws ec2 allocate-address --domain vpc --tag-specifications 'ResourceType=elastic-ip,Tags=[{Key=Name,Value=episode-metadata-nat-eip-dev}]'
+
+export EIP_ALLOC_ID_DEV=eipalloc-xxxxxxxxx
+
+aws ec2 create-nat-gateway \
+  --subnet-id $PUBLIC_SUBNET_1A_DEV \
+  --allocation-id $EIP_ALLOC_ID_DEV \
+  --tag-specifications 'ResourceType=natgateway,Tags=[{Key=Name,Value=episode-metadata-nat-1a-dev}]'
+
+export NAT_GW_ID_DEV=nat-xxxxxxxxx
+
+# Wait for NAT Gateway to be available
+aws ec2 wait nat-gateway-available --nat-gateway-ids $NAT_GW_ID_DEV
+
+# Create Route Tables
+aws ec2 create-route-table \
+  --vpc-id $VPC_ID_DEV \
+  --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=episode-metadata-public-rt-dev}]'
+
+export PUBLIC_RT_DEV=rtb-xxxxxxxxx
+
+aws ec2 create-route-table \
+  --vpc-id $VPC_ID_DEV \
+  --tag-specifications 'ResourceType=route-table,Tags=[{Key=Name,Value=episode-metadata-private-rt-dev}]'
+
+export PRIVATE_RT_DEV=rtb-xxxxxxxxx
+
+# Add routes
+aws ec2 create-route \
+  --route-table-id $PUBLIC_RT_DEV \
+  --destination-cidr-block 0.0.0.0/0 \
+  --gateway-id $IGW_ID_DEV
+
+aws ec2 create-route \
+  --route-table-id $PRIVATE_RT_DEV \
+  --destination-cidr-block 0.0.0.0/0 \
+  --nat-gateway-id $NAT_GW_ID_DEV
+
+# Associate subnets with route tables
+aws ec2 associate-route-table \
+  --route-table-id $PUBLIC_RT_DEV \
+  --subnet-id $PUBLIC_SUBNET_1A_DEV
+
+aws ec2 associate-route-table \
+  --route-table-id $PUBLIC_RT_DEV \
+  --subnet-id $PUBLIC_SUBNET_1B_DEV
+
+aws ec2 associate-route-table \
+  --route-table-id $PRIVATE_RT_DEV \
+  --subnet-id $PRIVATE_SUBNET_1A_DEV
+
+aws ec2 associate-route-table \
+  --route-table-id $PRIVATE_RT_DEV \
+  --subnet-id $PRIVATE_SUBNET_1B_DEV
+```
+
+**Staging VPC (Identical structure):**
+
+```bash
+# Repeat above commands with:
+# - VPC CIDR: 10.1.0.0/16
+# - All tags: Environment=staging
+# - All names: *-staging
+# - Subnets: 10.1.1.0/24, 10.1.2.0/24, 10.1.10.0/24, 10.1.20.0/24
+```
+
+**Production VPC (Identical structure, Multi-AZ NAT):**
+
+```bash
+# Repeat with:
+# - VPC CIDR: 10.2.0.0/16
+# - All tags: Environment=production
+# - All names: *-production
+# - Subnets: 10.2.1.0/24, 10.2.2.0/24, 10.2.10.0/24, 10.2.20.0/24
+# - IMPORTANT: Add second NAT Gateway in AZ-B for high availability
+```
+
+**Automation Tip:** Create a bash script to replicate VPC setup:
+
+```bash
+#!/bin/bash
+# create-vpc.sh
+ENVIRONMENT=$1  # dev, staging, or production
+VPC_CIDR=$2     # 10.0.0.0/16, 10.1.0.0/16, 10.2.0.0/16
+
+# Script creates entire VPC with subnets, IGW, NAT, route tables
+# Usage: ./create-vpc.sh staging 10.1.0.0/16
+```
+
+---
+
+#### 3.1.3 Create S3 Buckets (All Environments)
+
+**Development:**
+```bash
+# Primary storage bucket
+aws s3 mb s3://episode-metadata-storage-dev --region us-east-1
+
+aws s3api put-bucket-versioning \
+  --bucket episode-metadata-storage-dev \
+  --versioning-configuration Status=Enabled
+
+aws s3api put-bucket-encryption \
+  --bucket episode-metadata-storage-dev \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+      }
+    }]
+  }'
+
+aws s3api put-bucket-tagging \
+  --bucket episode-metadata-storage-dev \
+  --tagging 'TagSet=[{Key=Environment,Value=development},{Key=Project,Value=episode-metadata}]'
+
+# Thumbnails bucket
+aws s3 mb s3://episode-metadata-thumbnails-dev --region us-east-1
+
+aws s3api put-bucket-encryption \
+  --bucket episode-metadata-thumbnails-dev \
+  --server-side-encryption-configuration '{
+    "Rules": [{
+      "ApplyServerSideEncryptionByDefault": {
+        "SSEAlgorithm": "AES256"
+      }
+    }]
+  }'
+
+# Configure CORS for uploads
+cat > cors.json << 'EOF'
+{
+  "CORSRules": [{
+    "AllowedOrigins": ["http://localhost:3000", "http://localhost:3001"],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE"],
+    "AllowedHeaders": ["*"],
+    "MaxAgeSeconds": 3000
+  }]
+}
+EOF
+
+aws s3api put-bucket-cors \
+  --bucket episode-metadata-storage-dev \
+  --cors-configuration file://cors.json
+```
+
+**Staging:**
+```bash
+# Repeat above with bucket names:
+# - episode-metadata-storage-staging
+# - episode-metadata-thumbnails-staging
+# Update CORS to include staging domain
+```
+
+**Production:**
+```bash
+# Repeat with bucket names:
+# - episode-metadata-storage-production
+# - episode-metadata-thumbnails-production
+# Update CORS to include production domain
+# Add lifecycle policies for cost optimization:
+
+cat > lifecycle.json << 'EOF'
+{
+  "Rules": [{
+    "Id": "MoveRawToGlacier",
+    "Status": "Enabled",
+    "Prefix": "raw/",
+    "Transitions": [{
+      "Days": 90,
+      "StorageClass": "GLACIER"
+    }]
+  },{
+    "Id": "MoveOthersToGlacier",
+    "Status": "Enabled",
+    "Prefix": "",
+    "Filter": {
+      "And": {
+        "Prefix": "",
+        "Tags": [{
+          "Key": "Archive",
+          "Value": "true"
+        }]
+      }
+    },
+    "Transitions": [{
+      "Days": 180,
+      "StorageClass": "GLACIER"
+    }]
+  }]
+}
+EOF
+
+aws s3api put-bucket-lifecycle-configuration \
+  --bucket episode-metadata-storage-production \
+  --lifecycle-configuration file://lifecycle.json
+```
+
+---
+
+#### 3.1.4 Create RDS PostgreSQL Instances (All Environments)
+
+**Development:**
+```bash
+# Create DB subnet group
+aws rds create-db-subnet-group \
+  --db-subnet-group-name episode-metadata-db-subnet-group-dev \
+  --db-subnet-group-description "Subnet group for dev database" \
+  --subnet-ids $PRIVATE_SUBNET_1A_DEV $PRIVATE_SUBNET_1B_DEV \
+  --tags Key=Environment,Value=development
+
+# Create security group for RDS
+aws ec2 create-security-group \
+  --group-name episode-metadata-db-sg-dev \
+  --description "Security group for dev RDS PostgreSQL" \
+  --vpc-id $VPC_ID_DEV
+
+export DB_SG_ID_DEV=sg-xxxxxxxxx
+
+# Allow PostgreSQL from private subnets
+aws ec2 authorize-security-group-ingress \
+  --group-id $DB_SG_ID_DEV \
+  --protocol tcp \
+  --port 5432 \
+  --cidr 10.0.10.0/24
+
+aws ec2 authorize-security-group-ingress \
+  --group-id $DB_SG_ID_DEV \
+  --protocol tcp \
+  --port 5432 \
+  --cidr 10.0.20.0/24
+
+# Create RDS instance (Single-AZ for dev)
+aws rds create-db-instance \
+  --db-instance-identifier episode-metadata-db-dev \
+  --db-instance-class db.t3.small \
+  --engine postgres \
+  --engine-version 15.4 \
+  --master-username postgres \
+  --master-user-password 'CHANGE_ME_DEV_PASSWORD_Min12Chars!' \
+  --allocated-storage 20 \
+  --storage-type gp3 \
+  --db-subnet-group-name episode-metadata-db-subnet-group-dev \
+  --vpc-security-group-ids $DB_SG_ID_DEV \
+  --backup-retention-period 1 \
+  --preferred-backup-window "03:00-04:00" \
+  --preferred-maintenance-window "sun:04:00-sun:05:00" \
+  --storage-encrypted \
+  --tags Key=Environment,Value=development
+
+# Wait for RDS (takes 5-10 minutes)
+aws rds wait db-instance-available --db-instance-identifier episode-metadata-db-dev
+```
+
+**Staging:**
+```bash
+# Similar to dev but:
+# - Instance: episode-metadata-db-staging
+# - Class: db.t3.small (same as dev)
+# - Single-AZ (staging doesn't need Multi-AZ)
+# - Backup retention: 1 day
+# - Storage: 20-50 GB
+```
+
+**Production:**
+```bash
+# Production with Multi-AZ:
+aws rds create-db-instance \
+  --db-instance-identifier episode-metadata-db-production \
+  --db-instance-class db.t3.medium \
+  --engine postgres \
+  --engine-version 15.4 \
+  --master-username postgres \
+  --master-user-password 'CHANGE_ME_PROD_PASSWORD_Strong!123' \
+  --allocated-storage 100 \
+  --max-allocated-storage 500 \
+  --storage-type gp3 \
+  --iops 3000 \
+  --db-subnet-group-name episode-metadata-db-subnet-group-production \
+  --vpc-security-group-ids $DB_SG_ID_PRODUCTION \
+  --backup-retention-period 7 \
+  --preferred-backup-window "03:00-04:00" \
+  --preferred-maintenance-window "sun:04:00-sun:05:00" \
+  --storage-encrypted \
+  --multi-az \
+  --deletion-protection \
+  --enable-cloudwatch-logs-exports '["postgresql"]' \
+  --tags Key=Environment,Value=production Key=Backup,Value=critical
+
+# Enable automated minor version upgrades
+aws rds modify-db-instance \
+  --db-instance-identifier episode-metadata-db-production \
+  --auto-minor-version-upgrade \
+  --apply-immediately
+```
+
+**Get Database Endpoints:**
+```bash
+# Development
+aws rds describe-db-instances \
+  --db-instance-identifier episode-metadata-db-dev \
+  --query 'DBInstances[0].Endpoint.Address' \
+  --output text
+
+# Staging
+aws rds describe-db-instances \
+  --db-instance-identifier episode-metadata-db-staging \
+  --query 'DBInstances[0].Endpoint.Address' \
+  --output text
+
+# Production
+aws rds describe-db-instances \
+  --db-instance-identifier episode-metadata-db-production \
+  --query 'DBInstances[0].Endpoint.Address' \
+  --output text
+```
+
+---
+
+#### 3.1.5 Create Cognito User Pools (All Environments)
+
+**Development:**
+```bash
+aws cognito-idp create-user-pool \
+  --pool-name episode-metadata-users-dev \
+  --policies '{
+    "PasswordPolicy": {
+      "MinimumLength": 12,
+      "RequireUppercase": true,
+      "RequireLowercase": true,
+      "RequireNumbers": true,
+      "RequireSymbols": true
+    }
+  }' \
+  --username-attributes email \
+  --auto-verified-attributes email \
+  --mfa-configuration OPTIONAL \
+  --user-pool-tags Environment=development
+
+export USER_POOL_ID_DEV=us-east-1_XXXXXXXXX
+
+aws cognito-idp create-user-pool-client \
+  --user-pool-id $USER_POOL_ID_DEV \
+  --client-name episode-metadata-api-client-dev \
+  --explicit-auth-flows ALLOW_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH \
+  --access-token-validity 1 \
+  --id-token-validity 1 \
+  --refresh-token-validity 30 \
+  --token-validity-units '{
+    "AccessToken": "hours",
+    "IdToken": "hours",
+    "RefreshToken": "days"
+  }'
+
+export CLIENT_ID_DEV=xxxxxxxxxxxxxxxxxxxxxxxxxx
+
+# Create groups
+for group in admin editor viewer; do
+  aws cognito-idp create-group \
+    --user-pool-id $USER_POOL_ID_DEV \
+    --group-name $group \
+    --description "${group} group"
+done
+
+# Create first admin user
+aws cognito-idp admin-create-user \
+  --user-pool-id $USER_POOL_ID_DEV \
+  --username admin@example.com \
+  --user-attributes Name=email,Value=admin@example.com Name=email_verified,Value=true \
+  --temporary-password 'TempPassword123!' \
+  --message-action SUPPRESS
+
+# Add to admin group
+aws cognito-idp admin-add-user-to-group \
+  --user-pool-id $USER_POOL_ID_DEV \
+  --username admin@example.com \
+  --group-name admin
+```
+
+**Staging & Production:**
+```bash
+# Repeat for staging and production with appropriate naming
+# Production should have MFA REQUIRED:
+# --mfa-configuration ON
+```
+
+---
+
+#### 3.1.6 Create SQS Queues (All Environments)
+
+**Development:**
+```bash
+# Create main queue
+aws sqs create-queue \
+  --queue-name episode-metadata-thumbnail-queue-dev \
+  --attributes '{
+    "VisibilityTimeout": "300",
+    "MessageRetentionPeriod": "1209600"
+  }' \
+  --tags Environment=development
+
+export QUEUE_URL_DEV=$(aws sqs get-queue-url \
+  --queue-name episode-metadata-thumbnail-queue-dev \
+  --query 'QueueUrl' \
+  --output text)
+
+# Create DLQ
+aws sqs create-queue \
+  --queue-name episode-metadata-thumbnail-dlq-dev \
+  --attributes '{
+    "MessageRetentionPeriod": "1209600"
+  }'
+
+export DLQ_ARN_DEV=$(aws sqs get-queue-attributes \
+  --queue-url $(aws sqs get-queue-url --queue-name episode-metadata-thumbnail-dlq-dev --query 'QueueUrl' --output text) \
+  --attribute-names QueueArn \
+  --query 'Attributes.QueueArn' \
+  --output text)
+
+# Configure DLQ
+aws sqs set-queue-attributes \
+  --queue-url $QUEUE_URL_DEV \
+  --attributes "{
+    \"RedrivePolicy\": \"{\\\"deadLetterTargetArn\\\":\\\"$DLQ_ARN_DEV\\\",\\\"maxReceiveCount\\\":\\\"3\\\"}\"
+  }"
+```
+
+**Staging & Production:**
+```bash
+# Repeat with appropriate naming:
+# - episode-metadata-thumbnail-queue-staging
+# - episode-metadata-thumbnail-queue-production
+```
+
+---
+
+#### 3.1.7 Create Secrets in Secrets Manager (All Environments)
+
+**Development:**
+```bash
+aws secretsmanager create-secret \
+  --name episode-metadata/database-dev \
+  --description "Dev database credentials" \
+  --secret-string '{
+    "host": "episode-metadata-db-dev.xxxxxx.us-east-1.rds.amazonaws.com",
+    "port": 5432,
+    "database": "postgres",
+    "username": "postgres",
+    "password": "CHANGE_ME_DEV_PASSWORD_Min12Chars!"
+  }' \
+  --tags Key=Environment,Value=development
+
+aws secretsmanager create-secret \
+  --name episode-metadata/cognito-dev \
+  --description "Dev Cognito configuration" \
+  --secret-string "{
+    \"user_pool_id\": \"$USER_POOL_ID_DEV\",
+    \"client_id\": \"$CLIENT_ID_DEV\"
+  }" \
+  --tags Key=Environment,Value=development
+```
+
+**Staging:**
+```bash
+# Create secrets with staging values:
+# - episode-metadata/database-staging
+# - episode-metadata/cognito-staging
+```
+
+**Production:**
+```bash
+# Create secrets with production values:
+# - episode-metadata/database-production
+# - episode-metadata/cognito-production
+
+# IMPORTANT: Use strong, randomly generated passwords
+# Example: openssl rand -base64 32
+```
+
+---
+
+#### 3.1.8 Environment Summary & Costs
+
+**Resource Summary:**
+
+| Resource | Development | Staging | Production | Total |
+|----------|-------------|---------|------------|-------|
+| VPC | 1 | 1 | 1 | 3 |
+| NAT Gateway | 1 | 1 | 2 (Multi-AZ) | 4 |
+| RDS | db.t3.small | db.t3.small | db.t3.medium (Multi-AZ) | 3 |
+| S3 Buckets | 2 | 2 | 2 | 6 |
+| Cognito Pools | 1 | 1 | 1 | 3 |
+| SQS Queues | 2 | 2 | 2 | 6 |
+
+**Monthly Cost Estimate:**
+
+| Environment | Component | Monthly Cost |
+|-------------|-----------|--------------|
+| **Development** | Local (Docker) | $0 |
+| **Staging** | RDS db.t3.small | $35 |
+| | NAT Gateway | $32 |
+| | S3 (minimal data) | $10 |
+| | Other services | $13 |
+| | **Staging Total** | **~$90** |
+| **Production** | RDS db.t3.medium Multi-AZ | $150 |
+| | NAT Gateways (2) | $64 |
+| | S3 (growing data) | $50 |
+| | ECS Fargate (later) | $60-120 |
+| | ALB (later) | $20 |
+| | CloudWatch | $20 |
+| | Other services | $36 |
+| | **Production Total** | **~$400-460** |
+| **Grand Total** | | **~$490-550/month** |
+
+**Cost Optimization Tips:**
+1. **Dev**: Use local Docker (no AWS costs)
+2. **Staging**: Stop overnight/weekends (save 60%)
+3. **Production**: Reserved Instances for RDS (save 30-40%)
+4. **All**: Regular review and cleanup of unused resources
+
+**Validation Checklist:**
+- [ ] All VPCs created with proper CIDR blocks
+- [ ] Subnets in multiple AZs
+- [ ] NAT Gateways operational
+- [ ] Route tables configured
+- [ ] S3 buckets created with encryption
+- [ ] RDS instances available
+- [ ] Cognito pools created with admin users
+- [ ] SQS queues created with DLQs
+- [ ] Secrets stored in Secrets Manager
+- [ ] All resources tagged with Environment
+- [ ] Cost alerts configured
+
+---
+
+### 3.2 GitHub Repository Setup
+
+**Objective:** Initialize project repository and structure
+
+**3.2.1 Create Repository**
+
+```bash
+# On GitHub.com, create new repository: episode-metadata-api
+
+# Clone locally
+git clone git@github.com:your-org/episode-metadata-api.git
+cd episode-metadata-api
+```
+
+**3.2.2 Initialize Project Structure**
+
+```bash
+# Create directory structure
+mkdir -p src/{config,middleware,routes,controllers,services,models,utils}
+mkdir -p migrations
+mkdir -p tests/{unit,integration,fixtures}
+mkdir -p scripts
+mkdir -p .github/workflows
+
+# Create initial files
+touch src/app.js
+touch src/config/{database.js,aws.js,environment.js}
+touch src/middleware/{auth.js,errorHandler.js,validation.js,softDelete.js,rateLimit.js}
+touch src/utils/{logger.js,validators.js,constants.js}
+touch tests/setup.js
+touch .env.example
+touch .gitignore
+touch README.md
+touch Dockerfile
+touch .dockerignore
+touch docker-compose.yml
+```
+
+**3.2.3 Initialize Node.js Project**
+
+```bash
+npm init -y
+
+# Update package.json
+cat > package.json << 'EOF'
+{
+  "name": "episode-metadata-api",
+  "version": "1.0.0",
+  "description": "Episode metadata storage API for fashion/lifestyle video production",
+  "main": "src/app.js",
+  "scripts": {
+    "dev": "nodemon src/app.js",
+    "start": "node src/app.js",
+    "test": "NODE_ENV=test jest --coverage --runInBand",
+    "test:unit": "NODE_ENV=test jest tests/unit --runInBand",
+    "test:integration": "NODE_ENV=test jest tests/integration --runInBand",
+    "test:watch": "NODE_ENV=test jest --watch",
+    "lint": "eslint src/ tests/",
+    "lint:fix": "eslint src/ tests/ --fix",
+    "format": "prettier --write \"src/**/*.js\" \"tests/**/*.js\"",
+    "migrate": "node-pg-migrate",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create",
+    "seed": "node scripts/seed.js",
+    "docker:build": "docker build -t episode-metadata-api .",
+    "docker:run": "docker run -p 3000:3000 --env-file .env episode-metadata-api"
+  },
+  "keywords": ["api", "metadata", "video", "production"],
+  "author": "Your Team",
+  "license": "PROPRIETARY",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=9.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "pg": "^8.11.3",
+    "pg-pool": "^3.6.1",
+    "dotenv": "^16.3.1",
+    "joi": "^17.11.0",
+    "jsonwebtoken": "^9.0.2",
+    "jwks-rsa": "^3.1.0",
+    "aws-sdk": "^2.1498.0",
+    "winston": "^3.11.0",
+    "winston-cloudwatch": "^6.2.0",
+    "express-rate-limit": "^7.1.5",
+    "rate-limit-redis": "^4.2.0",
+    "redis": "^4.6.11",
+    "cors": "^2.8.5",
+    "helmet": "^7.1.0",
+    "uuid": "^9.0.1",
+    "node-pg-migrate": "^6.2.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2",
+    "jest": "^29.7.0",
+    "supertest": "^6.3.3",
+    "eslint": "^8.55.0",
+    "eslint-config-prettier": "^9.1.0",
+    "prettier": "^3.1.1"
+  }
+}
+EOF
+
+# Install dependencies
+npm install
+```
+
+**3.2.4 Create Configuration Files**
+
+**.gitignore**
+```bash
+cat > .gitignore << 'EOF'
+# Dependencies
+node_modules/
+package-lock.json
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build
+dist/
+build/
+
+# Misc
+.cache/
+temp/
+tmp/
+EOF
+```
+
+**.env.example**
+```bash
+cat > .env.example << 'EOF'
+# Application
+NODE_ENV=development
+PORT=3000
+API_VERSION=v1
+ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001
+
+# Database
+DATABASE_URL=postgresql://postgres:password@localhost:5432/episode_metadata_dev
+DATABASE_POOL_MIN=2
+DATABASE_POOL_MAX=10
+
+# AWS
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_dev_access_key
+AWS_SECRET_ACCESS_KEY=your_dev_secret_key
+S3_PRIMARY_BUCKET=episode-metadata-storage-dev
+S3_THUMBNAIL_BUCKET=episode-metadata-thumbnails-dev
+
+# Cognito
+COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
+COGNITO_CLIENT_ID=xxxxxxxxxxxxxxxxxxxxxxxxxx
+COGNITO_REGION=us-east-1
+
+# SQS
+THUMBNAIL_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/123456789/episode-metadata-thumbnail-queue-dev
+
+# Redis (optional - for rate limiting)
+REDIS_URL=redis://localhost:6379
+
+# Logging
+LOG_LEVEL=debug
+CLOUDWATCH_LOG_GROUP=/ecs/episode-metadata-api
+CLOUDWATCH_LOG_STREAM=api-local
+EOF
+```
+
+**.eslintrc.js**
+```bash
+cat > .eslintrc.js << 'EOF'
+module.exports = {
+  env: {
+    node: true,
+    es2021: true,
+    jest: true
+  },
+  extends: ['eslint:recommended', 'prettier'],
+  parserOptions: {
+    ecmaVersion: 2021,
+    sourceType: 'module'
+  },
+  rules: {
+    'no-console': process.env.NODE_ENV === 'production' ? 'warn' : 'off',
+    'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
+    'prefer-const': 'error',
+    'no-var': 'error'
+  }
+};
+EOF
+```
+
+**.prettierrc**
+```bash
+cat > .prettierrc << 'EOF'
+{
+  "semi": true,
+  "trailingComma": "es5",
+  "singleQuote": true,
+  "printWidth": 100,
+  "tabWidth": 2
+}
+EOF
+```
+
+**jest.config.js**
+```bash
+cat > jest.config.js << 'EOF'
+module.exports = {
+  testEnvironment: 'node',
+  coverageDirectory: 'coverage',
+  collectCoverageFrom: [
+    'src/**/*.js',
+    '!src/app.js'
+  ],
+  testMatch: [
+    '**/tests/**/*.test.js'
+  ],
+  setupFilesAfterEnv: ['./tests/setup.js']
+};
+EOF
+```
+
+**docker-compose.yml**
+```bash
+cat > docker-compose.yml << 'EOF'
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: episode_metadata_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
+EOF
+```
+
+**Dockerfile**
+```bash
+cat > Dockerfile << 'EOF'
+# Build stage
+FROM node:20-alpine AS builder
+
+WORKDIR /app
+
+COPY package*.json ./
+RUN npm ci --only=production
+
+COPY src ./src
+
+# Production stage
+FROM node:20-alpine
+
+WORKDIR /app
+
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/src ./src
+COPY package*.json ./
+
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+USER nodejs
+
+EXPOSE 3000
+
+HEALTHCHECK --interval=30s --timeout=3s --start-period=40s \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => {process.exit(r.statusCode === 200 ? 0 : 1)})"
+
+CMD ["node", "src/app.js"]
+EOF
+```
+
+**.dockerignore**
+```bash
+cat > .dockerignore << 'EOF'
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.example
+tests/
+coverage/
+.github/
+README.md
+docker-compose.yml
+Dockerfile
+.dockerignore
+*.md
+EOF
+```
+
+**README.md**
+```bash
+cat > README.md << 'EOF'
+# Episode Metadata Storage API
+
+API for managing fashion and lifestyle video production metadata.
+
+## Setup
+
+```bash
+# Install dependencies
+npm install
+
+# Copy environment file
+cp .env.example .env
+# Edit .env with your values
+
+# Start database
+docker-compose up -d postgres
+
+# Run migrations
+npm run migrate:up
+
+# Start development server
+npm run dev
+```
+
+## Development
+
+- `npm run dev` - Start dev server with hot reload
+- `npm test` - Run tests
+- `npm run lint` - Lint code
+- `npm run migrate:create <name>` - Create new migration
+
+## Documentation
+
+See `/docs` for detailed documentation.
+EOF
+```
+
+**3.2.5 Commit Initial Structure**
+
+```bash
+git add .
+git commit -m "Initial project structure"
+git push origin main
+git checkout -b develop
+git push origin develop
+```
+
+**Validation:**
+- [ ] GitHub repository created
+- [ ] Project structure initialized
+- [ ] Dependencies installed
+- [ ] Configuration files created
+- [ ] Initial commit pushed
+
+---
+
+### 3.3 CI/CD Pipeline Setup
+
+**Objective:** Configure GitHub Actions workflow
+
+**3.3.1 Create GitHub Actions Workflow**
+
+```bash
+cat > .github/workflows/ci-cd.yml << 'EOF'
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  AWS_REGION: us-east-1
+  ECR_REPOSITORY: episode-metadata-api
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: episode_metadata_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run linter
+        run: npm run lint
+      
+      - name: Run migrations
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/episode_metadata_test
+        run: npm run migrate:up
+      
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://postgres:password@localhost:5432/episode_metadata_test
+          NODE_ENV: test
+        run: npm test
+      
+      - name: Upload coverage
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./coverage/lcov.info
+
+  build-and-push:
+    name: Build and Push Docker Image
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    
+    steps:
+      - uses: actions/checkout@v3
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v1
+      
+      - name: Build, tag, and push image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+
+  deploy-staging:
+    name: Deploy to Staging
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/develop'
+    environment: staging
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster episode-metadata-cluster-staging \
+            --service episode-metadata-api-service \
+            --force-new-deployment
+
+  deploy-production:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_PROD_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_PROD_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+      
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster episode-metadata-cluster-production \
+            --service episode-metadata-api-service \
+            --force-new-deployment
+      
+      - name: Verify deployment
+        run: |
+          aws ecs wait services-stable \
+            --cluster episode-metadata-cluster-production \
+            --services episode-metadata-api-service
+EOF
+```
+
+**3.3.2 Add GitHub Secrets**
+
+```bash
+# In GitHub repository settings → Secrets and variables → Actions
+
+# Add secrets:
+AWS_ACCESS_KEY_ID=<your-dev-access-key>
+AWS_SECRET_ACCESS_KEY=<your-dev-secret-key>
+AWS_PROD_ACCESS_KEY_ID=<your-prod-access-key>
+AWS_PROD_SECRET_ACCESS_KEY=<your-prod-secret-key>
+```
+
+**3.3.3 Create ECR Repository**
+
+```bash
+aws ecr create-repository \
+  --repository-name episode-metadata-api \
+  --region us-east-1
+
+# Note the repository URI
+export ECR_REPO_URI=$(aws ecr describe-repositories \
+  --repository-names episode-metadata-api \
+  --query 'repositories[0].repositoryUri' \
+  --output text)
+
+echo "ECR Repository: $ECR_REPO_URI"
+```
+
+**Validation:**
+- [ ] GitHub Actions workflow created
+- [ ] GitHub secrets configured
+- [ ] ECR repository created
+- [ ] Pipeline runs successfully on push
+
+---
+
+## Phase 0 Complete! ✓
+
+**Deliverables:**
+- ✓ AWS infrastructure (VPC, RDS, S3, Cognito, SQS)
+- ✓ GitHub repository with project structure
+- ✓ CI/CD pipeline configured
+- ✓ Development environment ready
+
+**Time to Complete:** ~1 week (including AWS resource provisioning wait times)
+
+---
+
+## 5. Phase 1: Foundation (Week 2-3)
+
+### 4.1 Database Setup
+
+**Objective:** Create database schema and migrations
+
+**4.1.1 Configure Database Connection**
+
+```javascript
+// src/config/database.js
+const { Pool } = require('pg');
+const logger = require('../utils/logger');
+
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  min: parseInt(process.env.DATABASE_POOL_MIN) || 2,
+  max: parseInt(process.env.DATABASE_POOL_MAX) || 10,
+  idleTimeoutMillis: 30000,
+  connectionTimeoutMillis: 2000,
+});
+
+pool.on('connect', () => {
+  logger.info('Database connection established');
+});
+
+pool.on('error', (err) => {
+  logger.error('Unexpected database error', { error: err.message });
+});
+
+module.exports = pool;
+```
+
+**4.1.2 Create Database Migrations**
+
+```bash
+# Create first migration - shows table
+npm run migrate:create create-shows-table
+```
+
+Edit the migration file:
+
+```javascript
+// migrations/XXXXXX_create-shows-table.js
+exports.up = (pgm) => {
+  pgm.createTable('shows', {
+    show_id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+    name: { type: 'varchar(255)', notNull: true, unique: true },
+    description: { type: 'text' },
+    status: { type: 'varchar(50)', default: "'active'" },
+    created_at: { type: 'timestamp with time zone', default: pgm.func('NOW()') },
+    updated_at: { type: 'timestamp with time zone', default: pgm.func('NOW()') },
+    deleted_at: { type: 'timestamp with time zone' },
+    deleted_by: { type: 'uuid' },
+    deleted_reason: { type: 'text' },
+    restored_at: { type: 'timestamp with time zone' },
+    restored_by: { type: 'uuid' },
+    metadata: { type: 'jsonb', default: "'{}'" }
+  });
+
+  pgm.addConstraint('shows', 'shows_status_check', {
+    check: "status IN ('active', 'archived', 'on_hold')"
+  });
+
+  pgm.createIndex('shows', 'status', { where: 'deleted_at IS NULL' });
+  pgm.createIndex('shows', 'deleted_at');
+  pgm.createIndex('shows', 'metadata', { method: 'gin' });
+};
+
+exports.down = (pgm) => {
+  pgm.dropTable('shows');
+};
+```
+
+```bash
+# Create episodes migration
+npm run migrate:create create-episodes-table
+```
+
+```javascript
+// migrations/XXXXXX_create-episodes-table.js
+exports.up = (pgm) => {
+  pgm.createTable('episodes', {
+    episode_id: { type: 'uuid', primaryKey: true, default: pgm.func('gen_random_uuid()') },
+    show_id: { 
+      type: 'uuid', 
+      notNull: true,
+      references: 'shows(show_id)'
+    },
+    title: { type: 'varchar(500)', notNull: true },
+    episode_number: { type: 'integer', notNull: true },
+    season_number: { type: 'integer', default: 1 },
+    status: { type: 'varchar(50)', default: "'draft'" },
+    description: { type: 'text' },
+    duration_seconds: { type: 'integer' },
+    filming_date: { type: 'date' },
+    edit_deadline: { type: 'date' },
+    publish_date: { type: 'date' },
+    released_at: { type: 'timestamp with time zone' },
+    script_text: { type: 'text' },
+    script_file_reference: { type: 'varchar(1024)' },
+    trailer_reference: { type: 'varchar(1024)' },
+    thumbnail_reference: { type: 'varchar(1024)' },
+    tags: { type: 'text[]' },
+    category: { type: 'varchar(100)' },
+    language: { type: 'varchar(10)', default: "'en-US'" },
+    copyright: { type: 'text' },
+    approval_status: { type: 'varchar(50)', default: "'approved'" },
+    uploaded_by: { type: 'uuid' },
+    original_approver: { type: 'uuid' },
+    created_at: { type: 'timestamp with time zone', default: pgm.func('NOW()') },
+    updated_at: { type: 'timestamp with time zone', default: pgm.func('NOW()') },
+    created_by: { type: 'uuid' },
+    updated_by: { type: 'uuid' },
+    deleted_at: { type: 'timestamp with time zone' },
+    deleted_by: { type: 'uuid' },
+    deleted_reason: { type: 'text' },
+    restored_at: { type: 'timestamp with time zone' },
+    restored_by: { type: 'uuid' },
+    metadata: { type: 'jsonb', default: "'{}'" }
+  });
+
+  pgm.addConstraint('episodes', 'episodes_status_check', {
+    check: "status IN ('draft', 'in_production', 'ready_for_publish', 'published', 'archived', 'on_hold', 'canceled')"
+  });
+
+  pgm.addConstraint('episodes', 'episodes_approval_check', {
+    check: "approval_status IN ('draft', 'approved', 'rejected')"
+  });
+
+  pgm.addConstraint('episodes', 'episodes_unique_episode', {
+    unique: ['show_id', 'season_number', 'episode_number']
+  });
+
+  pgm.createIndex('episodes', 'show_id', { where: 'deleted_at IS NULL' });
+  pgm.createIndex('episodes', 'status', { where: 'deleted_at IS NULL' });
+  pgm.createIndex('episodes', ['show_id', 'season_number', 'episode_number'], { where: 'deleted_at IS NULL' });
+  pgm.createIndex('episodes', 'publish_date', { where: 'deleted_at IS NULL' });
+  pgm.createIndex('episodes', 'tags', { method: 'gin' });
+  pgm.createIndex('episodes', 'metadata', { method: 'gin' });
+  pgm.createIndex('episodes', 'deleted_at');
+
+  // Full-text search index
+  pgm.sql(`
+    CREATE INDEX idx_episodes_fts ON episodes USING gin(
+      to_tsvector('english', 
+        coalesce(title, '') || ' ' || 
+        coalesce(description, '') || ' ' || 
+        coalesce(script_text, '')
+      )
+    ) WHERE deleted_at IS NULL
+  `);
+};
+
+exports.down = (pgm) => {
+  pgm.dropTable('episodes');
+};
+```
+
+**Continue creating migrations for remaining tables:**
+
+```bash
+# Create all remaining table migrations
+npm run migrate:create create-script-versions-table
+npm run migrate:create create-outfits-table
+npm run migrate:create create-episode-outfits-table
+npm run migrate:create create-ui-elements-table
+npm run migrate:create create-episode-ui-elements-table
+npm run migrate:create create-backgrounds-table
+npm run migrate:create create-episode-backgrounds-table
+npm run migrate:create create-clips-table
+npm run migrate:create create-components-table
+npm run migrate:create create-guests-table
+npm run migrate:create create-thumbnails-table
+npm run migrate:create create-audit-log-table
+npm run migrate:create create-triggers
+```
+
+**4.1.3 Create Database Triggers Migration**
+
+```javascript
+// migrations/XXXXXX_create-triggers.js
+exports.up = (pgm) => {
+  // Create update timestamp function
+  pgm.sql(`
+    CREATE OR REPLACE FUNCTION update_updated_at_column()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        NEW.updated_at = NOW();
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+
+  // Apply to all tables with updated_at
+  const tables = ['shows', 'episodes', 'outfits', 'ui_elements', 'backgrounds', 'clips', 'components', 'guests'];
+  
+  tables.forEach(table => {
+    pgm.sql(`
+      CREATE TRIGGER update_${table}_updated_at 
+      BEFORE UPDATE ON ${table}
+      FOR EACH ROW 
+      EXECUTE FUNCTION update_updated_at_column();
+    `);
+  });
+
+  // Create ensure single active script version function
+  pgm.sql(`
+    CREATE OR REPLACE FUNCTION ensure_single_active_script_version()
+    RETURNS TRIGGER AS $$
+    BEGIN
+        IF NEW.is_active = TRUE THEN
+            UPDATE script_versions
+            SET is_active = FALSE
+            WHERE episode_id = NEW.episode_id
+              AND script_version_id != NEW.script_version_id
+              AND is_active = TRUE;
+        END IF;
+        RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql;
+  `);
+
+  pgm.sql(`
+    CREATE TRIGGER ensure_single_active_script_version_trigger
+    BEFORE INSERT OR UPDATE ON script_versions
+    FOR EACH ROW
+    WHEN (NEW.is_active = TRUE)
+    EXECUTE FUNCTION ensure_single_active_script_version();
+  `);
+};
+
+exports.down = (pgm) => {
+  pgm.sql('DROP TRIGGER IF EXISTS ensure_single_active_script_version_trigger ON script_versions');
+  pgm.sql('DROP FUNCTION IF EXISTS ensure_single_active_script_version()');
+  
+  const tables = ['shows', 'episodes', 'outfits', 'ui_elements', 'backgrounds', 'clips', 'components', 'guests'];
+  tables.forEach(table => {
+    pgm.sql(`DROP TRIGGER IF EXISTS update_${table}_updated_at ON ${table}`);
+  });
+  
+  pgm.sql('DROP FUNCTION IF EXISTS update_updated_at_column()');
+};
+```
+
+**4.1.4 Run Migrations**
+
+```bash
+# Start local database
+docker-compose up -d postgres
+
+# Run migrations
+npm run migrate:up
+
+# Verify tables created
+psql $DATABASE_URL -c "\dt"
+```
+
+**Validation:**
+- [ ] All migrations created
+- [ ] Migrations run successfully
+- [ ] All tables exist in database
+- [ ] Indexes created
+- [ ] Triggers working
+
+---
+
+### 4.2 Core Application Setup
+
+**Objective:** Build foundational API infrastructure
+
+**4.2.1 Create Constants File**
+
+```javascript
+// src/utils/constants.js
+const EPISODE_STATUS = {
+  DRAFT: 'draft',
+  IN_PRODUCTION: 'in_production',
+  READY_FOR_PUBLISH: 'ready_for_publish',
+  PUBLISHED: 'published',
+  ARCHIVED: 'archived',
+  ON_HOLD: 'on_hold',
+  CANCELED: 'canceled'
+};
+
+const CLIP_QUALITY = {
+  HERO: 'hero',
+  GOOD: 'good',
+  MAYBE: 'maybe',
+  REJECT: 'reject'
+};
+
+const CLIP_STATUS = {
+  PENDING_REVIEW: 'pending_review',
+  APPROVED: 'approved',
+  REJECTED: 'rejected',
+  USED: 'used'
+};
+
+const TALENT_SOURCES = {
+  LALA: 'Lala',
+  JUSTAWOMAN: 'JustAWomanInHerPrime',
+  GUEST: 'Guest'
+};
+
+const APPROVAL_STATUS = {
+  DRAFT: 'draft',
+  APPROVED: 'approved',
+  REJECTED: 'rejected'
+};
+
+const THUMBNAIL_SIZES = {
+  PRIMARY: { variant: 'primary', width: 1280, height: 720 },
+  MEDIUM: { variant: 'medium', width: 640, height: 360 },
+  SMALL: { variant: 'small', width: 320, height: 180 }
+};
+
+const FILE_SIZE_LIMITS = {
+  SCRIPT: 50 * 1024 * 1024,        // 50 MB
+  TRAILER: 500 * 1024 * 1024,      // 500 MB
+  RAW_CLIP: 5 * 1024 * 1024 * 1024, // 5 GB
+  IMAGE: 10 * 1024 * 1024,         // 10 MB
+  AUDIO: 100 * 1024 * 1024,        // 100 MB
+  UI_ELEMENT: 5 * 1024 * 1024      // 5 MB
+};
+
+const ERROR_CODES = {
+  VALIDATION_ERROR: 'VALIDATION_ERROR',
+  NOT_FOUND: 'NOT_FOUND',
+  UNAUTHORIZED: 'UNAUTHORIZED',
+  FORBIDDEN: 'FORBIDDEN',
+  CONFLICT: 'CONFLICT',
+  SERVER_ERROR: 'SERVER_ERROR',
+  RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED'
+};
+
+module.exports = {
+  EPISODE_STATUS,
+  CLIP_QUALITY,
+  CLIP_STATUS,
+  TALENT_SOURCES,
+  APPROVAL_STATUS,
+  THUMBNAIL_SIZES,
+  FILE_SIZE_LIMITS,
+  ERROR_CODES
+};
+```
+
+**4.2.2 Create Logger**
+
+```javascript
+// src/utils/logger.js
+const winston = require('winston');
+const WinstonCloudWatch = require('winston-cloudwatch');
+
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.errors({ stack: true }),
+    winston.format.json()
+  ),
+  defaultMeta: {
+    service: 'episode-metadata-api',
+    environment: process.env.NODE_ENV
+  },
+  transports: [
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.simple()
+      )
+    })
+  ]
+});
+
+// Add CloudWatch in production
+if (process.env.NODE_ENV === 'production' && process.env.CLOUDWATCH_LOG_GROUP) {
+  logger.add(new WinstonCloudWatch({
+    logGroupName: process.env.CLOUDWATCH_LOG_GROUP,
+    logStreamName: process.env.CLOUDWATCH_LOG_STREAM || `api-${process.env.HOSTNAME}`,
+    awsRegion: process.env.AWS_REGION
+  }));
+}
+
+module.exports = logger;
+```
+
+**4.2.3 Create Error Handler Middleware**
+
+```javascript
+// src/middleware/errorHandler.js
+const logger = require('../utils/logger');
+const { ERROR_CODES } = require('../utils/constants');
+
+function errorHandler(err, req, res, next) {
+  logger.error('Error occurred', {
+    error: err.message,
+    stack: err.stack,
+    path: req.path,
+    method: req.method,
+    requestId: req.id
+  });
+
+  // Joi validation error
+  if (err.isJoi) {
+    return res.status(400).json({
+      errors: err.details.map(detail => ({
+        code: ERROR_CODES.VALIDATION_ERROR,
+        message: detail.message,
+        field: detail.path.join('.')
+      })),
+      metadata: {
+        timestamp: new Date().toISOString(),
+        requestId: req.id
+      }
+    });
+  }
+
+  // Custom app errors
+  if (err.statusCode) {
+    return res.status(err.statusCode).json({
+      errors: [{
+        code: err.code || ERROR_CODES.SERVER_ERROR,
+        message: err.message
+      }],
+      metadata: {
+        timestamp: new Date().toISOString(),
+        requestId: req.id
+      }
+    });
+  }
+
+  // Default 500 error
+  res.status(500).json({
+    errors: [{
+      code: ERROR_CODES.SERVER_ERROR,
+      message: process.env.NODE_ENV === 'production' 
+        ? 'Internal server error' 
+        : err.message
+    }],
+    metadata: {
+      timestamp: new Date().toISOString(),
+      requestId: req.id
+    }
+  });
+}
+
+module.exports = errorHandler;
+```
+
+**4.2.4 Create Request ID Middleware**
+
+```javascript
+// src/middleware/requestId.js
+const { v4: uuidv4 } = require('uuid');
+
+function requestId(req, res, next) {
+  req.id = req.get('X-Request-ID') || uuidv4();
+  res.set('X-Request-ID', req.id);
+  next();
+}
+
+module.exports = requestId;
+```
+
+**4.2.5 Create Soft Delete Middleware**
+
+```javascript
+// src/middleware/softDelete.js
+function softDeleteFilter(req, res, next) {
+  // Check if include_deleted query param is set
+  req.includeDeleted = req.query.include_deleted === 'true';
+  
+  // Remove from query params so it doesn't interfere with other filters
+  delete req.query.include_deleted;
+  
+  next();
+}
+
+module.exports = softDeleteFilter;
+```
+
+**4.2.6 Create Main App**
+
+```javascript
+// src/app.js
+require('dotenv').config();
+const express = require('express');
+const cors = require('cors');
+const helmet = require('helmet');
+const requestId = require('./middleware/requestId');
+const errorHandler = require('./middleware/errorHandler');
+const softDeleteFilter = require('./middleware/softDelete');
+const logger = require('./utils/logger');
+
+const app = express();
+
+// Middleware
+app.use(helmet());
+app.use(cors({
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
+  credentials: true
+}));
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+app.use(requestId);
+app.use(softDeleteFilter);
+
+// Request logging
+app.use((req, res, next) => {
+  logger.info('Incoming request', {
+    method: req.method,
+    path: req.path,
+    requestId: req.id
+  });
+  next();
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'ok', 
+    timestamp: new Date().toISOString(),
+    environment: process.env.NODE_ENV
+  });
+});
+
+// API routes will be added here
+// app.use('/api/v1/shows', require('./routes/shows'));
+// app.use('/api/v1/episodes', require('./routes/episodes'));
+// etc.
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    errors: [{
+      code: 'NOT_FOUND',
+      message: 'Endpoint not found'
+    }],
+    metadata: {
+      timestamp: new Date().toISOString(),
+      requestId: req.id
+    }
+  });
+});
+
+// Error handler (must be last)
+app.use(errorHandler);
+
+// Start server
+const PORT = process.env.PORT || 3000;
+
+if (require.main === module) {
+  app.listen(PORT, () => {
+    logger.info(`Server started on port ${PORT}`);
+  });
+}
+
+module.exports = app;
+```
+
+**4.2.7 Test the Application**
+
+```bash
+# Start development server
+npm run dev
+
+# In another terminal, test health endpoint
+curl http://localhost:3000/health
+
+# Should return: {"status":"ok","timestamp":"...","environment":"development"}
+```
+
+**Validation:**
+- [ ] Application starts without errors
+- [ ] Health endpoint responds
+- [ ] Logger working
+- [ ] Error handler working
+- [ ] Middleware chain functioning
+
+---
+
+**Continue to Part 2 for remaining phases...**
+
+This roadmap is getting very long! Should I:
+1. Continue with the remaining phases (4.3 onwards) in this format?
+2. Create a more condensed version covering all phases?
+3. Split into multiple documents (one per phase)?
+
+What would be most useful for you?
+
+---
+
+### 4.3 Authentication Setup
+
+**Objective:** Implement Cognito JWT authentication
+
+**4.3.1 Create Auth Middleware**
+
+```javascript
+// src/middleware/auth.js
+const jwksClient = require('jwks-rsa');
+const jwt = require('jsonwebtoken');
+const { ERROR_CODES } = require('../utils/constants');
+
+const client = jwksClient({
+  jwksUri: `https://cognito-idp.${process.env.COGNITO_REGION}.amazonaws.com/${process.env.COGNITO_USER_POOL_ID}/.well-known/jwks.json`
+});
+
+function getKey(header, callback) {
+  client.getSigningKey(header.kid, (err, key) => {
+    if (err) return callback(err);
+    callback(null, key.getPublicKey());
+  });
+}
+
+async function authenticate(req, res, next) {
+  const token = req.headers.authorization?.replace('Bearer ', '');
+  
+  if (!token) {
+    return res.status(401).json({
+      errors: [{ code: ERROR_CODES.UNAUTHORIZED, message: 'No token provided' }]
+    });
+  }
+
+  jwt.verify(token, getKey, { algorithms: ['RS256'] }, (err, decoded) => {
+    if (err) {
+      return res.status(401).json({
+        errors: [{ code: ERROR_CODES.UNAUTHORIZED, message: 'Invalid token' }]
+      });
+    }
+    
+    req.user = {
+      id: decoded.sub,
+      email: decoded.email,
+      groups: decoded['cognito:groups'] || []
+    };
+    next();
+  });
+}
+
+function requireRole(...roles) {
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        errors: [{ code: ERROR_CODES.UNAUTHORIZED, message: 'Not authenticated' }]
+      });
+    }
+    
+    const hasRole = roles.some(role => req.user.groups.includes(role));
+    if (!hasRole) {
+      return res.status(403).json({
+        errors: [{ code: ERROR_CODES.FORBIDDEN, message: 'Insufficient permissions' }]
+      });
+    }
+    
+    next();
+  };
+}
+
+module.exports = { authenticate, requireRole };
+```
+
+**Validation:**
+- [ ] Auth middleware created
+- [ ] Token validation working
+- [ ] Role-based access working
+
+---
+
+## 6. Phase 2: Core Features (Week 4-5)
+
+### 5.1 Shows Module
+
+**Create Model, Service, Controller, Routes:**
+
+```bash
+# Create files
+touch src/models/Show.js
+touch src/services/showsService.js
+touch src/controllers/showsController.js
+touch src/routes/shows.js
+```
+
+**Implement CRUD operations following pattern:**
+1. Model: Database queries
+2. Service: Business logic
+3. Controller: Request/response handling
+4. Routes: Endpoint definitions
+
+**Test:**
+```bash
+npm test -- tests/integration/shows.test.js
+```
+
+### 5.2 Episodes Module
+
+**Same pattern as Shows, plus:**
+- Script management
+- Trailer management
+- Full-text search
+- Tag filtering
+
+### 5.3 Script Versions Module
+
+**Features:**
+- Version creation
+- Active version toggle
+- Version history
+- Ensure single active version
+
+---
+
+## 7. Phase 3: Assets (Week 6)
+
+### 6.1 Outfits Module
+
+**Features:**
+- CRUD operations
+- Episode linking (junction table)
+- JSONB field searches (top, shoes, accessories)
+- Usage tracking
+
+### 6.2 UI Elements Module
+
+**Features:**
+- Asset management
+- Episode linking
+- Usage context tracking
+
+### 6.3 Backgrounds Module
+
+**Features:**
+- Same as UI elements
+- Background type filtering
+
+### 6.4 Clips Module
+
+**Features:**
+- Standalone clip library
+- Episode assignment/unassignment
+- Talent source filtering
+- Quality rating
+- Duplicate detection via file hash
+
+---
+
+## 8. Phase 4: Media (Week 7)
+
+### 7.1 S3 Integration
+
+**7.1.1 Create S3 Service**
+
+```javascript
+// src/services/s3Service.js
+const AWS = require('aws-sdk');
+const s3 = new AWS.S3({ region: process.env.AWS_REGION });
+
+async function generatePresignedUploadUrl(fileName, fileType, folder) {
+  const key = `${folder}/${Date.now()}-${fileName}`;
+  
+  const params = {
+    Bucket: process.env.S3_PRIMARY_BUCKET,
+    Key: key,
+    Expires: 3600, // 1 hour
+    ContentType: fileType
+  };
+  
+  const uploadUrl = await s3.getSignedUrlPromise('putObject', params);
+  
+  return {
+    uploadUrl,
+    fileReference: `s3://${process.env.S3_PRIMARY_BUCKET}/${key}`
+  };
+}
+
+module.exports = { generatePresignedUploadUrl };
+```
+
+**7.1.2 Create Upload Endpoints**
+
+```javascript
+// src/routes/upload.js
+router.post('/generate-url', authenticate, async (req, res) => {
+  const { file_name, file_type, entity_type } = req.body;
+  const result = await s3Service.generatePresignedUploadUrl(file_name, file_type, entity_type);
+  res.json({ data: result });
+});
+```
+
+### 7.2 Thumbnail Generation
+
+**7.2.1 Create Lambda Function**
+
+```bash
+# Create lambda directory
+mkdir -p lambda/thumbnail-generator
+
+# Create package.json
+cd lambda/thumbnail-generator
+npm init -y
+npm install sharp aws-sdk pg
+```
+
+**7.2.2 Lambda Handler**
+
+```javascript
+// lambda/thumbnail-generator/index.js
+const AWS = require('aws-sdk');
+const sharp = require('sharp');
+const { Pool } = require('pg');
+
+const s3 = new AWS.S3();
+const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+
+const SIZES = {
+  primary: { width: 1280, height: 720 },
+  medium: { width: 640, height: 360 },
+  small: { width: 320, height: 180 }
+};
+
+exports.handler = async (event) => {
+  for (const record of event.Records) {
+    const message = JSON.parse(record.body);
+    const { entity_type, entity_id, source_reference } = message;
+    
+    try {
+      const sourceImage = await downloadFromS3(source_reference);
+      
+      for (const [variant, size] of Object.entries(SIZES)) {
+        const resized = await sharp(sourceImage)
+          .resize(size.width, size.height, { fit: 'cover' })
+          .jpeg({ quality: 85 })
+          .toBuffer();
+        
+        const key = `${entity_type}s/${entity_id}/${variant}.jpg`;
+        await uploadToS3(key, resized);
+        await saveThumbnailRecord(entity_type, entity_id, variant, key, size);
+      }
+    } catch (error) {
+      console.error('Error:', error);
+      throw error;
+    }
+  }
+};
+
+async function downloadFromS3(s3Path) {
+  const [, , bucket, ...keyParts] = s3Path.split('/');
+  const data = await s3.getObject({ Bucket: bucket, Key: keyParts.join('/') }).promise();
+  return data.Body;
+}
+
+async function uploadToS3(key, buffer) {
+  await s3.putObject({
+    Bucket: process.env.S3_THUMBNAIL_BUCKET,
+    Key: key,
+    Body: buffer,
+    ContentType: 'image/jpeg'
+  }).promise();
+}
+
+async function saveThumbnailRecord(entityType, entityId, variant, key, size) {
+  const s3Path = `s3://${process.env.S3_THUMBNAIL_BUCKET}/${key}`;
+  await pool.query(`
+    INSERT INTO thumbnails (entity_type, entity_id, size_variant, file_reference, width, height, status, processed_at)
+    VALUES ($1, $2, $3, $4, $5, $6, 'ready', NOW())
+    ON CONFLICT (entity_type, entity_id, size_variant)
+    DO UPDATE SET file_reference = $4, status = 'ready', processed_at = NOW()
+  `, [entityType, entityId, variant, s3Path, size.width, size.height]);
+}
+```
+
+**7.2.3 Deploy Lambda**
+
+```bash
+# Create deployment package
+cd lambda/thumbnail-generator
+zip -r function.zip .
+
+# Create Lambda function
+aws lambda create-function \
+  --function-name episode-metadata-thumbnail-generator-dev \
+  --runtime nodejs20.x \
+  --role arn:aws:iam::YOUR_ACCOUNT:role/episode-metadata-thumbnail-lambda-role \
+  --handler index.handler \
+  --zip-file fileb://function.zip \
+  --timeout 300 \
+  --memory-size 1024 \
+  --environment Variables="{
+    S3_PRIMARY_BUCKET=episode-metadata-storage-dev,
+    S3_THUMBNAIL_BUCKET=episode-metadata-thumbnails-dev,
+    DATABASE_URL=postgresql://...
+  }"
+
+# Add SQS trigger
+aws lambda create-event-source-mapping \
+  --function-name episode-metadata-thumbnail-generator-dev \
+  --event-source-arn arn:aws:sqs:us-east-1:YOUR_ACCOUNT:episode-metadata-thumbnail-queue-dev \
+  --batch-size 10
+```
+
+**7.2.4 Create Thumbnail Service**
+
+```javascript
+// src/services/thumbnailService.js
+const AWS = require('aws-sdk');
+const sqs = new AWS.SQS({ region: process.env.AWS_REGION });
+
+async function queueThumbnailGeneration(entityType, entityId, sourceReference) {
+  await sqs.sendMessage({
+    QueueUrl: process.env.THUMBNAIL_QUEUE_URL,
+    MessageBody: JSON.stringify({
+      entity_type: entityType,
+      entity_id: entityId,
+      source_reference: sourceReference
+    })
+  }).promise();
+}
+
+module.exports = { queueThumbnailGeneration };
+```
+
+---
+
+## 9. Phase 5: Polish (Week 8)
+
+### 8.1 Testing
+
+**8.1.1 Write Unit Tests**
+
+```javascript
+// tests/unit/services/episodesService.test.js
+const episodesService = require('../../../src/services/episodesService');
+
+describe('Episodes Service', () => {
+  describe('createEpisode', () => {
+    it('should create episode with valid data', async () => {
+      const episode = await episodesService.create({
+        show_id: 'test-uuid',
+        title: 'Test Episode',
+        episode_number: 1
+      });
+      expect(episode).toHaveProperty('episode_id');
+    });
+  });
+});
+```
+
+**8.1.2 Write Integration Tests**
+
+```javascript
+// tests/integration/episodes.test.js
+const request = require('supertest');
+const app = require('../../src/app');
+
+describe('Episodes API', () => {
+  it('POST /api/v1/episodes - creates episode', async () => {
+    const res = await request(app)
+      .post('/api/v1/episodes')
+      .set('Authorization', 'Bearer test-token')
+      .send({ show_id: 'uuid', title: 'Test', episode_number: 1 });
+    
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data).toHaveProperty('episode_id');
+  });
+});
+```
+
+**8.1.3 Run Test Suite**
+
+```bash
+npm test
+npm run test:coverage
+```
+
+**Target:** >80% code coverage
+
+### 8.2 Monitoring Setup
+
+**8.2.1 Create CloudWatch Dashboards**
+
+```bash
+aws cloudwatch put-dashboard \
+  --dashboard-name episode-metadata-dev \
+  --dashboard-body file://cloudwatch-dashboard.json
+```
+
+**8.2.2 Create Alarms**
+
+```bash
+# High CPU alarm
+aws cloudwatch put-metric-alarm \
+  --alarm-name episode-metadata-high-cpu-dev \
+  --alarm-description "Alert when CPU exceeds 80%" \
+  --metric-name CPUUtilization \
+  --namespace AWS/ECS \
+  --statistic Average \
+  --period 300 \
+  --threshold 80 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 2
+
+# High error rate alarm
+aws cloudwatch put-metric-alarm \
+  --alarm-name episode-metadata-high-errors-dev \
+  --alarm-description "Alert when error rate exceeds 5%" \
+  --metric-name 5XXError \
+  --namespace AWS/ApplicationELB \
+  --statistic Sum \
+  --period 60 \
+  --threshold 5 \
+  --comparison-operator GreaterThanThreshold \
+  --evaluation-periods 2
+```
+
+### 8.3 Documentation
+
+**8.3.1 Create API Documentation**
+
+```bash
+mkdir docs
+touch docs/API.md
+touch docs/DEPLOYMENT.md
+touch docs/DEVELOPMENT.md
+```
+
+**8.3.2 Generate Postman Collection**
+
+Create Postman collection with all endpoints for testing.
+
+---
+
+## 10. Phase 6: Launch (Week 9-10)
+
+### 9.1 ECS Setup
+
+**9.1.1 Create ECS Cluster**
+
+```bash
+aws ecs create-cluster \
+  --cluster-name episode-metadata-cluster-staging \
+  --region us-east-1
+```
+
+**9.1.2 Create Task Definition**
+
+```bash
+cat > task-definition.json << 'EOF'
+{
+  "family": "episode-metadata-api",
+  "networkMode": "awsvpc",
+  "requiresCompatibilities": ["FARGATE"],
+  "cpu": "512",
+  "memory": "1024",
+  "containerDefinitions": [{
+    "name": "api",
+    "image": "YOUR_ECR_URI:latest",
+    "portMappings": [{"containerPort": 3000, "protocol": "tcp"}],
+    "environment": [
+      {"name": "NODE_ENV", "value": "production"},
+      {"name": "PORT", "value": "3000"}
+    ],
+    "secrets": [
+      {"name": "DATABASE_URL", "valueFrom": "arn:aws:secretsmanager:..."},
+      {"name": "AWS_ACCESS_KEY_ID", "valueFrom": "arn:aws:secretsmanager:..."}
+    ],
+    "logConfiguration": {
+      "logDriver": "awslogs",
+      "options": {
+        "awslogs-group": "/ecs/episode-metadata-api",
+        "awslogs-region": "us-east-1",
+        "awslogs-stream-prefix": "api"
+      }
+    }
+  }]
+}
+EOF
+
+aws ecs register-task-definition \
+  --cli-input-json file://task-definition.json
+```
+
+**9.1.3 Create ALB**
+
+```bash
+# Create ALB
+aws elbv2 create-load-balancer \
+  --name episode-metadata-alb-staging \
+  --subnets subnet-xxx subnet-yyy \
+  --security-groups sg-xxx
+
+# Create target group
+aws elbv2 create-target-group \
+  --name episode-metadata-tg-staging \
+  --protocol HTTP \
+  --port 3000 \
+  --vpc-id vpc-xxx \
+  --target-type ip \
+  --health-check-path /health
+
+# Create listener
+aws elbv2 create-listener \
+  --load-balancer-arn arn:aws:elasticloadbalancing:... \
+  --protocol HTTP \
+  --port 80 \
+  --default-actions Type=forward,TargetGroupArn=arn:aws:elasticloadbalancing:...
+```
+
+**9.1.4 Create ECS Service**
+
+```bash
+aws ecs create-service \
+  --cluster episode-metadata-cluster-staging \
+  --service-name episode-metadata-api-service \
+  --task-definition episode-metadata-api \
+  --desired-count 2 \
+  --launch-type FARGATE \
+  --network-configuration "awsvpcConfiguration={
+    subnets=[subnet-xxx,subnet-yyy],
+    securityGroups=[sg-xxx],
+    assignPublicIp=DISABLED
+  }" \
+  --load-balancers "targetGroupArn=arn:aws:elasticloadbalancing:...,containerName=api,containerPort=3000"
+```
+
+### 9.2 Staging Deployment
+
+**9.2.1 Deploy to Staging**
+
+```bash
+# Push to develop branch triggers GitHub Actions
+git checkout develop
+git push origin develop
+
+# GitHub Actions will:
+# 1. Run tests
+# 2. Build Docker image
+# 3. Push to ECR
+# 4. Deploy to staging ECS
+```
+
+**9.2.2 Smoke Tests**
+
+```bash
+# Test health endpoint
+curl https://api-staging.example.com/health
+
+# Test authentication
+curl https://api-staging.example.com/api/v1/shows \
+  -H "Authorization: Bearer $TOKEN"
+
+# Run integration tests against staging
+API_BASE_URL=https://api-staging.example.com npm run test:integration
+```
+
+**9.2.3 Load Testing**
+
+```bash
+# Use Apache Bench or similar
+ab -n 1000 -c 10 https://api-staging.example.com/health
+```
+
+### 9.3 Production Deployment
+
+**9.3.1 Create Production Infrastructure**
+
+Repeat all AWS setup steps for production:
+- VPC with Multi-AZ
+- RDS with Multi-AZ
+- ECS cluster with auto-scaling
+- ALB with HTTPS (SSL certificate)
+- CloudWatch alarms
+- Backup policies
+
+**9.3.2 Deploy to Production**
+
+```bash
+# Create PR from develop to main
+git checkout develop
+git pull
+git checkout -b release/v1.0.0
+git push origin release/v1.0.0
+
+# Create PR on GitHub
+# Get approval
+# Merge to main
+
+# GitHub Actions will:
+# 1. Run tests
+# 2. Build Docker image
+# 3. Push to ECR
+# 4. Wait for manual approval
+# 5. Deploy to production
+```
+
+**9.3.3 Post-Deployment**
+
+```bash
+# Monitor logs
+aws logs tail /ecs/episode-metadata-api --follow
+
+# Monitor metrics
+aws cloudwatch get-metric-statistics \
+  --namespace AWS/ECS \
+  --metric-name CPUUtilization \
+  --start-time $(date -u -d '1 hour ago' +%Y-%m-%dT%H:%M:%S) \
+  --end-time $(date -u +%Y-%m-%dT%H:%M:%S) \
+  --period 300 \
+  --statistics Average
+
+# Verify health
+curl https://api.example.com/health
+```
+
+### 9.4 Rollback Plan
+
+**If deployment fails:**
+
+```bash
+# Rollback ECS to previous task definition
+aws ecs update-service \
+  --cluster episode-metadata-cluster-production \
+  --service episode-metadata-api-service \
+  --task-definition episode-metadata-api:PREVIOUS_REVISION
+
+# Rollback database migrations
+npm run migrate:down
+
+# Monitor recovery
+aws ecs wait services-stable \
+  --cluster episode-metadata-cluster-production \
+  --services episode-metadata-api-service
+```
+
+---
+
+## 11. Post-Launch Operations
+
+### 10.1 Monitoring Checklist
+
+- [ ] CloudWatch dashboards reviewed daily
+- [ ] Alarms configured and tested
+- [ ] Log aggregation working
+- [ ] Error tracking functional
+- [ ] Performance metrics baseline established
+
+### 10.2 Backup Verification
+
+- [ ] RDS automated backups running
+- [ ] Manual snapshots tested
+- [ ] Point-in-time recovery verified
+- [ ] S3 versioning enabled
+- [ ] Disaster recovery plan documented
+
+### 10.3 Security Hardening
+
+- [ ] API rate limiting tested
+- [ ] Authentication working correctly
+- [ ] Authorization roles enforced
+- [ ] Secrets rotation scheduled
+- [ ] Security audit completed
+
+### 10.4 Documentation
+
+- [ ] API documentation published
+- [ ] Deployment guide updated
+- [ ] Runbook created for on-call
+- [ ] Architecture diagrams finalized
+- [ ] User training materials prepared
+
+---
+
+## 12. Maintenance & Iteration
+
+### 11.1 Regular Tasks
+
+**Daily:**
+- Review error logs
+- Check alarm status
+- Monitor performance metrics
+
+**Weekly:**
+- Review security patches
+- Update dependencies
+- Review database performance
+- Analyze usage patterns
+
+**Monthly:**
+- Backup verification
+- Cost optimization review
+- Performance tuning
+- Security audit
+
+### 11.2 Feature Development Workflow
+
+```bash
+# Create feature branch
+git checkout develop
+git pull
+git checkout -b feature/new-feature
+
+# Develop and test
+npm run dev
+npm test
+
+# Create PR to develop
+git push origin feature/new-feature
+
+# After review and merge to develop
+# Test in staging
+
+# Create release PR to main
+# Deploy to production
+```
+
+---
+
+## 13. Appendix: Quick Reference Commands
+
+### Database
+
+```bash
+# Connect to database
+psql $DATABASE_URL
+
+# Create migration
+npm run migrate:create <name>
+
+# Run migrations
+npm run migrate:up
+
+# Rollback migration
+npm run migrate:down
+
+# Seed database
+npm run seed
+```
+
+### Development
+
+```bash
+# Start dev server
+npm run dev
+
+# Run tests
+npm test
+npm run test:unit
+npm run test:integration
+npm run test:watch
+
+# Lint and format
+npm run lint
+npm run lint:fix
+npm run format
+
+# Build Docker image
+npm run docker:build
+npm run docker:run
+```
+
+### AWS
+
+```bash
+# View logs
+aws logs tail /ecs/episode-metadata-api --follow
+
+# Describe service
+aws ecs describe-services \
+  --cluster episode-metadata-cluster-production \
+  --services episode-metadata-api-service
+
+# Update service (force new deployment)
+aws ecs update-service \
+  --cluster episode-metadata-cluster-production \
+  --service episode-metadata-api-service \
+  --force-new-deployment
+
+# Get task logs
+aws ecs list-tasks --cluster episode-metadata-cluster-production
+aws ecs describe-tasks --cluster episode-metadata-cluster-production --tasks <task-arn>
+```
+
+### Troubleshooting
+
+```bash
+# Check database connections
+psql $DATABASE_URL -c "SELECT count(*) FROM pg_stat_activity;"
+
+# Check S3 bucket
+aws s3 ls s3://episode-metadata-storage-production/
+
+# Check SQS queue depth
+aws sqs get-queue-attributes \
+  --queue-url $QUEUE_URL \
+  --attribute-names ApproximateNumberOfMessages
+
+# Test Lambda function
+aws lambda invoke \
+  --function-name episode-metadata-thumbnail-generator-production \
+  --payload '{"Records":[{"body":"..."}]}' \
+  response.json
+```
+
+---
+
+## 14. Success Criteria
+
+### Phase 0 (Setup)
+- [ ] AWS infrastructure provisioned
+- [ ] GitHub repository initialized
+- [ ] CI/CD pipeline functional
+
+### Phase 1 (Foundation)
+- [ ] Database schema deployed
+- [ ] Core app running
+- [ ] Authentication working
+
+### Phase 2 (Core Features)
+- [ ] Shows, Episodes, Scripts working
+- [ ] All CRUD operations functional
+- [ ] Search working
+
+### Phase 3 (Assets)
+- [ ] Outfits, UI Elements, Backgrounds working
+- [ ] Junction tables functional
+- [ ] Clips library operational
+
+### Phase 4 (Media)
+- [ ] S3 uploads working
+- [ ] Thumbnail generation functional
+- [ ] All media types supported
+
+### Phase 5 (Polish)
+- [ ] >80% test coverage
+- [ ] Monitoring dashboards active
+- [ ] Documentation complete
+
+### Phase 6 (Launch)
+- [ ] Staging deployed and tested
+- [ ] Production deployed successfully
+- [ ] Post-launch monitoring active
+
+---
+
+## 15. Timeline Summary
+
+| Week | Phase | Key Deliverables |
+|------|-------|------------------|
+| 1 | Setup | AWS infra, Git repo, CI/CD |
+| 2-3 | Foundation | Database, core app, auth |
+| 4-5 | Core Features | Episodes, shows, scripts, search |
+| 6 | Assets | Outfits, UI, backgrounds, clips |
+| 7 | Media | S3, thumbnails, uploads |
+| 8 | Polish | Tests, monitoring, docs |
+| 9-10 | Launch | Staging, production, verification |
+
+**Total:** 8-10 weeks with 1-2 developers
+
+---
+
+**END OF ROADMAP**
+
+This roadmap serves as a comprehensive guide for implementing the Episode Metadata Storage Solution. Follow it sequentially, validate each step, and adapt as needed based on your specific requirements and constraints.
+
+For questions or issues during implementation, refer to:
+- Requirements Document v2.0
+- Technical Architecture Document v1.0
+- AWS Documentation
+- PostgreSQL Documentation
+- Node.js Best Practices
+
+Good luck with your implementation! 🚀

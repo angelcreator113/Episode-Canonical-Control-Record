@@ -1,0 +1,5 @@
+
+SubnetId                 CidrBlock   AvailabilityZone
+--------                 ---------   ----------------
+subnet-00cf5f4778d1921d6 10.0.1.0/24 us-east-1a
+

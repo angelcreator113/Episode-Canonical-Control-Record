@@ -1,0 +1,46 @@
+# Episode Metadata Infrastructure IDs
+
+## Cognito User Pools
+- Dev:     
+  Client:  
+  Secret:  
+
+- Staging: 
+  Client:  
+  Secret:  
+
+- Prod:    
+  Client:  
+  Secret:  
+
+## SQS Queue URLs
+- Dev:     https://sqs.us-east-1.amazonaws.com/637423256673/episode-metadata-thumbnail-queue-dev
+- Staging: https://sqs.us-east-1.amazonaws.com/637423256673/episode-metadata-thumbnail-queue-staging
+- Prod:    https://sqs.us-east-1.amazonaws.com/637423256673/episode-metadata-thumbnail-queue-prod
+
+## Secrets Manager Paths
+- episode-metadata/database-dev
+- episode-metadata/database-staging
+- episode-metadata/database-prod
+- episode-metadata/cognito-dev
+- episode-metadata/cognito-staging
+- episode-metadata/cognito-prod
+
+=== COGNITO USER POOLS (Phase 0E) ===
+DEV_POOL_ID=us-east-1_JbZFIWX6h us-east-1_OFf9NjR6a us-east-1_mFVU52978
+DEV_CLIENT_ID=
+DEV_CLIENT_SECRET=
+
+STAGING_POOL_ID=us-east-1_VPrBfEn1f us-east-1_jYkqo528H us-east-1_wvs0J2Jho
+STAGING_CLIENT_ID=
+STAGING_CLIENT_SECRET=
+
+PROD_POOL_ID=us-east-1_643pfiGql us-east-1_ohSQAOEtC us-east-1_usfecvSkW
+PROD_CLIENT_ID=
+PROD_CLIENT_SECRET=
+
+=== TEST USERS (Dev Pool) ===
+admin@episodeidentityform.com (group: admin, password: TempPass123456!)
+editor@episodeidentityform.com (group: editor, password: TempPass123456!)
+viewer@episodeidentityform.com (group: viewer, password: TempPass123456!)
+

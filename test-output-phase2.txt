@@ -1,0 +1,825 @@
+
+> episode-metadata-api@1.0.0 test
+> cross-env NODE_ENV=test jest --coverage --runInBand
+
+FAIL tests/unit/models/activityLog.test.js
+  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have logActivity method
+
+    TypeError: Cannot set properties of undefined (setting 'logActivity')
+
+      14 |   describe('Model Methods', () => {
+      15 |     test('should have logActivity method', () => {
+    > 16 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
+         |                                   ^
+      17 |
+      18 |       expect(typeof ActivityLogModel.logActivity).toBe('function');
+      19 |     });
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:16:35)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getUserHistory method
+
+    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+
+      20 |
+      21 |     test('should have getUserHistory method', () => {
+    > 22 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
+         |                                      ^
+      23 |
+      24 |       expect(typeof ActivityLogModel.getUserHistory).toBe('function');
+      25 |     });
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:22:38)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getResourceHistory method
+
+    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+
+      26 |
+      27 |     test('should have getResourceHistory method', () => {
+    > 28 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
+         |                                          ^
+      29 |
+      30 |       expect(typeof ActivityLogModel.getResourceHistory).toBe('function');
+      31 |     });
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:28:42)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getAuditTrail method
+
+    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+
+      32 |
+      33 |     test('should have getAuditTrail method', () => {
+    > 34 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue([]);
+         |                                     ^
+      35 |
+      36 |       expect(typeof ActivityLogModel.getAuditTrail).toBe('function');
+      37 |     });
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:34:37)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getStats method
+
+    TypeError: Cannot set properties of undefined (setting 'getStats')
+
+      38 |
+      39 |     test('should have getStats method', () => {
+    > 40 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
+         |                                ^
+      41 |
+      42 |       expect(typeof ActivityLogModel.getStats).toBe('function');
+      43 |     });
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:40:32)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have create method (standard Sequelize)
+
+    TypeError: Cannot set properties of undefined (setting 'create')
+
+      44 |
+      45 |     test('should have create method (standard Sequelize)', () => {
+    > 46 |       ActivityLogModel.create = jest.fn().mockResolvedValue({ id: 1 });
+         |                              ^
+      47 |
+      48 |       expect(typeof ActivityLogModel.create).toBe('function');
+      49 |     });
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:46:30)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have findAll method (standard Sequelize)
+
+    TypeError: Cannot set properties of undefined (setting 'findAll')
+
+      50 |
+      51 |     test('should have findAll method (standard Sequelize)', () => {
+    > 52 |       ActivityLogModel.findAll = jest.fn().mockResolvedValue([]);
+         |                               ^
+      53 |
+      54 |       expect(typeof ActivityLogModel.findAll).toBe('function');
+      55 |     });
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:52:31)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have findByPk method (standard Sequelize)
+
+    TypeError: Cannot set properties of undefined (setting 'findByPk')
+
+      56 |
+      57 |     test('should have findByPk method (standard Sequelize)', () => {
+    > 58 |       ActivityLogModel.findByPk = jest.fn().mockResolvedValue({ id: 1 });
+         |                                ^
+      59 |
+      60 |       expect(typeof ActivityLogModel.findByPk).toBe('function');
+      61 |     });
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:58:32)
+
+  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should log activity with required fields
+
+    TypeError: Cannot set properties of undefined (setting 'logActivity')
+
+      64 |   describe('logActivity Method', () => {
+      65 |     test('should log activity with required fields', async () => {
+    > 66 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
+         |                                   ^
+      67 |
+      68 |       const result = await ActivityLogModel.logActivity({
+      69 |         userId: 'user-123',
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:66:35)
+
+  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should log activity with optional fields
+
+    TypeError: Cannot set properties of undefined (setting 'logActivity')
+
+      85 |
+      86 |     test('should log activity with optional fields', async () => {
+    > 87 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
+         |                                   ^
+      88 |
+      89 |       await ActivityLogModel.logActivity({
+      90 |         userId: 'user-456',
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:87:35)
+
+  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should support different action types
+
+    TypeError: Cannot set properties of undefined (setting 'logActivity')
+
+      102 |
+      103 |     test('should support different action types', async () => {
+    > 104 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
+          |                                   ^
+      105 |
+      106 |       const actions = ['view', 'create', 'edit', 'delete', 'download', 'upload'];
+      107 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:104:35)
+
+  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should support different resource types
+
+    TypeError: Cannot set properties of undefined (setting 'logActivity')
+
+      124 |
+      125 |       for (const resource of resources) {
+    > 126 |         ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
+          |                                     ^
+      127 |
+      128 |         await ActivityLogModel.logActivity({
+      129 |           userId: 'user-123',
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:126:37)
+
+  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should handle database errors
+
+    TypeError: Cannot set properties of undefined (setting 'logActivity')
+
+      138 |
+      139 |     test('should handle database errors', async () => {
+    > 140 |       ActivityLogModel.logActivity = jest
+          |                                   ^
+      141 |         .fn()
+      142 |         .mockRejectedValue(new Error('DB Error'));
+      143 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:140:35)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should retrieve user activity history
+
+    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+
+      163 |       ];
+      164 |
+    > 165 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue(mockLogs);
+          |                                      ^
+      166 |
+      167 |       const result = await ActivityLogModel.getUserHistory('user-123');
+      168 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:165:38)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should support pagination options
+
+    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+
+      172 |
+      173 |     test('should support pagination options', async () => {
+    > 174 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
+          |                                      ^
+      175 |
+      176 |       await ActivityLogModel.getUserHistory('user-123', { limit: 50, offset: 0 });
+      177 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:174:38)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should return empty array when no records found
+
+    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+
+      183 |
+      184 |     test('should return empty array when no records found', async () => {
+    > 185 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
+          |                                      ^
+      186 |
+      187 |       const result = await ActivityLogModel.getUserHistory('user-nonexistent');
+      188 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:185:38)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should handle database errors
+
+    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+
+      191 |
+      192 |     test('should handle database errors', async () => {
+    > 193 |       ActivityLogModel.getUserHistory = jest
+          |                                      ^
+      194 |         .fn()
+      195 |         .mockRejectedValue(new Error('DB Error'));
+      196 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:193:38)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should retrieve resource activity history
+
+    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+
+      211 |       ];
+      212 |
+    > 213 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue(mockLogs);
+          |                                          ^
+      214 |
+      215 |       const result = await ActivityLogModel.getResourceHistory('episode', 1);
+      216 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:213:42)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should support different resource types
+
+    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+
+      220 |
+      221 |     test('should support different resource types', async () => {
+    > 222 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
+          |                                          ^
+      223 |
+      224 |       const resources = ['episode', 'thumbnail', 'metadata', 'processing'];
+      225 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:222:42)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should return empty array on error
+
+    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+
+      234 |
+      235 |     test('should return empty array on error', async () => {
+    > 236 |       ActivityLogModel.getResourceHistory = jest
+          |                                          ^
+      237 |         .fn()
+      238 |         .mockRejectedValue(new Error('Error'));
+      239 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:236:42)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should retrieve full audit trail
+
+    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+
+      254 |       ];
+      255 |
+    > 256 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue(mockTrail);
+          |                                     ^
+      257 |
+      258 |       const result = await ActivityLogModel.getAuditTrail({ limit: 10 });
+      259 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:256:37)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should support filtering options
+
+    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+
+      262 |
+      263 |     test('should support filtering options', async () => {
+    > 264 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue([]);
+          |                                     ^
+      265 |
+      266 |       await ActivityLogModel.getAuditTrail({
+      267 |         actionType: 'delete',
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:264:37)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should return empty array on error
+
+    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+
+      274 |
+      275 |     test('should return empty array on error', async () => {
+    > 276 |       ActivityLogModel.getAuditTrail = jest
+          |                                     ^
+      277 |         .fn()
+      278 |         .mockRejectedValue(new Error('Error'));
+      279 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:276:37)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should retrieve activity statistics
+
+    TypeError: Cannot set properties of undefined (setting 'getStats')
+
+      294 |       };
+      295 |
+    > 296 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue(mockStats);
+          |                                ^
+      297 |
+      298 |       const result = await ActivityLogModel.getStats('7d');
+      299 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:296:32)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should support different time ranges
+
+    TypeError: Cannot set properties of undefined (setting 'getStats')
+
+      303 |
+      304 |     test('should support different time ranges', async () => {
+    > 305 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
+          |                                ^
+      306 |
+      307 |       const ranges = ['1d', '7d', '30d', '90d'];
+      308 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:305:32)
+
+  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should return empty object on error
+
+    TypeError: Cannot set properties of undefined (setting 'getStats')
+
+      317 |
+      318 |     test('should return empty object on error', async () => {
+    > 319 |       ActivityLogModel.getStats = jest
+          |                                ^
+      320 |         .fn()
+      321 |         .mockRejectedValue(new Error('Error'));
+      322 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:319:32)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support create
+
+    TypeError: Cannot set properties of undefined (setting 'create')
+
+      332 |   describe('Standard Sequelize Methods', () => {
+      333 |     test('should support create', async () => {
+    > 334 |       ActivityLogModel.create = jest
+          |                              ^
+      335 |         .fn()
+      336 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
+      337 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:334:30)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findAll
+
+    TypeError: Cannot set properties of undefined (setting 'findAll')
+
+      347 |
+      348 |     test('should support findAll', async () => {
+    > 349 |       ActivityLogModel.findAll = jest.fn().mockResolvedValue([
+          |                               ^
+      350 |         { id: 1, userId: 'user-123' },
+      351 |         { id: 2, userId: 'user-456' },
+      352 |       ]);
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:349:31)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findByPk
+
+    TypeError: Cannot set properties of undefined (setting 'findByPk')
+
+      358 |
+      359 |     test('should support findByPk', async () => {
+    > 360 |       ActivityLogModel.findByPk = jest
+          |                                ^
+      361 |         .fn()
+      362 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
+      363 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:360:32)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findOne
+
+    TypeError: Cannot set properties of undefined (setting 'findOne')
+
+      368 |
+      369 |     test('should support findOne', async () => {
+    > 370 |       ActivityLogModel.findOne = jest
+          |                               ^
+      371 |         .fn()
+      372 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
+      373 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:370:31)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Sequelize Association Support ΓÇ║ should support hasMany
+
+    TypeError: Cannot set properties of undefined (setting 'hasMany')
+
+      397 |   describe('Sequelize Association Support', () => {
+      398 |     test('should support hasMany', () => {
+    > 399 |       ActivityLogModel.hasMany = jest.fn();
+          |                               ^
+      400 |
+      401 |       ActivityLogModel.hasMany({
+      402 |         model: 'Episode',
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:399:31)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Sequelize Association Support ΓÇ║ should support belongsTo
+
+    TypeError: Cannot set properties of undefined (setting 'belongsTo')
+
+      408 |
+      409 |     test('should support belongsTo', () => {
+    > 410 |       ActivityLogModel.belongsTo = jest.fn();
+          |                                 ^
+      411 |
+      412 |       ActivityLogModel.belongsTo('User', { foreignKey: 'userId' });
+      413 |
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:410:33)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Hook Support ΓÇ║ should support beforeCreate hook
+
+    TypeError: Cannot set properties of undefined (setting 'beforeCreate')
+
+      418 |   describe('Hook Support', () => {
+      419 |     test('should support beforeCreate hook', () => {
+    > 420 |       ActivityLogModel.beforeCreate = jest.fn();
+          |                                    ^
+      421 |
+      422 |       ActivityLogModel.beforeCreate((log) => {
+      423 |         log.timestamp = new Date();
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:420:36)
+
+  ΓùÅ ActivityLog Model ΓÇ║ Hook Support ΓÇ║ should support beforeValidate hook
+
+    TypeError: Cannot set properties of undefined (setting 'beforeValidate')
+
+      428 |
+      429 |     test('should support beforeValidate hook', () => {
+    > 430 |       ActivityLogModel.beforeValidate = jest.fn();
+          |                                      ^
+      431 |
+      432 |       ActivityLogModel.beforeValidate((log) => {
+      433 |         // normalize data
+
+      at Object.<anonymous> (tests/unit/models/activityLog.test.js:430:38)
+
+FAIL tests/unit/services/FileValidationService.test.js
+  ΓùÅ FileValidationService ΓÇ║ generateS3Key ΓÇ║ should generate valid S3 key
+
+    expect(received).toMatch(expected)
+
+    Expected pattern: /^\d+_/
+    Received string:  "episodes/episode-uuid/video/1767295645213_my-video.mp4"
+
+      217 |       expect(key).toContain('episodes/episode-uuid/video/');
+      218 |       expect(key).toContain('my-video.mp4');
+    > 219 |       expect(key).toMatch(/^\d+_/);
+          |                   ^
+      220 |     });
+      221 |
+      222 |     it('should sanitize special characters in filename', () => {
+
+      at Object.toMatch (tests/unit/services/FileValidationService.test.js:219:19)
+
+  ΓùÅ FileValidationService ΓÇ║ getS3Bucket ΓÇ║ should return episodes bucket for video
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "brd-episodes-dev"
+    Received: undefined
+
+      253 |     it('should return episodes bucket for video', () => {
+      254 |       const bucket = FileValidationService.getS3Bucket('video');
+    > 255 |       expect(bucket).toBe(process.env.AWS_S3_BUCKET_EPISODES || 'brd-episodes-dev');
+          |                      ^
+      256 |     });
+      257 |
+      258 |     it('should return thumbnails bucket for image', () => {
+
+      at Object.toBe (tests/unit/services/FileValidationService.test.js:255:22)
+
+  ΓùÅ FileValidationService ΓÇ║ getS3Bucket ΓÇ║ should return thumbnails bucket for image
+
+    expect(received).toBeDefined()
+
+    Received: undefined
+
+      258 |     it('should return thumbnails bucket for image', () => {
+      259 |       const bucket = FileValidationService.getS3Bucket('image');
+    > 260 |       expect(bucket).toBeDefined();
+          |                      ^
+      261 |       expect(['brd-thumbnails-dev', 'brd-episodes-dev']).toContain(bucket);
+      262 |     });
+      263 |
+
+      at Object.toBeDefined (tests/unit/services/FileValidationService.test.js:260:22)
+
+  ΓùÅ FileValidationService ΓÇ║ getS3Bucket ΓÇ║ should return episodes bucket for script
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "brd-episodes-dev"
+    Received: undefined
+
+      264 |     it('should return episodes bucket for script', () => {
+      265 |       const bucket = FileValidationService.getS3Bucket('script');
+    > 266 |       expect(bucket).toBe(process.env.AWS_S3_BUCKET_EPISODES || 'brd-episodes-dev');
+          |                      ^
+      267 |     });
+      268 |
+      269 |     it('should default to episodes bucket for unknown type', () => {
+
+      at Object.toBe (tests/unit/services/FileValidationService.test.js:266:22)
+
+  ΓùÅ FileValidationService ΓÇ║ getS3Bucket ΓÇ║ should default to episodes bucket for unknown type
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: "brd-episodes-dev"
+    Received: undefined
+
+      269 |     it('should default to episodes bucket for unknown type', () => {
+      270 |       const bucket = FileValidationService.getS3Bucket('unknown');
+    > 271 |       expect(bucket).toBe(process.env.AWS_S3_BUCKET_EPISODES || 'brd-episodes-dev');
+          |                      ^
+      272 |     });
+      273 |   });
+      274 |
+
+      at Object.toBe (tests/unit/services/FileValidationService.test.js:271:22)
+
+FAIL tests/unit/app.test.js
+  ΓùÅ Console
+
+    console.log
+      Γ£ô Test mode - database and OpenSearch initialization skipped
+
+      at Object.log (src/app.js:66:11)
+
+  ΓùÅ Health Check Endpoint ΓÇ║ should return healthy status
+
+    Route.post() requires a callback function but got a [object Object]
+
+      24 |  * Upload file to episode
+      25 |  */
+    > 26 | router.post('/:episodeId/upload', auth, upload.single('file'), uploadValidation, (req, res) =>
+         |        ^
+      27 |   fileController.uploadFile(req, res)
+      28 | );
+      29 |
+
+      at Route.<computed> [as post] (node_modules/express/lib/router/route.js:216:15)
+      at Function.proto.<computed> [as post] (node_modules/express/lib/router/index.js:521:19)
+      at Object.post (src/routes/files.js:26:8)
+      at Object.require (src/app.js:136:21)
+      at Object.require (tests/unit/app.test.js:11:11)
+
+PASS tests/unit/controllers/metadata.test.js
+PASS tests/unit/middleware/auditLog.test.js
+  ΓùÅ Console
+
+    console.error
+      Error logging action: Error: DB error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog.test.js:82:28)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      182 |       });
+      183 |     } catch (error) {
+    > 184 |       console.error('Error logging action:', error);
+          |               ^
+      185 |       return null;
+      186 |     }
+      187 |   },
+
+      at Object.error [as logAction] (src/middleware/auditLog.js:184:15)
+      at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:85:22)
+
+    console.error
+      Error fetching user history: Error: DB error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog.test.js:110:71)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      198 |       return await ActivityLog.getUserHistory(userId, options);
+      199 |     } catch (error) {
+    > 200 |       console.error('Error fetching user history:', error);
+          |               ^
+      201 |       return [];
+      202 |     }
+      203 |   },
+
+      at Object.error [as getUserHistory] (src/middleware/auditLog.js:200:15)
+      at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:112:20)
+
+    console.error
+      Error fetching resource history: Error: error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog.test.js:132:75)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      214 |       return await ActivityLog.getResourceHistory(resourceType, resourceId);
+      215 |     } catch (error) {
+    > 216 |       console.error('Error fetching resource history:', error);
+          |               ^
+      217 |       return [];
+      218 |     }
+      219 |   },
+
+      at Object.error [as getResourceHistory] (src/middleware/auditLog.js:216:15)
+      at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:134:20)
+
+    console.error
+      Error fetching audit trail: Error: error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog.test.js:158:70)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      230 |       return await ActivityLog.getAuditTrail(options);
+      231 |     } catch (error) {
+    > 232 |       console.error('Error fetching audit trail:', error);
+          |               ^
+      233 |       return [];
+      234 |     }
+      235 |   },
+
+      at Object.error [as getAuditTrail] (src/middleware/auditLog.js:232:15)
+      at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:160:21)
+
+    console.error
+      Error fetching stats: Error: error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog.test.js:182:65)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      246 |       return await ActivityLog.getStats(timeRange);
+      247 |     } catch (error) {
+    > 248 |       console.error('Error fetching stats:', error);
+          |               ^
+      249 |       return {};
+      250 |     }
+      251 |   },
+
+      at Object.error [as getStats] (src/middleware/auditLog.js:248:15)
+      at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:184:21)
+
+    console.error
+      Error logging action: Error: Connection error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog.test.js:492:68)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      182 |       });
+      183 |     } catch (error) {
+    > 184 |       console.error('Error logging action:', error);
+          |               ^
+      185 |       return null;
+      186 |     }
+      187 |   },
+
+      at Object.error [as logAction] (src/middleware/auditLog.js:184:15)
+      at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:494:22)
+
+    console.error
+      Error fetching stats: Error: Stats error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog.test.js:668:65)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      246 |       return await ActivityLog.getStats(timeRange);
+      247 |     } catch (error) {
+    > 248 |       console.error('Error fetching stats:', error);
+          |               ^
+      249 |       return {};
+      250 |     }
+      251 |   },
+
+      at Object.error [as getStats] (src/middleware/auditLog.js:248:15)
+      at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:670:21)
+
+PASS tests/unit/controllers/episode.test.js
+PASS tests/unit/controllers/processing.test.js
+PASS tests/unit/controllers/thumbnail.test.js
+PASS tests/unit/middleware/auditLog-additional.test.js
+PASS tests/unit/middleware/rbac.test.js
+PASS tests/unit/middleware/errorHandler.test.js
+PASS tests/unit/middleware/auth.test.js
+PASS tests/unit/models/metadata-methods.test.js
+PASS tests/api/endpoints.test.js
+PASS tests/unit/models/episode.test.js
+PASS tests/unit/middleware/auth-gaps.test.js
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\services\S3Service.js:1028
+      (cov_259fl5fbx0().s[12]++, this.s3.getSignedUrl('getObject', params));
+                                         ^
+
+TypeError: this.s3.getSignedUrl is not a function
+    at S3Service.getSignedUrl [as getPreSignedUrl] (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\services\S3Service.js:70:27)
+    at Object.getPreSignedUrl (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\services\S3Service.test.js:141:30)
+    at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+    at new Promise (<anonymous>)
+    at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+    at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+    at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+    at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+    at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+    at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+    at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+    at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+    at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+    at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+    at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+Node.js v20.19.4

@@ -1,0 +1,17 @@
+Development RDS:
+  Host: 
+  Port: 5432
+  Database: episodemetadata
+  Username: postgres
+  
+Staging RDS:
+  Host: 
+  Port: 5432
+  Database: episodemetadata
+  Username: postgres
+  
+Production RDS:
+  Host: 
+  Port: 5432
+  Database: episodemetadata
+  Username: postgres

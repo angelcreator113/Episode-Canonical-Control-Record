@@ -1,0 +1,1369 @@
+# Episode Metadata Storage Solution - Requirements & Design Document
+
+## Document Control
+
+**Version:** 2.0  
+**Date:** December 31, 2025  
+**Status:** Approved - Ready for Technical Architecture  
+**Author:** System Design Team  
+**Change Log:** 
+- v1.0: Initial draft
+- v1.1: Updated to reflect fashion/lifestyle production context with production assets
+- v1.2: Incorporated answers to initial open questions, added new clarification questions
+- v2.0: All requirements clarified, all design decisions finalized, ready for technical architecture phase
+
+---
+
+## 1. Executive Summary
+
+This document defines the requirements and high-level design for an Episode Metadata Storage Solution for fashion and lifestyle video content production. The system will store comprehensive metadata for video episodes including production assets (wardrobe, backgrounds, UI elements), scripts, trailers, and raw footage from multiple talent sources (Lala, JustAWomanInHerPrime, guests).
+
+The solution emphasizes production workflow support, visual continuity tracking, flexible schema evolution, and adaptability to changing content production requirements over time.
+
+---
+
+## 2. Business Context
+
+### 2.1 Purpose
+Create a centralized metadata storage system for fashion and lifestyle video episode production that manages production assets (wardrobe, UI elements, backgrounds), content (scripts, trailers), and raw footage while maintaining data integrity and accessibility across the production workflow.
+
+### 2.2 Key Drivers
+- Need to track production assets for visual continuity across episodes
+- Requirement to organize raw footage from multiple talent sources
+- Wardrobe and styling metadata for production planning and reference
+- Flexible schema to accommodate evolving production needs
+- Multi-service data consumption (editing, production planning, playback services)
+- Support for incremental feature development
+
+### 2.3 Success Criteria
+- Production team can quickly find wardrobe and asset metadata for episodes
+- Visual continuity is maintained through consistent asset tracking
+- Raw footage is organized and easily retrievable by talent and episode
+- System supports schema changes without breaking existing data
+- New metadata fields can be added without service downtime
+- Data is accessible to authorized services with acceptable performance
+- Development team can iterate quickly on data model changes
+
+---
+
+## 3. Scope
+
+### 3.1 In Scope
+- Episode metadata storage and retrieval
+- Production asset metadata (wardrobe, UI elements, backgrounds)
+- Content metadata (scripts, trailers)
+- Raw footage organization (by talent source)
+- Associated component metadata (audio, video, timing data)
+- Schema versioning and evolution support
+- API for data access by other services
+- Basic data validation
+- Query capabilities for common access patterns
+- Incremental schema expansion
+
+### 3.2 Out of Scope
+- Actual media file storage (only metadata and references)
+- Media transcoding or processing
+- Image manipulation or graphic design tools
+- Complex analytics or reporting (though data should support these)
+- User authentication (delegated to API gateway/service layer)
+- Wardrobe inventory management system (physical tracking)
+- Business logic beyond data validation
+
+### 3.3 Future Considerations
+- Advanced search capabilities (search by outfit, background, etc.)
+- Visual similarity search for wardrobe items
+- Data archival strategies
+- Analytics integration
+- Real-time event streaming
+- Integration with digital asset management (DAM) systems
+- Automated tagging using AI/ML
+
+---
+
+## 4. Stakeholders
+
+### 4.1 Primary Stakeholders
+- **Development Team**: Building and maintaining the system
+- **Production Team**: Managing episode production and asset coordination
+- **Content Creators**: Lala, JustAWomanInHerPrime talent, and guest coordinators
+- **Styling/Wardrobe Team**: Managing outfit selections and continuity
+- **Editors**: Consuming metadata during post-production
+- **Downstream Services**: Data consumers (player services, analytics, etc.)
+
+### 4.2 Secondary Stakeholders
+- **DevOps Team**: Infrastructure and deployment
+- **Data Analysts**: Future analytics consumers
+- **Product Management**: Feature and requirement definition
+- **Marketing Team**: Potential consumers of trailer and asset metadata
+
+---
+
+## 5. Functional Requirements
+
+### 5.1 Core Data Entities
+
+#### 5.1.1 Episode
+The primary entity representing a video episode.
+
+**Initial Minimum Attributes:**
+- Unique identifier
+- Title
+- Episode number (if part of series)
+- Season (if applicable)
+- Creation timestamp
+- Last modified timestamp
+- Status (draft, in-production, ready-for-edit, published, archived, etc.)
+
+**Production Content Attributes:**
+- Episode full script (text or reference to file)
+- Episode trailer (reference/URL to trailer video)
+
+**Wardrobe Tracking:**
+- Main outfit
+  - Outfit type (dress, separates, suit, etc.)
+  - Top details (style, color, brand, size, notes)
+  - Bottom details (style, color, brand, size, notes)
+  - Dress details (if applicable: style, color, brand, size, notes)
+  - Pattern/texture description
+- Accessories
+  - Jewelry (necklace, earrings, bracelets, rings)
+  - Belt
+  - Scarf/wrap
+  - Hair accessories
+  - Other accessories
+- Shoes
+  - Style (heels, flats, boots, etc.)
+  - Color
+  - Brand
+  - Height (if heels)
+- Purse/Bag
+  - Style (clutch, tote, crossbody, etc.)
+  - Color
+  - Brand
+  - Size
+
+**UI/Graphics Elements:**
+- Computer mouse icon (reference to graphic file)
+- Login screen graphics (reference to graphic file)
+- Screen accessories
+  - Minimize button graphic
+  - Exit button graphic
+  - Maximize button graphic
+  - Custom UI elements
+- Icon holder/container graphics
+
+**Backgrounds/Sets:**
+- Main closet background (reference to image/video file)
+- Photoshoot background (reference to image/video file)
+- Event background (reference to image/video file)
+- Additional location backgrounds
+
+**Expected Future Attributes:**
+- Description/synopsis
+- Duration
+- Release date
+- Tags/categories (fashion, lifestyle, tutorial, etc.)
+- Thumbnail references
+- Guest information
+- Location details
+- Filming date
+- Copyright information
+- Language
+- Geographic availability
+- Mood board references
+- Color palette
+- Lighting setup notes
+- Camera setup notes
+
+#### 5.1.2 Raw Footage/Clips
+Raw video clips organized by talent source.
+
+**Component Types:**
+- Lala raw clips
+- JustAWomanInHerPrime raw clips
+- Guest raw clips
+- B-roll footage
+- Behind-the-scenes footage
+
+**Clip Attributes:**
+- Unique identifier
+- Episode reference (foreign key)
+- Talent source (Lala, JustAWomanInHerPrime, Guest Name)
+- Clip type (raw, b-roll, BTS, etc.)
+- File reference/location
+- Duration
+- Timecode in/out
+- Scene/segment description
+- Take number
+- Quality rating (good, use, maybe, reject)
+- Creation timestamp
+- Status (pending review, approved, rejected, used)
+- Notes/comments
+
+#### 5.1.3 Associated Components (Additional)
+Other components linked to an episode beyond raw footage.
+
+**Component Types:**
+- Audio files (music, voiceovers, sound effects)
+- Supporting video files (inserts, graphics animations)
+- Voice-over timing/sync data
+- Subtitle/caption files
+- Metadata files
+- Reference images
+
+**Component Attributes:**
+- Unique identifier
+- Episode reference (foreign key)
+- Component type
+- File reference/location
+- Creation timestamp
+- Version information
+- Status
+- Notes/metadata
+
+### 5.2 Data Management Requirements
+
+#### FR-1: Create Episode Record
+**Priority:** Critical  
+**Description:** System must allow creation of new episode records with minimum required fields.
+
+**Acceptance Criteria:**
+- Can create episode with only required fields
+- System generates unique identifier
+- Timestamps are automatically set
+- Returns created record with ID
+
+#### FR-2: Update Episode Record
+**Priority:** Critical  
+**Description:** System must allow updating episode records.
+
+**Acceptance Criteria:**
+- Can update any non-identifier field
+- Last modified timestamp updates automatically
+- Validation occurs before update
+- Returns updated record
+
+#### FR-3: Retrieve Episode Record
+**Priority:** Critical  
+**Description:** System must allow retrieval of episode records by identifier.
+
+**Acceptance Criteria:**
+- Can retrieve by unique identifier
+- Returns complete record including all fields
+- Returns 404 for non-existent episodes
+
+#### FR-4: List Episodes
+**Priority:** High  
+**Description:** System must support listing episodes with filtering and pagination.
+
+**Acceptance Criteria:**
+- Supports pagination (limit/offset or cursor-based)
+- Supports basic filtering (by status, date range, etc.)
+- Supports sorting by common fields
+- Returns metadata about total count
+
+#### FR-5: Delete Episode Record
+**Priority:** Medium  
+**Description:** System must support deletion of episode records.
+
+**Acceptance Criteria:**
+- Soft delete preferred (mark as deleted but retain data)
+- Handles cascade for associated components
+- Returns confirmation of deletion
+
+#### FR-6: Manage Raw Footage/Clips
+**Priority:** Critical  
+**Description:** System must allow CRUD operations on raw footage clips organized by talent source.
+
+**Acceptance Criteria:**
+- Can add clips to existing episodes with talent source specification
+- Can update clip metadata (quality rating, status, notes)
+- Can remove clips from episodes
+- Can list all clips for an episode
+- Can filter clips by talent source (Lala, JustAWomanInHerPrime, Guest)
+- Can filter clips by status or quality rating
+- Maintains referential integrity
+
+#### FR-7: Manage Production Assets
+**Priority:** High  
+**Description:** System must allow management of production assets (wardrobe, UI elements, backgrounds).
+
+**Acceptance Criteria:**
+- Can add/update wardrobe details (outfit, accessories, shoes, purse)
+- Can add/update UI element references
+- Can add/update background references
+- Can retrieve complete production asset metadata for an episode
+- Supports structured data for wardrobe sub-categories
+
+#### FR-8: Manage Episode Content
+**Priority:** High  
+**Description:** System must allow storage and retrieval of episode scripts and trailer references.
+
+**Acceptance Criteria:**
+- Can store full script text or file reference
+- Can store trailer video reference
+- Can update script and trailer independently
+- Can retrieve script and trailer for editing/review
+
+#### FR-9: Query by Production Assets
+**Priority:** Medium  
+**Description:** System should support querying episodes by production asset attributes.
+
+**Acceptance Criteria:**
+- Can find episodes by outfit characteristics (color, style, etc.)
+- Can find episodes by background used
+- Can find episodes featuring specific accessories
+- Results include complete episode metadata
+
+#### FR-10: Manage Associated Components
+**Priority:** High  
+**Description:** System must allow CRUD operations on associated components (audio, supporting video, etc.).
+
+**Acceptance Criteria:**
+- Can add components to existing episodes
+- Can update component metadata
+- Can remove components from episodes
+- Can list all components for an episode
+- Maintains referential integrity
+
+#### FR-11: Schema Evolution
+**Priority:** Critical  
+**Description:** System must support adding new fields without breaking existing data or requiring downtime.
+
+**Acceptance Criteria:**
+- New fields can be added via migration or configuration
+- Existing data remains accessible with new schema
+- Old records show null/default for new fields
+- No downtime required for schema additions
+- Schema version is trackable
+
+#### FR-12: Field Validation
+**Priority:** High  
+**Description:** System must validate data according to field definitions.
+
+**Acceptance Criteria:**
+- Required field validation
+- Data type validation
+- Custom validation rules (regex, ranges, etc.)
+- Clear error messages for validation failures
+
+### 5.3 API Requirements
+
+#### FR-13: RESTful API
+**Priority:** Critical  
+**Description:** System must expose RESTful API for all data operations.
+
+**Acceptance Criteria:**
+- Standard HTTP methods (GET, POST, PUT, PATCH, DELETE)
+- JSON request/response format
+- Standard HTTP status codes
+- Versioned API endpoints
+
+#### FR-14: Batch Operations
+**Priority:** Medium  
+**Description:** System should support batch operations for efficiency.
+
+**Acceptance Criteria:**
+- Can create multiple records in single request
+- Can update multiple records in single request
+- Returns status for each operation in batch
+
+#### FR-15: Query Capabilities
+**Priority:** High  
+**Description:** System must support flexible querying.
+
+**Acceptance Criteria:**
+- Filter by any field
+- Combine multiple filter conditions
+- Support for common operators (equals, contains, greater than, etc.)
+- Ability to select specific fields to return
+- Support for nested field queries (e.g., wardrobe.shoes.color)
+
+---
+
+## 6. Non-Functional Requirements
+
+### 6.1 Performance
+
+#### NFR-1: Response Time
+**Target:** 95th percentile response time < 200ms for single record retrieval  
+**Target:** 95th percentile response time < 500ms for list queries
+
+#### NFR-2: Throughput
+**Target:** Support at least 100 requests per second initially  
+**Scalability:** Architecture must support horizontal scaling to 1000+ requests per second
+
+#### NFR-3: Data Volume
+**Initial:** Support for 10,000 episodes  
+**Growth:** Architecture must support millions of episodes
+
+### 6.2 Reliability
+
+#### NFR-4: Availability
+**Target:** 99.9% uptime during business hours  
+**Target:** 99.5% uptime overall
+
+#### NFR-5: Data Durability
+**Target:** Zero data loss under normal operating conditions  
+**Requirement:** Automated backups with point-in-time recovery
+
+#### NFR-6: Disaster Recovery
+**RTO (Recovery Time Objective):** 4 hours  
+**RPO (Recovery Point Objective):** 15 minutes
+
+### 6.3 Scalability
+
+#### NFR-7: Horizontal Scalability
+System must support adding application instances without code changes.
+
+#### NFR-8: Storage Scalability
+System must support storage growth without requiring data migration or downtime.
+
+### 6.4 Maintainability
+
+#### NFR-9: Schema Migration
+Schema changes should be deployable via automated migration tools with rollback capability.
+
+#### NFR-10: Monitoring
+System must expose metrics for monitoring (response times, error rates, resource usage).
+
+#### NFR-11: Logging
+All operations must be logged with sufficient detail for debugging and audit.
+
+### 6.5 Security
+
+#### NFR-12: Authentication
+API must validate authentication tokens (implementation delegated to API gateway).
+
+#### NFR-13: Authorization
+System must support role-based access control for different operations.
+
+#### NFR-14: Data Protection
+Sensitive data must be encrypted at rest and in transit.
+
+#### NFR-15: API Rate Limiting
+System must support rate limiting to prevent abuse.
+
+### 6.6 Compatibility
+
+#### NFR-16: API Versioning
+System must support multiple API versions concurrently during transition periods.
+
+#### NFR-17: Backward Compatibility
+Schema changes must maintain backward compatibility for at least one major version.
+
+---
+
+## 7. Design Approach
+
+### 7.1 Architectural Principles
+
+#### 7.1.1 Schema-on-Read vs Schema-on-Write
+**Recommendation:** Hybrid approach
+- Core fields use schema-on-write (validated, indexed)
+- Extended/custom fields use schema-on-read (flexible JSON/document storage)
+- Allows incremental formalization of fields as requirements solidify
+
+#### 7.1.2 Data Storage Strategy
+**Recommendation:** Document-oriented database or relational database with JSON support
+
+**Rationale:**
+- Supports schema evolution naturally
+- Allows storing varying structures per record
+- Maintains query performance for known fields
+- Enables incremental schema definition
+
+**Options to Evaluate:**
+- PostgreSQL with JSONB columns
+- MongoDB
+- DynamoDB
+- Firestore
+
+#### 7.1.3 Versioning Strategy
+**Recommendation:** Schema versioning at the field level
+
+**Approach:**
+- Each record stores its schema version
+- New fields are additive
+- Deprecated fields remain readable but not writeable
+- Migration utilities for bulk updates when needed
+
+### 7.2 High-Level Architecture
+
+```
+┌─────────────────┐
+│  API Gateway    │
+│  (Auth/Rate     │
+│   Limiting)     │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Application    │
+│  Service Layer  │
+│  (Business      │
+│   Logic/        │
+│   Validation)   │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Data Access    │
+│  Layer          │
+│  (Abstraction)  │
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Database       │
+│  (Primary       │
+│   Storage)      │
+└─────────────────┘
+
+      ┌──────────────┐
+      │  Cache Layer │
+      │  (Optional)  │
+      └──────────────┘
+```
+
+### 7.3 Data Model Evolution Pattern
+
+**Phase 1: Minimal Viable Schema**
+- Start with absolute minimum fields
+- Focus on core episode identification and timestamps
+
+**Phase 2: Incremental Addition**
+- Add fields as requirements emerge
+- Document each field's purpose and validation rules
+- Maintain changelog of schema evolution
+
+**Phase 3: Field Promotion**
+- Promote frequently-used flexible fields to core schema
+- Add indexes for performance
+- Maintain backward compatibility
+
+### 7.4 API Design Patterns
+
+#### 7.4.1 Resource-Based Endpoints
+```
+# Episodes
+GET    /api/v1/episodes              # List episodes
+POST   /api/v1/episodes              # Create episode
+GET    /api/v1/episodes/{id}         # Get episode
+PUT    /api/v1/episodes/{id}         # Update episode (full)
+PATCH  /api/v1/episodes/{id}         # Update episode (partial)
+DELETE /api/v1/episodes/{id}         # Delete episode
+
+# Raw Footage/Clips
+GET    /api/v1/episodes/{id}/clips                    # List clips for episode
+POST   /api/v1/episodes/{id}/clips                    # Add clip to episode
+GET    /api/v1/episodes/{id}/clips/{clip_id}          # Get clip
+PUT    /api/v1/episodes/{id}/clips/{clip_id}          # Update clip
+DELETE /api/v1/episodes/{id}/clips/{clip_id}          # Delete clip
+GET    /api/v1/clips?talent={source}                  # Query clips by talent
+GET    /api/v1/clips?status={status}                  # Query clips by status
+
+# Production Assets
+GET    /api/v1/episodes/{id}/wardrobe                 # Get wardrobe details
+PUT    /api/v1/episodes/{id}/wardrobe                 # Update wardrobe
+GET    /api/v1/episodes/{id}/ui-elements              # Get UI elements
+PUT    /api/v1/episodes/{id}/ui-elements              # Update UI elements
+GET    /api/v1/episodes/{id}/backgrounds              # Get backgrounds
+PUT    /api/v1/episodes/{id}/backgrounds              # Update backgrounds
+
+# Episode Content
+GET    /api/v1/episodes/{id}/script                   # Get script
+PUT    /api/v1/episodes/{id}/script                   # Update script
+GET    /api/v1/episodes/{id}/trailer                  # Get trailer reference
+PUT    /api/v1/episodes/{id}/trailer                  # Update trailer reference
+
+# Associated Components (general)
+GET    /api/v1/episodes/{id}/components               # List components
+POST   /api/v1/episodes/{id}/components               # Add component
+GET    /api/v1/episodes/{id}/components/{comp_id}     # Get component
+PUT    /api/v1/episodes/{id}/components/{comp_id}     # Update component
+DELETE /api/v1/episodes/{id}/components/{comp_id}     # Delete component
+
+# Query/Search Endpoints
+GET    /api/v1/episodes/search?wardrobe.outfit_type={type}    # Search by outfit
+GET    /api/v1/episodes/search?wardrobe.shoes.color={color}   # Search by shoes
+GET    /api/v1/episodes/search?background={bg}                # Search by background
+```
+
+#### 7.4.2 Request/Response Format
+**Standard Response Envelope:**
+```json
+{
+  "data": { /* actual data */ },
+  "metadata": {
+    "schema_version": "1.2",
+    "timestamp": "2025-12-31T12:00:00Z"
+  },
+  "errors": []  // if applicable
+}
+```
+
+**Error Format:**
+```json
+{
+  "errors": [
+    {
+      "code": "VALIDATION_ERROR",
+      "message": "Title is required",
+      "field": "title"
+    }
+  ]
+}
+```
+
+---
+
+## 8. Design Decisions (From Requirements Clarification)
+
+### 8.1 Authentication & Authorization
+- **Decision**: Use AWS Cognito for authentication and authorization
+- **Implication**: JWT tokens, integration with AWS ecosystem, user pools for role management
+- **User Roles**: Admin (system owner), Editor/Uploader (optional), Viewer (optional)
+- **Permission Granularity**: Entity-level permissions initially
+- **Next Steps**: Define Cognito user pool structure, user groups for roles
+
+### 8.2 Media File References
+- **Decision**: Use S3 paths for all file references
+- **Format**: `s3://bucket-name/path/to/file.ext`
+- **Implication**: Direct S3 integration, presigned URLs for secure access
+- **Upload Flow**: Direct upload via API/UI with presigned URLs, plus "register existing S3 key" for bulk imports
+- **Next Steps**: Define S3 bucket structure and naming conventions
+
+### 8.3 Shared Asset Architecture
+- **Decision**: UI elements and backgrounds are independent entities/tables separate from episodes
+- **Design Pattern**: Create dedicated tables (ui_elements, backgrounds) that episodes reference via foreign keys
+- **Benefits**: Reusability, central management, version control per asset
+- **Implication**: Need junction/linking tables for many-to-many relationships
+
+### 8.4 Wardrobe Management
+- **Decision**: Track wardrobe reuse by Outfit ID, not exact field matching
+- **Design Pattern**: Create "Outfit" entity with unique ID that episodes reference
+- **Wardrobe Item Structure**: Outfit is composition of wardrobe items (top, bottom, shoes, accessories, etc.)
+- **Benefits**: Easy reuse tracking, outfit history, prevent duplicate entry
+- **Duplicate Detection**: Warn on same product_url or brand+product_name+size
+
+### 8.5 Raw Clip Organization
+- **Decision**: Clips can be linked to episodes OR exist standalone in clip library
+- **Design Pattern**: Clips are independent entities; episode_id is nullable foreign key
+- **Clip Library**: Standalone clips are "waiting to be assigned" with status tracking
+- **Implication**: Need filtering for unassigned clips, clip assignment workflow
+- **Duplicate Detection**: Warn on same source_file_hash (checksum) or filename+duration
+
+### 8.6 Data Retention Strategy
+- **Soft Delete Scope**: All primary entities (episodes, clips, scripts, script_versions, wardrobe_items, outfits, ui_elements, backgrounds)
+- **Soft Delete Fields**: `deleted_at`, `deleted_by`, `deleted_reason`, `restored_at`, `restored_by`
+- **Default Visibility**: Hidden by default; admins can use `include_deleted=true`
+- **Restoration**: Admin-only, full audit trail
+- **Hard Delete Triggers**: Legal deletion requests, accidental upload cleanup (short window), retention policy expiration
+- **Implication**: Add soft delete fields to all tables, filter queries by default
+
+### 8.7 Real-Time Capabilities
+- **Decision**: No real-time change notifications required initially
+- **Implication**: Simpler architecture, polling acceptable
+- **Future Notifications**: Optional email/slack on publish or active script version changes
+- **Future Consideration**: Add webhook support or message queue when needed
+
+### 8.8 Geographic Distribution
+- **Decision**: Single-region deployment (likely us-east-1) initially
+- **Architecture Principle**: Design for multi-region expansion
+- **Implication**: Avoid region-specific service features, use replicable patterns
+- **Future Path**: Add read replicas and CDN for global access
+
+### 8.9 Compliance & Privacy
+- **Guest Privacy Clarification**: Guests are treated as real identities (not anonymous)
+- **Guest Data**: Name, business_name, business_email/phone (optional), website, notes, outfit_refs, uploads
+- **Data Policy**: 
+  - Minimal PII collection with consent checkbox + privacy notice
+  - Session duration: 30 days (configurable, or 7 days for stricter privacy)
+  - Guest-to-registered conversion: Link and migrate with user_id assignment
+- **No Specific Compliance**: No GDPR/HIPAA requirements currently
+- **Implication**: Need consent tracking, guest session expiration, conversion workflow
+
+### 8.10 Script Version Control
+- **Storage Format**: Both text in DB (for full-text search, diff, preview) AND file reference (S3/drive for canonical file)
+- **Script Version Metadata**:
+  - `version_number` (integer: 1, 2, 3...)
+  - `author` (user_id or name)
+  - `change_notes` (text)
+  - `created_at` (timestamp)
+  - `approval_status` (draft/approved/rejected)
+  - `source` (manual_upload/import/system)
+  - `is_active` (boolean, or use active_version pointer)
+- **Version Limit**: Maximum 100 versions per episode script
+- **Trailer Scripts**: Separate script record with own versions
+- **Active Version Management**: Manual selection
+- **Implication**: Need version entity, version comparison API, active version toggle
+
+### 8.11 Approval Workflow
+- **Current State**: Manual/implicit approval (uploads are pre-approved)
+- **Approval Levels**: Single approval initially
+- **Approval Scope**: Optional approval fields on all entities (scripts, episodes, clips, wardrobe, outfits, ui_elements, backgrounds)
+- **No Role Gating**: Record `uploaded_by` and optional `original_approver` for future use
+- **State Transitions**: 
+  - draft → approved
+  - approved → draft (unapprove)
+  - draft → rejected
+  - rejected → draft (fix and resubmit)
+- **Current Default**: Everything defaults to `approved` on upload, but fields exist for future workflows
+- **Implication**: Add approval status fields but don't enforce workflows yet
+
+### 8.12 Thumbnail Generation
+- **Sizes/Resolutions**: 
+  - Primary: 1280×720 (16:9, YouTube-safe)
+  - Derivatives: 640×360, 320×180
+- **Sources**: 
+  - Composed image (wardrobe + background)
+  - Uploaded clip frame capture
+  - Uploaded custom thumbnail override
+- **Processing**: Asynchronous background job (fast uploads, avoid timeouts, allow regeneration)
+- **Storage Location**: Separate S3 bucket with structure:
+  - `thumbnails/episodes/{episode_id}/...`
+  - `thumbnails/clips/{clip_id}/...`
+  - `thumbnails/outfits/{outfit_id}/...`
+- **Implication**: Need image processing lambda/service, thumbnail regeneration API, background job queue
+
+### 8.13 Database Technology
+- **Decision**: PostgreSQL
+- **Rationale**: 
+  - Best for relational data with complex relationships
+  - Excellent for metadata with joins and constraints
+  - Full-text search via PostgreSQL FTS (good enough initially)
+  - Can add OpenSearch later if needed
+  - JSON/JSONB support for flexible fields
+- **Infrastructure**: AWS RDS PostgreSQL
+- **Future Consideration**: Read replicas for scale, connection pooling
+
+### 8.14 Data Organization
+- **Multiple Shows**: Yes, system supports multiple shows
+- **Shows Table**: Create shows table, episodes reference `show_id`
+- **Episode Numbering**: Both automatic and manual
+  - Auto-suggest next episode number
+  - Allow manual override
+  - Enforce uniqueness on (show_id, season_number, episode_number)
+- **Episode Status Workflow** (complete list):
+  - `draft` (created but not ready)
+  - `in_production` (filming/editing ongoing)
+  - `ready_for_publish` (final assets assembled)
+  - `published`
+  - `archived`
+  - Optional: `on_hold`, `canceled`
+- **Clip Quality Ratings** (enum):
+  - `hero` (best-of-best, must use)
+  - `good`
+  - `maybe`
+  - `reject`
+
+### 8.15 Production Timeline Tracking
+- **Decision**: Yes, track production dates (optional fields)
+- **Fields**:
+  - `filming_date`
+  - `edit_deadline`
+  - `publish_date`
+  - `released_at` (actual publish timestamp)
+- **Implication**: Support date-based queries and production schedule views
+
+### 8.16 Search & Discovery
+- **Search Priority** (in order):
+  1. Episodes (by show/season/episode number/status)
+  2. Clips (by tags, rating, scene/character)
+  3. Wardrobe/outfits (by brand, item type, "worn by", episode)
+  4. Scripts (full-text)
+  5. Backgrounds/UI elements (tags + usage frequency)
+- **Full-Text Search**: Yes, on scripts, descriptions, notes
+- **Tags/Taxonomy**: 
+  - Free-form tags (user-defined)
+  - Optional system categories (wardrobe_type, vibe/mood, show, character, sponsor)
+- **Implication**: Need PostgreSQL FTS configuration, tag normalization, category enums
+
+### 8.17 Infrastructure & DevOps
+- **Cloud Provider**: AWS-only initially
+- **CI/CD**: GitHub Actions
+- **Monitoring**: CloudWatch with structured logs and alarms
+- **Audit Logging**: Track create/update/delete with `changed_by`, `changed_at`, entity, field changes
+- **Critical Audit Entities**: Scripts, active version changes, deletions
+- **Implication**: Need CloudWatch dashboards, log aggregation, alarm configuration
+
+### 8.18 Expected Scale (Planning Defaults)
+- **Year 1**: 10-50 episodes, 200-2,000 raw clips, 200-1,500 outfits
+- **Year 5**: 100-500 episodes, 5,000-50,000 clips, 5,000-30,000 outfits
+- **Concurrent Users**: 1-5 internal users initially, 10-50+ if creators get access
+- **Peak Usage**: Upload/tagging days, pre-publish finalization, viewer traffic spikes near release
+- **Implication**: Design for current scale but architect for 100x growth
+
+### 8.19 Integration Strategy
+- **Video Editing Integration**: Not required initially (manual metadata entry)
+- **Future Option**: Export CSV/JSON for editors
+- **External DAM**: No integration planned initially
+- **Asset Upload**: Via API/UI with presigned S3 URLs
+- **Implication**: Simple REST API sufficient, consider export endpoints for future
+
+### 8.20 Talent Source Names
+- **Decision**: "Lala" and "JustAWomanInHerPrime" are canonical names
+- **Implication**: Create constants in code, use enum type in database
+- **Extensibility**: Design to allow adding new talent sources via configuration
+
+---
+
+## 9. Data Governance
+
+### 9.1 Schema Documentation
+- All fields must be documented with purpose, type, and validation rules
+- Schema changes must be reviewed and approved
+- Changelog must be maintained
+
+### 9.2 Migration Management
+- All schema changes must have corresponding migration scripts
+- Migrations must be tested in non-production environments
+- Rollback procedures must be documented
+
+### 9.3 Data Quality
+- Regular data quality audits
+- Validation rule enforcement
+- Data cleanup procedures for deprecated fields
+
+---
+
+## 10. Integration Points
+
+### 10.1 Downstream Consumers
+- **Video editing software** (need episode metadata, scripts, raw clip references)
+- **Video player services** (need episode metadata for playback)
+- **Content management systems** (need CRUD capabilities)
+- **Production planning tools** (need wardrobe and asset metadata)
+- **Digital asset management (DAM) systems** (need file references and metadata)
+- **Analytics platforms** (need read access for reporting)
+- **Search services** (need episode indexing including production assets)
+- **Styling/wardrobe planning tools** (need outfit history and details)
+
+### 10.2 Integration Patterns
+- **Synchronous:** REST API for real-time queries
+- **Asynchronous:** Event publishing for change notifications (future consideration)
+- **Batch:** Bulk export capabilities for analytics (future consideration)
+- **Webhooks:** Notify external systems of episode status changes (future consideration)
+
+---
+
+## 11. Constraints and Assumptions
+
+### 11.1 Constraints
+- Must use cloud-native services where possible
+- Must maintain backward compatibility during schema evolution
+- Must not store actual media files (only references)
+- Initial budget limits infrastructure costs
+- System must support concurrent access by production team members
+
+### 11.2 Assumptions
+- Media files (videos, images, graphics) are stored in separate object storage (S3, GCS, etc.)
+- Raw footage files are organized in object storage with consistent naming conventions
+- Authentication/authorization handled by separate service
+- Initial traffic volume is modest but must support future growth
+- Schema requirements will evolve significantly over first 6-12 months
+- Wardrobe items are identified by descriptions (not physical inventory tracking)
+- Production team will manually enter wardrobe and asset metadata
+- UI elements and backgrounds are stored as image/video files elsewhere
+- Guest information may be minimal initially and expanded later
+
+---
+
+## 12. Risks and Mitigations
+
+| Risk | Impact | Probability | Mitigation |
+|------|--------|-------------|------------|
+| Schema changes break existing integrations | High | Medium | API versioning, comprehensive testing, communication plan |
+| Performance degrades with data growth | High | Medium | Implement caching, database indexing strategy, monitoring |
+| Over-engineering for unknown requirements | Medium | High | Start minimal, iterate based on real needs |
+| Data inconsistency across services | High | Low | Implement validation, transaction support where needed |
+| Vendor lock-in with database choice | Medium | Medium | Use abstraction layer, choose portable technologies |
+
+---
+
+## 13. Open Questions
+
+### 13.1 Answered Questions ✓
+
+1. **Authentication/Authorization**: ✓ AWS Cognito
+2. **Media File References**: ✓ S3 paths
+3. **Wardrobe Detail Level**: ✓ Medium detail initially
+4. **Raw Clip Organization**: ✓ Clips can be linked to episodes OR standalone
+5. **Component Relationships**: ✓ UI elements and backgrounds can be shared across episodes
+6. **Soft Delete vs Hard Delete**: ✓ Both options available
+7. **Real-time Requirements**: ✓ No real-time change notifications needed
+8. **Geographical Distribution**: ✓ Single-region initially, architecture supports future multi-region
+9. **Compliance**: ✓ No specific regulatory requirements
+10. **Wardrobe Reuse Tracking**: ✓ Yes, track outfit reuse across episodes
+11. **Guest Privacy**: ✓ Guests are anonymous, session-based only, no PII
+12. **Script Versions**: ✓ Full version control with history, active version tracking
+13. **Approval Workflow**: ✓ Yes, production assets need approval status
+14. **Image/Thumbnail Storage**: ✓ Yes, generate thumbnails automatically
+15. **Talent Source Naming**: ✓ "Lala" and "JustAWomanInHerPrime" are canonical
+
+### 13.2 All Questions Answered ✓
+
+All questions have been answered and incorporated into Section 8 (Design Decisions).
+
+**Key Architectural Decisions Made:**
+- PostgreSQL database for relational data and metadata
+- AWS-only infrastructure with Cognito auth
+- Separate entities for shared assets (outfits, UI elements, backgrounds)
+- Outfit ID-based wardrobe tracking for reuse detection
+- Both soft delete and hard delete support
+- Standalone clip library with optional episode linking
+- Full script version control with text + file storage
+- Asynchronous thumbnail generation with multiple sizes
+- Optional approval workflow fields (not enforced initially)
+- Support for multiple shows in single system
+
+**Ready to Proceed to Technical Architecture Document**
+
+---
+
+## 14. Success Metrics
+
+### 14.1 Technical Metrics
+- API response time (p50, p95, p99)
+- Error rate (< 0.1% target)
+- Uptime percentage
+- Schema migration success rate
+- Time to add new field (target: < 1 day)
+
+### 14.2 Business Metrics
+- Number of episodes stored
+- Number of raw clips organized
+- Number of API consumers
+- API request volume
+- Developer satisfaction with API
+- Time saved vs manual metadata management
+- Production team satisfaction with wardrobe tracking
+- Percentage of episodes with complete production asset metadata
+- Search/query usage patterns
+
+### 14.3 Production Workflow Metrics
+- Time to retrieve outfit information for continuity
+- Percentage of episodes with complete wardrobe metadata
+- Number of searches by production assets
+- Time saved in pre-production planning
+
+---
+
+## 15. Next Steps
+
+Upon approval of this requirements document:
+
+1. **Create Technical Architecture Document** defining:
+   - Specific technology selections (database, framework, language)
+   - Detailed component design
+   - Infrastructure architecture
+   - Development environment setup
+   - CI/CD pipeline design
+   - Project structure and naming conventions
+   - Configuration management approach
+
+2. **Create Project Roadmap Document** defining:
+   - Development phases
+   - Task breakdown
+   - Implementation sequence
+   - Testing strategy
+   - Deployment plan
+   - Timeline and milestones
+
+3. **Stakeholder Review Cycle**:
+   - Review with technical team
+   - Review with product stakeholders
+   - Incorporate feedback
+   - Final approval
+
+---
+
+## 16. Appendices
+
+### Appendix A: Glossary
+
+- **Episode**: A single video content unit with associated metadata and production assets
+- **Component**: An associated file or data structure linked to an episode
+- **Raw Footage/Clips**: Unedited video clips organized by talent source
+- **Production Assets**: Wardrobe, UI elements, backgrounds, and other visual elements
+- **Wardrobe**: Complete outfit information including main outfit, accessories, shoes, and purse
+- **Talent Source**: The person or entity providing raw footage (Lala, JustAWomanInHerPrime, Guest)
+- **UI Elements**: Graphics and icons used in the episode interface
+- **Schema Evolution**: The process of changing data structure over time
+- **Schema-on-Read**: Validation and structure enforcement at read time
+- **Schema-on-Write**: Validation and structure enforcement at write time
+- **JustAWomanInHerPrime**: Talent source name (verify final canonical name)
+- **Lala**: Talent source name (verify final canonical name)
+
+### Appendix B: Example Episode Records
+
+**Minimal Initial Version (MVP):**
+```json
+{
+  "id": "ep_20251231_abc123",
+  "title": "New Year Style Reset",
+  "episode_number": 1,
+  "season": 1,
+  "status": "draft",
+  "created_at": "2025-12-31T10:00:00Z",
+  "updated_at": "2025-12-31T10:00:00Z",
+  "schema_version": "1.0"
+}
+```
+
+**With Production Assets:**
+```json
+{
+  "id": "ep_20251231_abc123",
+  "title": "New Year Style Reset",
+  "episode_number": 1,
+  "season": 1,
+  "status": "in-production",
+  "created_at": "2025-12-31T10:00:00Z",
+  "updated_at": "2025-12-31T15:30:00Z",
+  "schema_version": "1.1",
+  
+  "content": {
+    "script": "s3://bucket/scripts/ep_abc123_v2.pdf",
+    "trailer": "s3://bucket/trailers/ep_abc123_trailer.mp4"
+  },
+  
+  "wardrobe": {
+    "main_outfit": {
+      "outfit_type": "separates",
+      "top": {
+        "style": "silk blouse",
+        "color": "champagne",
+        "brand": "Equipment",
+        "size": "M",
+        "notes": "French tuck styling"
+      },
+      "bottom": {
+        "style": "wide-leg trousers",
+        "color": "black",
+        "brand": "Theory",
+        "size": "6",
+        "notes": "High-waisted"
+      },
+      "pattern": "solid"
+    },
+    "accessories": {
+      "jewelry": {
+        "necklace": "gold layered chains",
+        "earrings": "gold hoops, medium",
+        "bracelets": "gold bangles (3)",
+        "rings": "gold midi rings (2)"
+      },
+      "belt": "none",
+      "other": ["silk scarf as hair accessory"]
+    },
+    "shoes": {
+      "style": "pointed toe pumps",
+      "color": "nude",
+      "brand": "Christian Louboutin",
+      "heel_height": "4 inches"
+    },
+    "purse": {
+      "style": "structured tote",
+      "color": "cognac",
+      "brand": "Saint Laurent",
+      "size": "medium"
+    }
+  },
+  
+  "ui_elements": {
+    "computer_mouse": "s3://bucket/ui/mouse_icon_gold.svg",
+    "login_screen": "s3://bucket/ui/login_nyc_skyline.jpg",
+    "screen_accessories": {
+      "minimize": "s3://bucket/ui/minimize_champagne.svg",
+      "maximize": "s3://bucket/ui/maximize_champagne.svg",
+      "exit": "s3://bucket/ui/exit_champagne.svg"
+    },
+    "icon_holder": "s3://bucket/ui/icon_holder_marble.png"
+  },
+  
+  "backgrounds": {
+    "main_closet": "s3://bucket/backgrounds/closet_main_v3.jpg",
+    "photoshoot": "s3://bucket/backgrounds/studio_white_seamless.jpg",
+    "event": "s3://bucket/backgrounds/rooftop_nyc_sunset.jpg"
+  }
+}
+```
+
+**Future Fully Evolved Version:**
+```json
+{
+  "id": "ep_20251231_abc123",
+  "title": "New Year Style Reset",
+  "description": "Kick off the new year with a fresh approach to your wardrobe",
+  "episode_number": 1,
+  "season": 1,
+  "status": "published",
+  "duration_seconds": 1800,
+  "release_date": "2026-01-15",
+  "filming_date": "2025-12-31",
+  "tags": ["fashion", "new year", "wardrobe planning", "styling tips"],
+  "language": "en-US",
+  "copyright": "© 2026 JustAWomanInHerPrime",
+  "thumbnail_url": "https://cdn.example.com/thumbs/ep_abc123.jpg",
+  "created_at": "2025-12-31T10:00:00Z",
+  "updated_at": "2026-01-10T14:30:00Z",
+  "schema_version": "2.5",
+  
+  "content": {
+    "script": "s3://bucket/scripts/ep_abc123_final.pdf",
+    "trailer": "s3://bucket/trailers/ep_abc123_trailer.mp4"
+  },
+  
+  "wardrobe": {
+    "main_outfit": {
+      "outfit_type": "separates",
+      "top": {
+        "style": "silk blouse",
+        "color": "champagne",
+        "brand": "Equipment",
+        "size": "M",
+        "notes": "French tuck styling",
+        "image_reference": "s3://bucket/wardrobe/ep_abc123_top.jpg"
+      },
+      "bottom": {
+        "style": "wide-leg trousers",
+        "color": "black",
+        "brand": "Theory",
+        "size": "6",
+        "notes": "High-waisted",
+        "image_reference": "s3://bucket/wardrobe/ep_abc123_bottom.jpg"
+      },
+      "pattern": "solid",
+      "overall_image": "s3://bucket/wardrobe/ep_abc123_full_outfit.jpg"
+    },
+    "accessories": {
+      "jewelry": {
+        "necklace": "gold layered chains",
+        "earrings": "gold hoops, medium",
+        "bracelets": "gold bangles (3)",
+        "rings": "gold midi rings (2)"
+      },
+      "belt": "none",
+      "other": ["silk scarf as hair accessory"]
+    },
+    "shoes": {
+      "style": "pointed toe pumps",
+      "color": "nude",
+      "brand": "Christian Louboutin",
+      "heel_height": "4 inches",
+      "image_reference": "s3://bucket/wardrobe/ep_abc123_shoes.jpg"
+    },
+    "purse": {
+      "style": "structured tote",
+      "color": "cognac",
+      "brand": "Saint Laurent",
+      "size": "medium",
+      "image_reference": "s3://bucket/wardrobe/ep_abc123_purse.jpg"
+    }
+  },
+  
+  "ui_elements": {
+    "computer_mouse": "s3://bucket/ui/mouse_icon_gold.svg",
+    "login_screen": "s3://bucket/ui/login_nyc_skyline.jpg",
+    "screen_accessories": {
+      "minimize": "s3://bucket/ui/minimize_champagne.svg",
+      "maximize": "s3://bucket/ui/maximize_champagne.svg",
+      "exit": "s3://bucket/ui/exit_champagne.svg"
+    },
+    "icon_holder": "s3://bucket/ui/icon_holder_marble.png"
+  },
+  
+  "backgrounds": {
+    "main_closet": "s3://bucket/backgrounds/closet_main_v3.jpg",
+    "photoshoot": "s3://bucket/backgrounds/studio_white_seamless.jpg",
+    "event": "s3://bucket/backgrounds/rooftop_nyc_sunset.jpg"
+  },
+  
+  "guest_info": {
+    "name": "Sarah Johnson",
+    "role": "Celebrity Stylist",
+    "bio_url": "https://example.com/guests/sarah-johnson"
+  },
+  
+  "production_notes": {
+    "lighting_setup": "3-point with key from camera left",
+    "camera_setup": "Sony A7S III, 24-70mm f/2.8",
+    "color_palette": ["champagne", "black", "gold", "nude"],
+    "mood_board": "s3://bucket/production/ep_abc123_mood_board.pdf"
+  }
+}
+```
+
+### Appendix C: Example Raw Clip and Component Records
+
+**Raw Clip Example (Lala):**
+```json
+{
+  "id": "clip_lala_001",
+  "episode_id": "ep_20251231_abc123",
+  "talent_source": "Lala",
+  "clip_type": "raw",
+  "file_reference": "s3://bucket/raw/ep_abc123/lala_take_01.mov",
+  "duration_seconds": 245,
+  "timecode_in": "00:00:00:00",
+  "timecode_out": "00:04:05:00",
+  "scene_description": "Opening monologue - wardrobe introduction",
+  "take_number": 1,
+  "quality_rating": "good",
+  "status": "approved",
+  "notes": "Great energy, use this take",
+  "created_at": "2025-12-31T11:00:00Z",
+  "updated_at": "2025-12-31T14:00:00Z"
+}
+```
+
+**Raw Clip Example (Guest):**
+```json
+{
+  "id": "clip_guest_sarah_001",
+  "episode_id": "ep_20251231_abc123",
+  "talent_source": "Guest - Sarah Johnson",
+  "clip_type": "raw",
+  "file_reference": "s3://bucket/raw/ep_abc123/guest_sarah_take_03.mov",
+  "duration_seconds": 180,
+  "timecode_in": "00:00:00:00",
+  "timecode_out": "00:03:00:00",
+  "scene_description": "Guest styling tips segment",
+  "take_number": 3,
+  "quality_rating": "use",
+  "status": "approved",
+  "notes": "Best take, good audio",
+  "created_at": "2025-12-31T13:00:00Z",
+  "updated_at": "2025-12-31T15:30:00Z"
+}
+```
+
+**Audio Component Example:**
+```json
+{
+  "id": "comp_audio_bg_music",
+  "episode_id": "ep_20251231_abc123",
+  "type": "audio",
+  "subtype": "background_music",
+  "file_reference": "s3://bucket/audio/ep_abc123_bg_music.mp3",
+  "duration_seconds": 1800,
+  "created_at": "2026-01-05T09:00:00Z",
+  "updated_at": "2026-01-05T09:00:00Z",
+  "status": "ready",
+  "version": "1.0",
+  "metadata": {
+    "track_name": "Uplifting Corporate",
+    "artist": "Production Music Library",
+    "license": "royalty_free",
+    "bitrate": "320kbps"
+  }
+}
+```
+
+**Voiceover Sync Data Example:**
+```json
+{
+  "id": "comp_vo_sync_001",
+  "episode_id": "ep_20251231_abc123",
+  "type": "voiceover_sync",
+  "subtype": "timing_data",
+  "file_reference": "s3://bucket/sync/ep_abc123_vo_timing.json",
+  "created_at": "2026-01-06T10:00:00Z",
+  "updated_at": "2026-01-06T10:00:00Z",
+  "status": "ready",
+  "version": "1.0",
+  "metadata": {
+    "format": "json",
+    "segments": 24,
+    "total_duration": 1800
+  }
+}
+```
+
+### Appendix D: Production Workflow Use Cases
+
+**Use Case 1: Pre-Production Planning**
+The styling team needs to plan next week's episodes and wants to avoid repeating outfits too frequently.
+
+Query:
+```
+GET /api/v1/episodes/search?wardrobe.main_outfit.top.color=champagne&status=published
+```
+
+Response: List of all published episodes where a champagne-colored top was worn, allowing team to ensure variety.
+
+---
+
+**Use Case 2: Maintaining Visual Continuity**
+Editor needs to match UI elements from previous episode for series consistency.
+
+Query:
+```
+GET /api/v1/episodes/ep_20251220_xyz456/ui-elements
+```
+
+Response: All UI element references from the previous episode to maintain consistent branding.
+
+---
+
+**Use Case 3: Raw Footage Organization**
+Editor needs to find all approved Lala clips for the current episode to begin editing.
+
+Query:
+```
+GET /api/v1/episodes/ep_20251231_abc123/clips?talent_source=Lala&status=approved
+```
+
+Response: List of all approved Lala clips with file references and timecodes.
+
+---
+
+**Use Case 4: Quick Background Reference**
+Producer needs to know what backgrounds are available for tomorrow's shoot.
+
+Query:
+```
+GET /api/v1/episodes?status=published&_fields=backgrounds
+```
+
+Response: List of all backgrounds used in published episodes to see what's been shot before.
+
+---
+
+**Use Case 5: Script Review**
+Writer needs to access the current script for episode in production.
+
+Query:
+```
+GET /api/v1/episodes/ep_20251231_abc123/script
+```
+
+Response: File reference to current script version.
+
+---
+
+**Use Case 6: Wardrobe Inventory Check**
+Styling team wants to see all episodes featuring Christian Louboutin shoes.
+
+Query:
+```
+GET /api/v1/episodes/search?wardrobe.shoes.brand=Christian Louboutin
+```
+
+Response: List of episodes with detailed wardrobe information showing when those shoes were featured.
+
+---
+
+## Document Approval
+
+| Role | Name | Signature | Date |
+|------|------|-----------|------|
+| Product Owner | [TBD] | | |
+| Technical Lead | [TBD] | | |
+| DevOps Lead | [TBD] | | |
+
+---
+
+**End of Document**

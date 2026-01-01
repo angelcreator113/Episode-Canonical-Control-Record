@@ -1,0 +1,6 @@
+
+=== COGNITO USER POOLS (Phase 0E) ===
+DEV_POOL_ID=us-east-1_mFVU52978
+STAGING_POOL_ID=us-east-1_jYkqo528H
+PROD_POOL_ID=us-east-1_643pfiGql
+

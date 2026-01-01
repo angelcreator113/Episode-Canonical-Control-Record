@@ -1,0 +1,958 @@
+# Episode Metadata Storage - Technical Architecture Document
+
+## Document Control
+**Version:** 1.0  
+**Date:** December 31, 2025  
+**Status:** Draft for Review  
+**Related:** Episode Metadata Requirements v2.0
+
+---
+
+## 1. Technology Stack
+
+| Layer | Technology | Version |
+|-------|-----------|---------|
+| Database | PostgreSQL (AWS RDS) | 15.x |
+| API | Node.js + Express.js | 20.x + 4.x |
+| Auth | AWS Cognito | - |
+| Storage | AWS S3 | - |
+| Image Processing | AWS Lambda + Sharp | - |
+| Container | Docker + ECS Fargate | - |
+| CI/CD | GitHub Actions | - |
+| Monitoring | AWS CloudWatch | - |
+
+---
+
+## 2. Database Schema (PostgreSQL)
+
+### Core Tables
+
+```sql
+-- SHOWS
+CREATE TABLE shows (
+    show_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL UNIQUE,
+    description TEXT,
+    status VARCHAR(50) DEFAULT 'active',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}'
+);
+
+-- EPISODES
+CREATE TABLE episodes (
+    episode_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    show_id UUID NOT NULL REFERENCES shows(show_id),
+    title VARCHAR(500) NOT NULL,
+    episode_number INTEGER NOT NULL,
+    season_number INTEGER DEFAULT 1,
+    status VARCHAR(50) DEFAULT 'draft',
+    description TEXT,
+    duration_seconds INTEGER,
+    filming_date DATE,
+    edit_deadline DATE,
+    publish_date DATE,
+    released_at TIMESTAMPTZ,
+    script_text TEXT,
+    script_file_reference VARCHAR(1024),
+    trailer_reference VARCHAR(1024),
+    thumbnail_reference VARCHAR(1024),
+    tags TEXT[],
+    category VARCHAR(100),
+    language VARCHAR(10) DEFAULT 'en-US',
+    approval_status VARCHAR(50) DEFAULT 'approved',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+    metadata JSONB DEFAULT '{}',
+    UNIQUE (show_id, season_number, episode_number)
+);
+CREATE INDEX idx_episodes_show ON episodes(show_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_episodes_fts ON episodes USING gin(to_tsvector('english', 
+    coalesce(title,'') || ' ' || coalesce(description,'') || ' ' || coalesce(script_text,'')));
+
+-- SCRIPT VERSIONS
+CREATE TABLE script_versions (
+    script_version_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    episode_id UUID NOT NULL REFERENCES episodes(episode_id) ON DELETE CASCADE,
+    version_number INTEGER NOT NULL,
+    script_text TEXT,
+    script_file_reference VARCHAR(1024),
+    author_user_id UUID,
+    author_name VARCHAR(255),
+    change_notes TEXT,
+    source VARCHAR(50) DEFAULT 'manual_upload',
+    is_active BOOLEAN DEFAULT FALSE,
+    approval_status VARCHAR(50) DEFAULT 'draft',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ,
+    UNIQUE (episode_id, version_number)
+);
+
+-- OUTFITS
+CREATE TABLE outfits (
+    outfit_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    outfit_name VARCHAR(255),
+    outfit_type VARCHAR(50),
+    top JSONB,
+    bottom JSONB,
+    dress JSONB,
+    pattern_description TEXT,
+    overall_image_reference VARCHAR(1024),
+    accessories JSONB,
+    shoes JSONB,
+    purse JSONB,
+    tags TEXT[],
+    category VARCHAR(100),
+    season VARCHAR(50),
+    occasion VARCHAR(100),
+    approval_status VARCHAR(50) DEFAULT 'approved',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+CREATE INDEX idx_outfits_top ON outfits USING gin(top);
+CREATE INDEX idx_outfits_shoes ON outfits USING gin(shoes);
+
+-- EPISODE-OUTFIT LINK
+CREATE TABLE episode_outfits (
+    episode_outfit_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    episode_id UUID NOT NULL REFERENCES episodes(episode_id) ON DELETE CASCADE,
+    outfit_id UUID NOT NULL REFERENCES outfits(outfit_id),
+    usage_context VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (episode_id, outfit_id, usage_context)
+);
+
+-- UI ELEMENTS
+CREATE TABLE ui_elements (
+    ui_element_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    element_name VARCHAR(255) NOT NULL UNIQUE,
+    element_type VARCHAR(100) NOT NULL,
+    file_reference VARCHAR(1024) NOT NULL,
+    thumbnail_reference VARCHAR(1024),
+    description TEXT,
+    tags TEXT[],
+    version VARCHAR(50),
+    approval_status VARCHAR(50) DEFAULT 'approved',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+-- EPISODE-UI ELEMENT LINK
+CREATE TABLE episode_ui_elements (
+    episode_ui_element_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    episode_id UUID NOT NULL REFERENCES episodes(episode_id) ON DELETE CASCADE,
+    ui_element_id UUID NOT NULL REFERENCES ui_elements(ui_element_id),
+    usage_context VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (episode_id, ui_element_id, usage_context)
+);
+
+-- BACKGROUNDS
+CREATE TABLE backgrounds (
+    background_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    background_name VARCHAR(255) NOT NULL UNIQUE,
+    background_type VARCHAR(100) NOT NULL,
+    file_reference VARCHAR(1024) NOT NULL,
+    thumbnail_reference VARCHAR(1024),
+    description TEXT,
+    tags TEXT[],
+    location VARCHAR(255),
+    lighting_notes TEXT,
+    approval_status VARCHAR(50) DEFAULT 'approved',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+-- EPISODE-BACKGROUND LINK
+CREATE TABLE episode_backgrounds (
+    episode_background_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    episode_id UUID NOT NULL REFERENCES episodes(episode_id) ON DELETE CASCADE,
+    background_id UUID NOT NULL REFERENCES backgrounds(background_id),
+    usage_context VARCHAR(255),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE (episode_id, background_id, usage_context)
+);
+
+-- CLIPS
+CREATE TABLE clips (
+    clip_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    episode_id UUID REFERENCES episodes(episode_id) ON DELETE SET NULL,
+    talent_source VARCHAR(100) NOT NULL,
+    clip_type VARCHAR(50) DEFAULT 'raw',
+    file_reference VARCHAR(1024) NOT NULL,
+    file_hash VARCHAR(128),
+    file_size_bytes BIGINT,
+    duration_seconds INTEGER,
+    timecode_in VARCHAR(50),
+    timecode_out VARCHAR(50),
+    scene_description TEXT,
+    take_number INTEGER,
+    quality_rating VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'pending_review',
+    notes TEXT,
+    tags TEXT[],
+    thumbnail_reference VARCHAR(1024),
+    approval_status VARCHAR(50) DEFAULT 'draft',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+CREATE INDEX idx_clips_episode ON clips(episode_id) WHERE deleted_at IS NULL;
+CREATE INDEX idx_clips_talent ON clips(talent_source) WHERE deleted_at IS NULL;
+CREATE INDEX idx_clips_standalone ON clips(episode_id) WHERE episode_id IS NULL AND deleted_at IS NULL;
+
+-- COMPONENTS
+CREATE TABLE components (
+    component_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    episode_id UUID NOT NULL REFERENCES episodes(episode_id) ON DELETE CASCADE,
+    component_type VARCHAR(100) NOT NULL,
+    component_subtype VARCHAR(100),
+    file_reference VARCHAR(1024) NOT NULL,
+    file_size_bytes BIGINT,
+    duration_seconds INTEGER,
+    description TEXT,
+    version VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'ready',
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+-- GUESTS
+CREATE TABLE guests (
+    guest_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name VARCHAR(255) NOT NULL,
+    business_name VARCHAR(255),
+    business_email VARCHAR(255),
+    business_phone VARCHAR(50),
+    website VARCHAR(500),
+    session_id VARCHAR(255) UNIQUE,
+    session_expires_at TIMESTAMPTZ,
+    converted_user_id UUID,
+    converted_at TIMESTAMPTZ,
+    outfit_references JSONB DEFAULT '[]',
+    upload_references JSONB DEFAULT '[]',
+    notes TEXT,
+    consent_given BOOLEAN DEFAULT FALSE,
+    consent_timestamp TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    deleted_at TIMESTAMPTZ
+);
+
+-- THUMBNAILS
+CREATE TABLE thumbnails (
+    thumbnail_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_type VARCHAR(50) NOT NULL,
+    entity_id UUID NOT NULL,
+    size_variant VARCHAR(50) NOT NULL,
+    file_reference VARCHAR(1024) NOT NULL,
+    width INTEGER NOT NULL,
+    height INTEGER NOT NULL,
+    file_size_bytes BIGINT,
+    source_type VARCHAR(50),
+    source_reference VARCHAR(1024),
+    status VARCHAR(50) DEFAULT 'pending',
+    error_message TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    processed_at TIMESTAMPTZ,
+    UNIQUE (entity_type, entity_id, size_variant)
+);
+
+-- AUDIT LOG
+CREATE TABLE audit_log (
+    audit_id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    entity_type VARCHAR(100) NOT NULL,
+    entity_id UUID NOT NULL,
+    action VARCHAR(50) NOT NULL,
+    field_name VARCHAR(255),
+    old_value TEXT,
+    new_value TEXT,
+    user_id UUID,
+    user_email VARCHAR(255),
+    ip_address INET,
+    user_agent TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+CREATE INDEX idx_audit_log_entity ON audit_log(entity_type, entity_id);
+CREATE INDEX idx_audit_log_timestamp ON audit_log(created_at DESC);
+```
+
+### Database Triggers
+
+```sql
+-- Auto-update timestamps
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER update_episodes_updated_at BEFORE UPDATE ON episodes
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- (apply to all tables with updated_at)
+
+-- Ensure only one active script version
+CREATE OR REPLACE FUNCTION ensure_single_active_script_version()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF NEW.is_active = TRUE THEN
+        UPDATE script_versions
+        SET is_active = FALSE
+        WHERE episode_id = NEW.episode_id
+          AND script_version_id != NEW.script_version_id;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER ensure_single_active_script_version_trigger
+    BEFORE INSERT OR UPDATE ON script_versions
+    FOR EACH ROW WHEN (NEW.is_active = TRUE)
+    EXECUTE FUNCTION ensure_single_active_script_version();
+```
+
+---
+
+## 3. API Architecture
+
+### Project Structure
+
+```
+episode-metadata-api/
+├── src/
+│   ├── config/
+│   │   ├── database.js
+│   │   ├── aws.js
+│   │   └── environment.js
+│   ├── middleware/
+│   │   ├── auth.js
+│   │   ├── errorHandler.js
+│   │   ├── validation.js
+│   │   ├── softDelete.js
+│   │   └── rateLimit.js
+│   ├── routes/
+│   │   ├── episodes.js
+│   │   ├── clips.js
+│   │   ├── outfits.js
+│   │   ├── scripts.js
+│   │   ├── uiElements.js
+│   │   ├── backgrounds.js
+│   │   └── search.js
+│   ├── controllers/
+│   ├── services/
+│   ├── models/
+│   ├── utils/
+│   └── app.js
+├── migrations/
+├── tests/
+├── .env.example
+├── package.json
+├── Dockerfile
+└── README.md
+```
+
+### Key API Endpoints
+
+**Base URL:** `/api/v1`
+
+```
+# Shows
+GET    /shows
+POST   /shows
+GET    /shows/:showId
+PATCH  /shows/:showId
+DELETE /shows/:showId
+
+# Episodes
+GET    /episodes
+POST   /episodes
+GET    /episodes/:episodeId
+PATCH  /episodes/:episodeId
+DELETE /episodes/:episodeId
+GET    /episodes/:episodeId/script
+PUT    /episodes/:episodeId/script
+GET    /episodes/:episodeId/trailer
+PUT    /episodes/:episodeId/trailer
+
+# Script Versions
+GET    /episodes/:episodeId/script-versions
+POST   /episodes/:episodeId/script-versions
+GET    /episodes/:episodeId/script-versions/:versionNumber
+PATCH  /episodes/:episodeId/script-versions/:versionNumber/activate
+DELETE /episodes/:episodeId/script-versions/:versionNumber
+
+# Outfits
+GET    /outfits
+POST   /outfits
+GET    /outfits/:outfitId
+PATCH  /outfits/:outfitId
+DELETE /outfits/:outfitId
+GET    /outfits/:outfitId/usage
+POST   /episodes/:episodeId/outfits
+GET    /episodes/:episodeId/outfits
+DELETE /episodes/:episodeId/outfits/:outfitId
+
+# UI Elements
+GET    /ui-elements
+POST   /ui-elements
+GET    /ui-elements/:uiElementId
+PATCH  /ui-elements/:uiElementId
+DELETE /ui-elements/:uiElementId
+POST   /episodes/:episodeId/ui-elements
+GET    /episodes/:episodeId/ui-elements
+DELETE /episodes/:episodeId/ui-elements/:uiElementId
+
+# Backgrounds
+GET    /backgrounds
+POST   /backgrounds
+GET    /backgrounds/:backgroundId
+PATCH  /backgrounds/:backgroundId
+DELETE /backgrounds/:backgroundId
+POST   /episodes/:episodeId/backgrounds
+GET    /episodes/:episodeId/backgrounds
+DELETE /episodes/:episodeId/backgrounds/:backgroundId
+
+# Clips
+GET    /clips
+POST   /clips
+GET    /clips/:clipId
+PATCH  /clips/:clipId
+DELETE /clips/:clipId
+POST   /clips/:clipId/assign-episode
+POST   /clips/:clipId/unassign-episode
+
+# Thumbnails
+POST   /thumbnails/generate
+GET    /thumbnails/:entityType/:entityId
+GET    /thumbnails/:entityType/:entityId/:sizeVariant
+POST   /thumbnails/:entityType/:entityId/regenerate
+
+# Search
+GET    /search/episodes
+GET    /search/clips
+GET    /search/outfits
+GET    /search/scripts
+
+# File Upload
+POST   /upload/generate-url
+POST   /upload/confirm
+
+# Audit
+GET    /audit-log
+```
+
+### Response Format
+
+**Success:**
+```json
+{
+  "data": { /* entity or array */ },
+  "metadata": {
+    "schema_version": "1.0",
+    "timestamp": "2025-12-31T12:00:00Z",
+    "request_id": "uuid"
+  }
+}
+```
+
+**Error:**
+```json
+{
+  "errors": [{
+    "code": "VALIDATION_ERROR",
+    "message": "Title is required",
+    "field": "title"
+  }],
+  "metadata": {
+    "timestamp": "2025-12-31T12:00:00Z",
+    "request_id": "uuid"
+  }
+}
+```
+
+---
+
+## 4. AWS Infrastructure
+
+### S3 Bucket Structure
+
+**Primary:** `episode-metadata-storage-{env}`
+```
+raw/{episode_id}/{talent_source}/clip.mov
+scripts/{episode_id}/version_{n}.pdf
+trailers/{episode_id}/trailer.mp4
+wardrobe/{outfit_id}/full_outfit.jpg
+ui-elements/{ui_element_id}.svg
+backgrounds/{background_id}.jpg
+audio/{episode_id}/bg_music.mp3
+components/{episode_id}/{component_id}.ext
+```
+
+**Thumbnails:** `episode-metadata-thumbnails-{env}`
+```
+episodes/{episode_id}/primary.jpg
+episodes/{episode_id}/medium.jpg
+episodes/{episode_id}/small.jpg
+clips/{clip_id}/primary.jpg
+outfits/{outfit_id}/primary.jpg
+backgrounds/{background_id}/primary.jpg
+```
+
+### Cognito Configuration
+
+```yaml
+User Pool: episode-metadata-users-{env}
+Username: email
+Password: 12+ chars, mixed case, numbers, special chars
+MFA: Optional
+Groups: admin, editor, viewer
+Token Expiry: 1h (access), 30d (refresh)
+```
+
+### ECS Fargate
+
+```yaml
+Cluster: episode-metadata-cluster-{env}
+Task: 512 CPU, 1024 MB Memory
+Service: 2 tasks (prod), auto-scale 2-10
+Port: 3000
+Health Check: /health
+```
+
+### Lambda (Thumbnail Generator)
+
+```yaml
+Function: episode-metadata-thumbnail-generator-{env}
+Runtime: Node.js 20.x
+Memory: 1024 MB
+Timeout: 300s
+Trigger: SQS Queue
+Sizes:
+  - primary: 1280x720
+  - medium: 640x360
+  - small: 320x180
+```
+
+### Network (VPC)
+
+```
+VPC: 10.0.0.0/16
+Public Subnets: 10.0.1.0/24, 10.0.2.0/24
+Private Subnets: 10.0.10.0/24, 10.0.20.0/24
+NAT Gateway: Multi-AZ
+RDS: Private subnets (Multi-AZ prod)
+ECS: Private subnets
+ALB: Public subnets
+```
+
+---
+
+## 5. Development Environment
+
+### Setup
+
+```bash
+# 1. Clone and install
+git clone https://github.com/your-org/episode-metadata-api.git
+cd episode-metadata-api
+npm install
+
+# 2. Environment variables
+cp .env.example .env
+# Edit .env with local values
+
+# 3. Start database
+docker-compose up -d postgres
+
+# 4. Run migrations
+npm run migrate:up
+
+# 5. Start dev server
+npm run dev
+```
+
+### .env.example
+
+```bash
+NODE_ENV=development
+PORT=3000
+DATABASE_URL=postgresql://postgres:password@localhost:5432/episode_metadata_dev
+AWS_REGION=us-east-1
+AWS_ACCESS_KEY_ID=your_dev_key
+AWS_SECRET_ACCESS_KEY=your_dev_secret
+S3_PRIMARY_BUCKET=episode-metadata-storage-dev
+S3_THUMBNAIL_BUCKET=episode-metadata-thumbnails-dev
+COGNITO_USER_POOL_ID=us-east-1_XXXXXXXXX
+COGNITO_CLIENT_ID=xxxxxxxxxx
+THUMBNAIL_QUEUE_URL=https://sqs.us-east-1.amazonaws.com/123/queue-dev
+LOG_LEVEL=debug
+```
+
+### NPM Scripts
+
+```json
+{
+  "scripts": {
+    "dev": "nodemon src/app.js",
+    "start": "node src/app.js",
+    "test": "jest --coverage",
+    "lint": "eslint src/ tests/",
+    "lint:fix": "eslint src/ tests/ --fix",
+    "migrate:up": "node-pg-migrate up",
+    "migrate:down": "node-pg-migrate down",
+    "migrate:create": "node-pg-migrate create",
+    "seed": "node scripts/seed.js"
+  }
+}
+```
+
+---
+
+## 6. CI/CD Pipeline
+
+### GitHub Actions Workflow
+
+```yaml
+name: CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: episode_metadata_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: password
+        ports: [5432:5432]
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with: {node-version: '20', cache: 'npm'}
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run migrate:up
+      - run: npm test
+
+  build-and-push:
+    needs: test
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: aws-actions/configure-aws-credentials@v2
+      - uses: aws-actions/amazon-ecr-login@v1
+      - run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA .
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA
+
+  deploy-staging:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/develop'
+    runs-on: ubuntu-latest
+    steps:
+      - run: aws ecs update-service --cluster staging --service api --force-new-deployment
+
+  deploy-production:
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-latest
+    steps:
+      - run: aws ecs update-service --cluster production --service api --force-new-deployment
+```
+
+### Dockerfile
+
+```dockerfile
+FROM node:20-alpine AS builder
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --only=production
+COPY src ./src
+
+FROM node:20-alpine
+WORKDIR /app
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/src ./src
+COPY package*.json ./
+RUN addgroup -g 1001 -S nodejs && adduser -S nodejs -u 1001
+USER nodejs
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=3s \
+  CMD node -e "require('http').get('http://localhost:3000/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1))"
+CMD ["node", "src/app.js"]
+```
+
+---
+
+## 7. Security
+
+### Authentication Flow
+
+```
+1. User → Cognito (email/password)
+2. Cognito → JWT tokens (ID, Access, Refresh)
+3. Client → API (Authorization: Bearer <token>)
+4. API → Validate JWT
+5. API → Check Cognito groups for permissions
+6. API → Process request
+```
+
+### IAM Roles
+
+**ECS Task Role:**
+- S3: GetObject, PutObject, DeleteObject
+- SQS: SendMessage, ReceiveMessage, DeleteMessage
+- Secrets Manager: GetSecretValue
+- CloudWatch Logs: CreateLogStream, PutLogEvents
+
+**Lambda Role:**
+- S3: GetObject (primary), PutObject (thumbnails)
+- SQS: ReceiveMessage, DeleteMessage
+- Secrets Manager: GetSecretValue
+- CloudWatch Logs
+
+### Rate Limiting
+
+```javascript
+// 100 requests per 15 minutes per IP
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100
+});
+
+// 50 uploads per hour per user
+const uploadLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 50
+});
+```
+
+---
+
+## 8. Monitoring
+
+### CloudWatch Alarms
+
+```yaml
+- HighCPU: ECS CPU > 80% for 5min
+- HighMemory: ECS Memory > 85% for 5min
+- HighErrorRate: ALB 5XX > 5% for 2min
+- DatabaseConnections: RDS > 80% of max
+- ThumbnailFailures: Lambda errors > 5 in 5min
+- DeadLetterQueue: SQS DLQ > 0 messages
+```
+
+### Custom Metrics
+
+```
+EpisodeMetadata/API namespace:
+- RequestDuration (by endpoint)
+- DatabaseQueryDuration
+- S3OperationDuration
+- ValidationErrors
+- AuthenticationFailures
+```
+
+### Logging
+
+```javascript
+// Winston logger
+{
+  "timestamp": "2025-12-31T12:00:00Z",
+  "level": "info",
+  "message": "Episode created",
+  "service": "episode-metadata-api",
+  "environment": "production",
+  "requestId": "uuid",
+  "userId": "uuid",
+  "metadata": {"episodeId": "uuid"}
+}
+```
+
+---
+
+## 9. Backup & Recovery
+
+### Database Backups
+
+```yaml
+Automated:
+  - Retention: 7 days (prod), 1 day (staging)
+  - Window: 03:00-04:00 UTC
+  - Point-in-Time Recovery: Enabled
+
+Manual:
+  - Before deployments
+  - Monthly archive (1 year retention)
+```
+
+### S3 Lifecycle
+
+```yaml
+raw/ → Glacier after 90 days
+others/ → Glacier after 180 days
+Versioning: Enabled
+```
+
+### RTO/RPO
+
+```
+Production:
+  RTO: 4 hours
+  RPO: 15 minutes
+
+Staging:
+  RTO: 8 hours
+  RPO: 1 day
+```
+
+---
+
+## 10. Naming Conventions
+
+### General Principles
+
+- **Lowercase with hyphens** for AWS resources: `episode-metadata-api-prod`
+- **snake_case** for database tables/columns: `episode_id`
+- **camelCase** for JavaScript variables: `episodeId`
+- **PascalCase** for classes/models: `Episode`
+- **UPPER_SNAKE_CASE** for constants: `MAX_FILE_SIZE`
+
+### AWS Resources
+
+```
+S3 Buckets: episode-metadata-{type}-{environment}
+  Example: episode-metadata-storage-production
+
+RDS Instance: episode-metadata-db-{environment}
+  Example: episode-metadata-db-production
+
+ECS Cluster: episode-metadata-cluster-{environment}
+  Example: episode-metadata-cluster-staging
+
+Lambda: episode-metadata-{function}-{environment}
+  Example: episode-metadata-thumbnail-generator-production
+
+SQS Queue: episode-metadata-{purpose}-queue-{environment}
+  Example: episode-metadata-thumbnail-queue-production
+```
+
+### Git Branches
+
+```
+main → Production
+develop → Staging
+feature/{feature-name} → Development
+fix/{bug-name} → Bug fixes
+hotfix/{critical-fix} → Production hotfixes
+```
+
+---
+
+## 11. Constants & Enums
+
+### Episode Status
+
+```javascript
+const EPISODE_STATUS = {
+  DRAFT: 'draft',
+  IN_PRODUCTION: 'in_production',
+  READY_FOR_PUBLISH: 'ready_for_publish',
+  PUBLISHED: 'published',
+  ARCHIVED: 'archived',
+  ON_HOLD: 'on_hold',
+  CANCELED: 'canceled'
+};
+```
+
+### Clip Quality Rating
+
+```javascript
+const CLIP_QUALITY = {
+  HERO: 'hero',
+  GOOD: 'good',
+  MAYBE: 'maybe',
+  REJECT: 'reject'
+};
+```
+
+### Talent Sources
+
+```javascript
+const TALENT_SOURCES = {
+  LALA: 'Lala',
+  JUSTAWOMAN: 'JustAWomanInHerPrime',
+  GUEST: 'Guest'
+};
+```
+
+### Approval Status
+
+```javascript
+const APPROVAL_STATUS = {
+  DRAFT: 'draft',
+  APPROVED: 'approved',
+  REJECTED: 'rejected'
+};
+```
+
+---
+
+## 12. File Size Limits
+
+```javascript
+const FILE_SIZE_LIMITS = {
+  SCRIPT: 50 * 1024 * 1024,        // 50 MB
+  TRAILER: 500 * 1024 * 1024,      // 500 MB
+  RAW_CLIP: 5 * 1024 * 1024 * 1024, // 5 GB
+  IMAGE: 10 * 1024 * 1024,         // 10 MB
+  AUDIO: 100 * 1024 * 1024,        // 100 MB
+  UI_ELEMENT: 5 * 1024 * 1024      // 5 MB
+};
+```
+
+---
+
+## 13. Environment Matrix
+
+| Environment | Branch | Domain | Database | Users |
+|-------------|--------|--------|----------|-------|
+| Development | feature/* | localhost:3000 | Local PostgreSQL | 1 developer |
+| Staging | develop | api-staging.example.com | db.t3.small | Internal team |
+| Production | main | api.example.com | db.t3.medium (Multi-AZ) | All users |
+
+---
+
+## 14. Next Steps
+
+1. **Review & Approve** this technical architecture document
+2. **Create Project Roadmap** with detailed implementation steps
+3. **Setup AWS Infrastructure** (VPC, RDS, S3, Cognito)
+4. **Initialize Git Repository** with project structure
+5. **Setup CI/CD Pipeline** (GitHub Actions)
+6. **Begin Development** (Sprint 1: Core API + Database)
+
+---
+
+**Document End**

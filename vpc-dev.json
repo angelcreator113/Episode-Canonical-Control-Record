@@ -1,0 +1,35 @@
+{
+    "Vpc": {
+        "OwnerId": "637423256673",
+        "InstanceTenancy": "default",
+        "Ipv6CidrBlockAssociationSet": [],
+        "CidrBlockAssociationSet": [
+            {
+                "AssociationId": "vpc-cidr-assoc-0c6a4fb2567248f6c",
+                "CidrBlock": "10.0.0.0/16",
+                "CidrBlockState": {
+                    "State": "associated"
+                }
+            }
+        ],
+        "IsDefault": false,
+        "Tags": [
+            {
+                "Key": "Project",
+                "Value": "episode-metadata"
+            },
+            {
+                "Key": "Environment",
+                "Value": "dev"
+            },
+            {
+                "Key": "Name",
+                "Value": "episode-metadata-vpc-dev"
+            }
+        ],
+        "VpcId": "vpc-0754967be21268e7e",
+        "State": "pending",
+        "CidrBlock": "10.0.0.0/16",
+        "DhcpOptionsId": "dopt-02188c2c7a6df3784"
+    }
+}
