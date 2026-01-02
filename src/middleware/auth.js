@@ -193,8 +193,45 @@ const verifyGroup = (requiredGroup) => {
   };
 };
 
+/**
+ * Authorization Middleware
+ * Alias for verifyGroup - checks if user is in required role/group
+ * @param {string|string[]} requiredGroups - Group name(s) to check for
+ */
+const authorize = (requiredGroups) => {
+  // Handle both single group and array of groups
+  const groups = Array.isArray(requiredGroups) ? requiredGroups : [requiredGroups];
+  
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not authenticated',
+        code: 'AUTH_REQUIRED',
+      });
+    }
+
+    if (!req.user.groups || !req.user.groups.some(group => groups.includes(group))) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: `User must be in one of these groups: ${groups.join(', ')}`,
+        code: 'AUTH_GROUP_REQUIRED',
+      });
+    }
+
+    next();
+  };
+};
+
+/**
+ * Alias for authenticateToken - more intuitive naming
+ */
+const authenticate = authenticateToken;
+
 module.exports = {
+  authenticate,
   authenticateToken,
+  authorize,
   optionalAuth,
   verifyToken,
   verifyGroup,
