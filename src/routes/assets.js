@@ -3,17 +3,22 @@
  * POST /api/v1/assets/upload - Upload new asset
  * GET /api/v1/assets/approved/:type - Get approved assets by type
  * GET /api/v1/assets/pending - List pending assets
+ * GET /api/v1/assets/:id - Get asset by ID
  * PUT /api/v1/assets/:id/approve - Approve asset
  * PUT /api/v1/assets/:id/reject - Reject asset
+ * PUT /api/v1/assets/:id/process - Process background removal (Runway ML)
  */
 
 const express = require('express');
 const multer = require('multer');
 const AssetService = require('../services/AssetService');
+const RunwayMLService = require('../services/RunwayMLService');
 const { models } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
+const aws = require('aws-sdk');
 
 const router = express.Router();
+const s3 = new aws.S3();
 
 // Configure multer for file upload
 const upload = multer({
@@ -212,6 +217,70 @@ router.put('/:id/reject', authenticate, authorize(['ADMIN']), async (req, res) =
     console.error('Failed to reject asset:', error);
     res.status(500).json({
       error: 'Failed to reject asset',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * PUT /api/v1/assets/:id/process
+ * Process asset background removal using Runway ML (admin only)
+ */
+router.put('/:id/process', authenticate, authorize(['ADMIN']), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Get asset
+    const asset = await AssetService.getAsset(id);
+    if (!asset) {
+      return res.status(404).json({
+        error: 'Asset not found',
+      });
+    }
+
+    // Download raw image from S3
+    console.log(`📥 Downloading raw asset from S3: ${asset.s3_key_raw}`);
+    const params = {
+      Bucket: process.env.AWS_S3_BUCKET,
+      Key: asset.s3_key_raw,
+    };
+    const rawImageBuffer = (await s3.getObject(params).promise()).Body;
+
+    // Process with Runway ML
+    console.log(`🎨 Processing asset with Runway ML...`);
+    const processedBuffer = await RunwayMLService.processWithFallback(rawImageBuffer);
+
+    // Upload processed image to S3
+    const processedKey = asset.s3_key_raw.replace('/raw/', '/processed/');
+    console.log(`📤 Uploading processed asset to S3: ${processedKey}`);
+    await s3
+      .putObject({
+        Bucket: process.env.AWS_S3_BUCKET,
+        Key: processedKey,
+        Body: processedBuffer,
+        ContentType: 'image/png',
+      })
+      .promise();
+
+    // Update asset with processed key and approve it
+    const updatedAsset = await models.Asset.update(
+      {
+        s3_key_processed: processedKey,
+        approval_status: 'APPROVED',
+      },
+      { where: { id }, returning: true }
+    );
+
+    console.log(`✅ Asset processed and approved: ${id}`);
+    res.json({
+      status: 'SUCCESS',
+      message: 'Asset processed with background removal and approved',
+      data: updatedAsset[1][0].toJSON(),
+    });
+  } catch (error) {
+    console.error('Failed to process asset:', error);
+    res.status(500).json({
+      error: 'Failed to process asset',
       message: error.message,
     });
   }
