@@ -21,10 +21,16 @@ const ThumbnailComposer = () => {
   const [guestAssetId, setGuestAssetId] = useState('');
   const [frameAssetId, setFrameAssetId] = useState('');
 
+  // Generation state
+  const [compositions, setCompositions] = useState([]);
+  const [generatingId, setGeneratingId] = useState(null);
+  const [generatedThumbnails, setGeneratedThumbnails] = useState({});
+
   // Load templates and assets
   useEffect(() => {
     loadTemplates();
     loadAssets();
+    loadDraftCompositions();
   }, []);
 
   const loadTemplates = async () => {
@@ -106,11 +112,65 @@ const ThumbnailComposer = () => {
       setLalaAssetId('');
       setGuestAssetId('');
       setFrameAssetId('');
+
+      // Reload compositions list
+      await loadDraftCompositions();
     } catch (err) {
       console.error('Error creating composition:', err);
       setError(err.message || 'Failed to create composition');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadDraftCompositions = async () => {
+    try {
+      const response = await fetch(`/api/v1/compositions?episode_id=${episodeId}&status=DRAFT`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCompositions(data.data || []);
+      }
+    } catch (err) {
+      console.error('Error loading compositions:', err);
+    }
+  };
+
+  const handleGenerateThumbnails = async (compositionId) => {
+    try {
+      setGeneratingId(compositionId);
+      setError(null);
+      setSuccess(null);
+
+      const response = await fetch(`/api/v1/compositions/${compositionId}/generate-thumbnails`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      });
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.message || 'Failed to generate thumbnails');
+      }
+
+      const data = await response.json();
+      setGeneratedThumbnails(prev => ({
+        ...prev,
+        [compositionId]: data.data,
+      }));
+      setSuccess(`Generated ${data.data.length} thumbnails successfully!`);
+
+      // Reload compositions to show updated status
+      await loadDraftCompositions();
+    } catch (err) {
+      console.error('Error generating thumbnails:', err);
+      setError(err.message || 'Failed to generate thumbnails');
+    } finally {
+      setGeneratingId(null);
     }
   };
 
@@ -269,11 +329,83 @@ const ThumbnailComposer = () => {
                 <li>Select a template (YouTube, Instagram, etc.)</li>
                 <li>Choose assets for Lala, Guest, and background frame</li>
                 <li>Click "Create Composition" to generate</li>
-                <li>Admin approves composition to make it live</li>
+                <li>Click "Generate Thumbnails" to create the composite images</li>
+                <li>Admin can then publish the composition</li>
               </ol>
             </div>
           </div>
         </div>
+
+        {/* Draft Compositions Section */}
+        {compositions.length > 0 && (
+          <div className="draft-compositions-section">
+            <h2>📋 Draft Compositions</h2>
+            <p className="subtitle">Ready to generate thumbnails for these compositions</p>
+
+            <div className="compositions-grid">
+              {compositions.map(composition => (
+                <div key={composition.id} className="composition-card">
+                  <div className="composition-header">
+                    <h3>Episode {composition.episode_id}</h3>
+                    <span className={`status-badge ${composition.status?.toLowerCase()}`}>
+                      {composition.status === 'APPROVED' ? '✅ APPROVED' : '⏳ DRAFT'}
+                    </span>
+                  </div>
+
+                  <div className="composition-details">
+                    <p><strong>Template:</strong> {composition.template_id?.substring(0, 8)}...</p>
+                    <p><strong>Created:</strong> {new Date(composition.created_at).toLocaleDateString()}</p>
+                  </div>
+
+                  {composition.status === 'DRAFT' ? (
+                    <button
+                      onClick={() => handleGenerateThumbnails(composition.id)}
+                      disabled={generatingId === composition.id}
+                      className="btn-generate"
+                      style={{
+                        width: '100%',
+                        padding: '0.75rem',
+                        marginTop: '1rem',
+                        background: '#10b981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        cursor: 'pointer',
+                        fontWeight: 'bold',
+                      }}
+                    >
+                      {generatingId === composition.id ? '🎨 Generating...' : '🎨 Generate Thumbnails'}
+                    </button>
+                  ) : (
+                    <div style={{ marginTop: '1rem', padding: '0.5rem', background: '#f0fdf4', borderRadius: '4px', textAlign: 'center' }}>
+                      <p style={{ margin: 0, color: '#10b981', fontWeight: 'bold' }}>✅ Thumbnails Generated</p>
+                    </div>
+                  )}
+
+                  {generatedThumbnails[composition.id] && (
+                    <div className="generated-thumbnails">
+                      <h4>Generated Formats:</h4>
+                      <div className="thumbnails-list">
+                        {generatedThumbnails[composition.id].map((thumb, idx) => (
+                          <div key={idx} className="thumbnail-item">
+                            <span className="thumb-format">{thumb.thumbnail_type}</span>
+                            <span className="thumb-size">{thumb.width}x{thumb.height}</span>
+                            <span className="thumb-filesize">
+                              {(thumb.file_size_bytes / 1024).toFixed(0)}KB
+                            </span>
+                            <a href={thumb.s3_url} target="_blank" rel="noopener noreferrer" className="thumb-link">
+                              📥 View
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
