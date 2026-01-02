@@ -21,7 +21,13 @@ module.exports = {
     const offset = (page - 1) * limit;
 
     let where = {};
-    if (status) where.processingStatus = status;
+    // Validate status if provided
+    if (status) {
+      const validStatuses = ['pending', 'processing', 'complete', 'failed', 'draft'];
+      if (validStatuses.includes(status)) {
+        where.processingStatus = status;
+      }
+    }
     if (season) where.seasonNumber = parseInt(season);
 
     const { count, rows } = await Episode.findAndCountAll({
@@ -32,8 +38,9 @@ module.exports = {
       include: {
         model: Thumbnail,
         as: 'thumbnails',
-        where: { thumbnailType: 'primary' },
+        where: { thumbnail_type: 'primary' },
         required: false,
+        attributes: ['id', 's3_bucket', 's3_key', 'mime_type', 'width_pixels', 'height_pixels'],
       },
     });
 
@@ -68,18 +75,21 @@ module.exports = {
 
     const episode = await Episode.findByPk(id, {
       include: [
-        {
-          model: MetadataStorage,
-          as: 'metadata',
-        },
+        // TODO: Include metadata when schema is fixed
+        // {
+        //   model: MetadataStorage,
+        //   as: 'metadata',
+        // },
         {
           model: Thumbnail,
           as: 'thumbnails',
+          attributes: ['id', 's3_bucket', 's3_key', 'mime_type', 'width_pixels', 'height_pixels', 'thumbnail_type'],
         },
-        {
-          model: ProcessingQueue,
-          as: 'processingJobs',
-        },
+        // TODO: Include processing jobs when schema is fixed
+        // {
+        //   model: ProcessingQueue,
+        //   as: 'processingJobs',
+        // },
       ],
     });
 

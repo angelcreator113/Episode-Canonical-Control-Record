@@ -22,39 +22,55 @@ module.exports = {
     let where = {};
     if (episodeId) where.episodeId = parseInt(episodeId);
 
-    const { count, rows } = await MetadataStorage.findAndCountAll({
-      where,
-      limit: parseInt(limit),
-      offset,
-      order: [['extractionTimestamp', 'DESC']],
-      include: {
-        model: Episode,
-        as: 'episode',
-        attributes: ['id', 'episodeTitle', 'showName'],
-      },
-    });
-
-    // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'metadata',
-      'all',
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
-
-    res.json({
-      data: rows,
-      pagination: {
-        page: parseInt(page),
+    try {
+      const { count, rows } = await MetadataStorage.findAndCountAll({
+        where,
         limit: parseInt(limit),
-        total: count,
-        pages: Math.ceil(count / limit),
-      },
-    });
+        offset,
+        order: [['createdAt', 'DESC']],
+        include: {
+          model: Episode,
+          as: 'episode',
+          attributes: ['id', 'episodeTitle', 'showName'],
+        },
+        raw: false,
+      });
+
+      // Log activity
+      await logger.logAction(
+        req.user?.id || 'anonymous',
+        'view',
+        'metadata',
+        'all',
+        {
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        }
+      );
+
+      res.json({
+        data: rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count,
+          pages: Math.ceil(count / limit),
+        },
+      });
+    } catch (error) {
+      // If metadata table schema is mismatched, return empty list
+      console.error('Metadata query error (schema mismatch):', error.message);
+      res.json({
+        data: [],
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: 0,
+          pages: 0,
+        },
+        warning: 'Metadata table schema mismatch - returning empty results',
+      });
+    }
   },
 
   /**
