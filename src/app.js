@@ -11,6 +11,7 @@ const app = express();
 const db = require('./models');
 
 let isDbConnected = false;
+let isOpenSearchReady = false;
 
 // Initialize database - non-blocking, runs in background
 if (process.env.NODE_ENV !== 'test') {
@@ -118,6 +119,7 @@ app.get('/health', async (req, res) => {
 // ============================================================================
 let episodeRoutes, thumbnailRoutes, metadataRoutes, processingRoutes;
 let filesRoutes, searchRoutes, jobsRoutes;
+let assetRoutes, compositionRoutes, templateRoutes;
 
 try {
   episodeRoutes = require('./routes/episodes');
@@ -176,6 +178,31 @@ try {
   jobsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// Phase 2.5 routes (composite thumbnails)
+try {
+  assetRoutes = require('./routes/assets');
+  console.log('✓ Assets routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load assets routes:', e.message);
+  assetRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  compositionRoutes = require('./routes/compositions');
+  console.log('✓ Compositions routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load compositions routes:', e.message);
+  compositionRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  templateRoutes = require('./routes/templates');
+  console.log('✓ Templates routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load templates routes:', e.message);
+  templateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 app.use('/api/v1/episodes', episodeRoutes);
 app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
@@ -185,6 +212,11 @@ app.use('/api/v1/processing-queue', processingRoutes);
 app.use('/api/v1/files', filesRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/jobs', jobsRoutes);
+
+// Phase 2.5 routes (composite thumbnails)
+app.use('/api/v1/assets', assetRoutes);
+app.use('/api/v1/compositions', compositionRoutes);
+app.use('/api/v1/templates', templateRoutes);
 
 // API info endpoint
 app.get('/api/v1', (req, res) => {
@@ -202,6 +234,9 @@ app.get('/api/v1', (req, res) => {
       files: '/api/v1/files',
       search: '/api/v1/search',
       jobs: '/api/v1/jobs',
+      assets: '/api/v1/assets',
+      compositions: '/api/v1/compositions',
+      templates: '/api/v1/templates',
       health: '/health',
     },
   });
