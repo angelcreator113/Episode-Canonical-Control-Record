@@ -99,6 +99,60 @@ const testEpisodes = [
   },
 ];
 
+// Test templates
+const testTemplates = [
+  {
+    id: uuidv4(),
+    name: 'Styling Adventure With Lala',
+    description: 'A fashion and lifestyle template featuring styling tips, outfit coordination, and fashion trends.',
+    slug: 'styling-adventure-lala',
+    defaultStatus: 'draft',
+    defaultCategories: ['Fashion', 'Lifestyle', 'Styling'],
+    isActive: true,
+    usageCount: 0,
+  },
+  {
+    id: uuidv4(),
+    name: 'Day in a life of a content creator',
+    description: 'Behind-the-scenes look at a content creator\'s daily routine, including planning, filming, and editing processes.',
+    slug: 'day-in-life-content-creator',
+    defaultStatus: 'draft',
+    defaultCategories: ['Lifestyle', 'Behind-the-scenes', 'Content Creation'],
+    isActive: true,
+    usageCount: 0,
+  },
+  {
+    id: uuidv4(),
+    name: 'Documentary Series',
+    description: 'Template for creating short documentary films with interviews, B-roll, and narration.',
+    slug: 'documentary-series',
+    defaultStatus: 'draft',
+    defaultCategories: ['Documentary', 'Educational', 'Storytelling'],
+    isActive: true,
+    usageCount: 0,
+  },
+  {
+    id: uuidv4(),
+    name: 'Interview & Q&A',
+    description: 'Template for interview episodes featuring guest speakers, Q&A sessions, and discussions.',
+    slug: 'interview-qa',
+    defaultStatus: 'draft',
+    defaultCategories: ['Interview', 'Discussion', 'Entertainment'],
+    isActive: true,
+    usageCount: 0,
+  },
+  {
+    id: uuidv4(),
+    name: 'Comedy Sketch Show',
+    description: 'Template for comedy episodes with sketches, humor, and entertainment.',
+    slug: 'comedy-sketch',
+    defaultStatus: 'draft',
+    defaultCategories: ['Comedy', 'Entertainment', 'Humor'],
+    isActive: true,
+    usageCount: 0,
+  },
+];
+
 /**
  * POST /api/v1/seed/episodes
  * Create test episodes
@@ -135,6 +189,106 @@ router.post('/episodes', async (req, res) => {
     console.error('❌ Error seeding episodes:', error);
     res.status(500).json({
       error: 'Failed to seed episodes',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/seed/templates
+ * Create test templates
+ * WARNING: This is for development only!
+ */
+router.post('/templates', async (req, res) => {
+  try {
+    // Check if templates already exist
+    const existingCount = await models.EpisodeTemplate.count();
+    if (existingCount > 0) {
+      return res.json({
+        status: 'SKIPPED',
+        message: `Database already has ${existingCount} templates`,
+        count: existingCount,
+      });
+    }
+
+    // Create templates
+    const created = await models.EpisodeTemplate.bulkCreate(testTemplates);
+
+    console.log(`✅ Seeded ${created.length} templates`);
+
+    res.json({
+      status: 'SUCCESS',
+      message: `Created ${created.length} test templates`,
+      count: created.length,
+      templates: created.map(t => ({
+        id: t.id,
+        name: t.name,
+        slug: t.slug,
+        categories: t.default_categories,
+      })),
+    });
+  } catch (error) {
+    console.error('❌ Error seeding templates:', error);
+    res.status(500).json({
+      error: 'Failed to seed templates',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/seed/all
+ * Seed both episodes and templates
+ * WARNING: This is for development only!
+ */
+router.post('/all', async (req, res) => {
+  try {
+    const results = {
+      episodes: null,
+      templates: null,
+    };
+
+    // Seed episodes
+    const episodeCount = await models.Episode.count();
+    if (episodeCount === 0) {
+      const createdEpisodes = await models.Episode.bulkCreate(testEpisodes);
+      results.episodes = {
+        status: 'SUCCESS',
+        count: createdEpisodes.length,
+      };
+    } else {
+      results.episodes = {
+        status: 'SKIPPED',
+        count: episodeCount,
+      };
+    }
+
+    // Seed templates
+    const templateCount = await models.EpisodeTemplate.count();
+    if (templateCount === 0) {
+      const createdTemplates = await models.EpisodeTemplate.bulkCreate(testTemplates);
+      results.templates = {
+        status: 'SUCCESS',
+        count: createdTemplates.length,
+      };
+    } else {
+      results.templates = {
+        status: 'SKIPPED',
+        count: templateCount,
+      };
+    }
+
+    console.log(`✅ Seeding complete - Episodes: ${results.episodes.count}, Templates: ${results.templates.count}`);
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Seeding complete',
+      results,
+    });
+  } catch (error) {
+    console.error('❌ Error during seeding:', error);
+    res.status(500).json({
+      error: 'Failed to seed database',
       message: error.message,
     });
   }
