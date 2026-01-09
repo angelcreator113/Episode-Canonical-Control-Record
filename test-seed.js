@@ -2,9 +2,9 @@
 const http = require('http');
 
 const options = {
-  hostname: 'localhost',
+  hostname: '127.0.0.1',
   port: 3002,
-  path: '/api/v1/seed/episodes',
+  path: '/api/v1/seed/templates',
   method: 'POST',
   headers: {
     'Content-Type': 'application/json',
@@ -40,7 +40,7 @@ req.on('timeout', () => {
 });
 
 req.on('error', (error) => {
-  console.error('❌ Error:', error.message);
+  console.error('❌ Error:', error.code, error.message || error);
   process.exit(1);
 });
 

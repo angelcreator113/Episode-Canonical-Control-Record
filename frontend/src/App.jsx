@@ -18,6 +18,7 @@ import ThumbnailGallery from './pages/ThumbnailGallery';
 import AdminPanel from './pages/AdminPanel';
 import TemplateManagement from './pages/TemplateManagement';
 import AuditLogViewer from './pages/AuditLogViewer';
+import ShowManagement from './pages/ShowManagement';
 
 // Components
 import Header from './components/Header';
@@ -94,6 +95,7 @@ function App() {
                   {/* <Route path="/compositions/:compositionId" element={<CompositionManagement />} /> */}
                   <Route path="/composer/:episodeId" element={<ThumbnailComposer />} />
                   <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
+                  <Route path="/shows" element={<ShowManagement />} />
                   <Route path="/admin" element={<AdminPanel />} />
                   <Route path="/admin/templates" element={<TemplateManagement />} />
                   <Route path="/audit-log" element={<AuditLogViewer />} />

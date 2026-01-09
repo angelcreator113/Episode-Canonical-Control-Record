@@ -22,6 +22,7 @@ const Navigation = ({ isOpen, onClose }) => {
     { label: 'Home', path: '/', icon: '🏠' },
     { label: 'Episodes', path: '/episodes', icon: '📺' },
     { label: 'Create Episode', path: '/episodes/create', icon: '➕' },
+    { label: 'Shows', path: '/shows', icon: '🎬' },
     { label: 'Search', path: '/search', icon: '🔍' },
     { label: 'Thumbnail Composer', path: '/composer/default', icon: '🎨' },
     { label: 'Asset Manager', path: '/assets', icon: '📸' },

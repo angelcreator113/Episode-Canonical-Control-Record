@@ -306,6 +306,10 @@ app.use('/api/v1/assets', assetRoutes);
 app.use('/api/v1/compositions', compositionRoutes);
 app.use('/api/v1/templates', templateRoutes);
 
+// Phase 6 routes (Shows)
+const showRoutes = require('./routes/shows');
+app.use('/api/v1/shows', showRoutes);
+
 // Phase 3A routes (real-time notifications)
 app.use('/api/v1/notifications', notificationController);
 app.use('/api/v1/activity', activityController);
