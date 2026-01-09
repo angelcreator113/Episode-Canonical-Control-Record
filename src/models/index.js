@@ -48,6 +48,7 @@ const sequelize = new Sequelize(
  */
 let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
+let Show;
 
 try {
   // Core models
@@ -65,6 +66,9 @@ try {
   ThumbnailComposition = require('./ThumbnailComposition')(sequelize);
   ThumbnailTemplate = require('./ThumbnailTemplate')(sequelize);
   EpisodeTemplate = require('./EpisodeTemplate')(sequelize);
+  
+  // Phase 6 models
+  Show = require('./Show')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -86,6 +90,7 @@ const requiredModels = {
   ThumbnailComposition,
   ThumbnailTemplate,
   EpisodeTemplate,
+  Show,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -415,4 +420,6 @@ module.exports.FileStorage = FileStorage;
 module.exports.Asset = Asset;
 module.exports.ThumbnailComposition = ThumbnailComposition;
 module.exports.ThumbnailTemplate = ThumbnailTemplate;
+module.exports.EpisodeTemplate = EpisodeTemplate;
+module.exports.Show = Show;
 module.exports.EpisodeTemplate = EpisodeTemplate;
