@@ -19,6 +19,7 @@ import AdminPanel from './pages/AdminPanel';
 import TemplateManagement from './pages/TemplateManagement';
 import AuditLogViewer from './pages/AuditLogViewer';
 import ShowManagement from './pages/ShowManagement';
+import ShowForm from './components/ShowForm';
 
 // Components
 import Header from './components/Header';
@@ -96,6 +97,8 @@ function App() {
                   <Route path="/composer/:episodeId" element={<ThumbnailComposer />} />
                   <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
                   <Route path="/shows" element={<ShowManagement />} />
+                  <Route path="/shows/create" element={<ShowForm />} />
+                  <Route path="/shows/:id/edit" element={<ShowForm />} />
                   <Route path="/admin" element={<AdminPanel />} />
                   <Route path="/admin/templates" element={<TemplateManagement />} />
                   <Route path="/audit-log" element={<AuditLogViewer />} />
