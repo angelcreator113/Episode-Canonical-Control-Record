@@ -1,6 +1,6 @@
 /**
  * Asset Management Routes
- * POST /api/v1/assets/upload - Upload new asset
+ * POST /api/v1/assets - Upload new asset
  * GET /api/v1/assets/approved/:type - Get approved assets by type
  * GET /api/v1/assets/pending - List pending assets
  * GET /api/v1/assets/:id - Get asset by ID
@@ -12,13 +12,11 @@
 const express = require('express');
 const multer = require('multer');
 const AssetService = require('../services/AssetService');
-const RunwayMLService = require('../services/RunwayMLService');
 const { models } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
-const aws = require('aws-sdk');
+const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
 
 const router = express.Router();
-const s3 = new aws.S3();
 
 // Configure multer for file upload
 const upload = multer({
@@ -36,6 +34,15 @@ const upload = multer({
   },
 });
 
+// ✅ FIXED: Correct spelling everywhere
+const VALID_ASSET_TYPES = [
+  'PROMO_LALA',
+  'PROMO_JUSTAWOMANINHERPRIME',
+  'PROMO_GUEST',
+  'BRAND_LOGO',
+  'EPISODE_FRAME'
+];
+
 /**
  * GET /api/v1/assets/approved/:type
  * Get approved assets by type
@@ -43,16 +50,21 @@ const upload = multer({
 router.get('/approved/:type', async (req, res) => {
   try {
     const { type } = req.params;
-    const validTypes = ['PROMO_LALA', 'PROMO_GUEST', 'BRAND_LOGO', 'EPISODE_FRAME'];
 
-    if (!validTypes.includes(type)) {
+    console.log('📥 GET /approved/:type - Requested type:', type);
+
+    if (!VALID_ASSET_TYPES.includes(type)) {
+      console.error('❌ Invalid asset type:', type);
       return res.status(400).json({
         error: 'Invalid asset type',
-        valid_types: validTypes,
+        valid_types: VALID_ASSET_TYPES,
+        received: type,
       });
     }
 
     const assets = await AssetService.getApprovedAssets(type);
+
+    console.log(`✅ Found ${assets.length} assets for type: ${type}`);
 
     res.json({
       status: 'SUCCESS',
@@ -60,19 +72,20 @@ router.get('/approved/:type', async (req, res) => {
       count: assets.length,
     });
   } catch (error) {
-    console.error('Failed to get approved assets:', error);
+    console.error('❌ Failed to get approved assets:', error);
     res.status(500).json({
       error: 'Failed to get approved assets',
       message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
 
 /**
  * GET /api/v1/assets/pending
- * List pending assets (admin only)
+ * List pending assets
  */
-router.get('/pending', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.get('/pending', async (req, res) => {
   try {
     const assets = await AssetService.getPendingAssets();
 
@@ -94,7 +107,7 @@ router.get('/pending', authenticate, authorize(['ADMIN']), async (req, res) => {
  * GET /api/v1/assets/:id
  * Get asset by ID
  */
-router.get('/:id', async (req, res) => {
+router.get('/:id', validateUUIDParam('id'), async (req, res) => {
   try {
     const { id } = req.params;
     const asset = await AssetService.getAsset(id);
@@ -111,6 +124,11 @@ router.get('/:id', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to get asset:', error);
+    if (error.message.includes('Asset not found')) {
+      return res.status(404).json({
+        error: 'Asset not found',
+      });
+    }
     res.status(500).json({
       error: 'Failed to get asset',
       message: error.message,
@@ -119,33 +137,66 @@ router.get('/:id', async (req, res) => {
 });
 
 /**
- * POST /api/v1/assets/upload
+ * POST /api/v1/assets
  * Upload new asset
  */
-router.post('/upload', authenticate, upload.single('file'), async (req, res) => {
+router.post('/', upload.single('file'), validateAssetUpload, async (req, res) => {
   try {
     if (!req.file) {
       return res.status(400).json({
-        error: 'No file provided',
+        error: 'Validation failed',
+        message: 'No file provided',
+        details: ['No file provided'],
       });
     }
 
     const { assetType, metadata } = req.body;
-    const validTypes = ['PROMO_LALA', 'PROMO_GUEST', 'BRAND_LOGO', 'EPISODE_FRAME'];
 
-    if (!assetType || !validTypes.includes(assetType)) {
+    if (!assetType) {
       return res.status(400).json({
-        error: 'Invalid or missing asset type',
-        valid_types: validTypes,
+        error: 'Validation failed',
+        details: ['assetType is required'],
       });
     }
 
-    // Upload to S3
+    if (!VALID_ASSET_TYPES.includes(assetType)) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        details: [`assetType must be one of: ${VALID_ASSET_TYPES.join(', ')}`],
+        received: assetType,
+      });
+    }
+
+    // Parse metadata
+    let parsedMetadata = {};
+    if (metadata) {
+      try {
+        if (typeof metadata === 'string') {
+          parsedMetadata = JSON.parse(metadata);
+        } else if (typeof metadata === 'object') {
+          parsedMetadata = metadata;
+        }
+
+        if (typeof parsedMetadata !== 'object' || parsedMetadata === null) {
+          return res.status(400).json({
+            error: 'Validation failed',
+            details: ['Metadata must be valid JSON object'],
+          });
+        }
+      } catch (parseError) {
+        return res.status(400).json({
+          error: 'Validation failed',
+          details: ['Metadata must be valid JSON'],
+        });
+      }
+    }
+
+    // Upload to S3 and create database record
     const asset = await AssetService.uploadAsset(
       req.file,
       assetType,
-      metadata ? JSON.parse(metadata) : {},
-      req.user.id
+      parsedMetadata,
+      req.user?.id || 'system'
     );
 
     res.status(201).json({
@@ -158,6 +209,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
     res.status(500).json({
       error: 'Failed to upload asset',
       message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
@@ -169,7 +221,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req, res) => 
 router.put('/:id/approve', authenticate, authorize(['ADMIN']), async (req, res) => {
   try {
     const { id } = req.params;
-    const asset = await AssetService.approveAsset(id);
+    const asset = await AssetService.approveAsset(id, req.user?.id);
 
     if (!asset) {
       return res.status(404).json({
@@ -184,6 +236,9 @@ router.put('/:id/approve', authenticate, authorize(['ADMIN']), async (req, res) 
     });
   } catch (error) {
     console.error('Failed to approve asset:', error);
+    if (error.message.includes('Asset not found')) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
     res.status(500).json({
       error: 'Failed to approve asset',
       message: error.message,
@@ -215,6 +270,9 @@ router.put('/:id/reject', authenticate, authorize(['ADMIN']), async (req, res) =
     });
   } catch (error) {
     console.error('Failed to reject asset:', error);
+    if (error.message.includes('Asset not found')) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
     res.status(500).json({
       error: 'Failed to reject asset',
       message: error.message,
@@ -224,61 +282,30 @@ router.put('/:id/reject', authenticate, authorize(['ADMIN']), async (req, res) =
 
 /**
  * PUT /api/v1/assets/:id/process
- * Process asset background removal using Runway ML (admin only)
+ * Process asset background removal
  */
-router.put('/:id/process', authenticate, authorize(['ADMIN']), async (req, res) => {
+router.put('/:id/process', async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Get asset
-    const asset = await AssetService.getAsset(id);
+    const asset = await AssetService.processAssetBackgroundRemoval(id);
+
     if (!asset) {
       return res.status(404).json({
         error: 'Asset not found',
       });
     }
 
-    // Download raw image from S3
-    console.log(`📥 Downloading raw asset from S3: ${asset.s3_key_raw}`);
-    const params = {
-      Bucket: process.env.AWS_S3_BUCKET,
-      Key: asset.s3_key_raw,
-    };
-    const rawImageBuffer = (await s3.getObject(params).promise()).Body;
-
-    // Process with Runway ML
-    console.log(`🎨 Processing asset with Runway ML...`);
-    const processedBuffer = await RunwayMLService.processWithFallback(rawImageBuffer);
-
-    // Upload processed image to S3
-    const processedKey = asset.s3_key_raw.replace('/raw/', '/processed/');
-    console.log(`📤 Uploading processed asset to S3: ${processedKey}`);
-    await s3
-      .putObject({
-        Bucket: process.env.AWS_S3_BUCKET,
-        Key: processedKey,
-        Body: processedBuffer,
-        ContentType: 'image/png',
-      })
-      .promise();
-
-    // Update asset with processed key and approve it
-    const updatedAsset = await models.Asset.update(
-      {
-        s3_key_processed: processedKey,
-        approval_status: 'APPROVED',
-      },
-      { where: { id }, returning: true }
-    );
-
-    console.log(`✅ Asset processed and approved: ${id}`);
     res.json({
       status: 'SUCCESS',
       message: 'Asset processed with background removal and approved',
-      data: updatedAsset[1][0].toJSON(),
+      data: asset,
     });
   } catch (error) {
     console.error('Failed to process asset:', error);
+    if (error.message.includes('Asset not found')) {
+      return res.status(404).json({ error: 'Asset not found' });
+    }
     res.status(500).json({
       error: 'Failed to process asset',
       message: error.message,

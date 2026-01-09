@@ -3,11 +3,11 @@ version: '3.8'
 services:
   postgres:
     image: postgres:15-alpine
-    container_name: episode-metadata-postgres-dev
+    container_name: episode-postgres
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: episode_metadata_dev
+      POSTGRES_DB: episode_metadata
     ports:
       - '5432:5432'
     volumes:
@@ -18,38 +18,27 @@ services:
       timeout: 5s
       retries: 5
 
-  redis:
-    image: redis:7-alpine
-    container_name: episode-metadata-redis-dev
+  localstack:
+    image: localstack/localstack:latest
+    container_name: episode-localstack
     ports:
-      - '6379:6379'
+      - '4566:4566'
+      - '4571:4571'
+    environment:
+      - SERVICES=s3,sqs,sns
+      - DEBUG=0
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - AWS_DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+    volumes:
+      - '/var/run/docker.sock:/var/run/docker.sock'
     healthcheck:
-      test: ['CMD', 'redis-cli', 'ping']
+      test: ['CMD', 'curl', '-f', 'http://localhost:4566/']
       interval: 10s
       timeout: 5s
       retries: 5
 
-  api:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    container_name: episode-metadata-api-dev
-    environment:
-      NODE_ENV: development
-      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/episode_metadata_dev
-      REDIS_URL: redis://redis:6379
-      PORT: 3000
-    ports:
-      - '3000:3000'
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    volumes:
-      - .:/app
-      - /app/node_modules
-    command: npm run dev
-
 volumes:
   postgres_data:
+    driver: local

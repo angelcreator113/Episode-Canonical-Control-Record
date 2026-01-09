@@ -7,6 +7,9 @@ const S3Service = require('../services/S3Service');
 const FileValidationService = require('../services/FileValidationService');
 const JobQueueService = require('../services/JobQueueService');
 const logger = require('../utils/logger');
+const ActivityService = require('../services/ActivityService');
+const NotificationService = require('../services/NotificationService');
+const SocketService = require('../services/SocketService');
 
 class FileController {
   /**
@@ -97,6 +100,37 @@ class FileController {
         jobId: job.jobId,
       });
 
+      // Phase 3A Integration: Activity Logging (non-blocking)
+      ActivityService.logActivity({
+        userId: req.user?.id,
+        action: 'CREATE',
+        resourceType: 'file',
+        resourceId: fileStorage.id,
+        metadata: { fileName: req.file.originalname, fileType, episodeId, fileSize: req.file.size }
+      }).catch((err) => console.error('Activity logging error:', err));
+
+      // Phase 3A Integration: WebSocket broadcast (non-blocking)
+      SocketService.broadcastMessage({
+        event: 'file_uploaded',
+        data: {
+          fileId: fileStorage.id,
+          episodeId,
+          fileName: fileStorage.file_name,
+          fileType,
+          fileSize: fileStorage.file_size,
+          uploadedBy: req.user?.email || 'unknown',
+          timestamp: new Date()
+        }
+      }).catch((err) => console.error('WebSocket broadcast error:', err));
+
+      // Phase 3A Integration: Notification (non-blocking)
+      NotificationService.create({
+        userId: req.user?.id,
+        type: 'info',
+        message: `File "${req.file.originalname}" uploaded successfully`,
+        data: { resourceType: 'file', resourceId: fileStorage.id, episodeId }
+      }).catch((err) => console.error('Notification error:', err));
+
       res.status(201).json({
         id: fileStorage.id,
         episodeId,
@@ -143,6 +177,27 @@ class FileController {
         last_accessed_at: new Date(),
       });
 
+      // Phase 3A Integration: Activity Logging (non-blocking)
+      ActivityService.logActivity({
+        userId: req.user?.id,
+        action: 'DOWNLOAD',
+        resourceType: 'file',
+        resourceId: fileId,
+        metadata: { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId }
+      }).catch((err) => console.error('Activity logging error:', err));
+
+      // Phase 3A Integration: WebSocket broadcast (non-blocking)
+      SocketService.broadcastMessage({
+        event: 'file_download',
+        data: {
+          fileId,
+          episodeId,
+          fileName: fileStorage.file_name,
+          downloadedBy: req.user?.email || 'unknown',
+          timestamp: new Date()
+        }
+      }).catch((err) => console.error('WebSocket broadcast error:', err));
+
       res.json({
         url,
         expiresIn: 3600,
@@ -178,6 +233,35 @@ class FileController {
       await fileStorage.destroy();
 
       logger.info('File deleted', { episodeId, fileId });
+
+      // Phase 3A Integration: Activity Logging (non-blocking)
+      ActivityService.logActivity({
+        userId: req.user?.id,
+        action: 'DELETE',
+        resourceType: 'file',
+        resourceId: fileId,
+        metadata: { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId }
+      }).catch((err) => console.error('Activity logging error:', err));
+
+      // Phase 3A Integration: WebSocket broadcast (non-blocking)
+      SocketService.broadcastMessage({
+        event: 'file_deleted',
+        data: {
+          fileId,
+          episodeId,
+          fileName: fileStorage.file_name,
+          deletedBy: req.user?.email || 'unknown',
+          timestamp: new Date()
+        }
+      }).catch((err) => console.error('WebSocket broadcast error:', err));
+
+      // Phase 3A Integration: Notification (non-blocking)
+      NotificationService.create({
+        userId: req.user?.id,
+        type: 'info',
+        message: `File "${fileStorage.file_name}" deleted`,
+        data: { resourceType: 'file', resourceId: fileId, episodeId }
+      }).catch((err) => console.error('Notification error:', err));
 
       res.json({ message: 'File deleted successfully' });
     } catch (error) {

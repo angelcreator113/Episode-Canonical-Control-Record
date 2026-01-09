@@ -1,15 +1,37 @@
+/* Tailwind CSS alternative - using custom CSS */
+
 :root {
-  --primary-color: #667eea;
-  --primary-dark: #764ba2;
-  --success-color: #4caf50;
-  --warning-color: #ff9800;
-  --danger-color: #f44336;
-  --info-color: #2196f3;
+  /* Primary Colors */
+  --primary-color: #2563eb;
+  --primary-dark: #1e40af;
+  --primary: #2563eb;
+  
+  /* Dark & Light */
+  --dark: #1e293b;
+  --light: #f5f5f5;
   --light-gray: #f5f5f5;
-  --border-color: #e0e0e0;
-  --text-primary: #333;
-  --text-secondary: #666;
-  --text-muted: #999;
+  
+  /* Status Colors */
+  --success: #16a34a;
+  --success-color: #16a34a;
+  --warning: #ea580c;
+  --warning-color: #ea580c;
+  --danger: #dc2626;
+  --danger-color: #dc2626;
+  --info: #0284c7;
+  --info-color: #0284c7;
+  
+  /* Neutral Colors & Text */
+  --border: #e5e7eb;
+  --border-color: #e5e7eb;
+  --text-primary: #1f2937;
+  --text-secondary: #6b7280;
+  --secondary: #6b7280;
+  --text-muted: #9ca3af;
+  
+  /* Shadows & Effects */
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --transition: all 0.3s ease;
 }
 
 * {
@@ -33,6 +55,7 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--light-gray);
+  color: var(--text-primary);
 }
 
 code {
@@ -42,6 +65,8 @@ code {
 
 button {
   font-family: inherit;
+  cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 input,
@@ -68,3 +93,49 @@ textarea {
 ::-webkit-scrollbar-thumb:hover {
   background: #555;
 }
+
+/* Component styles */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-all duration-200;
+}
+
+.btn-primary {
+  @apply btn bg-blue-600 text-white hover:bg-blue-700 disabled:bg-gray-400;
+}
+
+.btn-secondary {
+  @apply btn bg-gray-200 text-gray-900 hover:bg-gray-300 disabled:bg-gray-300;
+}
+
+.btn-danger {
+  @apply btn bg-red-600 text-white hover:bg-red-700 disabled:bg-gray-400;
+}
+
+.btn-success {
+  @apply btn bg-green-600 text-white hover:bg-green-700 disabled:bg-gray-400;
+}
+
+.card {
+  @apply bg-white rounded-lg shadow-md p-6 border border-gray-200;
+}
+
+.badge {
+  @apply inline-block px-3 py-1 rounded-full text-sm font-medium;
+}
+
+.badge-primary {
+  @apply badge bg-blue-100 text-blue-800;
+}
+
+.badge-success {
+  @apply badge bg-green-100 text-green-800;
+}
+
+.badge-warning {
+  @apply badge bg-yellow-100 text-yellow-800;
+}
+
+.badge-danger {
+  @apply badge bg-red-100 text-red-800;
+}
+

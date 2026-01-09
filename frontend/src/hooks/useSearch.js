@@ -32,8 +32,9 @@ export const useSearch = (query, page = 1, limit = 20) => {
       // Filter results based on query
       const searchQuery_lower = searchQuery.toLowerCase();
       const filtered = response.data.data.filter(episode => {
-        const title = (episode.episodeTitle || '').toLowerCase();
-        const description = (episode.description || '').toLowerCase();
+        // Handle both new field names (title) and old field names (episodeTitle)
+        const title = (episode.title || episode.episodeTitle || '').toLowerCase();
+        const description = (episode.description || episode.plotSummary || '').toLowerCase();
         const showName = (episode.showName || '').toLowerCase();
         
         return (

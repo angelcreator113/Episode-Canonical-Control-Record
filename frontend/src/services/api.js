@@ -1,21 +1,54 @@
 import axios from 'axios';
 
-// Use relative path to work with Vite proxy
+// Use full backend URL in development, relative path in production
+const baseURL = process.env.NODE_ENV === 'development' 
+  ? 'http://localhost:3002'
+  : '/';
+
 const apiClient = axios.create({
-  baseURL: '/',
+  baseURL,
   headers: {
     'Content-Type': 'application/json',
   },
+  timeout: 30000, // 30 second timeout
 });
 
-// Add token to requests if available
-apiClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem('authToken');
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+// ✅ REQUEST INTERCEPTOR - Add token to requests
+apiClient.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
   }
-  return config;
-});
+);
+
+// ✅ RESPONSE INTERCEPTOR - Handle errors
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Handle 401 Unauthorized
+    if (error.response?.status === 401) {
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('token');
+      // Don't redirect in development to avoid breaking testing
+      if (process.env.NODE_ENV !== 'development') {
+        window.location.href = '/login';
+      }
+    }
+    
+    // Log errors in development
+    if (process.env.NODE_ENV === 'development') {
+      console.error('API Error:', error.response?.data || error.message);
+    }
+    
+    return Promise.reject(error);
+  }
+);
 
 // Episode API calls
 export const episodeAPI = {

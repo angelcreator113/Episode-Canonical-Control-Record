@@ -3,7 +3,8 @@ const { DataTypes } = require('sequelize');
 
 /**
  * ThumbnailComposition Model
- * Stores composition metadata for generated thumbnails
+ * Stores composition metadata for generated thumbnails with versioning support
+ * Schema matches migrations with versioning columns: current_version, version_history, last_modified_by, modification_timestamp
  */
 module.exports = (sequelize) => {
   const ThumbnailComposition = sequelize.define('ThumbnailComposition', {
@@ -11,104 +12,88 @@ module.exports = (sequelize) => {
       type: DataTypes.UUID,
       primaryKey: true,
       defaultValue: DataTypes.UUIDV4,
+      allowNull: false,
     },
     episode_id: {
       type: DataTypes.UUID,
-      references: {
-        model: 'episodes',
-        key: 'id',
-      },
-      comment: 'Episode this composition is for',
-    },
-    thumbnail_id: {
-      type: DataTypes.UUID,
-      references: {
-        model: 'thumbnails',
-        key: 'id',
-      },
-      comment: 'Generated thumbnail from composition',
+      allowNull: false,
     },
     template_id: {
-      type: DataTypes.STRING(100),
-      references: {
-        model: 'thumbnail_templates',
-        key: 'id',
-      },
-      comment: 'Template used for composition',
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    name: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
     },
     background_frame_asset_id: {
       type: DataTypes.UUID,
-      references: {
-        model: 'assets',
-        key: 'id',
-      },
-      comment: 'Background frame asset from episode',
+      allowNull: true,
     },
     lala_asset_id: {
       type: DataTypes.UUID,
-      references: {
-        model: 'assets',
-        key: 'id',
-      },
-      comment: 'Lala promotional image asset',
+      allowNull: true,
     },
     guest_asset_id: {
       type: DataTypes.UUID,
-      references: {
-        model: 'assets',
-        key: 'id',
-      },
-      comment: 'Guest promotional image asset',
+      allowNull: true,
     },
-    composition_config: {
+    justawomen_asset_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    selected_formats: {
       type: DataTypes.JSONB,
-      comment: 'Composition configuration: {template_id, layers, positioning}',
+      allowNull: true,
+      defaultValue: [],
     },
-    version: {
-      type: DataTypes.INTEGER,
-      defaultValue: 1,
-      comment: 'Version number for tracking updates',
-    },
-    is_primary: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      comment: 'Whether this is the primary thumbnail for episode',
-    },
-    approval_status: {
+    status: {
       type: DataTypes.STRING(50),
-      defaultValue: 'DRAFT',
-      validate: {
-        isIn: [['DRAFT', 'PENDING', 'APPROVED', 'REJECTED']],
-      },
-      comment: 'Approval status: DRAFT, PENDING, APPROVED, REJECTED',
-    },
-    published_at: {
-      type: DataTypes.DATE,
-      comment: 'When composition was published',
+      allowNull: true,
+      defaultValue: 'draft',
     },
     created_by: {
-      type: DataTypes.STRING(100),
-      comment: 'User ID who created composition',
+      type: DataTypes.STRING(255),
+      allowNull: true,
     },
     created_at: {
       type: DataTypes.DATE,
+      allowNull: true,
       defaultValue: DataTypes.NOW,
     },
     updated_at: {
       type: DataTypes.DATE,
+      allowNull: true,
       defaultValue: DataTypes.NOW,
     },
-    approved_by: {
-      type: DataTypes.STRING(100),
-      comment: 'User ID who approved composition',
+    // Versioning columns
+    current_version: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 1,
     },
-    approved_at: {
+    version_history: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: {},
+    },
+    last_modified_by: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    modification_timestamp: {
       type: DataTypes.DATE,
-      comment: 'When composition was approved',
+      allowNull: true,
+      defaultValue: DataTypes.NOW,
     },
   }, {
     tableName: 'thumbnail_compositions',
     timestamps: false,
+    underscored: true,
   });
 
   return ThumbnailComposition;

@@ -17,79 +17,104 @@ module.exports = {
    * GET /thumbnails - List all thumbnails
    */
   async listThumbnails(req, res, next) {
-    const { page = 1, limit = 20, episodeId, type } = req.query;
-    const offset = (page - 1) * limit;
+    try {
+      const { page = 1, limit = 20, episodeId, type } = req.query;
+      const offset = (page - 1) * limit;
 
-    let where = {};
-    if (episodeId) where.episodeId = parseInt(episodeId);
-    if (type) where.thumbnailType = type;
+      let where = {};
+      if (episodeId) where.episodeId = parseInt(episodeId);
+      if (type) where.thumbnailType = type;
 
-    const { count, rows } = await Thumbnail.findAndCountAll({
-      where,
-      limit: parseInt(limit),
-      offset,
-      order: [['generatedAt', 'DESC']],
-      include: {
-        model: Episode,
-        as: 'episode',
-        attributes: ['id', 'episodeTitle', 'showName'],
-      },
-    });
-
-    // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'thumbnail',
-      'all',
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
-
-    res.json({
-      data: rows,
-      pagination: {
-        page: parseInt(page),
+      const { count, rows } = await Thumbnail.findAndCountAll({
+        attributes: [
+          'id',
+          'episodeId',
+          's3Bucket',
+          's3Key',
+          'fileSizeBytes',
+          'mimeType',
+          'widthPixels',
+          'heightPixels',
+          'format',
+          'thumbnailType',
+          'positionSeconds',
+          'generatedAt',
+          'qualityRating'
+        ],
+        where,
         limit: parseInt(limit),
-        total: count,
-        pages: Math.ceil(count / limit),
-      },
-    });
+        offset,
+        order: [['generatedAt', 'DESC']],
+        include: {
+          model: Episode,
+          as: 'episode',
+          attributes: ['id', 'episodeTitle', 'showName'],
+        },
+      });
+
+      res.json({
+        data: rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count,
+          pages: Math.ceil(count / limit),
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error in listThumbnails:', error);
+      res.status(500).json({
+        error: 'Failed to list thumbnails',
+        message: error.message
+      });
+    }
   },
 
   /**
    * GET /thumbnails/:id - Get single thumbnail
    */
   async getThumbnail(req, res, next) {
-    const { id } = req.params;
+    try {
+      const { id } = req.params;
 
-    const thumbnail = await Thumbnail.findByPk(id, {
-      include: {
-        model: Episode,
-        as: 'episode',
-        attributes: ['id', 'episodeTitle', 'showName', 'seasonNumber', 'episodeNumber'],
-      },
-    });
+      const thumbnail = await Thumbnail.findByPk(id, {
+        attributes: [
+          'id',
+          'episodeId',
+          's3Bucket',
+          's3Key',
+          'fileSizeBytes',
+          'mimeType',
+          'widthPixels',
+          'heightPixels',
+          'format',
+          'thumbnailType',
+          'positionSeconds',
+          'generatedAt',
+          'qualityRating'
+        ],
+        include: {
+          model: Episode,
+          as: 'episode',
+          attributes: ['id', 'episodeTitle', 'showName', 'seasonNumber', 'episodeNumber'],
+        },
+      });
 
-    if (!thumbnail) {
-      throw new NotFoundError('Thumbnail', id);
-    }
-
-    // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'thumbnail',
-      id,
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
+      if (!thumbnail) {
+        return res.status(404).json({
+          error: 'Thumbnail not found',
+          id
+        });
       }
-    );
 
-    res.json({ data: thumbnail });
+      res.json({ data: thumbnail });
+    } catch (error) {
+      console.error('❌ Error in getThumbnail:', error);
+      res.status(500).json({
+        error: 'Failed to get thumbnail',
+        message: error.message
+      });
+    }
   },
 
   /**

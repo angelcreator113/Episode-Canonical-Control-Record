@@ -1,15 +1,23 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useSearch } from '../hooks/useSearch';
 import './SearchResults.css';
 
 export const SearchResults = () => {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
-  const query = searchParams.get('q') || '';
+  const initialQuery = searchParams.get('q') || '';
   const page = parseInt(searchParams.get('page') || '1');
 
-  const { results, loading, error, pagination } = useSearch(query, page);
+  const [searchInput, setSearchInput] = useState(initialQuery);
+  const { results, loading, error, pagination } = useSearch(initialQuery, page);
+
+  const handleSearch = (e) => {
+    e.preventDefault();
+    if (searchInput.trim()) {
+      navigate(`/search?q=${encodeURIComponent(searchInput.trim())}&page=1`);
+    }
+  };
 
   const handleViewDetails = (episodeId) => {
     navigate(`/episodes/${episodeId}`);
@@ -17,120 +25,199 @@ export const SearchResults = () => {
 
   const handlePageChange = (newPage) => {
     window.scrollTo({ top: 0, behavior: 'smooth' });
-    navigate(`/search?q=${encodeURIComponent(query)}&page=${newPage}`);
+    navigate(`/search?q=${encodeURIComponent(initialQuery)}&page=${newPage}`);
   };
 
-  if (loading && results.length === 0) {
-    return (
-      <div className="search-results">
-        <div className="loading">Searching...</div>
-      </div>
-    );
-  }
+  const handleClearSearch = () => {
+    setSearchInput('');
+    navigate('/search');
+  };
 
   return (
-    <div className="search-results">
-      <div className="search-results-header">
-        <h1>Search Results</h1>
-        <p className="search-query">
-          Results for: <strong>"{query}"</strong>
-        </p>
-        {pagination.total > 0 && (
-          <p className="result-count">
-            Found {pagination.total} result{pagination.total !== 1 ? 's' : ''}
-          </p>
-        )}
+    <div className="search-page">
+      {/* Search Header */}
+      <div className="search-header">
+        <div className="search-header-content">
+          <h1>🔍 Search Episodes</h1>
+          <p className="search-subtitle">Find episodes by title, description, or metadata</p>
+        </div>
       </div>
 
-      {error && (
-        <div className="error-message">
-          <span>⚠️ {error}</span>
-        </div>
-      )}
-
-      {pagination.total === 0 ? (
-        <div className="no-results">
-          <span className="icon">🔍</span>
-          <p>No episodes found matching "{query}"</p>
-          <p className="suggestion">Try searching for different keywords</p>
-        </div>
-      ) : (
-        <>
-          <div className="results-grid">
-            {results.map((episode) => (
-              <div key={episode.id} className="result-card">
-                <div className="result-header">
-                  <h3 className="result-title">{episode.episodeTitle || 'Untitled'}</h3>
-                  <span className="result-show">{episode.showName || 'Unknown Show'}</span>
-                </div>
-
-                <div className="result-meta">
-                  <span className="meta-item">
-                    Season {episode.seasonNumber || 'N/A'}, Ep {episode.episodeNumber || 'N/A'}
-                  </span>
-                  {episode.airDate && (
-                    <span className="meta-item">
-                      {new Date(episode.airDate).toLocaleDateString()}
-                    </span>
-                  )}
-                </div>
-
-                {episode.description && (
-                  <p className="result-description">{episode.description}</p>
-                )}
-
-                <div className="result-tags">
-                  {episode.tags && Array.isArray(episode.tags) && (
-                    episode.tags.slice(0, 3).map((tag) => (
-                      <span key={tag} className="tag">
-                        {tag}
-                      </span>
-                    ))
-                  )}
-                </div>
-
-                <div className="result-status">
-                  <span className={`status-badge ${episode.processingStatus || 'pending'}`}>
-                    {(episode.processingStatus || 'Pending').charAt(0).toUpperCase() +
-                      (episode.processingStatus || 'Pending').slice(1)}
-                  </span>
-                </div>
-
-                <button
-                  className="view-button"
-                  onClick={() => handleViewDetails(episode.id)}
-                >
-                  View Details →
-                </button>
-              </div>
-            ))}
+      {/* Search Bar */}
+      <div className="search-bar-section">
+        <form onSubmit={handleSearch} className="search-form">
+          <div className="search-input-wrapper">
+            <span className="search-icon">🔍</span>
+            <input
+              type="text"
+              className="search-input"
+              placeholder="Search episodes..."
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              autoFocus
+            />
+            {searchInput && (
+              <button
+                type="button"
+                className="clear-button"
+                onClick={handleClearSearch}
+                aria-label="Clear search"
+              >
+                ✕
+              </button>
+            )}
           </div>
+          <button type="submit" className="search-button" disabled={!searchInput.trim()}>
+            Search
+          </button>
+        </form>
+      </div>
 
-          {pagination.pages > 1 && (
-            <div className="pagination">
-              <button
-                className="pagination-btn"
-                onClick={() => handlePageChange(page - 1)}
-                disabled={page === 1}
-              >
-                ← Previous
-              </button>
+      {/* Results Section */}
+      <div className="search-results-container">
+        {loading && (
+          <div className="loading-state">
+            <div className="spinner-large"></div>
+            <p>Searching...</p>
+          </div>
+        )}
 
-              <div className="pagination-info">
-                Page {page} of {pagination.pages}
+        {error && !loading && (
+          <div className="error-state">
+            <span className="error-icon">⚠️</span>
+            <p>{error}</p>
+          </div>
+        )}
+
+        {!loading && !error && initialQuery && (
+          <>
+            {/* Results Header */}
+            <div className="results-header">
+              <div className="results-info">
+                <h2>Results for "{initialQuery}"</h2>
+                {pagination.total > 0 && (
+                  <p className="result-count">
+                    {pagination.total} result{pagination.total !== 1 ? 's' : ''} found
+                  </p>
+                )}
               </div>
-
-              <button
-                className="pagination-btn"
-                onClick={() => handlePageChange(page + 1)}
-                disabled={page >= pagination.pages}
-              >
-                Next →
-              </button>
             </div>
-          )}
-        </>
-      )}
+
+            {/* No Results */}
+            {pagination.total === 0 && (
+              <div className="no-results">
+                <span className="empty-icon">📭</span>
+                <h3>No episodes found</h3>
+                <p>No episodes match "{initialQuery}"</p>
+                <p className="suggestion">Try different keywords or check your spelling</p>
+              </div>
+            )}
+
+            {/* Results Grid */}
+            {pagination.total > 0 && (
+              <>
+                <div className="results-grid">
+                  {results.map((episode) => (
+                    <div key={episode.id} className="result-card">
+                      <div className="card-header">
+                        <h3 className="episode-title">
+                          {episode.title || episode.episodeTitle || 'Untitled Episode'}
+                        </h3>
+                        <span className="episode-number">
+                          Episode {episode.episode_number || episode.episodeNumber || '?'}
+                        </span>
+                      </div>
+
+                      {episode.description && (
+                        <p className="episode-description">
+                          {episode.description.length > 150
+                            ? `${episode.description.substring(0, 150)}...`
+                            : episode.description}
+                        </p>
+                      )}
+
+                      <div className="card-meta">
+                        {episode.air_date || episode.airDate ? (
+                          <span className="meta-item">
+                            📅 {new Date(episode.air_date || episode.airDate).toLocaleDateString()}
+                          </span>
+                        ) : null}
+                        
+                        {episode.status && (
+                          <span className={`status-badge status-${episode.status.toLowerCase()}`}>
+                            {episode.status}
+                          </span>
+                        )}
+                      </div>
+
+                      {episode.categories && Array.isArray(episode.categories) && episode.categories.length > 0 && (
+                        <div className="card-tags">
+                          {episode.categories.slice(0, 3).map((cat, idx) => (
+                            <span key={idx} className="tag">
+                              {cat}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+
+                      <button
+                        className="view-button"
+                        onClick={() => handleViewDetails(episode.id)}
+                      >
+                        View Details →
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Pagination */}
+                {pagination.pages > 1 && (
+                  <div className="pagination">
+                    <button
+                      className="pagination-btn"
+                      onClick={() => handlePageChange(page - 1)}
+                      disabled={page === 1}
+                    >
+                      ← Previous
+                    </button>
+
+                    <div className="pagination-info">
+                      <span className="current-page">{page}</span>
+                      <span className="separator">/</span>
+                      <span className="total-pages">{pagination.pages}</span>
+                    </div>
+
+                    <button
+                      className="pagination-btn"
+                      onClick={() => handlePageChange(page + 1)}
+                      disabled={page >= pagination.pages}
+                    >
+                      Next →
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* Initial State - No Search Yet */}
+        {!loading && !initialQuery && (
+          <div className="initial-state">
+            <span className="initial-icon">🔍</span>
+            <h3>Start Searching</h3>
+            <p>Enter keywords above to search for episodes</p>
+            <div className="search-tips">
+              <h4>Search Tips:</h4>
+              <ul>
+                <li>Search by episode title or description</li>
+                <li>Use quotes for exact phrases</li>
+                <li>Try different keywords if you don't find what you're looking for</li>
+              </ul>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 };

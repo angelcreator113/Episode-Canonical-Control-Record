@@ -2,9 +2,11 @@
  * ActivityLog Model Unit Tests
  */
 
-const { ActivityLog: ActivityLogModel } = require('../../../src/models');
+jest.mock('../../../src/models', () => ({
+  ActivityLog: {},
+}));
 
-jest.mock('../../../src/models');
+const { ActivityLog: ActivityLogModel } = require('../../../src/models');
 
 describe('ActivityLog Model', () => {
   beforeEach(() => {

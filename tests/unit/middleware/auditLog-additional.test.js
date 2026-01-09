@@ -3,7 +3,7 @@
  * Tests for edge cases and error scenarios
  */
 const auditLog = require('../../../src/middleware/auditLog');
-const { ActivityLog } = require('../../../src/models');
+const { ActivityLog: _ActivityLog } = require('../../../src/models');
 
 jest.mock('../../../src/models');
 

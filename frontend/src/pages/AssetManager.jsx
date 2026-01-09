@@ -20,7 +20,13 @@ const AssetManager = () => {
   const [metadata, setMetadata] = useState('');
   const [showPending, setShowPending] = useState(false);
 
-  const assetTypes = ['PROMO_LALA', 'PROMO_GUEST', 'BRAND_LOGO', 'EPISODE_FRAME'];
+  const assetTypes = [
+    { value: 'PROMO_LALA', label: '👩 Lala Promo' },
+    { value: 'PROMO_JUSTAWOMANINHERPRIME', label: '💜 JustAWoman Promo' },
+    { value: 'PROMO_GUEST', label: '👤 Guest Promo' },
+    { value: 'BRAND_LOGO', label: '🏷️ Brand Logo' },
+    { value: 'EPISODE_FRAME', label: '🖼️ Episode Frame' }
+  ];
 
   // Load assets
   useEffect(() => {
@@ -34,10 +40,10 @@ const AssetManager = () => {
       const response = await fetch(`/api/v1/assets/approved/${assetType}`);
       if (!response.ok) throw new Error('Failed to fetch assets');
       const data = await response.json();
-      setAssets(data.data || []);
+      setAssets(data.data || data.assets || []);
     } catch (err) {
       console.error('Error fetching assets:', err);
-      setError('Failed to load assets');
+      setAssets([]);
     } finally {
       setLoading(false);
     }
@@ -45,12 +51,10 @@ const AssetManager = () => {
 
   const fetchPendingAssets = async () => {
     try {
-      const response = await fetch('/api/v1/assets/pending', {
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('authToken')}` },
-      });
+      const response = await fetch('/api/v1/assets/pending');
       if (response.ok) {
         const data = await response.json();
-        setPendingAssets(data.data || []);
+        setPendingAssets(data.data || data.assets || []);
       }
     } catch (err) {
       console.error('Error fetching pending assets:', err);
@@ -59,6 +63,7 @@ const AssetManager = () => {
 
   const handleFileChange = (e) => {
     setFile(e.target.files[0]);
+    setError(null);
   };
 
   const handleAssetTypeChange = (e) => {
@@ -78,19 +83,26 @@ const AssetManager = () => {
       setError(null);
       setSuccess(null);
 
+      if (metadata && metadata.trim()) {
+        try {
+          JSON.parse(metadata);
+        } catch (parseErr) {
+          setError('Invalid JSON in metadata');
+          setLoading(false);
+          return;
+        }
+      }
+
       const formData = new FormData();
       formData.append('file', file);
       formData.append('assetType', assetType);
-      if (metadata) {
+      if (metadata && metadata.trim()) {
         formData.append('metadata', metadata);
       }
 
-      const response = await fetch('/api/v1/assets/upload', {
+      const response = await fetch('/api/v1/assets', {
         method: 'POST',
         body: formData,
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
       });
 
       if (!response.ok) {
@@ -99,12 +111,12 @@ const AssetManager = () => {
       }
 
       const data = await response.json();
-      setSuccess(`Asset uploaded! Pending background removal processing.`);
+      setSuccess(`✅ Asset uploaded successfully! Processing background removal...`);
       setFile(null);
       setMetadata('');
 
-      // Reload assets and pending
       await fetchPendingAssets();
+      await fetchAssets();
       document.getElementById('assetForm')?.reset();
     } catch (err) {
       console.error('Error uploading asset:', err);
@@ -115,7 +127,7 @@ const AssetManager = () => {
   };
 
   const handleProcessBackground = async (assetId) => {
-    if (!window.confirm('Process background removal with Runway ML?')) {
+    if (!window.confirm('Process background removal with Runway ML?\n\nThis will use Runway API credits.')) {
       return;
     }
 
@@ -125,9 +137,6 @@ const AssetManager = () => {
 
       const response = await fetch(`/api/v1/assets/${assetId}/process`, {
         method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
-        },
       });
 
       if (!response.ok) {
@@ -136,7 +145,7 @@ const AssetManager = () => {
       }
 
       const data = await response.json();
-      setSuccess(`Asset processed and approved! Ready for compositions.`);
+      setSuccess(`✅ Asset processed and approved! Ready for use in compositions.`);
       await fetchPendingAssets();
       await fetchAssets();
     } catch (err) {
@@ -147,162 +156,292 @@ const AssetManager = () => {
     }
   };
 
+  const getImageUrl = (asset) => {
+    if (asset.s3_url_processed) return asset.s3_url_processed;
+    if (asset.s3_url_raw) return asset.s3_url_raw;
+    
+    if (asset.s3_key_raw) {
+      const bucket = process.env.REACT_APP_S3_PRIMARY_BUCKET || 'episode-metadata-dev';
+      
+      if (process.env.REACT_APP_USE_LOCALSTACK === 'true') {
+        const endpoint = process.env.REACT_APP_AWS_ENDPOINT || 'http://localhost:4566';
+        return `${endpoint}/${bucket}/${asset.s3_key_raw}`;
+      }
+      
+      const region = process.env.REACT_APP_AWS_REGION || 'us-east-1';
+      return `https://${bucket}.s3.${region}.amazonaws.com/${asset.s3_key_raw}`;
+    }
+    
+    return null;
+  };
+
+  const AssetCard = ({ asset, isPending = false }) => {
+    const [imageError, setImageError] = useState(false);
+    const [imageLoading, setImageLoading] = useState(true);
+    const imageUrl = getImageUrl(asset);
+
+    return (
+      <div className="asset-card">
+        <div className="asset-preview">
+          {imageLoading && !imageError && (
+            <div className="asset-loading">
+              <div className="spinner"></div>
+              <span>Loading...</span>
+            </div>
+          )}
+
+          {imageError && (
+            <div className="asset-error">
+              <span>⚠️</span>
+              <span>Failed to load</span>
+            </div>
+          )}
+
+          {imageUrl && !imageError ? (
+            <img
+              src={imageUrl}
+              alt={asset.asset_type}
+              onLoad={() => {
+                setImageLoading(false);
+                setImageError(false);
+              }}
+              onError={(e) => {
+                // Suppress console error for missing S3 assets - they don't have valid keys
+                setImageError(true);
+                setImageLoading(false);
+              }}
+              style={{ 
+                display: imageLoading ? 'none' : 'block',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover'
+              }}
+            />
+          ) : (
+            !imageLoading && (
+              <div className="asset-placeholder">
+                <span style={{ fontSize: '2rem' }}>🖼️</span>
+                <span style={{ fontSize: '0.8rem' }}>No Preview</span>
+              </div>
+            )
+          )}
+
+          <div className="asset-status-badge">
+            {isPending ? '⏳ PENDING' : '✅ APPROVED'}
+          </div>
+        </div>
+
+        <div className="asset-info">
+          <p className="asset-type">{asset.asset_type}</p>
+          <p className="asset-id" title={asset.id}>
+            ID: {asset.id.substring(0, 8)}...
+          </p>
+          
+          {asset.file_size_bytes && (
+            <small className="asset-size">
+              {(asset.file_size_bytes / 1024).toFixed(0)} KB
+            </small>
+          )}
+
+          {isPending && (
+            <button
+              onClick={() => handleProcessBackground(asset.id)}
+              disabled={processingId === asset.id}
+              className="btn-process"
+            >
+              {processingId === asset.id ? (
+                <>
+                  <span className="spinner-sm"></span>
+                  Processing...
+                </>
+              ) : (
+                '🎨 Process Background'
+              )}
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const currentAssetTypeLabel = assetTypes.find(t => t.value === assetType)?.label || assetType;
 
   return (
     <div className="asset-manager">
       <div className="asset-manager-container">
-        <h1>📸 Asset Manager</h1>
-        <p className="subtitle">Upload promotional assets for composite thumbnails</p>
-
-        {/* Upload Form */}
-        <div className="upload-section">
-          <h2>Upload New Asset</h2>
-          <form id="assetForm" onSubmit={handleUpload} className="upload-form">
-            <div className="form-group">
-              <label htmlFor="assetType">Asset Type</label>
-              <select
-                id="assetType"
-                value={assetType}
-                onChange={handleAssetTypeChange}
-                required
-              >
-                {assetTypes.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="file">Image File</label>
-              <input
-                id="file"
-                type="file"
-                onChange={handleFileChange}
-                accept="image/*"
-                required
-              />
-              {file && <p className="file-selected">Selected: {file.name}</p>}
-            </div>
-
-            <div className="form-group">
-              <label htmlFor="metadata">Metadata (JSON, optional)</label>
-              <textarea
-                id="metadata"
-                value={metadata}
-                onChange={(e) => setMetadata(e.target.value)}
-                placeholder='{"description": "Lala promo image"}'
-                rows={3}
-              />
-            </div>
-
-            <button type="submit" disabled={loading} className="btn-upload">
-              {loading ? '⏳ Uploading...' : '📤 Upload Asset'}
-            </button>
-          </form>
-
-          {error && <div className="alert alert-error">{error}</div>}
-          {success && <div className="alert alert-success">{success}</div>}
+        {/* Header */}
+        <div className="page-header">
+          <div>
+            <h1>📸 Asset Manager</h1>
+            <p className="subtitle">Upload and manage promotional assets with AI background removal</p>
+          </div>
         </div>
 
-        {/* Assets List */}
-        <div className="assets-section">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2>Assets ({showPending ? 'Pending' : 'Approved'})</h2>
-            <button
-              onClick={() => setShowPending(!showPending)}
-              className="btn-refresh"
-              style={{ background: showPending ? '#667eea' : 'white', color: showPending ? 'white' : '#667eea' }}
-            >
-              {showPending ? '✅ Approved Assets' : '⏳ Pending Assets'}
-              {pendingAssets.length > 0 && ` (${pendingAssets.length})`}
-            </button>
+        {/* Upload Section */}
+        <div className="upload-section">
+          <div className="section-header-inline">
+            <h2>📤 Upload New Asset</h2>
           </div>
 
-          {loading && <p className="loading">Loading assets...</p>}
+          <form id="assetForm" onSubmit={handleUpload} className="upload-form-compact">
+            <div className="form-row">
+              <div className="form-group">
+                <label htmlFor="assetType">Asset Type</label>
+                <select
+                  id="assetType"
+                  value={assetType}
+                  onChange={handleAssetTypeChange}
+                  required
+                >
+                  {assetTypes.map(type => (
+                    <option key={type.value} value={type.value}>
+                      {type.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-          {showPending ? (
-            // Pending Assets
-            pendingAssets.length === 0 ? (
-              <div className="empty-state">
-                <p>No pending assets</p>
-                <small>All assets have been processed or approved</small>
+              <div className="form-group form-group-file">
+                <label htmlFor="file">Image File (PNG, JPG)</label>
+                <div className="file-input-wrapper">
+                  <input
+                    id="file"
+                    type="file"
+                    onChange={handleFileChange}
+                    accept="image/*"
+                    required
+                  />
+                  {file && (
+                    <div className="file-selected">
+                      ✅ {file.name}
+                    </div>
+                  )}
+                </div>
               </div>
-            ) : (
-              <div className="assets-grid">
-                {pendingAssets.map(asset => (
-                  <div key={asset.id} className="asset-card" style={{ position: 'relative' }}>
-                    <div className="asset-preview">
-                      {asset.s3_url && (
-                        <img
-                          src={asset.s3_url}
-                          alt={asset.asset_type}
-                          onError={(e) => {
-                            e.target.src = 'https://via.placeholder.com/150?text=Image';
-                          }}
-                        />
-                      )}
-                    </div>
-                    <div className="asset-info">
-                      <p className="asset-id" title={asset.id}>{asset.id.substring(0, 8)}...</p>
-                      <p className="asset-type">{asset.asset_type}</p>
-                      <p className="asset-status" style={{ color: '#f59e0b' }}>⏳ PENDING</p>
-                      <button
-                        onClick={() => handleProcessBackground(asset.id)}
-                        disabled={processingId === asset.id}
-                        style={{
-                          width: '100%',
-                          padding: '0.5rem',
-                          marginTop: '0.5rem',
-                          background: '#667eea',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontSize: '0.8rem',
-                          fontWeight: 'bold',
-                        }}
-                      >
-                        {processingId === asset.id ? '🎨 Processing...' : '🎨 Process Background'}
-                      </button>
-                    </div>
+
+              <div className="form-group-action">
+                <button type="submit" disabled={loading || !file} className="btn-upload">
+                  {loading ? (
+                    <>
+                      <span className="spinner-sm"></span>
+                      Uploading...
+                    </>
+                  ) : (
+                    <>
+                      📤 Upload Asset
+                    </>
+                  )}
+                </button>
+              </div>
+            </div>
+
+            <div className="form-row-metadata">
+              <div className="form-group">
+                <label htmlFor="metadata">
+                  Metadata (Optional JSON)
+                  <span className="label-hint">e.g., {"{"}"description": "Lala winter promo"{"}"}</span>
+                </label>
+                <textarea
+                  id="metadata"
+                  value={metadata}
+                  onChange={(e) => setMetadata(e.target.value)}
+                  placeholder='{"description": "Asset description", "tags": ["tag1", "tag2"]}'
+                  rows={2}
+                />
+              </div>
+            </div>
+          </form>
+
+          {error && (
+            <div className="alert alert-error">
+              <span className="alert-icon">❌</span>
+              <span>{error}</span>
+            </div>
+          )}
+          {success && (
+            <div className="alert alert-success">
+              <span className="alert-icon">✅</span>
+              <span>{success}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Assets Grid */}
+        <div className="assets-section">
+          <div className="section-header-inline">
+            <h2>
+              {showPending ? '⏳ Pending Assets' : `✅ ${currentAssetTypeLabel}`}
+              {showPending && pendingAssets.length > 0 && (
+                <span className="badge">{pendingAssets.length}</span>
+              )}
+              {!showPending && assets.length > 0 && (
+                <span className="badge badge-success">{assets.length}</span>
+              )}
+            </h2>
+            
+            <div className="section-actions">
+              <button 
+                onClick={() => {
+                  setShowPending(!showPending);
+                  setError(null);
+                  setSuccess(null);
+                }} 
+                className="btn-toggle"
+              >
+                {showPending ? (
+                  <>✅ View Approved</>
+                ) : (
+                  <>
+                    ⏳ View Pending
+                    {pendingAssets.length > 0 && (
+                      <span className="btn-badge">{pendingAssets.length}</span>
+                    )}
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+
+          {loading && (
+            <div className="loading-state">
+              <div className="spinner"></div>
+              <p>Loading assets...</p>
+            </div>
+          )}
+
+          {!loading && (
+            <>
+              {showPending ? (
+                pendingAssets.length === 0 ? (
+                  <div className="empty-state">
+                    <span className="empty-icon">✨</span>
+                    <h3>No Pending Assets</h3>
+                    <p>All uploaded assets have been processed</p>
                   </div>
-                ))}
-              </div>
-            )
-          ) : (
-            // Approved Assets
-            assets.length === 0 ? (
-              <div className="empty-state">
-                <p>No approved assets found for {assetType}</p>
-                <small>Upload an asset and process it with Runway ML to use here</small>
-              </div>
-            ) : (
-              <div className="assets-grid">
-                {assets.map(asset => (
-                  <div key={asset.id} className="asset-card">
-                    <div className="asset-preview">
-                      {asset.s3_url && (
-                        <img
-                          src={asset.s3_url}
-                          alt={asset.asset_type}
-                          onError={(e) => {
-                            e.target.src = 'https://via.placeholder.com/150?text=Image';
-                          }}
-                        />
-                      )}
-                    </div>
-                    <div className="asset-info">
-                      <p className="asset-id" title={asset.id}>{asset.id.substring(0, 8)}...</p>
-                      <p className="asset-type">{asset.asset_type}</p>
-                      <p className="asset-status">✅ APPROVED</p>
-                      <small className="asset-size">
-                        {asset.file_size_bytes ? `${(asset.file_size_bytes / 1024).toFixed(0)}KB` : 'N/A'}
-                      </small>
-                    </div>
+                ) : (
+                  <div className="assets-grid">
+                    {pendingAssets.map(asset => (
+                      <AssetCard key={asset.id} asset={asset} isPending={true} />
+                    ))}
                   </div>
-                ))}
-              </div>
-            )
+                )
+              ) : (
+                assets.length === 0 ? (
+                  <div className="empty-state">
+                    <span className="empty-icon">📦</span>
+                    <h3>No Assets Yet</h3>
+                    <p>Upload your first {currentAssetTypeLabel.toLowerCase()} asset to get started</p>
+                    <small>Assets will appear here after background removal processing</small>
+                  </div>
+                ) : (
+                  <div className="assets-grid">
+                    {assets.map(asset => (
+                      <AssetCard key={asset.id} asset={asset} isPending={false} />
+                    ))}
+                  </div>
+                )
+              )}
+            </>
           )}
         </div>
       </div>

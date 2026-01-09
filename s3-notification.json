@@ -1,0 +1,20 @@
+{
+  "LambdaFunctionConfigurations": [
+    {
+      "LambdaFunctionArn": "arn:aws:lambda:us-east-1:637423256673:function:brd-thumbnail-processor",
+      "Filter": {
+        "Key": {
+          "FilterRules": [
+            {
+              "Name": "prefix",
+              "Value": ""
+            }
+          ]
+        }
+      },
+      "Events": [
+        "s3:ObjectCreated:*"
+      ]
+    }
+  ]
+}

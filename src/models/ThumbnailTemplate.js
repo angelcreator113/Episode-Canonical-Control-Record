@@ -39,17 +39,10 @@ module.exports = (sequelize) => {
       type: DataTypes.JSONB,
       comment: 'Layer configuration: {background, lala, guest, text}',
     },
-    created_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
-    updated_at: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-    },
   }, {
     tableName: 'thumbnail_templates',
-    timestamps: false,
+    timestamps: true,
+    underscored: true,
   });
 
   return ThumbnailTemplate;

@@ -45,12 +45,19 @@ const getUserRole = (user) => {
     return ROLES.viewer; // Default to viewer
   }
 
-  // Check groups in order of privilege
-  if (user.groups.includes('admin') || user.groups.includes('Admin')) {
+  // Ensure groups is an array
+  if (!Array.isArray(user.groups)) {
+    return ROLES.viewer; // Default to viewer if groups is not an array
+  }
+
+  // Check groups in order of privilege (case-insensitive)
+  const groupsLower = user.groups.map(g => g.toLowerCase());
+  
+  if (groupsLower.includes('admin')) {
     return ROLES.admin;
   }
 
-  if (user.groups.includes('editor') || user.groups.includes('Editor')) {
+  if (groupsLower.includes('editor')) {
     return ROLES.editor;
   }
 

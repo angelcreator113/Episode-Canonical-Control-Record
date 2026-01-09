@@ -94,7 +94,7 @@ const authenticateToken = async (req, res, next) => {
         id: decoded.sub, // Cognito subject ID
         email: decoded.email,
         name: decoded.name,
-        groups: decoded['cognito:groups'] || [],
+        groups: decoded['cognito:groups'] || decoded.groups || [],
         tokenUse: decoded.token_use, // 'access' or 'id'
         issuedAt: decoded.iat,
         expiresAt: decoded.exp,
@@ -228,10 +228,16 @@ const authorize = (requiredGroups) => {
  */
 const authenticate = authenticateToken;
 
+/**
+ * Alias for authorize - check user roles/groups
+ */
+const authorizeRole = authorize;
+
 module.exports = {
   authenticate,
   authenticateToken,
   authorize,
+  authorizeRole,
   optionalAuth,
   verifyToken,
   verifyGroup,

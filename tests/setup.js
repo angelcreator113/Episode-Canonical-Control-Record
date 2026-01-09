@@ -9,6 +9,9 @@ process.env.DATABASE_URL = 'postgresql://postgres:password@localhost:5432/episod
 process.env.LOG_LEVEL = 'error';
 process.env.AWS_REGION = 'us-east-1';
 process.env.COGNITO_USER_POOL_ID = 'us-east-1_test123';
+process.env.JWT_SECRET = 'test-secret-key-that-is-at-least-32-characters-long-for-security';
+process.env.TOKEN_ISSUER = 'episode-metadata-api';
+process.env.TOKEN_AUDIENCE = 'episode-metadata-app';
 
 // Mock AWS SDK before any imports
 jest.mock('aws-sdk', () => ({

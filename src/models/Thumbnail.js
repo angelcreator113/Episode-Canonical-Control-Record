@@ -117,6 +117,47 @@ module.exports = (sequelize) => {
       },
       comment: 'Quality rating (0-10) for thumbnail',
     },
+
+    // Publishing fields
+    publishStatus: {
+      type: DataTypes.STRING(50),
+      defaultValue: 'DRAFT',
+      allowNull: false,
+      validate: {
+        isIn: [['DRAFT', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED']],
+      },
+      comment: 'DRAFT, PUBLISHED, UNPUBLISHED, ARCHIVED',
+    },
+    isPrimary: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+      comment: 'Is this the primary YouTube thumbnail for the episode',
+    },
+    publishedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'When thumbnail was published',
+    },
+    publishedBy: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      comment: 'User ID who published the thumbnail',
+    },
+    unpublishedAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      comment: 'When thumbnail was unpublished',
+    },
+    platformUploadStatus: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      comment: 'Track upload status per platform: {youtube: "uploaded", instagram: "pending"}',
+    },
+    platformUrls: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      comment: 'Platform-specific URLs: {youtube: "video_id", instagram: "post_id"}',
+    },
   }, {
     sequelize,
     modelName: 'Thumbnail',

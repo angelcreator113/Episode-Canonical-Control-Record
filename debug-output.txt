@@ -1,0 +1,1501 @@
+≡ƒÜÇ Starting Episode Metadata API...
+≡ƒôª Node version: v20.19.4
+≡ƒöº Environment: development
+Γ£ô Auth routes loaded
+Γ£ô Episodes routes loaded
+Γ£ô Thumbnails routes loaded
+Γ£ô Metadata routes loaded
+Γ£ô Processing routes loaded
+Γ£ô Files routes loaded
+[2026-01-08T15:15:36.547Z] [WARN] [App] OpenSearch not configured - using PostgreSQL fallback for search 
+Γ£ô Search routes loaded
+Γ£ô Jobs routes loaded
+Γ£ô Assets routes loaded
+Γ£ô Compositions routes loaded
+Γ£ô Templates routes loaded
+Γ£ô Notifications controller loaded
+Γ£ô Activity controller loaded
+Γ£ô Presence controller loaded
+Γ£ô Socket controller loaded
+Γ£ô Audit logs routes loaded
+Γ£ô Seed routes loaded (development only)
+Γ£ô Episode Metadata API listening on port 3002
+Γ£ô Environment: development
+Γ£ô API Version: v1
+≡ƒöù Ready to accept requests
+(node:91612) NOTE: The AWS SDK for JavaScript (v2) has reached end-of-support.
+It will no longer receive updates or releases.
+
+Please migrate your code to use AWS SDK for JavaScript (v3).
+For more information, check the blog post at https://a.co/cUPnyil
+(Use `node --trace-warnings ...` to show where the warning was created)
+Γ£à AWS SDK v3 configured with credentials from profile: default
+Γ£à Database connection authenticated
+Γ£à Database connection authenticated
+ΓÅ¡∩╕Å  Skipping model sync (database already initialized)
+Γ¥î Error in listEpisodes: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Episode.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Episode.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listEpisodes (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:52:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listEpisodes: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Episode.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Episode.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listEpisodes (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:52:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listEpisodes: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Episode.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Episode.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listEpisodes (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:52:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 100 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listEpisodes: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Episode.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Episode.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listEpisodes (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:52:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."title" ASC LIMIT 10 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."title" ASC LIMIT 10 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."title" ASC LIMIT 10 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listEpisodes: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Episode.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Episode.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listEpisodes (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:52:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."title" ASC LIMIT 10 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."title" ASC LIMIT 10 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."title" ASC LIMIT 10 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listEpisodes: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Episode.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Episode.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listEpisodes (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:52:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listEpisodes: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Episode.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Episode.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listEpisodes (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:52:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column "categories" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '78',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_number", "title", "description", "air_date", "status", "categories", "created_at", "updated_at" FROM "episodes" AS "Episode" ORDER BY "Episode"."created_at" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: relation "thumbnails" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '670',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1392',
+    routine: 'parserOpenTable',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: relation "thumbnails" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '670',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1392',
+    routine: 'parserOpenTable',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Internal Error: {
+  "timestamp": "2026-01-08T16:08:52.595Z",
+  "method": "GET",
+  "path": "/api/v1/metadata/ALL",
+  "query": {},
+  "ip": "::1",
+  "userId": "anonymous",
+  "error": {
+    "name": "SequelizeDatabaseError",
+    "message": "relation \"metadata_storage\" does not exist",
+    "statusCode": 500
+  },
+  "stack": "Error\n    at Query.run (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\postgres\\query.js:50:25)\n    at C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async PostgresQueryInterface.select (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\abstract\\query-interface.js:407:12)\n    at async MetadataStorage.findAll (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1140:21)\n    at async MetadataStorage.findOne (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1240:12)\n    at async MetadataStorage.findByPk (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1221:12)\n    at async getMetadata (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\src\\controllers\\metadataController.js:82:22)",
+  "body": {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: relation "thumbnails" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '670',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1392',
+    routine: 'parserOpenTable',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: relation "thumbnails" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 110,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '670',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1392',
+    routine: 'parserOpenTable',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column Thumbnail.episode_id does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 185,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "Thumbnail.episodeid".',
+    position: '741',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column Thumbnail.episode_id does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 185,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "Thumbnail.episodeid".',
+    position: '741',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column Thumbnail.episode_id does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 185,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "Thumbnail.episodeid".',
+    position: '741',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column Thumbnail.episode_id does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 185,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "Thumbnail.episodeid".',
+    position: '741',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Failed to get compositions: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async ThumbnailComposition.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\routes\compositions.js:66:26 {
+  name: 'SequelizeDatabaseError',
+  parent: error: relation "thumbnail_compositions" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 122,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '313',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1392',
+    routine: 'parserOpenTable',
+    sql: 'SELECT "id", "episode_id", "template_id", "name", "description", "background_frame_asset_id", "lala_asset_id", "guest_asset_id", "justawomen_asset_id", "selected_formats", "status", "created_by", "created_at", "updated_at", "current_version", "version_history", "last_modified_by", "modification_timestamp" FROM "thumbnail_compositions" AS "ThumbnailComposition" ORDER BY "ThumbnailComposition"."created_at" DESC;',
+    parameters: undefined
+  },
+  original: error: relation "thumbnail_compositions" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 122,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '313',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1392',
+    routine: 'parserOpenTable',
+    sql: 'SELECT "id", "episode_id", "template_id", "name", "description", "background_frame_asset_id", "lala_asset_id", "guest_asset_id", "justawomen_asset_id", "selected_formats", "status", "created_by", "created_at", "updated_at", "current_version", "version_history", "last_modified_by", "modification_timestamp" FROM "thumbnail_compositions" AS "ThumbnailComposition" ORDER BY "ThumbnailComposition"."created_at" DESC;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_id", "template_id", "name", "description", "background_frame_asset_id", "lala_asset_id", "guest_asset_id", "justawomen_asset_id", "selected_formats", "status", "created_by", "created_at", "updated_at", "current_version", "version_history", "last_modified_by", "modification_timestamp" FROM "thumbnail_compositions" AS "ThumbnailComposition" ORDER BY "ThumbnailComposition"."created_at" DESC;',
+  parameters: {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column Thumbnail.episode_id does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 185,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "Thumbnail.episodeid".',
+    position: '741',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column Thumbnail.episode_id does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 185,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "Thumbnail.episodeid".',
+    position: '741',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Failed to get compositions: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async ThumbnailComposition.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\routes\compositions.js:66:26 {
+  name: 'SequelizeDatabaseError',
+  parent: error: relation "thumbnail_compositions" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 122,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '313',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1392',
+    routine: 'parserOpenTable',
+    sql: 'SELECT "id", "episode_id", "template_id", "name", "description", "background_frame_asset_id", "lala_asset_id", "guest_asset_id", "justawomen_asset_id", "selected_formats", "status", "created_by", "created_at", "updated_at", "current_version", "version_history", "last_modified_by", "modification_timestamp" FROM "thumbnail_compositions" AS "ThumbnailComposition" ORDER BY "ThumbnailComposition"."created_at" DESC;',
+    parameters: undefined
+  },
+  original: error: relation "thumbnail_compositions" does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 122,
+    severity: 'ERROR',
+    code: '42P01',
+    detail: undefined,
+    hint: undefined,
+    position: '313',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '1392',
+    routine: 'parserOpenTable',
+    sql: 'SELECT "id", "episode_id", "template_id", "name", "description", "background_frame_asset_id", "lala_asset_id", "guest_asset_id", "justawomen_asset_id", "selected_formats", "status", "created_by", "created_at", "updated_at", "current_version", "version_history", "last_modified_by", "modification_timestamp" FROM "thumbnail_compositions" AS "ThumbnailComposition" ORDER BY "ThumbnailComposition"."created_at" DESC;',
+    parameters: undefined
+  },
+  sql: 'SELECT "id", "episode_id", "template_id", "name", "description", "background_frame_asset_id", "lala_asset_id", "guest_asset_id", "justawomen_asset_id", "selected_formats", "status", "created_by", "created_at", "updated_at", "current_version", "version_history", "last_modified_by", "modification_timestamp" FROM "thumbnail_compositions" AS "ThumbnailComposition" ORDER BY "ThumbnailComposition"."created_at" DESC;',
+  parameters: {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column Thumbnail.episode_id does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 185,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "Thumbnail.episodeId".',
+    position: '741',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column Thumbnail.episode_id does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 185,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "Thumbnail.episodeId".',
+    position: '741',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Internal Error: {
+  "timestamp": "2026-01-08T16:15:27.145Z",
+  "method": "GET",
+  "path": "/api/v1/metadata/ALL",
+  "query": {},
+  "ip": "::1",
+  "userId": "anonymous",
+  "error": {
+    "name": "SequelizeDatabaseError",
+    "message": "relation \"metadata_storage\" does not exist",
+    "statusCode": 500
+  },
+  "stack": "Error\n    at Query.run (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\postgres\\query.js:50:25)\n    at C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async PostgresQueryInterface.select (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\abstract\\query-interface.js:407:12)\n    at async MetadataStorage.findAll (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1140:21)\n    at async MetadataStorage.findOne (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1240:12)\n    at async MetadataStorage.findByPk (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1221:12)\n    at async getMetadata (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\src\\controllers\\metadataController.js:82:22)",
+  "body": {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column Thumbnail.thumbnail_type does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 123,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '342',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column Thumbnail.thumbnail_type does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 123,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '342',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Internal Error: {
+  "timestamp": "2026-01-08T16:20:57.677Z",
+  "method": "GET",
+  "path": "/api/v1/metadata/ALL",
+  "query": {},
+  "ip": "::1",
+  "userId": "anonymous",
+  "error": {
+    "name": "SequelizeDatabaseError",
+    "message": "column episode.episodeTitle does not exist",
+    "statusCode": 500
+  },
+  "stack": "Error\n    at Query.run (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\postgres\\query.js:50:25)\n    at C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async PostgresQueryInterface.select (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\abstract\\query-interface.js:407:12)\n    at async MetadataStorage.findAll (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1140:21)\n    at async MetadataStorage.findOne (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1240:12)\n    at async MetadataStorage.findByPk (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1221:12)\n    at async getMetadata (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\src\\controllers\\metadataController.js:82:22)",
+  "body": {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column Thumbnail.position_seconds does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 125,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '391',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column Thumbnail.position_seconds does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 125,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: undefined,
+    position: '391',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Internal Error: {
+  "timestamp": "2026-01-08T16:21:43.974Z",
+  "method": "GET",
+  "path": "/api/v1/metadata/ALL",
+  "query": {},
+  "ip": "::1",
+  "userId": "anonymous",
+  "error": {
+    "name": "SequelizeDatabaseError",
+    "message": "column episode.episodeTitle does not exist",
+    "statusCode": 500
+  },
+  "stack": "Error\n    at Query.run (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\postgres\\query.js:50:25)\n    at C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async PostgresQueryInterface.select (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\abstract\\query-interface.js:407:12)\n    at async MetadataStorage.findAll (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1140:21)\n    at async MetadataStorage.findOne (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1240:12)\n    at async MetadataStorage.findByPk (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1221:12)\n    at async getMetadata (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\src\\controllers\\metadataController.js:82:22)",
+  "body": {}
+}
+Γ¥î Error in listThumbnails: Error
+    at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\postgres\query.js:50:25)
+    at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\sequelize.js:315:28
+    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+    at async PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\dialects\abstract\query-interface.js:407:12)
+    at async Thumbnail.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1140:21)
+    at async Promise.all (index 1)
+    at async Thumbnail.findAndCountAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\lib\model.js:1322:27)
+    at async listThumbnails (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\thumbnailController.js:28:31) {
+  name: 'SequelizeDatabaseError',
+  parent: error: column episode.episodeTitle does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 187,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "episode.episode_title".',
+    position: '570',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  original: error: column episode.episodeTitle does not exist
+      at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:285:98)
+      at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:122:29)
+      at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\parser.js:35:38)
+      at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\dist\index.js:11:42)
+      at Socket.emit (node:events:524:28)
+      at Socket.emit (node:domain:489:12)
+      at addChunk (node:internal/streams/readable:561:12)
+      at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+      at Readable.push (node:internal/streams/readable:392:5)
+      at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+    length: 187,
+    severity: 'ERROR',
+    code: '42703',
+    detail: undefined,
+    hint: 'Perhaps you meant to reference the column "episode.episode_title".',
+    position: '570',
+    internalPosition: undefined,
+    internalQuery: undefined,
+    where: undefined,
+    schema: undefined,
+    table: undefined,
+    column: undefined,
+    dataType: undefined,
+    constraint: undefined,
+    file: 'parse_relation.c',
+    line: '3665',
+    routine: 'errorMissingColumn',
+    sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+    parameters: undefined
+  },
+  sql: 'SELECT "Thumbnail"."id", "Thumbnail"."episode_id" AS "episodeId", "Thumbnail"."s3_bucket" AS "s3Bucket", "Thumbnail"."s3_key" AS "s3Key", "Thumbnail"."file_size_bytes" AS "fileSizeBytes", "Thumbnail"."mime_type" AS "mimeType", "Thumbnail"."width_pixels" AS "widthPixels", "Thumbnail"."height_pixels" AS "heightPixels", "Thumbnail"."format", "Thumbnail"."thumbnail_type" AS "thumbnailType", "Thumbnail"."position_seconds" AS "positionSeconds", "Thumbnail"."generated_at" AS "generatedAt", "Thumbnail"."quality_rating" AS "qualityRating", "episode"."id" AS "episode.id", "episode"."episodeTitle" AS "episode.episodeTitle", "episode"."showName" AS "episode.showName" FROM "thumbnails" AS "Thumbnail" LEFT OUTER JOIN "episodes" AS "episode" ON "Thumbnail"."episode_id" = "episode"."id" ORDER BY "generatedAt" DESC LIMIT 20 OFFSET 0;',
+  parameters: {}
+}
+Internal Error: {
+  "timestamp": "2026-01-08T16:24:25.726Z",
+  "method": "GET",
+  "path": "/api/v1/metadata/ALL",
+  "query": {},
+  "ip": "::1",
+  "userId": "anonymous",
+  "error": {
+    "name": "SequelizeDatabaseError",
+    "message": "column episode.episodeTitle does not exist",
+    "statusCode": 500
+  },
+  "stack": "Error\n    at Query.run (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\postgres\\query.js:50:25)\n    at C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async PostgresQueryInterface.select (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\abstract\\query-interface.js:407:12)\n    at async MetadataStorage.findAll (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1140:21)\n    at async MetadataStorage.findOne (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1240:12)\n    at async MetadataStorage.findByPk (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1221:12)\n    at async getMetadata (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\src\\controllers\\metadataController.js:82:22)",
+  "body": {}
+}
+Internal Error: {
+  "timestamp": "2026-01-08T16:29:32.055Z",
+  "method": "GET",
+  "path": "/api/v1/metadata/ALL",
+  "query": {},
+  "ip": "::1",
+  "userId": "anonymous",
+  "error": {
+    "name": "SequelizeDatabaseError",
+    "message": "invalid input syntax for type integer: \"ALL\"",
+    "statusCode": 500
+  },
+  "stack": "Error\n    at Query.run (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\postgres\\query.js:50:25)\n    at C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async PostgresQueryInterface.select (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\abstract\\query-interface.js:407:12)\n    at async MetadataStorage.findAll (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1140:21)\n    at async MetadataStorage.findOne (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1240:12)\n    at async MetadataStorage.findByPk (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1221:12)\n    at async getMetadata (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\src\\controllers\\metadataController.js:82:22)",
+  "body": {}
+}
+Internal Error: {
+  "timestamp": "2026-01-08T16:30:11.089Z",
+  "method": "GET",
+  "path": "/api/v1/metadata/ALL",
+  "query": {},
+  "ip": "::1",
+  "userId": "anonymous",
+  "error": {
+    "name": "SequelizeDatabaseError",
+    "message": "invalid input syntax for type integer: \"ALL\"",
+    "statusCode": 500
+  },
+  "stack": "Error\n    at Query.run (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\postgres\\query.js:50:25)\n    at C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async PostgresQueryInterface.select (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\abstract\\query-interface.js:407:12)\n    at async MetadataStorage.findAll (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1140:21)\n    at async MetadataStorage.findOne (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1240:12)\n    at async MetadataStorage.findByPk (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1221:12)\n    at async getMetadata (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\src\\controllers\\metadataController.js:82:22)",
+  "body": {}
+}
+Internal Error: {
+  "timestamp": "2026-01-08T16:30:44.296Z",
+  "method": "GET",
+  "path": "/api/v1/metadata/ALL",
+  "query": {},
+  "ip": "::1",
+  "userId": "anonymous",
+  "error": {
+    "name": "SequelizeDatabaseError",
+    "message": "invalid input syntax for type integer: \"ALL\"",
+    "statusCode": 500
+  },
+  "stack": "Error\n    at Query.run (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\postgres\\query.js:50:25)\n    at C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\sequelize.js:315:28\n    at process.processTicksAndRejections (node:internal/process/task_queues:95:5)\n    at async PostgresQueryInterface.select (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\dialects\\abstract\\query-interface.js:407:12)\n    at async MetadataStorage.findAll (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1140:21)\n    at async MetadataStorage.findOne (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1240:12)\n    at async MetadataStorage.findByPk (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\node_modules\\sequelize\\lib\\model.js:1221:12)\n    at async getMetadata (C:\\Users\\12483\\prime studios\\BRD\\Episode-Canonical-Control-Record\\src\\controllers\\metadataController.js:82:22)",
+  "body": {}
+}

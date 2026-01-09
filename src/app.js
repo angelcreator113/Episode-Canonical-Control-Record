@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -11,7 +13,7 @@ const app = express();
 const db = require('./models');
 
 let isDbConnected = false;
-let isOpenSearchReady = false;
+const isOpenSearchReady = false;
 
 // Initialize database - non-blocking, runs in background
 if (process.env.NODE_ENV !== 'test') {
@@ -19,6 +21,11 @@ if (process.env.NODE_ENV !== 'test') {
     try {
       await db.authenticate();
       console.log('✅ Database connection authenticated');
+      
+      // Skip model sync - database already exists
+      // Sync errors indicate schema mismatches that we don't want to auto-fix
+      console.log('⏭️  Skipping model sync (database already initialized)');
+      
       isDbConnected = true;
     } catch (err) {
       console.warn('⚠ Database not available:', err.message.split('\n')[0]);
@@ -32,7 +39,7 @@ if (process.env.NODE_ENV !== 'test') {
 // ============================================================================
 // PROCESS ERROR HANDLERS (Set up early)
 // ============================================================================
-process.on('unhandledRejection', (reason, promise) => {
+process.on('unhandledRejection', (reason, _promise) => {
   console.error('❌ Unhandled Rejection:', reason);
 });
 
@@ -50,7 +57,6 @@ console.log('🚀 Starting Episode Metadata API...');
 console.log(`📦 Node version: ${process.version}`);
 console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
 
-try {
 // ============================================================================
 // SECURITY & MIDDLEWARE
 // ============================================================================
@@ -59,13 +65,27 @@ app.get('/ping', (req, res) => {
   res.json({ pong: true, timestamp: new Date().toISOString() });
 });
 
-app.use(helmet());
+// CORS MUST come BEFORE helmet
 app.use(
   cors({
-    origin: (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(','),
+    origin: function(origin, callback) {
+      // Allow all localhost origins and specified domains
+      const allowedOrigins = ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'];
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 200 // Some legacy browsers (IE11) require this
   })
 );
+
+app.use(helmet());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -113,6 +133,19 @@ app.get('/health', async (req, res) => {
 
   res.status(200).json(health);
 });
+
+// ============================================================================
+// AUTHENTICATION ROUTES
+// ============================================================================
+let authRoutes;
+try {
+  authRoutes = require('./routes/auth');
+  console.log('✓ Auth routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load auth routes:', e.message);
+  authRoutes = (req, res) => res.status(500).json({ error: 'Auth routes not available' });
+}
+app.use('/api/v1/auth', authRoutes);
 
 // ============================================================================
 // API ROUTES
@@ -203,6 +236,61 @@ try {
   templateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// Phase 3A controllers (real-time notifications)
+let notificationController, activityController, presenceController, socketController;
+
+try {
+  notificationController = require('./controllers/notificationController');
+  console.log('✓ Notifications controller loaded');
+} catch (e) {
+  console.error('✗ Failed to load notifications controller:', e.message);
+  notificationController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+}
+
+try {
+  activityController = require('./controllers/activityController');
+  console.log('✓ Activity controller loaded');
+} catch (e) {
+  console.error('✗ Failed to load activity controller:', e.message);
+  activityController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+}
+
+try {
+  presenceController = require('./controllers/presenceController');
+  console.log('✓ Presence controller loaded');
+} catch (e) {
+  console.error('✗ Failed to load presence controller:', e.message);
+  presenceController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+}
+
+try {
+  socketController = require('./controllers/socketController');
+  console.log('✓ Socket controller loaded');
+} catch (e) {
+  console.error('✗ Failed to load socket controller:', e.message);
+  socketController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+}
+
+// Audit logging routes
+let auditLogsRoutes;
+try {
+  auditLogsRoutes = require('./routes/auditLogs');
+  console.log('✓ Audit logs routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load audit logs routes:', e.message);
+  auditLogsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Development seed routes
+let seedRoutes;
+try {
+  seedRoutes = require('./routes/seed');
+  console.log('✓ Seed routes loaded (development only)');
+} catch (e) {
+  console.error('✗ Failed to load seed routes:', e.message);
+  seedRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 app.use('/api/v1/episodes', episodeRoutes);
 app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
@@ -217,6 +305,18 @@ app.use('/api/v1/jobs', jobsRoutes);
 app.use('/api/v1/assets', assetRoutes);
 app.use('/api/v1/compositions', compositionRoutes);
 app.use('/api/v1/templates', templateRoutes);
+
+// Phase 3A routes (real-time notifications)
+app.use('/api/v1/notifications', notificationController);
+app.use('/api/v1/activity', activityController);
+app.use('/api/v1/presence', presenceController);
+app.use('/api/v1/socket', socketController);
+
+// Audit logging routes
+app.use('/api/v1/audit-logs', auditLogsRoutes);
+
+// Development seed routes
+app.use('/api/v1/seed', seedRoutes);
 
 // API info endpoint
 app.get('/api/v1', (req, res) => {
@@ -237,6 +337,10 @@ app.get('/api/v1', (req, res) => {
       assets: '/api/v1/assets',
       compositions: '/api/v1/compositions',
       templates: '/api/v1/templates',
+      notifications: '/api/v1/notifications',
+      activity: '/api/v1/activity',
+      presence: '/api/v1/presence',
+      socket: '/api/v1/socket',
       health: '/health',
     },
   });
@@ -255,12 +359,6 @@ app.use(notFoundHandler);
 
 // Global error handler (must be last)
 app.use(errorHandler);
-
-} catch (error) {
-  console.error('❌ FATAL ERROR during startup:', error.message);
-  console.error('Stack:', error.stack);
-  process.exit(1);
-}
 
 // Export app for use in server.js or testing
 module.exports = app;

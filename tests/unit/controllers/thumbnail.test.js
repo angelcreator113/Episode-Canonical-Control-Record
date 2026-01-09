@@ -320,9 +320,9 @@ describe('Thumbnail Controller', () => {
     test('should handle database errors', async () => {
       models.Thumbnail.findAndCountAll = jest.fn().mockRejectedValue(new Error('DB error'));
 
-      await expect(thumbnailController.listThumbnails(mockReq, mockRes)).rejects.toThrow(
-        'DB error'
-      );
+      await thumbnailController.listThumbnails(mockReq, mockRes);
+
+      expect(mockRes.status).toHaveBeenCalledWith(500);
     });
   });
 });

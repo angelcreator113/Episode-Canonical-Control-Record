@@ -26,7 +26,7 @@ module.exports = (sequelize) => {
 
     // Action details
     actionType: {
-      type: DataTypes.ENUM('view', 'create', 'edit', 'delete', 'download', 'upload'),
+      type: DataTypes.ENUM('view', 'create', 'edit', 'delete', 'CREATE', 'UPDATE', 'DELETE', 'download', 'upload'),
       allowNull: false,
       comment: 'Type of action performed',
     },
@@ -34,18 +34,17 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(100),
       allowNull: false,
       validate: {
-        isIn: [['episode', 'thumbnail', 'metadata', 'processing']],
+        notEmpty: true,
       },
       comment: 'Type of resource affected',
     },
     resourceId: {
-      type: DataTypes.INTEGER,
+      type: DataTypes.STRING(255),
       allowNull: false,
       validate: {
-        isInt: true,
-        min: 0,
+        notEmpty: true,
       },
-      comment: 'ID of the resource',
+      comment: 'ID of the resource (UUID or integer)',
     },
 
     // Data changes
@@ -86,6 +85,7 @@ module.exports = (sequelize) => {
     modelName: 'ActivityLog',
     tableName: 'activity_logs',
     timestamps: false,
+    underscored: true,
     indexes: [
       {
         name: 'idx_user_timestamp',

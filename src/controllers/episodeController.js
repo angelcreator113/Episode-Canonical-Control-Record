@@ -6,6 +6,13 @@ const {
   asyncHandler,
 } = require('../middleware/errorHandler');
 const { logger } = require('../middleware/auditLog');
+const AuditLogger = require('../services/AuditLogger');
+
+// Phase 3A Services
+const ActivityService = require('../services/ActivityService');
+const NotificationService = require('../services/NotificationService');
+const PresenceService = require('../services/PresenceService');
+const SocketService = require('../services/SocketService');
 
 /**
  * Episode Controller
@@ -17,164 +24,250 @@ module.exports = {
    * GET /episodes - List all episodes
    */
   async listEpisodes(req, res, next) {
-    const { page = 1, limit = 20, status, season } = req.query;
-    const offset = (page - 1) * limit;
+    try {
+      const { page = 1, limit = 20, status, sort } = req.query;
+      const offset = (page - 1) * limit;
 
-    let where = {};
-    // Validate status if provided
-    if (status) {
-      const validStatuses = ['pending', 'processing', 'complete', 'failed', 'draft'];
-      if (validStatuses.includes(status)) {
-        where.processingStatus = status;
+      let where = {
+        // ✅ FIX: Only show episodes that haven't been soft-deleted
+        deleted_at: null,
+      };
+      // Validate status if provided
+      if (status) {
+        const validStatuses = ['pending', 'approved', 'rejected', 'archived', 'draft', 'published'];
+        if (validStatuses.includes(status)) {
+          where.status = status;
+        }
       }
-    }
-    if (season) where.seasonNumber = parseInt(season);
 
-    const { count, rows } = await Episode.findAndCountAll({
-      where,
-      limit: parseInt(limit),
-      offset,
-      order: [['seasonNumber', 'ASC'], ['episodeNumber', 'ASC']],
-      include: {
-        model: Thumbnail,
-        as: 'thumbnails',
-        where: { thumbnail_type: 'primary' },
-        required: false,
-        attributes: ['id', 's3_bucket', 's3_key', 'mime_type', 'width_pixels', 'height_pixels'],
-      },
-    });
-
-    // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'episode',
-      'all',
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
+      // Parse sort parameter (format: "field:direction")
+      let order = [['created_at', 'DESC']]; // default
+      if (sort) {
+        const [field, direction] = sort.split(':');
+        const validFields = ['title', 'episode_number', 'air_date', 'created_at', 'status'];
+        const validDirections = ['ASC', 'DESC'];
+        
+        if (validFields.includes(field) && validDirections.includes(direction?.toUpperCase())) {
+          order = [[field, direction.toUpperCase()]];
+        }
       }
-    );
 
-    res.json({
-      data: rows,
-      pagination: {
-        page: parseInt(page),
+      const { count, rows } = await Episode.findAndCountAll({
+        where,
         limit: parseInt(limit),
-        total: count,
-        pages: Math.ceil(count / limit),
-      },
-    });
+        offset,
+        order,
+        attributes: ['id', 'episode_number', 'title', 'description', 'air_date', 'status', 'categories', 'created_at', 'updated_at'],
+      });
+
+      res.json({
+        data: rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count,
+          pages: Math.ceil(count / limit),
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error in listEpisodes:', error);
+      res.status(500).json({
+        error: 'Failed to list episodes',
+        message: error.message
+      });
+    }
   },
 
   /**
    * GET /episodes/:id - Get single episode
    */
   async getEpisode(req, res, next) {
-    const { id } = req.params;
+    try {
+      const { id } = req.params;
 
-    const episode = await Episode.findByPk(id, {
-      include: [
-        // TODO: Include metadata when schema is fixed
-        // {
-        //   model: MetadataStorage,
-        //   as: 'metadata',
-        // },
-        {
-          model: Thumbnail,
-          as: 'thumbnails',
-          attributes: ['id', 's3_bucket', 's3_key', 'mime_type', 'width_pixels', 'height_pixels', 'thumbnail_type'],
-        },
-        // TODO: Include processing jobs when schema is fixed
-        // {
-        //   model: ProcessingQueue,
-        //   as: 'processingJobs',
-        // },
-      ],
-    });
+      // Query with proper column names that match the model
+      const episode = await Episode.findByPk(id, {
+        attributes: ['id', 'episode_number', 'title', 'description', 'air_date', 'status', 'categories', 'created_at', 'updated_at'],
+      });
 
-    if (!episode) {
-      throw new NotFoundError('Episode', id);
-    }
-
-    // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'episode',
-      id,
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
+      if (!episode) {
+        return res.status(404).json({
+          error: 'Episode not found',
+          id
+        });
       }
-    );
 
-    res.json({ data: episode });
+      res.json({ 
+        data: episode
+      });
+    } catch (error) {
+      console.error('❌ Error in getEpisode:', error);
+      res.status(500).json({
+        error: 'Failed to get episode',
+        message: error.message
+      });
+    }
   },
 
   /**
    * POST /episodes - Create new episode
    */
   async createEpisode(req, res, next) {
-    const {
-      showName,
-      seasonNumber,
-      episodeNumber,
-      episodeTitle,
-      airDate,
-      plotSummary,
-      director,
-      writer,
-      durationMinutes,
-      rating,
-      genre,
-    } = req.body;
+    try {
+      const {
+        // New field names (from frontend form)
+        title,
+        episode_number,
+        description,
+        air_date,
+        status,
+        categories,
+        // Old field names (for backward compatibility)
+        showName,
+        seasonNumber,
+        episodeNumber,
+        episodeTitle,
+        airDate,
+        plotSummary,
+        director,
+        writer,
+        durationMinutes,
+        rating,
+        genre,
+      } = req.body;
 
-    // Validate required fields
-    if (!showName || !seasonNumber || !episodeNumber || !episodeTitle) {
-      throw new ValidationError(
-        'Missing required fields',
-        {
-          showName: !showName ? 'required' : null,
-          seasonNumber: !seasonNumber ? 'required' : null,
-          episodeNumber: !episodeNumber ? 'required' : null,
-          episodeTitle: !episodeTitle ? 'required' : null,
-        }
-      );
-    }
+      // Use new field names if provided, otherwise fall back to old ones
+      const finalTitle = title || episodeTitle || showName;
+      const finalEpisodeNumber = episode_number || episodeNumber;
+      const finalDescription = description || plotSummary;
+      const finalAirDate = air_date || airDate;
+      const finalStatus = status || 'draft';
 
-    const episode = await Episode.create({
-      showName,
-      seasonNumber: parseInt(seasonNumber),
-      episodeNumber: parseInt(episodeNumber),
-      episodeTitle,
-      airDate: airDate ? new Date(airDate) : null,
-      plotSummary,
-      director,
-      writer,
-      durationMinutes: durationMinutes ? parseInt(durationMinutes) : null,
-      rating: rating ? parseFloat(rating) : null,
-      genre,
-      processingStatus: 'pending',
-    });
-
-    // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'create',
-      'episode',
-      episode.id,
-      {
-        newValues: episode.toJSON(),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
+      // Validate required fields
+      if (!finalTitle || !finalEpisodeNumber) {
+        return res.status(400).json({
+          error: 'Missing required fields',
+          fields: {
+            title: !finalTitle ? 'required' : null,
+            episode_number: !finalEpisodeNumber ? 'required' : null,
+          }
+        });
       }
-    );
 
-    res.status(201).json({
-      data: episode,
-      message: 'Episode created successfully',
-    });
+      const episode = await Episode.create({
+        title: finalTitle,
+        episode_number: parseInt(finalEpisodeNumber),
+        description: finalDescription,
+        air_date: finalAirDate ? new Date(finalAirDate) : null,
+        status: finalStatus,
+        categories: Array.isArray(categories) ? categories : [],
+        // Keep old fields for backward compatibility
+        showName,
+        seasonNumber: seasonNumber ? parseInt(seasonNumber) : null,
+        episodeTitle: episodeTitle || finalTitle,
+        airDate: finalAirDate ? new Date(finalAirDate) : null,
+        plotSummary: finalDescription,
+        director,
+        writer,
+        durationMinutes: durationMinutes ? parseInt(durationMinutes) : null,
+        rating: rating ? parseFloat(rating) : null,
+        genre,
+        processingStatus: 'pending',
+      });
+
+      // ✅ SAFE: Phase 3A Integration with proper checks
+      const userId = req.user?.id || 'anonymous';
+      const userEmail = req.user?.email || 'anonymous';
+
+      // Phase 3A Integration: Activity Logging (non-blocking, safe)
+      try {
+        const ActivityServiceModule = require('../services/ActivityService');
+        if (ActivityServiceModule && typeof ActivityServiceModule.logActivity === 'function') {
+          ActivityServiceModule.logActivity({
+            userId,
+            action: 'CREATE',
+            resourceType: 'episode',
+            resourceId: episode.id,
+            metadata: {
+              title: finalTitle,
+              categories: categories,
+              status: finalStatus,
+            },
+          }).catch((err) => console.error('Activity logging error:', err));
+        }
+      } catch (err) {
+        // Service not available, skip silently
+      }
+
+      // Phase 3A Integration: Broadcast WebSocket Event (non-blocking, safe)
+      try {
+        const SocketServiceModule = require('../services/SocketService');
+        if (SocketServiceModule && typeof SocketServiceModule.broadcastMessage === 'function') {
+          SocketServiceModule.broadcastMessage({
+            event: 'episode_created',
+            data: {
+              episode: {
+                id: episode.id,
+                title: finalTitle,
+                episode_number: parseInt(finalEpisodeNumber),
+                status: finalStatus,
+                categories: categories,
+              },
+              createdBy: userEmail,
+              timestamp: new Date(),
+            },
+          }).catch((err) => console.error('WebSocket broadcast error:', err));
+        }
+      } catch (err) {
+        // Service not available, skip silently
+      }
+
+      // Phase 3A Integration: Send Notification (non-blocking, safe)
+      try {
+        const NotificationServiceModule = require('../services/NotificationService');
+        if (NotificationServiceModule && typeof NotificationServiceModule.create === 'function') {
+          NotificationServiceModule.create({
+            userId,
+            type: 'info',
+            message: `Episode "${finalTitle}" created successfully`,
+            data: {
+              resourceType: 'episode',
+              resourceId: episode.id,
+            },
+          }).catch((err) => console.error('Notification error:', err));
+        }
+      } catch (err) {
+        // Service not available, skip silently
+      }
+
+      // Log audit event (non-blocking, safe)
+      try {
+        const AuditLoggerModule = require('../services/AuditLogger');
+        if (AuditLoggerModule && typeof AuditLoggerModule.log === 'function') {
+          AuditLoggerModule.log({
+            userId,
+            action: 'CREATE',
+            resource: 'Episode',
+            resourceId: episode.id,
+            resourceName: finalTitle,
+            username: userEmail,
+          }).catch((err) => console.error('Audit log error:', err));
+        }
+      } catch (err) {
+        // Service not available, skip silently
+      }
+
+      res.status(201).json({
+        data: episode,
+        message: 'Episode created successfully',
+      });
+    } catch (error) {
+      console.error('❌ Error in createEpisode:', error);
+      res.status(500).json({
+        error: 'Failed to create episode',
+        message: error.message
+      });
+    }
   },
 
   /**
@@ -191,35 +284,60 @@ module.exports = {
 
     const oldValues = episode.toJSON();
 
-    // Whitelist updatable fields
-    const allowedFields = [
-      'episodeTitle',
-      'airDate',
-      'plotSummary',
-      'director',
-      'writer',
-      'durationMinutes',
-      'rating',
-      'genre',
-      'thumbnailUrl',
-      'posterUrl',
-      'videoUrl',
-      'rawVideoS3Key',
-      'processedVideoS3Key',
-      'metadataJsonS3Key',
-      'processingStatus',
-    ];
+    // Whitelist updatable fields (support both new and old field names)
+    const allowedFields = {
+      // New field names
+      'title': true,
+      'episode_number': true,
+      'description': true,
+      'air_date': true,
+      'status': true,
+      'categories': true,
+      // Old field names
+      'episodeTitle': true,
+      'episodeNumber': true,
+      'airDate': true,
+      'plotSummary': true,
+      'director': true,
+      'writer': true,
+      'durationMinutes': true,
+      'rating': true,
+      'genre': true,
+      'thumbnailUrl': true,
+      'posterUrl': true,
+      'videoUrl': true,
+      'rawVideoS3Key': true,
+      'processedVideoS3Key': true,
+      'metadataJsonS3Key': true,
+      'processingStatus': true,
+    };
 
     const updateData = {};
-    allowedFields.forEach(field => {
-      if (field in updates) {
-        updateData[field] = updates[field];
+    
+    // Process each field in the updates
+    Object.keys(updates).forEach(field => {
+      if (allowedFields[field]) {
+        // Map new field names to their Sequelize equivalents
+        if (field === 'title' || field === 'episodeTitle') {
+          updateData.title = updates[field];
+        } else if (field === 'episode_number' || field === 'episodeNumber') {
+          updateData.episode_number = parseInt(updates[field]);
+        } else if (field === 'description' || field === 'plotSummary') {
+          updateData.description = updates[field];
+        } else if (field === 'air_date' || field === 'airDate') {
+          updateData.air_date = updates[field] ? new Date(updates[field]) : null;
+        } else if (field === 'status') {
+          updateData.status = updates[field];
+        } else {
+          // For other fields, just pass through
+          updateData[field] = updates[field];
+        }
       }
     });
 
     await episode.update(updateData);
 
-    // Log activity
+    // Log activity (existing logger)
     await logger.logAction(
       req.user?.id,
       'edit',
@@ -232,6 +350,45 @@ module.exports = {
         userAgent: req.get('user-agent'),
       }
     );
+
+    // Phase 3A Integration: Activity Logging (non-blocking)
+    ActivityService.logActivity({
+      userId: req.user?.id,
+      action: 'UPDATE',
+      resourceType: 'episode',
+      resourceId: id,
+      metadata: {
+        title: episode.title,
+        changedFields: Object.keys(updateData),
+        changes: updateData,
+      },
+    }).catch((err) => console.error('Activity logging error:', err));
+
+    // Phase 3A Integration: Broadcast WebSocket Event (non-blocking)
+    SocketService.broadcastMessage({
+      event: 'episode_updated',
+      data: {
+        episode: {
+          id: episode.id,
+          title: episode.title,
+          status: episode.status,
+          categories: episode.categories,
+        },
+        changedFields: Object.keys(updateData),
+        updatedBy: req.user?.email || 'unknown',
+        timestamp: new Date(),
+      },
+    }).catch((err) => console.error('WebSocket broadcast error:', err));
+
+    // Log audit event (non-blocking)
+    AuditLogger.log({
+      userId: req.user?.id || 'unknown',
+      action: 'UPDATE',
+      resource: 'Episode',
+      resourceId: id,
+      resourceName: episode.title,
+      username: req.user?.email || 'unknown',
+    }).catch((err) => console.error('Audit log error:', err));
 
     res.json({
       data: episode,
@@ -271,6 +428,52 @@ module.exports = {
         userAgent: req.get('user-agent'),
       }
     );
+
+    // Phase 3A Integration: Activity Logging (non-blocking)
+    ActivityService.logActivity({
+      userId: req.user?.id,
+      action: 'DELETE',
+      resourceType: 'episode',
+      resourceId: id,
+      metadata: {
+        title: oldValues.title,
+        deleteType: hard === 'true' ? 'permanent' : 'soft',
+      },
+    }).catch((err) => console.error('Activity logging error:', err));
+
+    // Phase 3A Integration: Broadcast WebSocket Event (non-blocking)
+    SocketService.broadcastMessage({
+      event: 'episode_deleted',
+      data: {
+        episodeId: id,
+        title: oldValues.title,
+        deleteType: hard === 'true' ? 'permanent' : 'soft',
+        deletedBy: req.user?.email || 'unknown',
+        timestamp: new Date(),
+      },
+    }).catch((err) => console.error('WebSocket broadcast error:', err));
+
+    // Phase 3A Integration: Send Notification (non-blocking)
+    NotificationService.create({
+      userId: req.user?.id,
+      type: 'info',
+      message: `Episode "${oldValues.title}" has been deleted`,
+      data: {
+        resourceType: 'episode',
+        resourceId: id,
+        deleteType: hard === 'true' ? 'permanent' : 'soft',
+      },
+    }).catch((err) => console.error('Notification error:', err));
+
+    // Log audit event (non-blocking)
+    AuditLogger.log({
+      userId: req.user?.id || 'unknown',
+      action: 'DELETE',
+      resource: 'Episode',
+      resourceId: id,
+      resourceName: oldValues.title,
+      username: req.user?.email || 'unknown',
+    }).catch((err) => console.error('Audit log error:', err));
 
     res.json({
       message: `Episode ${id} deleted successfully`,

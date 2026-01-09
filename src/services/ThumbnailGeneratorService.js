@@ -44,6 +44,8 @@ class ThumbnailGeneratorService {
       backgroundImage,      // Episode frame or gradient (Buffer)
       lalaImage,            // Processed Lala promo with transparent BG (Buffer)
       guestImage,           // Processed guest promo with transparent BG (Buffer)
+      justawomanImage,      // Optional JustAWoman promo with transparent BG (Buffer)
+      justawomanPosition,   // Optional custom position override for JustAWoman
       episodeTitle,         // String
       episodeNumber,        // Number
       brandLogo,            // Optional logo image (Buffer)
@@ -67,6 +69,8 @@ class ThumbnailGeneratorService {
           backgroundImage,
           lalaImage,
           guestImage,
+          justawomanImage,
+          justawomanPosition,
           episodeTitle,
           episodeNumber,
           brandLogo,
@@ -98,7 +102,7 @@ class ThumbnailGeneratorService {
    * @private
    */
   async generateSingleFormat(config) {
-    const { format, backgroundImage, lalaImage, guestImage, episodeTitle, episodeNumber } = config;
+    const { format, backgroundImage, lalaImage, guestImage, episodeTitle, episodeNumber, justawomanImage, justawomanPosition } = config;
 
     // Calculate positions based on aspect ratio
     const layout = this.calculateLayout(format);
@@ -151,7 +155,26 @@ class ThumbnailGeneratorService {
       });
     }
 
-    // 4. Text overlay (episode title + number)
+    // 4. JustAWoman image (top right corner, optional)
+    if (justawomanImage) {
+      const justawomanLayout = justawomanPosition || layout.justawoman;
+      const justawomanResized = await sharp(justawomanImage)
+        .resize(justawomanLayout.width, justawomanLayout.height, {
+          fit: 'contain',
+          background: { r: 0, g: 0, b: 0, alpha: 0 },
+        })
+        .png()
+        .toBuffer();
+
+      composites.push({
+        input: justawomanResized,
+        top: justawomanLayout.top,
+        left: justawomanLayout.left,
+        blend: 'over',
+      });
+    }
+
+    // 5. Text overlay (episode title + number)
     const textBuffer = await this.createTextOverlay(
       { episodeTitle, episodeNumber },
       format
@@ -199,6 +222,12 @@ class ThumbnailGeneratorService {
           top: Math.floor(format.height * 0.5),
           left: Math.floor(format.width * 0.25),
         },
+        justawoman: {
+          width: Math.floor(format.width * 0.25),
+          height: Math.floor(format.height * 0.25),
+          top: Math.floor(format.height * 0.05),
+          left: Math.floor(format.width * 0.70),
+        },
         text: {
           top: Math.floor(format.height * 0.85),
           left: Math.floor(format.width * 0.05),
@@ -218,6 +247,12 @@ class ThumbnailGeneratorService {
           height: Math.floor(format.height * 0.55),
           top: Math.floor(format.height * 0.15),
           left: Math.floor(format.width * 0.57),
+        },
+        justawoman: {
+          width: Math.floor(format.width * 0.25),
+          height: Math.floor(format.height * 0.25),
+          top: Math.floor(format.height * 0.05),
+          left: Math.floor(format.width * 0.70),
         },
         text: {
           top: Math.floor(format.height * 0.8),
@@ -239,6 +274,12 @@ class ThumbnailGeneratorService {
           top: Math.floor(format.height * 0.2),
           left: Math.floor(format.width * 0.7),
         },
+        justawoman: {
+          width: Math.floor(format.width * 0.18),
+          height: Math.floor(format.height * 0.4),
+          top: Math.floor(format.height * 0.05),
+          left: Math.floor(format.width * 0.76),
+        },
         text: {
           top: Math.floor(format.height * 0.65),
           left: Math.floor(format.width * 0.08),
@@ -252,11 +293,14 @@ class ThumbnailGeneratorService {
    * @private
    */
   async createTextOverlay(config, format) {
-    const { episodeTitle, episodeNumber } = config;
+    const { episodeTitle = 'Unknown Episode', episodeNumber = 0 } = config;
+    
+    // Ensure episodeTitle is a string
+    const titleStr = String(episodeTitle || 'Unknown Episode');
     const maxLength = Math.floor(format.width / 50); // Rough char limit based on width
-    const titleTruncated = episodeTitle.length > maxLength 
-      ? episodeTitle.substring(0, maxLength) + '...'
-      : episodeTitle;
+    const titleTruncated = titleStr.length > maxLength 
+      ? titleStr.substring(0, maxLength) + '...'
+      : titleStr;
 
     const fontSize = Math.max(24, Math.floor(format.width / 24));
     const episodeFontSize = Math.floor(fontSize * 0.6);
