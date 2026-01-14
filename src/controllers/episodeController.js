@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 const { models } = require('../models');
 const { Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog } = models;
 const {
@@ -13,6 +14,7 @@ const ActivityService = require('../services/ActivityService');
 const NotificationService = require('../services/NotificationService');
 const PresenceService = require('../services/PresenceService');
 const SocketService = require('../services/SocketService');
+/* eslint-enable no-unused-vars */
 
 /**
  * Episode Controller
@@ -28,7 +30,7 @@ module.exports = {
       const { page = 1, limit = 20, status, sort } = req.query;
       const offset = (page - 1) * limit;
 
-      let where = {
+      const where = {
         // ✅ FIX: Only show episodes that haven't been soft-deleted
         deleted_at: null,
       };
