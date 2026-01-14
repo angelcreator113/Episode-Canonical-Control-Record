@@ -5,6 +5,7 @@
  */
 
 const { Job, JOB_STATUS, JOB_TYPE } = require('../models/job');
+const { ProcessingQueue } = require('../models');
 const QueueService = require('../services/QueueService');
 const ErrorRecovery = require('../services/ErrorRecovery');
 const logger = require('../utils/logger');
@@ -21,6 +22,8 @@ class JobController {
     try {
       const { jobType, payload, maxRetries } = req.body;
       const userId = req.user.id;
+      const { episodeId, fileId, metadata } = payload || {};
+      const type = jobType;
 
       // Validate job type
       if (!Object.values(JOB_TYPE).includes(jobType)) {
@@ -49,19 +52,19 @@ class JobController {
       // Create processing queue record for tracking
       const processingRecord = await ProcessingQueue.create({
         id: job.id,
-        job_type: jobType,
-        episode_id: payload?.episodeId,
-        file_id: payload?.fileId,
+        job_type: type,
+        episode_id: episodeId,
+        file_id: fileId,
         status: 'pending',
         progress: 0,
-        data: { metadata: payload?.metadata },
+        data: { metadata },
         sqs_message_id: job.id,
       });
 
       logger.info('Job created', {
         jobId: job.id,
-        type: jobType,
-        episodeId: payload?.episodeId,
+        type,
+        episodeId,
       });
 
       // Phase 3A Integration: Activity Logging (non-blocking)
