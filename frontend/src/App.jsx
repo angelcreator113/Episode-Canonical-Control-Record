@@ -22,6 +22,7 @@ import ShowManagement from './pages/ShowManagement';
 import ShowForm from './components/ShowForm';
 
 // Components
+import Navigation from './components/Navigation';
 import Header from './components/Header';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastProvider from './components/ToastContainer';
@@ -49,6 +50,19 @@ function ProtectedRoute({ children }) {
  */
 function App() {
   const { isAuthenticated, loading } = useAuth();
+  const [navOpen, setNavOpen] = React.useState(false);
+
+  // Close nav when window resizes to desktop
+  React.useEffect(() => {
+    const handleResize = () => {
+      if (window.innerWidth > 768) {
+        setNavOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Always render Router at top level to prevent re-mounting
   // This prevents flickering between login and app screens
@@ -79,7 +93,9 @@ function App() {
           ) : (
             // Show main app with header, navigation, and content
             <div className="app-layout">
-              <Header />
+              <Navigation isOpen={navOpen} onClose={() => setNavOpen(false)} />
+              
+              <Header onMenuClick={() => setNavOpen(!navOpen)} />
               
               <main className="app-content">
                 <Routes>
