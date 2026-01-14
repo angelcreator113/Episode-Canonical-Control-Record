@@ -1,4 +1,4 @@
-/* eslint-disable no-unused-vars */
+/* eslint-disable no-unused-vars, no-undef */
 /**
  * Job Controller - HTTP endpoints for job management
  * Handles job creation, status tracking, and admin operations
@@ -48,20 +48,20 @@ class JobController {
 
       // Create processing queue record for tracking
       const processingRecord = await ProcessingQueue.create({
-        id: sqsResult.jobId,
-        job_type: type,
-        episode_id: episodeId,
-        file_id: fileId,
+        id: job.id,
+        job_type: jobType,
+        episode_id: payload?.episodeId,
+        file_id: payload?.fileId,
         status: 'pending',
         progress: 0,
-        data: { metadata },
-        sqs_message_id: sqsResult.messageId,
+        data: { metadata: payload?.metadata },
+        sqs_message_id: job.id,
       });
 
       logger.info('Job created', {
         jobId: job.id,
-        type,
-        episodeId,
+        type: jobType,
+        episodeId: payload?.episodeId,
       });
 
       // Phase 3A Integration: Activity Logging (non-blocking)

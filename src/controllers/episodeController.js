@@ -401,7 +401,7 @@ module.exports = {
   /**
    * DELETE /episodes/:id - Delete episode
    */
-  async deleteEpisode(req, res, next) {
+  async deleteEpisode(req, res, _next) {
     const { id } = req.params;
     const { hard = false } = req.query;
 
