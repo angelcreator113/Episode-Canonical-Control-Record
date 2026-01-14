@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 /**
  * Job Controller - HTTP endpoints for job management
  * Handles job creation, status tracking, and admin operations

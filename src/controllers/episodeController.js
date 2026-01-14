@@ -25,7 +25,7 @@ module.exports = {
   /**
    * GET /episodes - List all episodes
    */
-  async listEpisodes(req, res, next) {
+  async listEpisodes(req, res, _next) {
     try {
       const { page = 1, limit = 20, status, sort } = req.query;
       const offset = (page - 1) * limit;
@@ -83,7 +83,7 @@ module.exports = {
   /**
    * GET /episodes/:id - Get single episode
    */
-  async getEpisode(req, res, next) {
+  async getEpisode(req, res, _next) {
     try {
       const { id } = req.params;
 
@@ -114,7 +114,7 @@ module.exports = {
   /**
    * POST /episodes - Create new episode
    */
-  async createEpisode(req, res, next) {
+  async createEpisode(req, res, _next) {
     try {
       const {
         // New field names (from frontend form)
@@ -275,7 +275,7 @@ module.exports = {
   /**
    * PUT /episodes/:id - Update episode
    */
-  async updateEpisode(req, res, next) {
+  async updateEpisode(req, res, _next) {
     const { id } = req.params;
     const updates = req.body;
 
@@ -486,7 +486,7 @@ module.exports = {
   /**
    * GET /episodes/:id/status - Get episode processing status
    */
-  async getEpisodeStatus(req, res, next) {
+  async getEpisodeStatus(req, res, _next) {
     const { id } = req.params;
 
     const episode = await Episode.findByPk(id, {
@@ -508,7 +508,7 @@ module.exports = {
   /**
    * POST /episodes/:id/enqueue - Enqueue episode for processing
    */
-  async enqueueEpisode(req, res, next) {
+  async enqueueEpisode(req, res, _next) {
     const { id } = req.params;
     const { jobTypes = ['thumbnail_generation', 'metadata_extraction'] } = req.body;
 
