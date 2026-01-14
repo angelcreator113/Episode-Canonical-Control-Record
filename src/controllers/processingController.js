@@ -15,11 +15,11 @@ module.exports = {
   /**
    * GET /processing-queue - List all processing jobs
    */
-  async listJobs(req, res, next) {
+  async listJobs(req, res, _next) {
     const { page = 1, limit = 20, status, jobType, episodeId } = req.query;
     const offset = (page - 1) * limit;
 
-    let where = {};
+    const where = {};
     if (status) where.status = status;
     if (jobType) where.jobType = jobType;
     if (episodeId) where.episodeId = parseInt(episodeId);
@@ -71,7 +71,7 @@ module.exports = {
   /**
    * GET /processing-queue/:id - Get single job
    */
-  async getJob(req, res, next) {
+  async getJob(req, res, _next) {
     const { id } = req.params;
 
     const job = await ProcessingQueue.findByPk(id, {
@@ -104,7 +104,7 @@ module.exports = {
   /**
    * POST /processing-queue - Create new processing job
    */
-  async createJob(req, res, next) {
+  async createJob(req, res, _next) {
     const { episodeId, jobType, jobConfig = {} } = req.body;
 
     if (!episodeId || !jobType) {
@@ -169,7 +169,7 @@ module.exports = {
   /**
    * PUT /processing-queue/:id - Update job status
    */
-  async updateJob(req, res, next) {
+  async updateJob(req, res, _next) {
     const { id } = req.params;
     const { status, errorMessage } = req.body;
 
@@ -227,7 +227,7 @@ module.exports = {
   /**
    * POST /processing-queue/:id/retry - Retry failed job
    */
-  async retryJob(req, res, next) {
+  async retryJob(req, res, _next) {
     const { id } = req.params;
 
     const job = await ProcessingQueue.findByPk(id);
@@ -276,7 +276,7 @@ module.exports = {
   /**
    * DELETE /processing-queue/:id - Cancel job
    */
-  async cancelJob(req, res, next) {
+  async cancelJob(req, res, _next) {
     const { id } = req.params;
 
     const job = await ProcessingQueue.findByPk(id);
@@ -318,7 +318,7 @@ module.exports = {
   /**
    * GET /processing-queue/episode/:episodeId - Get all jobs for episode
    */
-  async getEpisodeJobs(req, res, next) {
+  async getEpisodeJobs(req, res, _next) {
     const { episodeId } = req.params;
 
     // Verify episode exists
@@ -352,7 +352,7 @@ module.exports = {
   /**
    * GET /processing-queue/pending - Get all pending jobs
    */
-  async getPendingJobs(req, res, next) {
+  async getPendingJobs(req, res, _next) {
     const jobs = await ProcessingQueue.findPending();
 
     res.json({
@@ -365,7 +365,7 @@ module.exports = {
   /**
    * GET /processing-queue/failed - Get all failed jobs
    */
-  async getFailedJobs(req, res, next) {
+  async getFailedJobs(req, res, _next) {
     const jobs = await ProcessingQueue.findFailed();
 
     res.json({
@@ -378,7 +378,7 @@ module.exports = {
   /**
    * GET /processing-queue/retryable - Get jobs ready for retry
    */
-  async getRetryableJobs(req, res, next) {
+  async getRetryableJobs(req, res, _next) {
     const jobs = await ProcessingQueue.findRetryable();
 
     res.json({
@@ -391,7 +391,7 @@ module.exports = {
   /**
    * GET /processing-queue/stats - Get processing statistics
    */
-  async getStats(req, res, next) {
+  async getStats(req, res, _next) {
     const stats = await ProcessingQueue.getStats();
 
     res.json({
