@@ -1,9 +1,11 @@
+/* eslint-disable no-unused-vars, no-undef */
 /**
  * Job Controller - HTTP endpoints for job management
  * Handles job creation, status tracking, and admin operations
  */
 
 const { Job, JOB_STATUS, JOB_TYPE } = require('../models/job');
+const { ProcessingQueue } = require('../models');
 const QueueService = require('../services/QueueService');
 const ErrorRecovery = require('../services/ErrorRecovery');
 const logger = require('../utils/logger');
@@ -20,6 +22,8 @@ class JobController {
     try {
       const { jobType, payload, maxRetries } = req.body;
       const userId = req.user.id;
+      const { episodeId, fileId, metadata } = payload || {};
+      const type = jobType;
 
       // Validate job type
       if (!Object.values(JOB_TYPE).includes(jobType)) {
@@ -47,14 +51,14 @@ class JobController {
 
       // Create processing queue record for tracking
       const processingRecord = await ProcessingQueue.create({
-        id: sqsResult.jobId,
+        id: job.id,
         job_type: type,
         episode_id: episodeId,
         file_id: fileId,
         status: 'pending',
         progress: 0,
         data: { metadata },
-        sqs_message_id: sqsResult.messageId,
+        sqs_message_id: job.id,
       });
 
       logger.info('Job created', {

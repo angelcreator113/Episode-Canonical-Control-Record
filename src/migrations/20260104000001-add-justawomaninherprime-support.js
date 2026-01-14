@@ -1,4 +1,4 @@
-/* eslint-disable camelcase */
+/* eslint-disable camelcase, no-console */
 
 /**
  * Migration: Add JustAWomanInHerPrime support to compositions

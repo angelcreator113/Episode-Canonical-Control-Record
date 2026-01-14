@@ -1,3 +1,4 @@
+/* eslint-disable no-console */
 /**
  * Sequelize Database Configuration
  * Environment-specific database connection settings

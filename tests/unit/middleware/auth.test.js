@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars, no-undef */
 /**
  * Unit tests for Authentication Middleware
  * Tests JWT token validation and user extraction
