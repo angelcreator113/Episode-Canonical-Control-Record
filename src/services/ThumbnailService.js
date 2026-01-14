@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+
 const { Thumbnail, Episode } = require('../models');
 const { Op } = require('sequelize');
 

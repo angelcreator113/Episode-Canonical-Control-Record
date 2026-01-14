@@ -2,6 +2,7 @@
  * Queue Service - AWS SQS integration
  * Handles message sending, receiving, and DLQ management
  */
+/* eslint-disable no-unused-vars */
 
 const AWS = require('aws-sdk');
 const logger = require('../utils/logger');

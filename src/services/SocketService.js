@@ -5,6 +5,7 @@
  * Manages Socket.IO connections, namespaces, rooms, and authentication
  * Handles connection/disconnection events and provides broadcasting utilities
  */
+/* eslint-disable no-unused-vars */
 
 const logger = require('./Logger');
 
