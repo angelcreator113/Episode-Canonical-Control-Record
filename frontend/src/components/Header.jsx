@@ -3,16 +3,14 @@
  * Top navigation bar
  */
 
-import React, { useState } from 'react';
+import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import Navigation from './Navigation';
 import '../styles/Header.css';
 
-const Header = () => {
+const Header = ({ onMenuClick }) => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
-  const [isNavOpen, setIsNavOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -30,19 +28,18 @@ const Header = () => {
   };
 
   return (
-    <>
-      <header className="header">
-        <div className="header-content">
-          <div className="header-left">
-            <button 
-              className="menu-button" 
-              onClick={() => setIsNavOpen(true)}
-              aria-label="Open menu"
-            >
-              ☰
-            </button>
-            <h1 className="header-title">Episode Control</h1>
-          </div>
+    <header className="header">
+      <div className="header-content">
+        <div className="header-left">
+          <button 
+            className="menu-button" 
+            onClick={onMenuClick}
+            aria-label="Open menu"
+          >
+            ☰
+          </button>
+          <h1 className="header-title">Episode Control</h1>
+        </div>
 
           <div className="header-right">
             {isAuthenticated && user && (
@@ -56,13 +53,6 @@ const Header = () => {
           </div>
         </div>
       </header>
-
-      {/* Navigation Sidebar */}
-      <Navigation 
-        isOpen={isNavOpen} 
-        onClose={() => setIsNavOpen(false)} 
-      />
-    </>
   );
 };
 
