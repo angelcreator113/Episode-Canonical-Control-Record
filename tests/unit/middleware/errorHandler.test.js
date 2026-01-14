@@ -1,4 +1,4 @@
-/**
+/* eslint-disable no-unused-vars, no-undef *//**
  * Error Handler Middleware Unit Tests
  */
 

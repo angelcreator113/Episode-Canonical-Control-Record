@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 /**
  * ActivityLog Model Unit Tests
  */

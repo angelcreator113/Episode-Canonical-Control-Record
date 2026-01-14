@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 /**
  * Unit tests for Episode model
  * Tests validations, associations, and business logic methods

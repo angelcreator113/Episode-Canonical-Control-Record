@@ -26,4 +26,13 @@ module.exports = {
     'prefer-const': 'error',
     'no-var': 'error',
   },
+  overrides: [
+    {
+      files: ['tests/**/*.js'],
+      rules: {
+        'no-unused-vars': 'off',
+        'no-undef': 'off',
+      },
+    },
+  ],
 };
