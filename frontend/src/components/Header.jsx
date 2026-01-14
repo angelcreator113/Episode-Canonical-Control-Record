@@ -53,7 +53,6 @@ const Header = ({ onMenuClick }) => {
           </div>
         </div>
       </header>
-    </div>
   );
 };
 
