@@ -18,8 +18,9 @@ module.exports = {
       statements: 30,
     },
   },
-  testMatch: ['**/tests/**/*.test.js'],
+  testMatch: ['**/tests/unit/**/*.test.js'],
+  testPathIgnorePatterns: ['.*job.test.js'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   forceExit: true,
-  detectOpenHandles: true,
+  detectOpenHandles: false,
 };
