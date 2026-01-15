@@ -15,13 +15,19 @@ const request = require('supertest');
 const express = require('express');
 const socketIO = require('socket.io');
 const { Server: HTTPServer } = require('http');
-const socketController = require('../../../src/controllers/socketController');
-const SocketService = require('../../../src/services/SocketService');
-const { authenticateToken, authorizeRole } = require('../../../src/middleware/auth');
+const socketController = require('../../src/controllers/socketController');
+const SocketService = require('../../src/services/SocketService');
+const { authenticateToken, authorizeRole } = require('../../src/middleware/auth');
 
-jest.mock('../../../src/middleware/auth');
-jest.mock('../../../src/services/Logger');
-jest.mock('../../../src/services/SocketService');
+jest.mock('../../src/middleware/auth', () => ({
+  authenticateToken: jest.fn((req, res, next) => {
+    req.user = { userId: 'test-user', role: 'admin' };
+    next();
+  }),
+  authorizeRole: jest.fn(() => (req, res, next) => next()),
+}));
+jest.mock('../../src/services/Logger');
+jest.mock('../../src/services/SocketService');
 
 describe('Socket Controller Integration Tests', () => {
   let app;
