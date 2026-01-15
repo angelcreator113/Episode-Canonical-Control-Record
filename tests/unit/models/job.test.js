@@ -3,7 +3,7 @@
  * Tests for CRUD operations, status tracking, and retry logic
  */
 
-const { Job, JOB_STATUS, JOB_TYPE } = require('../../src/models/job.js');
+const { Job, JOB_STATUS, JOB_TYPE } = require('../../src/models/job');
 const db = require('../../src/config/database');
 const { v4: uuidv4 } = require('uuid');
 
