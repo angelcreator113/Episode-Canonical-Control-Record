@@ -16,12 +16,12 @@ module.exports = {
   /**
    * GET /thumbnails - List all thumbnails
    */
-  async listThumbnails(req, res, next) {
+  async listThumbnails(req, res, _next) {
     try {
       const { page = 1, limit = 20, episodeId, type } = req.query;
       const offset = (page - 1) * limit;
 
-      let where = {};
+      const where = {};
       if (episodeId) where.episodeId = parseInt(episodeId);
       if (type) where.thumbnailType = type;
 
@@ -73,7 +73,7 @@ module.exports = {
   /**
    * GET /thumbnails/:id - Get single thumbnail
    */
-  async getThumbnail(req, res, next) {
+  async getThumbnail(req, res, _next) {
     try {
       const { id } = req.params;
 
@@ -120,7 +120,7 @@ module.exports = {
   /**
    * POST /thumbnails - Create new thumbnail
    */
-  async createThumbnail(req, res, next) {
+  async createThumbnail(req, res, _next) {
     const {
       episodeId,
       s3Bucket,
@@ -198,7 +198,7 @@ module.exports = {
   /**
    * PUT /thumbnails/:id - Update thumbnail
    */
-  async updateThumbnail(req, res, next) {
+  async updateThumbnail(req, res, _next) {
     const { id } = req.params;
     const updates = req.body;
 
@@ -250,7 +250,7 @@ module.exports = {
   /**
    * DELETE /thumbnails/:id - Delete thumbnail
    */
-  async deleteThumbnail(req, res, next) {
+  async deleteThumbnail(req, res, _next) {
     const { id } = req.params;
 
     const thumbnail = await Thumbnail.findByPk(id);
@@ -283,7 +283,7 @@ module.exports = {
   /**
    * GET /thumbnails/:id/url - Get S3 URL for thumbnail
    */
-  async getThumbnailUrl(req, res, next) {
+  async getThumbnailUrl(req, res, _next) {
     const { id } = req.params;
     const { cdn = false } = req.query;
 
@@ -310,7 +310,7 @@ module.exports = {
   /**
    * GET /thumbnails/:id/download - Prepare thumbnail for download
    */
-  async prepareThumbnailDownload(req, res, next) {
+  async prepareThumbnailDownload(req, res, _next) {
     const { id } = req.params;
 
     const thumbnail = await Thumbnail.findByPk(id, {
@@ -359,7 +359,7 @@ module.exports = {
   /**
    * POST /thumbnails/:id/rate-quality - Rate thumbnail quality
    */
-  async rateThumbnailQuality(req, res, next) {
+  async rateThumbnailQuality(req, res, _next) {
     const { id } = req.params;
     const { rating } = req.body;
 
@@ -403,7 +403,7 @@ module.exports = {
   /**
    * GET /episodes/:episodeId/thumbnails - Get all thumbnails for episode
    */
-  async getEpisodeThumbnails(req, res, next) {
+  async getEpisodeThumbnails(req, res, _next) {
     const { episodeId } = req.params;
 
     // Verify episode exists
@@ -427,7 +427,7 @@ module.exports = {
   /**
    * GET /episodes/:episodeId/thumbnails/primary - Get primary thumbnail for episode
    */
-  async getPrimaryThumbnail(req, res, next) {
+  async getPrimaryThumbnail(req, res, _next) {
     const { episodeId } = req.params;
 
     const thumbnail = await Thumbnail.findOne({

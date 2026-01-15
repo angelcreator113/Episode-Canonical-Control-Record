@@ -54,7 +54,7 @@ describe('Presence Integration Tests', () => {
       });
 
       // Get online users
-      let onlineRes = await request(app).get('/api/v1/presence/online-users');
+      const onlineRes = await request(app).get('/api/v1/presence/online-users');
 
       expect(onlineRes.status).toBe(200);
       expect(Array.isArray(onlineRes.body.data.users)).toBe(true);

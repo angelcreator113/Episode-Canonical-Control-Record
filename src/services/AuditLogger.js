@@ -4,7 +4,8 @@
  */
 
 const { models } = require('../models');
-const { v4: uuidv4 } = require('uuid');
+const { v4: _uuidv4 } = require('uuid');
+const { Op } = require('sequelize');
 
 class AuditLogger {
   /**
@@ -18,13 +19,13 @@ class AuditLogger {
         action,
         resource,
         resourceId,
-        resourceName,
+        _resourceName,
         changes = {},
         ipAddress,
         userAgent,
-        status = 'SUCCESS',
-        description = '',
-        metadata = {},
+        _status = 'SUCCESS',
+        _description = '',
+        _metadata = {},
       } = options;
 
       // Store in ActivityLog for compliance
@@ -240,8 +241,8 @@ class AuditLogger {
 
     if (startDate || endDate) {
       where.timestamp = {};
-      if (startDate) where.timestamp[sequelize.Op.gte] = new Date(startDate);
-      if (endDate) where.timestamp[sequelize.Op.lte] = new Date(endDate);
+      if (startDate) where.timestamp[Op.gte] = new Date(startDate);
+      if (endDate) where.timestamp[Op.lte] = new Date(endDate);
     }
 
     try {

@@ -159,13 +159,6 @@ module.exports = (sequelize) => {
       comment: 'Current processing status of episode',
       field: 'processingStatus', // Explicitly map to database column
     },
-
-    // Soft delete
-    deleted_at: {
-      type: DataTypes.DATE,
-      allowNull: true,
-      field: 'deleted_at',
-    },
   }, {
     sequelize,
     modelName: 'Episode',

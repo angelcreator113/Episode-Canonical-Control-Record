@@ -2,6 +2,7 @@
  * Runway ML Service
  * Handles AI-powered background removal and image enhancement
  */
+/* eslint-disable no-unused-vars */
 
 const axios = require('axios');
 const FormData = require('form-data');

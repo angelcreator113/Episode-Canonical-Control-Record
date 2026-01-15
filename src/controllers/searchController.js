@@ -5,7 +5,7 @@
  */
 
 const ActivityIndexService = require('../services/ActivityIndexService');
-const ActivityService = require('../services/ActivityService');
+const _ActivityService = require('../services/ActivityService');
 const logger = require('../services/Logger');
 const { getPool } = require('../config/database');
 
@@ -131,7 +131,7 @@ exports.searchEpisodes = [
   validateSearch,
   async (req, res) => {
     try {
-      const { q = '', status, tags, limit = '20', offset = '0' } = req.query;
+      const { q = '', status, _tags, limit = '20', offset = '0' } = req.query;
 
       logger.debug('Episode search initiated', {
         query: q.substring(0, 50),

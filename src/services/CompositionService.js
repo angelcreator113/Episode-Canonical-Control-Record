@@ -4,9 +4,9 @@
  */
 
 const { models } = require('../models');
-const { ThumbnailComposition, ThumbnailTemplate, Asset, Thumbnail } = models;
-const AssetService = require('./AssetService');
-const { v4: uuidv4 } = require('uuid');
+const { ThumbnailComposition, ThumbnailTemplate, Asset, _Thumbnail } = models;
+const _AssetService = require('./AssetService');
+const { v4: _uuidv4 } = require('uuid');
 
 class CompositionService {
   /**

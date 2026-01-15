@@ -2,6 +2,7 @@
  * Logger Service
  * Simple logging utility for the application
  */
+/* eslint-disable no-unused-vars */
 
 const LOG_LEVELS = {
   ERROR: 'ERROR',

@@ -1,0 +1,72 @@
+
+> episode-metadata-api@1.0.0 lint
+> eslint src/ tests/
+
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\middleware\auditLog.js
+  125:38  error  'responseData' is defined but never used. Allowed unused args must match /^_/u     no-unused-vars
+  138:35  error  'action' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\middleware\auth.js
+   3:7   error  'cognito' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  26:11  error  'keyUrl' is assigned a value but never used. Allowed unused vars must match /^_/u   no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000001-create-episodes.js
+  124:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000002-create-metadata-storage.js
+  66:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000003-create-thumbnails.js
+  86:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000004-create-processing-queue.js
+  91:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000005-create-activity-logs.js
+  72:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260106000001-add-categories-to-episodes.js
+  22:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108183816-update-assets-table.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108184514-update-assets-table.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108185054-update-assets-table.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108200000-create-episode-templates.js
+  205:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108204926-enhance-episode-templates.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108205124-enhance-episode-templates.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260109132556-create-shows.js
+  124:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\YYYYMMDDHHMMSS-update-assets-table.js
+  138:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+
+Γ£û 33 problems (33 errors, 0 warnings)
+

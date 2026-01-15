@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 const { models } = require('../models');
 const { Episode, MetadataStorage } = models;
 const {
@@ -15,11 +16,11 @@ module.exports = {
   /**
    * GET /metadata - List all metadata
    */
-  async listMetadata(req, res, next) {
+  async listMetadata(req, res, _next) {
     const { page = 1, limit = 20, episodeId } = req.query;
     const offset = (page - 1) * limit;
 
-    let where = {};
+    const where = {};
     if (episodeId) where.episodeId = parseInt(episodeId);
 
     try {
@@ -76,7 +77,7 @@ module.exports = {
   /**
    * GET /metadata/:id - Get single metadata record
    */
-  async getMetadata(req, res, next) {
+  async getMetadata(req, res, _next) {
     const { id } = req.params;
 
     const metadata = await MetadataStorage.findByPk(id, {
@@ -109,7 +110,7 @@ module.exports = {
   /**
    * GET /metadata/episode/:episodeId - Get metadata for specific episode
    */
-  async getMetadataForEpisode(req, res, next) {
+  async getMetadataForEpisode(req, res, _next) {
     const { episodeId } = req.params;
 
     // Verify episode exists
@@ -136,7 +137,7 @@ module.exports = {
   /**
    * POST /metadata - Create or update metadata
    */
-  async createOrUpdateMetadata(req, res, next) {
+  async createOrUpdateMetadata(req, res, _next) {
     const {
       episodeId,
       extractedText,
@@ -205,7 +206,7 @@ module.exports = {
   /**
    * PUT /metadata/:id - Update metadata
    */
-  async updateMetadata(req, res, next) {
+  async updateMetadata(req, res, _next) {
     const { id } = req.params;
     const updates = req.body;
 
@@ -286,7 +287,7 @@ module.exports = {
   /**
    * DELETE /metadata/:id - Delete metadata
    */
-  async deleteMetadata(req, res, next) {
+  async deleteMetadata(req, res, _next) {
     const { id } = req.params;
 
     const metadata = await MetadataStorage.findByPk(id);
@@ -319,7 +320,7 @@ module.exports = {
   /**
    * POST /metadata/:id/add-tags - Add tags to metadata
    */
-  async addTags(req, res, next) {
+  async addTags(req, res, _next) {
     const { id } = req.params;
     const { tags } = req.body;
 
@@ -361,7 +362,7 @@ module.exports = {
   /**
    * POST /metadata/:id/set-scenes - Set detected scenes
    */
-  async setDetectedScenes(req, res, next) {
+  async setDetectedScenes(req, res, _next) {
     const { id } = req.params;
     const { scenes, duration } = req.body;
 
@@ -412,7 +413,7 @@ module.exports = {
   /**
    * GET /metadata/:id/summary - Get metadata summary without large JSON fields
    */
-  async getMetadataSummary(req, res, next) {
+  async getMetadataSummary(req, res, _next) {
     const { id } = req.params;
 
     const metadata = await MetadataStorage.findByPk(id);

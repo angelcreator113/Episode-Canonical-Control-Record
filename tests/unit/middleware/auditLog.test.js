@@ -820,7 +820,7 @@ describe('Audit Log Middleware', () => {
         get: jest.fn().mockReturnValue('Mozilla/5.0'),
       };
 
-      let originalSend;
+      const originalSend = jest.fn();
       const res = {
         send: jest.fn((data) => {
           originalSend.call(res, data);
@@ -828,7 +828,6 @@ describe('Audit Log Middleware', () => {
         }),
         locals: {},
       };
-      originalSend = res.send;
 
       const next = jest.fn();
 
