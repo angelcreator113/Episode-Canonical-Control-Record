@@ -26,7 +26,7 @@ const createS3Client = async () => {
   const credentials = process.env.AWS_PROFILE
     ? await fromIni({ profile: process.env.AWS_PROFILE })()
     : await fromEnv()();
-  
+
   return new S3Client({
     region: process.env.AWS_REGION || 'us-east-1',
     credentials,
@@ -36,7 +36,10 @@ const createS3Client = async () => {
 let s3Client;
 (async () => {
   s3Client = await createS3Client();
-  console.log('✅ AWS SDK v3 configured with credentials from', process.env.AWS_PROFILE ? `profile: ${process.env.AWS_PROFILE}` : 'environment');
+  console.log(
+    '✅ AWS SDK v3 configured with credentials from',
+    process.env.AWS_PROFILE ? `profile: ${process.env.AWS_PROFILE}` : 'environment'
+  );
 })();
 
 const router = express.Router();
@@ -56,13 +59,13 @@ const isValidUUID = (uuid) => {
 router.get('/', async (req, res) => {
   try {
     const { episode_id } = req.query;
-    
+
     const where = {};
     // Only filter by episode_id if it's a valid UUID (not 'default' or invalid)
     if (episode_id && episode_id !== 'default' && isValidUUID(episode_id)) {
       where.episode_id = episode_id;
     }
-    
+
     const compositions = await models.ThumbnailComposition.findAll({
       where,
       order: [['created_at', 'DESC']],
@@ -91,20 +94,17 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     console.log('📥 POST /compositions request body:', JSON.stringify(req.body, null, 2));
-    
-    let { 
-      episode_id, 
-      template_id
-    } = req.body;
 
-    const { 
+    let { episode_id, template_id } = req.body;
+
+    const {
       lala_asset_id,
       justawomen_asset_id,
       include_justawomaninherprime,
       justawomaninherprime_position,
-      guest_asset_id, 
+      guest_asset_id,
       background_frame_asset_id,
-      selected_formats
+      selected_formats,
     } = req.body;
 
     // Validate required fields
@@ -123,7 +123,8 @@ router.post('/', async (req, res) => {
     const episodeIdInt = parseInt(episode_id, 10);
     if (isNaN(episodeIdInt) || episodeIdInt < 1) {
       // If not an integer, check if it's a UUID (from frontend mock data)
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (uuidRegex.test(episode_id)) {
         // UUID provided - try to use episode ID 2 as default for testing
         console.warn(`⚠️  UUID episode_id provided (${episode_id}), using default episode 2`);
@@ -132,7 +133,7 @@ router.post('/', async (req, res) => {
         return res.status(400).json({
           error: 'Invalid episode_id - must be a valid integer ID or UUID',
           received: episode_id,
-          type: typeof episode_id
+          type: typeof episode_id,
         });
       }
     } else {
@@ -143,7 +144,7 @@ router.post('/', async (req, res) => {
     if (!isValidUUID(lala_asset_id)) {
       return res.status(400).json({
         error: 'Invalid lala_asset_id - must be a valid UUID',
-        received: lala_asset_id
+        received: lala_asset_id,
       });
     }
 
@@ -151,18 +152,18 @@ router.post('/', async (req, res) => {
     if (justawomen_asset_id && !isValidUUID(justawomen_asset_id)) {
       return res.status(400).json({
         error: 'Invalid justawomen_asset_id - must be a valid UUID',
-        received: justawomen_asset_id
+        received: justawomen_asset_id,
       });
     }
 
     // If template_id not provided, get the first available template
     if (!template_id) {
       const defaultTemplate = await models.ThumbnailTemplate.findOne({
-        order: [['created_at', 'ASC']]
+        order: [['created_at', 'ASC']],
       });
       if (!defaultTemplate) {
         return res.status(400).json({
-          error: 'No templates available'
+          error: 'No templates available',
         });
       }
       template_id = defaultTemplate.id;
@@ -193,7 +194,7 @@ router.post('/', async (req, res) => {
         justawomaninherprime_position,
         guest_asset_id,
         background_frame_asset_id,
-        selected_formats // Pass selected formats to service
+        selected_formats, // Pass selected formats to service
       },
       req.user?.id || 'test-user'
     );
@@ -201,13 +202,10 @@ router.post('/', async (req, res) => {
     // NEW: Generate thumbnails for selected formats
     console.log('🎬 About to generate thumbnails for composition:', composition.id);
     console.log('📋 Selected formats:', selected_formats);
-    
+
     let thumbnails = [];
     try {
-      thumbnails = await CompositionService.generateThumbnails(
-        composition.id,
-        selected_formats
-      );
+      thumbnails = await CompositionService.generateThumbnails(composition.id, selected_formats);
       console.log('✅ Thumbnails generated:', thumbnails.length);
     } catch (genErr) {
       console.warn('⚠️ Thumbnail generation failed (non-blocking):', genErr.message);
@@ -217,12 +215,14 @@ router.post('/', async (req, res) => {
 
     res.status(201).json({
       status: 'SUCCESS',
-      message: 'Composition created' + (thumbnails.length > 0 ? ` and ${thumbnails.length} thumbnails generated` : ''),
+      message:
+        'Composition created' +
+        (thumbnails.length > 0 ? ` and ${thumbnails.length} thumbnails generated` : ''),
       data: {
         composition,
         thumbnails_generated: thumbnails.length || 0,
-        thumbnails: thumbnails || []
-      }
+        thumbnails: thumbnails || [],
+      },
     });
   } catch (error) {
     console.error('❌ Failed to create composition:', error.message);
@@ -457,7 +457,7 @@ router.post('/:id/generate-thumbnails', async (req, res) => {
     // Download all assets from S3 using SDK v3
     console.log('📥 Downloading assets from S3...');
     const sharp = require('sharp');
-    
+
     const downloadAsset = async (key, label, fallbackColor) => {
       try {
         console.log(`  Downloading ${label}: ${key}`);
@@ -478,11 +478,11 @@ router.post('/:id/generate-thumbnails', async (req, res) => {
               width: 350,
               height: 350,
               channels: 3,
-              background: fallbackColor
-            }
+              background: fallbackColor,
+            },
           })
-          .png()
-          .toBuffer();
+            .png()
+            .toBuffer();
           console.log(`  ✅ Created mock ${label}: ${mockImage.length} bytes`);
           return mockImage;
         }
@@ -492,19 +492,31 @@ router.post('/:id/generate-thumbnails', async (req, res) => {
     };
 
     const [backgroundBuffer, lalaBuffer, guestBuffer] = await Promise.all([
-      downloadAsset(composition.backgroundAsset.s3_key_raw, 'Background', { r: 100, g: 100, b: 100 }),
-      downloadAsset(composition.lalaAsset.s3_key_processed || composition.lalaAsset.s3_key_raw, 'Lala', { r: 255, g: 0, b: 0 }),
-      downloadAsset(composition.guestAsset.s3_key_processed || composition.guestAsset.s3_key_raw, 'Guest', { r: 0, g: 0, b: 255 }),
+      downloadAsset(composition.backgroundAsset.s3_key_raw, 'Background', {
+        r: 100,
+        g: 100,
+        b: 100,
+      }),
+      downloadAsset(
+        composition.lalaAsset.s3_key_processed || composition.lalaAsset.s3_key_raw,
+        'Lala',
+        { r: 255, g: 0, b: 0 }
+      ),
+      downloadAsset(
+        composition.guestAsset.s3_key_processed || composition.guestAsset.s3_key_raw,
+        'Guest',
+        { r: 0, g: 0, b: 255 }
+      ),
     ]);
 
     // Generate thumbnails for all MVP formats
     console.log('🎨 Generating thumbnails...');
-    
+
     if (!composition.episode) {
       console.error('❌ Episode not loaded in composition');
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: 'Failed to generate thumbnails',
-        message: 'Episode information not available for composition'
+        message: 'Episode information not available for composition',
       });
     }
 
@@ -562,21 +574,22 @@ router.post('/:id/generate-thumbnails', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to generate thumbnails:', error);
-    
+
     // Check if this is an AWS credential/signature error
-    const isAWSError = error.message?.includes('InvalidSignatureException') || 
-                      error.message?.includes('SignatureDoesNotMatch') ||
-                      error.message?.includes('Access Denied') ||
-                      error.message?.includes('NoSuchBucket') ||
-                      error.code?.includes('InvalidSignature') ||
-                      error.code?.includes('Unauthorized');
-    
+    const isAWSError =
+      error.message?.includes('InvalidSignatureException') ||
+      error.message?.includes('SignatureDoesNotMatch') ||
+      error.message?.includes('Access Denied') ||
+      error.message?.includes('NoSuchBucket') ||
+      error.code?.includes('InvalidSignature') ||
+      error.code?.includes('Unauthorized');
+
     if (isAWSError) {
       // AWS error - try mock response
       console.log('🎭 AWS error detected, returning mock response:', error.message || error.code);
       const composition = await models.ThumbnailComposition.findByPk(req.params.id);
       const formats = composition?.composition_config?.selected_formats || [];
-      
+
       res.json({
         status: 'SUCCESS',
         message: 'Thumbnails generated (mock mode - AWS credentials issue)',
@@ -609,12 +622,12 @@ router.post('/:id/generate-thumbnails', async (req, res) => {
 router.put('/:id', authenticateJWT, async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      template_id, 
-      lala_asset_id, 
+    const {
+      template_id,
+      lala_asset_id,
       justawomen_asset_id,
-      guest_asset_id, 
-      background_frame_asset_id 
+      guest_asset_id,
+      background_frame_asset_id,
     } = req.body;
 
     // Get existing composition
@@ -650,7 +663,10 @@ router.put('/:id', authenticateJWT, async (req, res) => {
       lala_asset_id: lala_asset_id || composition.lala_asset_id,
       justawomen_asset_id: justawomen_asset_id || composition.justawomen_asset_id,
       guest_asset_id: guest_asset_id !== undefined ? guest_asset_id : composition.guest_asset_id,
-      background_frame_asset_id: background_frame_asset_id !== undefined ? background_frame_asset_id : composition.background_frame_asset_id,
+      background_frame_asset_id:
+        background_frame_asset_id !== undefined
+          ? background_frame_asset_id
+          : composition.background_frame_asset_id,
       approval_status: 'DRAFT', // Reset to draft after edit
     });
 
@@ -706,30 +722,27 @@ router.delete('/:id', authenticateJWT, async (req, res) => {
 router.post('/:id/generate-formats', async (req, res) => {
   try {
     const { selected_formats } = req.body; // Array: ['FACEBOOK', 'TWITTER']
-    
+
     if (!Array.isArray(selected_formats) || selected_formats.length === 0) {
       return res.status(400).json({
-        error: 'selected_formats must be a non-empty array'
+        error: 'selected_formats must be a non-empty array',
       });
     }
 
-    const thumbnails = await CompositionService.generateThumbnails(
-      req.params.id,
-      selected_formats
-    );
+    const thumbnails = await CompositionService.generateThumbnails(req.params.id, selected_formats);
 
     res.json({
       status: 'SUCCESS',
       data: {
         composition_id: req.params.id,
         thumbnails_generated: thumbnails.length,
-        thumbnails
-      }
+        thumbnails,
+      },
     });
   } catch (error) {
     console.error('Failed to generate formats:', error);
     res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -740,19 +753,16 @@ router.post('/:id/generate-formats', async (req, res) => {
  */
 router.patch('/:id', async (req, res) => {
   try {
-    const composition = await CompositionService.updateComposition(
-      req.params.id,
-      req.body
-    );
+    const composition = await CompositionService.updateComposition(req.params.id, req.body);
 
     res.json({
       status: 'SUCCESS',
-      data: composition
+      data: composition,
     });
   } catch (error) {
     console.error('Failed to update composition:', error);
     res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -768,15 +778,15 @@ router.get('/:id/versions', async (req, res) => {
     }
 
     const history = await VersioningService.getVersionHistory(req.params.id);
-    
+
     res.json({
       status: 'SUCCESS',
-      data: history
+      data: history,
     });
   } catch (error) {
     console.error('Failed to get version history:', error);
     res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -796,19 +806,16 @@ router.get('/:id/versions/:versionNumber', async (req, res) => {
       return res.status(400).json({ error: 'Invalid version number' });
     }
 
-    const version = await VersioningService.getSpecificVersion(
-      req.params.id,
-      versionNumber
-    );
+    const version = await VersioningService.getSpecificVersion(req.params.id, versionNumber);
 
     res.json({
       status: 'SUCCESS',
-      data: version
+      data: version,
     });
   } catch (error) {
     console.error('Failed to get specific version:', error);
     res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -830,20 +837,16 @@ router.get('/:id/versions/:versionA/compare/:versionB', async (req, res) => {
       return res.status(400).json({ error: 'Invalid version numbers' });
     }
 
-    const comparison = await VersioningService.compareVersions(
-      req.params.id,
-      versionA,
-      versionB
-    );
+    const comparison = await VersioningService.compareVersions(req.params.id, versionA, versionB);
 
     res.json({
       status: 'SUCCESS',
-      data: comparison
+      data: comparison,
     });
   } catch (error) {
     console.error('Failed to compare versions:', error);
     res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -877,7 +880,7 @@ router.post('/:id/revert/:versionNumber', async (req, res) => {
   } catch (error) {
     console.error('Failed to revert version:', error);
     res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -896,12 +899,12 @@ router.get('/:id/version-stats', async (req, res) => {
 
     res.json({
       status: 'SUCCESS',
-      data: stats
+      data: stats,
     });
   } catch (error) {
     console.error('Failed to get version stats:', error);
     res.status(error.message.includes('not found') ? 404 : 500).json({
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -909,7 +912,7 @@ router.get('/:id/version-stats', async (req, res) => {
 /**
  * GET /api/v1/compositions/search
  * Advanced search with filtering by format, status, date, assets, template, text, etc.
- * 
+ *
  * Query Parameters:
  *   - formats: comma-separated format names (youtube,instagram)
  *   - status: draft|published|archived
@@ -940,16 +943,22 @@ router.get('/search', async (req, res) => {
       sortOrder = 'DESC',
       limit = '20',
       offset = '0',
-      episodeId = null
+      episodeId = null,
     } = req.query;
 
     // Parse comma-separated values
     const formatArray = formats
-      ? formats.split(',').map(f => f.trim()).filter(f => f)
+      ? formats
+          .split(',')
+          .map((f) => f.trim())
+          .filter((f) => f)
       : [];
 
     const assetArray = assets
-      ? assets.split(',').map(a => a.trim()).filter(a => a)
+      ? assets
+          .split(',')
+          .map((a) => a.trim())
+          .filter((a) => a)
       : [];
 
     const result = await FilterService.searchCompositions({
@@ -965,7 +974,7 @@ router.get('/search', async (req, res) => {
       sortOrder,
       limit,
       offset,
-      episodeId
+      episodeId,
     });
 
     res.json(result);
@@ -974,7 +983,7 @@ router.get('/search', async (req, res) => {
     res.status(500).json({
       status: 'ERROR',
       error: error.message,
-      message: 'Advanced search failed'
+      message: 'Advanced search failed',
     });
   }
 });
@@ -982,7 +991,7 @@ router.get('/search', async (req, res) => {
 /**
  * GET /api/v1/compositions/search/filters/options
  * Get available filter options for dropdowns/select boxes
- * 
+ *
  * Query Parameters:
  *   - episodeId: optional, limit to specific episode
  */
@@ -993,13 +1002,13 @@ router.get('/search/filters/options', async (req, res) => {
 
     res.json({
       status: 'SUCCESS',
-      data: options
+      data: options,
     });
   } catch (error) {
     console.error('Failed to get filter options:', error);
     res.status(500).json({
       status: 'ERROR',
-      error: error.message
+      error: error.message,
     });
   }
 });

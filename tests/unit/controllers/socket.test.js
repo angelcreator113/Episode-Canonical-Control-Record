@@ -80,9 +80,7 @@ describe('Socket Controller', () => {
     });
 
     it('should require message field', async () => {
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({ type: 'alert' });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({ type: 'alert' });
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('required');
@@ -91,9 +89,7 @@ describe('Socket Controller', () => {
     it('should include sent by admin ID', async () => {
       SocketService.broadcastToAll.mockResolvedValue({});
 
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({ message: 'Test' });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({ message: 'Test' });
 
       expect(res.status).toBe(200);
       expect(SocketService.broadcastToAll).toHaveBeenCalledWith(
@@ -116,13 +112,9 @@ describe('Socket Controller', () => {
     });
 
     it('should handle service errors', async () => {
-      SocketService.broadcastToAll.mockRejectedValue(
-        new Error('Socket connection failed')
-      );
+      SocketService.broadcastToAll.mockRejectedValue(new Error('Socket connection failed'));
 
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({ message: 'Test' });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({ message: 'Test' });
 
       expect(res.status).toBe(500);
       expect(res.body.status).toBe('error');
@@ -140,12 +132,10 @@ describe('Socket Controller', () => {
 
       SocketService.notifyUser.mockResolvedValue(mockResult);
 
-      const res = await request(app)
-        .post(`/api/v1/socket/notify-user/${targetUserId}`)
-        .send({
-          message: 'Your episode was published',
-          type: 'info',
-        });
+      const res = await request(app).post(`/api/v1/socket/notify-user/${targetUserId}`).send({
+        message: 'Your episode was published',
+        type: 'info',
+      });
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -206,12 +196,10 @@ describe('Socket Controller', () => {
 
       SocketService.notifyRoom.mockResolvedValue(mockResult);
 
-      const res = await request(app)
-        .post(`/api/v1/socket/notify-room/${roomId}`)
-        .send({
-          message: 'Episode status changed to published',
-          type: 'update',
-        });
+      const res = await request(app).post(`/api/v1/socket/notify-room/${roomId}`).send({
+        message: 'Episode status changed to published',
+        type: 'update',
+      });
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -284,23 +272,16 @@ describe('Socket Controller', () => {
     it('should use default reason if not provided', async () => {
       SocketService.disconnectUser.mockResolvedValue({ disconnected: true });
 
-      const res = await request(app)
-        .post('/api/v1/socket/disconnect/user-123')
-        .send({});
+      const res = await request(app).post('/api/v1/socket/disconnect/user-123').send({});
 
       expect(res.status).toBe(200);
-      expect(SocketService.disconnectUser).toHaveBeenCalledWith(
-        'user-123',
-        expect.any(String)
-      );
+      expect(SocketService.disconnectUser).toHaveBeenCalledWith('user-123', expect.any(String));
     });
 
     it('should handle user not connected', async () => {
       SocketService.disconnectUser.mockResolvedValue({ disconnected: false });
 
-      const res = await request(app)
-        .post('/api/v1/socket/disconnect/offline-user')
-        .send({});
+      const res = await request(app).post('/api/v1/socket/disconnect/offline-user').send({});
 
       expect(res.status).toBe(404);
       expect(res.body.message).toContain('not connected');
@@ -309,9 +290,7 @@ describe('Socket Controller', () => {
     it('should handle service errors', async () => {
       SocketService.disconnectUser.mockRejectedValue(new Error('Error'));
 
-      const res = await request(app)
-        .post('/api/v1/socket/disconnect/user-123')
-        .send({});
+      const res = await request(app).post('/api/v1/socket/disconnect/user-123').send({});
 
       expect(res.status).toBe(500);
     });
@@ -399,9 +378,7 @@ describe('Socket Controller', () => {
     it('should enforce max limit of 1000', async () => {
       SocketService.getActiveConnections.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/socket/connections')
-        .query({ limit: 5000 });
+      const res = await request(app).get('/api/v1/socket/connections').query({ limit: 5000 });
 
       expect(res.status).toBe(200);
       const [opts] = SocketService.getActiveConnections.mock.calls[0];
@@ -409,10 +386,7 @@ describe('Socket Controller', () => {
     });
 
     it('should return connection count', async () => {
-      SocketService.getActiveConnections.mockResolvedValue([
-        { socketId: '1' },
-        { socketId: '2' },
-      ]);
+      SocketService.getActiveConnections.mockResolvedValue([{ socketId: '1' }, { socketId: '2' }]);
 
       const res = await request(app).get('/api/v1/socket/connections');
 
@@ -448,9 +422,7 @@ describe('Socket Controller', () => {
     it('should log all admin actions', async () => {
       SocketService.broadcastToAll.mockResolvedValue({});
 
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({ message: 'Test' });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({ message: 'Test' });
 
       expect(res.status).toBe(200);
       // Logging verified by Logger mock
@@ -470,11 +442,9 @@ describe('Socket Controller', () => {
     it('should accept message with special characters', async () => {
       SocketService.broadcastToAll.mockResolvedValue({});
 
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({
-          message: 'Test with special chars: @#$%^&*()_+-=[]{}|;:,.<>?',
-        });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({
+        message: 'Test with special chars: @#$%^&*()_+-=[]{}|;:,.<>?',
+      });
 
       expect(res.status).toBe(200);
     });
@@ -482,11 +452,9 @@ describe('Socket Controller', () => {
     it('should accept unicode in messages', async () => {
       SocketService.broadcastToAll.mockResolvedValue({});
 
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({
-          message: 'Test with unicode: 你好世界 🚀 مرحبا',
-        });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({
+        message: 'Test with unicode: 你好世界 🚀 مرحبا',
+      });
 
       expect(res.status).toBe(200);
     });

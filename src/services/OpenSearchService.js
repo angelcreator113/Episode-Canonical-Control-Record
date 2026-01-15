@@ -225,7 +225,7 @@ class OpenSearchService {
         `ORDER BY updated_at DESC LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
 
       const result = await pool.query(searchQuery, [...params, limit, offset]);
-      
+
       // Close the pool
       await pool.end();
 

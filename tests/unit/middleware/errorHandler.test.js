@@ -1,4 +1,4 @@
-/* eslint-disable no-unused-vars, no-undef *//**
+/* eslint-disable no-unused-vars, no-undef */ /**
  * Error Handler Middleware Unit Tests
  */
 
@@ -241,9 +241,7 @@ describe('Error Handler Middleware', () => {
     test('should handle SequelizeUniqueConstraintError', () => {
       const sequelizeError = new Error('Unique constraint violation');
       sequelizeError.name = 'SequelizeUniqueConstraintError';
-      sequelizeError.errors = [
-        { path: 'email', message: 'Email already exists' },
-      ];
+      sequelizeError.errors = [{ path: 'email', message: 'Email already exists' }];
 
       errorHandler(sequelizeError, mockReq, mockRes, mockNext);
 

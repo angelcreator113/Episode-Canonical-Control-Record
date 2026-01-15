@@ -159,7 +159,9 @@ describe('Thumbnail Controller', () => {
       await thumbnailController.deleteThumbnail(mockReq, mockRes);
 
       expect(mockThumb.destroy).toHaveBeenCalled();
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.any(String) }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.any(String) })
+      );
     });
 
     test('should log thumbnail deletion', async () => {
@@ -202,7 +204,9 @@ describe('Thumbnail Controller', () => {
 
       await thumbnailController.getThumbnailUrl(mockReq, mockRes);
 
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ data: expect.any(Object) }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.any(Object) })
+      );
     });
   });
 
@@ -248,9 +252,7 @@ describe('Thumbnail Controller', () => {
       mockReq.params = { episodeId: '1' };
 
       // Controller throws NotFoundError which is caught by asyncHandler
-      await expect(
-        thumbnailController.getPrimaryThumbnail(mockReq, mockRes)
-      ).rejects.toBeDefined();
+      await expect(thumbnailController.getPrimaryThumbnail(mockReq, mockRes)).rejects.toBeDefined();
     });
   });
 
@@ -280,7 +282,9 @@ describe('Thumbnail Controller', () => {
 
       await thumbnailController.prepareThumbnailDownload(mockReq, mockRes);
 
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ data: expect.any(Object) }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.any(Object) })
+      );
     });
   });
 
@@ -312,7 +316,9 @@ describe('Thumbnail Controller', () => {
       mockReq.params = { id: '1' };
       mockReq.body = { rating: 'invalid' };
 
-      await expect(thumbnailController.rateThumbnailQuality(mockReq, mockRes)).rejects.toBeDefined();
+      await expect(
+        thumbnailController.rateThumbnailQuality(mockReq, mockRes)
+      ).rejects.toBeDefined();
     });
   });
 

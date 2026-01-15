@@ -77,12 +77,10 @@ describe('Socket Controller Integration Tests', () => {
     it('should broadcast message to all connected users', async () => {
       const socketService = SocketService.getInstance();
 
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({
-          message: 'System maintenance in 5 minutes',
-          type: 'system_alert',
-        });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({
+        message: 'System maintenance in 5 minutes',
+        type: 'system_alert',
+      });
 
       expect(res.status).toBe(200);
       expect(socketService.broadcastMessage).toHaveBeenCalled();
@@ -90,12 +88,10 @@ describe('Socket Controller Integration Tests', () => {
     });
 
     it('should handle broadcast with empty message', async () => {
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({
-          message: '',
-          type: 'system_alert',
-        });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({
+        message: '',
+        type: 'system_alert',
+      });
 
       expect(res.status).toBe(400);
     });
@@ -106,12 +102,10 @@ describe('Socket Controller Integration Tests', () => {
         next();
       });
 
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({
-          message: 'Test message',
-          type: 'system_alert',
-        });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({
+        message: 'Test message',
+        type: 'system_alert',
+      });
 
       // Should be forbidden or unauthorized
       expect([401, 403]).toContain(res.status);
@@ -124,12 +118,7 @@ describe('Socket Controller Integration Tests', () => {
     });
 
     it('should validate broadcast message type', async () => {
-      const validTypes = [
-        'system_alert',
-        'announcement',
-        'urgent',
-        'notification',
-      ];
+      const validTypes = ['system_alert', 'announcement', 'urgent', 'notification'];
 
       for (const type of validTypes) {
         const res = await request(app)
@@ -148,29 +137,22 @@ describe('Socket Controller Integration Tests', () => {
     it('should send message to specific user', async () => {
       const socketService = SocketService.getInstance();
 
-      const res = await request(app)
-        .post('/api/v1/socket/send-to-user')
-        .send({
-          userId: userId1,
-          message: 'Personal notification',
-          type: 'notification',
-        });
+      const res = await request(app).post('/api/v1/socket/send-to-user').send({
+        userId: userId1,
+        message: 'Personal notification',
+        type: 'notification',
+      });
 
       expect(res.status).toBe(200);
-      expect(socketService.sendToUser).toHaveBeenCalledWith(
-        userId1,
-        expect.any(Object)
-      );
+      expect(socketService.sendToUser).toHaveBeenCalledWith(userId1, expect.any(Object));
     });
 
     it('should handle non-existent user', async () => {
-      const res = await request(app)
-        .post('/api/v1/socket/send-to-user')
-        .send({
-          userId: 'non-existent-user',
-          message: 'Test message',
-          type: 'notification',
-        });
+      const res = await request(app).post('/api/v1/socket/send-to-user').send({
+        userId: 'non-existent-user',
+        message: 'Test message',
+        type: 'notification',
+      });
 
       // Should either succeed (message queued) or fail gracefully
       expect([200, 404]).toContain(res.status);
@@ -188,9 +170,7 @@ describe('Socket Controller Integration Tests', () => {
         });
 
       expect(res.status).toBe(200);
-      expect(socketService.sendToUser).toHaveBeenCalledTimes(
-        expect.any(Number)
-      );
+      expect(socketService.sendToUser).toHaveBeenCalledTimes(expect.any(Number));
     });
   });
 
@@ -198,13 +178,11 @@ describe('Socket Controller Integration Tests', () => {
     it('should send message to room', async () => {
       const socketService = SocketService.getInstance();
 
-      const res = await request(app)
-        .post('/api/v1/socket/send-to-room')
-        .send({
-          roomName: 'episode-123-viewers',
-          message: 'Episode updated',
-          type: 'update',
-        });
+      const res = await request(app).post('/api/v1/socket/send-to-room').send({
+        roomName: 'episode-123-viewers',
+        message: 'Episode updated',
+        type: 'update',
+      });
 
       expect(res.status).toBe(200);
       expect(socketService.sendToRoom).toHaveBeenCalledWith(
@@ -214,25 +192,21 @@ describe('Socket Controller Integration Tests', () => {
     });
 
     it('should handle room operations with wildcards', async () => {
-      const res = await request(app)
-        .post('/api/v1/socket/send-to-room')
-        .send({
-          roomName: 'episode-*',
-          message: 'Global episode update',
-          type: 'broadcast',
-        });
+      const res = await request(app).post('/api/v1/socket/send-to-room').send({
+        roomName: 'episode-*',
+        message: 'Global episode update',
+        type: 'broadcast',
+      });
 
       expect([200, 400]).toContain(res.status);
     });
 
     it('should validate room names', async () => {
-      const res = await request(app)
-        .post('/api/v1/socket/send-to-room')
-        .send({
-          roomName: '', // Invalid empty room
-          message: 'Test',
-          type: 'update',
-        });
+      const res = await request(app).post('/api/v1/socket/send-to-room').send({
+        roomName: '', // Invalid empty room
+        message: 'Test',
+        type: 'update',
+      });
 
       expect(res.status).toBe(400);
     });
@@ -242,12 +216,10 @@ describe('Socket Controller Integration Tests', () => {
     it('should disconnect specific user', async () => {
       const socketService = SocketService.getInstance();
 
-      const res = await request(app)
-        .post('/api/v1/socket/disconnect-user')
-        .send({
-          userId: userId1,
-          reason: 'Duplicate login detected',
-        });
+      const res = await request(app).post('/api/v1/socket/disconnect-user').send({
+        userId: userId1,
+        reason: 'Duplicate login detected',
+      });
 
       expect(res.status).toBe(200);
       expect(socketService.disconnectUser).toHaveBeenCalledWith(userId1);
@@ -256,13 +228,11 @@ describe('Socket Controller Integration Tests', () => {
     it('should handle disconnect with notification', async () => {
       const socketService = SocketService.getInstance();
 
-      const res = await request(app)
-        .post('/api/v1/socket/disconnect-user')
-        .send({
-          userId: userId1,
-          reason: 'Session expired',
-          notifyUser: true,
-        });
+      const res = await request(app).post('/api/v1/socket/disconnect-user').send({
+        userId: userId1,
+        reason: 'Session expired',
+        notifyUser: true,
+      });
 
       expect(res.status).toBe(200);
       expect(socketService.disconnectUser).toHaveBeenCalled();
@@ -347,9 +317,7 @@ describe('Socket Controller Integration Tests', () => {
         expect([200, 201]).toContain(res.status);
       });
 
-      expect(socketService.broadcastMessage).toHaveBeenCalledTimes(
-        expect.any(Number)
-      );
+      expect(socketService.broadcastMessage).toHaveBeenCalledTimes(expect.any(Number));
     });
 
     it('should handle mixed operations concurrently', async () => {
@@ -359,20 +327,16 @@ describe('Socket Controller Integration Tests', () => {
         request(app)
           .post('/api/v1/socket/broadcast')
           .send({ message: 'Broadcast', type: 'announcement' }),
-        request(app)
-          .post('/api/v1/socket/send-to-user')
-          .send({
-            userId: userId1,
-            message: 'Personal',
-            type: 'notification',
-          }),
-        request(app)
-          .post('/api/v1/socket/send-to-room')
-          .send({
-            roomName: 'room-1',
-            message: 'Room message',
-            type: 'update',
-          }),
+        request(app).post('/api/v1/socket/send-to-user').send({
+          userId: userId1,
+          message: 'Personal',
+          type: 'notification',
+        }),
+        request(app).post('/api/v1/socket/send-to-room').send({
+          roomName: 'room-1',
+          message: 'Room message',
+          type: 'update',
+        }),
         request(app).get('/api/v1/socket/connected-users'),
         request(app).get('/api/v1/socket/stats'),
       ];
@@ -397,37 +361,31 @@ describe('Socket Controller Integration Tests', () => {
     it('should handle oversized messages', async () => {
       const largeMessage = 'x'.repeat(100000); // Very large message
 
-      const res = await request(app)
-        .post('/api/v1/socket/broadcast')
-        .send({
-          message: largeMessage,
-          type: 'announcement',
-        });
+      const res = await request(app).post('/api/v1/socket/broadcast').send({
+        message: largeMessage,
+        type: 'announcement',
+      });
 
       expect([400, 413]).toContain(res.status);
     });
 
     it('should prevent SQL injection in room names', async () => {
-      const res = await request(app)
-        .post('/api/v1/socket/send-to-room')
-        .send({
-          roomName: "room'; DROP TABLE--",
-          message: 'Test',
-          type: 'update',
-        });
+      const res = await request(app).post('/api/v1/socket/send-to-room').send({
+        roomName: "room'; DROP TABLE--",
+        message: 'Test',
+        type: 'update',
+      });
 
       // Should fail validation
       expect(res.status).toBe(400);
     });
 
     it('should sanitize user IDs', async () => {
-      const res = await request(app)
-        .post('/api/v1/socket/send-to-user')
-        .send({
-          userId: "<script>alert('xss')</script>",
-          message: 'Test',
-          type: 'notification',
-        });
+      const res = await request(app).post('/api/v1/socket/send-to-user').send({
+        userId: "<script>alert('xss')</script>",
+        message: 'Test',
+        type: 'notification',
+      });
 
       expect(res.status).toBe(400);
     });

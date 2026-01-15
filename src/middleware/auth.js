@@ -16,7 +16,7 @@ const _cognito = new CognitoIdentityServiceProvider({
 const verifyToken = async (token) => {
   try {
     const userPoolId = process.env.COGNITO_USER_POOL_ID;
-    
+
     if (!userPoolId) {
       throw new Error('COGNITO_USER_POOL_ID not configured');
     }
@@ -24,15 +24,15 @@ const verifyToken = async (token) => {
     // Get the Cognito public keys for verification
     // In production, these should be cached and refreshed periodically
     const _keyUrl = `https://cognito-idp.${process.env.COGNITO_REGION || 'us-east-1'}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
-    
+
     // Note: In a production implementation, you would:
     // 1. Fetch and cache JWKS from Cognito
     // 2. Use jwt library to verify signature
     // 3. Validate claims (aud, iss, exp, etc.)
-    
+
     // For now, we'll use a simplified verification approach
     // that can be enhanced with proper JWT verification
-    
+
     // Decode token (without verification for now - see note above)
     const parts = token.split('.');
     if (parts.length !== 3) {
@@ -40,9 +40,7 @@ const verifyToken = async (token) => {
     }
 
     // Decode payload
-    const payload = JSON.parse(
-      Buffer.from(parts[1], 'base64').toString('utf-8')
-    );
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
 
     // Verify token expiration
     const now = Math.floor(Date.now() / 1000);
@@ -64,7 +62,7 @@ const authenticateToken = async (req, res, next) => {
   try {
     // Get token from Authorization header
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader) {
       return res.status(401).json({
         error: 'Unauthorized',
@@ -126,7 +124,7 @@ const authenticateToken = async (req, res, next) => {
 const optionalAuth = async (req, res, next) => {
   try {
     const authHeader = req.headers.authorization;
-    
+
     if (!authHeader) {
       req.user = null;
       return next();
@@ -201,7 +199,7 @@ const verifyGroup = (requiredGroup) => {
 const authorize = (requiredGroups) => {
   // Handle both single group and array of groups
   const groups = Array.isArray(requiredGroups) ? requiredGroups : [requiredGroups];
-  
+
   return (req, res, next) => {
     if (!req.user) {
       return res.status(401).json({
@@ -211,7 +209,7 @@ const authorize = (requiredGroups) => {
       });
     }
 
-    if (!req.user.groups || !req.user.groups.some(group => groups.includes(group))) {
+    if (!req.user.groups || !req.user.groups.some((group) => groups.includes(group))) {
       return res.status(403).json({
         error: 'Forbidden',
         message: `User must be in one of these groups: ${groups.join(', ')}`,

@@ -10,11 +10,12 @@ const { Job, JOB_STATUS } = require('../models/job');
 
 const sqs = new AWS.SQS({
   region: process.env.AWS_REGION || 'us-east-1',
-  endpoint: process.env.SQS_ENDPOINT_URL || undefined
+  endpoint: process.env.SQS_ENDPOINT_URL || undefined,
 });
 
 class QueueService {
-  static queueUrl = process.env.SQS_QUEUE_URL || 'http://localhost:4566/000000000000/episode-jobs-queue';
+  static queueUrl =
+    process.env.SQS_QUEUE_URL || 'http://localhost:4566/000000000000/episode-jobs-queue';
   static dlqUrl = process.env.SQS_DLQ_URL || 'http://localhost:4566/000000000000/episode-jobs-dlq';
   static visibilityTimeout = 300;
   static maxRetries = 3;
@@ -32,7 +33,7 @@ class QueueService {
         userId: job.userId,
         jobType: job.jobType,
         payload: job.payload,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
 
       const params = {
@@ -41,13 +42,13 @@ class QueueService {
         MessageAttributes: {
           jobType: {
             StringValue: job.jobType,
-            DataType: 'String'
+            DataType: 'String',
           },
           jobId: {
             StringValue: job.id,
-            DataType: 'String'
-          }
-        }
+            DataType: 'String',
+          },
+        },
       };
 
       const result = await sqs.sendMessage(params).promise();
@@ -69,7 +70,7 @@ class QueueService {
         MaxNumberOfMessages: maxMessages,
         VisibilityTimeout: this.visibilityTimeout,
         MessageAttributeNames: ['All'],
-        WaitTimeSeconds: 20
+        WaitTimeSeconds: 20,
       };
 
       const result = await sqs.receiveMessage(params).promise();
@@ -90,7 +91,7 @@ class QueueService {
     try {
       const params = {
         QueueUrl: this.queueUrl,
-        ReceiptHandle: receiptHandle
+        ReceiptHandle: receiptHandle,
       };
 
       await sqs.deleteMessage(params).promise();
@@ -110,7 +111,7 @@ class QueueService {
       const params = {
         QueueUrl: this.queueUrl,
         ReceiptHandle: receiptHandle,
-        VisibilityTimeout: visibilityTimeout
+        VisibilityTimeout: visibilityTimeout,
       };
 
       await sqs.changeMessageVisibility(params).promise();
@@ -135,12 +136,12 @@ class QueueService {
         originalJobType: job.jobType,
         reason: reason,
         timestamp: new Date().toISOString(),
-        job: job
+        job: job,
       };
 
       const params = {
         QueueUrl: this.dlqUrl,
-        MessageBody: JSON.stringify(messageBody)
+        MessageBody: JSON.stringify(messageBody),
       };
 
       const result = await sqs.sendMessage(params).promise();
@@ -164,8 +165,8 @@ class QueueService {
           'ApproximateNumberOfMessagesNotVisible',
           'ApproximateNumberOfMessagesDelayed',
           'CreatedTimestamp',
-          'LastModifiedTimestamp'
-        ]
+          'LastModifiedTimestamp',
+        ],
       };
 
       const result = await sqs.getQueueAttributes(params).promise();
@@ -177,7 +178,7 @@ class QueueService {
         processingMessages: parseInt(attrs.ApproximateNumberOfMessagesNotVisible, 10),
         delayedMessages: parseInt(attrs.ApproximateNumberOfMessagesDelayed, 10),
         createdAt: new Date(parseInt(attrs.CreatedTimestamp, 10) * 1000),
-        lastModified: new Date(parseInt(attrs.LastModifiedTimestamp, 10) * 1000)
+        lastModified: new Date(parseInt(attrs.LastModifiedTimestamp, 10) * 1000),
       };
     } catch (error) {
       logger.error('Error getting queue stats', { error });
@@ -191,7 +192,7 @@ class QueueService {
   static async purgeQueue() {
     try {
       const params = {
-        QueueUrl: this.queueUrl
+        QueueUrl: this.queueUrl,
       };
 
       await sqs.purgeQueue(params).promise();
@@ -212,7 +213,7 @@ class QueueService {
     try {
       // Update job status to processing
       await Job.updateStatus(jobId, JOB_STATUS.PROCESSING, {
-        startedAt: new Date()
+        startedAt: new Date(),
       });
 
       logger.info('Processing job', { jobId, jobType });
@@ -242,7 +243,7 @@ class QueueService {
       // Update job status to completed
       await Job.updateStatus(jobId, JOB_STATUS.COMPLETED, {
         results: results,
-        completedAt: new Date()
+        completedAt: new Date(),
       });
 
       logger.info('Job completed successfully', { jobId });
@@ -259,13 +260,13 @@ class QueueService {
   static async handleThumbnailGeneration(jobId, payload, userId) {
     const { episodeId, videoUrl, frameTimestamps } = payload;
     logger.info('Handling thumbnail generation', { jobId, episodeId });
-    
+
     // This would integrate with ThumbnailGeneratorService or Lambda
     return {
       jobId,
       status: 'completed',
       thumbnailsGenerated: frameTimestamps ? frameTimestamps.length : 1,
-      s3Urls: []
+      s3Urls: [],
     };
   }
 
@@ -275,13 +276,13 @@ class QueueService {
   static async handleVideoProcessing(jobId, payload, userId) {
     const { episodeId, videoUrl, format } = payload;
     logger.info('Handling video processing', { jobId, episodeId, format });
-    
+
     // This would integrate with video processing service
     return {
       jobId,
       status: 'completed',
       format: format,
-      outputUrl: null
+      outputUrl: null,
     };
   }
 
@@ -291,12 +292,12 @@ class QueueService {
   static async handleBulkUpload(jobId, payload, userId) {
     const { files, episodeId } = payload;
     logger.info('Handling bulk upload', { jobId, fileCount: files.length });
-    
+
     return {
       jobId,
       status: 'completed',
       uploaded: files.length,
-      failed: 0
+      failed: 0,
     };
   }
 
@@ -306,12 +307,12 @@ class QueueService {
   static async handleBulkExport(jobId, payload, userId) {
     const { episodeIds, format } = payload;
     logger.info('Handling bulk export', { jobId, episodeCount: episodeIds.length, format });
-    
+
     return {
       jobId,
       status: 'completed',
       exportUrl: null,
-      format: format
+      format: format,
     };
   }
 
@@ -321,12 +322,12 @@ class QueueService {
   static async handleDataImport(jobId, payload, userId) {
     const { fileUrl, dataType } = payload;
     logger.info('Handling data import', { jobId, dataType });
-    
+
     return {
       jobId,
       status: 'completed',
       dataType: dataType,
-      recordsImported: 0
+      recordsImported: 0,
     };
   }
 }

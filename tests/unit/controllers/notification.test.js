@@ -90,36 +90,30 @@ describe('Notification Controller', () => {
     });
 
     it('should require type field', async () => {
-      const res = await request(app)
-        .post('/api/v1/notifications')
-        .send({
-          title: 'Test Notification',
-          message: 'Test message',
-        });
+      const res = await request(app).post('/api/v1/notifications').send({
+        title: 'Test Notification',
+        message: 'Test message',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body.status).toBe('error');
     });
 
     it('should require title field', async () => {
-      const res = await request(app)
-        .post('/api/v1/notifications')
-        .send({
-          type: 'info',
-          message: 'Test message',
-        });
+      const res = await request(app).post('/api/v1/notifications').send({
+        type: 'info',
+        message: 'Test message',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body.status).toBe('error');
     });
 
     it('should require recipientIds field', async () => {
-      const res = await request(app)
-        .post('/api/v1/notifications')
-        .send({
-          type: 'info',
-          title: 'Test',
-        });
+      const res = await request(app).post('/api/v1/notifications').send({
+        type: 'info',
+        title: 'Test',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body.status).toBe('error');
@@ -150,9 +144,7 @@ describe('Notification Controller', () => {
 
       NotificationService.getNotifications.mockResolvedValue(mockNotifications);
 
-      const res = await request(app)
-        .get('/api/v1/notifications')
-        .query({ limit: 50, offset: 0 });
+      const res = await request(app).get('/api/v1/notifications').query({ limit: 50, offset: 0 });
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -163,9 +155,7 @@ describe('Notification Controller', () => {
     it('should enforce limit maximum of 100', async () => {
       NotificationService.getNotifications.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/notifications')
-        .query({ limit: 500 });
+      const res = await request(app).get('/api/v1/notifications').query({ limit: 500 });
 
       expect(res.status).toBe(200);
       // Should have capped limit at 100
@@ -178,9 +168,7 @@ describe('Notification Controller', () => {
 
       NotificationService.getNotifications.mockResolvedValue(mockNotifications);
 
-      const res = await request(app)
-        .get('/api/v1/notifications')
-        .query({ actionType: 'alert' });
+      const res = await request(app).get('/api/v1/notifications').query({ actionType: 'alert' });
 
       expect(res.status).toBe(200);
     });
@@ -190,9 +178,7 @@ describe('Notification Controller', () => {
 
       NotificationService.getNotifications.mockResolvedValue(mockNotifications);
 
-      const res = await request(app)
-        .get('/api/v1/notifications')
-        .query({ onlyUnread: true });
+      const res = await request(app).get('/api/v1/notifications').query({ onlyUnread: true });
 
       expect(res.status).toBe(200);
     });
@@ -209,10 +195,7 @@ describe('Notification Controller', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
-      expect(NotificationService.markAsRead).toHaveBeenCalledWith(
-        userId,
-        notifId
-      );
+      expect(NotificationService.markAsRead).toHaveBeenCalledWith(userId, notifId);
     });
 
     it('should handle service errors', async () => {
@@ -258,10 +241,7 @@ describe('Notification Controller', () => {
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
-      expect(NotificationService.deleteNotification).toHaveBeenCalledWith(
-        userId,
-        notifId
-      );
+      expect(NotificationService.deleteNotification).toHaveBeenCalledWith(userId, notifId);
     });
 
     it('should handle not found', async () => {
@@ -287,9 +267,7 @@ describe('Notification Controller', () => {
     it('should return zero when no unread', async () => {
       NotificationService.getUnreadCount.mockResolvedValue(0);
 
-      const res = await request(app).get(
-        '/api/v1/notifications/unread-count'
-      );
+      const res = await request(app).get('/api/v1/notifications/unread-count');
 
       expect(res.status).toBe(200);
       expect(res.body.data.unreadCount).toBe(0);
@@ -306,9 +284,7 @@ describe('Notification Controller', () => {
 
       NotificationService.getPreferences.mockResolvedValue(mockPrefs);
 
-      const res = await request(app).get(
-        '/api/v1/notifications/preferences'
-      );
+      const res = await request(app).get('/api/v1/notifications/preferences');
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -326,9 +302,7 @@ describe('Notification Controller', () => {
 
       NotificationService.updatePreferences.mockResolvedValue(updatedPrefs);
 
-      const res = await request(app)
-        .post('/api/v1/notifications/preferences')
-        .send(updatedPrefs);
+      const res = await request(app).post('/api/v1/notifications/preferences').send(updatedPrefs);
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -341,9 +315,7 @@ describe('Notification Controller', () => {
 
       NotificationService.updatePreferences.mockResolvedValue(result);
 
-      const res = await request(app)
-        .post('/api/v1/notifications/preferences')
-        .send(partialUpdate);
+      const res = await request(app).post('/api/v1/notifications/preferences').send(partialUpdate);
 
       expect(res.status).toBe(200);
     });
@@ -366,9 +338,7 @@ describe('Notification Controller', () => {
     it('should accept valid pagination params', async () => {
       NotificationService.getNotifications.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/notifications')
-        .query({ limit: 50, offset: 10 });
+      const res = await request(app).get('/api/v1/notifications').query({ limit: 50, offset: 10 });
 
       expect(res.status).toBe(200);
     });

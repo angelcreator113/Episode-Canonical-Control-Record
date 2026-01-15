@@ -1,9 +1,6 @@
 const { models } = require('../models');
 const { Episode, ProcessingQueue } = models;
-const {
-  NotFoundError,
-  ValidationError,
-} = require('../middleware/errorHandler');
+const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
 const { logger } = require('../middleware/auditLog');
 
 /**
@@ -37,16 +34,10 @@ module.exports = {
     });
 
     // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'processing',
-      'all',
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id || 'anonymous', 'view', 'processing', 'all', {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: rows,
@@ -87,16 +78,10 @@ module.exports = {
     }
 
     // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'processing',
-      id,
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id || 'anonymous', 'view', 'processing', id, {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({ data: job });
   },
@@ -108,24 +93,18 @@ module.exports = {
     const { episodeId, jobType, jobConfig = {} } = req.body;
 
     if (!episodeId || !jobType) {
-      throw new ValidationError(
-        'Missing required fields',
-        {
-          episodeId: !episodeId ? 'required' : null,
-          jobType: !jobType ? 'required' : null,
-        }
-      );
+      throw new ValidationError('Missing required fields', {
+        episodeId: !episodeId ? 'required' : null,
+        jobType: !jobType ? 'required' : null,
+      });
     }
 
     // Validate jobType
     const validJobTypes = ['thumbnail_generation', 'metadata_extraction', 'transcription'];
     if (!validJobTypes.includes(jobType)) {
-      throw new ValidationError(
-        'Invalid job type',
-        {
-          jobType: `Must be one of: ${validJobTypes.join(', ')}`,
-        }
-      );
+      throw new ValidationError('Invalid job type', {
+        jobType: `Must be one of: ${validJobTypes.join(', ')}`,
+      });
     }
 
     // Verify episode exists
@@ -144,21 +123,15 @@ module.exports = {
     });
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'create',
-      'processing',
-      job.id,
-      {
-        newValues: {
-          episodeId,
-          jobType,
-          status: 'pending',
-        },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'create', 'processing', job.id, {
+      newValues: {
+        episodeId,
+        jobType,
+        status: 'pending',
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.status(201).json({
       data: job,
@@ -182,10 +155,9 @@ module.exports = {
     const validStatuses = ['pending', 'processing', 'completed', 'failed'];
 
     if (status && !validStatuses.includes(status)) {
-      throw new ValidationError(
-        'Invalid status',
-        { status: `Must be one of: ${validStatuses.join(', ')}` }
-      );
+      throw new ValidationError('Invalid status', {
+        status: `Must be one of: ${validStatuses.join(', ')}`,
+      });
     }
 
     const updateData = {};
@@ -205,18 +177,12 @@ module.exports = {
     await job.update(updateData);
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'edit',
-      'processing',
-      id,
-      {
-        oldValues: { status: oldValues.status, errorMessage: oldValues.errorMessage },
-        newValues: { status: job.status, errorMessage: job.errorMessage },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'edit', 'processing', id, {
+      oldValues: { status: oldValues.status, errorMessage: oldValues.errorMessage },
+      newValues: { status: job.status, errorMessage: job.errorMessage },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: job,
@@ -248,24 +214,18 @@ module.exports = {
     await job.retry();
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'edit',
-      'processing',
-      id,
-      {
-        oldValues: {
-          status: oldValues.status,
-          retryCount: oldValues.retryCount,
-        },
-        newValues: {
-          status: job.status,
-          retryCount: job.retryCount,
-        },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'edit', 'processing', id, {
+      oldValues: {
+        status: oldValues.status,
+        retryCount: oldValues.retryCount,
+      },
+      newValues: {
+        status: job.status,
+        retryCount: job.retryCount,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: job,
@@ -298,17 +258,11 @@ module.exports = {
     await job.destroy();
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'delete',
-      'processing',
-      id,
-      {
-        oldValues,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'delete', 'processing', id, {
+      oldValues,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       message: 'Processing job cancelled',
@@ -335,15 +289,15 @@ module.exports = {
       count: jobs.length,
       summary: {
         byStatus: {
-          pending: jobs.filter(j => j.status === 'pending').length,
-          processing: jobs.filter(j => j.status === 'processing').length,
-          completed: jobs.filter(j => j.status === 'completed').length,
-          failed: jobs.filter(j => j.status === 'failed').length,
+          pending: jobs.filter((j) => j.status === 'pending').length,
+          processing: jobs.filter((j) => j.status === 'processing').length,
+          completed: jobs.filter((j) => j.status === 'completed').length,
+          failed: jobs.filter((j) => j.status === 'failed').length,
         },
         byType: {
-          thumbnail_generation: jobs.filter(j => j.jobType === 'thumbnail_generation').length,
-          metadata_extraction: jobs.filter(j => j.jobType === 'metadata_extraction').length,
-          transcription: jobs.filter(j => j.jobType === 'transcription').length,
+          thumbnail_generation: jobs.filter((j) => j.jobType === 'thumbnail_generation').length,
+          metadata_extraction: jobs.filter((j) => j.jobType === 'metadata_extraction').length,
+          transcription: jobs.filter((j) => j.jobType === 'transcription').length,
         },
       },
     });

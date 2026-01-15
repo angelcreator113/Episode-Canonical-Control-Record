@@ -217,11 +217,7 @@ describe('FileValidationService', () => {
 
   describe('generateS3Key', () => {
     it('should generate valid S3 key', () => {
-      const key = FileValidationService.generateS3Key(
-        'episode-uuid',
-        'video',
-        'my-video.mp4'
-      );
+      const key = FileValidationService.generateS3Key('episode-uuid', 'video', 'my-video.mp4');
 
       expect(key).toContain('episodes/episode-uuid/video/');
       expect(key).toContain('my-video.mp4');

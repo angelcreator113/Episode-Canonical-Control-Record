@@ -2,7 +2,7 @@
 /**
  * Sequelize Database Configuration
  * Environment-specific database connection settings
- * 
+ *
  * This file is used by Sequelize CLI for migrations and seeds
  * For application usage, use ./database.js instead
  */
@@ -14,16 +14,16 @@ require('dotenv').config();
  */
 function parseDatabaseUrl(url) {
   if (!url) return null;
-  
+
   try {
     // Format: postgres://user:password@host:port/database
     const match = url.match(/postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
-    
+
     if (!match) {
       console.warn('⚠️  Invalid DATABASE_URL format');
       return null;
     }
-    
+
     return {
       username: decodeURIComponent(match[1]),
       password: decodeURIComponent(match[2]),
@@ -43,10 +43,13 @@ function parseDatabaseUrl(url) {
 const baseConfig = {
   dialect: 'postgres',
   dialectOptions: {
-    ssl: process.env.DB_SSL === 'true' ? {
-      require: true,
-      rejectUnauthorized: false, // For self-signed certificates
-    } : false,
+    ssl:
+      process.env.DB_SSL === 'true'
+        ? {
+            require: true,
+            rejectUnauthorized: false, // For self-signed certificates
+          }
+        : false,
     // Connection timeout
     connectTimeout: 60000,
   },
@@ -91,7 +94,7 @@ const development = {
     max: 10,
     min: 2,
     acquire: 30000, // Maximum time (ms) to try to get connection before throwing error
-    idle: 10000,    // Maximum time (ms) a connection can be idle before being released
+    idle: 10000, // Maximum time (ms) a connection can be idle before being released
   },
   // Disable SSL in development
   dialectOptions: {
@@ -147,10 +150,13 @@ const staging = {
   },
   dialectOptions: {
     ...baseConfig.dialectOptions,
-    ssl: process.env.DB_SSL === 'true' ? {
-      require: true,
-      rejectUnauthorized: false,
-    } : false,
+    ssl:
+      process.env.DB_SSL === 'true'
+        ? {
+            require: true,
+            rejectUnauthorized: false,
+          }
+        : false,
   },
 };
 
@@ -224,7 +230,9 @@ module.exports.default = module.exports[env];
 
 // Validate configuration on load
 if (!module.exports[env]) {
-  throw new Error(`Invalid NODE_ENV: ${env}. Must be one of: development, test, staging, production`);
+  throw new Error(
+    `Invalid NODE_ENV: ${env}. Must be one of: development, test, staging, production`
+  );
 }
 
 // Log configuration (without sensitive data)

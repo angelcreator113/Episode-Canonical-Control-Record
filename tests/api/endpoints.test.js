@@ -472,7 +472,7 @@ describe('API Endpoint Integration Tests', () => {
 
       // expect(res.status).toBe(401);
 
-        expect(true).toBe(true);
+      expect(true).toBe(true);
     });
 
     test('should return 403 for insufficient permissions', async () => {

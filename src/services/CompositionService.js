@@ -14,15 +14,15 @@ class CompositionService {
    */
   async createComposition(episodeId, compositionData, createdBy) {
     try {
-      const { 
-        template_id, 
-        lala_asset_id, 
+      const {
+        template_id,
+        lala_asset_id,
         justawomen_asset_id,
         include_justawomaninherprime,
         justawomaninherprime_position,
-        guest_asset_id, 
+        guest_asset_id,
         background_frame_asset_id,
-        selected_formats // Add this
+        selected_formats, // Add this
       } = compositionData;
 
       // Validate assets exist
@@ -70,11 +70,14 @@ class CompositionService {
           selected_formats: selected_formats || [], // Store the formats
           layers: {
             lala: { asset_id: lala_asset_id, ...layoutConfig.lala },
-            justawoman: include_justawomaninherprime && justawomanAsset 
-              ? { asset_id: justawomen_asset_id, ...layoutConfig.justawomaninherprime } 
-              : null,
+            justawoman:
+              include_justawomaninherprime && justawomanAsset
+                ? { asset_id: justawomen_asset_id, ...layoutConfig.justawomaninherprime }
+                : null,
             guest: guest_asset_id ? { asset_id: guest_asset_id, ...layoutConfig.guest } : null,
-            background: background_frame_asset_id ? { asset_id: background_frame_asset_id, ...layoutConfig.background } : null,
+            background: background_frame_asset_id
+              ? { asset_id: background_frame_asset_id, ...layoutConfig.background }
+              : null,
             text: layoutConfig.text,
           },
         },
@@ -83,15 +86,15 @@ class CompositionService {
       });
 
       const json = composition.toJSON();
-      
+
       // Add episode info for UI
       if (template && template.dataValues) {
         json.episodeName = 'Composition';
       }
-      
+
       // Add selected formats for UI
       json.selected_formats = selected_formats || [];
-      
+
       return json;
     } catch (error) {
       console.error('Failed to create composition:', error);
@@ -141,36 +144,40 @@ class CompositionService {
       // If UUID, look for an episode with that ID first
       // If integer, use directly
       let queryEpisodeId = episodeId;
-      
+
       // If it looks like a UUID, try to find the actual episode
-      const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+      const uuidRegex =
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
       if (uuidRegex.test(episodeId)) {
         // This is a UUID - but our Episode table uses integer IDs
         // Return empty array since we can't match UUIDs
         console.log(`Episode UUID received but database uses integer IDs: ${episodeId}`);
         return [];
       }
-      
+
       // Try to parse as integer
       const parsedId = parseInt(episodeId, 10);
       if (!isNaN(parsedId) && parsedId > 0) {
         queryEpisodeId = parsedId;
       }
-      
+
       const compositions = await ThumbnailComposition.findAll({
         where: { episode_id: queryEpisodeId },
         include: [
           { model: ThumbnailTemplate, as: 'template' },
-          { 
-            model: models.Episode, 
+          {
+            model: models.Episode,
             as: 'episode',
-            attributes: ['id', 'episodeTitle', 'episodeNumber', 'seasonNumber']
-          }
+            attributes: ['id', 'episodeTitle', 'episodeNumber', 'seasonNumber'],
+          },
         ],
-        order: [['is_primary', 'DESC'], ['created_at', 'DESC']],
+        order: [
+          ['is_primary', 'DESC'],
+          ['created_at', 'DESC'],
+        ],
       });
 
-      return compositions.map(c => {
+      return compositions.map((c) => {
         const json = c.toJSON();
         // Add episodeName for UI
         if (c.episode) {
@@ -203,7 +210,12 @@ class CompositionService {
       // Unset other compositions for this episode
       await ThumbnailComposition.update(
         { is_primary: false },
-        { where: { episode_id: composition.episode_id, id: { [require('sequelize').Op.ne]: compositionId } } }
+        {
+          where: {
+            episode_id: composition.episode_id,
+            id: { [require('sequelize').Op.ne]: compositionId },
+          },
+        }
       );
 
       // Set this one as primary
@@ -306,7 +318,7 @@ class CompositionService {
   async generateThumbnails(compositionId, selectedFormats) {
     try {
       const composition = await ThumbnailComposition.findByPk(compositionId, {
-        attributes: ['id', 'episode_id', 'template_id', 'composition_config', 'approval_status']
+        attributes: ['id', 'episode_id', 'template_id', 'composition_config', 'approval_status'],
       });
 
       if (!composition) {
@@ -325,13 +337,11 @@ class CompositionService {
         { name: 'TIKTOK', width: 1080, height: 1920 },
         { name: 'FACEBOOK', width: 1200, height: 630 },
         { name: 'TWITTER', width: 1200, height: 675 },
-        { name: 'PINTEREST', width: 1000, height: 1500 }
+        { name: 'PINTEREST', width: 1000, height: 1500 },
       ];
 
       // Filter to only selected formats
-      const formatsToGenerate = allFormats.filter(f => 
-        selectedFormats.includes(f.name)
-      );
+      const formatsToGenerate = allFormats.filter((f) => selectedFormats.includes(f.name));
 
       const ThumbnailGeneratorService = require('./ThumbnailGeneratorService');
       const thumbnails = [];
@@ -350,7 +360,6 @@ class CompositionService {
 
       console.log(`✅ Generated ${thumbnails.length} thumbnails for composition ${compositionId}`);
       return thumbnails;
-
     } catch (error) {
       console.error('❌ Failed to generate thumbnails:', error);
       throw error;
@@ -368,7 +377,8 @@ class CompositionService {
       }
 
       // Update assets
-      const { lala_asset_id, guest_asset_id, justawomen_asset_id, include_justawomaninherprime } = updateData;
+      const { lala_asset_id, guest_asset_id, justawomen_asset_id, include_justawomaninherprime } =
+        updateData;
 
       if (lala_asset_id) composition.lala_asset_id = lala_asset_id;
       if (guest_asset_id !== undefined) composition.guest_asset_id = guest_asset_id;
@@ -386,7 +396,6 @@ class CompositionService {
 
       console.log(`✅ Composition updated: ${compositionId} (version ${composition.version})`);
       return composition;
-
     } catch (error) {
       console.error('❌ Failed to update composition:', error);
       throw error;

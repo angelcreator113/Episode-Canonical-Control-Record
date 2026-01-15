@@ -41,14 +41,14 @@ class ThumbnailGeneratorService {
    */
   async generateAllFormats(config) {
     const {
-      backgroundImage,      // Episode frame or gradient (Buffer)
-      lalaImage,            // Processed Lala promo with transparent BG (Buffer)
-      guestImage,           // Processed guest promo with transparent BG (Buffer)
-      justawomanImage,      // Optional JustAWoman promo with transparent BG (Buffer)
-      justawomanPosition,   // Optional custom position override for JustAWoman
-      episodeTitle,         // String
-      episodeNumber,        // Number
-      brandLogo,            // Optional logo image (Buffer)
+      backgroundImage, // Episode frame or gradient (Buffer)
+      lalaImage, // Processed Lala promo with transparent BG (Buffer)
+      guestImage, // Processed guest promo with transparent BG (Buffer)
+      justawomanImage, // Optional JustAWoman promo with transparent BG (Buffer)
+      justawomanPosition, // Optional custom position override for JustAWoman
+      episodeTitle, // String
+      episodeNumber, // Number
+      brandLogo, // Optional logo image (Buffer)
     } = config;
 
     if (!backgroundImage || !lalaImage || !guestImage) {
@@ -102,7 +102,16 @@ class ThumbnailGeneratorService {
    * @private
    */
   async generateSingleFormat(config) {
-    const { format, backgroundImage, lalaImage, guestImage, episodeTitle, episodeNumber, justawomanImage, justawomanPosition } = config;
+    const {
+      format,
+      backgroundImage,
+      lalaImage,
+      guestImage,
+      episodeTitle,
+      episodeNumber,
+      justawomanImage,
+      justawomanPosition,
+    } = config;
 
     // Calculate positions based on aspect ratio
     const layout = this.calculateLayout(format);
@@ -175,10 +184,7 @@ class ThumbnailGeneratorService {
     }
 
     // 5. Text overlay (episode title + number)
-    const textBuffer = await this.createTextOverlay(
-      { episodeTitle, episodeNumber },
-      format
-    );
+    const textBuffer = await this.createTextOverlay({ episodeTitle, episodeNumber }, format);
     composites.push({
       input: textBuffer,
       top: layout.text.top,
@@ -226,7 +232,7 @@ class ThumbnailGeneratorService {
           width: Math.floor(format.width * 0.25),
           height: Math.floor(format.height * 0.25),
           top: Math.floor(format.height * 0.05),
-          left: Math.floor(format.width * 0.70),
+          left: Math.floor(format.width * 0.7),
         },
         text: {
           top: Math.floor(format.height * 0.85),
@@ -252,7 +258,7 @@ class ThumbnailGeneratorService {
           width: Math.floor(format.width * 0.25),
           height: Math.floor(format.height * 0.25),
           top: Math.floor(format.height * 0.05),
-          left: Math.floor(format.width * 0.70),
+          left: Math.floor(format.width * 0.7),
         },
         text: {
           top: Math.floor(format.height * 0.8),
@@ -294,13 +300,12 @@ class ThumbnailGeneratorService {
    */
   async createTextOverlay(config, format) {
     const { episodeTitle = 'Unknown Episode', episodeNumber = 0 } = config;
-    
+
     // Ensure episodeTitle is a string
     const titleStr = String(episodeTitle || 'Unknown Episode');
     const maxLength = Math.floor(format.width / 50); // Rough char limit based on width
-    const titleTruncated = titleStr.length > maxLength 
-      ? titleStr.substring(0, maxLength) + '...'
-      : titleStr;
+    const titleTruncated =
+      titleStr.length > maxLength ? titleStr.substring(0, maxLength) + '...' : titleStr;
 
     const fontSize = Math.max(24, Math.floor(format.width / 24));
     const episodeFontSize = Math.floor(fontSize * 0.6);
@@ -337,7 +342,7 @@ class ThumbnailGeneratorService {
    * Get all available formats (for API documentation)
    */
   getAvailableFormats() {
-    return MVP_FORMATS.map(key => ({
+    return MVP_FORMATS.map((key) => ({
       ...THUMBNAIL_FORMATS[key],
       available: true,
     }));

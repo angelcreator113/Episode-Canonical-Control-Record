@@ -30,7 +30,7 @@ class JobController {
         return res.status(400).json({
           success: false,
           error: 'INVALID_JOB_TYPE',
-          message: `Invalid job type: ${jobType}`
+          message: `Invalid job type: ${jobType}`,
         });
       }
 
@@ -39,7 +39,7 @@ class JobController {
         userId,
         jobType,
         payload,
-        maxRetries: maxRetries || 3
+        maxRetries: maxRetries || 3,
       });
 
       // Send to queue
@@ -73,7 +73,7 @@ class JobController {
         action: 'CREATE',
         resourceType: 'job',
         resourceId: job.id,
-        metadata: { jobType: job.job_type, episodeId, payload: job.payload }
+        metadata: { jobType: job.job_type, episodeId, payload: job.payload },
       }).catch((err) => console.error('Activity logging error:', err));
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
@@ -84,8 +84,8 @@ class JobController {
           type: job.job_type,
           episodeId,
           createdBy: req.user?.email || 'unknown',
-          timestamp: new Date()
-        }
+          timestamp: new Date(),
+        },
       }).catch((err) => console.error('WebSocket broadcast error:', err));
 
       // Phase 3A Integration: Notification (non-blocking)
@@ -93,7 +93,7 @@ class JobController {
         userId: req.user?.id,
         type: 'info',
         message: `Job created (${job.job_type})`,
-        data: { resourceType: 'job', resourceId: job.id }
+        data: { resourceType: 'job', resourceId: job.id },
       }).catch((err) => console.error('Notification error:', err));
 
       res.status(201).json({
@@ -237,7 +237,7 @@ class JobController {
         action: 'RETRY',
         resourceType: 'job',
         resourceId: jobId,
-        metadata: { retryCount: job.retry_count + 1, jobType: job.job_type }
+        metadata: { retryCount: job.retry_count + 1, jobType: job.job_type },
       }).catch((err) => console.error('Activity logging error:', err));
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
@@ -246,8 +246,8 @@ class JobController {
         data: {
           jobId,
           retryCount: job.retry_count + 1,
-          timestamp: new Date()
-        }
+          timestamp: new Date(),
+        },
       }).catch((err) => console.error('WebSocket broadcast error:', err));
 
       res.json({
@@ -295,7 +295,7 @@ class JobController {
         action: 'CANCEL',
         resourceType: 'job',
         resourceId: jobId,
-        metadata: { jobType: job.job_type }
+        metadata: { jobType: job.job_type },
       }).catch((err) => console.error('Activity logging error:', err));
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
@@ -303,8 +303,8 @@ class JobController {
         event: 'job_cancelled',
         data: {
           jobId,
-          timestamp: new Date()
-        }
+          timestamp: new Date(),
+        },
       }).catch((err) => console.error('WebSocket broadcast error:', err));
 
       res.json({

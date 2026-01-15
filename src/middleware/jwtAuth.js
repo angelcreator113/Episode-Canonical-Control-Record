@@ -128,7 +128,7 @@ const requireGroup = (requiredGroups) => {
       });
     }
 
-    if (!req.user.groups || !req.user.groups.some(g => groups.includes(g))) {
+    if (!req.user.groups || !req.user.groups.some((g) => groups.includes(g))) {
       return res.status(403).json({
         error: 'Forbidden',
         message: `User must be in one of these groups: ${groups.join(', ')}`,

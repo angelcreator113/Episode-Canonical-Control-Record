@@ -188,9 +188,7 @@ describe('JobController', () => {
       await jobController.getJobStatus(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Job not found' })
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Job not found' }));
     });
 
     it('should handle status retrieval errors', async () => {
@@ -437,9 +435,7 @@ describe('JobController', () => {
       await jobController.retryJob(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Job not found' })
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Job not found' }));
     });
 
     it('should return 400 if job is not failed', async () => {
@@ -496,9 +492,7 @@ describe('JobController', () => {
       await jobController.retryJob(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Job retry failed' })
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Job retry failed' }));
     });
 
     it('should clear error message on retry', async () => {
@@ -596,9 +590,7 @@ describe('JobController', () => {
       await jobController.cancelJob(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(
-        expect.objectContaining({ error: 'Job not found' })
-      );
+      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Job not found' }));
     });
 
     it('should return 400 if job is completed', async () => {

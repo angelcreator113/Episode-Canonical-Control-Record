@@ -90,7 +90,6 @@ describe('Episode Controller - Real Tests', () => {
       );
     });
 
-
     test('should use default pagination values', async () => {
       models.Episode.findAndCountAll = jest.fn().mockResolvedValue({
         count: 0,
@@ -223,7 +222,6 @@ describe('Episode Controller - Real Tests', () => {
         })
       );
     });
-
 
     test.skip('should log creation activity', async () => {
       const episode = {
@@ -487,6 +485,5 @@ describe('Episode Controller - Real Tests', () => {
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
     });
-
   });
 });

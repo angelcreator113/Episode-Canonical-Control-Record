@@ -1,10 +1,7 @@
 /* eslint-disable no-unused-vars */
 const { models } = require('../models');
 const { Episode, MetadataStorage } = models;
-const {
-  NotFoundError,
-  ValidationError,
-} = require('../middleware/errorHandler');
+const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
 const { logger } = require('../middleware/auditLog');
 
 /**
@@ -38,16 +35,10 @@ module.exports = {
       });
 
       // Log activity
-      await logger.logAction(
-        req.user?.id || 'anonymous',
-        'view',
-        'metadata',
-        'all',
-        {
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-        }
-      );
+      await logger.logAction(req.user?.id || 'anonymous', 'view', 'metadata', 'all', {
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
 
       res.json({
         data: rows,
@@ -93,16 +84,10 @@ module.exports = {
     }
 
     // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'metadata',
-      id,
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id || 'anonymous', 'view', 'metadata', id, {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({ data: metadata });
   },
@@ -151,10 +136,7 @@ module.exports = {
     } = req.body;
 
     if (!episodeId) {
-      throw new ValidationError(
-        'Missing required fields',
-        { episodeId: 'required' }
-      );
+      throw new ValidationError('Missing required fields', { episodeId: 'required' });
     }
 
     // Verify episode exists
@@ -169,33 +151,33 @@ module.exports = {
       sentimentAnalysis: sentimentAnalysis ? JSON.parse(JSON.stringify(sentimentAnalysis)) : null,
       visualObjects: visualObjects ? JSON.parse(JSON.stringify(visualObjects)) : null,
       transcription,
-      tags: tags ? Array.isArray(tags) ? tags : JSON.parse(tags) : null,
-      categories: categories ? Array.isArray(categories) ? categories : JSON.parse(categories) : null,
-      processingDurationSeconds: processingDurationSeconds ? parseInt(processingDurationSeconds) : null,
+      tags: tags ? (Array.isArray(tags) ? tags : JSON.parse(tags)) : null,
+      categories: categories
+        ? Array.isArray(categories)
+          ? categories
+          : JSON.parse(categories)
+        : null,
+      processingDurationSeconds: processingDurationSeconds
+        ? parseInt(processingDurationSeconds)
+        : null,
       extractionTimestamp: new Date(),
     });
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'create',
-      'metadata',
-      metadata.id,
-      {
-        newValues: {
-          episodeId,
-          extractedText: extractedText ? 'present' : null,
-          scenesDetected: scenesDetected ? 'present' : null,
-          sentimentAnalysis: sentimentAnalysis ? 'present' : null,
-          visualObjects: visualObjects ? 'present' : null,
-          transcription: transcription ? 'present' : null,
-          tags,
-          categories,
-        },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'create', 'metadata', metadata.id, {
+      newValues: {
+        episodeId,
+        extractedText: extractedText ? 'present' : null,
+        scenesDetected: scenesDetected ? 'present' : null,
+        sentimentAnalysis: sentimentAnalysis ? 'present' : null,
+        visualObjects: visualObjects ? 'present' : null,
+        transcription: transcription ? 'present' : null,
+        tags,
+        categories,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.status(201).json({
       data: metadata,
@@ -233,10 +215,14 @@ module.exports = {
       extractionTimestamp: new Date(),
     };
 
-    allowedFields.forEach(field => {
+    allowedFields.forEach((field) => {
       if (field in updates) {
-        if (typeof updates[field] === 'string' && 
-            ['scenesDetected', 'sentimentAnalysis', 'visualObjects', 'tags', 'categories'].includes(field)) {
+        if (
+          typeof updates[field] === 'string' &&
+          ['scenesDetected', 'sentimentAnalysis', 'visualObjects', 'tags', 'categories'].includes(
+            field
+          )
+        ) {
           try {
             updateData[field] = JSON.parse(updates[field]);
           } catch (e) {
@@ -251,32 +237,26 @@ module.exports = {
     await metadata.update(updateData);
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'edit',
-      'metadata',
-      id,
-      {
-        oldValues: {
-          ...oldValues,
-          extractedText: oldValues.extractedText ? 'present' : null,
-          scenesDetected: oldValues.scenesDetected ? 'present' : null,
-          sentimentAnalysis: oldValues.sentimentAnalysis ? 'present' : null,
-          visualObjects: oldValues.visualObjects ? 'present' : null,
-          transcription: oldValues.transcription ? 'present' : null,
-        },
-        newValues: {
-          ...metadata.toJSON(),
-          extractedText: metadata.extractedText ? 'present' : null,
-          scenesDetected: metadata.scenesDetected ? 'present' : null,
-          sentimentAnalysis: metadata.sentimentAnalysis ? 'present' : null,
-          visualObjects: metadata.visualObjects ? 'present' : null,
-          transcription: metadata.transcription ? 'present' : null,
-        },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'edit', 'metadata', id, {
+      oldValues: {
+        ...oldValues,
+        extractedText: oldValues.extractedText ? 'present' : null,
+        scenesDetected: oldValues.scenesDetected ? 'present' : null,
+        sentimentAnalysis: oldValues.sentimentAnalysis ? 'present' : null,
+        visualObjects: oldValues.visualObjects ? 'present' : null,
+        transcription: oldValues.transcription ? 'present' : null,
+      },
+      newValues: {
+        ...metadata.toJSON(),
+        extractedText: metadata.extractedText ? 'present' : null,
+        scenesDetected: metadata.scenesDetected ? 'present' : null,
+        sentimentAnalysis: metadata.sentimentAnalysis ? 'present' : null,
+        visualObjects: metadata.visualObjects ? 'present' : null,
+        transcription: metadata.transcription ? 'present' : null,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: metadata,
@@ -300,17 +280,11 @@ module.exports = {
     await metadata.destroy();
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'delete',
-      'metadata',
-      id,
-      {
-        oldValues,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'delete', 'metadata', id, {
+      oldValues,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       message: `Metadata ${id} deleted successfully`,
@@ -325,10 +299,7 @@ module.exports = {
     const { tags } = req.body;
 
     if (!tags || !Array.isArray(tags) || tags.length === 0) {
-      throw new ValidationError(
-        'Invalid tags',
-        { tags: 'Must be non-empty array' }
-      );
+      throw new ValidationError('Invalid tags', { tags: 'Must be non-empty array' });
     }
 
     const metadata = await MetadataStorage.findByPk(id);
@@ -340,18 +311,12 @@ module.exports = {
     await metadata.addTags(tags);
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'edit',
-      'metadata',
-      id,
-      {
-        oldValues: { tags: oldTags },
-        newValues: { tags: metadata.tags },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'edit', 'metadata', id, {
+      oldValues: { tags: oldTags },
+      newValues: { tags: metadata.tags },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: metadata,
@@ -367,10 +332,7 @@ module.exports = {
     const { scenes, duration } = req.body;
 
     if (!scenes || !Array.isArray(scenes)) {
-      throw new ValidationError(
-        'Invalid scenes data',
-        { scenes: 'Must be array' }
-      );
+      throw new ValidationError('Invalid scenes data', { scenes: 'Must be array' });
     }
 
     const metadata = await MetadataStorage.findByPk(id);
@@ -384,25 +346,19 @@ module.exports = {
     await metadata.setDetectedScenes(scenes, duration);
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'edit',
-      'metadata',
-      id,
-      {
-        oldValues: {
-          scenesDetected: oldScenes ? 'present' : null,
-          processingDurationSeconds: oldDuration,
-        },
-        newValues: {
-          scenesDetected: 'present',
-          processingDurationSeconds: duration,
-          sceneCount: scenes.length,
-        },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'edit', 'metadata', id, {
+      oldValues: {
+        scenesDetected: oldScenes ? 'present' : null,
+        processingDurationSeconds: oldDuration,
+      },
+      newValues: {
+        scenesDetected: 'present',
+        processingDurationSeconds: duration,
+        sceneCount: scenes.length,
+      },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: metadata,

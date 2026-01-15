@@ -183,7 +183,9 @@ describe('Metadata Controller', () => {
       await metadataController.deleteMetadata(mockReq, mockRes);
 
       expect(mockMeta.destroy).toHaveBeenCalled();
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ message: expect.any(String) }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: expect.any(String) })
+      );
     });
   });
 
@@ -283,15 +285,15 @@ describe('Metadata Controller', () => {
       await metadataController.getMetadataSummary(mockReq, mockRes);
 
       expect(models.MetadataStorage.findByPk).toHaveBeenCalledWith(1);
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ data: expect.any(Object) }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ data: expect.any(Object) })
+      );
     });
   });
 
   describe('Error Handling', () => {
     test('should handle database errors', async () => {
-      models.MetadataStorage.findAndCountAll = jest.fn().mockRejectedValue(
-        new Error('DB error')
-      );
+      models.MetadataStorage.findAndCountAll = jest.fn().mockRejectedValue(new Error('DB error'));
 
       await metadataController.listMetadata(mockReq, mockRes);
 

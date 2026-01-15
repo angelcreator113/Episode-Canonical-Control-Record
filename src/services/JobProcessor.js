@@ -61,11 +61,11 @@ class JobProcessor {
   static async stop() {
     this.isRunning = false;
     logger.info('Job processor stopping');
-    
+
     // Wait for active jobs to complete
     let waitTime = 0;
     while (this.activeJobs > 0 && waitTime < 30000) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await new Promise((resolve) => setTimeout(resolve, 1000));
       waitTime += 1000;
     }
 
@@ -92,7 +92,7 @@ class JobProcessor {
       logger.info('Processing messages from queue', { count: messages.length });
 
       // Process messages concurrently up to maxConcurrent
-      const promises = messages.map(message => this.handleMessage(message));
+      const promises = messages.map((message) => this.handleMessage(message));
       await Promise.all(promises);
 
       // Continue polling
@@ -142,7 +142,7 @@ class JobProcessor {
       await this.processJob(job, handler, receiptHandle);
     } catch (error) {
       logger.error('Error handling message', { error, jobId });
-      
+
       if (jobId) {
         await this.handleJobError(jobId, error, receiptHandle);
       } else {
@@ -186,7 +186,7 @@ class JobProcessor {
     try {
       await Job.updateStatus(jobId, JOB_STATUS.COMPLETED, {
         results: results,
-        completedAt: new Date()
+        completedAt: new Date(),
       });
 
       await QueueService.deleteMessage(receiptHandle);
@@ -269,7 +269,7 @@ class JobProcessor {
         // Max retries exceeded, move to DLQ
         await Job.updateStatus(jobId, JOB_STATUS.FAILED, {
           errorMessage: error.message,
-          completedAt: new Date()
+          completedAt: new Date(),
         });
 
         await ErrorRecovery.moveToDLQ(jobId, `Max retries exceeded: ${error.message}`);
@@ -326,7 +326,7 @@ class JobProcessor {
       maxConcurrent: this.maxConcurrent,
       pollInterval: this.pollInterval,
       handlersRegistered: this.handlers.size,
-      handlers: Array.from(this.handlers.keys())
+      handlers: Array.from(this.handlers.keys()),
     };
   }
 }

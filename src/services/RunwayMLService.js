@@ -39,18 +39,14 @@ class RunwayMLService {
       const formData = new FormData();
       formData.append('image', imageBuffer, 'image.jpg');
 
-      const response = await axios.post(
-        `${this.baseUrl}/remove-background`,
-        formData,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            ...formData.getHeaders(),
-          },
-          responseType: 'arraybuffer',
-          timeout: this.timeout,
-        }
-      );
+      const response = await axios.post(`${this.baseUrl}/remove-background`, formData, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          ...formData.getHeaders(),
+        },
+        responseType: 'arraybuffer',
+        timeout: this.timeout,
+      });
 
       console.log('✅ Background removal complete');
       return Buffer.from(response.data);
@@ -76,18 +72,14 @@ class RunwayMLService {
       const formData = new FormData();
       formData.append('image', imageBuffer, 'image.jpg');
 
-      const response = await axios.post(
-        `${this.baseUrl}/enhance`,
-        formData,
-        {
-          headers: {
-            'Authorization': `Bearer ${this.apiKey}`,
-            ...formData.getHeaders(),
-          },
-          responseType: 'arraybuffer',
-          timeout: this.timeout,
-        }
-      );
+      const response = await axios.post(`${this.baseUrl}/enhance`, formData, {
+        headers: {
+          Authorization: `Bearer ${this.apiKey}`,
+          ...formData.getHeaders(),
+        },
+        responseType: 'arraybuffer',
+        timeout: this.timeout,
+      });
 
       console.log('✅ Image enhancement complete');
       return Buffer.from(response.data);

@@ -188,7 +188,7 @@ router.post('/test-token', async (req, res) => {
 router.post('/logout', authenticateJWT, (req, res) => {
   try {
     const { authorization } = req.headers;
-    
+
     if (authorization) {
       const token = authorization.split(' ')[1];
       // Revoke the token

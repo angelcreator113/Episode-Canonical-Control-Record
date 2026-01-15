@@ -50,10 +50,12 @@ describe('Authentication Middleware', () => {
     test('should return 401 if token is expired', async () => {
       // Create expired token
       const header = Buffer.from(JSON.stringify({ alg: 'HS256' })).toString('base64');
-      const payload = Buffer.from(JSON.stringify({
-        sub: 'user123',
-        exp: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago
-      })).toString('base64');
+      const payload = Buffer.from(
+        JSON.stringify({
+          sub: 'user123',
+          exp: Math.floor(Date.now() / 1000) - 3600, // 1 hour ago
+        })
+      ).toString('base64');
       const token = `${header}.${payload}.signature`;
 
       mockReq.headers.authorization = `Bearer ${token}`;
@@ -258,22 +260,22 @@ describe('Token Expiration Validation', () => {
   it('should accept valid tokens', async () => {
     // Generate token that expires in 1 hour
     const validToken = testUtils.generateMockToken(
-      'user123', 
+      'user123',
       ['admin'],
       Date.now() + 3600000 // 1 hour from now
     );
-    
-    const req = { 
-      headers: { authorization: `Bearer ${validToken}` } 
+
+    const req = {
+      headers: { authorization: `Bearer ${validToken}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
     expect(req.user).toBeDefined();
     expect(req.user.id).toBe('user123');
@@ -286,37 +288,38 @@ describe('Token Expiration Validation', () => {
 describe('Issuer and Audience Validation', () => {
   it('should validate token issuer matches Cognito', async () => {
     const token = testUtils.generateMockToken('user123', ['admin']);
-    
-    const req = { 
-      headers: { authorization: `Bearer ${token}` } 
+
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     // Token should be accepted with correct issuer
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should reject tokens with wrong issuer', async () => {
     // Create token with wrong issuer
-    const wrongIssuerToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiY29nbml0bzpncm91cHMiOlsiYWRtaW4iXSwiaXNzIjoiaHR0cHM6Ly93cm9uZy1pc3N1ZXIuY29tIiwiYXVkIjoid3JvbmctYXVkaWVuY2UiLCJleHAiOjk5OTk5OTk5OTl9.signature';
-    
-    const req = { 
-      headers: { authorization: `Bearer ${wrongIssuerToken}` } 
+    const wrongIssuerToken =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiY29nbml0bzpncm91cHMiOlsiYWRtaW4iXSwiaXNzIjoiaHR0cHM6Ly93cm9uZy1pc3N1ZXIuY29tIiwiYXVkIjoid3JvbmctYXVkaWVuY2UiLCJleHAiOjk5OTk5OTk5OTl9.signature';
+
+    const req = {
+      headers: { authorization: `Bearer ${wrongIssuerToken}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     // Should handle token with wrong issuer (reject or error)
     expect(res.status || !next.called).toBeDefined();
   });
@@ -328,93 +331,93 @@ describe('Issuer and Audience Validation', () => {
 describe('Group Extraction from Claims', () => {
   it('should extract groups from cognito:groups claim', async () => {
     const token = testUtils.generateMockToken('user123', ['admin', 'editor', 'viewer']);
-    
-    const req = { 
-      headers: { authorization: `Bearer ${token}` } 
+
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     expect(req.user.groups).toEqual(expect.arrayContaining(['admin', 'editor', 'viewer']));
     expect(req.user.groups).toHaveLength(3);
   });
-  
+
   it('should handle missing groups claim gracefully', async () => {
     // Token without groups claim - create a basic valid token without groups
     const tokenWithoutGroups = testUtils.generateMockToken('user123', []);
-    
-    const req = { 
-      headers: { authorization: `Bearer ${tokenWithoutGroups}` } 
+
+    const req = {
+      headers: { authorization: `Bearer ${tokenWithoutGroups}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
     expect(req.user.groups).toEqual([]); // Empty array, not undefined
   });
-  
+
   it('should handle empty groups array', async () => {
     const token = testUtils.generateMockToken('user123', []);
-    
-    const req = { 
-      headers: { authorization: `Bearer ${token}` } 
+
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     expect(req.user.groups).toEqual([]);
   });
-  
+
   it('should extract user ID from sub claim', async () => {
     const userId = 'user-abc-123-xyz';
     const token = testUtils.generateMockToken(userId, ['admin']);
-    
-    const req = { 
-      headers: { authorization: `Bearer ${token}` } 
+
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     // Middleware should extract the user ID from token sub claim
     expect(req.user.id).toBe(userId);
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should extract email from claims', async () => {
     // Generate token and verify email is extracted
     const token = testUtils.generateMockToken('user123', ['admin']);
-    
-    const req = { 
-      headers: { authorization: `Bearer ${token}` } 
+
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     // Email should be extracted or user should have email property
     expect(next).toHaveBeenCalled();
     if (req.user && req.user.email) {
@@ -429,76 +432,71 @@ describe('Group Extraction from Claims', () => {
 describe('Token Format and Bearer Validation', () => {
   it('should handle Bearer with different casing', async () => {
     const token = testUtils.generateMockToken('user123', ['admin']);
-    
-    const testCases = [
-      `Bearer ${token}`,
-      `bearer ${token}`,
-      `BEARER ${token}`,
-      `BeArEr ${token}`
-    ];
-    
+
+    const testCases = [`Bearer ${token}`, `bearer ${token}`, `BEARER ${token}`, `BeArEr ${token}`];
+
     for (const authHeader of testCases) {
       const req = { headers: { authorization: authHeader } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
-      
+
       await authenticateToken(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     }
   });
-  
+
   it('should reject tokens without Bearer prefix', async () => {
     const token = testUtils.generateMockToken('user123', ['admin']);
-    
-    const req = { 
-      headers: { authorization: token } // Missing "Bearer "
+
+    const req = {
+      headers: { authorization: token }, // Missing "Bearer "
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(401);
   });
-  
+
   it('should handle extra whitespace in authorization header', async () => {
     const token = testUtils.generateMockToken('user123', ['admin']);
-    
-    const req = { 
-      headers: { authorization: `Bearer ${token}` } 
+
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     // Middleware should handle the token regardless of whitespace handling
     await authenticateToken(req, res, next);
-    
+
     // Should either accept or reject cleanly
     expect(res.status || next).toBeDefined();
   });
-  
+
   it('should reject completely malformed tokens', async () => {
-    const req = { 
-      headers: { authorization: 'Bearer not.a.valid.jwt.token.format' } 
+    const req = {
+      headers: { authorization: 'Bearer not.a.valid.jwt.token.format' },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(401);
   });
 });
@@ -509,58 +507,64 @@ describe('Token Format and Bearer Validation', () => {
 describe('Error Handling and Edge Cases', () => {
   it('should handle tokens with invalid signature', async () => {
     // Create a token with invalid signature by using a base64 encoded malformed token
-    const invalidSignatureToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiY29nbml0bzpncm91cHMiOlsiYWRtaW4iXSwiZXhwIjo5OTk5OTk5OTk5fQ.invalidsignature';
-    
-    const req = { 
-      headers: { authorization: `Bearer ${invalidSignatureToken}` } 
+    const invalidSignatureToken =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyMTIzIiwiY29nbml0bzpncm91cHMiOlsiYWRtaW4iXSwiZXhwIjo5OTk5OTk5OTk5fQ.invalidsignature';
+
+    const req = {
+      headers: { authorization: `Bearer ${invalidSignatureToken}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     // Should reject or handle the token
     expect(res.status || next).toBeDefined();
   });
-  
+
   it('should not expose sensitive error details', async () => {
-    const req = { 
-      headers: { authorization: 'Bearer invalid' } 
+    const req = {
+      headers: { authorization: 'Bearer invalid' },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     expect(res.json).toHaveBeenCalled();
     const errorResponse = res.json.mock.calls[0][0];
-    
+
     // Should not expose internal error details
     expect(errorResponse).not.toHaveProperty('stack');
     expect(errorResponse.error).toBeDefined();
   });
-  
+
   it('should handle very long tokens', async () => {
     // Create a valid token with long user ID
-    const token = testUtils.generateMockToken('a'.repeat(100), ['admin', 'editor', 'viewer', 'moderator']);
-    
-    const req = { 
-      headers: { authorization: `Bearer ${token}` } 
+    const token = testUtils.generateMockToken('a'.repeat(100), [
+      'admin',
+      'editor',
+      'viewer',
+      'moderator',
+    ]);
+
+    const req = {
+      headers: { authorization: `Bearer ${token}` },
     };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     await authenticateToken(req, res, next);
-    
+
     // Should handle gracefully - expect either success or error handling
     expect(res.status || next).toBeDefined();
   });

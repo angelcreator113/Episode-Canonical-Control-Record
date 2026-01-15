@@ -143,7 +143,9 @@ describe('FileController', () => {
       await fileController.uploadFile(req, res);
 
       expect(res.status).toHaveBeenCalledWith(404);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Episode not found' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Episode not found' })
+      );
     });
 
     it('should return 400 if file validation fails', async () => {
@@ -183,7 +185,9 @@ describe('FileController', () => {
       await fileController.uploadFile(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'File upload failed' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'File upload failed' })
+      );
     });
 
     it('should enqueue indexing job', async () => {
@@ -337,7 +341,9 @@ describe('FileController', () => {
       await fileController.getPreSignedUrl(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Failed to generate download URL' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Failed to generate download URL' })
+      );
     });
   });
 
@@ -359,9 +365,14 @@ describe('FileController', () => {
 
       await fileController.deleteFile(req, res);
 
-      expect(S3Service.deleteFile).toHaveBeenCalledWith('brd-episodes-dev', 'episodes/ep-123/video/test.mp4');
+      expect(S3Service.deleteFile).toHaveBeenCalledWith(
+        'brd-episodes-dev',
+        'episodes/ep-123/video/test.mp4'
+      );
       expect(mockFile.destroy).toHaveBeenCalled();
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'File deleted successfully' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'File deleted successfully' })
+      );
     });
 
     it('should return 404 if file not found', async () => {
@@ -392,7 +403,9 @@ describe('FileController', () => {
       await fileController.deleteFile(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'File deletion failed' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'File deletion failed' })
+      );
     });
   });
 
@@ -450,7 +463,9 @@ describe('FileController', () => {
       await fileController.listEpisodeFiles(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Failed to list files' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Failed to list files' })
+      );
     });
   });
 });

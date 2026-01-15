@@ -13,7 +13,9 @@ describe('Job Model', () => {
 
   beforeAll(async () => {
     // Ensure jobs table exists
-    await db.query(`
+    await db
+      .query(
+        `
       CREATE TABLE IF NOT EXISTS jobs (
         id UUID PRIMARY KEY,
         user_id VARCHAR(255),
@@ -30,7 +32,9 @@ describe('Job Model', () => {
         next_retry_at TIMESTAMP,
         updated_at TIMESTAMP
       );
-    `).catch(() => {});
+    `
+      )
+      .catch(() => {});
   });
 
   afterEach(async () => {
@@ -45,7 +49,7 @@ describe('Job Model', () => {
       const jobData = {
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4(), frameTimestamps: [0, 5, 10] }
+        payload: { episodeId: uuidv4(), frameTimestamps: [0, 5, 10] },
       };
 
       const job = await Job.create(jobData);
@@ -63,7 +67,7 @@ describe('Job Model', () => {
       const job = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.VIDEO_PROCESSING,
-        payload: { videoUrl: 'https://example.com/video.mp4' }
+        payload: { videoUrl: 'https://example.com/video.mp4' },
       });
       createdJobId = job.id;
 
@@ -75,7 +79,7 @@ describe('Job Model', () => {
         userId: testUserId,
         jobType: JOB_TYPE.BULK_EXPORT,
         payload: { episodeIds: [uuidv4()] },
-        maxRetries: 5
+        maxRetries: 5,
       });
       createdJobId = job.id;
 
@@ -88,7 +92,7 @@ describe('Job Model', () => {
       const created = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       createdJobId = created.id;
 
@@ -112,7 +116,7 @@ describe('Job Model', () => {
         const job = await Job.create({
           userId: testUserId,
           jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-          payload: { episodeId: uuidv4() }
+          payload: { episodeId: uuidv4() },
         });
         jobs.push(job.id);
       }
@@ -139,12 +143,12 @@ describe('Job Model', () => {
       const created = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       createdJobId = created.id;
 
       const updated = await Job.updateStatus(created.id, JOB_STATUS.PROCESSING, {
-        startedAt: new Date()
+        startedAt: new Date(),
       });
 
       expect(updated.status).toBe(JOB_STATUS.PROCESSING);
@@ -155,14 +159,14 @@ describe('Job Model', () => {
       const created = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       createdJobId = created.id;
 
       const results = { thumbnailsGenerated: 5, s3Urls: [] };
       const updated = await Job.updateStatus(created.id, JOB_STATUS.COMPLETED, {
         results: results,
-        completedAt: new Date()
+        completedAt: new Date(),
       });
 
       expect(updated.status).toBe(JOB_STATUS.COMPLETED);
@@ -173,13 +177,13 @@ describe('Job Model', () => {
       const created = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.VIDEO_PROCESSING,
-        payload: { videoUrl: 'https://example.com/video.mp4' }
+        payload: { videoUrl: 'https://example.com/video.mp4' },
       });
       createdJobId = created.id;
 
       const errorMsg = 'Video processing failed: Invalid format';
       const updated = await Job.updateStatus(created.id, JOB_STATUS.FAILED, {
-        errorMessage: errorMsg
+        errorMessage: errorMsg,
       });
 
       expect(updated.status).toBe(JOB_STATUS.FAILED);
@@ -192,7 +196,7 @@ describe('Job Model', () => {
       const created = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       createdJobId = created.id;
 
@@ -205,7 +209,7 @@ describe('Job Model', () => {
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
         payload: { episodeId: uuidv4() },
-        maxRetries: 2
+        maxRetries: 2,
       });
       createdJobId = created.id;
 
@@ -220,7 +224,7 @@ describe('Job Model', () => {
       const created = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       createdJobId = created.id;
 
@@ -234,7 +238,7 @@ describe('Job Model', () => {
       const created = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       createdJobId = created.id;
 
@@ -246,13 +250,13 @@ describe('Job Model', () => {
       const created = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       createdJobId = created.id;
 
       // Mark as completed
       await Job.updateStatus(created.id, JOB_STATUS.COMPLETED, {
-        completedAt: new Date()
+        completedAt: new Date(),
       });
 
       const result = await Job.cancel(created.id);
@@ -265,7 +269,7 @@ describe('Job Model', () => {
       const job = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       createdJobId = job.id;
 
@@ -277,7 +281,7 @@ describe('Job Model', () => {
   describe('getStats', () => {
     test('should return job statistics', async () => {
       const stats = await Job.getStats();
-      
+
       expect(stats).toBeDefined();
       expect(stats.total).toBeDefined();
       expect(stats.pending).toBeDefined();
@@ -302,7 +306,7 @@ describe('Job Model', () => {
         started_at: null,
         completed_at: null,
         next_retry_at: null,
-        updated_at: new Date()
+        updated_at: new Date(),
       };
 
       const formatted = Job.formatJob(row);
@@ -317,7 +321,7 @@ describe('Job Model', () => {
       const row = {
         id: uuidv4(),
         payload: JSON.stringify(payload),
-        results: null
+        results: null,
       };
 
       const formatted = Job.formatJob(row);

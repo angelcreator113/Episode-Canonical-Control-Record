@@ -27,11 +27,9 @@ describe('Assets API Integration Tests', () => {
 
   describe('POST /api/v1/assets', () => {
     it('should reject asset upload without file', async () => {
-      const res = await request(app)
-        .post('/api/v1/assets')
-        .send({
-          assetType: 'PROMO_LALA',
-        });
+      const res = await request(app).post('/api/v1/assets').send({
+        assetType: 'PROMO_LALA',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error');
@@ -67,7 +65,7 @@ describe('Assets API Integration Tests', () => {
         'PROMO_JUSTAWOMANINPERPRIME',
         'PROMO_GUEST',
         'BRAND_LOGO',
-        'EPISODE_FRAME'
+        'EPISODE_FRAME',
       ];
 
       for (const type of validTypes) {
@@ -131,8 +129,7 @@ describe('Assets API Integration Tests', () => {
 
   describe('GET /api/v1/assets/:id', () => {
     it('should reject request with invalid UUID', async () => {
-      const res = await request(app)
-        .get('/api/v1/assets/not-a-uuid');
+      const res = await request(app).get('/api/v1/assets/not-a-uuid');
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error');
@@ -141,8 +138,7 @@ describe('Assets API Integration Tests', () => {
 
     it('should handle valid UUID format', async () => {
       const validUUID = '123e4567-e89b-12d3-a456-426614174000';
-      const res = await request(app)
-        .get(`/api/v1/assets/${validUUID}`);
+      const res = await request(app).get(`/api/v1/assets/${validUUID}`);
 
       // May return 404 if not found, but not validation error
       expect(res.status).not.toBe(400);
@@ -151,8 +147,7 @@ describe('Assets API Integration Tests', () => {
 
   describe('GET /api/v1/assets/approved/:type', () => {
     it('should list approved PROMO_LALA assets', async () => {
-      const res = await request(app)
-        .get('/api/v1/assets/approved/PROMO_LALA');
+      const res = await request(app).get('/api/v1/assets/approved/PROMO_LALA');
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('status', 'SUCCESS');
@@ -165,12 +160,11 @@ describe('Assets API Integration Tests', () => {
         'PROMO_JUSTAWOMANINPERPRIME',
         'PROMO_GUEST',
         'BRAND_LOGO',
-        'EPISODE_FRAME'
+        'EPISODE_FRAME',
       ];
 
       for (const type of types) {
-        const res = await request(app)
-          .get(`/api/v1/assets/approved/${type}`);
+        const res = await request(app).get(`/api/v1/assets/approved/${type}`);
 
         expect(res.status).toBe(200);
         expect(res.body.status).toBe('SUCCESS');
@@ -179,8 +173,7 @@ describe('Assets API Integration Tests', () => {
     });
 
     it('should reject invalid asset type', async () => {
-      const res = await request(app)
-        .get('/api/v1/assets/approved/INVALID_TYPE');
+      const res = await request(app).get('/api/v1/assets/approved/INVALID_TYPE');
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error');
@@ -189,8 +182,7 @@ describe('Assets API Integration Tests', () => {
 
   describe('GET /api/v1/assets/pending', () => {
     it('should list pending assets', async () => {
-      const res = await request(app)
-        .get('/api/v1/assets/pending');
+      const res = await request(app).get('/api/v1/assets/pending');
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('status', 'SUCCESS');
@@ -201,17 +193,14 @@ describe('Assets API Integration Tests', () => {
   describe('Error Handling', () => {
     it('should return proper error for non-existent asset', async () => {
       const nonExistentId = '00000000-0000-0000-0000-000000000000';
-      const res = await request(app)
-        .get(`/api/v1/assets/${nonExistentId}`);
+      const res = await request(app).get(`/api/v1/assets/${nonExistentId}`);
 
       expect(res.status).toBe(404);
       expect(res.body).toHaveProperty('error');
     });
 
     it('should handle malformed requests gracefully', async () => {
-      const res = await request(app)
-        .post('/api/v1/assets')
-        .send('invalid body format');
+      const res = await request(app).post('/api/v1/assets').send('invalid body format');
 
       expect(res.status).toBe(400);
     });
@@ -223,24 +212,22 @@ describe('Assets API Integration Tests', () => {
         {
           name: 'missing assetType',
           fields: {},
-          expectedError: 'assetType is required'
+          expectedError: 'assetType is required',
         },
         {
           name: 'invalid assetType',
           fields: { assetType: 'UNKNOWN' },
-          expectedError: 'must be one of'
+          expectedError: 'must be one of',
         },
         {
           name: 'invalid JSON metadata',
           fields: { assetType: 'PROMO_LALA', metadata: '{bad}' },
-          expectedError: 'valid JSON'
-        }
+          expectedError: 'valid JSON',
+        },
       ];
 
       for (const testCase of testCases) {
-        const req = request(app)
-          .post('/api/v1/assets')
-          .set('Content-Type', 'multipart/form-data');
+        const req = request(app).post('/api/v1/assets').set('Content-Type', 'multipart/form-data');
 
         // Add fields
         Object.entries(testCase.fields).forEach(([key, value]) => {

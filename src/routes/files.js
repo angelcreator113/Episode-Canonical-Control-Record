@@ -24,7 +24,13 @@ const upload = multer({
  * Upload file to episode
  */
 const uploadHandler = (req, res) => fileController.uploadFile(req, res);
-router.post('/:episodeId/upload', authenticateToken, upload.single('file'), uploadValidation, uploadHandler);
+router.post(
+  '/:episodeId/upload',
+  authenticateToken,
+  upload.single('file'),
+  uploadValidation,
+  uploadHandler
+);
 
 /**
  * GET /api/files/:episodeId/:fileId/download

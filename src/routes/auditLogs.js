@@ -87,10 +87,7 @@ router.get('/stats', authenticate, authorize(['ADMIN']), async (req, res) => {
 
     // Get stats by user
     const userStats = await models.ActivityLog.findAll({
-      attributes: [
-        'userId',
-        [models.sequelize.fn('COUNT', models.sequelize.col('id')), 'count'],
-      ],
+      attributes: ['userId', [models.sequelize.fn('COUNT', models.sequelize.col('id')), 'count']],
       where,
       group: ['userId'],
       order: [[models.sequelize.fn('COUNT', models.sequelize.col('id')), 'DESC']],

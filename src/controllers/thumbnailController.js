@@ -1,10 +1,6 @@
 const { models } = require('../models');
 const { Episode, Thumbnail } = models;
-const {
-  NotFoundError,
-  ValidationError,
-  ConflictError,
-} = require('../middleware/errorHandler');
+const { NotFoundError, ValidationError, ConflictError } = require('../middleware/errorHandler');
 const { logger } = require('../middleware/auditLog');
 
 /**
@@ -39,7 +35,7 @@ module.exports = {
           'thumbnailType',
           'positionSeconds',
           'generatedAt',
-          'qualityRating'
+          'qualityRating',
         ],
         where,
         limit: parseInt(limit),
@@ -65,7 +61,7 @@ module.exports = {
       console.error('❌ Error in listThumbnails:', error);
       res.status(500).json({
         error: 'Failed to list thumbnails',
-        message: error.message
+        message: error.message,
       });
     }
   },
@@ -91,7 +87,7 @@ module.exports = {
           'thumbnailType',
           'positionSeconds',
           'generatedAt',
-          'qualityRating'
+          'qualityRating',
         ],
         include: {
           model: Episode,
@@ -103,7 +99,7 @@ module.exports = {
       if (!thumbnail) {
         return res.status(404).json({
           error: 'Thumbnail not found',
-          id
+          id,
         });
       }
 
@@ -112,7 +108,7 @@ module.exports = {
       console.error('❌ Error in getThumbnail:', error);
       res.status(500).json({
         error: 'Failed to get thumbnail',
-        message: error.message
+        message: error.message,
       });
     }
   },
@@ -137,14 +133,11 @@ module.exports = {
 
     // Validate required fields
     if (!episodeId || !s3Bucket || !s3Key) {
-      throw new ValidationError(
-        'Missing required fields',
-        {
-          episodeId: !episodeId ? 'required' : null,
-          s3Bucket: !s3Bucket ? 'required' : null,
-          s3Key: !s3Key ? 'required' : null,
-        }
-      );
+      throw new ValidationError('Missing required fields', {
+        episodeId: !episodeId ? 'required' : null,
+        s3Bucket: !s3Bucket ? 'required' : null,
+        s3Key: !s3Key ? 'required' : null,
+      });
     }
 
     // Verify episode exists
@@ -156,10 +149,7 @@ module.exports = {
     // Check for duplicate s3Key
     const existingThumbnail = await Thumbnail.findOne({ where: { s3Key } });
     if (existingThumbnail) {
-      throw new ConflictError(
-        'Thumbnail with this S3 key already exists',
-        { s3Key }
-      );
+      throw new ConflictError('Thumbnail with this S3 key already exists', { s3Key });
     }
 
     const thumbnail = await Thumbnail.create({
@@ -177,17 +167,11 @@ module.exports = {
     });
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'create',
-      'thumbnail',
-      thumbnail.id,
-      {
-        newValues: thumbnail.toJSON(),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'create', 'thumbnail', thumbnail.id, {
+      newValues: thumbnail.toJSON(),
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.status(201).json({
       data: thumbnail,
@@ -219,7 +203,7 @@ module.exports = {
     ];
 
     const updateData = {};
-    allowedFields.forEach(field => {
+    allowedFields.forEach((field) => {
       if (field in updates) {
         updateData[field] = updates[field];
       }
@@ -228,18 +212,12 @@ module.exports = {
     await thumbnail.update(updateData);
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'edit',
-      'thumbnail',
-      id,
-      {
-        oldValues,
-        newValues: thumbnail.toJSON(),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'edit', 'thumbnail', id, {
+      oldValues,
+      newValues: thumbnail.toJSON(),
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: thumbnail,
@@ -263,17 +241,11 @@ module.exports = {
     await thumbnail.destroy();
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'delete',
-      'thumbnail',
-      id,
-      {
-        oldValues,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'delete', 'thumbnail', id, {
+      oldValues,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       message: `Thumbnail ${id} deleted successfully`,
@@ -326,16 +298,10 @@ module.exports = {
     }
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'download',
-      'thumbnail',
-      id,
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'download', 'thumbnail', id, {
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     // Prepare download response
     const episode = thumbnail.episode;
@@ -364,12 +330,9 @@ module.exports = {
     const { rating } = req.body;
 
     if (!rating || !['low', 'medium', 'high', 'excellent'].includes(rating)) {
-      throw new ValidationError(
-        'Invalid quality rating',
-        {
-          rating: 'Must be one of: low, medium, high, excellent',
-        }
-      );
+      throw new ValidationError('Invalid quality rating', {
+        rating: 'Must be one of: low, medium, high, excellent',
+      });
     }
 
     const thumbnail = await Thumbnail.findByPk(id);
@@ -381,18 +344,12 @@ module.exports = {
     await thumbnail.setQualityRating(rating);
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'edit',
-      'thumbnail',
-      id,
-      {
-        oldValues: { qualityRating: oldValue },
-        newValues: { qualityRating: rating },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'edit', 'thumbnail', id, {
+      oldValues: { qualityRating: oldValue },
+      newValues: { qualityRating: rating },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: thumbnail,
@@ -414,7 +371,10 @@ module.exports = {
 
     const thumbnails = await Thumbnail.findAll({
       where: { episodeId },
-      order: [['thumbnailType', 'ASC'], ['generatedAt', 'DESC']],
+      order: [
+        ['thumbnailType', 'ASC'],
+        ['generatedAt', 'DESC'],
+      ],
     });
 
     res.json({
@@ -438,10 +398,7 @@ module.exports = {
     });
 
     if (!thumbnail) {
-      throw new NotFoundError(
-        'Primary thumbnail for episode',
-        episodeId
-      );
+      throw new NotFoundError('Primary thumbnail for episode', episodeId);
     }
 
     res.json({

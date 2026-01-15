@@ -163,9 +163,7 @@ describe('Search Integration Tests - Phase 2C', () => {
     });
 
     test('should require authentication', async () => {
-      const res = await request(app)
-        .post('/api/v1/search')
-        .send({ q: 'test' });
+      const res = await request(app).post('/api/v1/search').send({ q: 'test' });
 
       expect(res.status).toBe(401);
     });

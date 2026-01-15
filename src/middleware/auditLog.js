@@ -25,7 +25,7 @@ const getActionType = (method) => {
  */
 const getResourceInfo = (req) => {
   const path = req.path;
-  const parts = path.split('/').filter(p => p);
+  const parts = path.split('/').filter((p) => p);
 
   // Parse route: /api/v1/{resource}/{id}/{action}
   // Examples:
@@ -87,7 +87,7 @@ const getChangeInfo = (req, res) => {
 const captureResponseData = (req, res, next) => {
   const originalJson = res.json;
 
-  res.json = function(data) {
+  res.json = function (data) {
     res.locals.responseData = data?.data || data;
     return originalJson.call(this, data);
   };
@@ -105,10 +105,10 @@ const auditLog = async (req, res, next) => {
 
   const originalSend = res.send;
 
-  res.send = function(data) {
+  res.send = function (data) {
     // Log activity after response is sent
     setImmediate(() => {
-      logActivity(req, res, data).catch(err => {
+      logActivity(req, res, data).catch((err) => {
         console.error('Error logging activity:', err.message);
       });
     });
@@ -126,7 +126,7 @@ const logActivity = async (req, res, _responseData) => {
   try {
     // Skip logging for certain paths
     const skipPaths = ['/health', '/api/v1'];
-    if (skipPaths.some(p => req.path.startsWith(p))) {
+    if (skipPaths.some((p) => req.path.startsWith(p))) {
       return;
     }
 

@@ -61,18 +61,13 @@ class FileController {
       });
 
       // Upload to S3
-      const s3Result = await S3Service.uploadFile(
-        bucket,
-        s3Key,
-        req.file.buffer,
-        {
-          ContentType: req.file.mimetype,
-          Metadata: {
-            episodeId,
-            fileStorageId: fileStorage.id,
-          },
-        }
-      );
+      const s3Result = await S3Service.uploadFile(bucket, s3Key, req.file.buffer, {
+        ContentType: req.file.mimetype,
+        Metadata: {
+          episodeId,
+          fileStorageId: fileStorage.id,
+        },
+      });
 
       // Update file storage with S3 metadata
       await fileStorage.update({
@@ -106,7 +101,7 @@ class FileController {
         action: 'CREATE',
         resourceType: 'file',
         resourceId: fileStorage.id,
-        metadata: { fileName: req.file.originalname, fileType, episodeId, fileSize: req.file.size }
+        metadata: { fileName: req.file.originalname, fileType, episodeId, fileSize: req.file.size },
       }).catch((err) => console.error('Activity logging error:', err));
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
@@ -119,8 +114,8 @@ class FileController {
           fileType,
           fileSize: fileStorage.file_size,
           uploadedBy: req.user?.email || 'unknown',
-          timestamp: new Date()
-        }
+          timestamp: new Date(),
+        },
       }).catch((err) => console.error('WebSocket broadcast error:', err));
 
       // Phase 3A Integration: Notification (non-blocking)
@@ -128,7 +123,7 @@ class FileController {
         userId: req.user?.id,
         type: 'info',
         message: `File "${req.file.originalname}" uploaded successfully`,
-        data: { resourceType: 'file', resourceId: fileStorage.id, episodeId }
+        data: { resourceType: 'file', resourceId: fileStorage.id, episodeId },
       }).catch((err) => console.error('Notification error:', err));
 
       res.status(201).json({
@@ -183,7 +178,7 @@ class FileController {
         action: 'DOWNLOAD',
         resourceType: 'file',
         resourceId: fileId,
-        metadata: { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId }
+        metadata: { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId },
       }).catch((err) => console.error('Activity logging error:', err));
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
@@ -194,8 +189,8 @@ class FileController {
           episodeId,
           fileName: fileStorage.file_name,
           downloadedBy: req.user?.email || 'unknown',
-          timestamp: new Date()
-        }
+          timestamp: new Date(),
+        },
       }).catch((err) => console.error('WebSocket broadcast error:', err));
 
       res.json({
@@ -240,7 +235,7 @@ class FileController {
         action: 'DELETE',
         resourceType: 'file',
         resourceId: fileId,
-        metadata: { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId }
+        metadata: { fileName: fileStorage.file_name, fileType: fileStorage.file_type, episodeId },
       }).catch((err) => console.error('Activity logging error:', err));
 
       // Phase 3A Integration: WebSocket broadcast (non-blocking)
@@ -251,8 +246,8 @@ class FileController {
           episodeId,
           fileName: fileStorage.file_name,
           deletedBy: req.user?.email || 'unknown',
-          timestamp: new Date()
-        }
+          timestamp: new Date(),
+        },
       }).catch((err) => console.error('WebSocket broadcast error:', err));
 
       // Phase 3A Integration: Notification (non-blocking)
@@ -260,7 +255,7 @@ class FileController {
         userId: req.user?.id,
         type: 'info',
         message: `File "${fileStorage.file_name}" deleted`,
-        data: { resourceType: 'file', resourceId: fileId, episodeId }
+        data: { resourceType: 'file', resourceId: fileId, episodeId },
       }).catch((err) => console.error('Notification error:', err));
 
       res.json({ message: 'File deleted successfully' });
@@ -328,10 +323,7 @@ class FileController {
         return res.status(404).json({ error: 'File not found' });
       }
 
-      const metadata = await S3Service.getFileMetadata(
-        fileStorage.s3_bucket,
-        fileStorage.s3_key
-      );
+      const metadata = await S3Service.getFileMetadata(fileStorage.s3_bucket, fileStorage.s3_key);
 
       res.json({
         id: fileStorage.id,

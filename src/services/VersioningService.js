@@ -36,7 +36,7 @@ class VersioningService {
     `;
 
     const result = await pool.query(query, [compositionId]);
-    
+
     if (result.rows.length === 0) {
       throw new Error(`Composition not found: ${compositionId}`);
     }
@@ -91,16 +91,21 @@ class VersioningService {
 
     // Compare key fields
     const fieldsToCompare = [
-      'name', 'template_id', 'background_frame_asset_id',
-      'lala_asset_id', 'guest_asset_id', 'justawomen_asset_id',
-      'selected_formats', 'status'
+      'name',
+      'template_id',
+      'background_frame_asset_id',
+      'lala_asset_id',
+      'guest_asset_id',
+      'justawomen_asset_id',
+      'selected_formats',
+      'status',
     ];
 
-    fieldsToCompare.forEach(field => {
+    fieldsToCompare.forEach((field) => {
       if (snapshot1[field] !== snapshot2[field]) {
         differences[field] = {
           version_a: snapshot1[field],
-          version_b: snapshot2[field]
+          version_b: snapshot2[field],
         };
       }
     });
@@ -111,16 +116,16 @@ class VersioningService {
         number: versionA,
         created_at: v1.created_at,
         created_by: v1.created_by,
-        snapshot: snapshot1
+        snapshot: snapshot1,
       },
       version_b: {
         number: versionB,
         created_at: v2.created_at,
         created_by: v2.created_by,
-        snapshot: snapshot2
+        snapshot: snapshot2,
       },
       differences: Object.keys(differences).length > 0 ? differences : null,
-      difference_count: Object.keys(differences).length
+      difference_count: Object.keys(differences).length,
     };
   }
 
@@ -141,7 +146,7 @@ class VersioningService {
       SELECT current_version FROM thumbnail_compositions WHERE id = $1
     `;
     const currentResult = await pool.query(currentQuery, [compositionId]);
-    
+
     if (currentResult.rows.length === 0) {
       throw new Error(`Composition not found: ${compositionId}`);
     }
@@ -151,7 +156,7 @@ class VersioningService {
 
     // Restore fields from target version snapshot
     const snapshot = targetVersionData.composition_snapshot;
-    
+
     const updateQuery = `
       UPDATE thumbnail_compositions
       SET 
@@ -182,7 +187,7 @@ class VersioningService {
       snapshot.selected_formats,
       snapshot.status,
       newVersion,
-      userId
+      userId,
     ]);
 
     // Create version entry for the revert action
@@ -200,7 +205,7 @@ class VersioningService {
     `;
 
     const revertSummary = `Reverted to v${targetVersion}. Reason: ${reason || 'No reason provided'}`;
-    
+
     await pool.query(versionQuery, [
       compositionId,
       newVersion,
@@ -209,7 +214,7 @@ class VersioningService {
       { revert_from_version: targetVersion, reason: reason },
       userId,
       snapshot.status === 'published',
-      snapshot
+      snapshot,
     ]);
 
     return {
@@ -221,8 +226,8 @@ class VersioningService {
         new_version_number: newVersion,
         reverted_by: userId,
         reason: reason,
-        reverted_at: new Date().toISOString()
-      }
+        reverted_at: new Date().toISOString(),
+      },
     };
   }
 
@@ -292,7 +297,7 @@ class VersioningService {
     return {
       composition_id: compositionId,
       deleted_versions: result.rows.length,
-      retention_days: retentionDays
+      retention_days: retentionDays,
     };
   }
 }
