@@ -10,12 +10,12 @@ const asyncHandler = (fn) => (req, res, next) => {
   Promise.resolve(fn(req, res, next)).catch((error) => {
     // Log error
     console.error('❌ Async handler error:', error.message);
-    
+
     // If headers already sent, pass to error middleware
     if (res.headersSent) {
       return next(error);
     }
-    
+
     // Send error response
     res.status(error.statusCode || 500).json({
       success: false,

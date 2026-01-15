@@ -7,7 +7,21 @@ const ALLOWED_FILE_TYPES = {
   document: ['application/pdf', 'text/plain', 'application/json'],
 };
 
-const ALLOWED_EXTENSIONS = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.txt', '.json'];
+const ALLOWED_EXTENSIONS = [
+  '.mp4',
+  '.mkv',
+  '.webm',
+  '.avi',
+  '.mov',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.pdf',
+  '.txt',
+  '.json',
+];
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 const MAX_FILE_SIZE_IMAGE = 50 * 1024 * 1024; // 50MB for images
 

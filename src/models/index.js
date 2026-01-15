@@ -2,7 +2,7 @@
 
 /**
  * Database Configuration and Model Initialization
- * 
+ *
  * This file:
  * 1. Loads database configuration from config/sequelize.js
  * 2. Initializes all Sequelize models
@@ -26,21 +26,16 @@ if (!dbConfig) {
 /**
  * Initialize Sequelize with environment-specific config
  */
-const sequelize = new Sequelize(
-  dbConfig.database,
-  dbConfig.username,
-  dbConfig.password,
-  {
-    host: dbConfig.host,
-    port: dbConfig.port,
-    dialect: dbConfig.dialect,
-    logging: dbConfig.logging,
-    pool: dbConfig.pool,
-    dialectOptions: dbConfig.dialectOptions,
-    define: dbConfig.define,
-    retry: dbConfig.retry,
-  }
-);
+const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.password, {
+  host: dbConfig.host,
+  port: dbConfig.port,
+  dialect: dbConfig.dialect,
+  logging: dbConfig.logging,
+  pool: dbConfig.pool,
+  dialectOptions: dbConfig.dialectOptions,
+  define: dbConfig.define,
+  retry: dbConfig.retry,
+});
 
 /**
  * Import Models
@@ -57,16 +52,16 @@ try {
   Thumbnail = require('./Thumbnail')(sequelize);
   ProcessingQueue = require('./ProcessingQueue')(sequelize);
   ActivityLog = require('./ActivityLog')(sequelize);
-  
+
   // Phase 2 models
   FileStorage = require('./FileStorage')(sequelize);
   Asset = require('./Asset')(sequelize);
-  
+
   // Phase 2.5 models
   ThumbnailComposition = require('./ThumbnailComposition')(sequelize);
   ThumbnailTemplate = require('./ThumbnailTemplate')(sequelize);
   EpisodeTemplate = require('./EpisodeTemplate')(sequelize);
-  
+
   // Phase 6 models
   Show = require('./Show')(sequelize);
 
@@ -273,7 +268,7 @@ const db = {
       return true;
     } catch (error) {
       console.error('❌ Database connection failed:', error.message);
-      
+
       // Provide helpful error messages
       if (error.message.includes('ECONNREFUSED')) {
         console.error('💡 Is PostgreSQL running?');
@@ -284,7 +279,7 @@ const db = {
         console.error('💡 Create database first:');
         console.error(`   createdb ${dbConfig.database}`);
       }
-      
+
       throw error;
     }
   },
@@ -332,7 +327,7 @@ const db = {
     if (process.env.NODE_ENV === 'production') {
       throw new Error('🚨 Cannot drop database in production!');
     }
-    
+
     const confirmed = process.env.CONFIRM_DROP === 'true';
     if (!confirmed) {
       throw new Error('Set CONFIRM_DROP=true to drop database');
@@ -354,7 +349,16 @@ const db = {
    */
   getStats: async () => {
     try {
-      const [episodes, metadata, thumbnails, processingJobs, activities, files, assets, compositions] = await Promise.all([
+      const [
+        episodes,
+        metadata,
+        thumbnails,
+        processingJobs,
+        activities,
+        files,
+        assets,
+        compositions,
+      ] = await Promise.all([
         Episode.count(),
         MetadataStorage.count(),
         Thumbnail.count(),
@@ -374,7 +378,15 @@ const db = {
         files,
         assets,
         compositions,
-        total: episodes + metadata + thumbnails + processingJobs + activities + files + assets + compositions,
+        total:
+          episodes +
+          metadata +
+          thumbnails +
+          processingJobs +
+          activities +
+          files +
+          assets +
+          compositions,
       };
     } catch (error) {
       console.error('❌ Error getting stats:', error.message);
@@ -389,7 +401,7 @@ const db = {
     try {
       await sequelize.authenticate();
       const stats = await db.getStats();
-      
+
       return {
         status: 'healthy',
         database: dbConfig.database,

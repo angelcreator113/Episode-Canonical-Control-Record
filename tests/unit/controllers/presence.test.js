@@ -82,9 +82,7 @@ describe('Presence Controller', () => {
     it('should enforce max limit of 500', async () => {
       PresenceService.getOnlineUsers.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/presence/online-users')
-        .query({ limit: 1000 });
+      const res = await request(app).get('/api/v1/presence/online-users').query({ limit: 1000 });
 
       expect(res.status).toBe(200);
       const [opts] = PresenceService.getOnlineUsers.mock.calls[0];
@@ -92,10 +90,7 @@ describe('Presence Controller', () => {
     });
 
     it('should return user count', async () => {
-      PresenceService.getOnlineUsers.mockResolvedValue([
-        { userId: 'user1' },
-        { userId: 'user2' },
-      ]);
+      PresenceService.getOnlineUsers.mockResolvedValue([{ userId: 'user1' }, { userId: 'user2' }]);
 
       const res = await request(app).get('/api/v1/presence/online-users');
 
@@ -143,9 +138,7 @@ describe('Presence Controller', () => {
 
       PresenceService.updateUserStatus.mockResolvedValue(mockUpdated);
 
-      const res = await request(app)
-        .post('/api/v1/presence/status')
-        .send({ status: 'online' });
+      const res = await request(app).post('/api/v1/presence/status').send({ status: 'online' });
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -155,9 +148,7 @@ describe('Presence Controller', () => {
     it('should update user status to away', async () => {
       PresenceService.updateUserStatus.mockResolvedValue({ status: 'away' });
 
-      const res = await request(app)
-        .post('/api/v1/presence/status')
-        .send({ status: 'away' });
+      const res = await request(app).post('/api/v1/presence/status').send({ status: 'away' });
 
       expect(res.status).toBe(200);
       expect(PresenceService.updateUserStatus).toHaveBeenCalledWith(
@@ -169,9 +160,7 @@ describe('Presence Controller', () => {
     it('should update user status to offline', async () => {
       PresenceService.updateUserStatus.mockResolvedValue({ status: 'offline' });
 
-      const res = await request(app)
-        .post('/api/v1/presence/status')
-        .send({ status: 'offline' });
+      const res = await request(app).post('/api/v1/presence/status').send({ status: 'offline' });
 
       expect(res.status).toBe(200);
     });
@@ -179,9 +168,7 @@ describe('Presence Controller', () => {
     it('should update user status to dnd (do not disturb)', async () => {
       PresenceService.updateUserStatus.mockResolvedValue({ status: 'dnd' });
 
-      const res = await request(app)
-        .post('/api/v1/presence/status')
-        .send({ status: 'dnd' });
+      const res = await request(app).post('/api/v1/presence/status').send({ status: 'dnd' });
 
       expect(res.status).toBe(200);
     });
@@ -205,18 +192,14 @@ describe('Presence Controller', () => {
     });
 
     it('should reject invalid status', async () => {
-      const res = await request(app)
-        .post('/api/v1/presence/status')
-        .send({ status: 'invalid' });
+      const res = await request(app).post('/api/v1/presence/status').send({ status: 'invalid' });
 
       expect(res.status).toBe(400);
       expect(res.body.message).toContain('Valid status required');
     });
 
     it('should require status field', async () => {
-      const res = await request(app)
-        .post('/api/v1/presence/status')
-        .send({});
+      const res = await request(app).post('/api/v1/presence/status').send({});
 
       expect(res.status).toBe(400);
     });
@@ -224,9 +207,7 @@ describe('Presence Controller', () => {
     it('should update lastActivity timestamp', async () => {
       PresenceService.updateUserStatus.mockResolvedValue({});
 
-      const res = await request(app)
-        .post('/api/v1/presence/status')
-        .send({ status: 'online' });
+      const res = await request(app).post('/api/v1/presence/status').send({ status: 'online' });
 
       expect(res.status).toBe(200);
       expect(PresenceService.updateUserStatus).toHaveBeenCalledWith(
@@ -247,9 +228,7 @@ describe('Presence Controller', () => {
 
       PresenceService.getResourceViewers.mockResolvedValue(mockViewers);
 
-      const res = await request(app).get(
-        '/api/v1/presence/resource-viewers/episode/episode-123'
-      );
+      const res = await request(app).get('/api/v1/presence/resource-viewers/episode/episode-123');
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -264,9 +243,7 @@ describe('Presence Controller', () => {
         { userId: 'user2' },
       ]);
 
-      const res = await request(app).get(
-        '/api/v1/presence/resource-viewers/episode/123'
-      );
+      const res = await request(app).get('/api/v1/presence/resource-viewers/episode/123');
 
       expect(res.status).toBe(200);
       expect(res.body.data.viewerCount).toBe(2);
@@ -275,9 +252,7 @@ describe('Presence Controller', () => {
     it('should handle empty viewers', async () => {
       PresenceService.getResourceViewers.mockResolvedValue([]);
 
-      const res = await request(app).get(
-        '/api/v1/presence/resource-viewers/episode/123'
-      );
+      const res = await request(app).get('/api/v1/presence/resource-viewers/episode/123');
 
       expect(res.status).toBe(200);
       expect(res.body.data.viewerCount).toBe(0);
@@ -303,9 +278,7 @@ describe('Presence Controller', () => {
       const types = ['episode', 'composition', 'template', 'asset'];
 
       for (const type of types) {
-        const res = await request(app).get(
-          `/api/v1/presence/resource-viewers/${type}/id-123`
-        );
+        const res = await request(app).get(`/api/v1/presence/resource-viewers/${type}/id-123`);
         expect(res.status).toBe(200);
       }
     });
@@ -366,9 +339,7 @@ describe('Presence Controller', () => {
       for (const status of validStatuses) {
         PresenceService.updateUserStatus.mockResolvedValue({ status });
 
-        const res = await request(app)
-          .post('/api/v1/presence/status')
-          .send({ status });
+        const res = await request(app).post('/api/v1/presence/status').send({ status });
 
         expect(res.status).toBe(200);
       }
@@ -378,9 +349,7 @@ describe('Presence Controller', () => {
       const invalidStatuses = ['busy', 'idle', 'invisible', 'active'];
 
       for (const status of invalidStatuses) {
-        const res = await request(app)
-          .post('/api/v1/presence/status')
-          .send({ status });
+        const res = await request(app).post('/api/v1/presence/status').send({ status });
 
         expect(res.status).toBe(400);
       }
@@ -389,9 +358,7 @@ describe('Presence Controller', () => {
 
   describe('Error Handling', () => {
     it('should handle database errors gracefully', async () => {
-      PresenceService.getOnlineUsers.mockRejectedValue(
-        new Error('DB Connection failed')
-      );
+      PresenceService.getOnlineUsers.mockRejectedValue(new Error('DB Connection failed'));
 
       const res = await request(app).get('/api/v1/presence/online-users');
 

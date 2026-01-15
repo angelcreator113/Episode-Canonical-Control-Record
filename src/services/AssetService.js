@@ -17,7 +17,7 @@ const getS3Client = async () => {
     const credentials = process.env.AWS_PROFILE
       ? await fromIni({ profile: process.env.AWS_PROFILE })()
       : await fromEnv()();
-    
+
     s3Client = new S3Client({
       region: process.env.AWS_REGION || 'us-east-1',
       credentials,
@@ -26,7 +26,8 @@ const getS3Client = async () => {
   return s3Client;
 };
 
-const BUCKET_NAME = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'episode-metadata-assets-dev';
+const BUCKET_NAME =
+  process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'episode-metadata-assets-dev';
 
 class AssetService {
   /**
@@ -45,16 +46,16 @@ class AssetService {
         'PROMO_JUSTAWOMANINHERPRIME',
         'PROMO_GUEST',
         'BRAND_LOGO',
-        'EPISODE_FRAME'
+        'EPISODE_FRAME',
       ];
-      
+
       if (!validTypes.includes(assetType)) {
         throw new Error(`Invalid asset type. Must be one of: ${validTypes.join(', ')}`);
       }
 
       const assetId = uuidv4();
       const timestamp = Date.now();
-      
+
       // Determine S3 path based on asset type
       const folderMap = {
         PROMO_LALA: 'promotional/lala/raw',
@@ -72,15 +73,15 @@ class AssetService {
       let thumbnailBuffer = null;
       let thumbnailKey = null;
       let imageDimensions = null;
-      
+
       try {
         // Get image dimensions and generate thumbnail
         const imageInfo = await sharp(file.buffer).metadata();
         imageDimensions = {
           width: imageInfo.width,
-          height: imageInfo.height
+          height: imageInfo.height,
         };
-        
+
         thumbnailBuffer = await sharp(file.buffer)
           .resize(150, 150, {
             fit: 'inside',
@@ -88,7 +89,7 @@ class AssetService {
           })
           .jpeg({ quality: 80 })
           .toBuffer();
-        
+
         thumbnailKey = `${folder}/thumbnails/${timestamp}-${assetId}-thumb.jpg`;
       } catch (thumbError) {
         console.warn(`⚠️ Thumbnail generation failed: ${thumbError.message}`);
@@ -98,11 +99,11 @@ class AssetService {
       // Upload to S3 using AWS SDK v3
       let s3Url = null;
       let thumbnailUrl = null;
-      
+
       try {
         console.log(`📤 Uploading to S3: ${s3Key}`);
         const client = await getS3Client();
-        
+
         // Upload original file
         const command = new PutObjectCommand({
           Bucket: BUCKET_NAME,
@@ -116,7 +117,7 @@ class AssetService {
           },
         });
         await client.send(command);
-        
+
         s3Url = `https://${BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
         console.log(`✅ S3 upload successful: ${s3Key}`);
 
@@ -143,32 +144,32 @@ class AssetService {
         s3Url = `https://mock-s3.dev/${s3Key}`;
         thumbnailUrl = this._generateThumbnailDataUri();
       }
-      
+
       // Fallback thumbnail if not generated
       if (!thumbnailUrl) {
         thumbnailUrl = this._generateThumbnailDataUri();
       }
-      
+
       // Create database record with new schema
       const asset = await Asset.create({
         id: assetId,
         name: file.originalname || `${assetType}-${timestamp}`,
         asset_type: assetType,
         approval_status: 'APPROVED', // Auto-approve for now
-        
+
         // Raw image fields
         s3_key_raw: s3Key,
         s3_url_raw: s3Url,
         file_size_bytes: file.size,
-        
+
         // Dimensions
         width: imageDimensions?.width || null,
         height: imageDimensions?.height || null,
-        
+
         // Legacy fields (for backward compatibility)
         s3_key: s3Key,
         url: s3Url,
-        
+
         // Metadata
         metadata: {
           ...metadata,
@@ -215,12 +216,18 @@ class AssetService {
         raw: false,
       });
 
-      console.log(`✅ AssetService: Found ${assets.length} approved assets (type: ${assetType || 'all'})`);
+      console.log(
+        `✅ AssetService: Found ${assets.length} approved assets (type: ${assetType || 'all'})`
+      );
 
-      return assets.map(asset => this._formatAssetForFrontend(asset));
+      return assets.map((asset) => this._formatAssetForFrontend(asset));
     } catch (error) {
       // If table doesn't exist (common in development), return empty array
-      if (error.message && error.message.includes('relation') && error.message.includes('does not exist')) {
+      if (
+        error.message &&
+        error.message.includes('relation') &&
+        error.message.includes('does not exist')
+      ) {
         console.warn('⚠️ Assets table does not exist yet, returning empty array');
         return [];
       }
@@ -243,7 +250,8 @@ class AssetService {
 
       return {
         ...asset.toJSON(),
-        s3_url: asset.s3_url_raw || asset.url || this._generateS3Url(asset.s3_key_raw || asset.s3_key),
+        s3_url:
+          asset.s3_url_raw || asset.url || this._generateS3Url(asset.s3_key_raw || asset.s3_key),
         thumbnail: asset.metadata?.thumbnail_url || asset.s3_url_raw || asset.url,
       };
     } catch (error) {
@@ -330,7 +338,7 @@ class AssetService {
         raw: true,
       });
 
-      return assets.map(asset => this._formatAssetForFrontend(asset));
+      return assets.map((asset) => this._formatAssetForFrontend(asset));
     } catch (error) {
       console.error('Failed to get pending assets:', error);
       throw error;
@@ -378,7 +386,7 @@ class AssetService {
    */
   _formatAssetForFrontend(asset) {
     const assetData = asset.toJSON ? asset.toJSON() : asset;
-    
+
     return {
       id: assetData.id,
       name: assetData.name,

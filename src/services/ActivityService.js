@@ -41,7 +41,7 @@ class ActivityService {
    * Get activities by user
    */
   async getByUserId(userId) {
-    return this.activities.filter(a => a.userId === userId);
+    return this.activities.filter((a) => a.userId === userId);
   }
 
   /**
@@ -49,7 +49,7 @@ class ActivityService {
    */
   async getByResource(resourceType, resourceId) {
     return this.activities.filter(
-      a => a.resourceType === resourceType && a.resourceId === resourceId
+      (a) => a.resourceType === resourceType && a.resourceId === resourceId
     );
   }
 }

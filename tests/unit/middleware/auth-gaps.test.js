@@ -29,7 +29,8 @@ describe('Auth Middleware - Gap Coverage', () => {
 
       const _req = {
         headers: {
-          authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
+          authorization:
+            'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
         },
       };
       const _res = {
@@ -48,7 +49,7 @@ describe('Auth Middleware - Gap Coverage', () => {
   describe('optionalAuth middleware', () => {
     test('should call next() when no authorization header present', async () => {
       const _req = {
-        headers: {}
+        headers: {},
       };
       const _res = {};
       const _next = jest.fn();
@@ -74,11 +75,13 @@ describe('Auth Middleware - Gap Coverage', () => {
 
   describe('Token verification edge cases', () => {
     test('should handle token with missing exp claim', () => {
-      const token = Buffer.from(JSON.stringify({
-        sub: 'user123',
-        // no exp claim
-      })).toString('base64');
-      
+      const token = Buffer.from(
+        JSON.stringify({
+          sub: 'user123',
+          // no exp claim
+        })
+      ).toString('base64');
+
       // This would be called internally by verifyToken
       expect(token).toBeTruthy();
     });
@@ -89,7 +92,7 @@ describe('Auth Middleware - Gap Coverage', () => {
         sub: 'user123',
         exp: futureExp,
       };
-      
+
       expect(payload.exp).toBeGreaterThan(Math.floor(Date.now() / 1000));
     });
 
@@ -97,7 +100,7 @@ describe('Auth Middleware - Gap Coverage', () => {
       const payload = { sub: 'user123', name: 'Test User' };
       const encoded = Buffer.from(JSON.stringify(payload)).toString('base64');
       const token = `header.${encoded}.signature`;
-      
+
       const parts = token.split('.');
       expect(parts.length).toBe(3);
       expect(parts[1]).toBe(encoded);

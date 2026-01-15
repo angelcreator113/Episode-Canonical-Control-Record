@@ -82,7 +82,7 @@ const hasPermission = (user, resource, action) => {
  */
 const authorize = (allowedRoles) => {
   const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
-  
+
   return (req, res, next) => {
     if (!req.user) {
       return res.status(403).json({

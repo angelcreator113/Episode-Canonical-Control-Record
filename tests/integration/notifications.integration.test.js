@@ -73,8 +73,7 @@ describe('Notification Integration Tests', () => {
       // (Note: In real app, would test with different user tokens)
 
       // Step 4: Mark as read
-      const readRes = await request(app)
-        .post(`/api/v1/notifications/${notificationId}/read`);
+      const readRes = await request(app).post(`/api/v1/notifications/${notificationId}/read`);
 
       expect(readRes.status).toBe(200);
 
@@ -105,8 +104,7 @@ describe('Notification Integration Tests', () => {
       expect(createRes2.status).toBe(201);
 
       // Mark all as read
-      const markAllRes = await request(app)
-        .post('/api/v1/notifications/read-all');
+      const markAllRes = await request(app).post('/api/v1/notifications/read-all');
 
       expect(markAllRes.status).toBe(200);
       expect(markAllRes.body.data.updatedCount).toBeGreaterThan(0);
@@ -118,20 +116,17 @@ describe('Notification Integration Tests', () => {
 
     it('should manage notification preferences with persistence', async () => {
       // Get preferences (creates if not exists)
-      const getRes = await request(app)
-        .get('/api/v1/notifications/preferences');
+      const getRes = await request(app).get('/api/v1/notifications/preferences');
 
       expect(getRes.status).toBe(200);
       expect(getRes.body.data).toBeDefined();
 
       // Update preferences
-      const updateRes = await request(app)
-        .post('/api/v1/notifications/preferences')
-        .send({
-          emailNotifications: false,
-          pushNotifications: true,
-          smsNotifications: true,
-        });
+      const updateRes = await request(app).post('/api/v1/notifications/preferences').send({
+        emailNotifications: false,
+        pushNotifications: true,
+        smsNotifications: true,
+      });
 
       expect(updateRes.status).toBe(200);
 
@@ -164,8 +159,7 @@ describe('Notification Integration Tests', () => {
       expect(dbNotif).toBeDefined();
 
       // Delete notification
-      const deleteRes = await request(app)
-        .delete(`/api/v1/notifications/${notificationId}`);
+      const deleteRes = await request(app).delete(`/api/v1/notifications/${notificationId}`);
 
       expect(deleteRes.status).toBe(200);
 
@@ -189,17 +183,13 @@ describe('Notification Integration Tests', () => {
       }
 
       // Test pagination
-      const res1 = await request(app)
-        .get('/api/v1/notifications')
-        .query({ limit: 2, offset: 0 });
+      const res1 = await request(app).get('/api/v1/notifications').query({ limit: 2, offset: 0 });
 
       expect(res1.status).toBe(200);
       expect(res1.body.data.pagination.limit).toBe(2);
 
       // Get second page
-      const res2 = await request(app)
-        .get('/api/v1/notifications')
-        .query({ limit: 2, offset: 2 });
+      const res2 = await request(app).get('/api/v1/notifications').query({ limit: 2, offset: 2 });
 
       expect(res2.status).toBe(200);
     });
@@ -207,8 +197,7 @@ describe('Notification Integration Tests', () => {
 
   describe('Error Scenarios and Edge Cases', () => {
     it('should handle non-existent notification gracefully', async () => {
-      const res = await request(app)
-        .get('/api/v1/notifications/non-existent-id');
+      const res = await request(app).get('/api/v1/notifications/non-existent-id');
 
       // Should return 200 with empty or appropriate response
       expect(res.status).toBeGreaterThanOrEqual(200);

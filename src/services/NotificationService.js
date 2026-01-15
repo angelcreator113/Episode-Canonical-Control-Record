@@ -44,14 +44,14 @@ class NotificationService {
    * Get notifications for a user
    */
   async getByUserId(userId) {
-    return this.notifications.filter(n => n.userId === userId);
+    return this.notifications.filter((n) => n.userId === userId);
   }
 
   /**
    * Mark notification as read
    */
   async markAsRead(notificationId) {
-    const notification = this.notifications.find(n => n.id === notificationId);
+    const notification = this.notifications.find((n) => n.id === notificationId);
     if (notification) {
       notification.read = true;
     }

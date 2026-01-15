@@ -19,7 +19,7 @@ class TokenService {
    */
   static generateToken(user, type = 'access') {
     const secret = process.env.JWT_SECRET;
-    
+
     if (!secret) {
       throw new Error('JWT_SECRET is not configured in environment variables');
     }
@@ -27,10 +27,9 @@ class TokenService {
     if (secret.length < 32) {
       throw new Error('JWT_SECRET must be at least 32 characters for security');
     }
-    
-    const expiresIn = type === 'refresh' 
-      ? process.env.JWT_REFRESH_EXPIRY || '7d'
-      : process.env.JWT_EXPIRY || '1h';
+
+    const expiresIn =
+      type === 'refresh' ? process.env.JWT_REFRESH_EXPIRY || '7d' : process.env.JWT_EXPIRY || '1h';
 
     const jti = crypto.randomBytes(16).toString('hex'); // Unique token ID
     const payload = {

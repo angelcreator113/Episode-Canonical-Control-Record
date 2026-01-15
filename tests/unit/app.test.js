@@ -52,4 +52,3 @@ describe('Health Check Endpoint', () => {
       .end(done);
   });
 });
-

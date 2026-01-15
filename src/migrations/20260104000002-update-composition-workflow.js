@@ -16,35 +16,35 @@ exports.up = (pgm) => {
       type: 'varchar(50)',
       default: 'DRAFT',
       notNull: true,
-      comment: 'DRAFT, PUBLISHED, UNPUBLISHED, ARCHIVED'
+      comment: 'DRAFT, PUBLISHED, UNPUBLISHED, ARCHIVED',
     },
     published_at: {
       type: 'timestamp',
-      notNull: false
+      notNull: false,
     },
     published_by: {
       type: 'varchar(100)',
-      notNull: false
+      notNull: false,
     },
     unpublished_at: {
       type: 'timestamp',
-      notNull: false
+      notNull: false,
     },
     platform_upload_status: {
       type: 'jsonb',
       notNull: false,
-      comment: 'Track upload status per platform: {youtube: "uploaded", instagram: "pending"}'
+      comment: 'Track upload status per platform: {youtube: "uploaded", instagram: "pending"}',
     },
     platform_urls: {
       type: 'jsonb',
       notNull: false,
-      comment: 'Platform-specific URLs: {youtube: "video_id", instagram: "post_id"}'
-    }
+      comment: 'Platform-specific URLs: {youtube: "video_id", instagram: "post_id"}',
+    },
   });
 
   // 2. Add constraint: Only YouTube can be primary
   pgm.addConstraint('thumbnails', 'youtube_primary_only', {
-    check: "is_primary = false OR (is_primary = true AND format = 'YOUTUBE')"
+    check: "is_primary = false OR (is_primary = true AND format = 'YOUTUBE')",
   });
 
   // 3. Add index for published thumbnails
@@ -69,7 +69,7 @@ exports.down = (pgm) => {
     'published_by',
     'unpublished_at',
     'platform_upload_status',
-    'platform_urls'
+    'platform_urls',
   ]);
 
   console.log('✅ Reverted composition workflow schema');

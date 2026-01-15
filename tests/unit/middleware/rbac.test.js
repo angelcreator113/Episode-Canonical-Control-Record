@@ -64,7 +64,10 @@ describe('RBAC Middleware', () => {
     });
 
     test('should handle user with multiple groups', async () => {
-      mockReq.user = { sub: 'multi-role-user', 'cognito:groups': ['editor', 'viewer', 'custom-group'] };
+      mockReq.user = {
+        sub: 'multi-role-user',
+        'cognito:groups': ['editor', 'viewer', 'custom-group'],
+      };
       const middleware = authorize(['editor']);
 
       // Should allow since user has editor group
@@ -140,7 +143,7 @@ describe('RBAC Middleware', () => {
   describe('Endpoint Permissions', () => {
     test('POST /episodes should require editor or admin', async () => {
       const allowedRoles = ['editor', 'admin'];
-      
+
       // Test viewer denied
       mockReq.user = { sub: 'viewer', 'cognito:groups': ['viewer'] };
       const middleware = authorize(allowedRoles);
@@ -149,28 +152,28 @@ describe('RBAC Middleware', () => {
 
     test('GET /episodes should allow all authenticated users', async () => {
       const allowedRoles = ['viewer', 'editor', 'admin'];
-      
+
       mockReq.user = { sub: 'viewer', 'cognito:groups': ['viewer'] };
       expect(true).toBe(true);
     });
 
     test('DELETE /episodes/:id should require admin', async () => {
       const allowedRoles = ['admin'];
-      
+
       mockReq.user = { sub: 'editor', 'cognito:groups': ['editor'] };
       expect(true).toBe(true);
     });
 
     test('POST /thumbnails/:id/promote should require admin', async () => {
       const allowedRoles = ['admin'];
-      
+
       mockReq.user = { sub: 'editor', 'cognito:groups': ['editor'] };
       expect(true).toBe(true);
     });
 
     test('GET /metadata should allow viewer+', async () => {
       const allowedRoles = ['viewer', 'editor', 'admin'];
-      
+
       mockReq.user = { sub: 'viewer', 'cognito:groups': ['viewer'] };
       expect(true).toBe(true);
     });
@@ -313,130 +316,130 @@ describe('Role Hierarchy and Permission Matrix', () => {
       const req = { user: { id: 'admin1', groups: ['admin'] } };
       const res = {};
       const next = jest.fn();
-      
+
       const middleware = requireRole('admin');
       middleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
       expect(next).toHaveBeenCalledTimes(1);
     });
-    
+
     it('should allow admin to access editor endpoints', () => {
       const req = { user: { id: 'admin1', groups: ['admin'] } };
       const res = {};
       const next = jest.fn();
-      
+
       const middleware = requireRole('editor');
       middleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     });
-    
+
     it('should allow admin to access viewer endpoints', () => {
       const req = { user: { id: 'admin1', groups: ['admin'] } };
       const res = {};
       const next = jest.fn();
-      
+
       const middleware = requireRole('viewer');
       middleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     });
-    
+
     it('should allow admin with multiple groups', () => {
       const req = { user: { id: 'admin1', groups: ['admin', 'editor', 'viewer'] } };
       const res = {};
       const next = jest.fn();
-      
+
       const middleware = requireRole('admin');
       middleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     });
   });
-  
+
   describe('Editor Role Permissions', () => {
     it('should DENY editor from admin endpoints', () => {
       const req = { user: { id: 'editor1', groups: ['editor'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
-      
+
       const middleware = requireRole('admin');
       middleware(req, res, next);
-      
+
       expect(res.status).toHaveBeenCalledWith(403);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          error: expect.any(String)
+          error: expect.any(String),
         })
       );
       expect(next).not.toHaveBeenCalled();
     });
-    
+
     it('should allow editor to access editor endpoints', () => {
       const req = { user: { id: 'editor1', groups: ['editor'] } };
       const res = {};
       const next = jest.fn();
-      
+
       const middleware = requireRole('editor');
       middleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     });
-    
+
     it('should allow editor to access viewer endpoints', () => {
       const req = { user: { id: 'editor1', groups: ['editor'] } };
       const res = {};
       const next = jest.fn();
-      
+
       const middleware = requireRole('viewer');
       middleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     });
   });
-  
+
   describe('Viewer Role Permissions', () => {
     it('should DENY viewer from admin endpoints', () => {
       const req = { user: { id: 'viewer1', groups: ['viewer'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
-      
+
       const middleware = requireRole('admin');
       middleware(req, res, next);
-      
+
       expect(res.status).toHaveBeenCalledWith(403);
       expect(next).not.toHaveBeenCalled();
     });
-    
+
     it('should DENY viewer from editor endpoints', () => {
       const req = { user: { id: 'viewer1', groups: ['viewer'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
-      
+
       const middleware = requireRole('editor');
       middleware(req, res, next);
-      
+
       expect(res.status).toHaveBeenCalledWith(403);
     });
-    
+
     it('should allow viewer to access viewer endpoints', () => {
       const req = { user: { id: 'viewer1', groups: ['viewer'] } };
       const res = {};
       const next = jest.fn();
-      
+
       const middleware = requireRole('viewer');
       middleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     });
   });
@@ -450,74 +453,74 @@ describe('Multiple Required Roles (OR Logic)', () => {
     // Note: Current implementation only supports single role string
     // Array support would need to be added to middleware
     const req = { user: { id: 'user1', groups: ['admin'] } };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should handle multiple role checks with hierarchy', () => {
     // Testing that admin can pass editor requirement
     const req = { user: { id: 'user1', groups: ['admin'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('editor');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should DENY if user lacks required role', () => {
     const req = { user: { id: 'user1', groups: ['viewer'] } };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin');
     middleware(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(403);
   });
-  
+
   it('should allow editor when checking editor role', () => {
     const req = { user: { id: 'user1', groups: ['viewer', 'editor', 'custom'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('editor');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should verify admin role requirement', () => {
     const req = { user: { id: 'user1', groups: ['admin'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should handle undefined role gracefully', () => {
     const req = { user: { id: 'user1', groups: ['admin'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole(undefined);
     middleware(req, res, next);
-    
+
     // When required role is undefined, userLevel < undefined is always false
     // So next() gets called (no error)
     expect(next).toHaveBeenCalled();
@@ -530,79 +533,79 @@ describe('Multiple Required Roles (OR Logic)', () => {
 describe('Missing User or Groups - Security Critical', () => {
   it('should DENY if req.user is undefined (401 Unauthorized)', () => {
     const req = {}; // No user
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('viewer');
     middleware(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(401);
     expect(next).not.toHaveBeenCalled();
   });
-  
+
   it('should DENY if req.user is null', () => {
     const req = { user: null };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('viewer');
     middleware(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(401);
   });
-  
+
   it('should default to viewer if user.groups is undefined', () => {
     // getUserRole defaults to viewer when groups is missing/empty
     // Viewer trying to access viewer role succeeds
     const req = { user: { id: 'user1' } }; // No groups
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('viewer');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should default to viewer if user.groups is null', () => {
     // getUserRole defaults to viewer when groups is null
     const req = { user: { id: 'user1', groups: null } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('viewer');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should default to viewer if user.groups is empty array', () => {
     // getUserRole defaults to viewer when groups is empty
     const req = { user: { id: 'user1', groups: [] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('viewer');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should default to viewer if user.groups is not an array', () => {
     // If groups is a string, getUserRole will default to viewer
     const req = { user: { id: 'user1', groups: 'admin' } }; // String, not array
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('viewer');
     middleware(req, res, next);
-    
+
     // Defaults to viewer role, viewer can access viewer
     expect(next).toHaveBeenCalled();
   });
@@ -614,122 +617,122 @@ describe('Missing User or Groups - Security Critical', () => {
 describe('Edge Cases and Security Hardening', () => {
   it('should be case-sensitive for role names', () => {
     const req = { user: { id: 'user1', groups: ['ADMIN'] } }; // Uppercase
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin'); // lowercase
     middleware(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(403);
   });
-  
+
   it('should handle special characters in group names', () => {
     const req = { user: { id: 'user1', groups: ['admin-special-role-123'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin-special-role-123');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should handle unicode characters in group names', () => {
     const req = { user: { id: 'user1', groups: ['admin-日本語-role'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin-日本語-role');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should NOT trim whitespace in group names (exact match)', () => {
     const req = { user: { id: 'user1', groups: [' admin ', 'editor'] } };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin');
     middleware(req, res, next);
-    
+
     // Should deny because ' admin ' !== 'admin'
     expect(res.status).toHaveBeenCalledWith(403);
   });
-  
+
   it('should handle duplicate groups in user.groups array', () => {
     const req = { user: { id: 'user1', groups: ['editor', 'editor', 'editor'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('editor');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should handle very long group names', () => {
     const longGroupName = 'a'.repeat(500);
     const req = { user: { id: 'user1', groups: [longGroupName] } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole(longGroupName);
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should handle user with many groups efficiently', () => {
     const manyGroups = Array.from({ length: 200 }, (_, i) => `group${i}`);
     manyGroups.push('target-role');
-    
+
     const req = { user: { id: 'user1', groups: manyGroups } };
     const res = {};
     const next = jest.fn();
-    
+
     const middleware = requireRole('target-role');
     middleware(req, res, next);
-    
+
     expect(next).toHaveBeenCalled();
   });
-  
+
   it('should handle error response for insufficient permissions', () => {
     // Note: Current implementation exposes userRole in error response
     // This is a security issue that should be fixed in the middleware
     const req = { user: { id: 'user1', groups: ['viewer'] } };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin');
     middleware(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(403);
     expect(res.json).toHaveBeenCalled();
   });
-  
+
   it('should return error for unknown required role', () => {
     // Undefined role level comparison: admin (3) < undefined is false
     // So next() is called instead of error (this is a bug in the middleware)
     const req = { user: { id: 'user1', groups: ['admin'] } };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('super-secret-admin-role');
     middleware(req, res, next);
-    
+
     // Due to undefined comparison, this passes through (not ideal)
     expect(next).toHaveBeenCalled();
   });
@@ -743,45 +746,45 @@ describe('Performance and Efficiency', () => {
     const req = { user: { id: 'user1', groups: ['admin'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const startTime = performance.now();
     const middleware = requireRole('admin');
     middleware(req, res, next);
     const endTime = performance.now();
-    
+
     const duration = endTime - startTime;
     expect(duration).toBeLessThan(5);
   });
-  
+
   it('should handle large role arrays in < 10ms', () => {
     const req = { user: { id: 'user1', groups: ['editor'] } };
     const res = {};
     const next = jest.fn();
-    
+
     const largeRoleArray = Array.from({ length: 100 }, (_, i) => `role${i}`);
     largeRoleArray.push('editor');
-    
+
     const startTime = performance.now();
     const middleware = requireRole(largeRoleArray);
     middleware(req, res, next);
     const endTime = performance.now();
-    
+
     const duration = endTime - startTime;
     expect(duration).toBeLessThan(10);
   });
-  
+
   it('should not create memory leaks with repeated calls', () => {
     const req = { user: { id: 'user1', groups: ['admin'] } };
     const res = {};
-    
+
     const middleware = requireRole('admin');
-    
+
     // Call 1000 times
     for (let i = 0; i < 1000; i++) {
       const next = jest.fn();
       middleware(req, res, next);
     }
-    
+
     // If no memory leak, this should complete without error
     expect(true).toBe(true);
   });
@@ -793,43 +796,43 @@ describe('Performance and Efficiency', () => {
 describe('HTTP Status Code Correctness', () => {
   it('should return 401 for missing authentication', () => {
     const req = {}; // No user
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin');
     middleware(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(401);
   });
-  
+
   it('should return 403 for insufficient permissions', () => {
     const req = { user: { id: 'user1', groups: ['viewer'] } };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin');
     middleware(req, res, next);
-    
+
     expect(res.status).toHaveBeenCalledWith(403);
   });
-  
+
   it('should NOT return 200 on authorization failure', () => {
     const req = { user: { id: 'user1', groups: ['viewer'] } };
-    const res = { 
-      status: jest.fn().mockReturnThis(), 
-      json: jest.fn() 
+    const res = {
+      status: jest.fn().mockReturnThis(),
+      json: jest.fn(),
     };
     const next = jest.fn();
-    
+
     const middleware = requireRole('admin');
     middleware(req, res, next);
-    
+
     expect(res.status).not.toHaveBeenCalledWith(200);
   });
 });
@@ -933,9 +936,9 @@ describe('Require Permission Middleware', () => {
 
     it('should DENY editor from deleting episodes', () => {
       const req = { user: { id: 'editor1', groups: ['editor'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
 
@@ -948,9 +951,9 @@ describe('Require Permission Middleware', () => {
 
     it('should DENY editor from managing episodes', () => {
       const req = { user: { id: 'editor1', groups: ['editor'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
 
@@ -975,9 +978,9 @@ describe('Require Permission Middleware', () => {
 
     it('should DENY viewer from creating episodes', () => {
       const req = { user: { id: 'viewer1', groups: ['viewer'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
 
@@ -989,9 +992,9 @@ describe('Require Permission Middleware', () => {
 
     it('should DENY viewer from editing episodes', () => {
       const req = { user: { id: 'viewer1', groups: ['viewer'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
 
@@ -1003,9 +1006,9 @@ describe('Require Permission Middleware', () => {
 
     it('should DENY viewer from deleting episodes', () => {
       const req = { user: { id: 'viewer1', groups: ['viewer'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
 
@@ -1052,7 +1055,7 @@ describe('Require Permission Middleware', () => {
 
     it('should allow viewer to view all resources', () => {
       const resources = ['episodes', 'thumbnails', 'metadata', 'processing', 'activity'];
-      resources.forEach(resource => {
+      resources.forEach((resource) => {
         const req = { user: { id: 'viewer1', groups: ['viewer'] } };
         const res = {};
         const next = jest.fn();
@@ -1068,9 +1071,9 @@ describe('Require Permission Middleware', () => {
   describe('Permission Errors', () => {
     it('should return 403 with permission details', () => {
       const req = { user: { id: 'viewer1', groups: ['viewer'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
 
@@ -1085,9 +1088,9 @@ describe('Require Permission Middleware', () => {
 
     it('should return 401 if user missing', () => {
       const req = {};
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
 
@@ -1180,9 +1183,9 @@ describe('Require Permission Middleware', () => {
 
     it('should deny viewer if not in authorize list', () => {
       const req = { user: { id: 'viewer1', groups: ['viewer'] } };
-      const res = { 
-        status: jest.fn().mockReturnThis(), 
-        json: jest.fn() 
+      const res = {
+        status: jest.fn().mockReturnThis(),
+        json: jest.fn(),
       };
       const next = jest.fn();
 
@@ -1296,4 +1299,3 @@ describe('Require Permission Middleware', () => {
     });
   });
 });
-

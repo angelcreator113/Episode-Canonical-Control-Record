@@ -17,18 +17,18 @@ exports.up = (pgm) => {
       type: 'uuid',
       references: 'assets(id)',
       onDelete: 'SET NULL',
-      notNull: false
+      notNull: false,
     },
     include_justawomaninherprime: {
       type: 'boolean',
       default: false,
-      notNull: true
+      notNull: true,
     },
     justawomaninherprime_position: {
       type: 'jsonb',
       notNull: false,
-      comment: 'Admin-adjustable position overrides'
-    }
+      comment: 'Admin-adjustable position overrides',
+    },
   });
 
   // 2. Create index for performance
@@ -38,15 +38,15 @@ exports.up = (pgm) => {
   const templates = [
     {
       id: 'youtube-1920x1080',
-      justawomanPosition: { width_percent: 20, left_percent: 75, top_percent: 5 }
+      justawomanPosition: { width_percent: 20, left_percent: 75, top_percent: 5 },
     },
     {
       id: 'instagram-1080x1080',
-      justawomanPosition: { width_percent: 25, left_percent: 70, top_percent: 5 }
-    }
+      justawomanPosition: { width_percent: 25, left_percent: 70, top_percent: 5 },
+    },
   ];
 
-  templates.forEach(template => {
+  templates.forEach((template) => {
     pgm.sql(`
       UPDATE thumbnail_templates
       SET layout_config = layout_config || '{"justawomaninherprime": ${JSON.stringify(template.justawomanPosition)}}'::jsonb
@@ -65,7 +65,7 @@ exports.down = (pgm) => {
   pgm.dropColumns('thumbnail_compositions', [
     'justawomaninherprime_asset_id',
     'include_justawomaninherprime',
-    'justawomaninherprime_position'
+    'justawomaninherprime_position',
   ]);
 
   // Remove justawomaninherprime from template layouts

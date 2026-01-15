@@ -201,10 +201,7 @@ describe('SearchController', () => {
       await searchController.search(req, res);
 
       // Should search with '*' when no query provided
-      expect(OpenSearchService.search).toHaveBeenCalledWith(
-        '*',
-        expect.any(Object)
-      );
+      expect(OpenSearchService.search).toHaveBeenCalledWith('*', expect.any(Object));
     });
 
     it('should handle search errors', async () => {
@@ -283,19 +280,13 @@ describe('SearchController', () => {
     it('should map aggregation buckets to filter format', async () => {
       OpenSearchService.getAggregations.mockResolvedValue({
         tags: {
-          buckets: [
-            { key: 'drama', doc_count: 30 },
-          ],
+          buckets: [{ key: 'drama', doc_count: 30 }],
         },
         seasons: {
-          buckets: [
-            { key: '1', doc_count: 10 },
-          ],
+          buckets: [{ key: '1', doc_count: 10 }],
         },
         file_types: {
-          buckets: [
-            { key: 'video', doc_count: 50 },
-          ],
+          buckets: [{ key: 'video', doc_count: 50 }],
         },
       });
 
@@ -324,15 +315,15 @@ describe('SearchController', () => {
       await searchController.getFilters(req, res);
 
       expect(res.status).toHaveBeenCalledWith(500);
-      expect(res.json).toHaveBeenCalledWith(expect.objectContaining({ error: 'Failed to get filters' }));
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'Failed to get filters' })
+      );
     });
 
     it('should handle partial aggregations', async () => {
       OpenSearchService.getAggregations.mockResolvedValue({
         tags: {
-          buckets: [
-            { key: 'drama', doc_count: 30 },
-          ],
+          buckets: [{ key: 'drama', doc_count: 30 }],
         },
         // seasons and file_types missing
       });

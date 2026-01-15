@@ -25,13 +25,9 @@ describe('Audit Log Middleware', () => {
       const mockLog = { id: 1, userId: 'user-123' };
       models.ActivityLog.logActivity = jest.fn().mockResolvedValue(mockLog);
 
-      const result = await logger.logAction(
-        'user-123',
-        'create',
-        'episode',
-        'ep-1',
-        { newValues: { title: 'New Episode' } }
-      );
+      const result = await logger.logAction('user-123', 'create', 'episode', 'ep-1', {
+        newValues: { title: 'New Episode' },
+      });
 
       expect(models.ActivityLog.logActivity).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -77,13 +73,11 @@ describe('Audit Log Middleware', () => {
     });
 
     test('should handle database errors gracefully', async () => {
-      models.ActivityLog.logActivity = jest
-        .fn()
-        .mockRejectedValue(new Error('DB error'));
+      models.ActivityLog.logActivity = jest.fn().mockRejectedValue(new Error('DB error'));
 
       // Should not throw - error logging failures shouldn't break the app
       const result = await logger.logAction('user-123', 'create', 'episode', 'ep-1', {});
-      
+
       expect(result).toBeNull();
     });
   });
@@ -122,10 +116,7 @@ describe('Audit Log Middleware', () => {
 
       await logger.getResourceHistory('episode', 'ep-1');
 
-      expect(models.ActivityLog.getResourceHistory).toHaveBeenCalledWith(
-        'episode',
-        'ep-1'
-      );
+      expect(models.ActivityLog.getResourceHistory).toHaveBeenCalledWith('episode', 'ep-1');
     });
 
     test('should return empty array on error', async () => {
@@ -390,7 +381,9 @@ describe('Audit Log Middleware', () => {
       const res = {
         locals: {},
       };
-      res.json = jest.fn(function() { return this; });
+      res.json = jest.fn(function () {
+        return this;
+      });
       const next = jest.fn();
 
       captureResponseData(req, res, next);
@@ -406,7 +399,9 @@ describe('Audit Log Middleware', () => {
       const res = {
         locals: {},
       };
-      res.json = jest.fn(function() { return this; });
+      res.json = jest.fn(function () {
+        return this;
+      });
       const next = jest.fn();
 
       captureResponseData(req, res, next);
@@ -422,7 +417,9 @@ describe('Audit Log Middleware', () => {
       const res = {
         locals: {},
       };
-      res.json = jest.fn(function() { return this; });
+      res.json = jest.fn(function () {
+        return this;
+      });
       const next = jest.fn();
 
       captureResponseData(req, res, next);
@@ -505,10 +502,7 @@ describe('Audit Log Middleware', () => {
       const options = { limit: 50, offset: 0 };
       await logger.getUserHistory('user-123', options);
 
-      expect(models.ActivityLog.getUserHistory).toHaveBeenCalledWith(
-        'user-123',
-        options
-      );
+      expect(models.ActivityLog.getUserHistory).toHaveBeenCalledWith('user-123', options);
     });
 
     test('should return empty array when ActivityLog unavailable', async () => {
@@ -554,13 +548,10 @@ describe('Audit Log Middleware', () => {
       for (const type of resourceTypes) {
         jest.clearAllMocks();
         models.ActivityLog.getResourceHistory = jest.fn().mockResolvedValue([]);
-        
+
         await logger.getResourceHistory(type, 'res-123');
 
-        expect(models.ActivityLog.getResourceHistory).toHaveBeenCalledWith(
-          type,
-          'res-123'
-        );
+        expect(models.ActivityLog.getResourceHistory).toHaveBeenCalledWith(type, 'res-123');
       }
     });
 
@@ -569,10 +560,7 @@ describe('Audit Log Middleware', () => {
 
       await logger.getResourceHistory('episode', 123);
 
-      expect(models.ActivityLog.getResourceHistory).toHaveBeenCalledWith(
-        'episode',
-        123
-      );
+      expect(models.ActivityLog.getResourceHistory).toHaveBeenCalledWith('episode', 123);
     });
 
     test('should return empty array when ActivityLog unavailable', async () => {
@@ -632,7 +620,7 @@ describe('Audit Log Middleware', () => {
       for (const range of timeRanges) {
         jest.clearAllMocks();
         models.ActivityLog.getStats = jest.fn().mockResolvedValue({});
-        
+
         await logger.getStats(range);
 
         expect(models.ActivityLog.getStats).toHaveBeenCalledWith(range);
@@ -797,7 +785,7 @@ describe('Audit Log Middleware', () => {
 
       for (const action of customActions) {
         models.ActivityLog.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-        
+
         await logger.logAction('user-123', action, 'episode', 'ep-1', {});
 
         expect(models.ActivityLog.logActivity).toHaveBeenCalledWith(
@@ -927,10 +915,10 @@ describe('Audit Log Middleware', () => {
 
       await logger.getUserHistory('user-123', { limit: 100, offset: 50 });
 
-      expect(models.ActivityLog.getUserHistory).toHaveBeenCalledWith(
-        'user-123',
-        { limit: 100, offset: 50 }
-      );
+      expect(models.ActivityLog.getUserHistory).toHaveBeenCalledWith('user-123', {
+        limit: 100,
+        offset: 50,
+      });
     });
 
     test('should handle date range filtering', async () => {
@@ -1039,4 +1027,3 @@ describe('Audit Log Middleware', () => {
     });
   });
 });
-

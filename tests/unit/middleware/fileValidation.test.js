@@ -213,10 +213,7 @@ describe('File Validation Middleware', () => {
       validateBatchFileUpload(req, res, next);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          errors: expect.arrayContaining([
-            expect.any(Object),
-            expect.any(Object),
-          ]),
+          errors: expect.arrayContaining([expect.any(Object), expect.any(Object)]),
         })
       );
       done();
@@ -229,7 +226,7 @@ describe('File Validation Middleware', () => {
       req.fileValidation = { size: 1 * 1024 * 1024 * 1024 }; // 1GB new file
 
       checkStorageQuota(req, res, next);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(next).toHaveBeenCalled();
     });
@@ -239,7 +236,7 @@ describe('File Validation Middleware', () => {
       req.fileValidation = { size: 1 * 1024 * 1024 * 1024 }; // 1GB new file (would exceed 10GB)
 
       checkStorageQuota(req, res, next);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(
@@ -254,7 +251,7 @@ describe('File Validation Middleware', () => {
       req.fileValidation = { size: 1 * 1024 * 1024 * 1024 }; // 1GB new file (exceeds quota)
 
       checkStorageQuota(req, res, next);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const callData = res.json.mock.calls[0]?.[0];
       expect(callData?.availableSpace).toBeGreaterThan(0);

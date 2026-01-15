@@ -104,9 +104,7 @@ class S3Service {
    */
   async getFileMetadata(bucket, key) {
     try {
-      const response = await this.s3
-        .headObject({ Bucket: bucket, Key: key })
-        .promise();
+      const response = await this.s3.headObject({ Bucket: bucket, Key: key }).promise();
 
       return {
         size: response.ContentLength,

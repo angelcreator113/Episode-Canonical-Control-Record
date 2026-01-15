@@ -6,178 +6,182 @@ const { DataTypes } = require('sequelize');
  * Stores thumbnail image metadata and S3 references
  */
 module.exports = (sequelize) => {
-  const Thumbnail = sequelize.define('Thumbnail', {
-    id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true,
-      allowNull: false,
-    },
-    episodeId: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      references: {
-        model: 'episodes',
-        key: 'id',
+  const Thumbnail = sequelize.define(
+    'Thumbnail',
+    {
+      id: {
+        type: DataTypes.INTEGER,
+        primaryKey: true,
+        autoIncrement: true,
+        allowNull: false,
       },
-    },
+      episodeId: {
+        type: DataTypes.INTEGER,
+        allowNull: false,
+        references: {
+          model: 'episodes',
+          key: 'id',
+        },
+      },
 
-    // File info
-    s3Bucket: {
-      type: DataTypes.STRING(255),
-      allowNull: false,
-      validate: {
-        notEmpty: true,
+      // File info
+      s3Bucket: {
+        type: DataTypes.STRING(255),
+        allowNull: false,
+        validate: {
+          notEmpty: true,
+        },
+        comment: 'S3 bucket name where thumbnail is stored',
       },
-      comment: 'S3 bucket name where thumbnail is stored',
-    },
-    s3Key: {
-      type: DataTypes.STRING(512),
-      allowNull: false,
-      unique: true,
-      validate: {
-        notEmpty: true,
+      s3Key: {
+        type: DataTypes.STRING(512),
+        allowNull: false,
+        unique: true,
+        validate: {
+          notEmpty: true,
+        },
+        comment: 'S3 object key (path) for thumbnail',
       },
-      comment: 'S3 object key (path) for thumbnail',
-    },
-    fileSizeBytes: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        isInt: true,
-        min: 0,
+      fileSizeBytes: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          isInt: true,
+          min: 0,
+        },
+        comment: 'File size in bytes',
       },
-      comment: 'File size in bytes',
-    },
-    mimeType: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-      defaultValue: 'image/jpeg',
-      validate: {
-        isIn: [['image/jpeg', 'image/png', 'image/webp', 'image/gif']],
+      mimeType: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        defaultValue: 'image/jpeg',
+        validate: {
+          isIn: [['image/jpeg', 'image/png', 'image/webp', 'image/gif']],
+        },
       },
-    },
 
-    // Image metadata
-    widthPixels: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        isInt: true,
-        min: 1,
+      // Image metadata
+      widthPixels: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          isInt: true,
+          min: 1,
+        },
+        comment: 'Image width in pixels',
       },
-      comment: 'Image width in pixels',
-    },
-    heightPixels: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        isInt: true,
-        min: 1,
+      heightPixels: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          isInt: true,
+          min: 1,
+        },
+        comment: 'Image height in pixels',
       },
-      comment: 'Image height in pixels',
-    },
-    format: {
-      type: DataTypes.STRING(20),
-      allowNull: true,
-      validate: {
-        isIn: [['jpeg', 'png', 'webp', 'gif']],
+      format: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        validate: {
+          isIn: [['jpeg', 'png', 'webp', 'gif']],
+        },
       },
-    },
 
-    // Thumbnail type and metadata
-    thumbnailType: {
-      type: DataTypes.ENUM('primary', 'cover', 'poster', 'frame'),
-      defaultValue: 'primary',
-      comment: 'Type of thumbnail (primary/cover/poster/frame)',
-    },
-    positionSeconds: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-      validate: {
-        isInt: true,
-        min: 0,
+      // Thumbnail type and metadata
+      thumbnailType: {
+        type: DataTypes.ENUM('primary', 'cover', 'poster', 'frame'),
+        defaultValue: 'primary',
+        comment: 'Type of thumbnail (primary/cover/poster/frame)',
       },
-      comment: 'Video timestamp (in seconds) for frame thumbnails',
-    },
+      positionSeconds: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        validate: {
+          isInt: true,
+          min: 0,
+        },
+        comment: 'Video timestamp (in seconds) for frame thumbnails',
+      },
 
-    // Generation metadata
-    generatedAt: {
-      type: DataTypes.DATE,
-      defaultValue: DataTypes.NOW,
-      comment: 'When thumbnail was generated',
-    },
-    qualityRating: {
-      type: DataTypes.DECIMAL(3, 2),
-      allowNull: true,
-      validate: {
-        isDecimal: true,
-        min: 0,
-        max: 10,
+      // Generation metadata
+      generatedAt: {
+        type: DataTypes.DATE,
+        defaultValue: DataTypes.NOW,
+        comment: 'When thumbnail was generated',
       },
-      comment: 'Quality rating (0-10) for thumbnail',
-    },
+      qualityRating: {
+        type: DataTypes.DECIMAL(3, 2),
+        allowNull: true,
+        validate: {
+          isDecimal: true,
+          min: 0,
+          max: 10,
+        },
+        comment: 'Quality rating (0-10) for thumbnail',
+      },
 
-    // Publishing fields
-    publishStatus: {
-      type: DataTypes.STRING(50),
-      defaultValue: 'DRAFT',
-      allowNull: false,
-      validate: {
-        isIn: [['DRAFT', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED']],
+      // Publishing fields
+      publishStatus: {
+        type: DataTypes.STRING(50),
+        defaultValue: 'DRAFT',
+        allowNull: false,
+        validate: {
+          isIn: [['DRAFT', 'PUBLISHED', 'UNPUBLISHED', 'ARCHIVED']],
+        },
+        comment: 'DRAFT, PUBLISHED, UNPUBLISHED, ARCHIVED',
       },
-      comment: 'DRAFT, PUBLISHED, UNPUBLISHED, ARCHIVED',
-    },
-    isPrimary: {
-      type: DataTypes.BOOLEAN,
-      defaultValue: false,
-      comment: 'Is this the primary YouTube thumbnail for the episode',
-    },
-    publishedAt: {
-      type: DataTypes.DATE,
-      allowNull: true,
-      comment: 'When thumbnail was published',
-    },
-    publishedBy: {
-      type: DataTypes.STRING(100),
-      allowNull: true,
-      comment: 'User ID who published the thumbnail',
-    },
-    unpublishedAt: {
-      type: DataTypes.DATE,
-      allowNull: true,
-      comment: 'When thumbnail was unpublished',
-    },
-    platformUploadStatus: {
-      type: DataTypes.JSONB,
-      allowNull: true,
-      comment: 'Track upload status per platform: {youtube: "uploaded", instagram: "pending"}',
-    },
-    platformUrls: {
-      type: DataTypes.JSONB,
-      allowNull: true,
-      comment: 'Platform-specific URLs: {youtube: "video_id", instagram: "post_id"}',
-    },
-  }, {
-    sequelize,
-    modelName: 'Thumbnail',
-    tableName: 'thumbnails',
-    timestamps: false,
-    indexes: [
-      {
-        name: 'idx_episode_id',
-        fields: ['episodeId'],
+      isPrimary: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'Is this the primary YouTube thumbnail for the episode',
       },
-      {
-        name: 'idx_s3_key',
-        fields: ['s3Key'],
+      publishedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'When thumbnail was published',
       },
-      {
-        name: 'idx_thumbnail_type',
-        fields: ['episodeId', 'thumbnailType'],
+      publishedBy: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'User ID who published the thumbnail',
       },
-    ],
-  });
+      unpublishedAt: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'When thumbnail was unpublished',
+      },
+      platformUploadStatus: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: 'Track upload status per platform: {youtube: "uploaded", instagram: "pending"}',
+      },
+      platformUrls: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: 'Platform-specific URLs: {youtube: "video_id", instagram: "post_id"}',
+      },
+    },
+    {
+      sequelize,
+      modelName: 'Thumbnail',
+      tableName: 'thumbnails',
+      timestamps: false,
+      indexes: [
+        {
+          name: 'idx_episode_id',
+          fields: ['episodeId'],
+        },
+        {
+          name: 'idx_s3_key',
+          fields: ['s3Key'],
+        },
+        {
+          name: 'idx_thumbnail_type',
+          fields: ['episodeId', 'thumbnailType'],
+        },
+      ],
+    }
+  );
 
   /**
    * Instance Methods
@@ -186,7 +190,7 @@ module.exports = (sequelize) => {
   /**
    * Get S3 URL for thumbnail
    */
-  Thumbnail.prototype.getS3Url = function() {
+  Thumbnail.prototype.getS3Url = function () {
     const region = process.env.AWS_REGION || 'us-east-1';
     return `https://${this.s3Bucket}.s3.${region}.amazonaws.com/${this.s3Key}`;
   };
@@ -194,7 +198,7 @@ module.exports = (sequelize) => {
   /**
    * Get CloudFront URL if available
    */
-  Thumbnail.prototype.getCloudfrontUrl = function() {
+  Thumbnail.prototype.getCloudfrontUrl = function () {
     if (!process.env.CLOUDFRONT_DOMAIN) {
       return this.getS3Url();
     }
@@ -204,7 +208,7 @@ module.exports = (sequelize) => {
   /**
    * Update quality rating
    */
-  Thumbnail.prototype.setQualityRating = async function(rating) {
+  Thumbnail.prototype.setQualityRating = async function (rating) {
     if (rating < 0 || rating > 10) {
       throw new Error('Quality rating must be between 0 and 10');
     }
@@ -219,7 +223,7 @@ module.exports = (sequelize) => {
   /**
    * Find primary thumbnail for episode
    */
-  Thumbnail.getPrimary = async function(episodeId) {
+  Thumbnail.getPrimary = async function (episodeId) {
     return Thumbnail.findOne({
       where: {
         episodeId,
@@ -231,7 +235,7 @@ module.exports = (sequelize) => {
   /**
    * Find all thumbnails for episode by type
    */
-  Thumbnail.findByType = async function(episodeId, type) {
+  Thumbnail.findByType = async function (episodeId, type) {
     return Thumbnail.findAll({
       where: {
         episodeId,
@@ -244,7 +248,7 @@ module.exports = (sequelize) => {
   /**
    * Find frame thumbnail at specific time
    */
-  Thumbnail.findFrame = async function(episodeId, positionSeconds) {
+  Thumbnail.findFrame = async function (episodeId, positionSeconds) {
     return Thumbnail.findOne({
       where: {
         episodeId,
@@ -257,7 +261,7 @@ module.exports = (sequelize) => {
   /**
    * Create or update primary thumbnail
    */
-  Thumbnail.createPrimary = async function(episodeId, s3Data) {
+  Thumbnail.createPrimary = async function (episodeId, s3Data) {
     const [thumbnail] = await Thumbnail.findOrCreate({
       where: {
         episodeId,
@@ -276,7 +280,7 @@ module.exports = (sequelize) => {
   /**
    * Get thumbnail count for episode
    */
-  Thumbnail.countForEpisode = async function(episodeId) {
+  Thumbnail.countForEpisode = async function (episodeId) {
     return Thumbnail.count({
       where: { episodeId },
     });

@@ -12,7 +12,7 @@ const JOB_STATUS = {
   PROCESSING: 'processing',
   COMPLETED: 'completed',
   FAILED: 'failed',
-  CANCELLED: 'cancelled'
+  CANCELLED: 'cancelled',
 };
 
 const JOB_TYPE = {
@@ -22,7 +22,7 @@ const JOB_TYPE = {
   BULK_EXPORT: 'bulk-export',
   DATA_IMPORT: 'data-import',
   BATCH_DELETE: 'batch-delete',
-  COMPOSITION_RENDER: 'composition-render'
+  COMPOSITION_RENDER: 'composition-render',
 };
 
 class Job {
@@ -32,12 +32,7 @@ class Job {
    * Create a new job record
    */
   static async create(jobData) {
-    const {
-      userId,
-      jobType,
-      payload,
-      maxRetries = 3
-    } = jobData;
+    const { userId, jobType, payload, maxRetries = 3 } = jobData;
 
     const id = uuidv4();
     const createdAt = new Date();
@@ -56,7 +51,7 @@ class Job {
       JOB_STATUS.PENDING,
       JSON.stringify(payload),
       maxRetries,
-      createdAt
+      createdAt,
     ];
 
     try {
@@ -101,7 +96,7 @@ class Job {
 
     try {
       const result = await db.query(query, [userId, limit, offset]);
-      return result.rows.map(row => this.formatJob(row));
+      return result.rows.map((row) => this.formatJob(row));
     } catch (error) {
       logger.error('Error fetching user jobs', { error, userId });
       throw error;
@@ -121,7 +116,7 @@ class Job {
 
     try {
       const result = await db.query(query, [status, limit, offset]);
-      return result.rows.map(row => this.formatJob(row));
+      return result.rows.map((row) => this.formatJob(row));
     } catch (error) {
       logger.error('Error fetching jobs by status', { error, status });
       throw error;
@@ -151,7 +146,7 @@ class Job {
 
     try {
       const result = await db.query(query, [JOB_STATUS.FAILED, limit]);
-      return result.rows.map(row => this.formatJob(row));
+      return result.rows.map((row) => this.formatJob(row));
     } catch (error) {
       logger.error('Error fetching retryable jobs', { error });
       throw error;
@@ -162,12 +157,7 @@ class Job {
    * Update job status
    */
   static async updateStatus(id, status, updates = {}) {
-    const {
-      results = null,
-      errorMessage = null,
-      startedAt = null,
-      completedAt = null
-    } = updates;
+    const { results = null, errorMessage = null, startedAt = null, completedAt = null } = updates;
 
     const query = `
       UPDATE ${this.tableName}
@@ -187,7 +177,7 @@ class Job {
       errorMessage,
       startedAt,
       completedAt,
-      id
+      id,
     ];
 
     try {
@@ -241,7 +231,7 @@ class Job {
         JOB_STATUS.CANCELLED,
         id,
         JOB_STATUS.PENDING,
-        JOB_STATUS.PROCESSING
+        JOB_STATUS.PROCESSING,
       ]);
       if (result.rows.length === 0) return null;
       logger.info('Job cancelled', { id });
@@ -293,7 +283,7 @@ class Job {
         JOB_STATUS.PROCESSING,
         JOB_STATUS.COMPLETED,
         JOB_STATUS.FAILED,
-        JOB_STATUS.CANCELLED
+        JOB_STATUS.CANCELLED,
       ]);
       return result.rows[0];
     } catch (error) {
@@ -313,7 +303,11 @@ class Job {
       jobType: row.job_type,
       status: row.status,
       payload: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
-      results: row.results ? (typeof row.results === 'string' ? JSON.parse(row.results) : row.results) : null,
+      results: row.results
+        ? typeof row.results === 'string'
+          ? JSON.parse(row.results)
+          : row.results
+        : null,
       errorMessage: row.error_message,
       retryCount: row.retry_count,
       maxRetries: row.max_retries,
@@ -321,7 +315,7 @@ class Job {
       startedAt: row.started_at,
       completedAt: row.completed_at,
       nextRetryAt: row.next_retry_at,
-      updatedAt: row.updated_at
+      updatedAt: row.updated_at,
     };
   }
 
@@ -349,5 +343,5 @@ class Job {
 module.exports = {
   Job,
   JOB_STATUS,
-  JOB_TYPE
+  JOB_TYPE,
 };

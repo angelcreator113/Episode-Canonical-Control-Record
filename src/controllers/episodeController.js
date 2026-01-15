@@ -1,11 +1,7 @@
 /* eslint-disable no-unused-vars */
 const { models } = require('../models');
 const { Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog } = models;
-const {
-  NotFoundError,
-  ValidationError,
-  asyncHandler,
-} = require('../middleware/errorHandler');
+const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const { logger } = require('../middleware/auditLog');
 const AuditLogger = require('../services/AuditLogger');
 
@@ -48,7 +44,7 @@ module.exports = {
         const [field, direction] = sort.split(':');
         const validFields = ['title', 'episode_number', 'air_date', 'created_at', 'status'];
         const validDirections = ['ASC', 'DESC'];
-        
+
         if (validFields.includes(field) && validDirections.includes(direction?.toUpperCase())) {
           order = [[field, direction.toUpperCase()]];
         }
@@ -59,7 +55,17 @@ module.exports = {
         limit: parseInt(limit),
         offset,
         order,
-        attributes: ['id', 'episode_number', 'title', 'description', 'air_date', 'status', 'categories', 'created_at', 'updated_at'],
+        attributes: [
+          'id',
+          'episode_number',
+          'title',
+          'description',
+          'air_date',
+          'status',
+          'categories',
+          'created_at',
+          'updated_at',
+        ],
       });
 
       res.json({
@@ -75,7 +81,7 @@ module.exports = {
       console.error('❌ Error in listEpisodes:', error);
       res.status(500).json({
         error: 'Failed to list episodes',
-        message: error.message
+        message: error.message,
       });
     }
   },
@@ -89,24 +95,34 @@ module.exports = {
 
       // Query with proper column names that match the model
       const episode = await Episode.findByPk(id, {
-        attributes: ['id', 'episode_number', 'title', 'description', 'air_date', 'status', 'categories', 'created_at', 'updated_at'],
+        attributes: [
+          'id',
+          'episode_number',
+          'title',
+          'description',
+          'air_date',
+          'status',
+          'categories',
+          'created_at',
+          'updated_at',
+        ],
       });
 
       if (!episode) {
         return res.status(404).json({
           error: 'Episode not found',
-          id
+          id,
         });
       }
 
-      res.json({ 
-        data: episode
+      res.json({
+        data: episode,
       });
     } catch (error) {
       console.error('❌ Error in getEpisode:', error);
       res.status(500).json({
         error: 'Failed to get episode',
-        message: error.message
+        message: error.message,
       });
     }
   },
@@ -152,7 +168,7 @@ module.exports = {
           fields: {
             title: !finalTitle ? 'required' : null,
             episode_number: !finalEpisodeNumber ? 'required' : null,
-          }
+          },
         });
       }
 
@@ -267,7 +283,7 @@ module.exports = {
       console.error('❌ Error in createEpisode:', error);
       res.status(500).json({
         error: 'Failed to create episode',
-        message: error.message
+        message: error.message,
       });
     }
   },
@@ -289,35 +305,35 @@ module.exports = {
     // Whitelist updatable fields (support both new and old field names)
     const allowedFields = {
       // New field names
-      'title': true,
-      'episode_number': true,
-      'description': true,
-      'air_date': true,
-      'status': true,
-      'categories': true,
+      title: true,
+      episode_number: true,
+      description: true,
+      air_date: true,
+      status: true,
+      categories: true,
       // Old field names
-      'episodeTitle': true,
-      'episodeNumber': true,
-      'airDate': true,
-      'plotSummary': true,
-      'director': true,
-      'writer': true,
-      'durationMinutes': true,
-      'rating': true,
-      'genre': true,
-      'thumbnailUrl': true,
-      'posterUrl': true,
-      'videoUrl': true,
-      'rawVideoS3Key': true,
-      'processedVideoS3Key': true,
-      'metadataJsonS3Key': true,
-      'processingStatus': true,
+      episodeTitle: true,
+      episodeNumber: true,
+      airDate: true,
+      plotSummary: true,
+      director: true,
+      writer: true,
+      durationMinutes: true,
+      rating: true,
+      genre: true,
+      thumbnailUrl: true,
+      posterUrl: true,
+      videoUrl: true,
+      rawVideoS3Key: true,
+      processedVideoS3Key: true,
+      metadataJsonS3Key: true,
+      processingStatus: true,
     };
 
     const updateData = {};
-    
+
     // Process each field in the updates
-    Object.keys(updates).forEach(field => {
+    Object.keys(updates).forEach((field) => {
       if (allowedFields[field]) {
         // Map new field names to their Sequelize equivalents
         if (field === 'title' || field === 'episodeTitle') {
@@ -340,18 +356,12 @@ module.exports = {
     await episode.update(updateData);
 
     // Log activity (existing logger)
-    await logger.logAction(
-      req.user?.id,
-      'edit',
-      'episode',
-      id,
-      {
-        oldValues,
-        newValues: episode.toJSON(),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'edit', 'episode', id, {
+      oldValues,
+      newValues: episode.toJSON(),
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     // Phase 3A Integration: Activity Logging (non-blocking)
     ActivityService.logActivity({
@@ -419,17 +429,11 @@ module.exports = {
     }
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'delete',
-      'episode',
-      id,
-      {
-        oldValues,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'delete', 'episode', id, {
+      oldValues,
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     // Phase 3A Integration: Activity Logging (non-blocking)
     ActivityService.logActivity({
@@ -518,7 +522,7 @@ module.exports = {
     }
 
     const jobs = await Promise.all(
-      jobTypes.map(jobType =>
+      jobTypes.map((jobType) =>
         ProcessingQueue.create({
           episodeId: id,
           jobType,
@@ -532,17 +536,11 @@ module.exports = {
     await episode.updateStatus('processing');
 
     // Log activity
-    await logger.logAction(
-      req.user?.id,
-      'create',
-      'processing',
-      id,
-      {
-        newValues: { jobTypes, count: jobs.length },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
+    await logger.logAction(req.user?.id, 'create', 'processing', id, {
+      newValues: { jobTypes, count: jobs.length },
+      ipAddress: req.ip,
+      userAgent: req.get('user-agent'),
+    });
 
     res.json({
       data: jobs,

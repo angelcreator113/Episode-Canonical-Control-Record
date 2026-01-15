@@ -264,9 +264,7 @@ describe('OpenSearchService', () => {
 
       const callArgs = mockClient.update.mock.calls[0][0];
       // Note: service adds updated_at field
-      expect(callArgs.body.doc).toEqual(
-        expect.objectContaining({ title: 'Updated' })
-      );
+      expect(callArgs.body.doc).toEqual(expect.objectContaining({ title: 'Updated' }));
       expect(callArgs.body.doc.updated_at).toBeDefined();
     });
 
@@ -327,9 +325,7 @@ describe('OpenSearchService', () => {
 
       for (const id of idFormats) {
         await openSearchInstance.deleteEpisode(id);
-        expect(mockClient.delete).toHaveBeenCalledWith(
-          expect.objectContaining({ id })
-        );
+        expect(mockClient.delete).toHaveBeenCalledWith(expect.objectContaining({ id }));
       }
     });
   });
@@ -460,9 +456,7 @@ describe('OpenSearchService', () => {
 
       const episodes = [{ id: 'ep-1', title: 'Episode 1' }];
 
-      await expect(openSearchInstance.bulkIndex(episodes)).rejects.toThrow(
-        'Bulk operation failed'
-      );
+      await expect(openSearchInstance.bulkIndex(episodes)).rejects.toThrow('Bulk operation failed');
     });
 
     it('should handle large batches efficiently', async () => {
@@ -541,9 +535,7 @@ describe('OpenSearchService', () => {
     it('should handle aggregation errors', async () => {
       mockClient.search.mockRejectedValueOnce(new Error('Aggregation failed'));
 
-      await expect(openSearchInstance.getAggregations()).rejects.toThrow(
-        'Aggregation failed'
-      );
+      await expect(openSearchInstance.getAggregations()).rejects.toThrow('Aggregation failed');
     });
 
     it('should support multiple aggregations', async () => {
@@ -571,9 +563,7 @@ describe('OpenSearchService', () => {
 
   describe('Error Handling', () => {
     it('should handle connection errors', async () => {
-      mockClient.index.mockRejectedValueOnce(
-        new Error('ECONNREFUSED: Connection refused')
-      );
+      mockClient.index.mockRejectedValueOnce(new Error('ECONNREFUSED: Connection refused'));
 
       await expect(
         openSearchInstance.indexEpisode('ep-conn', { title: 'Connection Error' })
@@ -587,9 +577,7 @@ describe('OpenSearchService', () => {
     });
 
     it('should handle validation errors', async () => {
-      mockClient.index.mockRejectedValueOnce(
-        new Error('Validation error: invalid field mapping')
-      );
+      mockClient.index.mockRejectedValueOnce(new Error('Validation error: invalid field mapping'));
 
       await expect(
         openSearchInstance.indexEpisode('ep-invalid', { title: 'Validation Error' })

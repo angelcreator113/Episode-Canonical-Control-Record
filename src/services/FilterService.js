@@ -39,7 +39,7 @@ class FilterService {
       sortOrder = 'DESC',
       limit = 20,
       offset = 0,
-      episodeId = null
+      episodeId = null,
     } = filters;
 
     // Validate inputs
@@ -48,7 +48,9 @@ class FilterService {
     const validSortOrders = ['ASC', 'DESC'];
 
     const sortField = validSortFields.includes(sortBy) ? sortBy : 'created_at';
-    const order = validSortOrders.includes(sortOrder.toUpperCase()) ? sortOrder.toUpperCase() : 'DESC';
+    const order = validSortOrders.includes(sortOrder.toUpperCase())
+      ? sortOrder.toUpperCase()
+      : 'DESC';
     const pageLimit = Math.min(Math.max(1, parseInt(limit) || 20), 100);
     const pageOffset = Math.max(0, parseInt(offset) || 0);
 
@@ -66,11 +68,13 @@ class FilterService {
 
     // Format filter (check if any selected format is in selected_formats array)
     if (Array.isArray(formats) && formats.length > 0) {
-      const formatConditions = formats.map(fmt => {
-        paramIndex++;
-        params.push(fmt);
-        return `tc.selected_formats @> '["${fmt}"]'::jsonb`;
-      }).join(' OR ');
+      const formatConditions = formats
+        .map((fmt) => {
+          paramIndex++;
+          params.push(fmt);
+          return `tc.selected_formats @> '["${fmt}"]'::jsonb`;
+        })
+        .join(' OR ');
       whereClauses.push(`(${formatConditions})`);
     }
 
@@ -104,7 +108,7 @@ class FilterService {
           `tc.background_frame_asset_id = $${paramIndex}`,
           `tc.lala_asset_id = $${paramIndex}`,
           `tc.guest_asset_id = $${paramIndex}`,
-          `tc.justawomen_asset_id = $${paramIndex}`
+          `tc.justawomen_asset_id = $${paramIndex}`,
         ];
         whereClauses.push(`(${conditions.join(' OR ')})`);
         params.push(assetId);
@@ -193,7 +197,7 @@ class FilterService {
           offset: pageOffset,
           total_pages: Math.ceil(totalCount / pageLimit),
           current_page: Math.floor(pageOffset / pageLimit) + 1,
-          has_more: (pageOffset + pageLimit) < totalCount
+          has_more: pageOffset + pageLimit < totalCount,
         },
         filters_applied: {
           formats: formats.length > 0 ? formats : null,
@@ -203,9 +207,9 @@ class FilterService {
           assets: assets.length > 0 ? assets : null,
           template: template || null,
           created_by: createdBy || null,
-          search: search || null
+          search: search || null,
         },
-        compositions: dataResult.rows
+        compositions: dataResult.rows,
       };
     } catch (error) {
       console.error('Search error:', error);
@@ -263,20 +267,21 @@ class FilterService {
         WHERE 1=1 ${episodeFilter}
       `;
 
-      const [formatsResult, statusResult, templatesResult, creatorsResult, dateRangeResult] = await Promise.all([
-        pool.query(formatsQuery),
-        pool.query(statusQuery),
-        pool.query(templatesQuery),
-        pool.query(creatorsQuery),
-        pool.query(dateRangeQuery)
-      ]);
+      const [formatsResult, statusResult, templatesResult, creatorsResult, dateRangeResult] =
+        await Promise.all([
+          pool.query(formatsQuery),
+          pool.query(statusQuery),
+          pool.query(templatesQuery),
+          pool.query(creatorsQuery),
+          pool.query(dateRangeQuery),
+        ]);
 
       return {
-        formats: formatsResult.rows.map(r => r.format).filter(Boolean),
-        statuses: statusResult.rows.map(r => r.status),
-        templates: templatesResult.rows.map(r => r.template_id),
-        creators: creatorsResult.rows.map(r => r.created_by),
-        date_range: dateRangeResult.rows[0] || { earliest_date: null, latest_date: null }
+        formats: formatsResult.rows.map((r) => r.format).filter(Boolean),
+        statuses: statusResult.rows.map((r) => r.status),
+        templates: templatesResult.rows.map((r) => r.template_id),
+        creators: creatorsResult.rows.map((r) => r.created_by),
+        date_range: dateRangeResult.rows[0] || { earliest_date: null, latest_date: null },
       };
     } catch (error) {
       console.error('Error fetching filter options:', error);
@@ -304,7 +309,10 @@ class FilterService {
     } catch (error) {
       if (error.code === '42P01') {
         // Table doesn't exist yet, return a message
-        return { error: 'Filter presets table not yet created', message: 'Run migration to enable filter presets' };
+        return {
+          error: 'Filter presets table not yet created',
+          message: 'Run migration to enable filter presets',
+        };
       }
       throw error;
     }
@@ -339,7 +347,7 @@ class FilterService {
    */
   async deleteFilterPreset(presetId) {
     const query = 'DELETE FROM search_filter_presets WHERE id = $1';
-    
+
     try {
       await pool.query(query, [presetId]);
       return true;

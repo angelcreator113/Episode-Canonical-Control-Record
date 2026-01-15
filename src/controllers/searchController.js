@@ -142,7 +142,8 @@ exports.searchEpisodes = [
       const parsedLimit = Math.min(parseInt(limit) || 20, 100);
       const parsedOffset = Math.max(parseInt(offset) || 0, 0);
 
-      let sql = 'SELECT id, title, description, status, episode_number, created_at FROM episodes WHERE 1=1';
+      let sql =
+        'SELECT id, title, description, status, episode_number, created_at FROM episodes WHERE 1=1';
       const params = [];
       let paramIndex = 1;
 
@@ -164,7 +165,10 @@ exports.searchEpisodes = [
       }
 
       // Get total count
-      const countSql = sql.replace('SELECT id, title, description, status, episode_number, created_at FROM episodes', 'SELECT COUNT(*) as count FROM episodes');
+      const countSql = sql.replace(
+        'SELECT id, title, description, status, episode_number, created_at FROM episodes',
+        'SELECT COUNT(*) as count FROM episodes'
+      );
       const countResult = await db.query(countSql, params);
       const total = parseInt(countResult.rows[0].count);
 
@@ -245,7 +249,7 @@ exports.searchSuggestions = [
           const activitySuggestions = await ActivityIndexService.getSuggestions(q, parsedLimit);
           if (activitySuggestions.success && activitySuggestions.data) {
             suggestions.push(
-              ...activitySuggestions.data.map(s => ({
+              ...activitySuggestions.data.map((s) => ({
                 value: s,
                 type: 'activity_description',
               }))
@@ -267,7 +271,7 @@ exports.searchSuggestions = [
           );
 
           suggestions.push(
-            ...result.rows.map(r => ({
+            ...result.rows.map((r) => ({
               value: r.title,
               type: 'episode_title',
             }))
@@ -340,10 +344,7 @@ exports.getAuditTrail = [
       const parsedOffset = Math.max(parseInt(offset) || 0, 0);
 
       // Verify episode exists
-      const episodeCheck = await db.query(
-        'SELECT id FROM episodes WHERE id = $1',
-        [id]
-      );
+      const episodeCheck = await db.query('SELECT id FROM episodes WHERE id = $1', [id]);
 
       if (episodeCheck.rows.length === 0) {
         return res.status(404).json({
@@ -365,16 +366,15 @@ exports.getAuditTrail = [
 
       // Enhance audit trail with episode and user details
       const enrichedData = await Promise.all(
-        results.data.map(async activity => {
+        results.data.map(async (activity) => {
           try {
             // Get user information if available
             let userName = 'Unknown User';
             if (activity.user_id) {
               // Note: Adjust query based on your user table structure
-              const userResult = await db.query(
-                'SELECT name, email FROM users WHERE id = $1 LIMIT 1',
-                [activity.user_id]
-              ).catch(() => ({ rows: [] }));
+              const userResult = await db
+                .query('SELECT name, email FROM users WHERE id = $1 LIMIT 1', [activity.user_id])
+                .catch(() => ({ rows: [] }));
 
               if (userResult && userResult.rows.length > 0) {
                 userName = userResult.rows[0].name || userResult.rows[0].email;

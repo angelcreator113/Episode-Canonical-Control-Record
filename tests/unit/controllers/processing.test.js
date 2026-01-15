@@ -127,7 +127,11 @@ describe('Processing Controller', () => {
       models.Episode.findByPk = jest.fn().mockResolvedValue(mockEpisode);
       models.ProcessingQueue.create = jest.fn().mockResolvedValue(mockJob);
 
-      mockReq.body = { episodeId: 1, jobType: 'thumbnail_generation', jobConfig: { quality: 'high' } };
+      mockReq.body = {
+        episodeId: 1,
+        jobType: 'thumbnail_generation',
+        jobConfig: { quality: 'high' },
+      };
 
       await processingController.createJob(mockReq, mockRes);
 
@@ -311,7 +315,9 @@ describe('Processing Controller', () => {
       await processingController.cancelJob(mockReq, mockRes);
 
       expect(mockJob.destroy).toHaveBeenCalled();
-      expect(mockRes.json).toHaveBeenCalledWith(expect.objectContaining({ message: 'Processing job cancelled' }));
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({ message: 'Processing job cancelled' })
+      );
     });
 
     test('should log cancellation', async () => {
@@ -426,9 +432,7 @@ describe('Processing Controller', () => {
 
   describe('getPendingJobs()', () => {
     test('should return pending jobs', async () => {
-      const mockJobs = [
-        { id: 1, status: 'pending', jobType: 'thumbnail_generation' },
-      ];
+      const mockJobs = [{ id: 1, status: 'pending', jobType: 'thumbnail_generation' }];
 
       models.ProcessingQueue.findPending = jest.fn().mockResolvedValue(mockJobs);
 
@@ -440,9 +444,7 @@ describe('Processing Controller', () => {
 
   describe('getFailedJobs()', () => {
     test('should return failed jobs', async () => {
-      const mockJobs = [
-        { id: 1, status: 'failed', jobType: 'thumbnail_generation' },
-      ];
+      const mockJobs = [{ id: 1, status: 'failed', jobType: 'thumbnail_generation' }];
 
       models.ProcessingQueue.findFailed = jest.fn().mockResolvedValue(mockJobs);
 
@@ -483,9 +485,7 @@ describe('Processing Controller', () => {
 
   describe('Error Handling', () => {
     test('should handle database errors', async () => {
-      models.ProcessingQueue.findAndCountAll = jest.fn().mockRejectedValue(
-        new Error('DB error')
-      );
+      models.ProcessingQueue.findAndCountAll = jest.fn().mockRejectedValue(new Error('DB error'));
 
       await expect(processingController.listJobs(mockReq, mockRes)).rejects.toThrow('DB error');
     });

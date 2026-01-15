@@ -85,9 +85,7 @@ describe('Activity Controller', () => {
     it('should support pagination', async () => {
       ActivityService.getActivityFeed.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/feed')
-        .query({ limit: 100, offset: 20 });
+      const res = await request(app).get('/api/v1/activity/feed').query({ limit: 100, offset: 20 });
 
       expect(res.status).toBe(200);
       expect(res.body.data.pagination.limit).toBe(100);
@@ -97,9 +95,7 @@ describe('Activity Controller', () => {
     it('should enforce max limit of 200', async () => {
       ActivityService.getActivityFeed.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/feed')
-        .query({ limit: 500 });
+      const res = await request(app).get('/api/v1/activity/feed').query({ limit: 500 });
 
       expect(res.status).toBe(200);
       const [, opts] = ActivityService.getActivityFeed.mock.calls[0];
@@ -119,12 +115,10 @@ describe('Activity Controller', () => {
     it('should filter by date range', async () => {
       ActivityService.getActivityFeed.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/feed')
-        .query({
-          startDate: '2025-01-01',
-          endDate: '2025-01-31',
-        });
+      const res = await request(app).get('/api/v1/activity/feed').query({
+        startDate: '2025-01-01',
+        endDate: '2025-01-31',
+      });
 
       expect(res.status).toBe(200);
     });
@@ -139,9 +133,7 @@ describe('Activity Controller', () => {
 
       ActivityService.getResourceActivity.mockResolvedValue(mockActivities);
 
-      const res = await request(app).get(
-        '/api/v1/activity/resource/episode/episode-123'
-      );
+      const res = await request(app).get('/api/v1/activity/resource/episode/episode-123');
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -195,12 +187,10 @@ describe('Activity Controller', () => {
     it('should support date range filtering', async () => {
       ActivityService.getTeamActivity.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/team')
-        .query({
-          startDate: '2025-01-01',
-          endDate: '2025-01-31',
-        });
+      const res = await request(app).get('/api/v1/activity/team').query({
+        startDate: '2025-01-01',
+        endDate: '2025-01-31',
+      });
 
       expect(res.status).toBe(200);
     });
@@ -208,9 +198,7 @@ describe('Activity Controller', () => {
     it('should enforce higher limit for admin', async () => {
       ActivityService.getTeamActivity.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/team')
-        .query({ limit: 500 });
+      const res = await request(app).get('/api/v1/activity/team').query({ limit: 500 });
 
       expect(res.status).toBe(200);
       const [opts] = ActivityService.getTeamActivity.mock.calls[0];
@@ -241,8 +229,7 @@ describe('Activity Controller', () => {
       const res = await request(app).get('/api/v1/activity/stats');
 
       expect(res.status).toBe(200);
-      const [startDate, endDate] = ActivityService.getActivityStats.mock
-        .calls[0];
+      const [startDate, endDate] = ActivityService.getActivityStats.mock.calls[0];
       expect(startDate).toBeInstanceOf(Date);
       expect(endDate).toBeInstanceOf(Date);
     });
@@ -250,12 +237,10 @@ describe('Activity Controller', () => {
     it('should accept custom date range', async () => {
       ActivityService.getActivityStats.mockResolvedValue({});
 
-      const res = await request(app)
-        .get('/api/v1/activity/stats')
-        .query({
-          startDate: '2025-01-01',
-          endDate: '2025-01-31',
-        });
+      const res = await request(app).get('/api/v1/activity/stats').query({
+        startDate: '2025-01-01',
+        endDate: '2025-01-31',
+      });
 
       expect(res.status).toBe(200);
     });
@@ -263,15 +248,11 @@ describe('Activity Controller', () => {
 
   describe('GET /api/v1/activity/search - Search Activity Logs', () => {
     it('should search activity logs', async () => {
-      const mockResults = [
-        { id: '1', action: 'created_episode', description: 'Created Test' },
-      ];
+      const mockResults = [{ id: '1', action: 'created_episode', description: 'Created Test' }];
 
       ActivityService.searchActivityLogs.mockResolvedValue(mockResults);
 
-      const res = await request(app)
-        .get('/api/v1/activity/search')
-        .query({ q: 'episode' });
+      const res = await request(app).get('/api/v1/activity/search').query({ q: 'episode' });
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -297,14 +278,9 @@ describe('Activity Controller', () => {
     });
 
     it('should return result count', async () => {
-      ActivityService.searchActivityLogs.mockResolvedValue([
-        { id: '1' },
-        { id: '2' },
-      ]);
+      ActivityService.searchActivityLogs.mockResolvedValue([{ id: '1' }, { id: '2' }]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/search')
-        .query({ q: 'test' });
+      const res = await request(app).get('/api/v1/activity/search').query({ q: 'test' });
 
       expect(res.status).toBe(200);
       expect(res.body.data.pagination.resultCount).toBe(2);
@@ -313,9 +289,7 @@ describe('Activity Controller', () => {
     it('should handle no results', async () => {
       ActivityService.searchActivityLogs.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/search')
-        .query({ q: 'nonexistent' });
+      const res = await request(app).get('/api/v1/activity/search').query({ q: 'nonexistent' });
 
       expect(res.status).toBe(200);
       expect(res.body.data.pagination.resultCount).toBe(0);
@@ -331,9 +305,7 @@ describe('Activity Controller', () => {
 
       ActivityService.getDashboardStats.mockResolvedValue(mockStats);
 
-      const res = await request(app).get(
-        '/api/v1/activity/dashboard-stats'
-      );
+      const res = await request(app).get('/api/v1/activity/dashboard-stats');
 
       expect(res.status).toBe(200);
       expect(res.body.status).toBe('success');
@@ -343,9 +315,7 @@ describe('Activity Controller', () => {
     it('should default to 7-day period', async () => {
       ActivityService.getDashboardStats.mockResolvedValue([]);
 
-      const res = await request(app).get(
-        '/api/v1/activity/dashboard-stats'
-      );
+      const res = await request(app).get('/api/v1/activity/dashboard-stats');
 
       expect(res.status).toBe(200);
       const [days] = ActivityService.getDashboardStats.mock.calls[0];
@@ -355,9 +325,7 @@ describe('Activity Controller', () => {
     it('should accept custom day range', async () => {
       ActivityService.getDashboardStats.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/dashboard-stats')
-        .query({ days: 30 });
+      const res = await request(app).get('/api/v1/activity/dashboard-stats').query({ days: 30 });
 
       expect(res.status).toBe(200);
       const [days] = ActivityService.getDashboardStats.mock.calls[0];
@@ -367,9 +335,7 @@ describe('Activity Controller', () => {
     it('should enforce max 90 days', async () => {
       ActivityService.getDashboardStats.mockResolvedValue([]);
 
-      const res = await request(app)
-        .get('/api/v1/activity/dashboard-stats')
-        .query({ days: 365 });
+      const res = await request(app).get('/api/v1/activity/dashboard-stats').query({ days: 365 });
 
       expect(res.status).toBe(200);
       const [days] = ActivityService.getDashboardStats.mock.calls[0];
@@ -388,13 +354,9 @@ describe('Activity Controller', () => {
     });
 
     it('should handle service errors on search', async () => {
-      ActivityService.searchActivityLogs.mockRejectedValue(
-        new Error('Search Error')
-      );
+      ActivityService.searchActivityLogs.mockRejectedValue(new Error('Search Error'));
 
-      const res = await request(app)
-        .get('/api/v1/activity/search')
-        .query({ q: 'test' });
+      const res = await request(app).get('/api/v1/activity/search').query({ q: 'test' });
 
       expect(res.status).toBe(500);
       expect(res.body.status).toBe('error');

@@ -12,7 +12,7 @@ describe('File Service Integration Tests', () => {
     const loginRes = await request(app)
       .post('/api/v1/auth/login')
       .send({ email: 'test@example.com', password: 'password123' });
-    
+
     if (loginRes.status === 200 && loginRes.body.data?.accessToken) {
       token = loginRes.body.data.accessToken;
     } else {
@@ -21,10 +21,11 @@ describe('File Service Integration Tests', () => {
 
     // Create test episode
     episodeId = uuidv4();
-    await db.query(
-      'INSERT INTO episodes (id, title, status) VALUES ($1, $2, $3)',
-      [episodeId, 'Test Episode', 'draft']
-    );
+    await db.query('INSERT INTO episodes (id, title, status) VALUES ($1, $2, $3)', [
+      episodeId,
+      'Test Episode',
+      'draft',
+    ]);
   });
 
   afterAll(async () => {
@@ -38,7 +39,7 @@ describe('File Service Integration Tests', () => {
   describe('POST /api/v1/files/upload', () => {
     test('should upload file successfully', async () => {
       const fileBuffer = Buffer.from('test video content');
-      
+
       const res = await request(app)
         .post('/api/v1/files/upload')
         .set('Authorization', `Bearer ${token}`)
@@ -72,7 +73,7 @@ describe('File Service Integration Tests', () => {
 
     test('should reject files exceeding size limit', async () => {
       const largeBuffer = Buffer.alloc(510 * 1024 * 1024); // 510MB
-      
+
       const res = await request(app)
         .post('/api/v1/files/upload')
         .set('Authorization', `Bearer ${token}`)
@@ -84,7 +85,7 @@ describe('File Service Integration Tests', () => {
 
     test('should associate file with episode if provided', async () => {
       const fileBuffer = Buffer.from('test video');
-      
+
       const res = await request(app)
         .post('/api/v1/files/upload')
         .set('Authorization', `Bearer ${token}`)
@@ -97,7 +98,7 @@ describe('File Service Integration Tests', () => {
 
     test('should reject upload to non-existent episode', async () => {
       const fakeEpisodeId = uuidv4();
-      
+
       const res = await request(app)
         .post('/api/v1/files/upload')
         .set('Authorization', `Bearer ${token}`)
@@ -108,7 +109,7 @@ describe('File Service Integration Tests', () => {
       expect(res.body.code).toBe('EPISODE_NOT_FOUND');
     });
 
-    test('should reject upload to episode user doesn\'t own', async () => {
+    test("should reject upload to episode user doesn't own", async () => {
       // Create another user
       const otherUserId = uuidv4();
       await db.query(
@@ -118,10 +119,12 @@ describe('File Service Integration Tests', () => {
 
       // Create episode owned by other user
       const otherEpisodeId = uuidv4();
-      await db.query(
-        'INSERT INTO episodes (id, title, user_id, status) VALUES ($1, $2, $3, $4)',
-        [otherEpisodeId, 'Other Episode', otherUserId, 'draft']
-      );
+      await db.query('INSERT INTO episodes (id, title, user_id, status) VALUES ($1, $2, $3, $4)', [
+        otherEpisodeId,
+        'Other Episode',
+        otherUserId,
+        'draft',
+      ]);
 
       const res = await request(app)
         .post('/api/v1/files/upload')
@@ -148,7 +151,7 @@ describe('File Service Integration Tests', () => {
         .post('/api/v1/files/upload')
         .set('Authorization', `Bearer ${token}`)
         .attach('file', fileBuffer, 'download-test.mp4');
-      
+
       fileId = res.body.data.id;
     });
 
@@ -165,7 +168,7 @@ describe('File Service Integration Tests', () => {
 
     test('should return 404 for non-existent file', async () => {
       const fakeId = uuidv4();
-      
+
       const res = await request(app)
         .get(`/api/v1/files/${fakeId}/download`)
         .set('Authorization', `Bearer ${token}`);
@@ -174,7 +177,7 @@ describe('File Service Integration Tests', () => {
       expect(res.body.code).toBe('FILE_NOT_FOUND');
     });
 
-    test('should prevent download of other user\'s files', async () => {
+    test("should prevent download of other user's files", async () => {
       const otherUserId = uuidv4();
       await db.query(
         'INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)',
@@ -201,7 +204,7 @@ describe('File Service Integration Tests', () => {
         .post('/api/v1/files/upload')
         .set('Authorization', `Bearer ${token}`)
         .attach('file', fileBuffer, 'delete-test.mp4');
-      
+
       fileId = res.body.data.id;
     });
 
@@ -223,7 +226,7 @@ describe('File Service Integration Tests', () => {
 
     test('should return 404 for non-existent file', async () => {
       const fakeId = uuidv4();
-      
+
       const res = await request(app)
         .delete(`/api/v1/files/${fakeId}`)
         .set('Authorization', `Bearer ${token}`);
@@ -244,10 +247,8 @@ describe('File Service Integration Tests', () => {
       }
     });
 
-    test('should list user\'s files', async () => {
-      const res = await request(app)
-        .get('/api/v1/files')
-        .set('Authorization', `Bearer ${token}`);
+    test("should list user's files", async () => {
+      const res = await request(app).get('/api/v1/files').set('Authorization', `Bearer ${token}`);
 
       expect(res.status).toBe(200);
       expect(res.body.success).toBe(true);
@@ -266,18 +267,16 @@ describe('File Service Integration Tests', () => {
       expect(res.body.pagination.limit).toBe(2);
     });
 
-    test('should not expose other user\'s files', async () => {
+    test("should not expose other user's files", async () => {
       const otherUserId = uuidv4();
       await db.query(
         'INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)',
         [otherUserId, 'otherlist', 'otherlist@example.com', 'hash']
       );
 
-      const res = await request(app)
-        .get('/api/v1/files')
-        .set('Authorization', `Bearer ${token}`);
+      const res = await request(app).get('/api/v1/files').set('Authorization', `Bearer ${token}`);
 
-      const filesByOtherUser = res.body.data.filter(f => f.userId === otherUserId);
+      const filesByOtherUser = res.body.data.filter((f) => f.userId === otherUserId);
       expect(filesByOtherUser.length).toBe(0);
 
       await db.query('DELETE FROM users WHERE id = $1', [otherUserId]);
@@ -293,7 +292,7 @@ describe('File Service Integration Tests', () => {
         .post('/api/v1/files/upload')
         .set('Authorization', `Bearer ${token}`)
         .attach('file', fileBuffer, 'metadata-test.jpg');
-      
+
       fileId = res.body.data.id;
     });
 
@@ -310,7 +309,7 @@ describe('File Service Integration Tests', () => {
       expect(res.body.data).toHaveProperty('createdAt');
     });
 
-    test('should prevent access to other user\'s file metadata', async () => {
+    test("should prevent access to other user's file metadata", async () => {
       const otherUserId = uuidv4();
       await db.query(
         'INSERT INTO users (id, username, email, password_hash) VALUES ($1, $2, $3, $4)',

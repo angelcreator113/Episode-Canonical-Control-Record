@@ -8,7 +8,7 @@ const { asyncHandler } = require('../middleware/errorHandler');
 /**
  * Thumbnail Routes
  * Base path: /api/v1/thumbnails
- * 
+ *
  * Permissions:
  * - view: All (viewer, editor, admin)
  * - create: Admin, Editor
@@ -17,28 +17,16 @@ const { asyncHandler } = require('../middleware/errorHandler');
  */
 
 // List thumbnails (viewer permission)
-router.get(
-  '/',
-  asyncHandler(thumbnailController.listThumbnails)
-);
+router.get('/', asyncHandler(thumbnailController.listThumbnails));
 
 // Get single thumbnail (viewer permission)
-router.get(
-  '/:id',
-  asyncHandler(thumbnailController.getThumbnail)
-);
+router.get('/:id', asyncHandler(thumbnailController.getThumbnail));
 
 // Get thumbnail S3 URL (viewer permission)
-router.get(
-  '/:id/url',
-  asyncHandler(thumbnailController.getThumbnailUrl)
-);
+router.get('/:id/url', asyncHandler(thumbnailController.getThumbnailUrl));
 
 // Prepare thumbnail download (viewer permission)
-router.get(
-  '/:id/download',
-  asyncHandler(thumbnailController.prepareThumbnailDownload)
-);
+router.get('/:id/download', asyncHandler(thumbnailController.prepareThumbnailDownload));
 
 // Create thumbnail (requires authentication + editor role)
 router.post(
@@ -73,16 +61,10 @@ router.delete(
 );
 
 // Get all thumbnails for specific episode
-router.get(
-  '/episode/:episodeId',
-  asyncHandler(thumbnailController.getEpisodeThumbnails)
-);
+router.get('/episode/:episodeId', asyncHandler(thumbnailController.getEpisodeThumbnails));
 
 // Get primary thumbnail for episode
-router.get(
-  '/episode/:episodeId/primary',
-  asyncHandler(thumbnailController.getPrimaryThumbnail)
-);
+router.get('/episode/:episodeId/primary', asyncHandler(thumbnailController.getPrimaryThumbnail));
 
 /**
  * Phase 2.6 Publishing Workflow Routes
@@ -99,11 +81,11 @@ router.post(
       const thumbnail = await ThumbnailService.publishThumbnail(req.params.id, userId);
       res.json({
         success: true,
-        thumbnail
+        thumbnail,
       });
     } catch (error) {
       res.status(error.message.includes('not found') ? 404 : 400).json({
-        error: error.message
+        error: error.message,
       });
     }
   })
@@ -119,11 +101,11 @@ router.post(
       const thumbnail = await ThumbnailService.unpublishThumbnail(req.params.id);
       res.json({
         success: true,
-        thumbnail
+        thumbnail,
       });
     } catch (error) {
       res.status(error.message.includes('not found') ? 404 : 400).json({
-        error: error.message
+        error: error.message,
       });
     }
   })
@@ -139,11 +121,11 @@ router.post(
       const thumbnail = await ThumbnailService.setPrimaryThumbnail(req.params.id);
       res.json({
         success: true,
-        thumbnail
+        thumbnail,
       });
     } catch (error) {
       res.status(error.message.includes('not found') ? 404 : 400).json({
-        error: error.message
+        error: error.message,
       });
     }
   })
@@ -158,11 +140,11 @@ router.get(
       const thumbnails = await ThumbnailService.getThumbnailsByEpisode(req.params.episodeId);
       res.json({
         success: true,
-        thumbnails
+        thumbnails,
       });
     } catch (error) {
       res.status(500).json({
-        error: error.message
+        error: error.message,
       });
     }
   })
