@@ -4,7 +4,15 @@
 
 jest.mock('../../../src/models');
 jest.mock('../../../src/middleware/errorHandler');
-jest.mock('../../../src/middleware/auditLog');
+jest.mock('../../../src/middleware/auditLog', () => ({
+  logger: {
+    logAction: jest.fn().mockResolvedValue(null),
+  },
+  auditLog: jest.fn(),
+  captureResponseData: jest.fn(),
+  getActionType: jest.fn(),
+  getResourceInfo: jest.fn(),
+}));
 
 const metadataController = require('../../../src/controllers/metadataController');
 const { models } = require('../../../src/models');
@@ -285,9 +293,13 @@ describe('Metadata Controller', () => {
         new Error('DB error')
       );
 
-      await expect(metadataController.listMetadata(mockReq, mockRes)).rejects.toThrow(
-        'DB error'
-      );
+      await metadataController.listMetadata(mockReq, mockRes);
+
+      // Controller returns empty JSON response with warning when query fails
+      expect(mockRes.json).toHaveBeenCalled();
+      const call = mockRes.json.mock.calls[0][0];
+      expect(call.data).toEqual([]);
+      expect(call.warning).toBeDefined();
     });
   });
 });

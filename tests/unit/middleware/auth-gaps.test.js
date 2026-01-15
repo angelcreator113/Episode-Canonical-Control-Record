@@ -18,7 +18,7 @@ describe('Auth Middleware - Gap Coverage', () => {
       };
       const next = jest.fn();
 
-      const middleware = authenticateToken(req, res, next);
+      const _middleware = authenticateToken(req, res, next);
       // This should trigger error handling on line 184
       expect(res.status).toBeDefined();
     });
@@ -27,19 +27,19 @@ describe('Auth Middleware - Gap Coverage', () => {
       const originalEnv = process.env.COGNITO_USER_POOL_ID;
       delete process.env.COGNITO_USER_POOL_ID;
 
-      const req = {
+      const _req = {
         headers: {
           authorization: 'Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c',
         },
       };
-      const res = {
+      const _res = {
         status: jest.fn().mockReturnThis(),
         json: jest.fn().mockReturnThis(),
       };
-      const next = jest.fn();
+      const _next = jest.fn();
 
-      const middleware = authenticateToken(req, res, next);
-      expect(res.status || next).toBeDefined();
+      const _middleware = authenticateToken(_req, _res, _next);
+      expect(_res.status || _next).toBeDefined();
 
       process.env.COGNITO_USER_POOL_ID = originalEnv;
     });
@@ -47,11 +47,11 @@ describe('Auth Middleware - Gap Coverage', () => {
 
   describe('optionalAuth middleware', () => {
     test('should call next() when no authorization header present', async () => {
-      const req = {
-        headers: {},
+      const _req = {
+        headers: {}
       };
-      const res = {};
-      const next = jest.fn();
+      const _res = {};
+      const _next = jest.fn();
 
       const middleware = optionalAuth;
       // optionalAuth wraps authenticateToken and makes it optional
@@ -59,13 +59,13 @@ describe('Auth Middleware - Gap Coverage', () => {
     });
 
     test('should process optional token when present', async () => {
-      const req = {
+      const _req = {
         headers: {
           authorization: 'Bearer valid.token.here',
         },
       };
-      const res = {};
-      const next = jest.fn();
+      const _res = {};
+      const _next = jest.fn();
 
       // Verify optionalAuth is exported and callable
       expect(optionalAuth).toBeDefined();

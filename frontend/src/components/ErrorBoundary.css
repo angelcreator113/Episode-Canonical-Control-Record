@@ -1,0 +1,144 @@
+/**
+ * Error Boundary Styles
+ */
+
+.error-boundary {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+  padding: 20px;
+}
+
+.error-boundary-content {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  padding: 40px;
+  max-width: 600px;
+  text-align: center;
+}
+
+.error-icon {
+  font-size: 60px;
+  margin-bottom: 20px;
+  display: block;
+}
+
+.error-boundary h1 {
+  color: #1f2937;
+  margin: 0 0 16px 0;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.error-message {
+  color: #6b7280;
+  margin: 0 0 24px 0;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+.error-details {
+  background-color: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+  padding: 12px;
+  margin: 24px 0;
+  text-align: left;
+}
+
+.error-details summary {
+  cursor: pointer;
+  color: #0066cc;
+  font-weight: 500;
+  padding: 8px;
+  user-select: none;
+}
+
+.error-details summary:hover {
+  color: #0052a3;
+}
+
+.error-details pre {
+  margin: 12px 0 0 0;
+  padding: 12px;
+  background-color: #1f2937;
+  color: #10b981;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.4;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.error-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 32px;
+}
+
+.error-actions .btn {
+  padding: 10px 24px;
+  border-radius: 4px;
+  border: none;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.error-actions .btn-primary {
+  background-color: #0066cc;
+  color: white;
+}
+
+.error-actions .btn-primary:hover {
+  background-color: #0052a3;
+}
+
+.error-actions .btn-secondary {
+  background-color: #e5e7eb;
+  color: #1f2937;
+}
+
+.error-actions .btn-secondary:hover {
+  background-color: #d1d5db;
+}
+
+.error-warning {
+  margin-top: 24px;
+  padding: 12px;
+  background-color: #fef3c7;
+  border: 1px solid #fcd34d;
+  border-radius: 4px;
+  color: #92400e;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* Responsive Design */
+
+@media (max-width: 640px) {
+  .error-boundary-content {
+    padding: 24px;
+  }
+
+  .error-boundary h1 {
+    font-size: 22px;
+  }
+
+  .error-message {
+    font-size: 14px;
+  }
+
+  .error-actions {
+    flex-direction: column;
+  }
+
+  .error-actions .btn {
+    width: 100%;
+  }
+}

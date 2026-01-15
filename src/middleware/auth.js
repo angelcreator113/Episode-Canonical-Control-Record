@@ -1,6 +1,6 @@
 const { CognitoIdentityServiceProvider } = require('aws-sdk');
 
-const cognito = new CognitoIdentityServiceProvider({
+const _cognito = new CognitoIdentityServiceProvider({
   region: process.env.COGNITO_REGION || 'us-east-1',
 });
 
@@ -23,7 +23,7 @@ const verifyToken = async (token) => {
 
     // Get the Cognito public keys for verification
     // In production, these should be cached and refreshed periodically
-    const keyUrl = `https://cognito-idp.${process.env.COGNITO_REGION || 'us-east-1'}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
+    const _keyUrl = `https://cognito-idp.${process.env.COGNITO_REGION || 'us-east-1'}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
     
     // Note: In a production implementation, you would:
     // 1. Fetch and cache JWKS from Cognito
@@ -94,7 +94,7 @@ const authenticateToken = async (req, res, next) => {
         id: decoded.sub, // Cognito subject ID
         email: decoded.email,
         name: decoded.name,
-        groups: decoded['cognito:groups'] || [],
+        groups: decoded['cognito:groups'] || decoded.groups || [],
         tokenUse: decoded.token_use, // 'access' or 'id'
         issuedAt: decoded.iat,
         expiresAt: decoded.exp,
@@ -193,8 +193,51 @@ const verifyGroup = (requiredGroup) => {
   };
 };
 
+/**
+ * Authorization Middleware
+ * Alias for verifyGroup - checks if user is in required role/group
+ * @param {string|string[]} requiredGroups - Group name(s) to check for
+ */
+const authorize = (requiredGroups) => {
+  // Handle both single group and array of groups
+  const groups = Array.isArray(requiredGroups) ? requiredGroups : [requiredGroups];
+  
+  return (req, res, next) => {
+    if (!req.user) {
+      return res.status(401).json({
+        error: 'Unauthorized',
+        message: 'User not authenticated',
+        code: 'AUTH_REQUIRED',
+      });
+    }
+
+    if (!req.user.groups || !req.user.groups.some(group => groups.includes(group))) {
+      return res.status(403).json({
+        error: 'Forbidden',
+        message: `User must be in one of these groups: ${groups.join(', ')}`,
+        code: 'AUTH_GROUP_REQUIRED',
+      });
+    }
+
+    next();
+  };
+};
+
+/**
+ * Alias for authenticateToken - more intuitive naming
+ */
+const authenticate = authenticateToken;
+
+/**
+ * Alias for authorize - check user roles/groups
+ */
+const authorizeRole = authorize;
+
 module.exports = {
+  authenticate,
   authenticateToken,
+  authorize,
+  authorizeRole,
   optionalAuth,
   verifyToken,
   verifyGroup,

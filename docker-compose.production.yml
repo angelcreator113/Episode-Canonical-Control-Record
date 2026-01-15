@@ -1,0 +1,90 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: episode-postgres-prod
+    environment:
+      POSTGRES_USER: ${DB_USER_PROD:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD_PROD:-postgres}
+      POSTGRES_DB: episode_metadata
+    ports:
+      - '5434:5432'
+    volumes:
+      - postgres_prod_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${DB_USER_PROD:-postgres}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  redis:
+    image: redis:7-alpine
+    container_name: episode-redis-prod
+    ports:
+      - '6381:6379'
+    volumes:
+      - redis_prod_data:/data
+    healthcheck:
+      test: ['CMD', 'redis-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: episode-api-prod
+    environment:
+      - NODE_ENV=production
+      - PORT=3002
+      - DATABASE_URL=postgresql://${DB_USER_PROD:-postgres}:${DB_PASSWORD_PROD:-postgres}@postgres:5432/episode_metadata
+      - DB_HOST=postgres
+      - AWS_REGION=us-east-1
+      - REDIS_URL=redis://redis:6379
+    ports:
+      - '3003:3002'
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env.production
+    restart: always
+    networks:
+      - production-network
+    healthcheck:
+      test: ['CMD', 'curl', '-f', 'http://localhost:3002/api/v1/health']
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  nginx:
+    image: nginx:alpine
+    container_name: episode-nginx-prod
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./nginx/production/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/production/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      - app
+    restart: always
+    networks:
+      - production-network
+
+volumes:
+  postgres_prod_data:
+    driver: local
+  redis_prod_data:
+    driver: local
+
+networks:
+  production-network:
+    driver: bridge

@@ -16,86 +16,111 @@ module.exports = {
   /**
    * GET /thumbnails - List all thumbnails
    */
-  async listThumbnails(req, res, next) {
-    const { page = 1, limit = 20, episodeId, type } = req.query;
-    const offset = (page - 1) * limit;
+  async listThumbnails(req, res, _next) {
+    try {
+      const { page = 1, limit = 20, episodeId, type } = req.query;
+      const offset = (page - 1) * limit;
 
-    let where = {};
-    if (episodeId) where.episodeId = parseInt(episodeId);
-    if (type) where.thumbnailType = type;
+      const where = {};
+      if (episodeId) where.episodeId = parseInt(episodeId);
+      if (type) where.thumbnailType = type;
 
-    const { count, rows } = await Thumbnail.findAndCountAll({
-      where,
-      limit: parseInt(limit),
-      offset,
-      order: [['generatedAt', 'DESC']],
-      include: {
-        model: Episode,
-        as: 'episode',
-        attributes: ['id', 'episodeTitle', 'showName'],
-      },
-    });
-
-    // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'thumbnail',
-      'all',
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      }
-    );
-
-    res.json({
-      data: rows,
-      pagination: {
-        page: parseInt(page),
+      const { count, rows } = await Thumbnail.findAndCountAll({
+        attributes: [
+          'id',
+          'episodeId',
+          's3Bucket',
+          's3Key',
+          'fileSizeBytes',
+          'mimeType',
+          'widthPixels',
+          'heightPixels',
+          'format',
+          'thumbnailType',
+          'positionSeconds',
+          'generatedAt',
+          'qualityRating'
+        ],
+        where,
         limit: parseInt(limit),
-        total: count,
-        pages: Math.ceil(count / limit),
-      },
-    });
+        offset,
+        order: [['generatedAt', 'DESC']],
+        include: {
+          model: Episode,
+          as: 'episode',
+          attributes: ['id', 'episodeTitle', 'showName'],
+        },
+      });
+
+      res.json({
+        data: rows,
+        pagination: {
+          page: parseInt(page),
+          limit: parseInt(limit),
+          total: count,
+          pages: Math.ceil(count / limit),
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error in listThumbnails:', error);
+      res.status(500).json({
+        error: 'Failed to list thumbnails',
+        message: error.message
+      });
+    }
   },
 
   /**
    * GET /thumbnails/:id - Get single thumbnail
    */
-  async getThumbnail(req, res, next) {
-    const { id } = req.params;
+  async getThumbnail(req, res, _next) {
+    try {
+      const { id } = req.params;
 
-    const thumbnail = await Thumbnail.findByPk(id, {
-      include: {
-        model: Episode,
-        as: 'episode',
-        attributes: ['id', 'episodeTitle', 'showName', 'seasonNumber', 'episodeNumber'],
-      },
-    });
+      const thumbnail = await Thumbnail.findByPk(id, {
+        attributes: [
+          'id',
+          'episodeId',
+          's3Bucket',
+          's3Key',
+          'fileSizeBytes',
+          'mimeType',
+          'widthPixels',
+          'heightPixels',
+          'format',
+          'thumbnailType',
+          'positionSeconds',
+          'generatedAt',
+          'qualityRating'
+        ],
+        include: {
+          model: Episode,
+          as: 'episode',
+          attributes: ['id', 'episodeTitle', 'showName', 'seasonNumber', 'episodeNumber'],
+        },
+      });
 
-    if (!thumbnail) {
-      throw new NotFoundError('Thumbnail', id);
-    }
-
-    // Log activity
-    await logger.logAction(
-      req.user?.id || 'anonymous',
-      'view',
-      'thumbnail',
-      id,
-      {
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
+      if (!thumbnail) {
+        return res.status(404).json({
+          error: 'Thumbnail not found',
+          id
+        });
       }
-    );
 
-    res.json({ data: thumbnail });
+      res.json({ data: thumbnail });
+    } catch (error) {
+      console.error('❌ Error in getThumbnail:', error);
+      res.status(500).json({
+        error: 'Failed to get thumbnail',
+        message: error.message
+      });
+    }
   },
 
   /**
    * POST /thumbnails - Create new thumbnail
    */
-  async createThumbnail(req, res, next) {
+  async createThumbnail(req, res, _next) {
     const {
       episodeId,
       s3Bucket,
@@ -173,7 +198,7 @@ module.exports = {
   /**
    * PUT /thumbnails/:id - Update thumbnail
    */
-  async updateThumbnail(req, res, next) {
+  async updateThumbnail(req, res, _next) {
     const { id } = req.params;
     const updates = req.body;
 
@@ -225,7 +250,7 @@ module.exports = {
   /**
    * DELETE /thumbnails/:id - Delete thumbnail
    */
-  async deleteThumbnail(req, res, next) {
+  async deleteThumbnail(req, res, _next) {
     const { id } = req.params;
 
     const thumbnail = await Thumbnail.findByPk(id);
@@ -258,7 +283,7 @@ module.exports = {
   /**
    * GET /thumbnails/:id/url - Get S3 URL for thumbnail
    */
-  async getThumbnailUrl(req, res, next) {
+  async getThumbnailUrl(req, res, _next) {
     const { id } = req.params;
     const { cdn = false } = req.query;
 
@@ -285,7 +310,7 @@ module.exports = {
   /**
    * GET /thumbnails/:id/download - Prepare thumbnail for download
    */
-  async prepareThumbnailDownload(req, res, next) {
+  async prepareThumbnailDownload(req, res, _next) {
     const { id } = req.params;
 
     const thumbnail = await Thumbnail.findByPk(id, {
@@ -334,7 +359,7 @@ module.exports = {
   /**
    * POST /thumbnails/:id/rate-quality - Rate thumbnail quality
    */
-  async rateThumbnailQuality(req, res, next) {
+  async rateThumbnailQuality(req, res, _next) {
     const { id } = req.params;
     const { rating } = req.body;
 
@@ -378,7 +403,7 @@ module.exports = {
   /**
    * GET /episodes/:episodeId/thumbnails - Get all thumbnails for episode
    */
-  async getEpisodeThumbnails(req, res, next) {
+  async getEpisodeThumbnails(req, res, _next) {
     const { episodeId } = req.params;
 
     // Verify episode exists
@@ -402,7 +427,7 @@ module.exports = {
   /**
    * GET /episodes/:episodeId/thumbnails/primary - Get primary thumbnail for episode
    */
-  async getPrimaryThumbnail(req, res, next) {
+  async getPrimaryThumbnail(req, res, _next) {
     const { episodeId } = req.params;
 
     const thumbnail = await Thumbnail.findOne({

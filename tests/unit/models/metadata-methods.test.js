@@ -198,7 +198,7 @@ describe('MetadataStorage Model Methods - Unit Tests', () => {
 
     test('should call save after setting scenes', async () => {
       const metadata = createMockMetadata();
-      metadata.setDetectedScenes = jest.fn(async function(scenes, duration) {
+      metadata.setDetectedScenes = jest.fn(async function(scenes, _duration) {
         this.scenesDetected = scenes;
         return await this.save();
       });

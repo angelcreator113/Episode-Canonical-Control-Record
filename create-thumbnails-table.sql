@@ -1,0 +1,21 @@
+CREATE TABLE IF NOT EXISTS thumbnails (
+  id SERIAL PRIMARY KEY,
+  "episodeId" UUID,
+  "s3Bucket" VARCHAR(255) NOT NULL,
+  "s3Key" VARCHAR(512) NOT NULL UNIQUE,
+  "fileSizeBytes" BIGINT,
+  "mimeType" VARCHAR(50) DEFAULT 'image/jpeg',
+  "widthPixels" INTEGER,
+  "heightPixels" INTEGER,
+  format VARCHAR(50) DEFAULT 'thumbnail',
+  "generatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  "qualityRating" DECIMAL(3,2),
+  "isPrimary" BOOLEAN DEFAULT FALSE,
+  "publishedAt" TIMESTAMP,
+  "publishedBy" VARCHAR(100),
+  "unpublishedAt" TIMESTAMP,
+  "platformUploadStatus" JSONB,
+  "platformUrls" JSONB,
+  "createdAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  "updatedAt" TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

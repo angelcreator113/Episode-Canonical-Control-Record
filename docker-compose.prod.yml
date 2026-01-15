@@ -1,0 +1,80 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: episode-postgres-prod
+    environment:
+      POSTGRES_USER: ${DB_USER_PROD}
+      POSTGRES_PASSWORD: ${DB_PASSWORD_PROD}
+      POSTGRES_DB: episode_metadata
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./backups:/backups
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER_PROD}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - episode-network
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.prod
+    container_name: episode-api-prod
+    environment:
+      NODE_ENV: production
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: episode_metadata
+      DB_USER: ${DB_USER_PROD}
+      DB_PASSWORD: ${DB_PASSWORD_PROD}
+      JWT_SECRET: ${JWT_SECRET_PROD}
+      AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID_PROD}
+      AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY_PROD}
+      S3_BUCKET: ${S3_BUCKET_PROD}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./logs:/app/logs
+    restart: unless-stopped
+    networks:
+      - episode-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  nginx:
+    image: nginx:alpine
+    container_name: episode-nginx-prod
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - episode-network
+
+volumes:
+  postgres_data:
+    driver: local
+
+networks:
+  episode-network:
+    driver: bridge

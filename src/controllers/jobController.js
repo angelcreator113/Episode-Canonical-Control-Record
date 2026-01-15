@@ -1,43 +1,64 @@
+/* eslint-disable no-unused-vars, no-undef */
 /**
- * JobController
- * Handles async job queue management endpoints
+ * Job Controller - HTTP endpoints for job management
+ * Handles job creation, status tracking, and admin operations
  */
+
+const { Job, JOB_STATUS, JOB_TYPE } = require('../models/job');
 const { ProcessingQueue } = require('../models');
-const JobQueueService = require('../services/JobQueueService');
+const QueueService = require('../services/QueueService');
+const ErrorRecovery = require('../services/ErrorRecovery');
 const logger = require('../utils/logger');
+const ActivityService = require('../services/ActivityService');
+const NotificationService = require('../services/NotificationService');
+const SocketService = require('../services/SocketService');
 
 class JobController {
   /**
-   * Create and enqueue a new job
-   * @param {object} req - Request object
-   * @param {object} res - Response object
+   * Create a new job
+   * POST /api/v1/jobs
    */
-  async createJob(req, res) {
+  static async createJob(req, res) {
     try {
-      const { type, episodeId, fileId, metadata } = req.body;
+      const { jobType, payload, maxRetries } = req.body;
+      const userId = req.user.id;
+      const { episodeId, fileId, metadata } = payload || {};
+      const type = jobType;
 
-      if (!type || !episodeId) {
-        return res.status(400).json({ error: 'type and episodeId are required' });
+      // Validate job type
+      if (!Object.values(JOB_TYPE).includes(jobType)) {
+        return res.status(400).json({
+          success: false,
+          error: 'INVALID_JOB_TYPE',
+          message: `Invalid job type: ${jobType}`
+        });
       }
 
-      // Enqueue job to SQS
-      const sqsResult = await JobQueueService.enqueueJob({
-        type,
-        episodeId,
-        fileId,
-        metadata,
+      // Create job record
+      const job = await Job.create({
+        userId,
+        jobType,
+        payload,
+        maxRetries: maxRetries || 3
       });
 
+      // Send to queue
+      try {
+        await QueueService.sendJob(job.id);
+      } catch (queueError) {
+        logger.warn('Failed to send job to queue', { jobId: job.id, error: queueError.message });
+      }
+
       // Create processing queue record for tracking
-      const job = await ProcessingQueue.create({
-        id: sqsResult.jobId,
+      const processingRecord = await ProcessingQueue.create({
+        id: job.id,
         job_type: type,
         episode_id: episodeId,
         file_id: fileId,
         status: 'pending',
         progress: 0,
         data: { metadata },
-        sqs_message_id: sqsResult.messageId,
+        sqs_message_id: job.id,
       });
 
       logger.info('Job created', {
@@ -45,6 +66,35 @@ class JobController {
         type,
         episodeId,
       });
+
+      // Phase 3A Integration: Activity Logging (non-blocking)
+      ActivityService.logActivity({
+        userId: req.user?.id,
+        action: 'CREATE',
+        resourceType: 'job',
+        resourceId: job.id,
+        metadata: { jobType: job.job_type, episodeId, payload: job.payload }
+      }).catch((err) => console.error('Activity logging error:', err));
+
+      // Phase 3A Integration: WebSocket broadcast (non-blocking)
+      SocketService.broadcastMessage({
+        event: 'job_created',
+        data: {
+          jobId: job.id,
+          type: job.job_type,
+          episodeId,
+          createdBy: req.user?.email || 'unknown',
+          timestamp: new Date()
+        }
+      }).catch((err) => console.error('WebSocket broadcast error:', err));
+
+      // Phase 3A Integration: Notification (non-blocking)
+      NotificationService.create({
+        userId: req.user?.id,
+        type: 'info',
+        message: `Job created (${job.job_type})`,
+        data: { resourceType: 'job', resourceId: job.id }
+      }).catch((err) => console.error('Notification error:', err));
 
       res.status(201).json({
         jobId: job.id,
@@ -181,6 +231,25 @@ class JobController {
         retryCount: job.retry_count + 1,
       });
 
+      // Phase 3A Integration: Activity Logging (non-blocking)
+      ActivityService.logActivity({
+        userId: req.user?.id,
+        action: 'RETRY',
+        resourceType: 'job',
+        resourceId: jobId,
+        metadata: { retryCount: job.retry_count + 1, jobType: job.job_type }
+      }).catch((err) => console.error('Activity logging error:', err));
+
+      // Phase 3A Integration: WebSocket broadcast (non-blocking)
+      SocketService.broadcastMessage({
+        event: 'job_retried',
+        data: {
+          jobId,
+          retryCount: job.retry_count + 1,
+          timestamp: new Date()
+        }
+      }).catch((err) => console.error('WebSocket broadcast error:', err));
+
       res.json({
         jobId: job.id,
         status: job.status,
@@ -219,6 +288,24 @@ class JobController {
       });
 
       logger.info('Job cancelled', { jobId });
+
+      // Phase 3A Integration: Activity Logging (non-blocking)
+      ActivityService.logActivity({
+        userId: req.user?.id,
+        action: 'CANCEL',
+        resourceType: 'job',
+        resourceId: jobId,
+        metadata: { jobType: job.job_type }
+      }).catch((err) => console.error('Activity logging error:', err));
+
+      // Phase 3A Integration: WebSocket broadcast (non-blocking)
+      SocketService.broadcastMessage({
+        event: 'job_cancelled',
+        data: {
+          jobId,
+          timestamp: new Date()
+        }
+      }).catch((err) => console.error('WebSocket broadcast error:', err));
 
       res.json({
         jobId: job.id,

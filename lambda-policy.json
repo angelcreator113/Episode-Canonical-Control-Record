@@ -1,0 +1,20 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::brd-thumbnails-dev/*",
+      "Effect": "Allow"
+    },
+    {
+      "Action": [
+        "es:*"
+      ],
+      "Resource": "arn:aws:es:us-east-1:*:domain/brd-opensearch-dev",
+      "Effect": "Allow"
+    }
+  ]
+}

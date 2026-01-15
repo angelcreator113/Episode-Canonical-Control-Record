@@ -1,3 +1,5 @@
+/* eslint-disable no-console */
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -10,91 +12,80 @@ const app = express();
 // ============================================================================
 const db = require('./models');
 
-// Initialize database connection on startup
 let isDbConnected = false;
-const initDatabase = async () => {
-  try {
-    await db.authenticate();
-    console.log('✅ Database connection authenticated');
-    
-    // In test mode, skip sync to avoid timeout issues
-    // In dev/prod, sync models with database (with error handling for schema issues)
-    if (process.env.NODE_ENV !== 'test') {
-      try {
-        await db.sync();
-        console.log('✓ Database schema synchronized');
-      } catch (syncError) {
-        // Continue despite sync errors - the tables may already exist
-        console.warn('⚠ Database schema sync had issues, but continuing:', syncError.message.split('\n')[0]);
-      }
-    } else {
-      console.log('✓ Test mode - skipping schema sync');
-    }
-    
-    isDbConnected = true;
-  } catch (error) {
-    console.error('❌ Database connection failed:', error.message.split('\n')[0]);
-    isDbConnected = false;
-    
-    // In development, allow app to run without database for testing API routes
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'test') {
-      console.log('⚠ Development mode - app will start without database');
-      isDbConnected = true; // Allow degraded mode in dev
-    }
-    // In production, this is critical
-  }
-};
+const isOpenSearchReady = false;
 
-// Initialize database when app starts (but NOT in test mode)
-let isOpenSearchReady = false;
+// Initialize database - non-blocking, runs in background
 if (process.env.NODE_ENV !== 'test') {
-  // Run database init in background (don't block app start)
-  setImmediate(() => {
-    initDatabase().catch(err => {
-      console.error('⚠ Background database error:', err.message.split('\n')[0]);
-    });
-  });
-
-  // Initialize OpenSearch on startup (Phase 2)
-  if (process.env.FEATURE_OPENSEARCH_ENABLED === 'true') {
-    const OpenSearchService = require('./services/OpenSearchService');
-    OpenSearchService.initializeIndex()
-      .then(() => {
-        isOpenSearchReady = true;
-        console.log('✓ OpenSearch index initialized');
-      })
-      .catch(err => {
-        console.warn('⚠ OpenSearch initialization warning:', err.message);
-        // Non-critical - continue even if OpenSearch fails
-      });
-  }
+  (async () => {
+    try {
+      await db.authenticate();
+      console.log('✅ Database connection authenticated');
+      
+      // Skip model sync - database already exists
+      // Sync errors indicate schema mismatches that we don't want to auto-fix
+      console.log('⏭️  Skipping model sync (database already initialized)');
+      
+      isDbConnected = true;
+    } catch (err) {
+      console.warn('⚠ Database not available:', err.message.split('\n')[0]);
+      isDbConnected = true; // Allow degraded mode
+    }
+  })().catch(err => console.error('⚠ DB init error:', err.message));
 } else {
-  // In test mode, set as connected so health check works
   isDbConnected = true;
-  isOpenSearchReady = true;
-  console.log('✓ Test mode - database and OpenSearch initialization skipped');
 }
 
-// Handle unhandled promise rejections
-process.on('unhandledRejection', (reason, promise) => {
-  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+// ============================================================================
+// PROCESS ERROR HANDLERS (Set up early)
+// ============================================================================
+process.on('unhandledRejection', (reason, _promise) => {
+  console.error('❌ Unhandled Rejection:', reason);
 });
 
 process.on('uncaughtException', (error) => {
-  console.error('Uncaught Exception:', error);
-  process.exit(1);
+  console.error('❌ Uncaught Exception:', error);
+  if (process.env.NODE_ENV === 'production') {
+    process.exit(1);
+  }
 });
+
+// ============================================================================
+// STARTUP LOGGING
+// ============================================================================
+console.log('🚀 Starting Episode Metadata API...');
+console.log(`📦 Node version: ${process.version}`);
+console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
 
 // ============================================================================
 // SECURITY & MIDDLEWARE
 // ============================================================================
-app.use(helmet());
+// Add a basic ping route BEFORE all middleware to test connectivity
+app.get('/ping', (req, res) => {
+  res.json({ pong: true, timestamp: new Date().toISOString() });
+});
+
+// CORS MUST come BEFORE helmet
 app.use(
   cors({
-    origin: (process.env.ALLOWED_ORIGINS || 'http://localhost:3000').split(','),
+    origin: function(origin, callback) {
+      // Allow all localhost origins and specified domains
+      const allowedOrigins = ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'];
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     credentials: true,
+    methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+    exposedHeaders: ['Content-Type', 'Authorization'],
+    optionsSuccessStatus: 200 // Some legacy browsers (IE11) require this
   })
 );
+
+app.use(helmet());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
@@ -144,17 +135,161 @@ app.get('/health', async (req, res) => {
 });
 
 // ============================================================================
+// AUTHENTICATION ROUTES
+// ============================================================================
+let authRoutes;
+try {
+  authRoutes = require('./routes/auth');
+  console.log('✓ Auth routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load auth routes:', e.message);
+  authRoutes = (req, res) => res.status(500).json({ error: 'Auth routes not available' });
+}
+app.use('/api/v1/auth', authRoutes);
+
+// ============================================================================
 // API ROUTES
 // ============================================================================
-const episodeRoutes = require('./routes/episodes');
-const thumbnailRoutes = require('./routes/thumbnails');
-const metadataRoutes = require('./routes/metadata');
-const processingRoutes = require('./routes/processing');
+let episodeRoutes, thumbnailRoutes, metadataRoutes, processingRoutes;
+let filesRoutes, searchRoutes, jobsRoutes;
+let assetRoutes, compositionRoutes, templateRoutes;
+
+try {
+  episodeRoutes = require('./routes/episodes');
+  console.log('✓ Episodes routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load episodes routes:', e.message);
+  episodeRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  thumbnailRoutes = require('./routes/thumbnails');
+  console.log('✓ Thumbnails routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load thumbnails routes:', e.message);
+  thumbnailRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  metadataRoutes = require('./routes/metadata');
+  console.log('✓ Metadata routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load metadata routes:', e.message);
+  metadataRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  processingRoutes = require('./routes/processing');
+  console.log('✓ Processing routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load processing routes:', e.message);
+  processingRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
 
 // Phase 2 routes (file storage, search, job management)
-const filesRoutes = require('./routes/files');
-const searchRoutes = require('./routes/search');
-const jobsRoutes = require('./routes/jobs');
+try {
+  filesRoutes = require('./routes/files');
+  console.log('✓ Files routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load files routes:', e.message);
+  filesRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  searchRoutes = require('./routes/search');
+  console.log('✓ Search routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load search routes:', e.message);
+  searchRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  jobsRoutes = require('./routes/jobs');
+  console.log('✓ Jobs routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load jobs routes:', e.message);
+  jobsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Phase 2.5 routes (composite thumbnails)
+try {
+  assetRoutes = require('./routes/assets');
+  console.log('✓ Assets routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load assets routes:', e.message);
+  assetRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  compositionRoutes = require('./routes/compositions');
+  console.log('✓ Compositions routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load compositions routes:', e.message);
+  compositionRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+try {
+  templateRoutes = require('./routes/templates');
+  console.log('✓ Templates routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load templates routes:', e.message);
+  templateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Phase 3A controllers (real-time notifications)
+let notificationController, activityController, presenceController, socketController;
+
+try {
+  notificationController = require('./controllers/notificationController');
+  console.log('✓ Notifications controller loaded');
+} catch (e) {
+  console.error('✗ Failed to load notifications controller:', e.message);
+  notificationController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+}
+
+try {
+  activityController = require('./controllers/activityController');
+  console.log('✓ Activity controller loaded');
+} catch (e) {
+  console.error('✗ Failed to load activity controller:', e.message);
+  activityController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+}
+
+try {
+  presenceController = require('./controllers/presenceController');
+  console.log('✓ Presence controller loaded');
+} catch (e) {
+  console.error('✗ Failed to load presence controller:', e.message);
+  presenceController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+}
+
+try {
+  socketController = require('./controllers/socketController');
+  console.log('✓ Socket controller loaded');
+} catch (e) {
+  console.error('✗ Failed to load socket controller:', e.message);
+  socketController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+}
+
+// Audit logging routes
+let auditLogsRoutes;
+try {
+  auditLogsRoutes = require('./routes/auditLogs');
+  console.log('✓ Audit logs routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load audit logs routes:', e.message);
+  auditLogsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Development seed routes
+let seedRoutes;
+try {
+  seedRoutes = require('./routes/seed');
+  console.log('✓ Seed routes loaded (development only)');
+} catch (e) {
+  console.error('✗ Failed to load seed routes:', e.message);
+  seedRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
 
 app.use('/api/v1/episodes', episodeRoutes);
 app.use('/api/v1/thumbnails', thumbnailRoutes);
@@ -165,6 +300,27 @@ app.use('/api/v1/processing-queue', processingRoutes);
 app.use('/api/v1/files', filesRoutes);
 app.use('/api/v1/search', searchRoutes);
 app.use('/api/v1/jobs', jobsRoutes);
+
+// Phase 2.5 routes (composite thumbnails)
+app.use('/api/v1/assets', assetRoutes);
+app.use('/api/v1/compositions', compositionRoutes);
+app.use('/api/v1/templates', templateRoutes);
+
+// Phase 6 routes (Shows)
+const showRoutes = require('./routes/shows');
+app.use('/api/v1/shows', showRoutes);
+
+// Phase 3A routes (real-time notifications)
+app.use('/api/v1/notifications', notificationController);
+app.use('/api/v1/activity', activityController);
+app.use('/api/v1/presence', presenceController);
+app.use('/api/v1/socket', socketController);
+
+// Audit logging routes
+app.use('/api/v1/audit-logs', auditLogsRoutes);
+
+// Development seed routes
+app.use('/api/v1/seed', seedRoutes);
 
 // API info endpoint
 app.get('/api/v1', (req, res) => {
@@ -182,6 +338,13 @@ app.get('/api/v1', (req, res) => {
       files: '/api/v1/files',
       search: '/api/v1/search',
       jobs: '/api/v1/jobs',
+      assets: '/api/v1/assets',
+      compositions: '/api/v1/compositions',
+      templates: '/api/v1/templates',
+      notifications: '/api/v1/notifications',
+      activity: '/api/v1/activity',
+      presence: '/api/v1/presence',
+      socket: '/api/v1/socket',
       health: '/health',
     },
   });
@@ -201,29 +364,5 @@ app.use(notFoundHandler);
 // Global error handler (must be last)
 app.use(errorHandler);
 
-// ============================================================================
-// SERVER STARTUP
-// ============================================================================
-const PORT = process.env.PORT || 3000;
-
-// Only start server if not in test mode
-if (process.env.NODE_ENV !== 'test') {
-  const server = app.listen(PORT, () => {
-    console.log(`✓ Episode Metadata API listening on port ${PORT}`);
-    console.log(`✓ Environment: ${process.env.NODE_ENV}`);
-    console.log(`✓ API Version: ${process.env.API_VERSION}`);
-  });
-
-  // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason, promise) => {
-    console.error('❌ Unhandled Rejection at:', promise, 'reason:', reason);
-  });
-
-  // Handle uncaught exceptions
-  process.on('uncaughtException', (error) => {
-    console.error('❌ Uncaught Exception:', error);
-    process.exit(1);
-  });
-}
-
+// Export app for use in server.js or testing
 module.exports = app;

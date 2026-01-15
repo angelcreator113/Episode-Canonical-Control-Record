@@ -2,492 +2,538 @@
 > episode-metadata-api@1.0.0 test
 > cross-env NODE_ENV=test jest --coverage --runInBand
 
-FAIL tests/unit/models/activityLog.test.js
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have logActivity method
+FAIL tests/unit/utils/logger.test.js
+  ΓùÅ Logger Utility ΓÇ║ logger.info() ΓÇ║ should log info messages when level is info or higher
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+    expect(jest.fn()).toHaveBeenCalled()
 
-      14 |   describe('Model Methods', () => {
-      15 |     test('should have logActivity method', () => {
-    > 16 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-         |                                   ^
-      17 |
-      18 |       expect(typeof ActivityLogModel.logActivity).toBe('function');
-      19 |     });
+    Expected number of calls: >= 1
+    Received number of calls:    0
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:16:35)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getUserHistory method
-
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
-
-      20 |
-      21 |     test('should have getUserHistory method', () => {
-    > 22 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-         |                                      ^
-      23 |
-      24 |       expect(typeof ActivityLogModel.getUserHistory).toBe('function');
-      25 |     });
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:22:38)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getResourceHistory method
-
-    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
-
-      26 |
-      27 |     test('should have getResourceHistory method', () => {
-    > 28 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
-         |                                          ^
-      29 |
-      30 |       expect(typeof ActivityLogModel.getResourceHistory).toBe('function');
+      27 |       logger.info('Test info message');
+      28 |       
+    > 29 |       expect(consoleLogSpy).toHaveBeenCalled();
+         |                             ^
+      30 |       expect(consoleLogSpy.mock.calls[0][0]).toContain('[INFO]');
       31 |     });
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:28:42)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getAuditTrail method
-
-    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
-
       32 |
-      33 |     test('should have getAuditTrail method', () => {
-    > 34 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue([]);
-         |                                     ^
-      35 |
-      36 |       expect(typeof ActivityLogModel.getAuditTrail).toBe('function');
-      37 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:34:37)
+      at Object.toHaveBeenCalled (tests/unit/utils/logger.test.js:29:29)
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getStats method
+  ΓùÅ Logger Utility ΓÇ║ logger.info() ΓÇ║ should include message in log output
 
-    TypeError: Cannot set properties of undefined (setting 'getStats')
+    TypeError: Cannot read properties of undefined (reading '0')
 
-      38 |
-      39 |     test('should have getStats method', () => {
-    > 40 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
-         |                                ^
+      37 |       logger.info('Custom message');
+      38 |       
+    > 39 |       expect(consoleLogSpy.mock.calls[0][0]).toContain('Custom message');
+         |                                         ^
+      40 |     });
       41 |
-      42 |       expect(typeof ActivityLogModel.getStats).toBe('function');
-      43 |     });
+      42 |     test('should accept metadata as second parameter', () => {
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:40:32)
+      at Object.<anonymous> (tests/unit/utils/logger.test.js:39:41)
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have create method (standard Sequelize)
+  ΓùÅ Logger Utility ΓÇ║ logger.info() ΓÇ║ should accept metadata as second parameter
 
-    TypeError: Cannot set properties of undefined (setting 'create')
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
 
-      44 |
-      45 |     test('should have create method (standard Sequelize)', () => {
-    > 46 |       ActivityLogModel.create = jest.fn().mockResolvedValue({ id: 1 });
+    Expected: "[INFO] Action performed", {"action": "test", "userId": "123"}
+
+    Number of calls: 0
+
+      47 |       logger.info('Action performed', metadata);
+      48 |       
+    > 49 |       expect(consoleLogSpy).toHaveBeenCalledWith('[INFO] Action performed', metadata);
+         |                             ^
+      50 |     });
+      51 |   });
+      52 |
+
+      at Object.toHaveBeenCalledWith (tests/unit/utils/logger.test.js:49:29)
+
+  ΓùÅ Logger Utility ΓÇ║ logger.warn() ΓÇ║ should log warnings at warn level or higher
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      78 |       logger.warn('Warning message');
+      79 |       
+    > 80 |       expect(consoleWarnSpy).toHaveBeenCalled();
          |                              ^
-      47 |
-      48 |       expect(typeof ActivityLogModel.create).toBe('function');
-      49 |     });
+      81 |       expect(consoleWarnSpy.mock.calls[0][0]).toContain('[WARN]');
+      82 |     });
+      83 |
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:46:30)
+      at Object.toHaveBeenCalled (tests/unit/utils/logger.test.js:80:30)
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have findAll method (standard Sequelize)
+  ΓùÅ Logger Utility ΓÇ║ logger.debug() ΓÇ║ should log debug messages at debug level
 
-    TypeError: Cannot set properties of undefined (setting 'findAll')
+    expect(jest.fn()).toHaveBeenCalled()
 
-      50 |
-      51 |     test('should have findAll method (standard Sequelize)', () => {
-    > 52 |       ActivityLogModel.findAll = jest.fn().mockResolvedValue([]);
-         |                               ^
-      53 |
-      54 |       expect(typeof ActivityLogModel.findAll).toBe('function');
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      100 |       logger.debug('Debug info');
+      101 |       
+    > 102 |       expect(consoleLogSpy).toHaveBeenCalled();
+          |                             ^
+      103 |       expect(consoleLogSpy.mock.calls[0][0]).toContain('[DEBUG]');
+      104 |     });
+      105 |
+
+      at Object.toHaveBeenCalled (tests/unit/utils/logger.test.js:102:29)
+
+FAIL tests/unit/middleware/uploadValidation.test.js
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should allow valid image files
+
+    TypeError: validateFileUpload is not a function
+
+      29 |       mockReq.file.size = 5000000; // 5MB
+      30 |       
+    > 31 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      32 |       
+      33 |       expect(mockNext).toHaveBeenCalled();
+      34 |     });
+
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:31:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should allow valid video files
+
+    TypeError: validateFileUpload is not a function
+
+      40 |       mockReq.file.size = 500000000; // 500MB
+      41 |       
+    > 42 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      43 |       
+      44 |       expect(mockNext).toHaveBeenCalled();
+      45 |     });
+
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:42:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should reject files exceeding size limit
+
+    TypeError: validateFileUpload is not a function
+
+      50 |       mockReq.file.size = 2000000000; // 2GB - exceeds limit
+      51 |       
+    > 52 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      53 |       
+      54 |       expect(mockRes.status).toHaveBeenCalledWith(400);
       55 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:52:31)
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:52:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have findByPk method (standard Sequelize)
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should reject unsupported file types
 
-    TypeError: Cannot set properties of undefined (setting 'findByPk')
+    TypeError: validateFileUpload is not a function
 
-      56 |
-      57 |     test('should have findByPk method (standard Sequelize)', () => {
-    > 58 |       ActivityLogModel.findByPk = jest.fn().mockResolvedValue({ id: 1 });
-         |                                ^
-      59 |
-      60 |       expect(typeof ActivityLogModel.findByPk).toBe('function');
-      61 |     });
+      60 |       mockReq.file.mimetype = 'application/exe';
+      61 |       
+    > 62 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      63 |       
+      64 |       expect(mockRes.status).toHaveBeenCalledWith(400);
+      65 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:58:32)
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:62:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should log activity with required fields
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should handle missing file gracefully
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+    TypeError: validateFileUpload is not a function
 
-      64 |   describe('logActivity Method', () => {
-      65 |     test('should log activity with required fields', async () => {
-    > 66 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-         |                                   ^
-      67 |
-      68 |       const result = await ActivityLogModel.logActivity({
-      69 |         userId: 'user-123',
+      70 |       delete mockReq.file;
+      71 |       
+    > 72 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      73 |       
+      74 |       // Should either call next or return error
+      75 |       expect(mockRes.status.mock.calls.length + mockNext.mock.calls.length).toBeGreaterThan(0);
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:66:35)
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:72:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should log activity with optional fields
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUploadBatch ΓÇ║ should validate multiple files
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+    TypeError: validateFileUploadBatch is not a function
 
-      85 |
-      86 |     test('should log activity with optional fields', async () => {
-    > 87 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-         |                                   ^
-      88 |
-      89 |       await ActivityLogModel.logActivity({
-      90 |         userId: 'user-456',
+      86 |       ];
+      87 |       
+    > 88 |       validateFileUploadBatch(mockReq, mockRes, mockNext);
+         |       ^
+      89 |       
+      90 |       expect(mockNext).toHaveBeenCalled();
+      91 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:87:35)
+      at Object.validateFileUploadBatch (tests/unit/middleware/uploadValidation.test.js:88:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should support different action types
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUploadBatch ΓÇ║ should reject batch if any file is invalid
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+    TypeError: validateFileUploadBatch is not a function
 
-      102 |
-      103 |     test('should support different action types', async () => {
-    > 104 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-          |                                   ^
-      105 |
-      106 |       const actions = ['view', 'create', 'edit', 'delete', 'download', 'upload'];
-      107 |
+       99 |       ];
+      100 |       
+    > 101 |       validateFileUploadBatch(mockReq, mockRes, mockNext);
+          |       ^
+      102 |       
+      103 |       expect(mockRes.status).toHaveBeenCalledWith(400);
+      104 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:104:35)
+      at Object.validateFileUploadBatch (tests/unit/middleware/uploadValidation.test.js:101:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should support different resource types
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUploadBatch ΓÇ║ should handle empty batch
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+    TypeError: validateFileUploadBatch is not a function
 
-      124 |
-      125 |       for (const resource of resources) {
-    > 126 |         ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-          |                                     ^
-      127 |
-      128 |         await ActivityLogModel.logActivity({
-      129 |           userId: 'user-123',
+      109 |       mockReq.files = [];
+      110 |       
+    > 111 |       validateFileUploadBatch(mockReq, mockRes, mockNext);
+          |       ^
+      112 |       
+      113 |       expect(mockRes.status.mock.calls.length + mockNext.mock.calls.length).toBeGreaterThan(0);
+      114 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:126:37)
+      at Object.validateFileUploadBatch (tests/unit/middleware/uploadValidation.test.js:111:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should handle database errors
+  ΓùÅ Upload Validation Middleware ΓÇ║ getFileSizeLimit ΓÇ║ should return appropriate size limit for image files
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+    TypeError: getFileSizeLimit is not a function
 
-      138 |
-      139 |     test('should handle database errors', async () => {
-    > 140 |       ActivityLogModel.logActivity = jest
-          |                                   ^
-      141 |         .fn()
-      142 |         .mockRejectedValue(new Error('DB Error'));
-      143 |
+      119 |       const { getFileSizeLimit } = require('../../../src/middleware/uploadValidation');
+      120 |       
+    > 121 |       const limit = getFileSizeLimit('image/jpeg');
+          |                     ^
+      122 |       
+      123 |       expect(limit).toBeGreaterThan(0);
+      124 |       expect(limit).toBeLessThan(1000000000); // Less than 1GB
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:140:35)
+      at Object.getFileSizeLimit (tests/unit/middleware/uploadValidation.test.js:121:21)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should retrieve user activity history
+  ΓùÅ Upload Validation Middleware ΓÇ║ getFileSizeLimit ΓÇ║ should return appropriate size limit for video files
 
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+    TypeError: getFileSizeLimit is not a function
 
-      163 |       ];
-      164 |
-    > 165 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue(mockLogs);
-          |                                      ^
-      166 |
-      167 |       const result = await ActivityLogModel.getUserHistory('user-123');
-      168 |
+      128 |       const { getFileSizeLimit } = require('../../../src/middleware/uploadValidation');
+      129 |       
+    > 130 |       const limit = getFileSizeLimit('video/mp4');
+          |                     ^
+      131 |       
+      132 |       expect(limit).toBeGreaterThan(0);
+      133 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:165:38)
+      at Object.getFileSizeLimit (tests/unit/middleware/uploadValidation.test.js:130:21)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should support pagination options
+  ΓùÅ Upload Validation Middleware ΓÇ║ getFileSizeLimit ΓÇ║ should handle unknown mime types
 
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+    TypeError: getFileSizeLimit is not a function
 
-      172 |
-      173 |     test('should support pagination options', async () => {
-    > 174 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-          |                                      ^
-      175 |
-      176 |       await ActivityLogModel.getUserHistory('user-123', { limit: 50, offset: 0 });
-      177 |
+      136 |       const { getFileSizeLimit } = require('../../../src/middleware/uploadValidation');
+      137 |       
+    > 138 |       const limit = getFileSizeLimit('application/unknown');
+          |                     ^
+      139 |       
+      140 |       expect(typeof limit === 'number').toBe(true);
+      141 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:174:38)
+      at Object.getFileSizeLimit (tests/unit/middleware/uploadValidation.test.js:138:21)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should return empty array when no records found
+  ΓùÅ Upload Validation Middleware ΓÇ║ isSupportedFileType ΓÇ║ should recognize supported image formats
 
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+    TypeError: isSupportedFileType is not a function
 
-      183 |
-      184 |     test('should return empty array when no records found', async () => {
-    > 185 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-          |                                      ^
-      186 |
-      187 |       const result = await ActivityLogModel.getUserHistory('user-nonexistent');
-      188 |
+      146 |       const { isSupportedFileType } = require('../../../src/middleware/uploadValidation');
+      147 |       
+    > 148 |       expect(isSupportedFileType('image/jpeg')).toBe(true);
+          |              ^
+      149 |       expect(isSupportedFileType('image/png')).toBe(true);
+      150 |       expect(isSupportedFileType('image/webp')).toBe(true);
+      151 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:185:38)
+      at Object.isSupportedFileType (tests/unit/middleware/uploadValidation.test.js:148:14)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should handle database errors
+  ΓùÅ Upload Validation Middleware ΓÇ║ isSupportedFileType ΓÇ║ should recognize supported video formats
 
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+    TypeError: isSupportedFileType is not a function
 
-      191 |
-      192 |     test('should handle database errors', async () => {
-    > 193 |       ActivityLogModel.getUserHistory = jest
-          |                                      ^
-      194 |         .fn()
-      195 |         .mockRejectedValue(new Error('DB Error'));
-      196 |
+      154 |       const { isSupportedFileType } = require('../../../src/middleware/uploadValidation');
+      155 |       
+    > 156 |       expect(isSupportedFileType('video/mp4')).toBe(true);
+          |              ^
+      157 |       expect(isSupportedFileType('video/quicktime')).toBe(true);
+      158 |     });
+      159 |
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:193:38)
+      at Object.isSupportedFileType (tests/unit/middleware/uploadValidation.test.js:156:14)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should retrieve resource activity history
+  ΓùÅ Upload Validation Middleware ΓÇ║ isSupportedFileType ΓÇ║ should reject unsupported formats
 
-    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+    TypeError: isSupportedFileType is not a function
 
-      211 |       ];
-      212 |
-    > 213 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue(mockLogs);
-          |                                          ^
-      214 |
-      215 |       const result = await ActivityLogModel.getResourceHistory('episode', 1);
-      216 |
+      161 |       const { isSupportedFileType } = require('../../../src/middleware/uploadValidation');
+      162 |       
+    > 163 |       expect(isSupportedFileType('application/exe')).toBe(false);
+          |              ^
+      164 |       expect(isSupportedFileType('text/plain')).toBe(false);
+      165 |     });
+      166 |   });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:213:42)
+      at Object.isSupportedFileType (tests/unit/middleware/uploadValidation.test.js:163:14)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should support different resource types
+FAIL tests/unit/middleware/searchLogger.test.js
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should call next() to pass control
 
-    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+    TypeError: searchLogger is not a function
 
-      220 |
-      221 |     test('should support different resource types', async () => {
-    > 222 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
-          |                                          ^
-      223 |
-      224 |       const resources = ['episode', 'thumbnail', 'metadata', 'processing'];
-      225 |
+      24 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      25 |       
+    > 26 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      27 |       
+      28 |       expect(mockNext).toHaveBeenCalled();
+      29 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:222:42)
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:26:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should return empty array on error
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should capture search query parameters
 
-    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+    TypeError: searchLogger is not a function
 
-      234 |
-      235 |     test('should return empty array on error', async () => {
-    > 236 |       ActivityLogModel.getResourceHistory = jest
-          |                                          ^
-      237 |         .fn()
-      238 |         .mockRejectedValue(new Error('Error'));
-      239 |
+      32 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      33 |       
+    > 34 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      35 |       
+      36 |       expect(mockReq.searchLog).toBeDefined();
+      37 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:236:42)
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:34:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should retrieve full audit trail
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should extract user information
 
-    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+    TypeError: searchLogger is not a function
 
-      254 |       ];
-      255 |
-    > 256 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue(mockTrail);
-          |                                     ^
-      257 |
-      258 |       const result = await ActivityLogModel.getAuditTrail({ limit: 10 });
-      259 |
+      40 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      41 |       
+    > 42 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      43 |       
+      44 |       expect(mockReq.searchLog.userId).toEqual('user123');
+      45 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:256:37)
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:42:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should support filtering options
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should record HTTP method and path
 
-    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+    TypeError: searchLogger is not a function
 
-      262 |
-      263 |     test('should support filtering options', async () => {
-    > 264 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue([]);
-          |                                     ^
-      265 |
-      266 |       await ActivityLogModel.getAuditTrail({
-      267 |         actionType: 'delete',
+      48 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      49 |       
+    > 50 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      51 |       
+      52 |       expect(mockReq.searchLog.method).toEqual('GET');
+      53 |       expect(mockReq.searchLog.path).toEqual('/api/v1/search');
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:264:37)
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:50:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should return empty array on error
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should handle requests without user
 
-    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+    TypeError: searchLogger is not a function
 
-      274 |
-      275 |     test('should return empty array on error', async () => {
-    > 276 |       ActivityLogModel.getAuditTrail = jest
-          |                                     ^
-      277 |         .fn()
-      278 |         .mockRejectedValue(new Error('Error'));
-      279 |
+      58 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      59 |       
+    > 60 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      61 |       
+      62 |       expect(mockNext).toHaveBeenCalled();
+      63 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:276:37)
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:60:7)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should retrieve activity statistics
+  ΓùÅ SearchLogger Middleware ΓÇ║ logSearch ΓÇ║ should format search log entry
 
-    TypeError: Cannot set properties of undefined (setting 'getStats')
+    TypeError: logSearch is not a function
 
-      294 |       };
-      295 |
-    > 296 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue(mockStats);
-          |                                ^
-      297 |
-      298 |       const result = await ActivityLogModel.getStats('7d');
-      299 |
+      68 |       const { logSearch } = require('../../../src/middleware/searchLogger');
+      69 |       
+    > 70 |       const logEntry = logSearch({
+         |                        ^
+      71 |         query: 'test',
+      72 |         results: 10,
+      73 |         userId: 'user123',
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:296:32)
+      at Object.logSearch (tests/unit/middleware/searchLogger.test.js:70:24)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should support different time ranges
+  ΓùÅ SearchLogger Middleware ΓÇ║ logSearch ΓÇ║ should handle empty query
 
-    TypeError: Cannot set properties of undefined (setting 'getStats')
+    TypeError: logSearch is not a function
 
-      303 |
-      304 |     test('should support different time ranges', async () => {
-    > 305 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
-          |                                ^
-      306 |
-      307 |       const ranges = ['1d', '7d', '30d', '90d'];
-      308 |
+      83 |       const { logSearch } = require('../../../src/middleware/searchLogger');
+      84 |       
+    > 85 |       const logEntry = logSearch({
+         |                        ^
+      86 |         query: '',
+      87 |         results: 0,
+      88 |         userId: 'user123'
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:305:32)
+      at Object.logSearch (tests/unit/middleware/searchLogger.test.js:85:24)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should return empty object on error
+  ΓùÅ SearchLogger Middleware ΓÇ║ getSearchStats ΓÇ║ should retrieve search statistics
 
-    TypeError: Cannot set properties of undefined (setting 'getStats')
+    TypeError: getSearchStats is not a function
 
-      317 |
-      318 |     test('should return empty object on error', async () => {
-    > 319 |       ActivityLogModel.getStats = jest
-          |                                ^
-      320 |         .fn()
-      321 |         .mockRejectedValue(new Error('Error'));
-      322 |
+       97 |       const { getSearchStats } = require('../../../src/middleware/searchLogger');
+       98 |       
+    >  99 |       const stats = await getSearchStats();
+          |                           ^
+      100 |       
+      101 |       expect(stats).toBeDefined();
+      102 |       expect(typeof stats === 'object').toBe(true);
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:319:32)
+      at Object.getSearchStats (tests/unit/middleware/searchLogger.test.js:99:27)
 
-  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support create
+  ΓùÅ SearchLogger Middleware ΓÇ║ getSearchStats ΓÇ║ should include search metrics
 
-    TypeError: Cannot set properties of undefined (setting 'create')
+    TypeError: getSearchStats is not a function
 
-      332 |   describe('Standard Sequelize Methods', () => {
-      333 |     test('should support create', async () => {
-    > 334 |       ActivityLogModel.create = jest
-          |                              ^
-      335 |         .fn()
-      336 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
-      337 |
+      106 |       const { getSearchStats } = require('../../../src/middleware/searchLogger');
+      107 |       
+    > 108 |       const stats = await getSearchStats();
+          |                           ^
+      109 |       
+      110 |       expect(stats.totalSearches || stats.topQueries || stats.avgResultsPerSearch).toBeDefined();
+      111 |     });
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:334:30)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findAll
-
-    TypeError: Cannot set properties of undefined (setting 'findAll')
-
-      347 |
-      348 |     test('should support findAll', async () => {
-    > 349 |       ActivityLogModel.findAll = jest.fn().mockResolvedValue([
-          |                               ^
-      350 |         { id: 1, userId: 'user-123' },
-      351 |         { id: 2, userId: 'user-456' },
-      352 |       ]);
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:349:31)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findByPk
-
-    TypeError: Cannot set properties of undefined (setting 'findByPk')
-
-      358 |
-      359 |     test('should support findByPk', async () => {
-    > 360 |       ActivityLogModel.findByPk = jest
-          |                                ^
-      361 |         .fn()
-      362 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
-      363 |
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:360:32)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findOne
-
-    TypeError: Cannot set properties of undefined (setting 'findOne')
-
-      368 |
-      369 |     test('should support findOne', async () => {
-    > 370 |       ActivityLogModel.findOne = jest
-          |                               ^
-      371 |         .fn()
-      372 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
-      373 |
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:370:31)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Sequelize Association Support ΓÇ║ should support hasMany
-
-    TypeError: Cannot set properties of undefined (setting 'hasMany')
-
-      397 |   describe('Sequelize Association Support', () => {
-      398 |     test('should support hasMany', () => {
-    > 399 |       ActivityLogModel.hasMany = jest.fn();
-          |                               ^
-      400 |
-      401 |       ActivityLogModel.hasMany({
-      402 |         model: 'Episode',
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:399:31)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Sequelize Association Support ΓÇ║ should support belongsTo
-
-    TypeError: Cannot set properties of undefined (setting 'belongsTo')
-
-      408 |
-      409 |     test('should support belongsTo', () => {
-    > 410 |       ActivityLogModel.belongsTo = jest.fn();
-          |                                 ^
-      411 |
-      412 |       ActivityLogModel.belongsTo('User', { foreignKey: 'userId' });
-      413 |
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:410:33)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Hook Support ΓÇ║ should support beforeCreate hook
-
-    TypeError: Cannot set properties of undefined (setting 'beforeCreate')
-
-      418 |   describe('Hook Support', () => {
-      419 |     test('should support beforeCreate hook', () => {
-    > 420 |       ActivityLogModel.beforeCreate = jest.fn();
-          |                                    ^
-      421 |
-      422 |       ActivityLogModel.beforeCreate((log) => {
-      423 |         log.timestamp = new Date();
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:420:36)
-
-  ΓùÅ ActivityLog Model ΓÇ║ Hook Support ΓÇ║ should support beforeValidate hook
-
-    TypeError: Cannot set properties of undefined (setting 'beforeValidate')
-
-      428 |
-      429 |     test('should support beforeValidate hook', () => {
-    > 430 |       ActivityLogModel.beforeValidate = jest.fn();
-          |                                      ^
-      431 |
-      432 |       ActivityLogModel.beforeValidate((log) => {
-      433 |         // normalize data
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:430:38)
+      at Object.getSearchStats (tests/unit/middleware/searchLogger.test.js:108:27)
 
 PASS tests/unit/app.test.js
   ΓùÅ Console
 
     console.log
-      Γ£ô Test mode - database initialization skipped
+      ≡ƒÜÇ Starting Episode Metadata API...
 
-      at Object.log (src/app.js:50:11)
+      at Object.log (src/app.js:69:9)
 
-PASS tests/unit/middleware/auditLog-additional.test.js
+    console.log
+      ≡ƒôª Node version: v20.19.4
+
+      at Object.log (src/app.js:70:9)
+
+    console.log
+      ≡ƒöº Environment: test
+
+      at Object.log (src/app.js:71:9)
+
+    console.log
+      Γ£ô Auth routes loaded
+
+      at Object.log (src/app.js:143:11)
+
+    console.log
+      Γ£ô Episodes routes loaded
+
+      at Object.log (src/app.js:159:11)
+
+    console.log
+      Γ£ô Thumbnails routes loaded
+
+      at Object.log (src/app.js:167:11)
+
+    console.log
+      Γ£ô Metadata routes loaded
+
+      at Object.log (src/app.js:175:11)
+
+    console.log
+      Γ£ô Processing routes loaded
+
+      at Object.log (src/app.js:183:11)
+
+    console.log
+      Γ£ô Files routes loaded
+
+      at Object.log (src/app.js:192:11)
+
+    console.log
+      Γ£ô Search routes loaded
+
+      at Object.log (src/app.js:200:11)
+
+    console.log
+      Γ£ô Jobs routes loaded
+
+      at Object.log (src/app.js:208:11)
+
+    console.log
+      Γ£ô Assets routes loaded
+
+      at Object.log (src/app.js:217:11)
+
+    console.error
+      Γ£ù Failed to load compositions routes: Cannot find module '../db' from 'src/services/VersioningService.js'
+      
+      Require stack:
+        src/services/VersioningService.js
+        src/routes/compositions.js
+        src/app.js
+        tests/unit/app.test.js
+
+      225 |   console.log('Γ£ô Compositions routes loaded');
+      226 | } catch (e) {
+    > 227 |   console.error('Γ£ù Failed to load compositions routes:', e.message);
+          |           ^
+      228 |   compositionRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+      229 | }
+      230 |
+
+      at Object.error (src/app.js:227:11)
+      at Object.require (tests/unit/app.test.js:11:11)
+
+    console.log
+      Γ£ô Templates routes loaded
+
+      at Object.log (src/app.js:233:11)
+
+    console.log
+      Γ£ô Seed routes loaded (development only)
+
+      at Object.log (src/app.js:243:11)
+
+PASS tests/unit/controllers/thumbnail.test.js
+  ΓùÅ Console
+
+    console.error
+      Γ¥î Error in listThumbnails: Error: DB error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\controllers\thumbnail.test.js:321:70)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      63 |       });
+      64 |     } catch (error) {
+    > 65 |       console.error('Γ¥î Error in listThumbnails:', error);
+         |               ^
+      66 |       res.status(500).json({
+      67 |         error: 'Failed to list thumbnails',
+      68 |         message: error.message
+
+      at Object.error [as listThumbnails] (src/controllers/thumbnailController.js:65:15)
+      at Object.<anonymous> (tests/unit/controllers/thumbnail.test.js:323:7)
+
 PASS tests/unit/middleware/auditLog.test.js
   ΓùÅ Console
 
@@ -687,63 +733,567 @@ PASS tests/unit/middleware/auditLog.test.js
       at Object.error [as getStats] (src/middleware/auditLog.js:248:15)
       at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:670:21)
 
-PASS tests/unit/controllers/episode.test.js
 PASS tests/unit/controllers/processing.test.js
-PASS tests/unit/controllers/thumbnail.test.js
+PASS tests/unit/controllers/episode.test.js
+  ΓùÅ Console
+
+    console.error
+      Γ¥î Error in listEpisodes: Error: DB connection failed
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\controllers\episode.test.js:491:23)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      56 |       });
+      57 |     } catch (error) {
+    > 58 |       console.error('Γ¥î Error in listEpisodes:', error);
+         |               ^
+      59 |       res.status(500).json({
+      60 |         error: 'Failed to list episodes',
+      61 |         message: error.message
+
+      at Object.error [as listEpisodes] (src/controllers/episodeController.js:58:15)
+      at Object.<anonymous> (tests/unit/controllers/episode.test.js:494:7)
+
 PASS tests/unit/controllers/metadata.test.js
+  ΓùÅ Console
+
+    console.error
+      Metadata query error (schema mismatch): DB error
+
+      60 |     } catch (error) {
+      61 |       // If metadata table schema is mismatched, return empty list
+    > 62 |       console.error('Metadata query error (schema mismatch):', error.message);
+         |               ^
+      63 |       res.json({
+      64 |         data: [],
+      65 |         pagination: {
+
+      at Object.error [as listMetadata] (src/controllers/metadataController.js:62:15)
+      at Object.<anonymous> (tests/unit/controllers/metadata.test.js:296:7)
+
+PASS tests/unit/middleware/auditLog-additional.test.js
 PASS tests/unit/middleware/rbac.test.js
 PASS tests/unit/middleware/errorHandler.test.js
+PASS tests/unit/services/OpenSearchService.test.js
+PASS tests/unit/services/JobQueueService.test.js
+PASS tests/unit/middleware/jwtAuth.test.js
 PASS tests/unit/middleware/auth.test.js
 PASS tests/unit/models/metadata-methods.test.js
+PASS tests/unit/services/S3Service.test.js
+PASS tests/unit/controllers/fileController.test.js
+PASS tests/unit/models/activityLog.test.js
+PASS tests/unit/controllers/jobController.test.js
 PASS tests/api/endpoints.test.js
+PASS tests/unit/services/FileValidationService.test.js
 PASS tests/unit/models/episode.test.js
+PASS tests/unit/controllers/searchController.test.js
 PASS tests/unit/middleware/auth-gaps.test.js
---------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------
-File                                        | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                       
---------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------
-All files                                   |   71.13 |    52.68 |   58.53 |   71.26 |                                                                         
- src                                        |   61.19 |    34.61 |      20 |   61.19 |                                                                         
-  app.js                                    |   61.19 |    34.61 |      20 |   61.19 | 16-37,44-45,96-102,126,162-165                                          
- src/config                                 |       0 |        0 |       0 |       0 |                                                                         
-  aws.js                                    |       0 |        0 |     100 |       0 | 7-17                                                                    
-  database.js                               |       0 |        0 |       0 |       0 | 7-36                                                                    
-  environment.js                            |       0 |        0 |     100 |       0 | 5-47                                                                    
-  sequelize.js                              |       0 |        0 |     100 |       0 | 6                                                                       
- src/controllers                            |   82.99 |    54.01 |   95.83 |   82.89 |                                                                         
-  episodeController.js                      |   97.01 |    73.07 |     100 |   96.92 | 206,247                                                                 
-  metadataController.js                     |   71.42 |    46.66 |      90 |   71.11 | 75,102,137,146,198,221-229,278,311,319,349-390,404                      
-  processingController.js                   |   88.65 |    67.85 |     100 |   89.36 | 86,111,123,134,178,185,202,235,284,327                                  
-  thumbnailController.js                    |   78.26 |     37.7 |    90.9 |   77.77 | 77,111-167,182,199,233,267,300,352,387                                  
- src/middleware                             |   82.03 |     78.1 |   81.48 |   82.25 |                                                                         
-  auditLog.js                               |   69.76 |    58.82 |    64.7 |   70.23 | 67-78,110-116,126-155,170,195,211,227,243                               
-  auth.js                                   |   61.66 |    52.94 |      60 |   61.66 | 50,69,114,135-166,175-192                                               
-  errorHandler.js                           |     100 |    95.18 |     100 |     100 | 66-75,193,233                                                           
-  rbac.js                                   |   92.98 |     90.9 |   84.61 |   92.98 | 68,83,141,178                                                           
- src/migrations                             |       0 |      100 |       0 |       0 |                                                                         
-  20240101000001-create-episodes.js         |       0 |      100 |       0 |       0 | 3-125                                                                   
-  20240101000002-create-metadata-storage.js |       0 |      100 |       0 |       0 | 3-67                                                                    
-  20240101000003-create-thumbnails.js       |       0 |      100 |       0 |       0 | 3-87                                                                    
-  20240101000004-create-processing-queue.js |       0 |      100 |       0 |       0 | 3-92                                                                    
-  20240101000005-create-activity-logs.js    |       0 |      100 |       0 |       0 | 3-73                                                                    
- src/models                                 |   39.59 |        0 |   11.36 |   40.41 |                                                                         
-  ActivityLog.js                            |    37.5 |        0 |   16.66 |   42.85 | 117,133,144,154-164,174-189                                             
-  Episode.js                                |   46.42 |        0 |      10 |   46.42 | 216-217,224-225,232-236,243,261,268,278,287-290,297                     
-  MetadataStorage.js                        |      36 |        0 |   16.66 |      36 | 106-108,115-117,124-127,138,147-160                                     
-  ProcessingQueue.js                        |   35.55 |        0 |    7.69 |   35.55 | 137-139,146-148,155-158,165-173,180,187-190,201,213,224,234,247,257-267 
-  Thumbnail.js                              |   44.44 |        0 |   11.11 |   44.44 | 149-150,157-160,167-171,182,194,207,220-232,239                         
- src/routes                                 |     100 |      100 |     100 |     100 |                                                                         
-  episodes.js                               |     100 |      100 |     100 |     100 |                                                                         
-  metadata.js                               |     100 |      100 |     100 |     100 |                                                                         
-  processing.js                             |     100 |      100 |     100 |     100 |                                                                         
-  thumbnails.js                             |     100 |      100 |     100 |     100 |                                                                         
---------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------
-Jest: "global" coverage threshold for statements (75%) not met: 71.13%
-Jest: "global" coverage threshold for branches (75%) not met: 52.68%
-Jest: "global" coverage threshold for lines (75%) not met: 71.26%
-Jest: "global" coverage threshold for functions (75%) not met: 58.53%
+-----------------------------------------------------|---------|----------|---------|---------|-----------------------------------------------------------------------------------------------------------------------------------
+File                                                 | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                                                 
+-----------------------------------------------------|---------|----------|---------|---------|-----------------------------------------------------------------------------------------------------------------------------------
+All files                                            |   46.72 |    34.03 |   40.44 |   47.24 |                                                                                                                                   
+ src                                                 |   46.48 |    21.05 |    4.16 |   49.71 |                                                                                                                                   
+  app.js                                             |   55.12 |    26.66 |    5.26 |   59.72 | 18-47,56,60-62,79,122-128,145-146,161-162,169-170,177-178,185-186,194-195,202-203,210-211,219-220,225,235-236,245-246,269,306-308 
+  server.js                                          |       0 |        0 |       0 |       0 | 7-76                                                                                                                              
+ src/config                                          |       0 |        0 |       0 |       0 |                                                                                                                                   
+  aws.js                                             |       0 |        0 |     100 |       0 | 7-17                                                                                                                              
+  database.js                                        |       0 |        0 |       0 |       0 | 7-36                                                                                                                              
+  environment.js                                     |       0 |        0 |     100 |       0 | 5-47                                                                                                                              
+  sequelize.js                                       |       0 |        0 |     100 |       0 | 6                                                                                                                                 
+ src/controllers                                     |   85.08 |    63.18 |    94.2 |   85.19 |                                                                                                                                   
+  episodeController.js                               |      92 |       74 |     100 |   91.89 | 102-103,162-163,206,247                                                                                                           
+  fileController.js                                  |   84.72 |    77.77 |   83.33 |   86.95 | 236-266                                                                                                                           
+  jobController.js                                   |     100 |      100 |     100 |     100 |                                                                                                                                   
+  metadataController.js                              |   72.34 |    46.66 |      90 |   72.04 | 91,118,153,162,214,237-245,294,327,335,365-406,420                                                                                
+  processingController.js                            |   88.65 |    67.85 |     100 |   89.36 | 86,111,123,134,178,185,202,235,284,327                                                                                            
+  searchController.js                                |   89.58 |      100 |   88.88 |   88.88 | 98-104                                                                                                                            
+  thumbnailController.js                             |   77.08 |    36.84 |    90.9 |   76.59 | 104,112-192,207,224,258,292,325,377,412                                                                                           
+ src/middleware                                      |   69.28 |    62.92 |   68.65 |   69.74 |                                                                                                                                   
+  auditLog.js                                        |   69.76 |    58.82 |    64.7 |   70.23 | 67-78,110-116,126-155,170,195,211,227,243                                                                                         
+  auth.js                                            |   58.57 |    45.23 |      50 |   59.42 | 50,69,114,135-166,175-192,206-222                                                                                                 
+  errorHandler.js                                    |     100 |    95.18 |     100 |     100 | 66-75,193,233                                                                                                                     
+  jwtAuth.js                                         |   36.36 |    29.41 |   14.28 |   37.03 | 61,74-111,120-139,148-167                                                                                                         
+  rbac.js                                            |   92.98 |     90.9 |   84.61 |   92.98 | 68,83,141,178                                                                                                                     
+  searchLogger.js                                    |   21.42 |        0 |       0 |   21.42 | 15-41                                                                                                                             
+  uploadValidation.js                                |      20 |        0 |       0 |      20 | 15-61                                                                                                                             
+ src/migrations                                      |       0 |      100 |       0 |       0 |                                                                                                                                   
+  20240101000001-create-episodes.js                  |       0 |      100 |       0 |       0 | 3-125                                                                                                                             
+  20240101000002-create-metadata-storage.js          |       0 |      100 |       0 |       0 | 3-67                                                                                                                              
+  20240101000003-create-thumbnails.js                |       0 |      100 |       0 |       0 | 3-87                                                                                                                              
+  20240101000004-create-processing-queue.js          |       0 |      100 |       0 |       0 | 3-92                                                                                                                              
+  20240101000005-create-activity-logs.js             |       0 |      100 |       0 |       0 | 3-73                                                                                                                              
+  20260104000001-add-justawomaninherprime-support.js |       0 |      100 |       0 |       0 | 11-77                                                                                                                             
+  20260104000002-update-composition-workflow.js      |       0 |      100 |       0 |       0 | 10-75                                                                                                                             
+ src/models                                          |   45.23 |        0 |   18.36 |   46.06 |                                                                                                                                   
+  ActivityLog.js                                     |    37.5 |        0 |   16.66 |   42.85 | 117,133,144,154-164,174-189                                                                                                       
+  Asset.js                                           |     100 |      100 |     100 |     100 |                                                                                                                                   
+  Episode.js                                         |   46.42 |        0 |      10 |   46.42 | 217-218,225-226,233-237,244,262,269,279,288-291,298                                                                               
+  FileStorage.js                                     |   71.42 |      100 |      50 |   71.42 | 130-135                                                                                                                           
+  MetadataStorage.js                                 |      36 |        0 |   16.66 |      36 | 106-108,115-117,124-127,138,147-160                                                                                               
+  ProcessingQueue.js                                 |   35.55 |        0 |    7.69 |   35.55 | 137-139,146-148,155-158,165-173,180,187-190,201,213,224,234,247,257-267                                                           
+  Thumbnail.js                                       |   44.44 |        0 |   11.11 |   44.44 | 190-191,198-201,208-212,223,235,248,261-273,280                                                                                   
+  ThumbnailComposition.js                            |     100 |      100 |     100 |     100 |                                                                                                                                   
+  ThumbnailTemplate.js                               |     100 |      100 |     100 |     100 |                                                                                                                                   
+ src/routes                                          |   24.87 |     0.38 |       0 |   25.54 |                                                                                                                                   
+  assets.js                                          |   20.93 |     4.16 |       0 |   20.93 | 38-42,52-72,84-94,106-122,134-166,178-195,207-226,238-275                                                                         
+  auth.js                                            |    20.4 |        0 |       0 |    20.4 | 17-74,87-111,125-150,163-173,186-215                                                                                              
+  compositions.js                                    |    1.32 |        0 |       0 |    1.32 | 17-1004                                                                                                                           
+  episodes.js                                        |     100 |      100 |     100 |     100 |                                                                                                                                   
+  files.js                                           |   79.16 |      100 |       0 |     100 |                                                                                                                                   
+  jobs.js                                            |   66.66 |      100 |       0 |     100 |                                                                                                                                   
+  metadata.js                                        |     100 |      100 |     100 |     100 |                                                                                                                                   
+  processing.js                                      |     100 |      100 |     100 |     100 |                                                                                                                                   
+  search.js                                          |   71.42 |      100 |       0 |     100 |                                                                                                                                   
+  seed.js                                            |   41.17 |        0 |       0 |   41.17 | 92-120                                                                                                                            
+  templates.js                                       |   35.29 |        0 |       0 |   35.29 | 17-27,39-49                                                                                                                       
+  thumbnails.js                                      |      50 |        0 |       0 |      50 | 96-105,117-125,137-145,156-164                                                                                                    
+ src/services                                        |   30.38 |    18.23 |   35.84 |   30.59 |                                                                                                                                   
+  AssetService.js                                    |   12.32 |      3.7 |       0 |   12.85 | 15-25,35-230                                                                                                                      
+  CompositionService.js                              |    3.57 |        0 |       0 |    3.75 | 16-392                                                                                                                            
+  FileValidationService.js                           |     100 |    97.22 |     100 |     100 | 141                                                                                                                               
+  FilterService.js                                   |       0 |        0 |       0 |       0 | 3-352                                                                                                                             
+  JobQueueService.js                                 |   96.36 |    66.66 |   91.66 |   98.11 | 95                                                                                                                                
+  OpenSearchService.js                               |   71.91 |     60.6 |   83.33 |   71.59 | 37-93,105-106,135-136,166-167,194-195,323-332                                                                                     
+  RunwayMLService.js                                 |   17.94 |        0 |   16.66 |   17.94 | 21-129                                                                                                                            
+  S3Service.js                                       |   95.83 |    66.66 |     100 |   95.74 | 155-160                                                                                                                           
+  ThumbnailGeneratorService.js                       |    7.14 |        0 |       0 |    7.27 | 52-350                                                                                                                            
+  ThumbnailService.js                                |       0 |        0 |       0 |       0 | 1-174                                                                                                                             
+  VersioningService.js                               |    2.22 |        0 |       0 |    2.22 | 16-300                                                                                                                            
+  tokenService.js                                    |    9.37 |        0 |       0 |    9.37 | 17-144                                                                                                                            
+ src/utils                                           |      75 |    64.28 |     100 |      75 |                                                                                                                                   
+  logger.js                                          |      75 |    64.28 |     100 |      75 | 24,30,36                                                                                                                          
+-----------------------------------------------------|---------|----------|---------|---------|-----------------------------------------------------------------------------------------------------------------------------------
+Jest: "global" coverage threshold for statements (75%) not met: 46.72%
+Jest: "global" coverage threshold for branches (75%) not met: 34.03%
+Jest: "global" coverage threshold for lines (75%) not met: 47.24%
+Jest: "global" coverage threshold for functions (75%) not met: 40.44%
 
-Test Suites: 1 failed, 14 passed, 15 total
-Tests:       34 failed, 517 passed, 551 total
+Summary of all failing tests
+FAIL tests/unit/utils/logger.test.js
+  ΓùÅ Logger Utility ΓÇ║ logger.info() ΓÇ║ should log info messages when level is info or higher
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      27 |       logger.info('Test info message');
+      28 |       
+    > 29 |       expect(consoleLogSpy).toHaveBeenCalled();
+         |                             ^
+      30 |       expect(consoleLogSpy.mock.calls[0][0]).toContain('[INFO]');
+      31 |     });
+      32 |
+
+      at Object.toHaveBeenCalled (tests/unit/utils/logger.test.js:29:29)
+
+  ΓùÅ Logger Utility ΓÇ║ logger.info() ΓÇ║ should include message in log output
+
+    TypeError: Cannot read properties of undefined (reading '0')
+
+      37 |       logger.info('Custom message');
+      38 |       
+    > 39 |       expect(consoleLogSpy.mock.calls[0][0]).toContain('Custom message');
+         |                                         ^
+      40 |     });
+      41 |
+      42 |     test('should accept metadata as second parameter', () => {
+
+      at Object.<anonymous> (tests/unit/utils/logger.test.js:39:41)
+
+  ΓùÅ Logger Utility ΓÇ║ logger.info() ΓÇ║ should accept metadata as second parameter
+
+    expect(jest.fn()).toHaveBeenCalledWith(...expected)
+
+    Expected: "[INFO] Action performed", {"action": "test", "userId": "123"}
+
+    Number of calls: 0
+
+      47 |       logger.info('Action performed', metadata);
+      48 |       
+    > 49 |       expect(consoleLogSpy).toHaveBeenCalledWith('[INFO] Action performed', metadata);
+         |                             ^
+      50 |     });
+      51 |   });
+      52 |
+
+      at Object.toHaveBeenCalledWith (tests/unit/utils/logger.test.js:49:29)
+
+  ΓùÅ Logger Utility ΓÇ║ logger.warn() ΓÇ║ should log warnings at warn level or higher
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      78 |       logger.warn('Warning message');
+      79 |       
+    > 80 |       expect(consoleWarnSpy).toHaveBeenCalled();
+         |                              ^
+      81 |       expect(consoleWarnSpy.mock.calls[0][0]).toContain('[WARN]');
+      82 |     });
+      83 |
+
+      at Object.toHaveBeenCalled (tests/unit/utils/logger.test.js:80:30)
+
+  ΓùÅ Logger Utility ΓÇ║ logger.debug() ΓÇ║ should log debug messages at debug level
+
+    expect(jest.fn()).toHaveBeenCalled()
+
+    Expected number of calls: >= 1
+    Received number of calls:    0
+
+      100 |       logger.debug('Debug info');
+      101 |       
+    > 102 |       expect(consoleLogSpy).toHaveBeenCalled();
+          |                             ^
+      103 |       expect(consoleLogSpy.mock.calls[0][0]).toContain('[DEBUG]');
+      104 |     });
+      105 |
+
+      at Object.toHaveBeenCalled (tests/unit/utils/logger.test.js:102:29)
+
+FAIL tests/unit/middleware/uploadValidation.test.js
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should allow valid image files
+
+    TypeError: validateFileUpload is not a function
+
+      29 |       mockReq.file.size = 5000000; // 5MB
+      30 |       
+    > 31 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      32 |       
+      33 |       expect(mockNext).toHaveBeenCalled();
+      34 |     });
+
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:31:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should allow valid video files
+
+    TypeError: validateFileUpload is not a function
+
+      40 |       mockReq.file.size = 500000000; // 500MB
+      41 |       
+    > 42 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      43 |       
+      44 |       expect(mockNext).toHaveBeenCalled();
+      45 |     });
+
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:42:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should reject files exceeding size limit
+
+    TypeError: validateFileUpload is not a function
+
+      50 |       mockReq.file.size = 2000000000; // 2GB - exceeds limit
+      51 |       
+    > 52 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      53 |       
+      54 |       expect(mockRes.status).toHaveBeenCalledWith(400);
+      55 |     });
+
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:52:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should reject unsupported file types
+
+    TypeError: validateFileUpload is not a function
+
+      60 |       mockReq.file.mimetype = 'application/exe';
+      61 |       
+    > 62 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      63 |       
+      64 |       expect(mockRes.status).toHaveBeenCalledWith(400);
+      65 |     });
+
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:62:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUpload ΓÇ║ should handle missing file gracefully
+
+    TypeError: validateFileUpload is not a function
+
+      70 |       delete mockReq.file;
+      71 |       
+    > 72 |       validateFileUpload(mockReq, mockRes, mockNext);
+         |       ^
+      73 |       
+      74 |       // Should either call next or return error
+      75 |       expect(mockRes.status.mock.calls.length + mockNext.mock.calls.length).toBeGreaterThan(0);
+
+      at Object.validateFileUpload (tests/unit/middleware/uploadValidation.test.js:72:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUploadBatch ΓÇ║ should validate multiple files
+
+    TypeError: validateFileUploadBatch is not a function
+
+      86 |       ];
+      87 |       
+    > 88 |       validateFileUploadBatch(mockReq, mockRes, mockNext);
+         |       ^
+      89 |       
+      90 |       expect(mockNext).toHaveBeenCalled();
+      91 |     });
+
+      at Object.validateFileUploadBatch (tests/unit/middleware/uploadValidation.test.js:88:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUploadBatch ΓÇ║ should reject batch if any file is invalid
+
+    TypeError: validateFileUploadBatch is not a function
+
+       99 |       ];
+      100 |       
+    > 101 |       validateFileUploadBatch(mockReq, mockRes, mockNext);
+          |       ^
+      102 |       
+      103 |       expect(mockRes.status).toHaveBeenCalledWith(400);
+      104 |     });
+
+      at Object.validateFileUploadBatch (tests/unit/middleware/uploadValidation.test.js:101:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ validateFileUploadBatch ΓÇ║ should handle empty batch
+
+    TypeError: validateFileUploadBatch is not a function
+
+      109 |       mockReq.files = [];
+      110 |       
+    > 111 |       validateFileUploadBatch(mockReq, mockRes, mockNext);
+          |       ^
+      112 |       
+      113 |       expect(mockRes.status.mock.calls.length + mockNext.mock.calls.length).toBeGreaterThan(0);
+      114 |     });
+
+      at Object.validateFileUploadBatch (tests/unit/middleware/uploadValidation.test.js:111:7)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ getFileSizeLimit ΓÇ║ should return appropriate size limit for image files
+
+    TypeError: getFileSizeLimit is not a function
+
+      119 |       const { getFileSizeLimit } = require('../../../src/middleware/uploadValidation');
+      120 |       
+    > 121 |       const limit = getFileSizeLimit('image/jpeg');
+          |                     ^
+      122 |       
+      123 |       expect(limit).toBeGreaterThan(0);
+      124 |       expect(limit).toBeLessThan(1000000000); // Less than 1GB
+
+      at Object.getFileSizeLimit (tests/unit/middleware/uploadValidation.test.js:121:21)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ getFileSizeLimit ΓÇ║ should return appropriate size limit for video files
+
+    TypeError: getFileSizeLimit is not a function
+
+      128 |       const { getFileSizeLimit } = require('../../../src/middleware/uploadValidation');
+      129 |       
+    > 130 |       const limit = getFileSizeLimit('video/mp4');
+          |                     ^
+      131 |       
+      132 |       expect(limit).toBeGreaterThan(0);
+      133 |     });
+
+      at Object.getFileSizeLimit (tests/unit/middleware/uploadValidation.test.js:130:21)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ getFileSizeLimit ΓÇ║ should handle unknown mime types
+
+    TypeError: getFileSizeLimit is not a function
+
+      136 |       const { getFileSizeLimit } = require('../../../src/middleware/uploadValidation');
+      137 |       
+    > 138 |       const limit = getFileSizeLimit('application/unknown');
+          |                     ^
+      139 |       
+      140 |       expect(typeof limit === 'number').toBe(true);
+      141 |     });
+
+      at Object.getFileSizeLimit (tests/unit/middleware/uploadValidation.test.js:138:21)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ isSupportedFileType ΓÇ║ should recognize supported image formats
+
+    TypeError: isSupportedFileType is not a function
+
+      146 |       const { isSupportedFileType } = require('../../../src/middleware/uploadValidation');
+      147 |       
+    > 148 |       expect(isSupportedFileType('image/jpeg')).toBe(true);
+          |              ^
+      149 |       expect(isSupportedFileType('image/png')).toBe(true);
+      150 |       expect(isSupportedFileType('image/webp')).toBe(true);
+      151 |     });
+
+      at Object.isSupportedFileType (tests/unit/middleware/uploadValidation.test.js:148:14)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ isSupportedFileType ΓÇ║ should recognize supported video formats
+
+    TypeError: isSupportedFileType is not a function
+
+      154 |       const { isSupportedFileType } = require('../../../src/middleware/uploadValidation');
+      155 |       
+    > 156 |       expect(isSupportedFileType('video/mp4')).toBe(true);
+          |              ^
+      157 |       expect(isSupportedFileType('video/quicktime')).toBe(true);
+      158 |     });
+      159 |
+
+      at Object.isSupportedFileType (tests/unit/middleware/uploadValidation.test.js:156:14)
+
+  ΓùÅ Upload Validation Middleware ΓÇ║ isSupportedFileType ΓÇ║ should reject unsupported formats
+
+    TypeError: isSupportedFileType is not a function
+
+      161 |       const { isSupportedFileType } = require('../../../src/middleware/uploadValidation');
+      162 |       
+    > 163 |       expect(isSupportedFileType('application/exe')).toBe(false);
+          |              ^
+      164 |       expect(isSupportedFileType('text/plain')).toBe(false);
+      165 |     });
+      166 |   });
+
+      at Object.isSupportedFileType (tests/unit/middleware/uploadValidation.test.js:163:14)
+
+FAIL tests/unit/middleware/searchLogger.test.js
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should call next() to pass control
+
+    TypeError: searchLogger is not a function
+
+      24 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      25 |       
+    > 26 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      27 |       
+      28 |       expect(mockNext).toHaveBeenCalled();
+      29 |     });
+
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:26:7)
+
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should capture search query parameters
+
+    TypeError: searchLogger is not a function
+
+      32 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      33 |       
+    > 34 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      35 |       
+      36 |       expect(mockReq.searchLog).toBeDefined();
+      37 |     });
+
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:34:7)
+
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should extract user information
+
+    TypeError: searchLogger is not a function
+
+      40 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      41 |       
+    > 42 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      43 |       
+      44 |       expect(mockReq.searchLog.userId).toEqual('user123');
+      45 |     });
+
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:42:7)
+
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should record HTTP method and path
+
+    TypeError: searchLogger is not a function
+
+      48 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      49 |       
+    > 50 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      51 |       
+      52 |       expect(mockReq.searchLog.method).toEqual('GET');
+      53 |       expect(mockReq.searchLog.path).toEqual('/api/v1/search');
+
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:50:7)
+
+  ΓùÅ SearchLogger Middleware ΓÇ║ searchLogger ΓÇ║ should handle requests without user
+
+    TypeError: searchLogger is not a function
+
+      58 |       const { searchLogger } = require('../../../src/middleware/searchLogger');
+      59 |       
+    > 60 |       searchLogger(mockReq, mockRes, mockNext);
+         |       ^
+      61 |       
+      62 |       expect(mockNext).toHaveBeenCalled();
+      63 |     });
+
+      at Object.searchLogger (tests/unit/middleware/searchLogger.test.js:60:7)
+
+  ΓùÅ SearchLogger Middleware ΓÇ║ logSearch ΓÇ║ should format search log entry
+
+    TypeError: logSearch is not a function
+
+      68 |       const { logSearch } = require('../../../src/middleware/searchLogger');
+      69 |       
+    > 70 |       const logEntry = logSearch({
+         |                        ^
+      71 |         query: 'test',
+      72 |         results: 10,
+      73 |         userId: 'user123',
+
+      at Object.logSearch (tests/unit/middleware/searchLogger.test.js:70:24)
+
+  ΓùÅ SearchLogger Middleware ΓÇ║ logSearch ΓÇ║ should handle empty query
+
+    TypeError: logSearch is not a function
+
+      83 |       const { logSearch } = require('../../../src/middleware/searchLogger');
+      84 |       
+    > 85 |       const logEntry = logSearch({
+         |                        ^
+      86 |         query: '',
+      87 |         results: 0,
+      88 |         userId: 'user123'
+
+      at Object.logSearch (tests/unit/middleware/searchLogger.test.js:85:24)
+
+  ΓùÅ SearchLogger Middleware ΓÇ║ getSearchStats ΓÇ║ should retrieve search statistics
+
+    TypeError: getSearchStats is not a function
+
+       97 |       const { getSearchStats } = require('../../../src/middleware/searchLogger');
+       98 |       
+    >  99 |       const stats = await getSearchStats();
+          |                           ^
+      100 |       
+      101 |       expect(stats).toBeDefined();
+      102 |       expect(typeof stats === 'object').toBe(true);
+
+      at Object.getSearchStats (tests/unit/middleware/searchLogger.test.js:99:27)
+
+  ΓùÅ SearchLogger Middleware ΓÇ║ getSearchStats ΓÇ║ should include search metrics
+
+    TypeError: getSearchStats is not a function
+
+      106 |       const { getSearchStats } = require('../../../src/middleware/searchLogger');
+      107 |       
+    > 108 |       const stats = await getSearchStats();
+          |                           ^
+      109 |       
+      110 |       expect(stats.totalSearches || stats.topQueries || stats.avgResultsPerSearch).toBeDefined();
+      111 |     });
+
+      at Object.getSearchStats (tests/unit/middleware/searchLogger.test.js:108:27)
+
+
+Test Suites: 3 failed, 23 passed, 26 total
+Tests:       28 failed, 6 skipped, 775 passed, 809 total
 Snapshots:   0 total
-Time:        4.864 s
+Time:        6.978 s
 Ran all test suites.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.

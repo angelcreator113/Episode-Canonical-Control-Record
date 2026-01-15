@@ -1,78 +1,151 @@
 'use strict';
-const { Sequelize } = require('sequelize');
-const path = require('path');
-require('dotenv').config();
 
 /**
  * Database Configuration and Model Initialization
+ * 
+ * This file:
+ * 1. Loads database configuration from config/sequelize.js
+ * 2. Initializes all Sequelize models
+ * 3. Sets up model associations
+ * 4. Exports models and helper functions
  */
 
-// Initialize Sequelize
-const sequelize = new Sequelize({
-  dialect: 'postgres',
-  host: process.env.DB_HOST || 'localhost',
-  port: parseInt(process.env.DB_PORT || '5432'),
-  username: process.env.DB_USER || 'admin',
-  password: process.env.DB_PASSWORD || 'password',
-  database: process.env.DB_NAME || 'episode_metadata_dev',
-  logging: process.env.SQL_LOGGING === 'true' ? console.log : false,
-  pool: {
-    max: parseInt(process.env.DB_POOL_MAX || '10'),
-    min: parseInt(process.env.DB_POOL_MIN || '2'),
-    acquire: 30000,
-    idle: 10000,
-  },
-  define: {
-    freezeTableName: false,
-    underscored: true,
-    charset: 'utf8mb4',
-    collate: 'utf8mb4_unicode_ci',
-  },
-  dialectOptions: {
-    supportBigNumbers: true,
-    bigNumberStrings: true,
-    ssl: {
-      require: false,
-      rejectUnauthorized: false,
-    },
-  },
-});
+const { Sequelize } = require('sequelize');
+// const _path = require('path'); // Removed: unused import
+require('dotenv').config();
 
-// Import models
-const Episode = require('./Episode')(sequelize);
-const MetadataStorage = require('./MetadataStorage')(sequelize);
-const Thumbnail = require('./Thumbnail')(sequelize);
-const ProcessingQueue = require('./ProcessingQueue')(sequelize);
-const ActivityLog = require('./ActivityLog')(sequelize);
-const FileStorage = require('./FileStorage')(sequelize);
+// Load database configuration
+const config = require('../config/sequelize');
+const env = process.env.NODE_ENV || 'development';
+const dbConfig = config[env];
+
+if (!dbConfig) {
+  throw new Error(`Database configuration not found for environment: ${env}`);
+}
+
+/**
+ * Initialize Sequelize with environment-specific config
+ */
+const sequelize = new Sequelize(
+  dbConfig.database,
+  dbConfig.username,
+  dbConfig.password,
+  {
+    host: dbConfig.host,
+    port: dbConfig.port,
+    dialect: dbConfig.dialect,
+    logging: dbConfig.logging,
+    pool: dbConfig.pool,
+    dialectOptions: dbConfig.dialectOptions,
+    define: dbConfig.define,
+    retry: dbConfig.retry,
+  }
+);
+
+/**
+ * Import Models
+ * Each model is a function that takes sequelize instance
+ */
+let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
+let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
+let Show;
+
+try {
+  // Core models
+  Episode = require('./Episode')(sequelize);
+  MetadataStorage = require('./MetadataStorage')(sequelize);
+  Thumbnail = require('./Thumbnail')(sequelize);
+  ProcessingQueue = require('./ProcessingQueue')(sequelize);
+  ActivityLog = require('./ActivityLog')(sequelize);
+  
+  // Phase 2 models
+  FileStorage = require('./FileStorage')(sequelize);
+  Asset = require('./Asset')(sequelize);
+  
+  // Phase 2.5 models
+  ThumbnailComposition = require('./ThumbnailComposition')(sequelize);
+  ThumbnailTemplate = require('./ThumbnailTemplate')(sequelize);
+  EpisodeTemplate = require('./EpisodeTemplate')(sequelize);
+  
+  // Phase 6 models
+  Show = require('./Show')(sequelize);
+
+  console.log('✅ All models loaded successfully');
+} catch (error) {
+  console.error('❌ Error loading models:', error.message);
+  throw error;
+}
+
+/**
+ * Validate Required Models
+ */
+const requiredModels = {
+  Episode,
+  MetadataStorage,
+  Thumbnail,
+  ProcessingQueue,
+  ActivityLog,
+  FileStorage,
+  Asset,
+  ThumbnailComposition,
+  ThumbnailTemplate,
+  EpisodeTemplate,
+  Show,
+};
+
+Object.entries(requiredModels).forEach(([name, model]) => {
+  if (!model) {
+    throw new Error(`Required model not loaded: ${name}`);
+  }
+});
 
 /**
  * Define Model Associations
+ * Order matters: define associations after all models are loaded
  */
 
-// Episode associations
+// ==================== EPISODE ASSOCIATIONS ====================
+
+// Episode → MetadataStorage (1:N)
 Episode.hasMany(MetadataStorage, {
-  foreignKey: 'episodeId',
+  foreignKey: 'episode_id',
   as: 'metadata',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
 
+MetadataStorage.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Episode → Thumbnail (1:N)
 Episode.hasMany(Thumbnail, {
-  foreignKey: 'episodeId',
+  foreignKey: 'episode_id',
   as: 'thumbnails',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
 
+Thumbnail.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Episode → ProcessingQueue (1:N)
 Episode.hasMany(ProcessingQueue, {
-  foreignKey: 'episodeId',
+  foreignKey: 'episode_id',
   as: 'processingJobs',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
 
-// Phase 2: FileStorage associations
+ProcessingQueue.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Episode → FileStorage (1:N)
 Episode.hasMany(FileStorage, {
   foreignKey: 'episode_id',
   as: 'files',
@@ -80,31 +153,30 @@ Episode.hasMany(FileStorage, {
   onUpdate: 'CASCADE',
 });
 
-ProcessingQueue.hasOne(FileStorage, {
-  foreignKey: 'processing_job_id',
-  as: 'file',
-});
-
-// Reverse associations
-MetadataStorage.belongsTo(Episode, {
-  foreignKey: 'episodeId',
-  as: 'episode',
-});
-
-Thumbnail.belongsTo(Episode, {
-  foreignKey: 'episodeId',
-  as: 'episode',
-});
-
-ProcessingQueue.belongsTo(Episode, {
-  foreignKey: 'episodeId',
-  as: 'episode',
-});
-
-// Phase 2: FileStorage reverse associations
 FileStorage.belongsTo(Episode, {
   foreignKey: 'episode_id',
   as: 'episode',
+});
+
+// Episode → ThumbnailComposition (1:N)
+Episode.hasMany(ThumbnailComposition, {
+  foreignKey: 'episode_id',
+  as: 'compositions',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+
+ThumbnailComposition.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// ==================== PROCESSING QUEUE ASSOCIATIONS ====================
+
+// ProcessingQueue → FileStorage (1:1)
+ProcessingQueue.hasOne(FileStorage, {
+  foreignKey: 'processing_job_id',
+  as: 'file',
 });
 
 FileStorage.belongsTo(ProcessingQueue, {
@@ -112,16 +184,72 @@ FileStorage.belongsTo(ProcessingQueue, {
   as: 'processingJob',
 });
 
+// ==================== THUMBNAIL COMPOSITION ASSOCIATIONS ====================
+
+// ThumbnailComposition → ThumbnailTemplate
+ThumbnailComposition.belongsTo(ThumbnailTemplate, {
+  foreignKey: 'template_id',
+  as: 'template',
+});
+
+ThumbnailTemplate.hasMany(ThumbnailComposition, {
+  foreignKey: 'template_id',
+  as: 'compositions',
+});
+
+// ThumbnailComposition → Assets (multiple relationships)
+ThumbnailComposition.belongsTo(Asset, {
+  foreignKey: 'lala_asset_id',
+  as: 'lalaAsset',
+});
+
+ThumbnailComposition.belongsTo(Asset, {
+  foreignKey: 'guest_asset_id',
+  as: 'guestAsset',
+});
+
+ThumbnailComposition.belongsTo(Asset, {
+  foreignKey: 'justawomen_asset_id',
+  as: 'justawomanAsset',
+});
+
+ThumbnailComposition.belongsTo(Asset, {
+  foreignKey: 'background_frame_asset_id',
+  as: 'backgroundAsset',
+});
+
+// Reverse associations for Assets
+Asset.hasMany(ThumbnailComposition, {
+  foreignKey: 'lala_asset_id',
+  as: 'lalaCompositions',
+});
+
+Asset.hasMany(ThumbnailComposition, {
+  foreignKey: 'guest_asset_id',
+  as: 'guestCompositions',
+});
+
+Asset.hasMany(ThumbnailComposition, {
+  foreignKey: 'justawomen_asset_id',
+  as: 'justawomanCompositions',
+});
+
+Asset.hasMany(ThumbnailComposition, {
+  foreignKey: 'background_frame_asset_id',
+  as: 'backgroundCompositions',
+});
+
+console.log('✅ Model associations defined');
+
 /**
  * Database Helper Functions
  */
-
 const db = {
-  // Sequelize instance
+  // Sequelize instance and class
   sequelize,
   Sequelize,
 
-  // Models
+  // All models
   models: {
     Episode,
     MetadataStorage,
@@ -129,6 +257,36 @@ const db = {
     ProcessingQueue,
     ActivityLog,
     FileStorage,
+    Asset,
+    ThumbnailComposition,
+    ThumbnailTemplate,
+    EpisodeTemplate,
+  },
+
+  /**
+   * Test database connection
+   */
+  authenticate: async () => {
+    try {
+      await sequelize.authenticate();
+      console.log('✅ Database connection authenticated');
+      return true;
+    } catch (error) {
+      console.error('❌ Database connection failed:', error.message);
+      
+      // Provide helpful error messages
+      if (error.message.includes('ECONNREFUSED')) {
+        console.error('💡 Is PostgreSQL running?');
+        console.error(`💡 Check: ${dbConfig.host}:${dbConfig.port}`);
+      } else if (error.message.includes('password authentication failed')) {
+        console.error('💡 Check database credentials in .env');
+      } else if (error.message.includes('database') && error.message.includes('does not exist')) {
+        console.error('💡 Create database first:');
+        console.error(`   createdb ${dbConfig.database}`);
+      }
+      
+      throw error;
+    }
   },
 
   /**
@@ -138,35 +296,23 @@ const db = {
   sync: async (options = {}) => {
     try {
       const defaultOptions = {
-        alter: process.env.NODE_ENV !== 'production',
-        logging: process.env.SQL_LOGGING === 'true' ? console.log : false,
+        alter: process.env.NODE_ENV === 'development',
+        force: false,
+        logging: dbConfig.logging,
       };
 
+      console.log(`🔄 Syncing database (${env} mode)...`);
       await sequelize.sync({ ...defaultOptions, ...options });
       console.log('✅ Database schema synchronized');
       return true;
     } catch (error) {
-      console.error('❌ Database sync failed:', error);
+      console.error('❌ Database sync failed:', error.message);
       throw error;
     }
   },
 
   /**
-   * Authenticate database connection
-   */
-  authenticate: async () => {
-    try {
-      await sequelize.authenticate();
-      console.log('✅ Database connection authenticated');
-      return true;
-    } catch (error) {
-      console.error('❌ Database connection failed:', error);
-      throw error;
-    }
-  },
-
-  /**
-   * Close database connection
+   * Close database connection gracefully
    */
   close: async () => {
     try {
@@ -174,38 +320,50 @@ const db = {
       console.log('✅ Database connection closed');
       return true;
     } catch (error) {
-      console.error('❌ Error closing database:', error);
+      console.error('❌ Error closing database:', error.message);
       throw error;
     }
   },
 
   /**
-   * Drop all tables (danger! dev only)
+   * Drop all tables (DANGER! Development only)
    */
   drop: async () => {
     if (process.env.NODE_ENV === 'production') {
-      throw new Error('Cannot drop database in production');
+      throw new Error('🚨 Cannot drop database in production!');
     }
+    
+    const confirmed = process.env.CONFIRM_DROP === 'true';
+    if (!confirmed) {
+      throw new Error('Set CONFIRM_DROP=true to drop database');
+    }
+
     try {
+      console.log('⚠️  Dropping all tables...');
       await sequelize.drop();
       console.log('✅ All tables dropped');
       return true;
     } catch (error) {
-      console.error('❌ Error dropping tables:', error);
+      console.error('❌ Error dropping tables:', error.message);
       throw error;
     }
   },
 
   /**
-   * Get database stats
+   * Get database statistics
    */
   getStats: async () => {
     try {
-      const episodes = await Episode.count();
-      const metadata = await MetadataStorage.count();
-      const thumbnails = await Thumbnail.count();
-      const processingJobs = await ProcessingQueue.count();
-      const activities = await ActivityLog.count();
+      const [episodes, metadata, thumbnails, processingJobs, activities, files, assets, compositions] = await Promise.all([
+        Episode.count(),
+        MetadataStorage.count(),
+        Thumbnail.count(),
+        ProcessingQueue.count(),
+        ActivityLog.count(),
+        FileStorage.count(),
+        Asset.count(),
+        ThumbnailComposition.count(),
+      ]);
 
       return {
         episodes,
@@ -213,12 +371,55 @@ const db = {
         thumbnails,
         processingJobs,
         activities,
+        files,
+        assets,
+        compositions,
+        total: episodes + metadata + thumbnails + processingJobs + activities + files + assets + compositions,
       };
     } catch (error) {
-      console.error('❌ Error getting stats:', error);
+      console.error('❌ Error getting stats:', error.message);
       throw error;
+    }
+  },
+
+  /**
+   * Check database health
+   */
+  healthCheck: async () => {
+    try {
+      await sequelize.authenticate();
+      const stats = await db.getStats();
+      
+      return {
+        status: 'healthy',
+        database: dbConfig.database,
+        host: dbConfig.host,
+        port: dbConfig.port,
+        environment: env,
+        stats,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        status: 'unhealthy',
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      };
     }
   },
 };
 
+// Export models individually for convenience
 module.exports = db;
+module.exports.Episode = Episode;
+module.exports.MetadataStorage = MetadataStorage;
+module.exports.Thumbnail = Thumbnail;
+module.exports.ProcessingQueue = ProcessingQueue;
+module.exports.ActivityLog = ActivityLog;
+module.exports.FileStorage = FileStorage;
+module.exports.Asset = Asset;
+module.exports.ThumbnailComposition = ThumbnailComposition;
+module.exports.ThumbnailTemplate = ThumbnailTemplate;
+module.exports.EpisodeTemplate = EpisodeTemplate;
+module.exports.Show = Show;
+module.exports.EpisodeTemplate = EpisodeTemplate;

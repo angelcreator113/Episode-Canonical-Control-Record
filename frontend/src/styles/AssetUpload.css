@@ -1,0 +1,48 @@
+.asset-upload-zone {
+  border: 2px dashed #667eea;
+  border-radius: 8px;
+  padding: 2rem;
+  text-align: center;
+  cursor: pointer;
+  background-color: rgba(102, 126, 234, 0.05);
+  transition: all 0.3s ease;
+}
+
+.asset-upload-zone:hover {
+  border-color: #764cac;
+  background-color: rgba(102, 126, 234, 0.1);
+}
+
+.upload-content {
+  pointer-events: none;
+}
+
+.upload-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+
+.upload-content p {
+  color: #666;
+  font-size: 1rem;
+  margin: 0;
+}
+
+.upload-progress {
+  margin-top: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.upload-progress progress {
+  flex: 1;
+  height: 8px;
+  border-radius: 4px;
+}
+
+.upload-progress span {
+  font-size: 0.9rem;
+  color: #666;
+  min-width: 40px;
+}

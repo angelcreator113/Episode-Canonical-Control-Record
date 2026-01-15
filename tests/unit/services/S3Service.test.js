@@ -10,75 +10,89 @@ jest.mock('../../../src/utils/logger', () => ({
   debug: jest.fn(),
 }));
 
-const AWS = require('aws-sdk');
-
-// Mock AWS SDK
 jest.mock('aws-sdk', () => {
+  const mockS3Instance = {
+    upload: jest.fn(),
+    deleteObject: jest.fn(),
+    headObject: jest.fn(),
+    listObjectsV2: jest.fn(),
+    copyObject: jest.fn(),
+    getObject: jest.fn(),
+    getSignedUrl: jest.fn(),
+  };
+
   return {
-    S3: jest.fn(),
+    S3: jest.fn(() => mockS3Instance),
   };
 });
 
-const S3Service = require('../../../src/services/S3Service');
+const AWS = require('aws-sdk');
 
 describe('S3Service', () => {
-  let mockS3;
   let s3Instance;
+  let mockS3Instance;
 
   beforeEach(() => {
     jest.clearAllMocks();
     
-    mockS3 = {
-      upload: jest.fn(() => ({
-        promise: () => Promise.resolve({
-          ETag: '"abc123"',
-          VersionId: 'v1',
-          Location: 'https://bucket.s3.amazonaws.com/key',
-          Key: 'key',
-        }),
-      })),
-      deleteObject: jest.fn(() => ({
-        promise: () => Promise.resolve({}),
-      })),
-      headObject: jest.fn(() => ({
-        promise: () => Promise.resolve({
-          ContentLength: 1024,
-          ContentType: 'text/plain',
-          LastModified: new Date(),
-          ETag: '"abc123"',
-          Metadata: {},
-        }),
-      })),
-      listObjectsV2: jest.fn(() => ({
-        promise: () => Promise.resolve({ Contents: [] }),
-      })),
-      copyObject: jest.fn(() => ({
-        promise: () => Promise.resolve({ CopyObjectResult: { ETag: '"abc"' } }),
-      })),
-      getObject: jest.fn(() => ({
-        createReadStream: () => ({ on: jest.fn(), pipe: jest.fn() }),
-      })),
-      getSignedUrl: jest.fn((method, params) => 'https://bucket.s3.amazonaws.com/key?signed=params'),
-    };
-
-    AWS.S3.mockImplementation(() => mockS3);
+    // Get the mocked S3 instance
+    mockS3Instance = new AWS.S3();
     
-    // Load the module after mocking AWS SDK
+    // Setup default mock responses
+    mockS3Instance.upload.mockReturnValue({
+      promise: () => Promise.resolve({
+        ETag: '"abc123"',
+        VersionId: 'v1',
+        Location: 'https://bucket.s3.amazonaws.com/key',
+        Key: 'key',
+      }),
+    });
+
+    mockS3Instance.deleteObject.mockReturnValue({
+      promise: () => Promise.resolve({}),
+    });
+
+    mockS3Instance.headObject.mockReturnValue({
+      promise: () => Promise.resolve({
+        ContentLength: 1024,
+        ContentType: 'text/plain',
+        LastModified: new Date(),
+        ETag: '"abc123"',
+        Metadata: {},
+      }),
+    });
+
+    mockS3Instance.listObjectsV2.mockReturnValue({
+      promise: () => Promise.resolve({ Contents: [] }),
+    });
+
+    mockS3Instance.copyObject.mockReturnValue({
+      promise: () => Promise.resolve({ CopyObjectResult: { ETag: '"abc"' } }),
+    });
+
+    mockS3Instance.getObject.mockReturnValue({
+      createReadStream: () => ({ on: jest.fn(), pipe: jest.fn() }),
+    });
+
+    mockS3Instance.getSignedUrl.mockReturnValue(
+      'https://bucket.s3.amazonaws.com/key?signed=params'
+    );
+    
+    // Require S3Service after mocks are set up
+    delete require.cache[require.resolve('../../../src/services/S3Service')];
     s3Instance = require('../../../src/services/S3Service');
   });
 
   describe('uploadFile', () => {
     it('should upload file to S3 successfully', async () => {
-      const mockPromise = Promise.resolve({
-        ETag: '"abc123"',
-        VersionId: 'v1',
-        Location: 'https://bucket.s3.amazonaws.com/key',
-        Key: 'episodes/uuid/video/file.mp4',
+      mockS3Instance.upload.mockReturnValue({
+        promise: () => Promise.resolve({
+          ETag: '"abc123"',
+          VersionId: 'v1',
+          Location: 'https://bucket.s3.amazonaws.com/key',
+          Key: 'episodes/uuid/video/file.mp4',
+        }),
       });
-
-      mockS3.upload = jest.fn(() => ({
-        promise: () => mockPromise,
-      }));
 
       const bucket = 'test-bucket';
       const key = 'episodes/uuid/video/file.mp4';
@@ -97,9 +111,9 @@ describe('S3Service', () => {
 
     it('should handle upload errors', async () => {
       const error = new Error('Access Denied');
-      mockS3.upload = jest.fn(() => ({
+      mockS3Instance.upload.mockReturnValue({
         promise: () => Promise.reject(error),
-      }));
+      });
       
       await expect(
         s3Instance.uploadFile('bucket', 'key', Buffer.from('data'))
@@ -107,21 +121,21 @@ describe('S3Service', () => {
     });
 
     it('should pass metadata in upload params', async () => {
-      mockS3.upload = jest.fn(() => ({
+      mockS3Instance.upload.mockReturnValue({
         promise: () => Promise.resolve({
           ETag: '"abc"',
           VersionId: 'v1',
           Location: 'https://bucket.s3.amazonaws.com/key',
           Key: 'key',
         }),
-      }));
+      });
 
       await s3Instance.uploadFile('bucket', 'key', Buffer.from('data'), {
         ContentType: 'video/mp4',
         Metadata: { episodeId: 'ep-1' },
       });
 
-      expect(mockS3.upload).toHaveBeenCalledWith(
+      expect(mockS3Instance.upload).toHaveBeenCalledWith(
         expect.objectContaining({
           Bucket: 'bucket',
           Key: 'key',
@@ -133,14 +147,14 @@ describe('S3Service', () => {
   });
 
   describe('getPreSignedUrl', () => {
-    it('should generate pre-signed URL for download', () => {
+    it('should generate pre-signed URL for download', async () => {
       const mockUrl = 'https://bucket.s3.amazonaws.com/key?signed=params';
-      mockS3.getSignedUrl = jest.fn(() => mockUrl);
+      mockS3Instance.getSignedUrl.mockReturnValue(mockUrl);
 
-      const url = s3Instance.getPreSignedUrl('bucket', 'key', 3600);
+      const url = await s3Instance.getPreSignedUrl('bucket', 'key', 3600);
 
       expect(url).toBe(mockUrl);
-      expect(mockS3.getSignedUrl).toHaveBeenCalledWith(
+      expect(mockS3Instance.getSignedUrl).toHaveBeenCalledWith(
         'getObject',
         expect.objectContaining({
           Bucket: 'bucket',
@@ -150,12 +164,12 @@ describe('S3Service', () => {
       );
     });
 
-    it('should use default expiration time', () => {
-      mockS3.getSignedUrl = jest.fn(() => 'https://signed.url');
+    it('should use default expiration time', async () => {
+      mockS3Instance.getSignedUrl.mockReturnValue('https://signed.url');
 
-      s3Instance.getPreSignedUrl('bucket', 'key');
+      await s3Instance.getPreSignedUrl('bucket', 'key');
 
-      expect(mockS3.getSignedUrl).toHaveBeenCalledWith(
+      expect(mockS3Instance.getSignedUrl).toHaveBeenCalledWith(
         'getObject',
         expect.objectContaining({
           Expires: 3600,
@@ -163,26 +177,26 @@ describe('S3Service', () => {
       );
     });
 
-    it('should handle URL generation errors', () => {
-      mockS3.getSignedUrl = jest.fn(() => {
+    it('should handle URL generation errors', async () => {
+      mockS3Instance.getSignedUrl.mockImplementation(() => {
         throw new Error('Invalid bucket');
       });
 
-      expect(() => {
-        s3Instance.getPreSignedUrl('invalid', 'key');
-      }).toThrow('Invalid bucket');
+      await expect(
+        s3Instance.getPreSignedUrl('invalid', 'key')
+      ).rejects.toThrow('Invalid bucket');
     });
   });
 
   describe('deleteFile', () => {
     it('should delete file from S3', async () => {
-      mockS3.deleteObject = jest.fn(() => ({
+      mockS3Instance.deleteObject.mockReturnValue({
         promise: () => Promise.resolve({}),
-      }));
+      });
 
       await s3Instance.deleteFile('bucket', 'episodes/uuid/file.mp4');
 
-      expect(mockS3.deleteObject).toHaveBeenCalledWith({
+      expect(mockS3Instance.deleteObject).toHaveBeenCalledWith({
         Bucket: 'bucket',
         Key: 'episodes/uuid/file.mp4',
       });
@@ -190,11 +204,10 @@ describe('S3Service', () => {
 
     it('should handle delete errors', async () => {
       const error = new Error('File not found');
-      mockS3.deleteObject = jest.fn(() => ({
+      mockS3Instance.deleteObject.mockReturnValue({
         promise: () => Promise.reject(error),
-      }));
+      });
 
-      
       await expect(
         s3Instance.deleteFile('bucket', 'key')
       ).rejects.toThrow('File not found');
@@ -203,7 +216,7 @@ describe('S3Service', () => {
 
   describe('getFileMetadata', () => {
     it('should retrieve file metadata from S3', async () => {
-      mockS3.headObject = jest.fn(() => ({
+      mockS3Instance.headObject.mockReturnValue({
         promise: () => Promise.resolve({
           ContentLength: 1024000,
           ContentType: 'video/mp4',
@@ -211,7 +224,7 @@ describe('S3Service', () => {
           ETag: '"abc123"',
           Metadata: { episodeId: 'ep-1' },
         }),
-      }));
+      });
 
       const metadata = await s3Instance.getFileMetadata('bucket', 'key');
 
@@ -226,11 +239,10 @@ describe('S3Service', () => {
 
     it('should handle metadata retrieval errors', async () => {
       const error = new Error('Access Denied');
-      mockS3.headObject = jest.fn(() => ({
+      mockS3Instance.headObject.mockReturnValue({
         promise: () => Promise.reject(error),
-      }));
+      });
 
-      
       await expect(
         s3Instance.getFileMetadata('bucket', 'key')
       ).rejects.toThrow('Access Denied');
@@ -239,7 +251,7 @@ describe('S3Service', () => {
 
   describe('listFiles', () => {
     it('should list files with prefix', async () => {
-      mockS3.listObjectsV2 = jest.fn(() => ({
+      mockS3Instance.listObjectsV2.mockReturnValue({
         promise: () => Promise.resolve({
           Contents: [
             {
@@ -256,7 +268,7 @@ describe('S3Service', () => {
             },
           ],
         }),
-      }));
+      });
 
       const files = await s3Instance.listFiles('bucket', 'episodes/uuid/video');
 
@@ -270,9 +282,9 @@ describe('S3Service', () => {
     });
 
     it('should handle empty list', async () => {
-      mockS3.listObjectsV2 = jest.fn(() => ({
+      mockS3Instance.listObjectsV2.mockReturnValue({
         promise: () => Promise.resolve({ Contents: [] }),
-      }));
+      });
 
       const files = await s3Instance.listFiles('bucket', 'empty/prefix');
 
@@ -280,13 +292,13 @@ describe('S3Service', () => {
     });
 
     it('should use custom maxKeys', async () => {
-      mockS3.listObjectsV2 = jest.fn(() => ({
+      mockS3Instance.listObjectsV2.mockReturnValue({
         promise: () => Promise.resolve({ Contents: [] }),
-      }));
+      });
 
       await s3Instance.listFiles('bucket', 'prefix', 50);
 
-      expect(mockS3.listObjectsV2).toHaveBeenCalledWith(
+      expect(mockS3Instance.listObjectsV2).toHaveBeenCalledWith(
         expect.objectContaining({
           MaxKeys: 50,
         })
@@ -296,17 +308,16 @@ describe('S3Service', () => {
 
   describe('copyFile', () => {
     it('should copy file within S3', async () => {
-      mockS3.copyObject = jest.fn(() => ({
+      mockS3Instance.copyObject.mockReturnValue({
         promise: () => Promise.resolve({
           CopyObjectResult: { ETag: '"copied"' },
         }),
-      }));
+      });
 
-      const S3Service = require('../../../src/services/S3Service');
-      const result = await S3Service.copyFile('src-bucket', 'src-key', 'dest-bucket', 'dest-key');
+      const result = await s3Instance.copyFile('src-bucket', 'src-key', 'dest-bucket', 'dest-key');
 
       expect(result).toBeDefined();
-      expect(mockS3.copyObject).toHaveBeenCalledWith({
+      expect(mockS3Instance.copyObject).toHaveBeenCalledWith({
         CopySource: 'src-bucket/src-key',
         Bucket: 'dest-bucket',
         Key: 'dest-key',
@@ -315,14 +326,12 @@ describe('S3Service', () => {
 
     it('should handle copy errors', async () => {
       const error = new Error('Source not found');
-      mockS3.copyObject = jest.fn(() => ({
+      mockS3Instance.copyObject.mockReturnValue({
         promise: () => Promise.reject(error),
-      }));
+      });
 
-      const S3Service = require('../../../src/services/S3Service');
-      
       await expect(
-        S3Service.copyFile('src-bucket', 'invalid', 'dest-bucket', 'dest')
+        s3Instance.copyFile('src-bucket', 'invalid', 'dest-bucket', 'dest')
       ).rejects.toThrow('Source not found');
     });
   });
@@ -334,29 +343,26 @@ describe('S3Service', () => {
         pipe: jest.fn(),
       };
 
-      mockS3.getObject = jest.fn(() => ({
+      mockS3Instance.getObject.mockReturnValue({
         createReadStream: () => mockStream,
-      }));
+      });
 
-      const S3Service = require('../../../src/services/S3Service');
-      const stream = S3Service.getFileStream('bucket', 'key');
+      const stream = s3Instance.getFileStream('bucket', 'key');
 
       expect(stream).toBe(mockStream);
-      expect(mockS3.getObject).toHaveBeenCalledWith({
+      expect(mockS3Instance.getObject).toHaveBeenCalledWith({
         Bucket: 'bucket',
         Key: 'key',
       });
     });
 
     it('should handle stream creation errors', () => {
-      mockS3.getObject = jest.fn(() => {
+      mockS3Instance.getObject.mockImplementation(() => {
         throw new Error('Stream error');
       });
 
-      const S3Service = require('../../../src/services/S3Service');
-      
       expect(() => {
-        S3Service.getFileStream('bucket', 'key');
+        s3Instance.getFileStream('bucket', 'key');
       }).toThrow('Stream error');
     });
   });

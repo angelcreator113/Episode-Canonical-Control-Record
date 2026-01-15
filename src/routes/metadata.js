@@ -24,6 +24,12 @@ router.get(
   asyncHandler(metadataController.listMetadata)
 );
 
+// Get all metadata - special route for /ALL
+router.get(
+  '/ALL',
+  asyncHandler(metadataController.listMetadata)
+);
+
 // Get single metadata (viewer permission)
 router.get(
   '/:id',

@@ -1,491 +1,998 @@
+npm warn Unknown cli config "--testPathPattern". This will stop working in the next major version of npm.
+npm warn Unknown cli config "--coverage". This will stop working in the next major version of npm.
 
 > episode-metadata-api@1.0.0 test
 > cross-env NODE_ENV=test jest --coverage --runInBand
 
-FAIL tests/unit/models/activityLog.test.js
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have logActivity method
+FAIL tests/integration/auth.integration.test.js
+  ΓùÅ Console
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+    console.log
+      ≡ƒÜÇ Starting Episode Metadata API...
 
-      14 |   describe('Model Methods', () => {
-      15 |     test('should have logActivity method', () => {
-    > 16 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-         |                                   ^
-      17 |
-      18 |       expect(typeof ActivityLogModel.logActivity).toBe('function');
-      19 |     });
+      at Object.log (src/app.js:69:9)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:16:35)
+    console.log
+      ≡ƒôª Node version: v20.19.4
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getUserHistory method
+      at Object.log (src/app.js:70:9)
 
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+    console.log
+      ≡ƒöº Environment: test
 
-      20 |
-      21 |     test('should have getUserHistory method', () => {
-    > 22 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-         |                                      ^
-      23 |
-      24 |       expect(typeof ActivityLogModel.getUserHistory).toBe('function');
-      25 |     });
+      at Object.log (src/app.js:71:9)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:22:38)
+    console.log
+      Γ£ô Auth routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getResourceHistory method
+      at Object.log (src/app.js:157:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+    console.log
+      Γ£ô Episodes routes loaded
 
-      26 |
-      27 |     test('should have getResourceHistory method', () => {
-    > 28 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
-         |                                          ^
-      29 |
-      30 |       expect(typeof ActivityLogModel.getResourceHistory).toBe('function');
-      31 |     });
+      at Object.log (src/app.js:173:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:28:42)
+    console.log
+      Γ£ô Thumbnails routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getAuditTrail method
+      at Object.log (src/app.js:181:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+    console.log
+      Γ£ô Metadata routes loaded
 
-      32 |
-      33 |     test('should have getAuditTrail method', () => {
-    > 34 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue([]);
-         |                                     ^
-      35 |
-      36 |       expect(typeof ActivityLogModel.getAuditTrail).toBe('function');
-      37 |     });
+      at Object.log (src/app.js:189:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:34:37)
+    console.log
+      Γ£ô Processing routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have getStats method
+      at Object.log (src/app.js:197:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getStats')
+    console.log
+      Γ£ô Files routes loaded
 
-      38 |
-      39 |     test('should have getStats method', () => {
-    > 40 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
-         |                                ^
-      41 |
-      42 |       expect(typeof ActivityLogModel.getStats).toBe('function');
-      43 |     });
+      at Object.log (src/app.js:206:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:40:32)
+    console.log
+      Γ£ô Search routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have create method (standard Sequelize)
+      at Object.log (src/app.js:214:11)
 
-    TypeError: Cannot set properties of undefined (setting 'create')
+    console.log
+      Γ£ô Jobs routes loaded
 
-      44 |
-      45 |     test('should have create method (standard Sequelize)', () => {
-    > 46 |       ActivityLogModel.create = jest.fn().mockResolvedValue({ id: 1 });
-         |                              ^
-      47 |
-      48 |       expect(typeof ActivityLogModel.create).toBe('function');
-      49 |     });
+      at Object.log (src/app.js:222:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:46:30)
+    console.log
+      Γ£ô Assets routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have findAll method (standard Sequelize)
+      at Object.log (src/app.js:231:11)
 
-    TypeError: Cannot set properties of undefined (setting 'findAll')
+    console.log
+      Γ£ô Compositions routes loaded
 
-      50 |
-      51 |     test('should have findAll method (standard Sequelize)', () => {
-    > 52 |       ActivityLogModel.findAll = jest.fn().mockResolvedValue([]);
-         |                               ^
-      53 |
-      54 |       expect(typeof ActivityLogModel.findAll).toBe('function');
-      55 |     });
+      at Object.log (src/app.js:239:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:52:31)
+    console.log
+      Γ£ô Templates routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ Model Methods ΓÇ║ should have findByPk method (standard Sequelize)
+      at Object.log (src/app.js:247:11)
 
-    TypeError: Cannot set properties of undefined (setting 'findByPk')
+    console.log
+      Γ£ô Seed routes loaded (development only)
 
-      56 |
-      57 |     test('should have findByPk method (standard Sequelize)', () => {
-    > 58 |       ActivityLogModel.findByPk = jest.fn().mockResolvedValue({ id: 1 });
-         |                                ^
-      59 |
-      60 |       expect(typeof ActivityLogModel.findByPk).toBe('function');
-      61 |     });
+      at Object.log (src/app.js:257:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:58:32)
+    console.log
+      Γ£à AWS SDK v3 configured with credentials from profile: default
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should log activity with required fields
+      at log (src/routes/compositions.js:39:11)
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+    console.error
+      Token refresh error: Error: Token refresh failed: Token has expired
+          at Function.refreshAccessToken (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\services\tokenService.js:175:13)
+          at refreshAccessToken (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\routes\auth.js:123:36)
+          at Layer.handle [as handle_request] (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\express\lib\router\layer.js:95:5)
+          at next (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\express\lib\router\route.js:149:13)
+          at next (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\middleware\requestValidation.js:98:5)
+          at Layer.handle [as handle_request] (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\express\lib\router\layer.js:95:5)
+          at next (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\express\lib\router\route.js:149:13)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\express-rate-limit\dist\index.cjs:706:9
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\express-rate-limit\dist\index.cjs:691:5
 
-      64 |   describe('logActivity Method', () => {
-      65 |     test('should log activity with required fields', async () => {
-    > 66 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-         |                                   ^
-      67 |
-      68 |       const result = await ActivityLogModel.logActivity({
-      69 |         userId: 'user-123',
+      133 |     });
+      134 |   } catch (error) {
+    > 135 |     console.error('Token refresh error:', error);
+          |             ^
+      136 |     return res.status(401).json({
+      137 |       error: 'Unauthorized',
+      138 |       message: error.message,
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:66:35)
+      at error (src/routes/auth.js:135:13)
+      at Layer.handle [as handle_request] (node_modules/express/lib/router/layer.js:95:5)
+      at next (node_modules/express/lib/router/route.js:149:13)
+      at next (src/middleware/requestValidation.js:98:5)
+      at Layer.handle [as handle_request] (node_modules/express/lib/router/layer.js:95:5)
+      at next (node_modules/express/lib/router/route.js:149:13)
+      at node_modules/express-rate-limit/dist/index.cjs:706:9
+      at node_modules/express-rate-limit/dist/index.cjs:691:5
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should log activity with optional fields
+    console.warn
+      Optional auth token invalid: Token verification failed: Invalid token format
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+      156 |     } catch (error) {
+      157 |       // Log but don't fail - user is optional
+    > 158 |       console.warn('Optional auth token invalid:', error.message);
+          |               ^
+      159 |       req.user = null;
+      160 |     }
+      161 |
 
-      85 |
-      86 |     test('should log activity with optional fields', async () => {
-    > 87 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-         |                                   ^
-      88 |
-      89 |       await ActivityLogModel.logActivity({
-      90 |         userId: 'user-456',
+      at warn (src/middleware/auth.js:158:15)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:87:35)
+    console.warn
+      Optional auth token invalid: Token verification failed: Invalid token format
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should support different action types
+      156 |     } catch (error) {
+      157 |       // Log but don't fail - user is optional
+    > 158 |       console.warn('Optional auth token invalid:', error.message);
+          |               ^
+      159 |       req.user = null;
+      160 |     }
+      161 |
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+      at warn (src/middleware/auth.js:158:15)
 
-      102 |
-      103 |     test('should support different action types', async () => {
-    > 104 |       ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-          |                                   ^
-      105 |
-      106 |       const actions = ['view', 'create', 'edit', 'delete', 'download', 'upload'];
-      107 |
+  ΓùÅ Authentication API Integration Tests ΓÇ║ End-to-End Authentication Flow ΓÇ║ should complete full auth cycle: login -> use token -> refresh -> logout
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:104:35)
+    expect(received).toBe(expected) // Object.is equality
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should support different resource types
+    Expected: 200
+    Received: 401
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+      332 |         .set('Authorization', `Bearer ${token1}`);
+      333 |
+    > 334 |       expect(meRes.status).toBe(200);
+          |                            ^
+      335 |       expect(meRes.body.data.user.email).toBe('e2e@test.dev');
+      336 |
+      337 |       // 3. Refresh token
 
-      124 |
-      125 |       for (const resource of resources) {
-    > 126 |         ActivityLogModel.logActivity = jest.fn().mockResolvedValue({ id: 1 });
-          |                                     ^
-      127 |
-      128 |         await ActivityLogModel.logActivity({
-      129 |           userId: 'user-123',
+      at Object.toBe (tests/integration/auth.integration.test.js:334:28)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:126:37)
+FAIL tests/integration/episodes.integration.test.js
+  ΓùÅ Console
 
-  ΓùÅ ActivityLog Model ΓÇ║ logActivity Method ΓÇ║ should handle database errors
+    console.log
+      ≡ƒÜÇ Starting Episode Metadata API...
 
-    TypeError: Cannot set properties of undefined (setting 'logActivity')
+      at Object.log (src/app.js:69:9)
 
-      138 |
-      139 |     test('should handle database errors', async () => {
-    > 140 |       ActivityLogModel.logActivity = jest
-          |                                   ^
-      141 |         .fn()
-      142 |         .mockRejectedValue(new Error('DB Error'));
-      143 |
+    console.log
+      ≡ƒôª Node version: v20.19.4
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:140:35)
+      at Object.log (src/app.js:70:9)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should retrieve user activity history
+    console.log
+      ≡ƒöº Environment: test
 
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+      at Object.log (src/app.js:71:9)
 
-      163 |       ];
-      164 |
-    > 165 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue(mockLogs);
-          |                                      ^
-      166 |
-      167 |       const result = await ActivityLogModel.getUserHistory('user-123');
-      168 |
+    console.log
+      Γ£ô Auth routes loaded
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:165:38)
+      at Object.log (src/app.js:157:11)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should support pagination options
+    console.log
+      Γ£ô Episodes routes loaded
 
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+      at Object.log (src/app.js:173:11)
 
-      172 |
-      173 |     test('should support pagination options', async () => {
-    > 174 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-          |                                      ^
-      175 |
-      176 |       await ActivityLogModel.getUserHistory('user-123', { limit: 50, offset: 0 });
+    console.log
+      Γ£ô Thumbnails routes loaded
+
+      at Object.log (src/app.js:181:11)
+
+    console.log
+      Γ£ô Metadata routes loaded
+
+      at Object.log (src/app.js:189:11)
+
+    console.log
+      Γ£ô Processing routes loaded
+
+      at Object.log (src/app.js:197:11)
+
+    console.log
+      Γ£ô Files routes loaded
+
+      at Object.log (src/app.js:206:11)
+
+    console.log
+      Γ£ô Search routes loaded
+
+      at Object.log (src/app.js:214:11)
+
+    console.log
+      Γ£ô Jobs routes loaded
+
+      at Object.log (src/app.js:222:11)
+
+    console.log
+      Γ£ô Assets routes loaded
+
+      at Object.log (src/app.js:231:11)
+
+    console.log
+      Γ£ô Compositions routes loaded
+
+      at Object.log (src/app.js:239:11)
+
+    console.log
+      Γ£ô Templates routes loaded
+
+      at Object.log (src/app.js:247:11)
+
+    console.log
+      Γ£ô Seed routes loaded (development only)
+
+      at Object.log (src/app.js:257:11)
+
+    console.log
+      Γ£à AWS SDK v3 configured with credentials from profile: default
+
+      at log (src/routes/compositions.js:39:11)
+
+    console.error
+      Γ¥î Error in getEpisode: Error: 
+          at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\dialects\postgres\query.js:76:25)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\sequelize.js:650:28
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\dialects\abstract\query-interface.js:1001:12)
+          at Function.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1824:21)
+          at Function.findOne (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1998:12)
+          at Function.findByPk (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1955:12)
+          at getEpisode (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:66:23) {
+        name: 'SequelizeDatabaseError',
+        parent: error: column "showName" does not exist
+            at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:369:69)
+            at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:187:21)
+            at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:102:30)
+            at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\index.ts:7:48)
+            at Socket.emit (node:events:524:28)
+            at addChunk (node:internal/streams/readable:561:12)
+            at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+            at Socket.Readable.push (node:internal/streams/readable:392:5)
+            at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+          length: 108,
+          severity: 'ERROR',
+          code: '42703',
+          detail: undefined,
+          hint: undefined,
+          position: '14',
+          internalPosition: undefined,
+          internalQuery: undefined,
+          where: undefined,
+          schema: undefined,
+          table: undefined,
+          column: undefined,
+          dataType: undefined,
+          constraint: undefined,
+          file: 'parse_relation.c',
+          line: '3647',
+          routine: 'errorMissingColumn',
+          sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '123e4567-e89b-12d3-a456-426614174000';`,
+          parameters: undefined
+        },
+        original: error: column "showName" does not exist
+            at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:369:69)
+            at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:187:21)
+            at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:102:30)
+            at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\index.ts:7:48)
+            at Socket.emit (node:events:524:28)
+            at addChunk (node:internal/streams/readable:561:12)
+            at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+            at Socket.Readable.push (node:internal/streams/readable:392:5)
+            at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+          length: 108,
+          severity: 'ERROR',
+          code: '42703',
+          detail: undefined,
+          hint: undefined,
+          position: '14',
+          internalPosition: undefined,
+          internalQuery: undefined,
+          where: undefined,
+          schema: undefined,
+          table: undefined,
+          column: undefined,
+          dataType: undefined,
+          constraint: undefined,
+          file: 'parse_relation.c',
+          line: '3647',
+          routine: 'errorMissingColumn',
+          sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '123e4567-e89b-12d3-a456-426614174000';`,
+          parameters: undefined
+        },
+        sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '123e4567-e89b-12d3-a456-426614174000';`,
+        parameters: {}
+      }
+
+      77 |       res.json({ data: episode });
+      78 |     } catch (error) {
+    > 79 |       console.error('Γ¥î Error in getEpisode:', error);
+         |               ^
+      80 |       res.status(500).json({
+      81 |         error: 'Failed to get episode',
+      82 |         message: error.message
+
+      at error (src/controllers/episodeController.js:79:15)
+
+    console.error
+      Γ¥î Error in getEpisode: Error: 
+          at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\dialects\postgres\query.js:76:25)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\sequelize.js:650:28
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\dialects\abstract\query-interface.js:1001:12)
+          at Function.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1824:21)
+          at Function.findOne (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1998:12)
+          at Function.findByPk (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1955:12)
+          at getEpisode (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:66:23) {
+        name: 'SequelizeDatabaseError',
+        parent: error: column "showName" does not exist
+            at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:369:69)
+            at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:187:21)
+            at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:102:30)
+            at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\index.ts:7:48)
+            at Socket.emit (node:events:524:28)
+            at addChunk (node:internal/streams/readable:561:12)
+            at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+            at Socket.Readable.push (node:internal/streams/readable:392:5)
+            at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+          length: 108,
+          severity: 'ERROR',
+          code: '42703',
+          detail: undefined,
+          hint: undefined,
+          position: '14',
+          internalPosition: undefined,
+          internalQuery: undefined,
+          where: undefined,
+          schema: undefined,
+          table: undefined,
+          column: undefined,
+          dataType: undefined,
+          constraint: undefined,
+          file: 'parse_relation.c',
+          line: '3647',
+          routine: 'errorMissingColumn',
+          sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '222fdc28-9063-4f5a-82ad-8f0e4a93b91f';`,
+          parameters: undefined
+        },
+        original: error: column "showName" does not exist
+            at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:369:69)
+            at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:187:21)
+            at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:102:30)
+            at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\index.ts:7:48)
+            at Socket.emit (node:events:524:28)
+            at addChunk (node:internal/streams/readable:561:12)
+            at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+            at Socket.Readable.push (node:internal/streams/readable:392:5)
+            at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+          length: 108,
+          severity: 'ERROR',
+          code: '42703',
+          detail: undefined,
+          hint: undefined,
+          position: '14',
+          internalPosition: undefined,
+          internalQuery: undefined,
+          where: undefined,
+          schema: undefined,
+          table: undefined,
+          column: undefined,
+          dataType: undefined,
+          constraint: undefined,
+          file: 'parse_relation.c',
+          line: '3647',
+          routine: 'errorMissingColumn',
+          sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '222fdc28-9063-4f5a-82ad-8f0e4a93b91f';`,
+          parameters: undefined
+        },
+        sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '222fdc28-9063-4f5a-82ad-8f0e4a93b91f';`,
+        parameters: {}
+      }
+
+      77 |       res.json({ data: episode });
+      78 |     } catch (error) {
+    > 79 |       console.error('Γ¥î Error in getEpisode:', error);
+         |               ^
+      80 |       res.status(500).json({
+      81 |         error: 'Failed to get episode',
+      82 |         message: error.message
+
+      at error (src/controllers/episodeController.js:79:15)
+
+    console.error
+      Γ¥î Error in getEpisode: Error: 
+          at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\dialects\postgres\query.js:76:25)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\sequelize.js:650:28
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\dialects\abstract\query-interface.js:1001:12)
+          at Function.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1824:21)
+          at Function.findOne (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1998:12)
+          at Function.findByPk (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1955:12)
+          at getEpisode (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:66:23) {
+        name: 'SequelizeDatabaseError',
+        parent: error: column "showName" does not exist
+            at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:369:69)
+            at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:187:21)
+            at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:102:30)
+            at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\index.ts:7:48)
+            at Socket.emit (node:events:524:28)
+            at addChunk (node:internal/streams/readable:561:12)
+            at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+            at Socket.Readable.push (node:internal/streams/readable:392:5)
+            at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+          length: 108,
+          severity: 'ERROR',
+          code: '42703',
+          detail: undefined,
+          hint: undefined,
+          position: '14',
+          internalPosition: undefined,
+          internalQuery: undefined,
+          where: undefined,
+          schema: undefined,
+          table: undefined,
+          column: undefined,
+          dataType: undefined,
+          constraint: undefined,
+          file: 'parse_relation.c',
+          line: '3647',
+          routine: 'errorMissingColumn',
+          sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '222fdc28-9063-4f5a-82ad-8f0e4a93b91f';`,
+          parameters: undefined
+        },
+        original: error: column "showName" does not exist
+            at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:369:69)
+            at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:187:21)
+            at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:102:30)
+            at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\index.ts:7:48)
+            at Socket.emit (node:events:524:28)
+            at addChunk (node:internal/streams/readable:561:12)
+            at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+            at Socket.Readable.push (node:internal/streams/readable:392:5)
+            at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+          length: 108,
+          severity: 'ERROR',
+          code: '42703',
+          detail: undefined,
+          hint: undefined,
+          position: '14',
+          internalPosition: undefined,
+          internalQuery: undefined,
+          where: undefined,
+          schema: undefined,
+          table: undefined,
+          column: undefined,
+          dataType: undefined,
+          constraint: undefined,
+          file: 'parse_relation.c',
+          line: '3647',
+          routine: 'errorMissingColumn',
+          sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '222fdc28-9063-4f5a-82ad-8f0e4a93b91f';`,
+          parameters: undefined
+        },
+        sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '222fdc28-9063-4f5a-82ad-8f0e4a93b91f';`,
+        parameters: {}
+      }
+
+      77 |       res.json({ data: episode });
+      78 |     } catch (error) {
+    > 79 |       console.error('Γ¥î Error in getEpisode:', error);
+         |               ^
+      80 |       res.status(500).json({
+      81 |         error: 'Failed to get episode',
+      82 |         message: error.message
+
+      at error (src/controllers/episodeController.js:79:15)
+
+    console.error
+      Γ¥î Error in getEpisode: Error: 
+          at Query.run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\dialects\postgres\query.js:76:25)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\sequelize.js:650:28
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at PostgresQueryInterface.select (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\dialects\abstract\query-interface.js:1001:12)
+          at Function.findAll (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1824:21)
+          at Function.findOne (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1998:12)
+          at Function.findByPk (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\sequelize\src\model.js:1955:12)
+          at getEpisode (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\episodeController.js:66:23) {
+        name: 'SequelizeDatabaseError',
+        parent: error: column "showName" does not exist
+            at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:369:69)
+            at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:187:21)
+            at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:102:30)
+            at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\index.ts:7:48)
+            at Socket.emit (node:events:524:28)
+            at addChunk (node:internal/streams/readable:561:12)
+            at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+            at Socket.Readable.push (node:internal/streams/readable:392:5)
+            at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+          length: 108,
+          severity: 'ERROR',
+          code: '42703',
+          detail: undefined,
+          hint: undefined,
+          position: '14',
+          internalPosition: undefined,
+          internalQuery: undefined,
+          where: undefined,
+          schema: undefined,
+          table: undefined,
+          column: undefined,
+          dataType: undefined,
+          constraint: undefined,
+          file: 'parse_relation.c',
+          line: '3647',
+          routine: 'errorMissingColumn',
+          sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '00000000-0000-0000-0000-000000000000';`,
+          parameters: undefined
+        },
+        original: error: column "showName" does not exist
+            at Parser.parseErrorMessage (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:369:69)
+            at Parser.handlePacket (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:187:21)
+            at Parser.parse (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\parser.ts:102:30)
+            at Socket.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\pg-protocol\src\index.ts:7:48)
+            at Socket.emit (node:events:524:28)
+            at addChunk (node:internal/streams/readable:561:12)
+            at readableAddChunkPushByteMode (node:internal/streams/readable:512:3)
+            at Socket.Readable.push (node:internal/streams/readable:392:5)
+            at TCP.onStreamRead (node:internal/stream_base_commons:191:23) {
+          length: 108,
+          severity: 'ERROR',
+          code: '42703',
+          detail: undefined,
+          hint: undefined,
+          position: '14',
+          internalPosition: undefined,
+          internalQuery: undefined,
+          where: undefined,
+          schema: undefined,
+          table: undefined,
+          column: undefined,
+          dataType: undefined,
+          constraint: undefined,
+          file: 'parse_relation.c',
+          line: '3647',
+          routine: 'errorMissingColumn',
+          sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '00000000-0000-0000-0000-000000000000';`,
+          parameters: undefined
+        },
+        sql: `SELECT "id", "showName", "seasonNumber", "episodeNumber", "episodeTitle", "airDate", "status", "created_at", "updated_at" FROM "episodes" AS "Episode" WHERE "Episode"."id" = '00000000-0000-0000-0000-000000000000';`,
+        parameters: {}
+      }
+
+      77 |       res.json({ data: episode });
+      78 |     } catch (error) {
+    > 79 |       console.error('Γ¥î Error in getEpisode:', error);
+         |               ^
+      80 |       res.status(500).json({
+      81 |         error: 'Failed to get episode',
+      82 |         message: error.message
+
+      at error (src/controllers/episodeController.js:79:15)
+
+  ΓùÅ Episodes API Integration Tests ΓÇ║ GET /api/v1/episodes/:id ΓÇ║ should return episode details if found
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+      151 |           .get(`/api/v1/episodes/${episodeId}`);
+      152 |
+    > 153 |         expect(res.status).toBe(200);
+          |                            ^
+      154 |         expect(res.body.data.id).toBe(episodeId);
+      155 |         expect(res.body.data).toHaveProperty('title');
+      156 |         expect(res.body.data).toHaveProperty('status');
+
+      at Object.toBe (tests/integration/episodes.integration.test.js:153:28)
+
+  ΓùÅ Episodes API Integration Tests ΓÇ║ End-to-End Episode Workflow ΓÇ║ should complete full episode viewing workflow
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+      176 |           .get(`/api/v1/episodes/${episode.id}`);
       177 |
+    > 178 |         expect(detailRes.status).toBe(200);
+          |                                  ^
+      179 |         expect(detailRes.body.data.id).toBe(episode.id);
+      180 |         expect(detailRes.body.data).toHaveProperty('title');
+      181 |         expect(detailRes.body.data).toHaveProperty('status');
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:174:38)
+      at Object.toBe (tests/integration/episodes.integration.test.js:178:34)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should return empty array when no records found
+  ΓùÅ Episodes API Integration Tests ΓÇ║ Error Handling ΓÇ║ should return proper error for non-existent episode
 
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
+    expect(received).toBe(expected) // Object.is equality
 
-      183 |
-      184 |     test('should return empty array when no records found', async () => {
-    > 185 |       ActivityLogModel.getUserHistory = jest.fn().mockResolvedValue([]);
-          |                                      ^
-      186 |
-      187 |       const result = await ActivityLogModel.getUserHistory('user-nonexistent');
-      188 |
+    Expected: 404
+    Received: 500
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:185:38)
-
-  ΓùÅ ActivityLog Model ΓÇ║ getUserHistory Method ΓÇ║ should handle database errors
-
-    TypeError: Cannot set properties of undefined (setting 'getUserHistory')
-
-      191 |
-      192 |     test('should handle database errors', async () => {
-    > 193 |       ActivityLogModel.getUserHistory = jest
-          |                                      ^
-      194 |         .fn()
-      195 |         .mockRejectedValue(new Error('DB Error'));
-      196 |
-
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:193:38)
-
-  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should retrieve resource activity history
-
-    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
-
-      211 |       ];
+      211 |         .get(`/api/v1/episodes/${nonExistentId}`);
       212 |
-    > 213 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue(mockLogs);
-          |                                          ^
-      214 |
-      215 |       const result = await ActivityLogModel.getResourceHistory('episode', 1);
+    > 213 |       expect(res.status).toBe(404);
+          |                          ^
+      214 |       expect(res.body).toHaveProperty('error');
+      215 |     });
       216 |
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:213:42)
+      at Object.toBe (tests/integration/episodes.integration.test.js:213:26)
 
-  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should support different resource types
+PASS tests/integration/assets.integration.test.js
+  ΓùÅ Console
 
-    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+    console.log
+      ≡ƒÜÇ Starting Episode Metadata API...
 
-      220 |
-      221 |     test('should support different resource types', async () => {
-    > 222 |       ActivityLogModel.getResourceHistory = jest.fn().mockResolvedValue([]);
-          |                                          ^
-      223 |
-      224 |       const resources = ['episode', 'thumbnail', 'metadata', 'processing'];
-      225 |
+      at Object.log (src/app.js:69:9)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:222:42)
+    console.log
+      ≡ƒôª Node version: v20.19.4
 
-  ΓùÅ ActivityLog Model ΓÇ║ getResourceHistory Method ΓÇ║ should return empty array on error
+      at Object.log (src/app.js:70:9)
 
-    TypeError: Cannot set properties of undefined (setting 'getResourceHistory')
+    console.log
+      ≡ƒöº Environment: test
 
-      234 |
-      235 |     test('should return empty array on error', async () => {
-    > 236 |       ActivityLogModel.getResourceHistory = jest
-          |                                          ^
-      237 |         .fn()
-      238 |         .mockRejectedValue(new Error('Error'));
-      239 |
+      at Object.log (src/app.js:71:9)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:236:42)
+    console.log
+      Γ£ô Auth routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should retrieve full audit trail
+      at Object.log (src/app.js:157:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+    console.log
+      Γ£ô Episodes routes loaded
 
-      254 |       ];
-      255 |
-    > 256 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue(mockTrail);
-          |                                     ^
-      257 |
-      258 |       const result = await ActivityLogModel.getAuditTrail({ limit: 10 });
-      259 |
+      at Object.log (src/app.js:173:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:256:37)
+    console.log
+      Γ£ô Thumbnails routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should support filtering options
+      at Object.log (src/app.js:181:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+    console.log
+      Γ£ô Metadata routes loaded
 
-      262 |
-      263 |     test('should support filtering options', async () => {
-    > 264 |       ActivityLogModel.getAuditTrail = jest.fn().mockResolvedValue([]);
-          |                                     ^
-      265 |
-      266 |       await ActivityLogModel.getAuditTrail({
-      267 |         actionType: 'delete',
+      at Object.log (src/app.js:189:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:264:37)
+    console.log
+      Γ£ô Processing routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ getAuditTrail Method ΓÇ║ should return empty array on error
+      at Object.log (src/app.js:197:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getAuditTrail')
+    console.log
+      Γ£ô Files routes loaded
 
-      274 |
-      275 |     test('should return empty array on error', async () => {
-    > 276 |       ActivityLogModel.getAuditTrail = jest
-          |                                     ^
-      277 |         .fn()
-      278 |         .mockRejectedValue(new Error('Error'));
-      279 |
+      at Object.log (src/app.js:206:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:276:37)
+    console.log
+      Γ£ô Search routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should retrieve activity statistics
+      at Object.log (src/app.js:214:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getStats')
+    console.log
+      Γ£ô Jobs routes loaded
 
-      294 |       };
-      295 |
-    > 296 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue(mockStats);
-          |                                ^
-      297 |
-      298 |       const result = await ActivityLogModel.getStats('7d');
-      299 |
+      at Object.log (src/app.js:222:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:296:32)
+    console.log
+      Γ£ô Assets routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should support different time ranges
+      at Object.log (src/app.js:231:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getStats')
+    console.log
+      Γ£ô Compositions routes loaded
 
-      303 |
-      304 |     test('should support different time ranges', async () => {
-    > 305 |       ActivityLogModel.getStats = jest.fn().mockResolvedValue({});
-          |                                ^
-      306 |
-      307 |       const ranges = ['1d', '7d', '30d', '90d'];
-      308 |
+      at Object.log (src/app.js:239:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:305:32)
+    console.log
+      Γ£ô Templates routes loaded
 
-  ΓùÅ ActivityLog Model ΓÇ║ getStats Method ΓÇ║ should return empty object on error
+      at Object.log (src/app.js:247:11)
 
-    TypeError: Cannot set properties of undefined (setting 'getStats')
+    console.log
+      Γ£ô Seed routes loaded (development only)
 
-      317 |
-      318 |     test('should return empty object on error', async () => {
-    > 319 |       ActivityLogModel.getStats = jest
-          |                                ^
-      320 |         .fn()
-      321 |         .mockRejectedValue(new Error('Error'));
-      322 |
+      at Object.log (src/app.js:257:11)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:319:32)
+    console.log
+      Γ£à AWS SDK v3 configured with credentials from profile: default
 
-  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support create
+      at log (src/routes/compositions.js:39:11)
 
-    TypeError: Cannot set properties of undefined (setting 'create')
+    console.log
+      ≡ƒôñ Uploading to S3: promotional/lala/raw/1767648231521-cfa24117-24fd-4f6f-8d59-2e3645d4a4f4.jpg
 
-      332 |   describe('Standard Sequelize Methods', () => {
-      333 |     test('should support create', async () => {
-    > 334 |       ActivityLogModel.create = jest
-          |                              ^
-      335 |         .fn()
-      336 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
-      337 |
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:57:17)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:334:30)
+    console.log
+      Γ£à S3 upload successful: promotional/lala/raw/1767648231521-cfa24117-24fd-4f6f-8d59-2e3645d4a4f4.jpg
 
-  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findAll
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:71:17)
 
-    TypeError: Cannot set properties of undefined (setting 'findAll')
+    console.log
+      ≡ƒôñ Uploading to S3: promotional/justawomaninperprime/raw/1767648231846-bee21f81-f740-4662-a0de-2dd4bf814d2d.jpg
 
-      347 |
-      348 |     test('should support findAll', async () => {
-    > 349 |       ActivityLogModel.findAll = jest.fn().mockResolvedValue([
-          |                               ^
-      350 |         { id: 1, userId: 'user-123' },
-      351 |         { id: 2, userId: 'user-456' },
-      352 |       ]);
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:57:17)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:349:31)
+    console.log
+      Γ£à S3 upload successful: promotional/justawomaninperprime/raw/1767648231846-bee21f81-f740-4662-a0de-2dd4bf814d2d.jpg
 
-  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findByPk
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:71:17)
 
-    TypeError: Cannot set properties of undefined (setting 'findByPk')
+    console.log
+      ≡ƒôñ Uploading to S3: promotional/guests/raw/1767648231921-6a37a0b0-996a-41be-b8a4-5fe137aac1ac.jpg
 
-      358 |
-      359 |     test('should support findByPk', async () => {
-    > 360 |       ActivityLogModel.findByPk = jest
-          |                                ^
-      361 |         .fn()
-      362 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
-      363 |
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:57:17)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:360:32)
+    console.log
+      Γ£à S3 upload successful: promotional/guests/raw/1767648231921-6a37a0b0-996a-41be-b8a4-5fe137aac1ac.jpg
 
-  ΓùÅ ActivityLog Model ΓÇ║ Standard Sequelize Methods ΓÇ║ should support findOne
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:71:17)
 
-    TypeError: Cannot set properties of undefined (setting 'findOne')
+    console.log
+      ≡ƒôñ Uploading to S3: promotional/brands/1767648231990-3bb2a76c-4606-46f4-ba7f-74fa1d768aab.jpg
 
-      368 |
-      369 |     test('should support findOne', async () => {
-    > 370 |       ActivityLogModel.findOne = jest
-          |                               ^
-      371 |         .fn()
-      372 |         .mockResolvedValue({ id: 1, userId: 'user-123' });
-      373 |
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:57:17)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:370:31)
+    console.log
+      Γ£à S3 upload successful: promotional/brands/1767648231990-3bb2a76c-4606-46f4-ba7f-74fa1d768aab.jpg
 
-  ΓùÅ ActivityLog Model ΓÇ║ Sequelize Association Support ΓÇ║ should support hasMany
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:71:17)
 
-    TypeError: Cannot set properties of undefined (setting 'hasMany')
+    console.log
+      ≡ƒôñ Uploading to S3: thumbnails/auto/1767648232076-bd94f1d9-14b0-4306-9819-da15f4843053.jpg
 
-      397 |   describe('Sequelize Association Support', () => {
-      398 |     test('should support hasMany', () => {
-    > 399 |       ActivityLogModel.hasMany = jest.fn();
-          |                               ^
-      400 |
-      401 |       ActivityLogModel.hasMany({
-      402 |         model: 'Episode',
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:57:17)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:399:31)
+    console.log
+      Γ£à S3 upload successful: thumbnails/auto/1767648232076-bd94f1d9-14b0-4306-9819-da15f4843053.jpg
 
-  ΓùÅ ActivityLog Model ΓÇ║ Sequelize Association Support ΓÇ║ should support belongsTo
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:71:17)
 
-    TypeError: Cannot set properties of undefined (setting 'belongsTo')
+    console.log
+      ≡ƒôñ Uploading to S3: promotional/lala/raw/1767648232156-9c702288-f6a9-42c6-bc14-621c533e87d0.jpg
 
-      408 |
-      409 |     test('should support belongsTo', () => {
-    > 410 |       ActivityLogModel.belongsTo = jest.fn();
-          |                                 ^
-      411 |
-      412 |       ActivityLogModel.belongsTo('User', { foreignKey: 'userId' });
-      413 |
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:57:17)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:410:33)
+    console.log
+      Γ£à S3 upload successful: promotional/lala/raw/1767648232156-9c702288-f6a9-42c6-bc14-621c533e87d0.jpg
 
-  ΓùÅ ActivityLog Model ΓÇ║ Hook Support ΓÇ║ should support beforeCreate hook
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:71:17)
 
-    TypeError: Cannot set properties of undefined (setting 'beforeCreate')
+    console.log
+      ≡ƒôñ Uploading to S3: promotional/lala/raw/1767648232229-9f9969c8-8b62-4aaf-8db6-292b120385db.jpg
 
-      418 |   describe('Hook Support', () => {
-      419 |     test('should support beforeCreate hook', () => {
-    > 420 |       ActivityLogModel.beforeCreate = jest.fn();
-          |                                    ^
-      421 |
-      422 |       ActivityLogModel.beforeCreate((log) => {
-      423 |         log.timestamp = new Date();
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:57:17)
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:420:36)
+    console.log
+      Γ£à S3 upload successful: promotional/lala/raw/1767648232229-9f9969c8-8b62-4aaf-8db6-292b120385db.jpg
 
-  ΓùÅ ActivityLog Model ΓÇ║ Hook Support ΓÇ║ should support beforeValidate hook
+      at AssetService.log [as uploadAsset] (src/services/AssetService.js:71:17)
 
-    TypeError: Cannot set properties of undefined (setting 'beforeValidate')
+    console.error
+      Failed to get asset: Error: Asset not found
+          at AssetService.getAsset (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\services\AssetService.js:138:15)
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\routes\assets.js:109:19
 
-      428 |
-      429 |     test('should support beforeValidate hook', () => {
-    > 430 |       ActivityLogModel.beforeValidate = jest.fn();
-          |                                      ^
-      431 |
-      432 |       ActivityLogModel.beforeValidate((log) => {
-      433 |         // normalize data
+      144 |       };
+      145 |     } catch (error) {
+    > 146 |       console.error('Failed to get asset:', error);
+          |               ^
+      147 |       throw error;
+      148 |     }
+      149 |   }
 
-      at Object.<anonymous> (tests/unit/models/activityLog.test.js:430:38)
+      at AssetService.error [as getAsset] (src/services/AssetService.js:146:15)
+      at src/routes/assets.js:109:19
+
+    console.error
+      Failed to get asset: Error: Asset not found
+          at AssetService.getAsset (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\services\AssetService.js:138:15)
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\routes\assets.js:109:19
+
+      120 |     });
+      121 |   } catch (error) {
+    > 122 |     console.error('Failed to get asset:', error);
+          |             ^
+      123 |     // Check if error is "Asset not found"
+      124 |     if (error.message.includes('Asset not found')) {
+      125 |       return res.status(404).json({
+
+      at error (src/routes/assets.js:122:13)
+
+    console.error
+      Failed to get asset: Error: Asset not found
+          at AssetService.getAsset (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\services\AssetService.js:138:15)
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\routes\assets.js:109:19
+
+      144 |       };
+      145 |     } catch (error) {
+    > 146 |       console.error('Failed to get asset:', error);
+          |               ^
+      147 |       throw error;
+      148 |     }
+      149 |   }
+
+      at AssetService.error [as getAsset] (src/services/AssetService.js:146:15)
+      at src/routes/assets.js:109:19
+
+    console.error
+      Failed to get asset: Error: Asset not found
+          at AssetService.getAsset (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\services\AssetService.js:138:15)
+          at processTicksAndRejections (node:internal/process/task_queues:95:5)
+          at C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\routes\assets.js:109:19
+
+      120 |     });
+      121 |   } catch (error) {
+    > 122 |     console.error('Failed to get asset:', error);
+          |             ^
+      123 |     // Check if error is "Asset not found"
+      124 |     if (error.message.includes('Asset not found')) {
+      125 |       return res.status(404).json({
+
+      at error (src/routes/assets.js:122:13)
 
 PASS tests/unit/app.test.js
   ΓùÅ Console
 
     console.log
-      Γ£ô Test mode - database initialization skipped
+      ≡ƒÜÇ Starting Episode Metadata API...
 
-      at Object.log (src/app.js:50:11)
+      at Object.log (src/app.js:69:9)
+
+    console.log
+      ≡ƒôª Node version: v20.19.4
+
+      at Object.log (src/app.js:70:9)
+
+    console.log
+      ≡ƒöº Environment: test
+
+      at Object.log (src/app.js:71:9)
+
+    console.log
+      Γ£ô Auth routes loaded
+
+      at Object.log (src/app.js:157:11)
+
+    console.log
+      Γ£ô Episodes routes loaded
+
+      at Object.log (src/app.js:173:11)
+
+    console.log
+      Γ£ô Thumbnails routes loaded
+
+      at Object.log (src/app.js:181:11)
+
+    console.log
+      Γ£ô Metadata routes loaded
+
+      at Object.log (src/app.js:189:11)
+
+    console.log
+      Γ£ô Processing routes loaded
+
+      at Object.log (src/app.js:197:11)
+
+    console.log
+      Γ£ô Files routes loaded
+
+      at Object.log (src/app.js:206:11)
+
+    console.log
+      Γ£ô Search routes loaded
+
+      at Object.log (src/app.js:214:11)
+
+    console.log
+      Γ£ô Jobs routes loaded
+
+      at Object.log (src/app.js:222:11)
+
+    console.log
+      Γ£ô Assets routes loaded
+
+      at Object.log (src/app.js:231:11)
+
+    console.log
+      Γ£ô Compositions routes loaded
+
+      at Object.log (src/app.js:239:11)
+
+    console.log
+      Γ£ô Templates routes loaded
+
+      at Object.log (src/app.js:247:11)
+
+    console.log
+      Γ£ô Seed routes loaded (development only)
+
+      at Object.log (src/app.js:257:11)
+
+
+  ΓùÅ  Cannot log after tests are done. Did you forget to wait for something async in your test?
+    Attempted to log "Γ£à AWS SDK v3 configured with credentials from profile: default".
+
+      37 | (async () => {
+      38 |   s3Client = await createS3Client();
+    > 39 |   console.log('Γ£à AWS SDK v3 configured with credentials from', process.env.AWS_PROFILE ? `profile: ${process.env.AWS_PROFILE}` : 'environment');
+         |           ^
+      40 | })();
+      41 |
+      42 | const router = express.Router();
+
+      at console.log (node_modules/@jest/console/build/BufferedConsole.js:156:10)
+      at log (src/routes/compositions.js:39:11)
+
+PASS tests/unit/controllers/thumbnail.test.js
+  ΓùÅ Console
+
+    console.error
+      Γ¥î Error in listThumbnails: Error: DB error
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\controllers\thumbnail.test.js:321:70)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      63 |       });
+      64 |     } catch (error) {
+    > 65 |       console.error('Γ¥î Error in listThumbnails:', error);
+         |               ^
+      66 |       res.status(500).json({
+      67 |         error: 'Failed to list thumbnails',
+      68 |         message: error.message
+
+      at Object.error [as listThumbnails] (src/controllers/thumbnailController.js:65:15)
+      at Object.<anonymous> (tests/unit/controllers/thumbnail.test.js:323:7)
+
+PASS tests/unit/controllers/metadata.test.js
+  ΓùÅ Console
+
+    console.error
+      Metadata query error (schema mismatch): DB error
+
+      60 |     } catch (error) {
+      61 |       // If metadata table schema is mismatched, return empty list
+    > 62 |       console.error('Metadata query error (schema mismatch):', error.message);
+         |               ^
+      63 |       res.json({
+      64 |         data: [],
+      65 |         pagination: {
+
+      at Object.error [as listMetadata] (src/controllers/metadataController.js:62:15)
+      at Object.<anonymous> (tests/unit/controllers/metadata.test.js:296:7)
 
 PASS tests/unit/middleware/auditLog.test.js
   ΓùÅ Console
@@ -686,63 +1193,210 @@ PASS tests/unit/middleware/auditLog.test.js
       at Object.error [as getStats] (src/middleware/auditLog.js:248:15)
       at Object.<anonymous> (tests/unit/middleware/auditLog.test.js:670:21)
 
-PASS tests/unit/controllers/episode.test.js
 PASS tests/unit/controllers/processing.test.js
-PASS tests/unit/controllers/thumbnail.test.js
-PASS tests/unit/controllers/metadata.test.js
+PASS tests/unit/middleware/auditLog-additional.test.js
+PASS tests/unit/controllers/episode.test.js
+  ΓùÅ Console
+
+    console.error
+      Γ¥î Error in listEpisodes: Error: DB connection failed
+          at Object.<anonymous> (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\controllers\episode.test.js:475:23)
+          at Promise.then.completed (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:298:28)
+          at new Promise (<anonymous>)
+          at callAsyncCircusFn (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\utils.js:231:10)
+          at _callCircusTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:316:40)
+          at _runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:252:3)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:126:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at _runTestsForDescribeBlock (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:121:9)
+          at run (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\run.js:71:3)
+          at runAndTransformResultsToJestFormat (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapterInit.js:122:21)
+          at jestAdapter (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-circus\build\legacy-code-todo-rewrite\jestAdapter.js:79:19)
+          at runTestInternal (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:367:16)
+          at runTest (C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\node_modules\jest-runner\build\runTest.js:444:34)
+
+      49 |       });
+      50 |     } catch (error) {
+    > 51 |       console.error('Γ¥î Error in listEpisodes:', error);
+         |               ^
+      52 |       res.status(500).json({
+      53 |         error: 'Failed to list episodes',
+      54 |         message: error.message
+
+      at Object.error [as listEpisodes] (src/controllers/episodeController.js:51:15)
+      at Object.<anonymous> (tests/unit/controllers/episode.test.js:478:7)
+
 PASS tests/unit/middleware/rbac.test.js
 PASS tests/unit/middleware/errorHandler.test.js
-PASS tests/unit/models/metadata-methods.test.js
+PASS tests/unit/services/JobQueueService.test.js
+PASS tests/unit/middleware/jwtAuth.test.js
+PASS tests/unit/services/OpenSearchService.test.js
 PASS tests/unit/middleware/auth.test.js
+PASS tests/unit/controllers/jobController.test.js
+PASS tests/unit/models/metadata-methods.test.js
+PASS tests/unit/services/S3Service.test.js
 PASS tests/api/endpoints.test.js
+PASS tests/unit/services/FileValidationService.test.js
+PASS tests/unit/controllers/fileController.test.js
+PASS tests/unit/models/activityLog.test.js
+PASS tests/unit/controllers/searchController.test.js
 PASS tests/unit/models/episode.test.js
 PASS tests/unit/middleware/auth-gaps.test.js
---------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------
-File                                        | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                       
---------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------
-All files                                   |   71.13 |    52.68 |   58.53 |   71.26 |                                                                         
- src                                        |   61.19 |    34.61 |      20 |   61.19 |                                                                         
-  app.js                                    |   61.19 |    34.61 |      20 |   61.19 | 16-37,44-45,96-102,126,162-165                                          
- src/config                                 |       0 |        0 |       0 |       0 |                                                                         
-  aws.js                                    |       0 |        0 |     100 |       0 | 7-17                                                                    
-  database.js                               |       0 |        0 |       0 |       0 | 7-36                                                                    
-  environment.js                            |       0 |        0 |     100 |       0 | 5-47                                                                    
-  sequelize.js                              |       0 |        0 |     100 |       0 | 6                                                                       
- src/controllers                            |   82.99 |    54.01 |   95.83 |   82.89 |                                                                         
-  episodeController.js                      |   97.01 |    73.07 |     100 |   96.92 | 206,247                                                                 
-  metadataController.js                     |   71.42 |    46.66 |      90 |   71.11 | 75,102,137,146,198,221-229,278,311,319,349-390,404                      
-  processingController.js                   |   88.65 |    67.85 |     100 |   89.36 | 86,111,123,134,178,185,202,235,284,327                                  
-  thumbnailController.js                    |   78.26 |     37.7 |    90.9 |   77.77 | 77,111-167,182,199,233,267,300,352,387                                  
- src/middleware                             |   82.03 |     78.1 |   81.48 |   82.25 |                                                                         
-  auditLog.js                               |   69.76 |    58.82 |    64.7 |   70.23 | 67-78,110-116,126-155,170,195,211,227,243                               
-  auth.js                                   |   61.66 |    52.94 |      60 |   61.66 | 50,69,114,135-166,175-192                                               
-  errorHandler.js                           |     100 |    95.18 |     100 |     100 | 66-75,193,233                                                           
-  rbac.js                                   |   92.98 |     90.9 |   84.61 |   92.98 | 68,83,141,178                                                           
- src/migrations                             |       0 |      100 |       0 |       0 |                                                                         
-  20240101000001-create-episodes.js         |       0 |      100 |       0 |       0 | 3-125                                                                   
-  20240101000002-create-metadata-storage.js |       0 |      100 |       0 |       0 | 3-67                                                                    
-  20240101000003-create-thumbnails.js       |       0 |      100 |       0 |       0 | 3-87                                                                    
-  20240101000004-create-processing-queue.js |       0 |      100 |       0 |       0 | 3-92                                                                    
-  20240101000005-create-activity-logs.js    |       0 |      100 |       0 |       0 | 3-73                                                                    
- src/models                                 |   39.59 |        0 |   11.36 |   40.41 |                                                                         
-  ActivityLog.js                            |    37.5 |        0 |   16.66 |   42.85 | 117,133,144,154-164,174-189                                             
-  Episode.js                                |   46.42 |        0 |      10 |   46.42 | 216-217,224-225,232-236,243,261,268,278,287-290,297                     
-  MetadataStorage.js                        |      36 |        0 |   16.66 |      36 | 106-108,115-117,124-127,138,147-160                                     
-  ProcessingQueue.js                        |   35.55 |        0 |    7.69 |   35.55 | 137-139,146-148,155-158,165-173,180,187-190,201,213,224,234,247,257-267 
-  Thumbnail.js                              |   44.44 |        0 |   11.11 |   44.44 | 149-150,157-160,167-171,182,194,207,220-232,239                         
- src/routes                                 |     100 |      100 |     100 |     100 |                                                                         
-  episodes.js                               |     100 |      100 |     100 |     100 |                                                                         
-  metadata.js                               |     100 |      100 |     100 |     100 |                                                                         
-  processing.js                             |     100 |      100 |     100 |     100 |                                                                         
-  thumbnails.js                             |     100 |      100 |     100 |     100 |                                                                         
---------------------------------------------|---------|----------|---------|---------|-------------------------------------------------------------------------
-Jest: "global" coverage threshold for statements (75%) not met: 71.13%
-Jest: "global" coverage threshold for branches (75%) not met: 52.68%
-Jest: "global" coverage threshold for lines (75%) not met: 71.26%
-Jest: "global" coverage threshold for functions (75%) not met: 58.53%
+-----------------------------------------------------|---------|----------|---------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+File                                                 | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s                                                                                                                                                          
+-----------------------------------------------------|---------|----------|---------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+All files                                            |   54.23 |    41.24 |   48.21 |   54.87 |                                                                                                                                                                            
+ src                                                 |   47.15 |       28 |    7.69 |   50.27 |                                                                                                                                                                            
+  app.js                                             |      55 |    28.12 |      10 |   59.45 | 18-47,56,60-62,79,91,136-142,159-160,175-176,183-184,191-192,199-200,208-209,216-217,224-225,233-234,241-242,249-250,259-260,283,320-322                                   
+  db.js                                              |      75 |       50 |       0 |      75 | 13                                                                                                                                                                         
+  server.js                                          |       0 |        0 |       0 |       0 | 7-76                                                                                                                                                                       
+ src/config                                          |       0 |        0 |       0 |       0 |                                                                                                                                                                            
+  aws.js                                             |       0 |        0 |     100 |       0 | 7-17                                                                                                                                                                       
+  database.js                                        |       0 |        0 |       0 |       0 | 7-36                                                                                                                                                                       
+  environment.js                                     |       0 |        0 |     100 |       0 | 5-47                                                                                                                                                                       
+  sequelize.js                                       |       0 |        0 |     100 |       0 | 6                                                                                                                                                                          
+ src/controllers                                     |   85.39 |    62.97 |    94.2 |   85.55 |                                                                                                                                                                            
+  episodeController.js                               |   94.52 |    72.91 |     100 |   94.52 | 139-140,183,224                                                                                                                                                            
+  fileController.js                                  |   84.72 |    77.77 |   83.33 |   86.95 | 236-266                                                                                                                                                                    
+  jobController.js                                   |     100 |      100 |     100 |     100 |                                                                                                                                                                            
+  metadataController.js                              |   72.34 |    46.66 |      90 |   72.04 | 91,118,153,162,214,237-245,294,327,335,365-406,420                                                                                                                         
+  processingController.js                            |   88.65 |    67.85 |     100 |   89.36 | 86,111,123,134,178,185,202,235,284,327                                                                                                                                     
+  searchController.js                                |   89.58 |      100 |   88.88 |   88.88 | 98-104                                                                                                                                                                     
+  thumbnailController.js                             |   77.08 |    36.84 |    90.9 |   76.59 | 104,112-192,207,224,258,292,325,377,412                                                                                                                                    
+ src/middleware                                      |    74.7 |    69.54 |   74.02 |   75.24 |                                                                                                                                                                            
+  auditLog.js                                        |   69.76 |    58.82 |    64.7 |   70.23 | 67-78,110-116,126-155,170,195,211,227,243                                                                                                                                  
+  auth.js                                            |   71.42 |    59.52 |      50 |   72.46 | 50,69,114,137-138,164-166,175-192,206-222                                                                                                                                  
+  errorHandler.js                                    |     100 |    95.18 |     100 |     100 | 66-75,193,233                                                                                                                                                              
+  jwtAuth.js                                         |      40 |    32.35 |   28.57 |   40.74 | 61,74-111,123-139,148-167                                                                                                                                                  
+  rbac.js                                            |   92.98 |     90.9 |   84.61 |   92.98 | 68,83,141,178                                                                                                                                                              
+  requestValidation.js                               |   83.92 |    82.71 |     100 |   84.68 | 37,41,48,52,66,85,100,119,134,154,188,208,221,236,273-274,287                                                                                                              
+  searchLogger.js                                    |   21.42 |        0 |       0 |   21.42 | 15-41                                                                                                                                                                      
+  uploadValidation.js                                |      20 |        0 |       0 |      20 | 15-61                                                                                                                                                                      
+ src/migrations                                      |       0 |      100 |       0 |       0 |                                                                                                                                                                            
+  20240101000001-create-episodes.js                  |       0 |      100 |       0 |       0 | 3-125                                                                                                                                                                      
+  20240101000002-create-metadata-storage.js          |       0 |      100 |       0 |       0 | 3-67                                                                                                                                                                       
+  20240101000003-create-thumbnails.js                |       0 |      100 |       0 |       0 | 3-87                                                                                                                                                                       
+  20240101000004-create-processing-queue.js          |       0 |      100 |       0 |       0 | 3-92                                                                                                                                                                       
+  20240101000005-create-activity-logs.js             |       0 |      100 |       0 |       0 | 3-73                                                                                                                                                                       
+  20260104000001-add-justawomaninherprime-support.js |       0 |      100 |       0 |       0 | 11-77                                                                                                                                                                      
+  20260104000002-update-composition-workflow.js      |       0 |      100 |       0 |       0 | 10-75                                                                                                                                                                      
+ src/models                                          |   45.23 |        0 |   18.36 |   46.06 |                                                                                                                                                                            
+  ActivityLog.js                                     |    37.5 |        0 |   16.66 |   42.85 | 117,133,144,154-164,174-189                                                                                                                                                
+  Asset.js                                           |     100 |      100 |     100 |     100 |                                                                                                                                                                            
+  Episode.js                                         |   46.42 |        0 |      10 |   46.42 | 241-242,249-250,257-261,268,286,293,303,312-315,322                                                                                                                        
+  FileStorage.js                                     |   71.42 |      100 |      50 |   71.42 | 130-135                                                                                                                                                                    
+  MetadataStorage.js                                 |      36 |        0 |   16.66 |      36 | 106-108,115-117,124-127,138,147-160                                                                                                                                        
+  ProcessingQueue.js                                 |   35.55 |        0 |    7.69 |   35.55 | 137-139,146-148,155-158,165-173,180,187-190,201,213,224,234,247,257-267                                                                                                    
+  Thumbnail.js                                       |   44.44 |        0 |   11.11 |   44.44 | 190-191,198-201,208-212,223,235,248,261-273,280                                                                                                                            
+  ThumbnailComposition.js                            |     100 |      100 |     100 |     100 |                                                                                                                                                                            
+  ThumbnailTemplate.js                               |     100 |      100 |     100 |     100 |                                                                                                                                                                            
+ src/routes                                          |    41.2 |     15.1 |   21.73 |   42.24 |                                                                                                                                                                            
+  assets.js                                          |   51.96 |    47.22 |    62.5 |   51.96 | 43,72-73,94-95,111-117,129,154,161,174-177,185-191,212-213,226-243,255-274,286-323                                                                                         
+  auth.js                                            |      80 |    73.33 |     100 |      80 | 47,56,98-99,116,153,174-175,212-213,235-236,253                                                                                                                            
+  compositions.js                                    |    13.2 |      1.5 |    6.45 |   13.28 | 48-49,57-79,92-227,240-251,263-273,285-304,316-327,339-350,362-388,400-410,423-593,607-661,673-692,704-728,739-751,762-775,786-807,818-842,853-876,887-900,926-971,987-997 
+  episodes.js                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                            
+  files.js                                           |   79.16 |      100 |       0 |     100 |                                                                                                                                                                            
+  jobs.js                                            |   66.66 |      100 |       0 |     100 |                                                                                                                                                                            
+  metadata.js                                        |     100 |      100 |     100 |     100 |                                                                                                                                                                            
+  processing.js                                      |     100 |      100 |     100 |     100 |                                                                                                                                                                            
+  search.js                                          |   71.42 |      100 |       0 |     100 |                                                                                                                                                                            
+  seed.js                                            |   41.17 |        0 |       0 |   41.17 | 92-120                                                                                                                                                                     
+  templates.js                                       |   35.29 |        0 |       0 |   35.29 | 17-27,39-49                                                                                                                                                                
+  thumbnails.js                                      |      50 |        0 |       0 |      50 | 96-105,117-125,137-145,156-164                                                                                                                                             
+ src/services                                        |   40.07 |    28.35 |   49.54 |   40.35 |                                                                                                                                                                            
+  AssetService.js                                    |   57.31 |    36.36 |   76.92 |   58.02 | 37,73,100-101,126-127,141,155-200,222-233                                                                                                                                  
+  CompositionService.js                              |    3.57 |        0 |       0 |    3.75 | 16-392                                                                                                                                                                     
+  FileValidationService.js                           |     100 |    97.22 |     100 |     100 | 141                                                                                                                                                                        
+  FilterService.js                                   |       2 |        0 |       0 |       2 | 43-347                                                                                                                                                                     
+  JobQueueService.js                                 |   96.36 |    66.66 |   91.66 |   98.11 | 95                                                                                                                                                                         
+  OpenSearchService.js                               |   71.91 |     60.6 |   83.33 |   71.59 | 37-93,105-106,135-136,166-167,194-195,323-332                                                                                                                              
+  RunwayMLService.js                                 |   17.94 |        0 |   16.66 |   17.94 | 21-129                                                                                                                                                                     
+  S3Service.js                                       |   95.83 |    66.66 |     100 |   95.74 | 155-160                                                                                                                                                                    
+  ThumbnailGeneratorService.js                       |    7.14 |        0 |       0 |    7.27 | 52-350                                                                                                                                                                     
+  ThumbnailService.js                                |       0 |        0 |       0 |       0 | 1-174                                                                                                                                                                      
+  VersioningService.js                               |    4.44 |        0 |       0 |    4.44 | 16-292                                                                                                                                                                     
+  tokenService.js                                    |   86.44 |    60.65 |     100 |   86.44 | 24,28,54-55,97-98,110,142                                                                                                                                                  
+ src/utils                                           |   41.66 |    21.42 |      25 |   41.66 |                                                                                                                                                                            
+  logger.js                                          |   41.66 |    21.42 |      25 |   41.66 | 17-18,24-36                                                                                                                                                                
+-----------------------------------------------------|---------|----------|---------|---------|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-Test Suites: 1 failed, 13 passed, 14 total
-Tests:       34 failed, 501 passed, 535 total
+Summary of all failing tests
+FAIL tests/integration/auth.integration.test.js
+  ΓùÅ Authentication API Integration Tests ΓÇ║ End-to-End Authentication Flow ΓÇ║ should complete full auth cycle: login -> use token -> refresh -> logout
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 401
+
+      332 |         .set('Authorization', `Bearer ${token1}`);
+      333 |
+    > 334 |       expect(meRes.status).toBe(200);
+          |                            ^
+      335 |       expect(meRes.body.data.user.email).toBe('e2e@test.dev');
+      336 |
+      337 |       // 3. Refresh token
+
+      at Object.toBe (tests/integration/auth.integration.test.js:334:28)
+
+FAIL tests/integration/episodes.integration.test.js
+  ΓùÅ Episodes API Integration Tests ΓÇ║ GET /api/v1/episodes/:id ΓÇ║ should return episode details if found
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+      151 |           .get(`/api/v1/episodes/${episodeId}`);
+      152 |
+    > 153 |         expect(res.status).toBe(200);
+          |                            ^
+      154 |         expect(res.body.data.id).toBe(episodeId);
+      155 |         expect(res.body.data).toHaveProperty('title');
+      156 |         expect(res.body.data).toHaveProperty('status');
+
+      at Object.toBe (tests/integration/episodes.integration.test.js:153:28)
+
+  ΓùÅ Episodes API Integration Tests ΓÇ║ End-to-End Episode Workflow ΓÇ║ should complete full episode viewing workflow
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 200
+    Received: 500
+
+      176 |           .get(`/api/v1/episodes/${episode.id}`);
+      177 |
+    > 178 |         expect(detailRes.status).toBe(200);
+          |                                  ^
+      179 |         expect(detailRes.body.data.id).toBe(episode.id);
+      180 |         expect(detailRes.body.data).toHaveProperty('title');
+      181 |         expect(detailRes.body.data).toHaveProperty('status');
+
+      at Object.toBe (tests/integration/episodes.integration.test.js:178:34)
+
+  ΓùÅ Episodes API Integration Tests ΓÇ║ Error Handling ΓÇ║ should return proper error for non-existent episode
+
+    expect(received).toBe(expected) // Object.is equality
+
+    Expected: 404
+    Received: 500
+
+      211 |         .get(`/api/v1/episodes/${nonExistentId}`);
+      212 |
+    > 213 |       expect(res.status).toBe(404);
+          |                          ^
+      214 |       expect(res.body).toHaveProperty('error');
+      215 |     });
+      216 |
+
+      at Object.toBe (tests/integration/episodes.integration.test.js:213:26)
+
+
+Test Suites: 2 failed, 24 passed, 26 total
+Tests:       4 failed, 6 skipped, 819 passed, 829 total
 Snapshots:   0 total
-Time:        4.959 s, estimated 5 s
+Time:        9.436 s
 Ran all test suites.
+Jest did not exit one second after the test run has completed.
+
+'This usually means that there are asynchronous operations that weren't stopped in your tests. Consider running Jest with `--detectOpenHandles` to troubleshoot this issue.

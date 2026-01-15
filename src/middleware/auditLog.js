@@ -122,7 +122,7 @@ const auditLog = async (req, res, next) => {
 /**
  * Log activity to database
  */
-const logActivity = async (req, res, responseData) => {
+const logActivity = async (req, res, _responseData) => {
   try {
     // Skip logging for certain paths
     const skipPaths = ['/health', '/api/v1'];
@@ -135,7 +135,7 @@ const logActivity = async (req, res, responseData) => {
       return;
     }
 
-    const { resource, resourceId, action } = getResourceInfo(req);
+    const { resource, resourceId, _action } = getResourceInfo(req);
     const actionType = getActionType(req.method);
     const { oldValues, newValues } = getChangeInfo(req, res);
 

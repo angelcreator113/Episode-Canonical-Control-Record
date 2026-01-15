@@ -1,0 +1,77 @@
+/* App Layout - Mobile First */
+* {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+}
+
+.app-layout {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  background-color: #f1f5f9;
+}
+
+.app-layout > header {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: white;
+  border-bottom: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  height: 60px;
+}
+
+.app-layout > nav {
+  /* ✅ FIX: Navigation is now position:fixed in Navigation.jsx */
+  /* Don't include in layout flow */
+}
+
+.app-content {
+  flex: 1;
+  padding: 2rem;
+  overflow-y: auto;
+}
+
+.app-footer {
+  flex-shrink: 0;
+  background-color: #1e293b;
+  color: #cbd5e1;
+  padding: 1rem 2rem;
+  text-align: center;
+  border-top: 1px solid #334155;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 80px;
+}
+
+.app-footer p {
+  margin: 0;
+  font-size: 0.875rem;
+}
+
+
+/* Responsive Design - Tablet and Desktop */
+@media (min-width: 769px) {
+  .app-content {
+    padding: 2rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .app-content {
+    padding: 2rem 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .app-content {
+    padding: 1rem;
+  }
+}
+

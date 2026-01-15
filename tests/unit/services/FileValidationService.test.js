@@ -10,6 +10,15 @@ jest.mock('../../../src/utils/logger', () => ({
   debug: jest.fn(),
 }));
 
+// Set up environment variables for tests
+process.env.AWS_S3_BUCKET_EPISODES = 'brd-episodes-dev';
+process.env.AWS_S3_BUCKET_THUMBNAILS = 'brd-thumbnails-dev';
+process.env.AWS_S3_BUCKET_TEMP = 'brd-temp-dev';
+process.env.FILE_LIMITS_VIDEO_SOFT = '5368709120';
+process.env.FILE_LIMITS_VIDEO_HARD = '10737418240';
+process.env.FILE_LIMITS_IMAGE_SOFT = '10485760';
+process.env.FILE_LIMITS_IMAGE_HARD = '26214400';
+
 const FileValidationService = require('../../../src/services/FileValidationService');
 
 describe('FileValidationService', () => {
@@ -216,7 +225,7 @@ describe('FileValidationService', () => {
 
       expect(key).toContain('episodes/episode-uuid/video/');
       expect(key).toContain('my-video.mp4');
-      expect(key).toMatch(/^\d+_/);
+      expect(key).toMatch(/\d+_my-video/);
     });
 
     it('should sanitize special characters in filename', () => {

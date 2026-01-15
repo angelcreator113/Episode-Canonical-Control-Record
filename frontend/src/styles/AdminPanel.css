@@ -1,0 +1,193 @@
+/* Admin Panel Styles */
+.admin-panel-page {
+  padding: 2rem 1rem;
+  background-color: var(--light);
+  min-height: calc(100vh - 100px);
+}
+
+.admin-container {
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.admin-container h1 {
+  margin-bottom: 0.5rem;
+}
+
+.admin-subtitle {
+  color: var(--secondary);
+  margin-bottom: 2rem;
+}
+
+/* Users Table */
+.users-table-container {
+  background-color: white;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  overflow: auto;
+  margin-bottom: 2rem;
+}
+
+.users-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.users-table thead {
+  background-color: var(--light);
+  border-bottom: 2px solid var(--border);
+}
+
+.users-table th {
+  padding: 1rem;
+  text-align: left;
+  font-weight: 600;
+  color: var(--primary);
+  font-size: 0.9rem;
+  white-space: nowrap;
+}
+
+.users-table tbody tr {
+  border-bottom: 1px solid var(--border);
+  transition: background-color 0.2s ease;
+}
+
+.users-table tbody tr:hover {
+  background-color: var(--light);
+}
+
+.users-table td {
+  padding: 1rem;
+  color: var(--secondary);
+  font-size: 0.95rem;
+}
+
+.users-table .username {
+  font-weight: 600;
+  color: var(--primary);
+}
+
+.users-table .email {
+  color: var(--secondary);
+  word-break: break-all;
+}
+
+.users-table .created {
+  font-size: 0.85rem;
+  color: var(--secondary);
+  white-space: nowrap;
+}
+
+.users-table .actions {
+  text-align: right;
+}
+
+/* Role Badge */
+.role-badge {
+  display: inline-block;
+  padding: 0.35rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.role-admin {
+  background-color: #fee2e2;
+  color: #991b1b;
+}
+
+.role-editor {
+  background-color: #bfdbfe;
+  color: #1e40af;
+}
+
+.role-viewer {
+  background-color: #dbeafe;
+  color: #0c4a6e;
+}
+
+/* Role Select */
+.role-select {
+  padding: 0.35rem 0.5rem;
+  border: 2px solid var(--primary);
+  border-radius: 6px;
+  background-color: white;
+  color: var(--primary);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.role-select:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+/* Buttons */
+.btn-sm {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  border-radius: 4px;
+}
+
+.users-table .actions .btn {
+  margin-left: 0.5rem;
+}
+
+.users-table .actions .btn:first-child {
+  margin-left: 0;
+}
+
+/* Admin Footer */
+.admin-footer {
+  display: flex;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+
+.admin-footer .btn {
+  padding: 0.6rem 1.2rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .admin-container {
+    padding: 0;
+  }
+
+  .users-table-container {
+    border-radius: 0;
+  }
+
+  .users-table {
+    font-size: 0.85rem;
+  }
+
+  .users-table th,
+  .users-table td {
+    padding: 0.75rem 0.5rem;
+  }
+
+  .users-table th {
+    font-size: 0.75rem;
+  }
+
+  .users-table .email {
+    display: none;
+  }
+
+  .users-table .actions {
+    text-align: left;
+  }
+
+  .users-table .actions .btn {
+    margin-left: 0;
+    margin-right: 0.25rem;
+  }
+
+  .btn-sm {
+    padding: 0.3rem 0.6rem;
+    font-size: 0.75rem;
+  }
+}

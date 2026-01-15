@@ -185,14 +185,81 @@ class OpenSearchService {
   }
 
   /**
+   * PostgreSQL fallback search
+   * @param {string} query - Search query
+   * @param {object} options - Search options
+   * @returns {Promise<object>} Search results
+   */
+  async searchPostgreSQL(query, options = {}) {
+    try {
+      const { Pool } = require('pg');
+      const pool = new Pool({
+        connectionString: process.env.DATABASE_URL,
+      });
+
+      const { from = 0, size = 20 } = options;
+      const offset = Math.max(0, from);
+      const limit = Math.min(size, 100);
+
+      let whereClause = '1=1';
+      const params = [];
+      let paramCounter = 1;
+
+      if (query && query !== '*') {
+        // Search in title and description using ILIKE (case-insensitive)
+        whereClause = `(title ILIKE $${paramCounter} OR description ILIKE $${paramCounter})`;
+        params.push(`%${query}%`);
+        paramCounter++;
+      }
+
+      // Get total count
+      const countResult = await pool.query(
+        `SELECT COUNT(*) as total FROM episodes WHERE ${whereClause}`,
+        params
+      );
+      const total = parseInt(countResult.rows[0].total, 10);
+
+      // Get paginated results
+      const searchQuery =
+        `SELECT * FROM episodes WHERE ${whereClause} ` +
+        `ORDER BY updated_at DESC LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
+
+      const result = await pool.query(searchQuery, [...params, limit, offset]);
+      
+      // Close the pool
+      await pool.end();
+
+      logger.info('PostgreSQL search executed', {
+        query,
+        hits: result.rows.length,
+        total,
+      });
+
+      return {
+        total,
+        hits: result.rows.map((row) => ({
+          id: row.id,
+          ...row,
+        })),
+        aggregations: {},
+      };
+    } catch (error) {
+      logger.error('PostgreSQL search failed', { error: error.message, stack: error.stack });
+      // Return empty results on error instead of throwing
+      return { total: 0, hits: [], aggregations: {} };
+    }
+  }
+
+  /**
    * Search episodes
    * @param {object} query - Search query object
    * @param {object} options - Search options {from, size, filters, sort}
    * @returns {Promise<object>} Search results
    */
-  async search(query, options = {}) {    if (!this.isConfigured) {
-      logger.warn('OpenSearch not configured - returning empty search results');
-      return { hits: { total: { value: 0 }, hits: [] }, aggregations: {} };
+  async search(query, options = {}) {
+    if (!this.isConfigured) {
+      logger.warn('OpenSearch not configured - using PostgreSQL fallback');
+      return this.searchPostgreSQL(query, options);
     }
     try {
       const { from = 0, size = 20, filters = {}, sort = [{ updated_at: 'desc' }] } = options;
