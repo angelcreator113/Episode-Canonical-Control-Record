@@ -194,9 +194,7 @@ describe('Presence Integration Tests', () => {
       const resourceTypes = ['episode', 'composition', 'template', 'asset'];
 
       for (const type of resourceTypes) {
-        const res = await request(app).get(
-          `/api/v1/presence/resource-viewers/${type}/test-id`
-        );
+        const res = await request(app).get(`/api/v1/presence/resource-viewers/${type}/test-id`);
         expect(res.status).toBe(200);
       }
     });
@@ -230,9 +228,7 @@ describe('Presence Integration Tests', () => {
     });
 
     it('should enforce maximum limits', async () => {
-      const res = await request(app)
-        .get('/api/v1/presence/online-users')
-        .query({ limit: 2000 });
+      const res = await request(app).get('/api/v1/presence/online-users').query({ limit: 2000 });
 
       expect(res.status).toBe(200);
       expect(res.body.data.pagination.limit).toBeLessThanOrEqual(500);
@@ -285,9 +281,7 @@ describe('Presence Integration Tests', () => {
     });
 
     it('should require valid resource type', async () => {
-      const res = await request(app).get(
-        '/api/v1/presence/resource-viewers/invalid-type/id'
-      );
+      const res = await request(app).get('/api/v1/presence/resource-viewers/invalid-type/id');
 
       // Should either fail or return empty
       expect([200, 400, 404]).toContain(res.status);

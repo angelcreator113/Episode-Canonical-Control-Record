@@ -70,12 +70,12 @@ async function gracefulShutdown(signal) {
 process.on('uncaughtException', (error) => {
   console.error('❌ UNCAUGHT EXCEPTION:');
   console.error(error);
-  
+
   // In production, you might want to log to external service
   if (process.env.NODE_ENV === 'production') {
     // TODO: Log to external error tracking service (e.g., Sentry)
   }
-  
+
   // Attempt graceful shutdown
   gracefulShutdown('UNCAUGHT_EXCEPTION')
     .then(() => process.exit(1))
@@ -86,12 +86,12 @@ process.on('unhandledRejection', (reason, promise) => {
   console.error('❌ UNHANDLED REJECTION:');
   console.error('Reason:', reason);
   console.error('Promise:', promise);
-  
+
   // In production, log to external service
   if (process.env.NODE_ENV === 'production') {
     // TODO: Log to external error tracking service
   }
-  
+
   // Don't exit on unhandled rejection in development
   if (process.env.NODE_ENV === 'production') {
     gracefulShutdown('UNHANDLED_REJECTION')
@@ -117,7 +117,10 @@ async function startServer() {
       await sequelize.authenticate();
       console.log('✓ Database connection established');
     } catch (dbError) {
-      console.warn('⚠️  Database not available, starting in degraded mode:', dbError.message.split('\n')[0]);
+      console.warn(
+        '⚠️  Database not available, starting in degraded mode:',
+        dbError.message.split('\n')[0]
+      );
     }
 
     // Start HTTP server
@@ -134,7 +137,7 @@ async function startServer() {
     // Handle server errors
     server.on('error', (error) => {
       console.error('❌ Server error:', error);
-      
+
       if (error.code === 'EADDRINUSE') {
         console.error(`❌ Port ${PORT} is already in use`);
         console.error(`💡 Try: lsof -ti:${PORT} | xargs kill -9`);
@@ -152,7 +155,7 @@ async function startServer() {
     // Handle client errors (malformed requests, etc.)
     server.on('clientError', (err, socket) => {
       console.error('❌ Client error:', err.message);
-      
+
       // Send error response if socket is still writable
       if (socket.writable && !socket.destroyed) {
         socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
@@ -163,7 +166,7 @@ async function startServer() {
     server.on('connection', (socket) => {
       // Set socket timeout to prevent hanging connections
       socket.setTimeout(120000); // 2 minutes
-      
+
       socket.on('timeout', () => {
         console.warn('⏰ Socket timeout - closing connection');
         socket.destroy();
@@ -178,7 +181,6 @@ async function startServer() {
     if (process.platform === 'win32') {
       process.on('SIGBREAK', () => gracefulShutdown('SIGBREAK'));
     }
-
   } catch (error) {
     console.error('❌ Failed to start server:');
     console.error(error);

@@ -28,12 +28,10 @@ describe('Authentication API Integration Tests', () => {
 
   describe('POST /api/v1/auth/login', () => {
     it('should successfully login with valid credentials', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          email: 'test@example.com',
-          password: 'password123',
-        });
+      const res = await request(app).post('/api/v1/auth/login').send({
+        email: 'test@example.com',
+        password: 'password123',
+      });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('success', true);
@@ -43,11 +41,9 @@ describe('Authentication API Integration Tests', () => {
     });
 
     it('should reject login with missing email', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          password: 'password123',
-        });
+      const res = await request(app).post('/api/v1/auth/login').send({
+        password: 'password123',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body).toHaveProperty('error');
@@ -55,35 +51,29 @@ describe('Authentication API Integration Tests', () => {
     });
 
     it('should reject login with invalid email format', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          email: 'not-an-email',
-          password: 'password123',
-        });
+      const res = await request(app).post('/api/v1/auth/login').send({
+        email: 'not-an-email',
+        password: 'password123',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body.details[0]).toMatch(/Email format is invalid/i);
     });
 
     it('should reject login with short password', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          email: 'test@example.com',
-          password: 'short',
-        });
+      const res = await request(app).post('/api/v1/auth/login').send({
+        email: 'test@example.com',
+        password: 'short',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body.details[0]).toMatch(/Password must be at least 6 characters/i);
     });
 
     it('should reject login with missing password', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          email: 'test@example.com',
-        });
+      const res = await request(app).post('/api/v1/auth/login').send({
+        email: 'test@example.com',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body.details).toContain('Password is required');
@@ -92,12 +82,10 @@ describe('Authentication API Integration Tests', () => {
     it('should handle rate limiting after multiple failed attempts', async () => {
       // Note: Rate limiting is disabled in development mode
       // This test verifies the middleware is in place
-      const res = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          email: 'test@example.com',
-          password: 'password123',
-        });
+      const res = await request(app).post('/api/v1/auth/login').send({
+        email: 'test@example.com',
+        password: 'password123',
+      });
 
       expect(res.status).toBe(200);
     });
@@ -105,11 +93,9 @@ describe('Authentication API Integration Tests', () => {
 
   describe('POST /api/v1/auth/refresh', () => {
     it('should successfully refresh access token', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/refresh')
-        .send({
-          refreshToken,
-        });
+      const res = await request(app).post('/api/v1/auth/refresh').send({
+        refreshToken,
+      });
 
       expect(res.status).toBe(200);
       expect(res.body).toHaveProperty('success', true);
@@ -118,20 +104,16 @@ describe('Authentication API Integration Tests', () => {
     });
 
     it('should reject refresh with missing token', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/refresh')
-        .send({});
+      const res = await request(app).post('/api/v1/auth/refresh').send({});
 
       expect(res.status).toBe(400);
       expect(res.body.details[0]).toMatch(/refreshToken is required/i);
     });
 
     it('should reject refresh with invalid token format', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/refresh')
-        .send({
-          refreshToken: 'invalid-token',
-        });
+      const res = await request(app).post('/api/v1/auth/refresh').send({
+        refreshToken: 'invalid-token',
+      });
 
       expect(res.status).toBe(400);
       expect(res.body.details[0]).toMatch(/Invalid refresh token format/i);
@@ -160,11 +142,9 @@ describe('Authentication API Integration Tests', () => {
         }
       );
 
-      const res = await request(app)
-        .post('/api/v1/auth/refresh')
-        .send({
-          refreshToken: expiredToken,
-        });
+      const res = await request(app).post('/api/v1/auth/refresh').send({
+        refreshToken: expiredToken,
+      });
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('error');
@@ -183,8 +163,7 @@ describe('Authentication API Integration Tests', () => {
     });
 
     it('should reject logout without authentication header', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/logout');
+      const res = await request(app).post('/api/v1/auth/logout');
 
       expect(res.status).toBe(401);
       expect(res.body).toHaveProperty('error');
@@ -201,9 +180,7 @@ describe('Authentication API Integration Tests', () => {
 
     it('should add token to blacklist after logout', async () => {
       // Logout
-      await request(app)
-        .post('/api/v1/auth/logout')
-        .set('Authorization', `Bearer ${accessToken}`);
+      await request(app).post('/api/v1/auth/logout').set('Authorization', `Bearer ${accessToken}`);
 
       // Try to use the same token
       const validateRes = await request(app)
@@ -217,9 +194,7 @@ describe('Authentication API Integration Tests', () => {
 
   describe('POST /api/v1/auth/validate', () => {
     it('should validate a valid token', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/validate')
-        .send({ token: accessToken });
+      const res = await request(app).post('/api/v1/auth/validate').send({ token: accessToken });
 
       expect(res.status).toBe(200);
       expect(res.body.data.valid).toBe(true);
@@ -227,9 +202,7 @@ describe('Authentication API Integration Tests', () => {
     });
 
     it('should reject validation without token', async () => {
-      const res = await request(app)
-        .post('/api/v1/auth/validate')
-        .send({});
+      const res = await request(app).post('/api/v1/auth/validate').send({});
 
       expect(res.status).toBe(400);
       expect(res.body.details[0]).toMatch(/token is required/i);
@@ -245,10 +218,7 @@ describe('Authentication API Integration Tests', () => {
     });
 
     it('should reject validation with expired token', async () => {
-      const expiredToken = TokenService.generateToken(
-        user,
-        'access'
-      );
+      const expiredToken = TokenService.generateToken(user, 'access');
 
       // Manually set expiration to past
       const parts = expiredToken.split('.');
@@ -257,9 +227,10 @@ describe('Authentication API Integration Tests', () => {
       payload.exp = Math.floor(Date.now() / 1000) - 3600; // 1 hour ago
 
       // Re-sign with expired timestamp would require signing, so we just verify behavior
-      const res = await request(app)
-        .post('/api/v1/auth/validate')
-        .send({ token: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MDAwMDAwMDAsImlhdCI6MTYwMDAwMDAwMH0.invalid' });
+      const res = await request(app).post('/api/v1/auth/validate').send({
+        token:
+          'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE2MDAwMDAwMDAsImlhdCI6MTYwMDAwMDAwMH0.invalid',
+      });
 
       expect(res.status).toBe(401);
     });
@@ -277,8 +248,7 @@ describe('Authentication API Integration Tests', () => {
     });
 
     it('should reject request without authentication', async () => {
-      const res = await request(app)
-        .get('/api/v1/auth/me');
+      const res = await request(app).get('/api/v1/auth/me');
 
       expect(res.status).toBe(401);
     });
@@ -299,12 +269,10 @@ describe('Authentication API Integration Tests', () => {
         return;
       }
 
-      const res = await request(app)
-        .post('/api/v1/auth/test-token')
-        .send({
-          email: 'custom@test.dev',
-          role: 'ADMIN',
-        });
+      const res = await request(app).post('/api/v1/auth/test-token').send({
+        email: 'custom@test.dev',
+        role: 'ADMIN',
+      });
 
       expect(res.status).toBe(200);
       expect(res.body.data).toHaveProperty('accessToken');
@@ -316,12 +284,10 @@ describe('Authentication API Integration Tests', () => {
   describe('End-to-End Authentication Flow', () => {
     it('should complete full auth cycle: login -> use token -> refresh -> logout', async () => {
       // 1. Login
-      const loginRes = await request(app)
-        .post('/api/v1/auth/login')
-        .send({
-          email: 'e2e@test.dev',
-          password: 'password123',
-        });
+      const loginRes = await request(app).post('/api/v1/auth/login').send({
+        email: 'e2e@test.dev',
+        password: 'password123',
+      });
 
       expect(loginRes.status).toBe(200);
       const { accessToken: token1, refreshToken: refresh1 } = loginRes.body.data;

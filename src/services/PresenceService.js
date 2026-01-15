@@ -19,7 +19,7 @@ class PresenceService {
       }
 
       const key = `${resourceType}:${resourceId}`;
-      
+
       if (!this.presenceMap.has(key)) {
         this.presenceMap.set(key, new Set());
       }
@@ -39,7 +39,7 @@ class PresenceService {
   async removePresence(userId, resourceType, resourceId) {
     try {
       const key = `${resourceType}:${resourceId}`;
-      
+
       if (this.presenceMap.has(key)) {
         this.presenceMap.get(key).delete(userId);
       }

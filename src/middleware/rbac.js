@@ -50,14 +50,12 @@ const getUserRole = (user) => {
     return ROLES.viewer; // Default to viewer if groups is not an array
   }
 
-  // Check groups in order of privilege (case-insensitive)
-  const groupsLower = user.groups.map(g => g.toLowerCase());
-  
-  if (groupsLower.includes('admin')) {
+  // Check groups in order of privilege (case-sensitive)
+  if (user.groups.includes('admin')) {
     return ROLES.admin;
   }
 
-  if (groupsLower.includes('editor')) {
+  if (user.groups.includes('editor')) {
     return ROLES.editor;
   }
 
@@ -84,7 +82,7 @@ const hasPermission = (user, resource, action) => {
  */
 const authorize = (allowedRoles) => {
   const rolesArray = Array.isArray(allowedRoles) ? allowedRoles : [allowedRoles];
-  
+
   return (req, res, next) => {
     if (!req.user) {
       return res.status(403).json({

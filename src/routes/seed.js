@@ -104,7 +104,8 @@ const testTemplates = [
   {
     id: uuidv4(),
     name: 'Styling Adventure With Lala',
-    description: 'A fashion and lifestyle template featuring styling tips, outfit coordination, and fashion trends.',
+    description:
+      'A fashion and lifestyle template featuring styling tips, outfit coordination, and fashion trends.',
     slug: 'styling-adventure-lala',
     defaultStatus: 'draft',
     defaultCategories: ['Fashion', 'Lifestyle', 'Styling'],
@@ -114,7 +115,8 @@ const testTemplates = [
   {
     id: uuidv4(),
     name: 'Day in a life of a content creator',
-    description: 'Behind-the-scenes look at a content creator\'s daily routine, including planning, filming, and editing processes.',
+    description:
+      "Behind-the-scenes look at a content creator's daily routine, including planning, filming, and editing processes.",
     slug: 'day-in-life-content-creator',
     defaultStatus: 'draft',
     defaultCategories: ['Lifestyle', 'Behind-the-scenes', 'Content Creation'],
@@ -124,7 +126,8 @@ const testTemplates = [
   {
     id: uuidv4(),
     name: 'Documentary Series',
-    description: 'Template for creating short documentary films with interviews, B-roll, and narration.',
+    description:
+      'Template for creating short documentary films with interviews, B-roll, and narration.',
     slug: 'documentary-series',
     defaultStatus: 'draft',
     defaultCategories: ['Documentary', 'Educational', 'Storytelling'],
@@ -134,7 +137,8 @@ const testTemplates = [
   {
     id: uuidv4(),
     name: 'Interview & Q&A',
-    description: 'Template for interview episodes featuring guest speakers, Q&A sessions, and discussions.',
+    description:
+      'Template for interview episodes featuring guest speakers, Q&A sessions, and discussions.',
     slug: 'interview-qa',
     defaultStatus: 'draft',
     defaultCategories: ['Interview', 'Discussion', 'Entertainment'],
@@ -179,7 +183,7 @@ router.post('/episodes', async (req, res) => {
       status: 'SUCCESS',
       message: `Created ${created.length} test episodes`,
       count: created.length,
-      episodes: created.map(ep => ({
+      episodes: created.map((ep) => ({
         id: ep.id,
         episode_number: ep.episodeNumber,
         title: ep.episodeTitle,
@@ -220,7 +224,7 @@ router.post('/templates', async (req, res) => {
       status: 'SUCCESS',
       message: `Created ${created.length} test templates`,
       count: created.length,
-      templates: created.map(t => ({
+      templates: created.map((t) => ({
         id: t.id,
         name: t.name,
         slug: t.slug,
@@ -278,7 +282,9 @@ router.post('/all', async (req, res) => {
       };
     }
 
-    console.log(`✅ Seeding complete - Episodes: ${results.episodes.count}, Templates: ${results.templates.count}`);
+    console.log(
+      `✅ Seeding complete - Episodes: ${results.episodes.count}, Templates: ${results.templates.count}`
+    );
 
     res.json({
       status: 'SUCCESS',

@@ -16,7 +16,7 @@ module.exports = (sequelize) => {
         defaultValue: DataTypes.UUIDV4,
         comment: 'Unique template identifier',
       },
-      
+
       // ==================== BASIC INFO ====================
       name: {
         type: DataTypes.STRING(255),
@@ -33,14 +33,14 @@ module.exports = (sequelize) => {
         },
         comment: 'Template display name',
       },
-      
+
       slug: {
         type: DataTypes.STRING(255),
         allowNull: true,
         unique: true,
         comment: 'URL-friendly version of name',
       },
-      
+
       description: {
         type: DataTypes.TEXT,
         allowNull: true,
@@ -53,7 +53,7 @@ module.exports = (sequelize) => {
         },
         comment: 'Template description for users',
       },
-      
+
       // ==================== DEFAULT VALUES ====================
       defaultStatus: {
         type: DataTypes.STRING(50),
@@ -65,7 +65,7 @@ module.exports = (sequelize) => {
         },
         comment: 'Default episode status when using this template',
       },
-      
+
       defaultCategories: {
         type: DataTypes.JSON,
         defaultValue: [],
@@ -89,7 +89,7 @@ module.exports = (sequelize) => {
         },
         comment: 'Default categories/tags for episodes',
       },
-      
+
       defaultDuration: {
         type: DataTypes.INTEGER,
         allowNull: true,
@@ -106,7 +106,7 @@ module.exports = (sequelize) => {
         },
         comment: 'Default episode duration in minutes',
       },
-      
+
       // ==================== TEMPLATE CONFIG ====================
       config: {
         type: DataTypes.JSONB,
@@ -125,7 +125,7 @@ module.exports = (sequelize) => {
         },
         comment: 'Additional template configuration',
       },
-      
+
       // ==================== METADATA ====================
       icon: {
         type: DataTypes.STRING(100),
@@ -139,7 +139,7 @@ module.exports = (sequelize) => {
         },
         comment: 'Emoji or icon identifier',
       },
-      
+
       color: {
         type: DataTypes.STRING(50),
         allowNull: true,
@@ -153,7 +153,7 @@ module.exports = (sequelize) => {
         },
         comment: 'Template color theme (hex)',
       },
-      
+
       sortOrder: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -161,7 +161,7 @@ module.exports = (sequelize) => {
         field: 'sort_order',
         comment: 'Display order (lower numbers first)',
       },
-      
+
       usageCount: {
         type: DataTypes.INTEGER,
         allowNull: false,
@@ -172,7 +172,7 @@ module.exports = (sequelize) => {
         },
         comment: 'Number of times template has been used',
       },
-      
+
       // ==================== STATUS ====================
       isActive: {
         type: DataTypes.BOOLEAN,
@@ -181,7 +181,7 @@ module.exports = (sequelize) => {
         field: 'is_active',
         comment: 'Whether template is available for use',
       },
-      
+
       isDefault: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -189,7 +189,7 @@ module.exports = (sequelize) => {
         field: 'is_default',
         comment: 'Whether this is the default template',
       },
-      
+
       isSystemTemplate: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
@@ -197,7 +197,7 @@ module.exports = (sequelize) => {
         field: 'is_system_template',
         comment: 'System templates cannot be deleted by users',
       },
-      
+
       // ==================== TRACKING ====================
       createdBy: {
         type: DataTypes.UUID,
@@ -205,21 +205,21 @@ module.exports = (sequelize) => {
         field: 'created_by',
         comment: 'User who created this template',
       },
-      
+
       updatedBy: {
         type: DataTypes.UUID,
         allowNull: true,
         field: 'updated_by',
         comment: 'User who last updated this template',
       },
-      
+
       lastUsedAt: {
         type: DataTypes.DATE,
         allowNull: true,
         field: 'last_used_at',
         comment: 'When template was last used',
       },
-      
+
       // ==================== TIMESTAMPS ====================
       createdAt: {
         type: DataTypes.DATE,
@@ -227,14 +227,14 @@ module.exports = (sequelize) => {
         defaultValue: DataTypes.NOW,
         field: 'created_at',
       },
-      
+
       updatedAt: {
         type: DataTypes.DATE,
         allowNull: false,
         defaultValue: DataTypes.NOW,
         field: 'updated_at',
       },
-      
+
       deletedAt: {
         type: DataTypes.DATE,
         allowNull: true,
@@ -247,7 +247,7 @@ module.exports = (sequelize) => {
       timestamps: true,
       underscored: true,
       paranoid: true, // Enable soft deletes
-      
+
       indexes: [
         {
           fields: ['name'],
@@ -275,7 +275,7 @@ module.exports = (sequelize) => {
           fields: ['usage_count'],
         },
       ],
-      
+
       // ==================== HOOKS ====================
       hooks: {
         beforeValidate: (template) => {
@@ -287,17 +287,14 @@ module.exports = (sequelize) => {
               .replace(/^-|-$/g, '');
           }
         },
-        
+
         beforeCreate: async (template) => {
           // Ensure only one default template
           if (template.isDefault) {
-            await EpisodeTemplate.update(
-              { isDefault: false },
-              { where: { isDefault: true } }
-            );
+            await EpisodeTemplate.update({ isDefault: false }, { where: { isDefault: true } });
           }
         },
-        
+
         beforeUpdate: async (template) => {
           // Ensure only one default template
           if (template.changed('isDefault') && template.isDefault) {
@@ -307,7 +304,7 @@ module.exports = (sequelize) => {
             );
           }
         },
-        
+
         beforeDestroy: (template) => {
           // Prevent deletion of system templates
           if (template.isSystemTemplate) {
@@ -315,7 +312,7 @@ module.exports = (sequelize) => {
           }
         },
       },
-      
+
       // ==================== SCOPES ====================
       scopes: {
         active: {
@@ -346,47 +343,50 @@ module.exports = (sequelize) => {
   );
 
   // ==================== CLASS METHODS ====================
-  
+
   /**
    * Get the default template
    */
-  EpisodeTemplate.getDefault = async function() {
+  EpisodeTemplate.getDefault = async function () {
     return await this.findOne({ where: { isDefault: true, isActive: true } });
   };
-  
+
   /**
    * Get all active templates
    */
-  EpisodeTemplate.getActive = async function(options = {}) {
+  EpisodeTemplate.getActive = async function (options = {}) {
     return await this.findAll({
       where: { isActive: true },
-      order: [['sort_order', 'ASC'], ['name', 'ASC']],
+      order: [
+        ['sort_order', 'ASC'],
+        ['name', 'ASC'],
+      ],
       ...options,
     });
   };
-  
+
   /**
    * Get template by slug
    */
-  EpisodeTemplate.getBySlug = async function(slug) {
+  EpisodeTemplate.getBySlug = async function (slug) {
     return await this.findOne({ where: { slug, isActive: true } });
   };
-  
+
   /**
    * Get popular templates
    */
-  EpisodeTemplate.getPopular = async function(limit = 5) {
+  EpisodeTemplate.getPopular = async function (limit = 5) {
     return await this.findAll({
       where: { isActive: true },
       order: [['usage_count', 'DESC']],
       limit,
     });
   };
-  
+
   /**
    * Create system template (cannot be deleted)
    */
-  EpisodeTemplate.createSystem = async function(data) {
+  EpisodeTemplate.createSystem = async function (data) {
     return await this.create({
       ...data,
       isSystemTemplate: true,
@@ -394,46 +394,43 @@ module.exports = (sequelize) => {
   };
 
   // ==================== INSTANCE METHODS ====================
-  
+
   /**
    * Increment usage count
    */
-  EpisodeTemplate.prototype.incrementUsage = async function() {
+  EpisodeTemplate.prototype.incrementUsage = async function () {
     this.usageCount += 1;
     this.lastUsedAt = new Date();
     await this.save();
     return this;
   };
-  
+
   /**
    * Toggle active status
    */
-  EpisodeTemplate.prototype.toggleActive = async function() {
+  EpisodeTemplate.prototype.toggleActive = async function () {
     this.isActive = !this.isActive;
     await this.save();
     return this;
   };
-  
+
   /**
    * Set as default template
    */
-  EpisodeTemplate.prototype.setAsDefault = async function() {
+  EpisodeTemplate.prototype.setAsDefault = async function () {
     // Remove default from all others
-    await EpisodeTemplate.update(
-      { isDefault: false },
-      { where: { isDefault: true } }
-    );
-    
+    await EpisodeTemplate.update({ isDefault: false }, { where: { isDefault: true } });
+
     // Set this as default
     this.isDefault = true;
     await this.save();
     return this;
   };
-  
+
   /**
    * Create episode from this template
    */
-  EpisodeTemplate.prototype.createEpisode = function(overrides = {}) {
+  EpisodeTemplate.prototype.createEpisode = function (overrides = {}) {
     return {
       status: this.defaultStatus,
       categories: [...this.defaultCategories],
@@ -442,13 +439,13 @@ module.exports = (sequelize) => {
       ...overrides,
     };
   };
-  
+
   /**
    * Get formatted template data
    */
-  EpisodeTemplate.prototype.toJSON = function() {
+  EpisodeTemplate.prototype.toJSON = function () {
     const values = Object.assign({}, this.get());
-    
+
     return {
       id: values.id,
       name: values.name,

@@ -33,9 +33,9 @@ describe('Audit Log Middleware - Additional Coverage', () => {
   describe('auditLog middleware', () => {
     test('should intercept res.send and call next', () => {
       const { auditLog: auditLogMiddleware } = auditLog;
-      
+
       auditLogMiddleware(req, res, next);
-      
+
       // Should override res.send and call next
       expect(next).toHaveBeenCalled();
       expect(res.send).toBeDefined();
@@ -44,18 +44,18 @@ describe('Audit Log Middleware - Additional Coverage', () => {
     test('should skip logging for /health paths', () => {
       req.path = '/health';
       const { auditLog: auditLogMiddleware } = auditLog;
-      
+
       auditLogMiddleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     });
 
     test('should skip logging for /api/v1 paths', () => {
       req.path = '/api/v1/endpoint';
       const { auditLog: auditLogMiddleware } = auditLog;
-      
+
       auditLogMiddleware(req, res, next);
-      
+
       expect(next).toHaveBeenCalled();
     });
   });
@@ -63,41 +63,41 @@ describe('Audit Log Middleware - Additional Coverage', () => {
   describe('getActionType function', () => {
     test('should return create for POST', () => {
       const { getActionType } = auditLog;
-      
+
       const action = getActionType('POST');
-      
+
       expect(action).toBe('create');
     });
 
     test('should return edit for PUT', () => {
       const { getActionType } = auditLog;
-      
+
       const action = getActionType('PUT');
-      
+
       expect(action).toBe('edit');
     });
 
     test('should return edit for PATCH', () => {
       const { getActionType } = auditLog;
-      
+
       const action = getActionType('PATCH');
-      
+
       expect(action).toBe('edit');
     });
 
     test('should return delete for DELETE', () => {
       const { getActionType } = auditLog;
-      
+
       const action = getActionType('DELETE');
-      
+
       expect(action).toBe('delete');
     });
 
     test('should return view for GET', () => {
       const { getActionType } = auditLog;
-      
+
       const action = getActionType('GET');
-      
+
       expect(action).toBe('view');
     });
   });
@@ -106,9 +106,9 @@ describe('Audit Log Middleware - Additional Coverage', () => {
     test('should capture response data in res.locals', () => {
       const { captureResponseData } = auditLog;
       const middleware = captureResponseData;
-      
+
       middleware(req, res, next);
-      
+
       // Should call next
       expect(next).toHaveBeenCalled();
     });
@@ -119,9 +119,9 @@ describe('Audit Log Middleware - Additional Coverage', () => {
       const { getResourceInfo } = auditLog;
       req.path = '/api/episodes/123';
       req.method = 'GET';
-      
+
       const info = getResourceInfo(req);
-      
+
       expect(info).toHaveProperty('resource');
       expect(info).toHaveProperty('resourceId');
     });
@@ -129,9 +129,9 @@ describe('Audit Log Middleware - Additional Coverage', () => {
     test('should handle different endpoints', () => {
       const { getResourceInfo } = auditLog;
       req.path = '/api/metadata/456';
-      
+
       const info = getResourceInfo(req);
-      
+
       expect(info).toBeDefined();
     });
   });
@@ -139,35 +139,35 @@ describe('Audit Log Middleware - Additional Coverage', () => {
   describe('logger service', () => {
     test('should provide logAction method', () => {
       const { logger } = auditLog;
-      
+
       expect(logger.logAction).toBeDefined();
       expect(typeof logger.logAction).toBe('function');
     });
 
     test('should provide getUserHistory method', () => {
       const { logger } = auditLog;
-      
+
       expect(logger.getUserHistory).toBeDefined();
       expect(typeof logger.getUserHistory).toBe('function');
     });
 
     test('should provide getResourceHistory method', () => {
       const { logger } = auditLog;
-      
+
       expect(logger.getResourceHistory).toBeDefined();
       expect(typeof logger.getResourceHistory).toBe('function');
     });
 
     test('should provide getAuditTrail method', () => {
       const { logger } = auditLog;
-      
+
       expect(logger.getAuditTrail).toBeDefined();
       expect(typeof logger.getAuditTrail).toBe('function');
     });
 
     test('should provide getStats method', () => {
       const { logger } = auditLog;
-      
+
       expect(logger.getStats).toBeDefined();
       expect(typeof logger.getStats).toBe('function');
     });

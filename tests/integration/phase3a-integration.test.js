@@ -34,7 +34,7 @@ describe('Phase 3A Integration Tests', () => {
   beforeEach(() => {
     // Reset all mocks before each test
     jest.clearAllMocks();
-    
+
     // Setup default mock implementations
     ActivityService.logActivity.mockResolvedValue({ id: 'activity-123' });
     NotificationService.create.mockResolvedValue({ id: 'notification-123' });
@@ -191,9 +191,7 @@ describe('Phase 3A Integration Tests', () => {
 
   describe('Non-blocking Error Handling', () => {
     it('should continue request even if ActivityService fails', async () => {
-      ActivityService.logActivity.mockRejectedValueOnce(
-        new Error('Database connection failed')
-      );
+      ActivityService.logActivity.mockRejectedValueOnce(new Error('Database connection failed'));
 
       const episodeData = {
         title: 'Error Resilience Test',
@@ -232,9 +230,7 @@ describe('Phase 3A Integration Tests', () => {
     });
 
     it('should continue request even if SocketService fails', async () => {
-      SocketService.broadcastMessage.mockRejectedValueOnce(
-        new Error('WebSocket connection lost')
-      );
+      SocketService.broadcastMessage.mockRejectedValueOnce(new Error('WebSocket connection lost'));
 
       const episodeData = {
         title: 'Socket Error Test',
@@ -384,10 +380,10 @@ describe('Phase 3A Integration Tests', () => {
     it('should trigger Phase 3A services on file operations', async () => {
       // Note: File upload requires multipart form data
       // This test verifies the Phase 3A integration points are called
-      
+
       // Create a mock file buffer
       const fileBuffer = Buffer.from('test file content');
-      
+
       const res = await request(app)
         .post('/api/v1/episodes/episode-123/files')
         .set('Authorization', `Bearer ${accessToken}`)

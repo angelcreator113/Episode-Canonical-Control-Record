@@ -34,18 +34,19 @@ describe('S3Service', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    
+
     // Get the mocked S3 instance
     mockS3Instance = new AWS.S3();
-    
+
     // Setup default mock responses
     mockS3Instance.upload.mockReturnValue({
-      promise: () => Promise.resolve({
-        ETag: '"abc123"',
-        VersionId: 'v1',
-        Location: 'https://bucket.s3.amazonaws.com/key',
-        Key: 'key',
-      }),
+      promise: () =>
+        Promise.resolve({
+          ETag: '"abc123"',
+          VersionId: 'v1',
+          Location: 'https://bucket.s3.amazonaws.com/key',
+          Key: 'key',
+        }),
     });
 
     mockS3Instance.deleteObject.mockReturnValue({
@@ -53,13 +54,14 @@ describe('S3Service', () => {
     });
 
     mockS3Instance.headObject.mockReturnValue({
-      promise: () => Promise.resolve({
-        ContentLength: 1024,
-        ContentType: 'text/plain',
-        LastModified: new Date(),
-        ETag: '"abc123"',
-        Metadata: {},
-      }),
+      promise: () =>
+        Promise.resolve({
+          ContentLength: 1024,
+          ContentType: 'text/plain',
+          LastModified: new Date(),
+          ETag: '"abc123"',
+          Metadata: {},
+        }),
     });
 
     mockS3Instance.listObjectsV2.mockReturnValue({
@@ -77,7 +79,7 @@ describe('S3Service', () => {
     mockS3Instance.getSignedUrl.mockReturnValue(
       'https://bucket.s3.amazonaws.com/key?signed=params'
     );
-    
+
     // Require S3Service after mocks are set up
     delete require.cache[require.resolve('../../../src/services/S3Service')];
     s3Instance = require('../../../src/services/S3Service');
@@ -86,12 +88,13 @@ describe('S3Service', () => {
   describe('uploadFile', () => {
     it('should upload file to S3 successfully', async () => {
       mockS3Instance.upload.mockReturnValue({
-        promise: () => Promise.resolve({
-          ETag: '"abc123"',
-          VersionId: 'v1',
-          Location: 'https://bucket.s3.amazonaws.com/key',
-          Key: 'episodes/uuid/video/file.mp4',
-        }),
+        promise: () =>
+          Promise.resolve({
+            ETag: '"abc123"',
+            VersionId: 'v1',
+            Location: 'https://bucket.s3.amazonaws.com/key',
+            Key: 'episodes/uuid/video/file.mp4',
+          }),
       });
 
       const bucket = 'test-bucket';
@@ -114,20 +117,21 @@ describe('S3Service', () => {
       mockS3Instance.upload.mockReturnValue({
         promise: () => Promise.reject(error),
       });
-      
-      await expect(
-        s3Instance.uploadFile('bucket', 'key', Buffer.from('data'))
-      ).rejects.toThrow('Access Denied');
+
+      await expect(s3Instance.uploadFile('bucket', 'key', Buffer.from('data'))).rejects.toThrow(
+        'Access Denied'
+      );
     });
 
     it('should pass metadata in upload params', async () => {
       mockS3Instance.upload.mockReturnValue({
-        promise: () => Promise.resolve({
-          ETag: '"abc"',
-          VersionId: 'v1',
-          Location: 'https://bucket.s3.amazonaws.com/key',
-          Key: 'key',
-        }),
+        promise: () =>
+          Promise.resolve({
+            ETag: '"abc"',
+            VersionId: 'v1',
+            Location: 'https://bucket.s3.amazonaws.com/key',
+            Key: 'key',
+          }),
       });
 
       await s3Instance.uploadFile('bucket', 'key', Buffer.from('data'), {
@@ -182,9 +186,7 @@ describe('S3Service', () => {
         throw new Error('Invalid bucket');
       });
 
-      await expect(
-        s3Instance.getPreSignedUrl('invalid', 'key')
-      ).rejects.toThrow('Invalid bucket');
+      await expect(s3Instance.getPreSignedUrl('invalid', 'key')).rejects.toThrow('Invalid bucket');
     });
   });
 
@@ -208,22 +210,21 @@ describe('S3Service', () => {
         promise: () => Promise.reject(error),
       });
 
-      await expect(
-        s3Instance.deleteFile('bucket', 'key')
-      ).rejects.toThrow('File not found');
+      await expect(s3Instance.deleteFile('bucket', 'key')).rejects.toThrow('File not found');
     });
   });
 
   describe('getFileMetadata', () => {
     it('should retrieve file metadata from S3', async () => {
       mockS3Instance.headObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          ContentLength: 1024000,
-          ContentType: 'video/mp4',
-          LastModified: new Date('2024-01-01'),
-          ETag: '"abc123"',
-          Metadata: { episodeId: 'ep-1' },
-        }),
+        promise: () =>
+          Promise.resolve({
+            ContentLength: 1024000,
+            ContentType: 'video/mp4',
+            LastModified: new Date('2024-01-01'),
+            ETag: '"abc123"',
+            Metadata: { episodeId: 'ep-1' },
+          }),
       });
 
       const metadata = await s3Instance.getFileMetadata('bucket', 'key');
@@ -243,31 +244,30 @@ describe('S3Service', () => {
         promise: () => Promise.reject(error),
       });
 
-      await expect(
-        s3Instance.getFileMetadata('bucket', 'key')
-      ).rejects.toThrow('Access Denied');
+      await expect(s3Instance.getFileMetadata('bucket', 'key')).rejects.toThrow('Access Denied');
     });
   });
 
   describe('listFiles', () => {
     it('should list files with prefix', async () => {
       mockS3Instance.listObjectsV2.mockReturnValue({
-        promise: () => Promise.resolve({
-          Contents: [
-            {
-              Key: 'episodes/uuid/video/file1.mp4',
-              Size: 5368709120,
-              LastModified: new Date('2024-01-01'),
-              ETag: '"abc123"',
-            },
-            {
-              Key: 'episodes/uuid/video/file2.mp4',
-              Size: 1024000,
-              LastModified: new Date('2024-01-02'),
-              ETag: '"def456"',
-            },
-          ],
-        }),
+        promise: () =>
+          Promise.resolve({
+            Contents: [
+              {
+                Key: 'episodes/uuid/video/file1.mp4',
+                Size: 5368709120,
+                LastModified: new Date('2024-01-01'),
+                ETag: '"abc123"',
+              },
+              {
+                Key: 'episodes/uuid/video/file2.mp4',
+                Size: 1024000,
+                LastModified: new Date('2024-01-02'),
+                ETag: '"def456"',
+              },
+            ],
+          }),
       });
 
       const files = await s3Instance.listFiles('bucket', 'episodes/uuid/video');
@@ -309,9 +309,10 @@ describe('S3Service', () => {
   describe('copyFile', () => {
     it('should copy file within S3', async () => {
       mockS3Instance.copyObject.mockReturnValue({
-        promise: () => Promise.resolve({
-          CopyObjectResult: { ETag: '"copied"' },
-        }),
+        promise: () =>
+          Promise.resolve({
+            CopyObjectResult: { ETag: '"copied"' },
+          }),
       });
 
       const result = await s3Instance.copyFile('src-bucket', 'src-key', 'dest-bucket', 'dest-key');

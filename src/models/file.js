@@ -88,7 +88,7 @@ class FileModel {
     values.push(limit, offset);
 
     const result = await db.query(query, values);
-    return result.rows.map(row => this.formatFile(row));
+    return result.rows.map((row) => this.formatFile(row));
   }
 
   /**
@@ -102,7 +102,7 @@ class FileModel {
     `;
 
     const result = await db.query(query, [episodeId]);
-    return result.rows.map(row => this.formatFile(row));
+    return result.rows.map((row) => this.formatFile(row));
   }
 
   /**

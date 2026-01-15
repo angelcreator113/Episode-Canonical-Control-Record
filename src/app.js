@@ -21,17 +21,17 @@ if (process.env.NODE_ENV !== 'test') {
     try {
       await db.authenticate();
       console.log('✅ Database connection authenticated');
-      
+
       // Skip model sync - database already exists
       // Sync errors indicate schema mismatches that we don't want to auto-fix
       console.log('⏭️  Skipping model sync (database already initialized)');
-      
+
       isDbConnected = true;
     } catch (err) {
       console.warn('⚠ Database not available:', err.message.split('\n')[0]);
       isDbConnected = true; // Allow degraded mode
     }
-  })().catch(err => console.error('⚠ DB init error:', err.message));
+  })().catch((err) => console.error('⚠ DB init error:', err.message));
 } else {
   isDbConnected = true;
 }
@@ -68,9 +68,14 @@ app.get('/ping', (req, res) => {
 // CORS MUST come BEFORE helmet
 app.use(
   cors({
-    origin: function(origin, callback) {
+    origin: function (origin, callback) {
       // Allow all localhost origins and specified domains
-      const allowedOrigins = ['http://localhost:3000', 'http://localhost:5173', 'http://127.0.0.1:5173', 'http://127.0.0.1:3000'];
+      const allowedOrigins = [
+        'http://localhost:3000',
+        'http://localhost:5173',
+        'http://127.0.0.1:5173',
+        'http://127.0.0.1:3000',
+      ];
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -81,7 +86,7 @@ app.use(
     methods: ['GET', 'HEAD', 'PUT', 'PATCH', 'POST', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     exposedHeaders: ['Content-Type', 'Authorization'],
-    optionsSuccessStatus: 200 // Some legacy browsers (IE11) require this
+    optionsSuccessStatus: 200, // Some legacy browsers (IE11) require this
   })
 );
 
@@ -114,7 +119,7 @@ app.get('/health', async (req, res) => {
     timestamp: new Date().toISOString(),
     uptime: process.uptime(),
     version: process.env.API_VERSION || 'v1',
-    environment: process.env.NODE_ENV || 'development'
+    environment: process.env.NODE_ENV || 'development',
   };
 
   // Only check DB in non-test environment or if DB is available
@@ -244,7 +249,8 @@ try {
   console.log('✓ Notifications controller loaded');
 } catch (e) {
   console.error('✗ Failed to load notifications controller:', e.message);
-  notificationController = (req, res) => res.status(500).json({ error: 'Controller not available' });
+  notificationController = (req, res) =>
+    res.status(500).json({ error: 'Controller not available' });
 }
 
 try {
@@ -353,10 +359,7 @@ app.get('/api/v1', (req, res) => {
 // ============================================================================
 // ERROR HANDLING
 // ============================================================================
-const {
-  errorHandler,
-  notFoundHandler,
-} = require('./middleware/errorHandler');
+const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 
 // 404 handler for undefined routes
 app.use(notFoundHandler);

@@ -181,9 +181,7 @@ class JobQueueService {
         .promise();
 
       return {
-        approximateNumberOfMessages: parseInt(
-          result.Attributes.ApproximateNumberOfMessages
-        ),
+        approximateNumberOfMessages: parseInt(result.Attributes.ApproximateNumberOfMessages),
         approximateNumberOfMessagesNotVisible: parseInt(
           result.Attributes.ApproximateNumberOfMessagesNotVisible
         ),

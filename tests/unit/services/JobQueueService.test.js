@@ -187,7 +187,8 @@ describe('JobQueueService', () => {
           episodeId: 'ep-test',
         });
 
-        const callArgs = mockSQS.sendMessage.mock.calls[mockSQS.sendMessage.mock.calls.length - 1][0];
+        const callArgs =
+          mockSQS.sendMessage.mock.calls[mockSQS.sendMessage.mock.calls.length - 1][0];
         const messageBody = JSON.parse(callArgs.MessageBody);
 
         expect(messageBody.type).toBe(jobType);
@@ -493,7 +494,8 @@ describe('JobQueueService', () => {
 
         await jobQueueInstance.sendToDLQ({ jobId: 'job-test' }, reason);
 
-        const callArgs = mockSQS.sendMessage.mock.calls[mockSQS.sendMessage.mock.calls.length - 1][0];
+        const callArgs =
+          mockSQS.sendMessage.mock.calls[mockSQS.sendMessage.mock.calls.length - 1][0];
         const messageBody = JSON.parse(callArgs.MessageBody);
 
         expect(messageBody.dlqReason).toBe(reason);
@@ -576,9 +578,7 @@ describe('JobQueueService', () => {
         promise: jest.fn().mockRejectedValue(new Error('Get attributes failed')),
       });
 
-      await expect(jobQueueInstance.getQueueAttributes()).rejects.toThrow(
-        'Get attributes failed'
-      );
+      await expect(jobQueueInstance.getQueueAttributes()).rejects.toThrow('Get attributes failed');
     });
 
     it('should handle empty queue', async () => {
@@ -693,9 +693,7 @@ describe('JobQueueService', () => {
 
       const jobData = { type: 'process', episodeId: 'ep-123' };
 
-      await expect(jobQueueInstance.enqueueJob(jobData)).rejects.toThrow(
-        'Invalid message format'
-      );
+      await expect(jobQueueInstance.enqueueJob(jobData)).rejects.toThrow('Invalid message format');
     });
 
     it('should log errors appropriately', async () => {

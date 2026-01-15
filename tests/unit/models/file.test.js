@@ -27,7 +27,13 @@ describe('FileModel Unit Tests', () => {
   describe('create', () => {
     test('should create file record successfully', async () => {
       db.query.mockResolvedValue({
-        rows: [{ ...mockFileData, created_at: mockFileData.createdAt, updated_at: mockFileData.updatedAt }],
+        rows: [
+          {
+            ...mockFileData,
+            created_at: mockFileData.createdAt,
+            updated_at: mockFileData.updatedAt,
+          },
+        ],
       });
 
       const result = await FileModel.create(mockFileData);

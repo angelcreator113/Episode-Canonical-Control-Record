@@ -9,29 +9,18 @@ const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/reque
 /**
  * Episode Routes
  * Base path: /api/v1/episodes
- * 
+ *
  * ✅ AUTH TEMPORARILY DISABLED FOR TESTING
  */
 
 // List episodes
-router.get(
-  '/',
-  validateEpisodeQuery,
-  asyncHandler(episodeController.listEpisodes)
-);
+router.get('/', validateEpisodeQuery, asyncHandler(episodeController.listEpisodes));
 
 // Get episode status
-router.get(
-  '/:id/status',
-  asyncHandler(episodeController.getEpisodeStatus)
-);
+router.get('/:id/status', asyncHandler(episodeController.getEpisodeStatus));
 
 // Get single episode
-router.get(
-  '/:id',
-  validateUUIDParam('id'),
-  asyncHandler(episodeController.getEpisode)
-);
+router.get('/:id', validateUUIDParam('id'), asyncHandler(episodeController.getEpisode));
 
 // ✅ CREATE EPISODE - AUTH DISABLED FOR TESTING
 router.post(

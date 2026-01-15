@@ -130,7 +130,7 @@ class ActivityIndexService {
 
     try {
       // Build bulk request body
-      const body = activities.flatMap(activity => [
+      const body = activities.flatMap((activity) => [
         { index: { _index: this.indexName, _id: activity.id } },
         {
           user_id: activity.user_id,
@@ -188,7 +188,7 @@ class ActivityIndexService {
         ORDER BY timestamp DESC
       `);
 
-      const activities = result.rows.map(row => ({
+      const activities = result.rows.map((row) => ({
         id: row.id,
         user_id: row.user_id,
         action_type: row.action_type,
@@ -317,7 +317,8 @@ class ActivityIndexService {
    */
   async dbFallback(query = '', filters = {}) {
     try {
-      let sql = 'SELECT id, user_id, action_type, resource_type, resource_id, old_values, new_values, timestamp FROM activity_logs WHERE 1=1';
+      let sql =
+        'SELECT id, user_id, action_type, resource_type, resource_id, old_values, new_values, timestamp FROM activity_logs WHERE 1=1';
       const params = [];
       let paramIndex = 1;
 
@@ -426,7 +427,7 @@ class ActivityIndexService {
       const total = parseInt(countResult.rows[0].count);
 
       // Transform results
-      const activities = result.rows.map(row => ({
+      const activities = result.rows.map((row) => ({
         id: row.id,
         user_id: row.user_id,
         action_type: row.action_type,
@@ -462,7 +463,7 @@ class ActivityIndexService {
    * Format OpenSearch results
    */
   formatResults(result, limit, offset) {
-    const activities = result.body.hits.hits.map(hit => ({
+    const activities = result.body.hits.hits.map((hit) => ({
       ...hit._source,
       id: hit._id,
     }));
@@ -511,11 +512,14 @@ class ActivityIndexService {
             },
           });
 
-          const suggestions = result.body.hits.hits.map(hit => ({
+          const suggestions = result.body.hits.hits.map((hit) => ({
             action_type: hit._source.action_type,
             resource_type: hit._source.resource_type,
           }));
-          return { success: true, data: [...new Set(suggestions.map(s => `${s.action_type} ${s.resource_type}`))] };
+          return {
+            success: true,
+            data: [...new Set(suggestions.map((s) => `${s.action_type} ${s.resource_type}`))],
+          };
         } catch (error) {
           logger.debug('OpenSearch suggestions failed', { error: error.message });
         }
@@ -535,7 +539,7 @@ class ActivityIndexService {
 
       return {
         success: true,
-        data: result.rows.map(r => `${r.action_type} ${r.resource_type}`),
+        data: result.rows.map((r) => `${r.action_type} ${r.resource_type}`),
       };
     } catch (error) {
       logger.error('Failed to get suggestions', { error: error.message });

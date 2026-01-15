@@ -7,7 +7,21 @@ const ALLOWED_FILE_TYPES = {
   document: ['application/pdf', 'text/plain', 'application/json'],
 };
 
-const ALLOWED_EXTENSIONS = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.pdf', '.txt', '.json'];
+const ALLOWED_EXTENSIONS = [
+  '.mp4',
+  '.mkv',
+  '.webm',
+  '.avi',
+  '.mov',
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.gif',
+  '.webp',
+  '.pdf',
+  '.txt',
+  '.json',
+];
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 const MAX_FILE_SIZE_IMAGE = 50 * 1024 * 1024; // 50MB for images
 
@@ -168,6 +182,16 @@ function validateBatchFileUpload(req, res, next) {
       });
     }
 
+    // Reject batch if any file has validation errors
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch validation failed - some files have errors',
+        code: 'BATCH_VALIDATION_FAILED',
+        errors,
+      });
+    }
+
     if (validatedFiles.length === 0) {
       return res.status(400).json({
         success: false,
@@ -208,12 +232,13 @@ async function checkStorageQuota(req, res, next) {
     const STORAGE_QUOTA = 10 * 1024 * 1024 * 1024; // 10GB
 
     const FileModel = require('../models/file');
-    const currentSize = await FileModel.getTotalSizeByUserId(userId);
+    const currentSizeResult = await FileModel.getTotalSizeByUserId(userId);
+    const currentSize = Number(currentSizeResult) || 0;
     const incomingSize = req.fileValidation?.size || 0;
 
     if (currentSize + incomingSize > STORAGE_QUOTA) {
       const availableSpace = STORAGE_QUOTA - currentSize;
-      return res.status(413).json({
+      return res.status(400).json({
         success: false,
         message: 'Storage quota exceeded',
         code: 'QUOTA_EXCEEDED',

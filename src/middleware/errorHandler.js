@@ -124,7 +124,7 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'SequelizeValidationError') {
     // Sequelize validation error
     const fields = {};
-    err.errors.forEach(e => {
+    err.errors.forEach((e) => {
       fields[e.path] = e.message;
     });
     error = new ValidationError('Validation failed', fields);
@@ -134,7 +134,7 @@ const errorHandler = (err, req, res, next) => {
   if (err.name === 'SequelizeUniqueConstraintError') {
     // Unique constraint violation
     const fields = {};
-    err.errors.forEach(e => {
+    err.errors.forEach((e) => {
       fields[e.path] = `${e.path} must be unique`;
     });
     error = new ConflictError('Unique constraint violation', fields);
@@ -196,7 +196,7 @@ const validateRequest = (schema, source = 'body') => {
     const errors = {};
     let hasErrors = false;
 
-    Object.keys(schema).forEach(field => {
+    Object.keys(schema).forEach((field) => {
       const rules = schema[field];
       const value = data[field];
 

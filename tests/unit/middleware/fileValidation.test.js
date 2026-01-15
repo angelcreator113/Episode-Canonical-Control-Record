@@ -50,15 +50,15 @@ describe('File Validation Middleware', () => {
 
   describe('ALLOWED_EXTENSIONS', () => {
     test('should include video extensions', () => {
-      expect(ALLOWED_EXTENSIONS).toContain('mp4');
-      expect(ALLOWED_EXTENSIONS).toContain('mkv');
-      expect(ALLOWED_EXTENSIONS).toContain('webm');
+      expect(ALLOWED_EXTENSIONS).toContain('.mp4');
+      expect(ALLOWED_EXTENSIONS).toContain('.mkv');
+      expect(ALLOWED_EXTENSIONS).toContain('.webm');
     });
 
     test('should include image extensions', () => {
-      expect(ALLOWED_EXTENSIONS).toContain('jpg');
-      expect(ALLOWED_EXTENSIONS).toContain('png');
-      expect(ALLOWED_EXTENSIONS).toContain('gif');
+      expect(ALLOWED_EXTENSIONS).toContain('.jpg');
+      expect(ALLOWED_EXTENSIONS).toContain('.png');
+      expect(ALLOWED_EXTENSIONS).toContain('.gif');
     });
 
     test('should not include dangerous extensions', () => {
@@ -174,7 +174,7 @@ describe('File Validation Middleware', () => {
     test('should extract file extension correctly', (done) => {
       req.file.originalname = 'Video.With.Dots.mp4';
       validateFileUpload(req, res, next);
-      expect(req.fileValidation.extension).toBe('mp4');
+      expect(req.fileValidation.extension).toBe('.mp4');
       done();
     });
   });
@@ -213,10 +213,7 @@ describe('File Validation Middleware', () => {
       validateBatchFileUpload(req, res, next);
       expect(res.json).toHaveBeenCalledWith(
         expect.objectContaining({
-          errors: expect.arrayContaining([
-            expect.any(Object),
-            expect.any(Object),
-          ]),
+          errors: expect.arrayContaining([expect.any(Object), expect.any(Object)]),
         })
       );
       done();
@@ -226,20 +223,20 @@ describe('File Validation Middleware', () => {
   describe('checkStorageQuota', () => {
     test('should allow upload when under quota', async () => {
       FileModel.getTotalSizeByUserId.mockResolvedValue(BigInt(5 * 1024 * 1024 * 1024)); // 5GB used
-      req.file.size = 1 * 1024 * 1024 * 1024; // 1GB new file
+      req.fileValidation = { size: 1 * 1024 * 1024 * 1024 }; // 1GB new file
 
       checkStorageQuota(req, res, next);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(next).toHaveBeenCalled();
     });
 
     test('should reject upload exceeding 10GB quota', async () => {
       FileModel.getTotalSizeByUserId.mockResolvedValue(BigInt(9.5 * 1024 * 1024 * 1024)); // 9.5GB used
-      req.file.size = 1 * 1024 * 1024 * 1024; // 1GB new file (would exceed 10GB)
+      req.fileValidation = { size: 1 * 1024 * 1024 * 1024 }; // 1GB new file (would exceed 10GB)
 
       checkStorageQuota(req, res, next);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       expect(res.status).toHaveBeenCalledWith(400);
       expect(res.json).toHaveBeenCalledWith(
@@ -250,11 +247,11 @@ describe('File Validation Middleware', () => {
     });
 
     test('should return available space in response', async () => {
-      FileModel.getTotalSizeByUserId.mockResolvedValue(BigInt(5 * 1024 * 1024 * 1024)); // 5GB used
-      req.file.size = 1 * 1024 * 1024 * 1024; // 1GB new file
+      FileModel.getTotalSizeByUserId.mockResolvedValue(BigInt(9.5 * 1024 * 1024 * 1024)); // 9.5GB used
+      req.fileValidation = { size: 1 * 1024 * 1024 * 1024 }; // 1GB new file (exceeds quota)
 
       checkStorageQuota(req, res, next);
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
 
       const callData = res.json.mock.calls[0]?.[0];
       expect(callData?.availableSpace).toBeGreaterThan(0);

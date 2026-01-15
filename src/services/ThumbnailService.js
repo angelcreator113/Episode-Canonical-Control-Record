@@ -21,7 +21,7 @@ class ThumbnailService {
         id: thumbnail.id,
         format: thumbnail.format,
         status: 'PUBLISHED',
-        message: 'Publishing workflow will be fully functional after database migration runs'
+        message: 'Publishing workflow will be fully functional after database migration runs',
       };
     } catch (error) {
       console.error('❌ Failed to publish thumbnail:', error);
@@ -46,7 +46,7 @@ class ThumbnailService {
         id: thumbnail.id,
         format: thumbnail.format,
         status: 'UNPUBLISHED',
-        message: 'Publishing workflow will be fully functional after database migration runs'
+        message: 'Publishing workflow will be fully functional after database migration runs',
       };
     } catch (error) {
       console.error('❌ Failed to unpublish thumbnail:', error);
@@ -76,7 +76,7 @@ class ThumbnailService {
         id: thumbnail.id,
         format: thumbnail.format,
         isPrimary: true,
-        message: 'Primary thumbnail setting will be fully functional after database migration runs'
+        message: 'Primary thumbnail setting will be fully functional after database migration runs',
       };
     } catch (error) {
       console.error('❌ Failed to set primary thumbnail:', error);
@@ -106,12 +106,10 @@ class ThumbnailService {
           'thumbnail_type',
           'position_seconds',
           'generated_at',
-          'quality_rating'
+          'quality_rating',
         ],
-        order: [
-          ['generated_at', 'DESC']
-        ],
-        raw: true
+        order: [['generated_at', 'DESC']],
+        raw: true,
       });
 
       return thumbnails;
@@ -133,18 +131,22 @@ class ThumbnailService {
 
       // Check if it's the primary thumbnail
       if (thumbnail.is_primary) {
-        throw new Error('Cannot delete primary thumbnail. Set another YouTube thumbnail as primary first, or unpublish this one.');
+        throw new Error(
+          'Cannot delete primary thumbnail. Set another YouTube thumbnail as primary first, or unpublish this one.'
+        );
       }
 
       // Delete from S3
       const AWS = require('aws-sdk');
       const s3 = new AWS.S3();
-      
+
       if (thumbnail.s3_key) {
-        await s3.deleteObject({
-          Bucket: process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET,
-          Key: thumbnail.s3_key
-        }).promise();
+        await s3
+          .deleteObject({
+            Bucket: process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET,
+            Key: thumbnail.s3_key,
+          })
+          .promise();
       }
 
       // Delete from database
@@ -165,8 +167,8 @@ class ThumbnailService {
     const existingYoutube = await Thumbnail.count({
       where: {
         episode_id: episodeId,
-        format: 'YOUTUBE'
-      }
+        format: 'YOUTUBE',
+      },
     });
 
     return existingYoutube === 0;

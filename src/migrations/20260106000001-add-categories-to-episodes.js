@@ -30,5 +30,5 @@ module.exports = {
       console.error('Error removing categories column:', error);
       throw error;
     }
-  }
+  },
 };

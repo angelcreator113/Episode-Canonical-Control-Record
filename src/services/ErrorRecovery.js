@@ -37,7 +37,7 @@ class ErrorRecovery {
       // Update job status
       await Job.updateStatus(jobId, JOB_STATUS.FAILED, {
         errorMessage: reason,
-        completedAt: new Date()
+        completedAt: new Date(),
       });
 
       // Send to SQS DLQ
@@ -63,7 +63,7 @@ class ErrorRecovery {
         error: error.message,
         timestamp: new Date().toISOString(),
         retryCount: job.retryCount,
-        maxRetries: job.maxRetries
+        maxRetries: job.maxRetries,
       };
 
       // Log alert (in production, would send to monitoring service)
@@ -82,7 +82,7 @@ class ErrorRecovery {
   static async getFailureRate(hours = 24) {
     try {
       const db = require('../config/database');
-      
+
       const query = `
         SELECT 
           COUNT(*) as total,
@@ -97,7 +97,7 @@ class ErrorRecovery {
         period: `${hours} hours`,
         total: parseInt(result.rows[0].total, 10),
         failed: parseInt(result.rows[0].failed || 0, 10),
-        failureRate: parseFloat(result.rows[0].failure_rate || 0)
+        failureRate: parseFloat(result.rows[0].failure_rate || 0),
       };
     } catch (error) {
       logger.error('Error getting failure rate', { error });
@@ -111,7 +111,7 @@ class ErrorRecovery {
   static async getRetryStats() {
     try {
       const db = require('../config/database');
-      
+
       const query = `
         SELECT 
           COUNT(*) as total,
@@ -127,7 +127,7 @@ class ErrorRecovery {
         total: parseInt(result.rows[0].total, 10),
         avgRetries: parseFloat(result.rows[0].avg_retries || 0).toFixed(2),
         maxRetries: parseInt(result.rows[0].max_retries || 0, 10),
-        jobsRetried: parseInt(result.rows[0].jobs_retried || 0, 10)
+        jobsRetried: parseInt(result.rows[0].jobs_retried || 0, 10),
       };
     } catch (error) {
       logger.error('Error getting retry stats', { error });
@@ -141,7 +141,7 @@ class ErrorRecovery {
   static async getErrorStats(limit = 10) {
     try {
       const db = require('../config/database');
-      
+
       const query = `
         SELECT 
           SUBSTRING(error_message, 1, 100) as error,
@@ -156,10 +156,10 @@ class ErrorRecovery {
       `;
 
       const result = await db.query(query, [JOB_STATUS.FAILED, limit]);
-      return result.rows.map(row => ({
+      return result.rows.map((row) => ({
         error: row.error,
         count: parseInt(row.count, 10),
-        avgRetries: parseFloat(row.avg_retries || 0).toFixed(2)
+        avgRetries: parseFloat(row.avg_retries || 0).toFixed(2),
       }));
     } catch (error) {
       logger.error('Error getting error stats', { error });
@@ -173,7 +173,7 @@ class ErrorRecovery {
   static async retryFailedJobs() {
     try {
       const db = require('../config/database');
-      
+
       const query = `
         UPDATE jobs
         SET status = $1,
@@ -202,7 +202,7 @@ class ErrorRecovery {
     try {
       await Job.updateStatus(jobId, JOB_STATUS.FAILED, {
         errorMessage: `Permanently failed: ${reason}`,
-        completedAt: new Date()
+        completedAt: new Date(),
       });
 
       logger.warn('Job marked as permanently failed', { jobId, reason });
@@ -218,7 +218,7 @@ class ErrorRecovery {
   static async getHealthStatus() {
     try {
       const db = require('../config/database');
-      
+
       const statsQuery = `
         SELECT 
           COUNT(*) as total,
@@ -234,7 +234,7 @@ class ErrorRecovery {
         JOB_STATUS.PENDING,
         JOB_STATUS.PROCESSING,
         JOB_STATUS.COMPLETED,
-        JOB_STATUS.FAILED
+        JOB_STATUS.FAILED,
       ]);
 
       const stats = result.rows[0];
@@ -244,7 +244,7 @@ class ErrorRecovery {
       const completed = parseInt(stats.completed || 0, 10);
       const failed = parseInt(stats.failed || 0, 10);
 
-      const failureRate = total > 0 ? (failed / total * 100).toFixed(2) : 0;
+      const failureRate = total > 0 ? ((failed / total) * 100).toFixed(2) : 0;
       const avgDuration = 0; // TODO: Calculate from database
 
       const health = {
@@ -255,13 +255,13 @@ class ErrorRecovery {
           pending,
           processing,
           completed,
-          failed
+          failed,
         },
         metrics: {
           failureRate: parseFloat(failureRate),
-          completionRate: total > 0 ? (completed / total * 100).toFixed(2) : 0,
-          avgDuration: avgDuration
-        }
+          completionRate: total > 0 ? ((completed / total) * 100).toFixed(2) : 0,
+          avgDuration: avgDuration,
+        },
       };
 
       return health;
@@ -270,7 +270,7 @@ class ErrorRecovery {
       return {
         status: 'unhealthy',
         error: error.message,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       };
     }
   }

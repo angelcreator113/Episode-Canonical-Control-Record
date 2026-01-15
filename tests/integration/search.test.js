@@ -1,8 +1,8 @@
 const request = require('supertest');
 const app = require('../../app');
-const OpenSearchService = require('../../../src/services/OpenSearchService');
+const OpenSearchService = require('../../src/services/OpenSearchService');
 
-jest.mock('../../../src/services/OpenSearchService');
+jest.mock('../../src/services/OpenSearchService');
 
 describe('Search Integration Tests - Phase 2C', () => {
   let token;
@@ -163,9 +163,7 @@ describe('Search Integration Tests - Phase 2C', () => {
     });
 
     test('should require authentication', async () => {
-      const res = await request(app)
-        .post('/api/v1/search')
-        .send({ q: 'test' });
+      const res = await request(app).post('/api/v1/search').send({ q: 'test' });
 
       expect(res.status).toBe(401);
     });

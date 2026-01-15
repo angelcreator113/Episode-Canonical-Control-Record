@@ -140,9 +140,7 @@ describe('ActivityLog Model', () => {
     });
 
     test('should handle database errors', async () => {
-      ActivityLogModel.logActivity = jest
-        .fn()
-        .mockRejectedValue(new Error('DB Error'));
+      ActivityLogModel.logActivity = jest.fn().mockRejectedValue(new Error('DB Error'));
 
       try {
         await ActivityLogModel.logActivity({
@@ -193,9 +191,7 @@ describe('ActivityLog Model', () => {
     });
 
     test('should handle database errors', async () => {
-      ActivityLogModel.getUserHistory = jest
-        .fn()
-        .mockRejectedValue(new Error('DB Error'));
+      ActivityLogModel.getUserHistory = jest.fn().mockRejectedValue(new Error('DB Error'));
 
       try {
         await ActivityLogModel.getUserHistory('user-123');
@@ -236,9 +232,7 @@ describe('ActivityLog Model', () => {
     });
 
     test('should return empty array on error', async () => {
-      ActivityLogModel.getResourceHistory = jest
-        .fn()
-        .mockRejectedValue(new Error('Error'));
+      ActivityLogModel.getResourceHistory = jest.fn().mockRejectedValue(new Error('Error'));
 
       try {
         await ActivityLogModel.getResourceHistory('episode', 1);
@@ -276,9 +270,7 @@ describe('ActivityLog Model', () => {
     });
 
     test('should return empty array on error', async () => {
-      ActivityLogModel.getAuditTrail = jest
-        .fn()
-        .mockRejectedValue(new Error('Error'));
+      ActivityLogModel.getAuditTrail = jest.fn().mockRejectedValue(new Error('Error'));
 
       try {
         await ActivityLogModel.getAuditTrail();
@@ -319,9 +311,7 @@ describe('ActivityLog Model', () => {
     });
 
     test('should return empty object on error', async () => {
-      ActivityLogModel.getStats = jest
-        .fn()
-        .mockRejectedValue(new Error('Error'));
+      ActivityLogModel.getStats = jest.fn().mockRejectedValue(new Error('Error'));
 
       try {
         await ActivityLogModel.getStats('7d');
@@ -334,9 +324,7 @@ describe('ActivityLog Model', () => {
 
   describe('Standard Sequelize Methods', () => {
     test('should support create', async () => {
-      ActivityLogModel.create = jest
-        .fn()
-        .mockResolvedValue({ id: 1, userId: 'user-123' });
+      ActivityLogModel.create = jest.fn().mockResolvedValue({ id: 1, userId: 'user-123' });
 
       const result = await ActivityLogModel.create({
         userId: 'user-123',
@@ -360,9 +348,7 @@ describe('ActivityLog Model', () => {
     });
 
     test('should support findByPk', async () => {
-      ActivityLogModel.findByPk = jest
-        .fn()
-        .mockResolvedValue({ id: 1, userId: 'user-123' });
+      ActivityLogModel.findByPk = jest.fn().mockResolvedValue({ id: 1, userId: 'user-123' });
 
       const result = await ActivityLogModel.findByPk(1);
 
@@ -370,9 +356,7 @@ describe('ActivityLog Model', () => {
     });
 
     test('should support findOne', async () => {
-      ActivityLogModel.findOne = jest
-        .fn()
-        .mockResolvedValue({ id: 1, userId: 'user-123' });
+      ActivityLogModel.findOne = jest.fn().mockResolvedValue({ id: 1, userId: 'user-123' });
 
       const result = await ActivityLogModel.findOne({ where: { userId: 'user-123' } });
 

@@ -48,7 +48,10 @@ class FileValidationService {
 
     if (fileSize > soft) {
       logger.warn('File size exceeds soft limit', { fileSize, fileType, softLimit: soft });
-      return { valid: true, warning: `File size exceeds soft limit of ${(soft / 1024 / 1024).toFixed(2)}MB` };
+      return {
+        valid: true,
+        warning: `File size exceeds soft limit of ${(soft / 1024 / 1024).toFixed(2)}MB`,
+      };
     }
 
     return { valid: true };

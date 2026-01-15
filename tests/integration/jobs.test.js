@@ -12,30 +12,30 @@ const { v4: uuidv4 } = require('uuid');
 // Mock AWS SDK for testing
 jest.mock('aws-sdk', () => ({
   SQS: jest.fn().mockImplementation(() => ({
-    sendMessage: jest.fn().mockImplementation(params => ({
-      promise: jest.fn().mockResolvedValue({ MessageId: 'mock-message-id' })
+    sendMessage: jest.fn().mockImplementation((params) => ({
+      promise: jest.fn().mockResolvedValue({ MessageId: 'mock-message-id' }),
     })),
-    receiveMessage: jest.fn().mockImplementation(params => ({
-      promise: jest.fn().mockResolvedValue({ Messages: [] })
+    receiveMessage: jest.fn().mockImplementation((params) => ({
+      promise: jest.fn().mockResolvedValue({ Messages: [] }),
     })),
-    deleteMessage: jest.fn().mockImplementation(params => ({
-      promise: jest.fn().mockResolvedValue({})
+    deleteMessage: jest.fn().mockImplementation((params) => ({
+      promise: jest.fn().mockResolvedValue({}),
     })),
-    changeMessageVisibility: jest.fn().mockImplementation(params => ({
-      promise: jest.fn().mockResolvedValue({})
+    changeMessageVisibility: jest.fn().mockImplementation((params) => ({
+      promise: jest.fn().mockResolvedValue({}),
     })),
-    getQueueAttributes: jest.fn().mockImplementation(params => ({
+    getQueueAttributes: jest.fn().mockImplementation((params) => ({
       promise: jest.fn().mockResolvedValue({
         Attributes: {
           ApproximateNumberOfMessages: '5',
           ApproximateNumberOfMessagesNotVisible: '2',
           ApproximateNumberOfMessagesDelayed: '0',
           CreatedTimestamp: Math.floor(Date.now() / 1000).toString(),
-          LastModifiedTimestamp: Math.floor(Date.now() / 1000).toString()
-        }
-      })
-    }))
-  }))
+          LastModifiedTimestamp: Math.floor(Date.now() / 1000).toString(),
+        },
+      }),
+    })),
+  })),
 }));
 
 describe('Job Queue System Integration', () => {
@@ -44,7 +44,9 @@ describe('Job Queue System Integration', () => {
 
   beforeAll(async () => {
     // Ensure tables exist
-    await db.query(`
+    await db
+      .query(
+        `
       CREATE TABLE IF NOT EXISTS jobs (
         id UUID PRIMARY KEY,
         user_id VARCHAR(255),
@@ -61,7 +63,9 @@ describe('Job Queue System Integration', () => {
         next_retry_at TIMESTAMP,
         updated_at TIMESTAMP
       );
-    `).catch(() => {});
+    `
+      )
+      .catch(() => {});
   });
 
   afterEach(async () => {
@@ -75,7 +79,7 @@ describe('Job Queue System Integration', () => {
       const job = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       testJobId = job.id;
 
@@ -101,7 +105,7 @@ describe('Job Queue System Integration', () => {
     test('should register job handler', () => {
       const handler = jest.fn();
       JobProcessor.registerHandler('test-job-type', handler);
-      
+
       expect(JobProcessor.handlers.has('test-job-type')).toBe(true);
     });
 
@@ -119,9 +123,12 @@ describe('Job Queue System Integration', () => {
 
     test('should have default handlers for job types', () => {
       // Register default handlers
-      JobProcessor.registerHandler(JOB_TYPE.THUMBNAIL_GENERATION, async (jobId, payload, userId) => {
-        return { status: 'completed' };
-      });
+      JobProcessor.registerHandler(
+        JOB_TYPE.THUMBNAIL_GENERATION,
+        async (jobId, payload, userId) => {
+          return { status: 'completed' };
+        }
+      );
 
       expect(JobProcessor.handlers.has(JOB_TYPE.THUMBNAIL_GENERATION)).toBe(true);
     });
@@ -133,7 +140,7 @@ describe('Job Queue System Integration', () => {
       const job = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       testJobId = job.id;
 
@@ -143,20 +150,23 @@ describe('Job Queue System Integration', () => {
       await QueueService.sendJob(job.id);
 
       // Register handler and process
-      JobProcessor.registerHandler(JOB_TYPE.THUMBNAIL_GENERATION, async (jobId, payload, userId) => {
-        return { thumbnailsGenerated: 3 };
-      });
+      JobProcessor.registerHandler(
+        JOB_TYPE.THUMBNAIL_GENERATION,
+        async (jobId, payload, userId) => {
+          return { thumbnailsGenerated: 3 };
+        }
+      );
 
       // Update status to processing
       let updated = await Job.updateStatus(job.id, JOB_STATUS.PROCESSING, {
-        startedAt: new Date()
+        startedAt: new Date(),
       });
       expect(updated.status).toBe(JOB_STATUS.PROCESSING);
 
       // Mark as completed
       updated = await Job.updateStatus(job.id, JOB_STATUS.COMPLETED, {
         results: { thumbnailsGenerated: 3 },
-        completedAt: new Date()
+        completedAt: new Date(),
       });
       expect(updated.status).toBe(JOB_STATUS.COMPLETED);
       expect(updated.results.thumbnailsGenerated).toBe(3);
@@ -167,13 +177,13 @@ describe('Job Queue System Integration', () => {
         userId: testUserId,
         jobType: JOB_TYPE.VIDEO_PROCESSING,
         payload: { videoUrl: 'https://example.com/video.mp4' },
-        maxRetries: 3
+        maxRetries: 3,
       });
       testJobId = job.id;
 
       // Mark as failed
       let updated = await Job.updateStatus(job.id, JOB_STATUS.FAILED, {
-        errorMessage: 'Processing failed'
+        errorMessage: 'Processing failed',
       });
       expect(updated.status).toBe(JOB_STATUS.FAILED);
 
@@ -187,21 +197,21 @@ describe('Job Queue System Integration', () => {
         userId: testUserId,
         jobType: JOB_TYPE.BULK_EXPORT,
         payload: { episodeIds: [uuidv4()] },
-        maxRetries: 1
+        maxRetries: 1,
       });
       testJobId = job.id;
 
       // Simulate retries
       await Job.updateStatus(job.id, JOB_STATUS.FAILED, {
-        errorMessage: 'Attempt 1 failed'
+        errorMessage: 'Attempt 1 failed',
       });
       await Job.retry(job.id); // retryCount = 1
 
       // Next failure should not allow retry
       await Job.updateStatus(job.id, JOB_STATUS.FAILED, {
-        errorMessage: 'Attempt 2 failed'
+        errorMessage: 'Attempt 2 failed',
       });
-      
+
       // Verify job is failed and won't retry
       const final = await Job.getById(job.id);
       expect(final.status).toBe(JOB_STATUS.FAILED);
@@ -219,7 +229,7 @@ describe('Job Queue System Integration', () => {
       const job = await Job.create({
         userId: testUserId,
         jobType: 'unknown-type',
-        payload: { test: true }
+        payload: { test: true },
       });
       testJobId = job.id;
 
@@ -241,7 +251,7 @@ describe('Job Queue System Integration', () => {
       const job = await Job.create({
         userId: testUserId,
         jobType: JOB_TYPE.THUMBNAIL_GENERATION,
-        payload: { episodeId: uuidv4() }
+        payload: { episodeId: uuidv4() },
       });
       testJobId = job.id;
 

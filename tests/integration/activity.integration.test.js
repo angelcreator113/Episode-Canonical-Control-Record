@@ -110,9 +110,7 @@ describe('Activity Integration Tests', () => {
       });
 
       // Get resource-specific activity
-      const resourceRes = await request(app).get(
-        '/api/v1/activity/resource/episode/ep-1'
-      );
+      const resourceRes = await request(app).get('/api/v1/activity/resource/episode/ep-1');
 
       expect(resourceRes.status).toBe(200);
       expect(resourceRes.body.data.resourceType).toBe('episode');
@@ -132,9 +130,7 @@ describe('Activity Integration Tests', () => {
       });
 
       // Search
-      const searchRes = await request(app)
-        .get('/api/v1/activity/search')
-        .query({ q: 'search' });
+      const searchRes = await request(app).get('/api/v1/activity/search').query({ q: 'search' });
 
       expect(searchRes.status).toBe(200);
       expect(searchRes.body.status).toBe('success');
@@ -155,12 +151,10 @@ describe('Activity Integration Tests', () => {
       const now = new Date();
       const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);
 
-      const feedRes = await request(app)
-        .get('/api/v1/activity/feed')
-        .query({
-          startDate: now.toISOString(),
-          endDate: tomorrow.toISOString(),
-        });
+      const feedRes = await request(app).get('/api/v1/activity/feed').query({
+        startDate: now.toISOString(),
+        endDate: tomorrow.toISOString(),
+      });
 
       expect(feedRes.status).toBe(200);
     });
@@ -197,25 +191,19 @@ describe('Activity Integration Tests', () => {
       }
 
       // Get first page
-      const page1 = await request(app)
-        .get('/api/v1/activity/feed')
-        .query({ limit: 5, offset: 0 });
+      const page1 = await request(app).get('/api/v1/activity/feed').query({ limit: 5, offset: 0 });
 
       expect(page1.status).toBe(200);
       expect(page1.body.data.pagination.limit).toBe(5);
 
       // Get second page
-      const page2 = await request(app)
-        .get('/api/v1/activity/feed')
-        .query({ limit: 5, offset: 5 });
+      const page2 = await request(app).get('/api/v1/activity/feed').query({ limit: 5, offset: 5 });
 
       expect(page2.status).toBe(200);
     });
 
     it('should enforce maximum limits', async () => {
-      const res = await request(app)
-        .get('/api/v1/activity/feed')
-        .query({ limit: 500 });
+      const res = await request(app).get('/api/v1/activity/feed').query({ limit: 500 });
 
       expect(res.status).toBe(200);
       // Limit should be capped at 200
@@ -257,9 +245,7 @@ describe('Activity Integration Tests', () => {
     });
 
     it('should handle missing resource gracefully', async () => {
-      const res = await request(app).get(
-        '/api/v1/activity/resource/episode/nonexistent'
-      );
+      const res = await request(app).get('/api/v1/activity/resource/episode/nonexistent');
 
       expect(res.status).toBeGreaterThanOrEqual(200);
     });
