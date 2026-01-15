@@ -27,6 +27,10 @@ jobs:
     
     - name: Run tests
       run: npm test --if-present
+      env:
+        NODE_ENV: test
+        DATABASE_URL: postgresql://postgres:password@localhost:5432/episode_metadata_test
+        JWT_SECRET: test-secret-key-minimum-32-characters-long
     
     - name: Check code style
       run: npm run format:check --if-present
