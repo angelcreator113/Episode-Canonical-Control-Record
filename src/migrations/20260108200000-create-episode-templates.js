@@ -202,7 +202,7 @@ module.exports = {
     console.log('✅ episode_templates table created with default templates');
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     await queryInterface.dropTable('episode_templates');
   },
 };

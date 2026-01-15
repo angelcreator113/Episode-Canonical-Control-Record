@@ -3,198 +3,70 @@
 > eslint src/ tests/
 
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\app.js
-   18:5  warning  Unexpected console statement  no-console
-   25:9  warning  Unexpected console statement  no-console
-   31:7  warning  Unexpected console statement  no-console
-   41:7  warning  Unexpected console statement  no-console
-   60:9  warning  Unexpected console statement  no-console
-   71:3  warning  Unexpected console statement  no-console
-  208:5  warning  Unexpected console statement  no-console
-  209:5  warning  Unexpected console statement  no-console
-  210:5  warning  Unexpected console statement  no-console
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\middleware\auditLog.js
+  125:38  error  'responseData' is defined but never used. Allowed unused args must match /^_/u     no-unused-vars
+  138:35  error  'action' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\config\sequelize.js
-  14:51  warning  Unexpected console statement  no-console
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\middleware\auth.js
+   3:7   error  'cognito' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+  26:11  error  'keyUrl' is assigned a value but never used. Allowed unused vars must match /^_/u   no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\sceneController.js
-  128:5  warning  Unexpected console statement  no-console
-  129:5  warning  Unexpected console statement  no-console
-  130:5  warning  Unexpected console statement  no-console
-  131:5  warning  Unexpected console statement  no-console
-  132:5  warning  Unexpected console statement  no-console
-  152:5  warning  Unexpected console statement  no-console
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000001-create-episodes.js
+  124:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\controllers\scriptController.js
-   17:5   warning  Unexpected console statement  no-console
-   28:5   warning  Unexpected console statement  no-console
-   70:5   warning  Unexpected console statement  no-console
-   80:7   warning  Unexpected console statement  no-console
-   84:5   warning  Unexpected console statement  no-console
-  146:7   warning  Unexpected console statement  no-console
-  154:7   warning  Unexpected console statement  no-console
-  187:5   warning  Unexpected console statement  no-console
-  188:5   warning  Unexpected console statement  no-console
-  216:11  warning  Unexpected console statement  no-console
-  220:9   warning  Unexpected console statement  no-console
-  243:5   warning  Unexpected console statement  no-console
-  271:7   warning  Unexpected console statement  no-console
-  278:7   warning  Unexpected console statement  no-console
-  280:7   warning  Unexpected console statement  no-console
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000002-create-metadata-storage.js
+  66:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260111000001-fix-scenes-unique-constraint.js
-  16:7  warning  Unexpected console statement  no-console
-  36:7  warning  Unexpected console statement  no-console
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000003-create-thumbnails.js
+  86:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\models\index.js
-   18:49  warning  Unexpected console statement  no-console
-  175:55  warning  Unexpected console statement  no-console
-  179:7   warning  Unexpected console statement  no-console
-  193:7   warning  Unexpected console statement  no-console
-  207:7   warning  Unexpected console statement  no-console
-  224:7   warning  Unexpected console statement  no-console
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000004-create-processing-queue.js
+  91:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\utils\logger.js
-  30:7  warning  Unexpected console statement  no-console
-  36:7  warning  Unexpected console statement  no-console
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20240101000005-create-activity-logs.js
+  72:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\api\endpoints.test.js
-   7:7   error  'request' is defined but never used. Allowed unused vars must match /^_/u               no-unused-vars
-   8:7   error  'adminToken' is assigned a value but never used. Allowed unused vars must match /^_/u   no-unused-vars
-   8:19  error  'editorToken' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-   8:32  error  'viewerToken' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  16:18  error  'testUtils' is not defined                                                              no-undef
-  17:19  error  'testUtils' is not defined                                                              no-undef
-  18:19  error  'testUtils' is not defined                                                              no-undef
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260106000001-add-categories-to-episodes.js
+  22:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\integration\scenes.integration.test.js
-  5:7  error  'sequelize' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108183816-update-assets-table.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\controllers\episode.test.js
-   16:25  error  'mockNext' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  159:49  error  'id' is defined but never used. Allowed unused args must match /^_/u                 no-unused-vars
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108184514-update-assets-table.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\controllers\metadata.test.js
-  11:9   error  'NotFoundError' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  11:24  error  'ValidationError' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108185054-update-assets-table.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\controllers\processing.test.js
-  11:9  error  'NotFoundError' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108200000-create-episode-templates.js
+  205:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\controllers\thumbnail.test.js
-  11:9  error  'NotFoundError' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108204926-enhance-episode-templates.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog-additional.test.js
-  6:9  error  'ActivityLog' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260108205124-enhance-episode-templates.js
+   5:13  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+   5:29  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
+  14:15  error  'queryInterface' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
+  14:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u       no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auditLog.test.js
-   28:13  error  'result' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  823:11  error  'originalSend' is never reassigned. Use 'const' instead                            prefer-const
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\20260109132556-create-shows.js
+  124:31  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auth-gaps.test.js
-  21:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  41:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  50:13  error  'req' is assigned a value but never used. Allowed unused vars must match /^_/u         no-unused-vars
-  53:13  error  'res' is assigned a value but never used. Allowed unused vars must match /^_/u         no-unused-vars
-  54:13  error  'next' is assigned a value but never used. Allowed unused vars must match /^_/u        no-unused-vars
-  62:13  error  'req' is assigned a value but never used. Allowed unused vars must match /^_/u         no-unused-vars
-  67:13  error  'res' is assigned a value but never used. Allowed unused vars must match /^_/u         no-unused-vars
-  68:13  error  'next' is assigned a value but never used. Allowed unused vars must match /^_/u        no-unused-vars
+C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\src\migrations\YYYYMMDDHHMMSS-update-assets-table.js
+  138:32  error  'Sequelize' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
 
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\auth.test.js
-    9:16  error  'mockRes' is assigned a value but never used. Allowed unused vars must match /^_/u   no-unused-vars
-    9:25  error  'mockNext' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-   12:15  error  'testUtils' is not defined                                                           no-undef
-   13:15  error  'testUtils' is not defined                                                           no-undef
-   14:16  error  'testUtils' is not defined                                                           no-undef
-   19:21  error  'testUtils' is not defined                                                           no-undef
-   66:21  error  'testUtils' is not defined                                                           no-undef
-   77:21  error  'testUtils' is not defined                                                           no-undef
-   85:21  error  'testUtils' is not defined                                                           no-undef
-   93:21  error  'testUtils' is not defined                                                           no-undef
-  101:21  error  'testUtils' is not defined                                                           no-undef
-  110:22  error  'testUtils' is not defined                                                           no-undef
-  133:13  error  'token' is assigned a value but never used. Allowed unused vars must match /^_/u     no-unused-vars
-  133:21  error  'testUtils' is not defined                                                           no-undef
-  180:21  error  'testUtils' is not defined                                                           no-undef
-  235:21  error  'testUtils' is not defined                                                           no-undef
-  259:24  error  'testUtils' is not defined                                                           no-undef
-  287:19  error  'testUtils' is not defined                                                           no-undef
-  329:19  error  'testUtils' is not defined                                                           no-undef
-  348:32  error  'testUtils' is not defined                                                           no-undef
-  366:19  error  'testUtils' is not defined                                                           no-undef
-  384:19  error  'testUtils' is not defined                                                           no-undef
-  404:19  error  'testUtils' is not defined                                                           no-undef
-  430:19  error  'testUtils' is not defined                                                           no-undef
-  454:19  error  'testUtils' is not defined                                                           no-undef
-  471:19  error  'testUtils' is not defined                                                           no-undef
-  550:19  error  'testUtils' is not defined                                                           no-undef
-
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\errorHandler.test.js
-  422:38  error  'req' is defined but never used. Allowed unused args must match /^_/u             no-unused-vars
-  422:43  error  'res' is defined but never used. Allowed unused args must match /^_/u             no-unused-vars
-  422:48  error  'next' is defined but never used. Allowed unused args must match /^_/u            no-unused-vars
-  427:13  error  'error' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  435:48  error  'next' is defined but never used. Allowed unused args must match /^_/u            no-unused-vars
-
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\middleware\rbac.test.js
-    9:16  error  'mockRes' is assigned a value but never used. Allowed unused vars must match /^_/u       no-unused-vars
-    9:25  error  'mockNext' is assigned a value but never used. Allowed unused vars must match /^_/u      no-unused-vars
-   12:15  error  'testUtils' is not defined                                                               no-undef
-   13:15  error  'testUtils' is not defined                                                               no-undef
-   14:16  error  'testUtils' is not defined                                                               no-undef
-   20:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   28:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   36:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   44:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   52:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   60:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   68:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   76:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   84:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-   92:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  100:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  108:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  132:15  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  146:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  151:13  error  'allowedRoles' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  158:13  error  'allowedRoles' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  165:13  error  'allowedRoles' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  172:13  error  'allowedRoles' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  182:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  190:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  198:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  206:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  216:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  224:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  231:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  238:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  246:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  257:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  270:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  282:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  293:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-  301:13  error  'middleware' is assigned a value but never used. Allowed unused vars must match /^_/u    no-unused-vars
-
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\models\activityLog.test.js
-  151:9   error  'fail' is not defined                                                  no-undef
-  199:9   error  'fail' is not defined                                                  no-undef
-  242:9   error  'fail' is not defined                                                  no-undef
-  282:9   error  'fail' is not defined                                                  no-undef
-  325:9   error  'fail' is not defined                                                  no-undef
-  432:40  error  'log' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
-
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\models\episode.test.js
-  7:7  error  'Episode' is defined but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  8:7  error  'db' is defined but never used. Allowed unused vars must match /^_/u       no-unused-vars
-
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\models\metadata-methods.test.js
-  201:67  error  'duration' is defined but never used. Allowed unused args must match /^_/u  no-unused-vars
-
-C:\Users\12483\prime studios\BRD\Episode-Canonical-Control-Record\tests\unit\services\S3Service.test.js
-  22:7   error  'S3Service' is assigned a value but never used. Allowed unused vars must match /^_/u  no-unused-vars
-  61:30  error  'method' is defined but never used. Allowed unused args must match /^_/u              no-unused-vars
-  61:38  error  'params' is defined but never used. Allowed unused args must match /^_/u              no-unused-vars
-
-Γ£û 147 problems (106 errors, 41 warnings)
+Γ£û 33 problems (33 errors, 0 warnings)
 

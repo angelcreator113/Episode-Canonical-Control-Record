@@ -1,6 +1,6 @@
 const { CognitoIdentityServiceProvider } = require('aws-sdk');
 
-const cognito = new CognitoIdentityServiceProvider({
+const _cognito = new CognitoIdentityServiceProvider({
   region: process.env.COGNITO_REGION || 'us-east-1',
 });
 
@@ -23,7 +23,7 @@ const verifyToken = async (token) => {
 
     // Get the Cognito public keys for verification
     // In production, these should be cached and refreshed periodically
-    const keyUrl = `https://cognito-idp.${process.env.COGNITO_REGION || 'us-east-1'}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
+    const _keyUrl = `https://cognito-idp.${process.env.COGNITO_REGION || 'us-east-1'}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
     
     // Note: In a production implementation, you would:
     // 1. Fetch and cache JWKS from Cognito
