@@ -1,8 +1,8 @@
 const request = require('supertest');
 const app = require('../../app');
-const OpenSearchService = require('../../../src/services/OpenSearchService');
+const OpenSearchService = require('../../src/services/OpenSearchService');
 
-jest.mock('../../../src/services/OpenSearchService');
+jest.mock('../../src/services/OpenSearchService');
 
 describe('Search Integration Tests - Phase 2C', () => {
   let token;
