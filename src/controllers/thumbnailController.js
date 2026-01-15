@@ -21,7 +21,7 @@ module.exports = {
       const { page = 1, limit = 20, episodeId, type } = req.query;
       const offset = (page - 1) * limit;
 
-      let where = {};
+      const where = {};
       if (episodeId) where.episodeId = parseInt(episodeId);
       if (type) where.thumbnailType = type;
 

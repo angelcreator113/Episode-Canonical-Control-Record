@@ -11,7 +11,7 @@
  */
 
 const { Sequelize } = require('sequelize');
-const path = require('path');
+// const _path = require('path'); // Removed: unused import
 require('dotenv').config();
 
 // Load database configuration

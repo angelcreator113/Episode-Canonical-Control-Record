@@ -5,7 +5,7 @@
  */
 
 const ActivityIndexService = require('../services/ActivityIndexService');
-const ActivityService = require('../services/ActivityService');
+const _ActivityService = require('../services/ActivityService');
 const logger = require('../services/Logger');
 const { getPool } = require('../config/database');
 
