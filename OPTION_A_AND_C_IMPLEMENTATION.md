@@ -188,8 +188,8 @@ Once HTTPS is working, set up ALB for high-availability.
 ### Step 8: Get Required Information
 
 ```powershell
-$env:AWS_ACCESS_KEY_ID="AKIAZI2LDARQ4MYI6XXY"
-$env:AWS_SECRET_ACCESS_KEY="bfS5sS02xVTBrX9mkSxTvt8vmZDKRfY1TeQ+zRjm"
+$env:AWS_ACCESS_KEY_ID="your-access-key-id"
+$env:AWS_SECRET_ACCESS_KEY="your-secret-access-key"
 $env:AWS_REGION="us-east-1"
 
 # Get VPC ID
