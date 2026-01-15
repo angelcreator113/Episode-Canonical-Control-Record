@@ -1,14 +1,50 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import './Home.css';
 
 const Home = () => {
-  const stats = {
-    total: 6,
-    draft: 2,
-    published: 2,
-    inProgress: 1
+  const [stats, setStats] = useState({
+    total: 0,
+    draft: 0,
+    published: 0,
+    inProgress: 0
+  });
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    loadStats();
+  }, []);
+
+  const loadStats = async () => {
+    try {
+      const response = await fetch('http://localhost:3002/api/v1/episodes?limit=100');
+      const data = await response.json();
+      
+      if (data.success && data.data) {
+        const episodes = data.data;
+        setStats({
+          total: episodes.length,
+          draft: episodes.filter(e => e.status === 'DRAFT').length,
+          published: episodes.filter(e => e.status === 'PUBLISHED').length,
+          inProgress: episodes.filter(e => e.status === 'IN_PROGRESS').length
+        });
+      }
+    } catch (error) {
+      console.error('Failed to load stats:', error);
+      // Use defaults
+      setStats({ total: 6, draft: 2, published: 2, inProgress: 1 });
+    } finally {
+      setLoading(false);
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="home-page-modern loading">
+        <div className="spinner"></div>
+      </div>
+    );
+  }
 
   return (
     <div className="home-page-modern">
@@ -20,23 +56,31 @@ const Home = () => {
       <section className="stats-grid">
         <div className="stat-card total">
           <span className="stat-icon">📺</span>
-          <span className="stat-value">{stats.total}</span>
-          <span className="stat-label">Total Episodes</span>
+          <div className="stat-content">
+            <span className="stat-value">{stats.total}</span>
+            <span className="stat-label">Total Episodes</span>
+          </div>
         </div>
         <div className="stat-card draft">
           <span className="stat-icon">📝</span>
-          <span className="stat-value">{stats.draft}</span>
-          <span className="stat-label">Draft</span>
+          <div className="stat-content">
+            <span className="stat-value">{stats.draft}</span>
+            <span className="stat-label">Draft</span>
+          </div>
         </div>
         <div className="stat-card published">
           <span className="stat-icon">✅</span>
-          <span className="stat-value">{stats.published}</span>
-          <span className="stat-label">Published</span>
+          <div className="stat-content">
+            <span className="stat-value">{stats.published}</span>
+            <span className="stat-label">Published</span>
+          </div>
         </div>
         <div className="stat-card progress">
           <span className="stat-icon">🎬</span>
-          <span className="stat-value">{stats.inProgress}</span>
-          <span className="stat-label">In Progress</span>
+          <div className="stat-content">
+            <span className="stat-value">{stats.inProgress}</span>
+            <span className="stat-label">In Progress</span>
+          </div>
         </div>
       </section>
 
