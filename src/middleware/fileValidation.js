@@ -208,7 +208,8 @@ async function checkStorageQuota(req, res, next) {
     const STORAGE_QUOTA = 10 * 1024 * 1024 * 1024; // 10GB
 
     const FileModel = require('../models/file');
-    const currentSize = await FileModel.getTotalSizeByUserId(userId);
+    const currentSizeResult = await FileModel.getTotalSizeByUserId(userId);
+    const currentSize = Number(currentSizeResult) || 0;
     const incomingSize = req.fileValidation?.size || 0;
 
     if (currentSize + incomingSize > STORAGE_QUOTA) {

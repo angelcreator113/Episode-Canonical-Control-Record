@@ -50,15 +50,15 @@ describe('File Validation Middleware', () => {
 
   describe('ALLOWED_EXTENSIONS', () => {
     test('should include video extensions', () => {
-      expect(ALLOWED_EXTENSIONS).toContain('mp4');
-      expect(ALLOWED_EXTENSIONS).toContain('mkv');
-      expect(ALLOWED_EXTENSIONS).toContain('webm');
+      expect(ALLOWED_EXTENSIONS).toContain('.mp4');
+      expect(ALLOWED_EXTENSIONS).toContain('.mkv');
+      expect(ALLOWED_EXTENSIONS).toContain('.webm');
     });
 
     test('should include image extensions', () => {
-      expect(ALLOWED_EXTENSIONS).toContain('jpg');
-      expect(ALLOWED_EXTENSIONS).toContain('png');
-      expect(ALLOWED_EXTENSIONS).toContain('gif');
+      expect(ALLOWED_EXTENSIONS).toContain('.jpg');
+      expect(ALLOWED_EXTENSIONS).toContain('.png');
+      expect(ALLOWED_EXTENSIONS).toContain('.gif');
     });
 
     test('should not include dangerous extensions', () => {
@@ -174,7 +174,7 @@ describe('File Validation Middleware', () => {
     test('should extract file extension correctly', (done) => {
       req.file.originalname = 'Video.With.Dots.mp4';
       validateFileUpload(req, res, next);
-      expect(req.fileValidation.extension).toBe('mp4');
+      expect(req.fileValidation.extension).toBe('.mp4');
       done();
     });
   });
