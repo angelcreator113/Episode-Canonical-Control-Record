@@ -99,7 +99,7 @@ class FilterService {
 
     // Asset filter (composition must have ALL specified assets)
     if (Array.isArray(assets) && assets.length > 0) {
-      assets.forEach((assetId, idx) => {
+      assets.forEach((assetId, _idx) => {
         const conditions = [
           `tc.background_frame_asset_id = $${paramIndex}`,
           `tc.lala_asset_id = $${paramIndex}`,

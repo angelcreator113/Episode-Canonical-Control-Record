@@ -1,7 +1,7 @@
 'use strict';
 
 module.exports = {
-  up: async (queryInterface, Sequelize) => {
+  up: async (queryInterface, _Sequelize) => {
     await queryInterface.bulkInsert('episode_templates', [
       {
         id: '00000000-0000-0000-0000-000000000004',
@@ -44,7 +44,7 @@ module.exports = {
     ]);
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface, _Sequelize) => {
     await queryInterface.bulkDelete('episode_templates', {
       id: [
         '00000000-0000-0000-0000-000000000004',

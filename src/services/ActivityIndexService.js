@@ -383,7 +383,7 @@ class ActivityIndexService {
 
       // Get total count
       let countSql = 'SELECT COUNT(*) as count FROM activity_logs WHERE 1=1';
-      let countParams = [];
+      const countParams = [];
       let countIndex = 1;
 
       if (query && query.trim().length > 0) {

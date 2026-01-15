@@ -12,7 +12,7 @@
 const express = require('express');
 const multer = require('multer');
 const AssetService = require('../services/AssetService');
-const { models } = require('../models');
+const { _models } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
 const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
 
