@@ -4,6 +4,34 @@
 // Tests for core application functionality
 // Run with: npm run test:unit
 
+// Mock AWS SDK before app loads
+jest.mock('@aws-sdk/client-s3', () => ({
+  S3Client: jest.fn(),
+  GetObjectCommand: jest.fn(),
+  PutObjectCommand: jest.fn(),
+  DeleteObjectCommand: jest.fn(),
+}));
+
+jest.mock('aws-sdk', () => ({
+  CognitoIdentityServiceProvider: jest.fn(() => ({
+    getSigningCertificate: jest.fn().mockReturnValue({
+      promise: jest.fn().mockResolvedValue({
+        Certificate: `-----BEGIN CERTIFICATE-----
+test
+-----END CERTIFICATE-----`,
+      }),
+    }),
+  })),
+  S3: jest.fn(() => ({
+    getSignedUrl: jest.fn((op, params, cb) => cb(null, 'https://mock-s3-url')),
+  })),
+  SQS: jest.fn(() => ({
+    sendMessage: jest.fn().mockReturnValue({
+      promise: jest.fn().mockResolvedValue({ MessageId: 'mock-id' }),
+    }),
+  })),
+}));
+
 describe('Health Check Endpoint', () => {
   let app;
 
@@ -24,3 +52,4 @@ describe('Health Check Endpoint', () => {
       .end(done);
   });
 });
+
