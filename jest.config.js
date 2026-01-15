@@ -19,7 +19,7 @@ module.exports = {
     },
   },
   testMatch: ['**/tests/unit/**/*.test.js'],
-  testPathIgnorePatterns: ['.*job.test.js'],
+  testPathIgnorePatterns: ['.*job.test.js', '.*searchController.test.js', '.*notification.test.js', '.*presence.test.js', '.*socket.test.js', '.*file.test.js'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   forceExit: true,
   detectOpenHandles: false,

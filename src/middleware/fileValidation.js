@@ -168,6 +168,16 @@ function validateBatchFileUpload(req, res, next) {
       });
     }
 
+    // Reject batch if any file has validation errors
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        message: 'Batch validation failed - some files have errors',
+        code: 'BATCH_VALIDATION_FAILED',
+        errors,
+      });
+    }
+
     if (validatedFiles.length === 0) {
       return res.status(400).json({
         success: false,
@@ -214,7 +224,7 @@ async function checkStorageQuota(req, res, next) {
 
     if (currentSize + incomingSize > STORAGE_QUOTA) {
       const availableSpace = STORAGE_QUOTA - currentSize;
-      return res.status(413).json({
+      return res.status(400).json({
         success: false,
         message: 'Storage quota exceeded',
         code: 'QUOTA_EXCEEDED',
