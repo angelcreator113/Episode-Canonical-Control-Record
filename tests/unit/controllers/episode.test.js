@@ -108,7 +108,7 @@ describe('Episode Controller - Real Tests', () => {
       );
     });
 
-    test.skip('should log activity', async () => {
+    test('should log activity', async () => {
       models.Episode.findAndCountAll = jest.fn().mockResolvedValue({
         count: 0,
         rows: [],
@@ -159,7 +159,7 @@ describe('Episode Controller - Real Tests', () => {
       expect(mockRes.status).toHaveBeenCalledWith(404);
     });
 
-    test.skip('should log viewing activity', async () => {
+    test('should log viewing activity', async () => {
       models.Episode.findByPk = jest.fn().mockResolvedValue({ id: 1 });
 
       mockReq.params = { id: '1' };
@@ -223,7 +223,7 @@ describe('Episode Controller - Real Tests', () => {
       );
     });
 
-    test.skip('should log creation activity', async () => {
+    test('should log creation activity', async () => {
       const episode = {
         id: 1,
         showName: 'Test',
@@ -292,7 +292,7 @@ describe('Episode Controller - Real Tests', () => {
       await expect(episodeController.updateEpisode(mockReq, mockRes)).rejects.toThrow();
     });
 
-    test.skip('should log update activity', async () => {
+    test('should log update activity', async () => {
       const mockEpisode = {
         id: 1,
         toJSON: jest.fn().mockReturnValue({
@@ -350,7 +350,7 @@ describe('Episode Controller - Real Tests', () => {
       await expect(episodeController.deleteEpisode(mockReq, mockRes)).rejects.toThrow();
     });
 
-    test.skip('should log activity', async () => {
+    test('should log activity', async () => {
       const mockEpisode = {
         id: 1,
         toJSON: jest.fn().mockReturnValue({ id: 1 }),
@@ -440,7 +440,7 @@ describe('Episode Controller - Real Tests', () => {
       await expect(episodeController.enqueueEpisode(mockReq, mockRes)).rejects.toThrow();
     });
 
-    test.skip('should log activity', async () => {
+    test('should log activity', async () => {
       const mockEpisode = {
         id: 1,
         updateStatus: jest.fn().mockResolvedValue(true),

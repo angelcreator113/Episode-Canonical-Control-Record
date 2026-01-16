@@ -43,7 +43,7 @@ const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.p
  */
 let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
-let Show;
+let Show, Scene;
 
 try {
   // Core models
@@ -64,6 +64,7 @@ try {
 
   // Phase 6 models
   Show = require('./Show')(sequelize);
+  Scene = require('./Scene')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -86,6 +87,7 @@ const requiredModels = {
   ThumbnailTemplate,
   EpisodeTemplate,
   Show,
+  Scene,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -162,6 +164,19 @@ Episode.hasMany(ThumbnailComposition, {
 });
 
 ThumbnailComposition.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Episode → Scene (1:N)
+Episode.hasMany(Scene, {
+  foreignKey: 'episode_id',
+  as: 'scenes',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+
+Scene.belongsTo(Episode, {
   foreignKey: 'episode_id',
   as: 'episode',
 });
@@ -256,6 +271,7 @@ const db = {
     ThumbnailComposition,
     ThumbnailTemplate,
     EpisodeTemplate,
+    Scene,
   },
 
   /**
@@ -434,4 +450,4 @@ module.exports.ThumbnailComposition = ThumbnailComposition;
 module.exports.ThumbnailTemplate = ThumbnailTemplate;
 module.exports.EpisodeTemplate = EpisodeTemplate;
 module.exports.Show = Show;
-module.exports.EpisodeTemplate = EpisodeTemplate;
+module.exports.Scene = Scene;

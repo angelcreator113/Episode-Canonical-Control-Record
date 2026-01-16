@@ -68,6 +68,14 @@ module.exports = {
         ],
       });
 
+      // Log activity
+      await logger.logAction(req.user?.id, 'view', 'episode', 'all', {
+        count,
+        filters: { status, sort },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+
       res.json({
         data: rows,
         pagination: {
@@ -114,6 +122,13 @@ module.exports = {
           id,
         });
       }
+
+      // Log viewing activity
+      await logger.logAction(req.user?.id, 'view', 'episode', id, {
+        episodeTitle: episode.title,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
 
       res.json({
         data: episode,
@@ -191,6 +206,13 @@ module.exports = {
         rating: rating ? parseFloat(rating) : null,
         genre,
         processingStatus: 'pending',
+      });
+
+      // Log creation activity
+      await logger.logAction(req.user?.id, 'create', 'episode', episode.id, {
+        newValues: episode.toJSON(),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
       });
 
       // ✅ SAFE: Phase 3A Integration with proper checks

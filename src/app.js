@@ -158,6 +158,7 @@ app.use('/api/v1/auth', authRoutes);
 let episodeRoutes, thumbnailRoutes, metadataRoutes, processingRoutes;
 let filesRoutes, searchRoutes, jobsRoutes;
 let assetRoutes, compositionRoutes, templateRoutes;
+let sceneRoutes;
 
 try {
   episodeRoutes = require('./routes/episodes');
@@ -241,6 +242,15 @@ try {
   templateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// Scene routes
+try {
+  sceneRoutes = require('./routes/scenes');
+  console.log('✓ Scenes routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load scenes routes:', e.message);
+  sceneRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 // Phase 3A controllers (real-time notifications)
 let notificationController, activityController, presenceController, socketController;
 
@@ -311,6 +321,9 @@ app.use('/api/v1/jobs', jobsRoutes);
 app.use('/api/v1/assets', assetRoutes);
 app.use('/api/v1/compositions', compositionRoutes);
 app.use('/api/v1/templates', templateRoutes);
+
+// Scene routes
+app.use('/api/v1/scenes', sceneRoutes);
 
 // Phase 6 routes (Shows)
 const showRoutes = require('./routes/shows');

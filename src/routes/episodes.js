@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const episodeController = require('../controllers/episodeController');
+const sceneController = require('../controllers/sceneController');
 const { _authenticateToken } = require('../middleware/auth');
 const { _requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -52,6 +53,32 @@ router.post(
   // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
   // requirePermission('episodes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
   asyncHandler(episodeController.enqueueEpisode)
+);
+
+/**
+ * Episode Scenes Management
+ */
+
+// GET /api/v1/episodes/:episodeId/scenes - Get all scenes for episode
+router.get(
+  '/:episodeId/scenes',
+  validateUUIDParam('episodeId'),
+  asyncHandler(sceneController.getEpisodeScenes)
+);
+
+// PUT /api/v1/episodes/:episodeId/scenes/reorder - Reorder scenes
+router.put(
+  '/:episodeId/scenes/reorder',
+  validateUUIDParam('episodeId'),
+  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  asyncHandler(sceneController.reorderScenes)
+);
+
+// GET /api/v1/episodes/:episodeId/scenes/stats - Get scene statistics
+router.get(
+  '/:episodeId/scenes/stats',
+  validateUUIDParam('episodeId'),
+  asyncHandler(sceneController.getSceneStats)
 );
 
 module.exports = router;

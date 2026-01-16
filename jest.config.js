@@ -18,7 +18,7 @@ module.exports = {
       statements: 20,
     },
   },
-  testMatch: ['**/tests/unit/**/*.test.js'],
+  testMatch: ['**/tests/unit/**/*.test.js', '**/tests/integration/**/*.test.js'],
   testPathIgnorePatterns: ['jobController.test.js', 'job.test.js', 'file.test.js', 'searchController.test.js', 'notification.test.js', 'presence.test.js', 'socket.test.js', 'fileController.test.js'],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   forceExit: true,
