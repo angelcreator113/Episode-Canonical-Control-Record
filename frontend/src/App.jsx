@@ -1,7 +1,11 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './hooks/useAuth';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { AuthProvider, useAuth } from './contexts/AuthContext';
 import authService from './services/authService';
+
+// Contexts
+import { BulkSelectionProvider } from './contexts/BulkSelectionContext';
+import { SearchFiltersProvider } from './contexts/SearchFiltersContext';
 
 // Pages
 import Login from './pages/Login';
@@ -15,6 +19,7 @@ import AssetManager from './pages/AssetManager';
 // import CompositionManagement from './pages/CompositionManagement'; // Not needed for episode creation
 import ThumbnailComposer from './pages/ThumbnailComposer';
 import ThumbnailGallery from './pages/ThumbnailGallery';
+import SceneComposer from './pages/Scenes/SceneComposer';
 import AdminPanel from './pages/AdminPanel';
 import TemplateManagement from './pages/TemplateManagement';
 import AuditLogViewer from './pages/AuditLogViewer';
@@ -45,12 +50,40 @@ function ProtectedRoute({ children }) {
 }
 
 /**
- * Main App Component
+ * AppContent Component (inside Router)
  * Handles routing and layout
  */
-function App() {
+function AppContent() {
   const { isAuthenticated, loading } = useAuth();
   const [navOpen, setNavOpen] = React.useState(false);
+  const navigate = useNavigate();
+  const location = useLocation();
+  const isNavigatingRef = React.useRef(false);
+
+  // Debug logging
+  React.useEffect(() => {
+    console.log('[AppContent] Auth state changed:', { isAuthenticated, loading, pathname: location.pathname });
+  }, [isAuthenticated, loading, location.pathname]);
+
+  // Redirect to episodes when logged in from login page
+  React.useEffect(() => {
+    if (!loading && isAuthenticated && location.pathname === '/login' && !isNavigatingRef.current) {
+      console.log('[AppContent] User authenticated on login page, redirecting to episodes...');
+      isNavigatingRef.current = true;
+      navigate('/episodes', { replace: true });
+      setTimeout(() => { isNavigatingRef.current = false; }, 100);
+    }
+  }, [isAuthenticated, loading, location.pathname, navigate]);
+
+  // Redirect to login when logged out (if not already on login page)
+  React.useEffect(() => {
+    if (!loading && !isAuthenticated && location.pathname !== '/login' && !isNavigatingRef.current) {
+      console.log('[AppContent] User logged out, redirecting to login...');
+      isNavigatingRef.current = true;
+      navigate('/login', { replace: true });
+      setTimeout(() => { isNavigatingRef.current = false; }, 100);
+    }
+  }, [isAuthenticated, loading, location.pathname, navigate]);
 
   // Close nav when window resizes to desktop
   React.useEffect(() => {
@@ -64,76 +97,96 @@ function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Always render Router at top level to prevent re-mounting
-  // This prevents flickering between login and app screens
+  if (loading) {
+    return (
+      <div style={{ 
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh',
+        fontSize: '18px',
+        backgroundColor: '#f5f5f5'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <Routes>
+        <Route path="/login" element={<Login />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
+  return (
+    <div className="app-layout">
+      <Navigation isOpen={navOpen} onClose={() => setNavOpen(false)} />
+      
+      <Header onMenuClick={() => setNavOpen(!navOpen)} />
+      
+      <main className="app-content">
+        <Routes>
+          {/* Core Pages */}
+          <Route path="/" element={<Home />} />
+          <Route path="/episodes" element={<Episodes />} />
+          <Route path="/episodes/create" element={<CreateEpisode />} />
+          <Route path="/episodes/:episodeId/edit" element={<EditEpisode />} />
+          <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
+          <Route path="/assets" element={<AssetManager />} />
+
+          {/* Additional Pages */}
+          <Route path="/search" element={<SearchResults />} />
+          {/* <Route path="/compositions/:compositionId" element={<CompositionManagement />} /> */}
+          <Route path="/composer/:episodeId" element={<ThumbnailComposer />} />
+          <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
+          <Route path="/episodes/:episodeId/scenes" element={<SceneComposer />} />
+          <Route path="/shows" element={<ShowManagement />} />
+          <Route path="/shows/create" element={<ShowForm />} />
+          <Route path="/shows/:id/edit" element={<ShowForm />} />
+          <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/admin/templates" element={<TemplateManagement />} />
+          <Route path="/audit-log" element={<AuditLogViewer />} />
+          
+          {/* Test Routes */}
+          {/* <Route path="/test/assets" element={<AssetLibraryTest />} /> */}
+
+          {/* If authenticated user tries to access login, redirect to episodes */}
+          <Route path="/login" element={<Navigate to="/episodes" replace />} />
+          
+          {/* Fallback - redirect unknown routes to home */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </main>
+
+      <footer className="app-footer">
+        <p>&copy; 2026 Episode Control System. Built with React + Vite</p>
+      </footer>
+    </div>
+  );
+}
+
+/**
+ * Main App Component
+ * Wraps everything with providers and router
+ */
+function App() {
   return (
     <ErrorBoundary>
       <ToastProvider>
-        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-          {loading ? (
-            // Show loading state while checking authentication
-            <div style={{ 
-              display: 'flex', 
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              height: '100vh',
-              fontSize: '18px',
-              backgroundColor: '#f5f5f5'
-            }}>
-              <div style={{ textAlign: 'center' }}>
-                <p>Loading...</p>
-              </div>
-            </div>
-          ) : !isAuthenticated ? (
-            // Show login page if not authenticated
-            <Routes>
-              <Route path="/login" element={<Login />} />
-              <Route path="*" element={<Navigate to="/login" replace />} />
-            </Routes>
-          ) : (
-            // Show main app with header, navigation, and content
-            <div className="app-layout">
-              <Navigation isOpen={navOpen} onClose={() => setNavOpen(false)} />
-              
-              <Header onMenuClick={() => setNavOpen(!navOpen)} />
-              
-              <main className="app-content">
-                <Routes>
-                  {/* Core Pages */}
-                  <Route path="/" element={<Home />} />
-                  <Route path="/episodes" element={<Episodes />} />
-                  <Route path="/episodes/create" element={<CreateEpisode />} />
-                  <Route path="/episodes/:episodeId/edit" element={<EditEpisode />} />
-                  <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
-                  <Route path="/assets" element={<AssetManager />} />
-
-                  {/* Additional Pages */}
-                  <Route path="/search" element={<SearchResults />} />
-                  {/* <Route path="/compositions/:compositionId" element={<CompositionManagement />} /> */}
-                  <Route path="/composer/:episodeId" element={<ThumbnailComposer />} />
-                  <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
-                  <Route path="/shows" element={<ShowManagement />} />
-                  <Route path="/shows/create" element={<ShowForm />} />
-                  <Route path="/shows/:id/edit" element={<ShowForm />} />
-                  <Route path="/admin" element={<AdminPanel />} />
-                  <Route path="/admin/templates" element={<TemplateManagement />} />
-                  <Route path="/audit-log" element={<AuditLogViewer />} />
-                  
-                  {/* Test Routes */}
-                  {/* <Route path="/test/assets" element={<AssetLibraryTest />} /> */}
-
-                  {/* Fallback */}
-                  <Route path="/login" element={<Navigate to="/" replace />} />
-                  <Route path="*" element={<Navigate to="/" replace />} />
-                </Routes>
-              </main>
-
-              <footer className="app-footer">
-                <p>&copy; 2026 Episode Control System. Built with React + Vite</p>
-              </footer>
-            </div>
-          )}
-        </Router>
+        <AuthProvider>
+          <BulkSelectionProvider>
+            <SearchFiltersProvider>
+              <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+                <AppContent />
+              </Router>
+            </SearchFiltersProvider>
+          </BulkSelectionProvider>
+        </AuthProvider>
       </ToastProvider>
     </ErrorBoundary>
   );

@@ -23,7 +23,7 @@ export default function CompositionEditor({ compositionId, onSave }) {
     try {
       setLoading(true);
       const apiUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3002'
+        ? 'http://localhost:3000'
         : '';
       const response = await axios.get(
         `${apiUrl}/api/v1/compositions/${compositionId}`

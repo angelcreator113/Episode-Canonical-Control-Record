@@ -5,7 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import '../styles/ShowManagement.css';
 
 const ShowManagement = () => {
@@ -41,7 +41,7 @@ const ShowManagement = () => {
   const fetchShows = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3002/api/v1/shows', {
+      const response = await fetch('http://localhost:3000/api/v1/shows', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
@@ -92,8 +92,8 @@ const ShowManagement = () => {
       setError(null);
       
       const url = editingShow
-        ? `http://localhost:3002/api/v1/shows/${editingShow.id}`
-        : 'http://localhost:3002/api/v1/shows';
+        ? `http://localhost:3000/api/v1/shows/${editingShow.id}`
+        : 'http://localhost:3000/api/v1/shows';
       
       const method = editingShow ? 'PUT' : 'POST';
       
@@ -134,7 +134,7 @@ const ShowManagement = () => {
 
     try {
       setError(null);
-      const response = await fetch(`http://localhost:3002/api/v1/shows/${showId}`, {
+      const response = await fetch(`http://localhost:3000/api/v1/shows/${showId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -153,51 +153,119 @@ const ShowManagement = () => {
 
   if (authLoading || loading) {
     return (
-      <div className="show-management-page">
-        <div className="loading-state">
-          <div className="spinner"></div>
-          <p>Loading shows...</p>
+      <div style={{ minHeight: '100vh', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
+          <p style={{ fontSize: '1.1rem', color: '#6b7280' }}>Loading shows...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="show-management-page">
-      <div className="show-container">
-        <div className="show-header">
-          <h1>🎬 Show Management</h1>
-          <p className="show-subtitle">Manage your content shows</p>
-          <button
-            onClick={() => {
-              if (showForm) {
-                resetForm();
-              } else {
-                setShowForm(true);
-              }
-            }}
-            className="btn-primary"
-          >
-            {showForm ? 'Cancel' : '+ Create Show'}
-          </button>
+    <div style={{ minHeight: '100vh', background: '#f3f4f6' }}>
+      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.5rem' }}>
+        {/* Header */}
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div>
+              <h1 style={{ margin: '0 0 0.25rem 0', fontSize: '1.75rem', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                🎬 Show Management
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.95rem', color: '#6b7280' }}>
+                Create and manage your content shows
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                if (showForm) {
+                  resetForm();
+                } else {
+                  setShowForm(true);
+                }
+              }}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: showForm ? '#6b7280' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                transition: 'all 0.2s'
+              }}
+            >
+              {showForm ? '✕ Cancel' : '+ Create Show'}
+            </button>
+          </div>
+
+          {/* Stats Bar */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
+            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>TOTAL SHOWS</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white' }}>{shows.length}</div>
+            </div>
+            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>ACTIVE SHOWS</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white' }}>{shows.filter(s => s.status === 'active').length}</div>
+            </div>
+            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>COMING SOON</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white' }}>{shows.filter(s => s.status === 'coming_soon').length}</div>
+            </div>
+          </div>
         </div>
 
+        {/* Error Message */}
         {error && (
-          <div className="error-message">
-            <span>⚠️</span>
-            <span>{error}</span>
-            <button onClick={() => setError(null)}>✕</button>
+          <div style={{
+            marginBottom: '1.5rem',
+            padding: '0.875rem 1rem',
+            background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+            border: '2px solid #ef4444',
+            borderRadius: '8px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            color: '#991b1b',
+            fontSize: '0.95rem',
+            fontWeight: '600'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+              <span>{error}</span>
+            </div>
+            <button 
+              onClick={() => setError(null)}
+              style={{
+                background: 'none',
+                border: 'none',
+                color: '#991b1b',
+                fontSize: '1.25rem',
+                cursor: 'pointer',
+                padding: '0.25rem',
+                lineHeight: 1
+              }}
+            >
+              ✕
+            </button>
           </div>
         )}
 
         {/* Show Form */}
         {showForm && (
-          <div className="show-form-container">
-            <h2>{editingShow ? 'Edit Show' : 'Create New Show'}</h2>
-            <form onSubmit={handleSubmit} className="show-form">
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="name">Show Name *</label>
+          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '1.5rem' }}>
+            <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>
+              {editingShow ? '✏️ Edit Show' : '🆕 Create New Show'}
+            </h2>
+            <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+                <div>
+                  <label htmlFor="name" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                    Show Name <span style={{ color: '#ef4444' }}>*</span>
+                  </label>
                   <input
                     type="text"
                     id="name"
@@ -206,11 +274,21 @@ const ShowManagement = () => {
                     onChange={handleInputChange}
                     placeholder="e.g., Styling Adventures with Lala"
                     required
+                    style={{
+                      width: '100%',
+                      padding: '0.65rem 0.875rem',
+                      fontSize: '0.95rem',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '8px',
+                      background: 'white'
+                    }}
                   />
                 </div>
 
-                <div className="form-group">
-                  <label htmlFor="icon">Icon (Emoji)</label>
+                <div>
+                  <label htmlFor="icon" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                    Icon (Emoji)
+                  </label>
                   <input
                     type="text"
                     id="icon"
@@ -219,41 +297,82 @@ const ShowManagement = () => {
                     onChange={handleInputChange}
                     placeholder="📺"
                     maxLength={2}
+                    style={{
+                      width: '100%',
+                      padding: '0.65rem 0.875rem',
+                      fontSize: '0.95rem',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '8px',
+                      background: 'white'
+                    }}
                   />
                 </div>
               </div>
 
-              <div className="form-group">
-                <label htmlFor="description">Description</label>
+              <div>
+                <label htmlFor="description" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                  Description
+                </label>
                 <textarea
                   id="description"
                   name="description"
                   value={formData.description}
                   onChange={handleInputChange}
                   placeholder="Describe what this show is about..."
-                  rows={3}
+                  rows={2}
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 0.875rem',
+                    fontSize: '0.875rem',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '8px',
+                    background: 'white',
+                    fontFamily: 'inherit',
+                    resize: 'vertical'
+                  }}
                 />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="color">Theme Color</label>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
+                <div>
+                  <label htmlFor="color" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                    Theme Color
+                  </label>
                   <input
                     type="color"
                     id="color"
                     name="color"
                     value={formData.color}
                     onChange={handleInputChange}
+                    style={{
+                      width: '100%',
+                      height: '42px',
+                      padding: '0.25rem',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '8px',
+                      cursor: 'pointer'
+                    }}
                   />
                 </div>
 
-                <div className="form-group">
-                  <label htmlFor="status">Status</label>
+                <div>
+                  <label htmlFor="status" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                    Status
+                  </label>
                   <select
                     id="status"
                     name="status"
                     value={formData.status}
                     onChange={handleInputChange}
+                    style={{
+                      width: '100%',
+                      padding: '0.65rem 0.875rem',
+                      fontSize: '0.95rem',
+                      border: '2px solid #e5e7eb',
+                      borderRadius: '8px',
+                      background: 'white',
+                      cursor: 'pointer'
+                    }}
                   >
                     <option value="active">Active</option>
                     <option value="archived">Archived</option>
@@ -262,11 +381,41 @@ const ShowManagement = () => {
                 </div>
               </div>
 
-              <div className="form-actions">
-                <button type="submit" className="btn-primary">
-                  {editingShow ? 'Update Show' : 'Create Show'}
+              <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
+                <button 
+                  type="submit"
+                  style={{
+                    flex: '1',
+                    padding: '0.75rem 1.5rem',
+                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '700',
+                    cursor: 'pointer',
+                    boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {editingShow ? '💾 Update Show' : '✨ Create Show'}
                 </button>
-                <button type="button" onClick={resetForm} className="btn-secondary">
+                <button 
+                  type="button" 
+                  onClick={resetForm}
+                  style={{
+                    flex: '1',
+                    padding: '0.75rem 1.5rem',
+                    background: 'white',
+                    color: '#374151',
+                    border: '2px solid #d1d5db',
+                    borderRadius: '8px',
+                    fontSize: '1rem',
+                    fontWeight: '600',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
+                >
                   Cancel
                 </button>
               </div>
@@ -275,63 +424,181 @@ const ShowManagement = () => {
         )}
 
         {/* Shows List */}
-        <div className="shows-list">
+        <div>
+          <h2 style={{ margin: '0 0 1rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            📚 All Shows
+            <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#6b7280', marginLeft: '0.5rem' }}>
+              ({shows.length})
+            </span>
+          </h2>
+          
           {!loading && shows.length === 0 && (
-            <div className="empty-state">
-              <p>📭 No shows yet</p>
-              <p className="empty-text">Create your first show to get started</p>
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '3rem',
+              textAlign: 'center',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
+            }}>
+              <div style={{ fontSize: '5rem', marginBottom: '1rem' }}>📺</div>
+              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
+                No shows yet
+              </h3>
+              <p style={{ margin: '0 0 1.5rem 0', fontSize: '1rem', color: '#6b7280' }}>
+                Create your first show to get started
+              </p>
+              <button
+                onClick={() => setShowForm(true)}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  fontWeight: '600',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+                }}
+              >
+                + Create First Show
+              </button>
             </div>
           )}
 
           {!loading && shows.length > 0 && (
-            <>
-              <h2>Your Shows ({shows.length})</h2>
-              <div className="shows-grid">
-                {shows.map((show) => (
-                  <div 
-                    key={show.id} 
-                    className="show-card"
-                    style={{ borderLeftColor: show.color }}
-                  >
-                    <div className="show-card-header">
-                      <div className="show-title-row">
-                        <span className="show-icon">{show.icon}</span>
-                        <h3>{show.name}</h3>
-                      </div>
-                      <div className="show-actions">
-                        <button
-                          onClick={() => handleEdit(show)}
-                          className="btn-edit"
-                          title="Edit show"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={() => handleDelete(show.id)}
-                          className="btn-delete"
-                          title="Delete show"
-                        >
-                          🗑️
-                        </button>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+              {shows.map((show) => (
+                <div
+                  key={show.id}
+                  style={{
+                    background: 'white',
+                    padding: '1.25rem',
+                    borderRadius: '12px',
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    transition: 'all 0.2s',
+                    border: '2px solid transparent',
+                    borderLeft: `4px solid ${show.color || '#667eea'}`,
+                    cursor: 'pointer',
+                    position: 'relative'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                    e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.12)';
+                    e.currentTarget.style.borderColor = show.color || '#667eea';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = 'translateY(0)';
+                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+                    e.currentTarget.style.borderColor = 'transparent';
+                    e.currentTarget.style.borderLeft = `4px solid ${show.color || '#667eea'}`;
+                  }}
+                  onClick={() => navigate(`/shows/${show.slug}`)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
+                      <span style={{ fontSize: '2rem', lineHeight: 1 }}>{show.icon || '📺'}</span>
+                      <div style={{ flex: 1 }}>
+                        <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', fontWeight: '700', color: '#1f2937' }}>
+                          {show.name}
+                        </h3>
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '0.25rem 0.625rem',
+                          borderRadius: '6px',
+                          fontSize: '0.75rem',
+                          fontWeight: '600',
+                          background: show.status === 'active' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
+                                     show.status === 'coming_soon' ? 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)' :
+                                     'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+                          color: 'white',
+                          textTransform: 'uppercase',
+                          letterSpacing: '0.5px'
+                        }}>
+                          {show.status === 'coming_soon' ? 'Coming Soon' : show.status}
+                        </span>
                       </div>
                     </div>
-
-                    <p className="show-desc">{show.description}</p>
-
-                    <div className="show-meta">
-                      <span className={`status-badge status-${show.status}`}>
-                        {show.status}
-                      </span>
-                      <span className="show-slug">{show.slug}</span>
-                    </div>
-
-                    <div className="show-footer">
-                      <small>Created: {new Date(show.created_at).toLocaleDateString()}</small>
+                    <div style={{ display: 'flex', gap: '0.375rem' }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleEdit(show);
+                        }}
+                        style={{
+                          padding: '0.375rem 0.625rem',
+                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '1rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          lineHeight: 1
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        title="Edit show"
+                      >
+                        ✏️
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(show.id);
+                        }}
+                        style={{
+                          padding: '0.375rem 0.625rem',
+                          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '1rem',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          lineHeight: 1
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        title="Delete show"
+                      >
+                        🗑️
+                      </button>
                     </div>
                   </div>
-                ))}
-              </div>
-            </>
+
+                  <p style={{
+                    margin: '0 0 0.75rem 0',
+                    fontSize: '0.875rem',
+                    color: '#6b7280',
+                    lineHeight: '1.5'
+                  }}>
+                    {show.description}
+                  </p>
+
+                  <div style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                    padding: '0.75rem',
+                    background: '#f9fafb',
+                    borderRadius: '8px',
+                    marginBottom: '0.5rem'
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                      <span style={{ color: '#6b7280', fontWeight: '500' }}>Slug:</span>
+                      <span style={{ color: '#1f2937', fontWeight: '600', fontFamily: 'monospace' }}>{show.slug}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
+                      <span style={{ color: '#6b7280', fontWeight: '500' }}>Created:</span>
+                      <span style={{ color: '#1f2937', fontWeight: '600' }}>
+                        {new Date(show.created_at).toLocaleDateString()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
           )}
         </div>
       </div>

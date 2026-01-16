@@ -73,12 +73,18 @@ app.use(
       const allowedOrigins = [
         'http://localhost:3000',
         'http://localhost:5173',
+        'http://localhost:5174',
         'http://127.0.0.1:5173',
+        'http://127.0.0.1:5174',
         'http://127.0.0.1:3000',
       ];
+      
+      console.log('🔍 CORS Check - Origin:', origin, 'Allowed:', allowedOrigins.includes(origin));
+      
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
+        console.log('❌ CORS Rejected - Origin:', origin);
         callback(new Error('Not allowed by CORS'));
       }
     },
@@ -89,6 +95,9 @@ app.use(
     optionsSuccessStatus: 200, // Some legacy browsers (IE11) require this
   })
 );
+
+// Handle preflight requests for all routes
+app.options('*', cors());
 
 app.use(helmet());
 app.use(express.json({ limit: '10mb' }));

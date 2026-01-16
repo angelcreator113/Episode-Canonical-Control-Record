@@ -24,7 +24,7 @@ export default function VersionTimeline({ compositionId }) {
     try {
       setLoading(true);
       const apiUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3002'
+        ? 'http://localhost:3000'
         : '';
       const response = await axios.get(
         `${apiUrl}/api/v1/compositions/${compositionId}/versions`
@@ -54,7 +54,7 @@ export default function VersionTimeline({ compositionId }) {
   const fetchComparison = async (v1, v2) => {
     try {
       const apiUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3002'
+        ? 'http://localhost:3000'
         : '';
       const response = await axios.get(
         `${apiUrl}/api/v1/compositions/${compositionId}/versions/${v1.version_number}/compare/${v2.version_number}`
@@ -70,7 +70,7 @@ export default function VersionTimeline({ compositionId }) {
     
     try {
         const apiUrl = process.env.NODE_ENV === 'development' 
-        ? 'http://localhost:3002'
+        ? 'http://localhost:3000'
         : '';
         const response = await axios.post(
         `${apiUrl}/api/v1/compositions/${compositionId}/revert/${versionNumber}`
@@ -191,7 +191,7 @@ function VersionDetails({ version, onRevert, compositionId }) {
     const fetchSnapshot = async () => {
       try {
         const apiUrl = process.env.NODE_ENV === 'development' 
-          ? 'http://localhost:3002'
+          ? 'http://localhost:3000'
           : '';
         const response = await axios.get(
           `${apiUrl}/api/v1/compositions/${compositionId}/versions/${version.version_number}`
@@ -279,7 +279,7 @@ function VersionComparison({ v1, v2, compositionId, onRevert }) {
     const fetchComparison = async () => {
       try {
         const apiUrl = process.env.NODE_ENV === 'development' 
-          ? 'http://localhost:3002'
+          ? 'http://localhost:3000'
           : '';
         const response = await axios.get(
           `${apiUrl}/api/v1/compositions/${compositionId}/versions/${Math.min(v1.version_number, v2.version_number)}/compare/${Math.max(v1.version_number, v2.version_number)}`

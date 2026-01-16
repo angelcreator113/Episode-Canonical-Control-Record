@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Use full backend URL in development, relative path in production
 const baseURL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:3002'
+  ? 'http://localhost:3000'
   : '/';
 
 const apiClient = axios.create({

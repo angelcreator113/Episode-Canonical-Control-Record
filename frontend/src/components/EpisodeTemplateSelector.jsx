@@ -21,7 +21,7 @@ const EpisodeTemplateSelector = ({
       try {
         setLoading(true);
         const token = localStorage.getItem('authToken');
-        const response = await fetch('http://localhost:3002/api/v1/templates', {
+        const response = await fetch('http://localhost:3000/api/v1/templates', {
           headers: {
             'Authorization': `Bearer ${token}`
           }

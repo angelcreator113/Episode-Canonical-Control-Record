@@ -24,7 +24,7 @@ const TemplateSelector = ({ onTemplateSelected = () => {}, readOnly = false }) =
       const token = localStorage.getItem('authToken');
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const response = await fetch('http://localhost:3002/api/v1/templates', { headers });
+      const response = await fetch('http://localhost:3000/api/v1/templates', { headers });
       if (!response.ok) throw new Error('Failed to load templates');
 
       const data = await response.json();

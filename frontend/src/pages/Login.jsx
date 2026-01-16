@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import authService from '../services/authService';
 import '../styles/Login.css';
 
 export default function Login() {
   const navigate = useNavigate();
-  const { login } = useAuth();
+  const { login, isAuthenticated } = useAuth();
   const [email, setEmail] = useState('test@example.com');
   const [password, setPassword] = useState('password123');
   const [loading, setLoading] = useState(false);
@@ -27,9 +27,8 @@ export default function Login() {
       console.log('[Login] Login successful:', result);
       setSuccess(`Welcome!`);
       
-      // ✅ FIX: Use React Router navigate with replace
-      console.log('[Login] Redirecting to home...');
-      navigate('/', { replace: true });
+      // Note: Navigation will happen automatically via AppContent
+      // when isAuthenticated changes to true
     } catch (err) {
       console.error('[Login] Login error:', err);
       console.error('[Login] Error response:', err.response);

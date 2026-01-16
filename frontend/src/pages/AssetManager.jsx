@@ -181,19 +181,67 @@ const AssetManager = () => {
     const imageUrl = getImageUrl(asset);
 
     return (
-      <div className="asset-card">
-        <div className="asset-preview">
+      <div style={{
+        background: 'white',
+        borderRadius: '12px',
+        overflow: 'hidden',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+        transition: 'all 0.2s',
+        cursor: 'pointer',
+        border: '2px solid transparent'
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.12)';
+        e.currentTarget.style.transform = 'translateY(-4px)';
+        e.currentTarget.style.borderColor = isPending ? '#f59e0b' : '#10b981';
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
+        e.currentTarget.style.transform = 'translateY(0)';
+        e.currentTarget.style.borderColor = 'transparent';
+      }}
+      >
+        <div style={{ 
+          position: 'relative', 
+          width: '100%', 
+          paddingTop: '100%', 
+          background: '#f3f4f6',
+          overflow: 'hidden'
+        }}>
           {imageLoading && !imageError && (
-            <div className="asset-loading">
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem'
+            }}>
               <div className="spinner"></div>
-              <span>Loading...</span>
+              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>Loading...</span>
             </div>
           )}
 
           {imageError && (
-            <div className="asset-error">
-              <span>⚠️</span>
-              <span>Failed to load</span>
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '0.5rem',
+              background: '#fef3c7'
+            }}>
+              <span style={{ fontSize: '2.5rem' }}>⚠️</span>
+              <span style={{ fontSize: '0.875rem', color: '#92400e' }}>Failed to load</span>
             </div>
           )}
 
@@ -206,12 +254,14 @@ const AssetManager = () => {
                 setImageError(false);
               }}
               onError={(e) => {
-                // Suppress console error for missing S3 assets - they don't have valid keys
                 setImageError(true);
                 setImageLoading(false);
               }}
               style={{ 
                 display: imageLoading ? 'none' : 'block',
+                position: 'absolute',
+                top: 0,
+                left: 0,
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover'
@@ -219,43 +269,108 @@ const AssetManager = () => {
             />
           ) : (
             !imageLoading && (
-              <div className="asset-placeholder">
-                <span style={{ fontSize: '2rem' }}>🖼️</span>
-                <span style={{ fontSize: '0.8rem' }}>No Preview</span>
+              <div style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem',
+                background: '#f3f4f6'
+              }}>
+                <span style={{ fontSize: '3rem' }}>🖼️</span>
+                <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>No Preview</span>
               </div>
             )
           )}
 
-          <div className="asset-status-badge">
+          <div style={{
+            position: 'absolute',
+            top: '0.75rem',
+            right: '0.75rem',
+            padding: '0.375rem 0.875rem',
+            background: isPending ? '#fbbf24' : '#10b981',
+            color: 'white',
+            borderRadius: '999px',
+            fontSize: '0.75rem',
+            fontWeight: '700',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.15)'
+          }}>
             {isPending ? '⏳ PENDING' : '✅ APPROVED'}
           </div>
         </div>
 
-        <div className="asset-info">
-          <p className="asset-type">{asset.asset_type}</p>
-          <p className="asset-id" title={asset.id}>
-            ID: {asset.id.substring(0, 8)}...
+        <div style={{ padding: '1.25rem' }}>
+          <p style={{ 
+            margin: '0 0 0.5rem 0', 
+            fontSize: '0.875rem', 
+            fontWeight: '700', 
+            color: '#667eea',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px'
+          }}>
+            {asset.asset_type}
+          </p>
+          <p style={{ 
+            margin: '0 0 0.75rem 0', 
+            fontSize: '0.875rem', 
+            color: '#6b7280',
+            fontFamily: 'monospace',
+            wordBreak: 'break-all'
+          }} title={asset.id}>
+            ID: {asset.id.substring(0, 12)}...
           </p>
           
           {asset.file_size_bytes && (
-            <small className="asset-size">
-              {(asset.file_size_bytes / 1024).toFixed(0)} KB
-            </small>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              marginBottom: '0.75rem'
+            }}>
+              <span style={{ fontSize: '1rem' }}>📊</span>
+              <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                {(asset.file_size_bytes / 1024).toFixed(1)} KB
+              </span>
+            </div>
           )}
 
           {isPending && (
             <button
               onClick={() => handleProcessBackground(asset.id)}
               disabled={processingId === asset.id}
-              className="btn-process"
+              style={{
+                width: '100%',
+                padding: '0.75rem 1rem',
+                background: processingId === asset.id ? '#d1d5db' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '0.875rem',
+                fontWeight: '600',
+                cursor: processingId === asset.id ? 'not-allowed' : 'pointer',
+                boxShadow: processingId === asset.id ? 'none' : '0 2px 4px rgba(0,0,0,0.1)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.5rem'
+              }}
             >
               {processingId === asset.id ? (
                 <>
                   <span className="spinner-sm"></span>
-                  Processing...
+                  <span>Processing...</span>
                 </>
               ) : (
-                '🎨 Process Background'
+                <>
+                  <span>🎨</span>
+                  <span>Process Background</span>
+                </>
               )}
             </button>
           )}
@@ -267,31 +382,116 @@ const AssetManager = () => {
   const currentAssetTypeLabel = assetTypes.find(t => t.value === assetType)?.label || assetType;
 
   return (
-    <div className="asset-manager">
-      <div className="asset-manager-container">
+    <div className="asset-manager" style={{ minHeight: '100vh', background: '#f3f4f6' }}>
+      <div className="asset-manager-container" style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.5rem' }}>
         {/* Header */}
-        <div className="page-header">
-          <div>
-            <h1>📸 Asset Manager</h1>
-            <p className="subtitle">Upload and manage promotional assets with AI background removal</p>
+        <div style={{ marginBottom: '1.5rem' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
+            <div>
+              <h1 style={{ margin: '0 0 0.25rem 0', fontSize: '1.75rem', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                📸 Asset Manager
+              </h1>
+              <p style={{ margin: 0, fontSize: '0.95rem', color: '#6b7280' }}>
+                Upload and manage promotional assets with AI background removal
+              </p>
+            </div>
+            <button 
+              onClick={() => {
+                setShowPending(!showPending);
+                setError(null);
+                setSuccess(null);
+              }} 
+              style={{
+                padding: '0.875rem 1.75rem',
+                background: showPending ? '#6b7280' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '10px',
+                fontSize: '1rem',
+                fontWeight: '600',
+                cursor: 'pointer',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.5rem'
+              }}
+            >
+              {showPending ? (
+                <>
+                  <span>✅</span>
+                  <span>View Approved</span>
+                </>
+              ) : (
+                <>
+                  <span>⏳</span>
+                  <span>View Pending</span>
+                  {pendingAssets.length > 0 && (
+                    <span style={{
+                      padding: '0.25rem 0.625rem',
+                      background: 'rgba(255,255,255,0.2)',
+                      borderRadius: '999px',
+                      fontSize: '0.875rem',
+                      fontWeight: '700'
+                    }}>
+                      {pendingAssets.length}
+                    </span>
+                  )}
+                </>
+              )}
+            </button>
+          </div>
+
+          {/* Stats Bar */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
+            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>APPROVED ASSETS</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white' }}>{assets.length}</div>
+            </div>
+            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>PENDING REVIEW</div>
+              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white' }}>{pendingAssets.length}</div>
+            </div>
+            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)' }}>
+              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>CURRENT TYPE</div>
+              <div style={{ fontSize: '1rem', fontWeight: '700', color: 'white' }}>{currentAssetTypeLabel}</div>
+            </div>
           </div>
         </div>
 
         {/* Upload Section */}
-        <div className="upload-section">
-          <div className="section-header-inline">
-            <h2>📤 Upload New Asset</h2>
+        <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '1.5rem' }}>
+          <div style={{ marginBottom: '1.25rem' }}>
+            <h2 style={{ margin: '0 0 0.375rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              📤 Upload New Asset
+            </h2>
+            <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b7280' }}>
+              Select asset type, choose a file, and upload for AI background removal
+            </p>
           </div>
 
-          <form id="assetForm" onSubmit={handleUpload} className="upload-form-compact">
-            <div className="form-row">
-              <div className="form-group">
-                <label htmlFor="assetType">Asset Type</label>
+          <form id="assetForm" onSubmit={handleUpload} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+              {/* Asset Type */}
+              <div>
+                <label htmlFor="assetType" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                  Asset Type <span style={{ color: '#ef4444' }}>*</span>
+                </label>
                 <select
                   id="assetType"
                   value={assetType}
                   onChange={handleAssetTypeChange}
                   required
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 0.875rem',
+                    fontSize: '0.95rem',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '8px',
+                    background: 'white',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s'
+                  }}
                 >
                   {assetTypes.map(type => (
                     <option key={type.value} value={type.value}>
@@ -301,111 +501,167 @@ const AssetManager = () => {
                 </select>
               </div>
 
-              <div className="form-group form-group-file">
-                <label htmlFor="file">Image File (PNG, JPG)</label>
-                <div className="file-input-wrapper">
-                  <input
-                    id="file"
-                    type="file"
-                    onChange={handleFileChange}
-                    accept="image/*"
-                    required
-                  />
-                  {file && (
-                    <div className="file-selected">
-                      ✅ {file.name}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="form-group-action">
-                <button type="submit" disabled={loading || !file} className="btn-upload">
-                  {loading ? (
-                    <>
-                      <span className="spinner-sm"></span>
-                      Uploading...
-                    </>
-                  ) : (
-                    <>
-                      📤 Upload Asset
-                    </>
-                  )}
-                </button>
-              </div>
-            </div>
-
-            <div className="form-row-metadata">
-              <div className="form-group">
-                <label htmlFor="metadata">
-                  Metadata (Optional JSON)
-                  <span className="label-hint">e.g., {"{"}"description": "Lala winter promo"{"}"}</span>
+              {/* File Upload */}
+              <div>
+                <label htmlFor="file" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                  Choose File <span style={{ color: '#ef4444' }}>*</span>
                 </label>
-                <textarea
-                  id="metadata"
-                  value={metadata}
-                  onChange={(e) => setMetadata(e.target.value)}
-                  placeholder='{"description": "Asset description", "tags": ["tag1", "tag2"]}'
-                  rows={2}
+                <input
+                  type="file"
+                  id="file"
+                  onChange={handleFileChange}
+                  accept="image/*"
+                  required
+                  style={{
+                    width: '100%',
+                    padding: '0.65rem 0.875rem',
+                    fontSize: '0.95rem',
+                    border: '2px solid #e5e7eb',
+                    borderRadius: '8px',
+                    background: 'white',
+                    cursor: 'pointer'
+                  }}
                 />
+                {file && (
+                  <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.875rem', color: '#10b981' }}>
+                    ✓ {file.name} ({(file.size / 1024).toFixed(1)} KB)
+                  </p>
+                )}
               </div>
             </div>
+
+            {/* Metadata (Optional) */}
+            <div>
+              <label htmlFor="metadata" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                Metadata (Optional JSON)
+              </label>
+              <textarea
+                id="metadata"
+                value={metadata}
+                onChange={(e) => setMetadata(e.target.value)}
+                placeholder='{"description": "Optional metadata"}'
+                rows="2"
+                style={{
+                  width: '100%',
+                  padding: '0.65rem 0.875rem',
+                  fontSize: '0.875rem',
+                  border: '2px solid #e5e7eb',
+                  borderRadius: '8px',
+                  background: 'white',
+                  fontFamily: 'monospace',
+                  resize: 'vertical'
+                }}
+              />
+            </div>
+
+            {/* Submit Button */}
+            <button
+              type="submit"
+              disabled={loading || !file}
+              style={{
+                padding: '0.75rem 1.5rem',
+                background: loading || !file ? '#d1d5db' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '8px',
+                fontSize: '1rem',
+                fontWeight: '700',
+                cursor: loading || !file ? 'not-allowed' : 'pointer',
+                boxShadow: loading || !file ? 'none' : '0 4px 12px rgba(16, 185, 129, 0.3)',
+                transition: 'all 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '0.75rem'
+              }}
+            >
+              {loading ? (
+                <>
+                  <span className="spinner-sm"></span>
+                  <span>Uploading & Processing...</span>
+                </>
+              ) : (
+                <>
+                  <span>🚀</span>
+                  <span>Upload & Process Asset</span>
+                </>
+              )}
+            </button>
           </form>
 
+          {/* Alerts */}
           {error && (
-            <div className="alert alert-error">
-              <span className="alert-icon">❌</span>
+            <div style={{
+              marginTop: '1rem',
+              padding: '0.875rem 1rem',
+              background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
+              border: '2px solid #ef4444',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              color: '#991b1b',
+              fontSize: '0.95rem',
+              fontWeight: '600'
+            }}>
+              <span style={{ fontSize: '1.25rem' }}>❌</span>
               <span>{error}</span>
             </div>
           )}
           {success && (
-            <div className="alert alert-success">
-              <span className="alert-icon">✅</span>
+            <div style={{
+              marginTop: '1rem',
+              padding: '0.875rem 1rem',
+              background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)',
+              border: '2px solid #10b981',
+              borderRadius: '8px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.75rem',
+              color: '#065f46',
+              fontSize: '0.95rem',
+              fontWeight: '600'
+            }}>
+              <span style={{ fontSize: '1.25rem' }}>✅</span>
               <span>{success}</span>
             </div>
           )}
         </div>
 
         {/* Assets Grid */}
-        <div className="assets-section">
-          <div className="section-header-inline">
-            <h2>
+        <div>
+          <div style={{ marginBottom: '1rem' }}>
+            <h2 style={{ margin: '0 0 0.375rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>
               {showPending ? '⏳ Pending Assets' : `✅ ${currentAssetTypeLabel}`}
-              {showPending && pendingAssets.length > 0 && (
-                <span className="badge">{pendingAssets.length}</span>
-              )}
-              {!showPending && assets.length > 0 && (
-                <span className="badge badge-success">{assets.length}</span>
-              )}
+              <span style={{
+                marginLeft: '0.75rem',
+                padding: '0.375rem 0.875rem',
+                background: showPending ? '#fbbf24' : '#10b981',
+                color: 'white',
+                borderRadius: '999px',
+                fontSize: '1rem',
+                fontWeight: '700'
+              }}>
+                {showPending ? pendingAssets.length : assets.length}
+              </span>
             </h2>
-            
-            <div className="section-actions">
-              <button 
-                onClick={() => {
-                  setShowPending(!showPending);
-                  setError(null);
-                  setSuccess(null);
-                }} 
-                className="btn-toggle"
-              >
-                {showPending ? (
-                  <>✅ View Approved</>
-                ) : (
-                  <>
-                    ⏳ View Pending
-                    {pendingAssets.length > 0 && (
-                      <span className="btn-badge">{pendingAssets.length}</span>
-                    )}
-                  </>
-                )}
-              </button>
-            </div>
+            <p style={{ margin: 0, fontSize: '0.95rem', color: '#6b7280' }}>
+              {showPending 
+                ? 'Assets waiting for background removal processing' 
+                : 'Processed and approved assets ready to use'}
+            </p>
           </div>
 
           {loading && (
-            <div className="loading-state">
-              <div className="spinner"></div>
-              <p>Loading assets...</p>
+            <div style={{ 
+              textAlign: 'center', 
+              padding: '4rem 2rem',
+              background: 'white',
+              borderRadius: '16px',
+              boxShadow: '0 4px 16px rgba(0,0,0,0.08)'
+            }}>
+              <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
+              <p style={{ margin: 0, fontSize: '1.1rem', color: '#6b7280' }}>Loading assets...</p>
             </div>
           )}
 
@@ -413,13 +669,23 @@ const AssetManager = () => {
             <>
               {showPending ? (
                 pendingAssets.length === 0 ? (
-                  <div className="empty-state">
-                    <span className="empty-icon">✨</span>
-                    <h3>No Pending Assets</h3>
-                    <p>All uploaded assets have been processed</p>
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '4rem 2rem',
+                    background: 'white',
+                    borderRadius: '16px',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.08)'
+                  }}>
+                    <div style={{ fontSize: '5rem', marginBottom: '1rem' }}>✨</div>
+                    <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>
+                      No Pending Assets
+                    </h3>
+                    <p style={{ margin: 0, color: '#6b7280', fontSize: '1.1rem' }}>
+                      All uploaded assets have been processed
+                    </p>
                   </div>
                 ) : (
-                  <div className="assets-grid">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
                     {pendingAssets.map(asset => (
                       <AssetCard key={asset.id} asset={asset} isPending={true} />
                     ))}
@@ -427,14 +693,26 @@ const AssetManager = () => {
                 )
               ) : (
                 assets.length === 0 ? (
-                  <div className="empty-state">
-                    <span className="empty-icon">📦</span>
-                    <h3>No Assets Yet</h3>
-                    <p>Upload your first {currentAssetTypeLabel.toLowerCase()} asset to get started</p>
-                    <small>Assets will appear here after background removal processing</small>
+                  <div style={{ 
+                    textAlign: 'center', 
+                    padding: '4rem 2rem',
+                    background: 'white',
+                    borderRadius: '16px',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.08)'
+                  }}>
+                    <div style={{ fontSize: '5rem', marginBottom: '1rem' }}>📦</div>
+                    <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>
+                      No Assets Yet
+                    </h3>
+                    <p style={{ margin: '0 0 0.5rem 0', color: '#6b7280', fontSize: '1.1rem' }}>
+                      Upload your first {currentAssetTypeLabel.toLowerCase()} asset to get started
+                    </p>
+                    <p style={{ margin: 0, color: '#9ca3af', fontSize: '0.95rem' }}>
+                      Assets will appear here after background removal processing
+                    </p>
                   </div>
                 ) : (
-                  <div className="assets-grid">
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
                     {assets.map(asset => (
                       <AssetCard key={asset.id} asset={asset} isPending={false} />
                     ))}

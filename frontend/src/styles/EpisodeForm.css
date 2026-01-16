@@ -1,117 +1,456 @@
-/* Episode Form Styles (Create & Edit) */
+/* =========================================================
+   EPISODE FORM SHARED STYLES (Create + Edit)
+   Scoped to .episode-form-page to prevent app-wide conflicts
+========================================================= */
+
 .episode-form-page {
-  padding: 2rem 1rem;
-  background-color: var(--light);
-  min-height: calc(100vh - 100px);
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --text: #0f172a;
+  --muted: #64748b;
+  --border: #e5e7eb;
+  --border2: #eef2f7;
+  --primary: #2563eb;
+  --primary2: #1d4ed8;
+  --danger: #dc2626;
+
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
+  --shadow-md: 0 10px 18px rgba(15, 23, 42, 0.08);
+  --radius: 14px;
+
+  color: var(--text);
 }
 
-.form-container {
-  max-width: 700px;
+.episode-form-page.ce-page {
+  min-height: 100vh;
+  background: var(--bg);
+}
+
+/* Hard override for global styles */
+.episode-form-page button,
+.episode-form-page input,
+.episode-form-page select,
+.episode-form-page textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+/* =========================================================
+   HEADER
+========================================================= */
+
+.episode-form-page .ce-header {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.episode-form-page .ce-header__inner {
+  max-width: 1200px;
   margin: 0 auto;
-  background-color: white;
-  padding: 2rem;
-  border-radius: 0.5rem;
-  box-shadow: var(--shadow);
-}
-
-.form-container h1 {
-  margin-top: 0;
-  margin-bottom: 1.5rem;
-}
-
-.episode-form {
-  margin: 1.5rem 0;
-}
-
-.form-row {
+  padding: 14px 16px;
   display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
+  grid-template-columns: 120px 1fr auto;
+  gap: 12px;
+  align-items: center;
 }
 
-.form-actions {
+.episode-form-page .ce-link {
+  background: transparent !important;
+  border: none !important;
+  color: var(--muted) !important;
+  font-weight: 900;
+  cursor: pointer;
+  padding: 8px 0;
+  text-align: left;
+}
+.episode-form-page .ce-link:hover { color: #334155 !important; }
+
+.episode-form-page .ce-header__title h1 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 950;
+}
+
+.episode-form-page .ce-subline {
+  margin-top: 6px;
   display: flex;
-  gap: 1rem;
-  margin-top: 2rem;
-}
-
-.form-actions .btn {
-  flex: 1;
-  justify-content: center;
-}
-
-@media (max-width: 768px) {
-  .form-container {
-    padding: 1.5rem;
-  }
-
-  .form-row {
-    grid-template-columns: 1fr;
-  }
-
-  .form-actions {
-    flex-direction: column;
-  }
-
-  .form-actions .btn {
-    width: 100%;
-  }
-}
-/* Category Input Styles */
-.category-input-group {
-  display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-}
-
-.category-input-group input {
-  flex: 1;
-}
-
-.category-input-group .btn {
-  white-space: nowrap;
-}
-
-.category-tags {
-  display: flex;
+  align-items: center;
+  gap: 10px;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 1rem;
 }
 
-.category-tag {
+.episode-form-page .ce-pill {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
-  background-color: var(--primary);
-  color: white;
-  padding: 0.5rem 0.75rem;
-  border-radius: 20px;
-  font-size: 0.85rem;
-  font-weight: 500;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fbfdff;
+  color: #334155;
+  font-weight: 900;
+  font-size: 12px;
+}
+.episode-form-page .ce-pill--soft {
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+  color: #475569;
 }
 
-.category-remove {
-  background: none;
-  border: none;
-  color: white;
+.episode-form-page .ce-muted { color: var(--muted); font-weight: 800; }
+.episode-form-page .ce-mutedSm { color: var(--muted); font-weight: 750; font-size: 13px; }
+.episode-form-page .ce-dot { color: #cbd5e1; }
+
+/* =========================================================
+   BUTTONS
+========================================================= */
+
+.episode-form-page .ce-btn {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  padding: 10px 14px !important;
+  border-radius: 12px !important;
+  font-weight: 950 !important;
+  font-size: 14px !important;
+  cursor: pointer !important;
+  transition: transform 0.15s, box-shadow 0.15s, background 0.15s, border-color 0.15s !important;
+  display: inline-flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  white-space: nowrap !important;
+}
+
+.episode-form-page .ce-btn:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+.episode-form-page .ce-btn--primary {
+  background: var(--primary) !important;
+  color: #fff !important;
+  box-shadow: var(--shadow-sm);
+}
+.episode-form-page .ce-btn--primary:hover:not(:disabled) {
+  background: var(--primary2) !important;
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-md);
+}
+
+.episode-form-page .ce-btn--secondary {
+  background: #f1f5f9 !important;
+  border-color: #e2e8f0 !important;
+  color: #0f172a !important;
+}
+.episode-form-page .ce-btn--secondary:hover:not(:disabled) {
+  background: #e8edf5 !important;
+}
+
+.episode-form-page .ce-btn--danger {
+  background: #fee2e2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b !important;
+}
+
+.episode-form-page .ce-btn--sm {
+  padding: 8px 12px !important;
+  font-size: 13px !important;
+  border-radius: 10px !important;
+}
+
+/* =========================================================
+   TABS
+========================================================= */
+
+.episode-form-page .ce-tabs {
+  position: sticky;
+  top: 64px;
+  z-index: 19;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+
+.episode-form-page .ce-tabs__inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 16px;
+  height: 48px;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.episode-form-page .ce-tabs__inner::-webkit-scrollbar { display: none; }
+
+.episode-form-page .ce-tab {
+  height: 38px;
+  padding: 0 12px !important;
+  border-radius: 10px !important;
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  cursor: pointer !important;
+  font-weight: 950 !important;
+  color: #475569 !important;
+  white-space: nowrap;
+}
+.episode-form-page .ce-tab:hover { background: #f1f5f9 !important; }
+.episode-form-page .ce-tab.active {
+  background: #eef2ff !important;
+  color: #1d4ed8 !important;
+  border-color: #dbeafe !important;
+}
+
+/* =========================================================
+   LAYOUT
+========================================================= */
+
+.episode-form-page .ce-body {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 14px;
+}
+
+.episode-form-page .ce-body--single {
+  grid-template-columns: 1fr;
+}
+
+.episode-form-page .ce-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-sm);
+  padding: 16px;
+}
+
+.episode-form-page .ce-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.episode-form-page .ce-grid--2 { grid-template-columns: 1fr 1fr; }
+.episode-form-page .ce-grid--3 { grid-template-columns: 1fr 1fr 1fr; }
+
+/* =========================================================
+   FIELDS / INPUTS
+========================================================= */
+
+.episode-form-page .ce-field label {
+  display: block;
+  margin-bottom: 8px;
+  color: #334155;
+  font-weight: 900;
+  font-size: 13px;
+}
+
+.episode-form-page .ce-required {
+  color: var(--danger);
+  font-weight: 950;
+}
+
+.episode-form-page .ce-input {
+  width: 100%;
+  padding: 12px !important;
+  border-radius: 12px !important;
+  border: 1px solid var(--border) !important;
+  background: #fff !important;
+  color: var(--text) !important;
+  font-weight: 700 !important;
+  font-size: 14px !important;
+  outline: none !important;
+}
+
+.episode-form-page .ce-input:focus {
+  border-color: #93c5fd !important;
+  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12) !important;
+  background: #fbfdff !important;
+}
+
+.episode-form-page .ce-input--error {
+  border-color: #fca5a5 !important;
+  background: #fff1f2 !important;
+}
+
+.episode-form-page .ce-textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.episode-form-page .ce-error {
+  margin-top: 8px;
+  color: #b91c1c;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.episode-form-page .ce-hint {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+/* =========================================================
+   TAGS
+========================================================= */
+
+.episode-form-page .ce-tagRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  align-items: center;
+}
+
+.episode-form-page .ce-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.episode-form-page .ce-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  color: #0f172a;
+  font-weight: 800;
+  font-size: 13px;
+}
+
+.episode-form-page .ce-tagX {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid #e2e8f0 !important;
+  background: #ffffff !important;
   cursor: pointer;
-  font-size: 1rem;
-  padding: 0;
-  line-height: 1;
-  transition: opacity 0.2s ease;
+  font-weight: 950;
+  color: #64748b;
+}
+.episode-form-page .ce-tagX:hover {
+  background: #fee2e2 !important;
+  border-color: #fecaca !important;
+  color: #991b1b;
 }
 
-.category-remove:hover {
-  opacity: 0.8;
+.episode-form-page .ce-emptySmall {
+  margin-top: 10px;
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 13px;
+}
+
+/* =========================================================
+   SIDEBAR
+========================================================= */
+
+.episode-form-page .ce-sideTitle {
+  font-weight: 950;
+  margin-bottom: 10px;
+}
+
+.episode-form-page .ce-progress {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid var(--border2);
+  background: #fbfdff;
+}
+
+.episode-form-page .ce-progressTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.episode-form-page .ce-progressBar {
+  height: 10px;
+  border-radius: 999px;
+  background: #eef2f7;
+  overflow: hidden;
+}
+
+.episode-form-page .ce-progressFill {
+  height: 100%;
+  background: #93c5fd;
+  border-radius: 999px;
+}
+
+.episode-form-page .ce-checklist {
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.episode-form-page .ce-checkItem {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.episode-form-page .ce-checkDot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #e2e8f0;
+}
+.episode-form-page .ce-checkDot.done { background: #22c55e; }
+
+.episode-form-page .ce-checkLabel {
+  font-weight: 750;
+  color: #334155;
+  font-size: 13px;
+}
+
+.episode-form-page .ce-sideHint {
+  margin-top: 14px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.4;
+}
+
+/* =========================================================
+   FOOTER ACTIONS (mobile)
+========================================================= */
+
+.episode-form-page .ce-footerActions {
+  display: none;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  gap: 10px;
+}
+
+.episode-form-page .ce-alert {
+  margin-bottom: 12px;
+}
+
+/* =========================================================
+   RESPONSIVE
+========================================================= */
+
+@media (max-width: 1024px) {
+  .episode-form-page .ce-body { grid-template-columns: 1fr; }
+  .episode-form-page .ce-header__inner { grid-template-columns: 1fr; }
+  .episode-form-page .ce-header__actions { justify-content: flex-start; }
 }
 
 @media (max-width: 768px) {
-  .category-input-group {
-    flex-direction: column;
-  }
+  .episode-form-page .ce-grid--2,
+  .episode-form-page .ce-grid--3 { grid-template-columns: 1fr; }
 
-  .category-input-group input {
-    width: 100%;
-  }
+  .episode-form-page .ce-header__actions { display: none; }
+  .episode-form-page .ce-footerActions { display: flex; }
+  .episode-form-page .ce-btn { width: 100%; }
+  .episode-form-page .ce-tagRow { grid-template-columns: 1fr; }
 }

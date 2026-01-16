@@ -61,106 +61,6 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'deleted_at',
       },
-
-      // DEPRECATED FIELDS - kept for backward compatibility
-      showName: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-        field: 'showName', // Explicitly map to database column
-      },
-      seasonNumber: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        field: 'seasonNumber', // Explicitly map to database column
-      },
-      episodeNumber: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        field: 'episodeNumber', // Explicitly map to database column
-      },
-      episodeTitle: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-        field: 'episodeTitle', // Explicitly map to database column
-      },
-      plotSummary: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        field: 'plotSummary', // Explicitly map to database column
-      },
-      director: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-        field: 'director', // Explicitly map to database column
-      },
-      writer: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-        field: 'writer', // Explicitly map to database column
-      },
-      durationMinutes: {
-        type: DataTypes.INTEGER,
-        allowNull: true,
-        field: 'durationMinutes', // Explicitly map to database column
-      },
-      rating: {
-        type: DataTypes.DECIMAL(3, 1),
-        allowNull: true,
-        field: 'rating', // Explicitly map to database column
-      },
-      genre: {
-        type: DataTypes.STRING(100),
-        allowNull: true,
-        field: 'genre', // Explicitly map to database column
-      },
-
-      // Media references
-      thumbnailUrl: {
-        type: DataTypes.STRING(512),
-        allowNull: true,
-        field: 'thumbnailUrl', // Explicitly map to database column
-      },
-      posterUrl: {
-        type: DataTypes.STRING(512),
-        allowNull: true,
-        field: 'posterUrl', // Explicitly map to database column
-      },
-      videoUrl: {
-        type: DataTypes.STRING(512),
-        allowNull: true,
-        validate: {
-          isUrl: true,
-        },
-        field: 'videoUrl', // Explicitly map to database column
-      },
-
-      // S3 references
-      rawVideoS3Key: {
-        type: DataTypes.STRING(512),
-        allowNull: true,
-        comment: 'S3 key for original uploaded video',
-        field: 'rawVideoS3Key', // Explicitly map to database column
-      },
-      processedVideoS3Key: {
-        type: DataTypes.STRING(512),
-        allowNull: true,
-        comment: 'S3 key for processed/encoded video',
-        field: 'processedVideoS3Key', // Explicitly map to database column
-      },
-      metadataJsonS3Key: {
-        type: DataTypes.STRING(512),
-        allowNull: true,
-        comment: 'S3 key for extracted metadata JSON',
-        field: 'metadataJsonS3Key', // Explicitly map to database column
-      },
-
-      // Status tracking
-      processingStatus: {
-        type: DataTypes.ENUM('pending', 'processing', 'complete', 'failed'),
-        defaultValue: 'pending',
-        comment: 'Current processing status of episode',
-        field: 'processingStatus', // Explicitly map to database column
-      },
     },
     {
       sequelize,
@@ -173,17 +73,8 @@ module.exports = (sequelize) => {
       paranoid: false, // Manual soft delete via deletedAt
       indexes: [
         {
-          name: 'idx_show_season_episode',
-          fields: ['showName', 'seasonNumber', 'episodeNumber'],
-          unique: true,
-        },
-        {
           name: 'idx_air_date',
           fields: ['air_date'],
-        },
-        {
-          name: 'idx_processing_status',
-          fields: ['processingStatus'],
         },
         {
           name: 'idx_deleted_at',

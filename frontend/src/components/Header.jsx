@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '../hooks/useAuth';
+import { useAuth } from '../contexts/AuthContext';
 import '../styles/Header.css';
 
 const Header = ({ onMenuClick }) => {
@@ -14,16 +14,15 @@ const Header = ({ onMenuClick }) => {
 
   const handleLogout = async () => {
     try {
+      console.log('[Header] Logging out...');
       // Call logout which clears auth state and localStorage
       await logout();
-      // Redirect to login - using replace to prevent back button issues
-      setTimeout(() => {
-        navigate('/login', { replace: true });
-      }, 100);
+      console.log('[Header] Logout complete');
+      // Note: Navigation will happen automatically via App.jsx useEffect
+      // when isAuthenticated changes to false
     } catch (err) {
-      console.error('Logout error:', err);
-      // Still redirect even if logout fails
-      navigate('/login', { replace: true });
+      console.error('[Header] Logout error:', err);
+      // Navigation will still happen via App.jsx
     }
   };
 
