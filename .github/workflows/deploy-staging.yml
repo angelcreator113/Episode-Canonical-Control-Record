@@ -146,7 +146,7 @@ jobs:
           
           # Setup SSH key
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           
           # Deploy via SSH
