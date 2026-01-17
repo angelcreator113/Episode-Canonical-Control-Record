@@ -37,6 +37,9 @@ exports.up = (pgm) => {
       notNull: true,
       default: pgm.func('NOW()'),
     },
+    deleted_at: {
+      type: 'timestamp',
+    },
   });
 
   // Create indexes
