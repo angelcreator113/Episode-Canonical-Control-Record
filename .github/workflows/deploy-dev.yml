@@ -7,6 +7,7 @@ on:
     paths:
       - 'src/**'
       - 'frontend/**'
+      - 'migrations/**'
       - 'package.json'
       - '.github/workflows/**'
   workflow_dispatch:
