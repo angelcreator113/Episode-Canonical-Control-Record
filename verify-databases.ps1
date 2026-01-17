@@ -11,9 +11,9 @@ param(
     [string]$Environment = "all"
 )
 
-function Write-Success { param($message) Write-Host "✅ $message" -ForegroundColor Green }
-function Write-Error { param($message) Write-Host "❌ $message" -ForegroundColor Red }
-function Write-Info { param($message) Write-Host "ℹ️  $message" -ForegroundColor Cyan }
+function Write-Success { param($message) Write-Host "[SUCCESS] $message" -ForegroundColor Green }
+function Write-Error { param($message) Write-Host "[ERROR] $message" -ForegroundColor Red }
+function Write-Info { param($message) Write-Host "[INFO] $message" -ForegroundColor Cyan }
 
 function Get-DatabaseInfo {
     param([string]$EnvFile)
@@ -90,9 +90,9 @@ function Test-DatabaseConnection {
 }
 
 # Main execution
-Write-Host "`n╔════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║   DATABASE VERIFICATION                        ║" -ForegroundColor Cyan
-Write-Host "╚════════════════════════════════════════════════╝" -ForegroundColor Cyan
+Write-Host "`n=====================================================" -ForegroundColor Cyan
+Write-Host "   DATABASE VERIFICATION                            " -ForegroundColor Cyan
+Write-Host "=====================================================`n" -ForegroundColor Cyan
 
 $environments = @()
 if ($Environment -eq "all") {
@@ -117,9 +117,9 @@ foreach ($env in $environments) {
 }
 
 # Summary
-Write-Host "`n╔════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║   VERIFICATION SUMMARY                         ║" -ForegroundColor Cyan
-Write-Host "╚════════════════════════════════════════════════╝`n" -ForegroundColor Cyan
+Write-Host "`n=====================================================" -ForegroundColor Cyan
+Write-Host "   VERIFICATION SUMMARY                            " -ForegroundColor Cyan
+Write-Host "=====================================================`n" -ForegroundColor Cyan
 
 foreach ($env in $environments) {
     $status = $results[$env.Name]
@@ -132,7 +132,7 @@ foreach ($env in $environments) {
     }
 }
 
-Write-Host "`n📋 Next Steps:" -ForegroundColor Yellow
+Write-Host "`n[NEXT STEPS]" -ForegroundColor Yellow
 Write-Host "  1. Ensure all RDS instances are running in AWS" -ForegroundColor White
 Write-Host "  2. Verify security groups allow your IP" -ForegroundColor White
 Write-Host "  3. Check credentials in environment files" -ForegroundColor White

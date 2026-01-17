@@ -21,10 +21,10 @@ param(
 )
 
 # Color output functions
-function Write-Success { param($message) Write-Host "✅ $message" -ForegroundColor Green }
-function Write-Error { param($message) Write-Host "❌ $message" -ForegroundColor Red }
-function Write-Info { param($message) Write-Host "ℹ️  $message" -ForegroundColor Cyan }
-function Write-Warning { param($message) Write-Host "⚠️  $message" -ForegroundColor Yellow }
+function Write-Success { param($message) Write-Host "[SUCCESS] $message" -ForegroundColor Green }
+function Write-Error { param($message) Write-Host "[ERROR] $message" -ForegroundColor Red }
+function Write-Info { param($message) Write-Host "[INFO] $message" -ForegroundColor Cyan }
+function Write-Warning { param($message) Write-Host "[WARNING] $message" -ForegroundColor Yellow }
 
 # Load environment variables
 function Load-Environment {
@@ -230,9 +230,9 @@ function Setup-Database {
 }
 
 # Main execution
-Write-Host "`n╔════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║   DATABASE SETUP - Multi-Environment          ║" -ForegroundColor Cyan
-Write-Host "╚════════════════════════════════════════════════╝`n" -ForegroundColor Cyan
+Write-Host "`n=====================================================" -ForegroundColor Cyan
+Write-Host "   DATABASE SETUP - Multi-Environment              " -ForegroundColor Cyan
+Write-Host "=====================================================`n" -ForegroundColor Cyan
 
 $environments = @()
 if ($Environment -eq "all") {
@@ -250,9 +250,9 @@ foreach ($env in $environments) {
 }
 
 # Summary
-Write-Host "`n╔════════════════════════════════════════════════╗" -ForegroundColor Cyan
-Write-Host "║   SETUP SUMMARY                                ║" -ForegroundColor Cyan
-Write-Host "╚════════════════════════════════════════════════╝`n" -ForegroundColor Cyan
+Write-Host "`n=====================================================" -ForegroundColor Cyan
+Write-Host "   SETUP SUMMARY                                   " -ForegroundColor Cyan
+Write-Host "=====================================================`n" -ForegroundColor Cyan
 
 foreach ($env in $environments) {
     if ($results[$env]) {
@@ -265,9 +265,9 @@ foreach ($env in $environments) {
 # Exit with appropriate code
 $allSuccess = $results.Values | Where-Object { $_ -eq $false } | Measure-Object | Select-Object -ExpandProperty Count
 if ($allSuccess -eq 0) {
-    Write-Host "`n✅ All database setups completed successfully!`n" -ForegroundColor Green
+    Write-Host "`n[SUCCESS] All database setups completed successfully!`n" -ForegroundColor Green
     exit 0
 } else {
-    Write-Host "`n❌ Some database setups failed. Check logs above.`n" -ForegroundColor Red
+    Write-Host "`n[ERROR] Some database setups failed. Check logs above.`n" -ForegroundColor Red
     exit 1
 }
