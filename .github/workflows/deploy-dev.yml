@@ -133,54 +133,28 @@ jobs:
           echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           
-          # Deploy via SSH
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_HOST }} 'bash -l' << 'EOF'
-            set -e
+          # Deploy via SSH - run commands in user's shell environment
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_HOST }} << 'ENDSSH'
+            #!/bin/bash
             
-            # Load NVM and Node.js environment
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            cd ~/episode-metadata || { echo \"Directory not found\"; exit 1; }
             
-            # Verify commands are available
-            echo "Checking environment..."
-            which node || echo "Node not found"
-            which npm || echo "npm not found"
-            which git || echo "git not found"
-            which pm2 || echo "pm2 not found"
-            
-            # Check if project directory exists, if not clone it
-            if [ ! -d "/home/ubuntu/episode-metadata" ]; then
-              echo "📦 First time setup - cloning repository..."
-              cd /home/ubuntu
-              git clone https://github.com/angelcreator113/Episode-Canonical-Control-Record.git episode-metadata
-              cd episode-metadata
-            else
-              cd /home/ubuntu/episode-metadata
-            fi
-            
-            echo "📥 Fetching latest changes..."
-            git fetch origin
-            git checkout dev
-            git pull origin dev
-            
-            echo "📦 Installing backend dependencies..."
+            git fetch origin && git checkout dev && git pull origin dev
             npm ci --production
-            
-            echo "🏗️  Building frontend..."
-            cd frontend
-            npm ci
-            npm run build
-            cd ..
-            
-            echo "🗄️  Running migrations..."
+            cd frontend && npm ci && npm run build && cd ..
             npm run migrate:up || true
             
-            echo "🔄 Restarting application..."
+            # Install pm2 globally if not present
+            if ! command -v pm2 &> /dev/null; then
+              sudo npm install -g pm2
+            fi
+            
+            # Start or restart app with pm2
             pm2 restart all || pm2 start src/index.js --name episode-api
             pm2 save
-            
-            echo "✅ Deployment complete!"
-          EOF
+            pm2 status
+            echo "✅ Deployed!"
+          ENDSSH
           
           echo "✅ Deployment to EC2 complete"
 
