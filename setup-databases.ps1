@@ -174,7 +174,8 @@ function Setup-Database {
     Write-Host "================================================`n" -ForegroundColor Magenta
     
     # Load environment file
-    $envFile = ".env.$EnvName"
+    $envFile = if ($EnvName -eq "dev") { ".env.development" } else { ".env.$EnvName" }
+    
     if ($EnvName -eq "production") {
         if (Test-Path ".env.production") {
             $envFile = ".env.production"

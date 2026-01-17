@@ -7,11 +7,22 @@
 const { Sequelize } = require('sequelize');
 const path = require('path');
 
+// Clear any existing DATABASE_URL to avoid conflicts
+delete process.env.DATABASE_URL;
+
 // Load environment-specific config
 const env = process.env.NODE_ENV || 'development';
 const envFile = env === 'production' ? '.env.production' : `.env.${env}`;
 
+console.log(`🔧 Loading environment: ${env} from ${envFile}\n`);
 require('dotenv').config({ path: path.join(__dirname, envFile) });
+
+console.log(`📋 Environment variables loaded:`);
+console.log(`   DB_HOST: ${process.env.DB_HOST}`);
+console.log(`   DB_PORT: ${process.env.DB_PORT}`);
+console.log(`   DB_NAME: ${process.env.DB_NAME}`);
+console.log(`   DB_USER: ${process.env.DB_USER}`);
+console.log(`   DATABASE_SSL: ${process.env.DATABASE_SSL}\n`);
 
 const testConnection = async () => {
   const dbUrl = process.env.DATABASE_URL;
@@ -29,11 +40,14 @@ const testConnection = async () => {
   const maskedUrl = dbUrl.replace(/:([^:@]+)@/, ':****@');
   console.log(`ℹ️  Testing connection to: ${maskedUrl}\n`);
 
-  const sequelize = new Sequelize(dbUrl, {
+  // Parse connection URL to remove sslmode parameter (Sequelize handles SSL differently)
+  const cleanUrl = dbUrl.replace(/\?sslmode=\w+/, '');
+  
+  const sequelize = new Sequelize(cleanUrl, {
     dialect: 'postgres',
     logging: false,
     dialectOptions: {
-      ssl: process.env.DATABASE_SSL === 'true' || dbUrl.includes('sslmode=require') ? {
+      ssl: (process.env.DATABASE_SSL === 'true' || dbUrl.includes('sslmode=require')) ? {
         require: true,
         rejectUnauthorized: false // Accept AWS RDS self-signed certificates
       } : false
