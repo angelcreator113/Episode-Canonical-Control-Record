@@ -101,14 +101,6 @@ exports.up = (pgm) => {
     },
   });
 
-  // Add soft delete field
-  pgm.addColumn('scenes', {
-    deleted_at: {
-      type: 'timestamp',
-      comment: 'Soft delete timestamp (paranoid mode)',
-    },
-  });
-
   // Add indexes for frequently queried fields
   pgm.createIndex('scenes', 'scene_type', {
     name: 'idx_scenes_scene_type',
@@ -121,19 +113,10 @@ exports.up = (pgm) => {
   pgm.createIndex('scenes', 'is_locked', {
     name: 'idx_scenes_is_locked',
   });
-
-  pgm.createIndex('scenes', 'deleted_at', {
-    name: 'idx_scenes_deleted_at',
-  });
 };
 
 exports.down = (pgm) => {
   // Remove indexes
-  pgm.dropIndex('scenes', 'deleted_at', {
-    name: 'idx_scenes_deleted_at',
-    ifExists: true,
-  });
-
   pgm.dropIndex('scenes', 'is_locked', {
     name: 'idx_scenes_is_locked',
     ifExists: true,
@@ -150,7 +133,6 @@ exports.down = (pgm) => {
   });
 
   // Remove columns
-  pgm.dropColumn('scenes', 'deleted_at', { ifExists: true });
   pgm.dropColumn('scenes', 'updated_by', { ifExists: true });
   pgm.dropColumn('scenes', 'created_by', { ifExists: true });
   pgm.dropColumn('scenes', 'characters', { ifExists: true });

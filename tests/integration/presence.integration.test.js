@@ -12,13 +12,13 @@
 
 const request = require('supertest');
 const express = require('express');
-const { sequelize } = require('../../../src/models');
-const UserPresence = require('../../../src/models').UserPresence;
-const presenceController = require('../../../src/controllers/presenceController');
-const { authenticateToken, authorizeRole } = require('../../../src/middleware/auth');
+const { sequelize } = require('../../src/models');
+const UserPresence = require('../../src/models').UserPresence;
+const presenceController = require('../../src/controllers/presenceController');
+const { authenticateToken, authorizeRole } = require('../../src/middleware/auth');
 
-jest.mock('../../../src/middleware/auth');
-jest.mock('../../../src/services/Logger');
+jest.mock('../../src/middleware/auth');
+jest.mock('../../src/services/Logger');
 
 describe('Presence Integration Tests', () => {
   let app;

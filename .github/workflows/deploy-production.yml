@@ -108,7 +108,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: production
-      url: https://www.primepisodes.com
+      url: https://primepisodes.com
 
     steps:
       - uses: actions/checkout@v3
@@ -156,13 +156,35 @@ jobs:
           echo "Branch: main"
           echo "Reason: ${{ github.event.inputs.reason }}"
           echo "Deployed by: ${{ github.actor }}"
-          # Add production deployment commands here
-          # Example: aws ecs update-service --cluster production --service episode-metadata --force-new-deployment
+          
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          
+          # Deploy via SSH
+          ssh -i ~/.ssh/deploy_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/ubuntu/episode-metadata
+            git fetch origin
+            git checkout main
+            git pull origin main
+            npm ci --production
+            cd frontend && npm ci && npm run build && cd ..
+            npm run migrate:up || true
+            pm2 restart all
+            pm2 save
+          EOF
+          
+          echo "✅ Deployment to EC2 complete"
 
       - name: Run smoke tests
         run: |
-          echo "Running production health checks..."
-          # curl -f https://www.primepisodes.com/health || exit 1
+          echo "🧪 Running production health checks..."
+          curl -f https://primepisodes.com/health || exit 1
+          curl -f https://www.primepisodes.com/health || exit 1
+          echo "✅ Production health checks passed"
+          echo "🌐 Site: https://primepisodes.com"
 
       - name: Deployment summary
         run: |
