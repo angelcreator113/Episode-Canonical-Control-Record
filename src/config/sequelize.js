@@ -16,8 +16,8 @@ function parseDatabaseUrl(url) {
   if (!url) return null;
 
   try {
-    // Format: postgres://user:password@host:port/database
-    const match = url.match(/postgres:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
+    // Format: postgresql://user:password@host:port/database
+    const match = url.match(/postgresql?:\/\/([^:]+):([^@]+)@([^:]+):(\d+)\/(.+)/);
 
     if (!match) {
       console.warn('⚠️  Invalid DATABASE_URL format');
