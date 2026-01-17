@@ -12,14 +12,14 @@
 
 const request = require('supertest');
 const express = require('express');
-const { sequelize } = require('../../../src/models');
-const Notification = require('../../../src/models').Notification;
-const NotificationPreference = require('../../../src/models').NotificationPreference;
-const notificationController = require('../../../src/controllers/notificationController');
-const { authenticateToken, authorizeRole } = require('../../../src/middleware/auth');
+const { sequelize } = require('../../src/models');
+const Notification = require('../../src/models').Notification;
+const NotificationPreference = require('../../src/models').NotificationPreference;
+const notificationController = require('../../src/controllers/notificationController');
+const { authenticateToken, authorizeRole } = require('../../src/middleware/auth');
 
-jest.mock('../../../src/middleware/auth');
-jest.mock('../../../src/services/Logger');
+jest.mock('../../src/middleware/auth');
+jest.mock('../../src/services/Logger');
 
 describe('Notification Integration Tests', () => {
   let app;

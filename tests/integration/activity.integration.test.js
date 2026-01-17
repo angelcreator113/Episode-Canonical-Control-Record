@@ -12,13 +12,13 @@
 
 const request = require('supertest');
 const express = require('express');
-const { sequelize } = require('../../../src/models');
-const ActivityLog = require('../../../src/models').ActivityLog;
-const activityController = require('../../../src/controllers/activityController');
-const { authenticateToken, authorizeRole } = require('../../../src/middleware/auth');
+const { sequelize } = require('../../src/models');
+const ActivityLog = require('../../src/models').ActivityLog;
+const activityController = require('../../src/controllers/activityController');
+const { authenticateToken, authorizeRole } = require('../../src/middleware/auth');
 
-jest.mock('../../../src/middleware/auth');
-jest.mock('../../../src/services/Logger');
+jest.mock('../../src/middleware/auth');
+jest.mock('../../src/services/Logger');
 
 describe('Activity Integration Tests', () => {
   let app;
