@@ -1,8 +1,10 @@
-name: Deploy to Production
+name: CI/CD Deploy Pipeline
 
 on:
   push:
     branches:
+      - dev
+      - staging
       - main
     paths:
       - 'src/**'
@@ -92,10 +94,13 @@ jobs:
           name: episode-metadata-build
           path: episode-metadata-${{ github.sha }}.tar.gz
 
-  deploy-staging:
+  deploy-dev:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/develop'
+    if: github.ref == 'refs/heads/dev'
+    environment:
+      name: development
+      url: https://dev.episodes.primestudios.dev
 
     steps:
       - uses: actions/checkout@v3
@@ -105,19 +110,61 @@ jobs:
         with:
           name: episode-metadata-build
 
-      - name: Deploy to Staging
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to Development
         run: |
-          # Add deployment commands here
-          echo "Deploying to staging environment..."
+          echo "Deploying to development environment..."
+          # Add your deployment commands here (e.g., AWS ECS, EB, Lambda)
 
       - name: Run smoke tests
         run: |
-          curl -f http://staging-api.example.com/health || exit 1
+          curl -f https://dev.episodes.primestudios.dev/health || exit 1
+
+  deploy-staging:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/staging'
+    environment:
+      name: staging
+      url: https://staging.episodes.primestudios.dev
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: episode-metadata-build
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Deploy to Staging
+        run: |
+          echo "Deploying to staging environment..."
+          # Add your deployment commands here
+
+      - name: Run smoke tests
+        run: |
+          curl -f https://staging.episodes.primestudios.dev/health || exit 1
 
   deploy-production:
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
+    environment:
+      name: production
+      url: https://www.primepisodes.com
 
     steps:
       - uses: actions/checkout@v3
@@ -136,32 +183,23 @@ jobs:
 
       - name: Deploy to Production
         run: |
-          # Add production deployment commands
           echo "Deploying to production..."
+          # Add production deployment commands here
 
       - name: Run smoke tests
         run: |
-          curl -f https://api.example.com/health || exit 1
+          curl -f https://www.primepisodes.com/health || exit 1
 
       - name: Notify on success
+        if: success()
         uses: actions/github-script@v6
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '✅ Deployment to production completed successfully!'
-            })
+            console.log('✅ Deployment to production completed successfully!')
 
       - name: Notify on failure
         if: failure()
         uses: actions/github-script@v6
         with:
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: '❌ Deployment to production failed. Please review logs.'
-            })
+            console.log('❌ Deployment to production failed. Please review logs.')
