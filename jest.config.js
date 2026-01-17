@@ -40,7 +40,6 @@ module.exports = {
     'scene.test.js',
   ],
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
-  forceExit: true,
   detectOpenHandles: false,
   maxWorkers: 1,
 };
