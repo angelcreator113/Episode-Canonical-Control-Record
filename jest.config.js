@@ -42,4 +42,5 @@ module.exports = {
   setupFilesAfterEnv: ['<rootDir>/tests/setup.js'],
   forceExit: true,
   detectOpenHandles: false,
+  maxWorkers: 1,
 };
