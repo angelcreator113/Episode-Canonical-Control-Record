@@ -134,8 +134,19 @@ jobs:
           chmod 600 ~/.ssh/deploy_key
           
           # Deploy via SSH
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_HOST }} 'bash -l' << 'EOF'
             set -e
+            
+            # Load NVM and Node.js environment
+            export NVM_DIR="$HOME/.nvm"
+            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+            
+            # Verify commands are available
+            echo "Checking environment..."
+            which node || echo "Node not found"
+            which npm || echo "npm not found"
+            which git || echo "git not found"
+            which pm2 || echo "pm2 not found"
             
             # Check if project directory exists, if not clone it
             if [ ! -d "/home/ubuntu/episode-metadata" ]; then
