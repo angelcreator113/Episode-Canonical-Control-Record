@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: development
-      url: https://dev.episodes.primestudios.dev
+      url: https://dev.primepisodes.com
 
     steps:
       - uses: actions/checkout@v3
@@ -127,10 +127,27 @@ jobs:
           echo "Database: episode-control-dev"
           echo "Commit: ${{ github.sha }}"
           echo "Target: primepisodes-alb-1912818060.us-east-1.elb.amazonaws.com"
-          echo "✅ Build artifacts created successfully"
-          echo ""
-          echo "Note: Deployment to EC2 requires SSH key configuration"
-          echo "To enable automatic deployment, add SSH_PRIVATE_KEY secret and configure deployment script"
+          
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+          
+          # Deploy via SSH
+          ssh -i ~/.ssh/deploy_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
+            cd /home/ubuntu/episode-metadata
+            git fetch origin
+            git checkout dev
+            git pull origin dev
+            npm ci --production
+            cd frontend && npm ci && npm run build && cd ..
+            npm run migrate:up || true
+            pm2 restart all
+            pm2 save
+          EOF
+          
+          echo "✅ Deployment to EC2 complete"
 
       - name: Run smoke tests
         run: |
