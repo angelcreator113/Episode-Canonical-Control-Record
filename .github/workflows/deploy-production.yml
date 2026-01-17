@@ -161,8 +161,11 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          echo "Running production health checks..."
-          # curl -f https://www.primepisodes.com/health || exit 1
+          echo "🧪 Running production health checks..."
+          curl -f https://primepisodes.com/health || exit 1
+          curl -f https://www.primepisodes.com/health || exit 1
+          echo "✅ Production health checks passed"
+          echo "🌐 Site: https://primepisodes.com"
 
       - name: Deployment summary
         run: |

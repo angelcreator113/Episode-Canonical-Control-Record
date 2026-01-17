@@ -135,9 +135,9 @@ jobs:
       - name: Run smoke tests
         run: |
           echo "🧪 Running smoke tests against load balancer..."
-          curl -f http://dev.primepisodes.com/health || curl -f http://primepisodes-alb-1912818060.us-east-1.elb.amazonaws.com/health || echo "⚠️  Health check failed - service may be starting"
+          curl -f https://dev.primepisodes.com/health || echo "⚠️  Health check failed - service may be starting"
           echo "✅ Deployment workflow completed"
-          echo "🌐 Site: http://dev.primepisodes.com"
+          echo "🌐 Site: https://dev.primepisodes.com"
           echo "✅ Smoke tests passed"
 
       - name: Deployment summary
