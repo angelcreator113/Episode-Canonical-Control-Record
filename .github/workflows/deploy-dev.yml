@@ -9,6 +9,7 @@ on:
       - 'frontend/**'
       - 'migrations/**'
       - 'package.json'
+      - 'jest.config.js'
       - '.github/workflows/**'
   workflow_dispatch:
 
