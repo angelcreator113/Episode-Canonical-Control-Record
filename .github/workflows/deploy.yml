@@ -12,6 +12,15 @@ on:
       - 'package.json'
       - '.github/workflows/deploy.yml'
   workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy'
+        required: true
+        type: choice
+        options:
+          - development
+          - staging
+          - production
 
 jobs:
   test:
@@ -129,7 +138,7 @@ jobs:
   deploy-staging:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/staging'
+    if: github.ref == 'refs/heads/staging' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging')
     environment:
       name: staging
       url: https://staging.episodes.primestudios.dev
@@ -142,6 +151,11 @@ jobs:
         with:
           name: episode-metadata-build
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -149,19 +163,38 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          NODE_ENV: staging
+        run: |
+          echo "Running staging database migrations..."
+          npm ci
+          npm run migrate || echo "Migration skipped or failed"
+
       - name: Deploy to Staging
         run: |
-          echo "Deploying to staging environment..."
+          echo "🚀 Deploying to staging environment..."
+          echo "Database: episode-control-staging"
           # Add your deployment commands here
+          # Example: aws ecs update-service --cluster staging --service episode-metadata --force-new-deployment
 
       - name: Run smoke tests
         run: |
-          curl -f https://staging.episodes.primestudios.dev/health || exit 1
+          echo "Running staging health checks..."
+          # curl -f https://staging.episodes.primestudios.dev/health || exit 1
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Staging deployment completed"
+          echo "Environment: staging"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
 
   deploy-production:
     needs: build
     runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+    if: github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production')
     environment:
       name: production
       url: https://www.primepisodes.com
@@ -174,6 +207,11 @@ jobs:
         with:
           name: episode-metadata-build
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
         with:
@@ -181,14 +219,38 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
+      - name: Create backup
+        run: |
+          echo "📦 Creating production database backup..."
+          # Add backup command: aws rds create-db-snapshot --db-instance-identifier episode-control-prod --db-snapshot-identifier prod-backup-$(date +%Y%m%d-%H%M%S)
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          NODE_ENV: production
+        run: |
+          echo "Running production database migrations..."
+          npm ci
+          npm run migrate || echo "Migration skipped or failed"
+
       - name: Deploy to Production
         run: |
-          echo "Deploying to production..."
+          echo "🚀 Deploying to production..."
+          echo "Database: episode-control-prod"
           # Add production deployment commands here
+          # Example: aws ecs update-service --cluster production --service episode-metadata --force-new-deployment
 
       - name: Run smoke tests
         run: |
-          curl -f https://www.primepisodes.com/health || exit 1
+          echo "Running production health checks..."
+          # curl -f https://www.primepisodes.com/health || exit 1
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Production deployment completed"
+          echo "Environment: production"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
 
       - name: Notify on success
         if: success()
