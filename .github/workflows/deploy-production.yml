@@ -201,9 +201,29 @@ jobs:
             export DATABASE_URL="${{ secrets.PRODUCTION_DATABASE_URL }}"
             npm run migrate:up || true
             
-            echo "🔄 Restarting application..."
+            echo "🌐 Setting up Nginx..."
+            # Install Nginx if not present
+            if ! command -v nginx &> /dev/null; then
+              echo "Installing Nginx..."
+              sudo apt-get update -qq
+              sudo apt-get install -y nginx
+            fi
+            
+            # Copy Nginx configuration
+            sudo cp nginx.conf /etc/nginx/sites-available/primepisodes
+            sudo ln -sf /etc/nginx/sites-available/primepisodes /etc/nginx/sites-enabled/primepisodes
+            sudo rm -f /etc/nginx/sites-enabled/default
+            
+            # Test and reload Nginx
+            sudo nginx -t
+            sudo systemctl enable nginx
+            sudo systemctl restart nginx
+            
+            echo "🔄 Restarting backend application..."
+            export PORT=3000
+            export NODE_ENV=production
             export DATABASE_URL="${{ secrets.PRODUCTION_DATABASE_URL }}"
-            pm2 restart all || pm2 start src/server.js --name episode-api
+            pm2 restart all || pm2 start src/server.js --name episode-api --env production
             pm2 save
             
             echo "✅ Deployment complete!"
