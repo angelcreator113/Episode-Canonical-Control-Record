@@ -186,15 +186,18 @@ jobs:
             git pull origin main
             
             echo "📦 Installing backend dependencies..."
-            npm ci --production
+            export NODE_ENV=production
+            npm ci --production --omit=dev
             
             echo "🏗️  Building frontend..."
             cd frontend
+            export NODE_ENV=production
             npm ci
             npm run build
             cd ..
             
-            echo "🗄️  Running migrations..."
+            echo "🗄️  Running migrations ONLY (no test data seeding)..."
+            export NODE_ENV=production
             npm run migrate:up || true
             
             echo "🔄 Restarting application..."
