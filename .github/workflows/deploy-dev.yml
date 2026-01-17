@@ -135,15 +135,40 @@ jobs:
           
           # Deploy via SSH
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /home/ubuntu/episode-metadata
+            set -e
+            
+            # Check if project directory exists, if not clone it
+            if [ ! -d "/home/ubuntu/episode-metadata" ]; then
+              echo "📦 First time setup - cloning repository..."
+              cd /home/ubuntu
+              git clone https://github.com/angelcreator113/Episode-Canonical-Control-Record.git episode-metadata
+              cd episode-metadata
+            else
+              cd /home/ubuntu/episode-metadata
+            fi
+            
+            echo "📥 Fetching latest changes..."
             git fetch origin
             git checkout dev
             git pull origin dev
+            
+            echo "📦 Installing backend dependencies..."
             npm ci --production
-            cd frontend && npm ci && npm run build && cd ..
+            
+            echo "🏗️  Building frontend..."
+            cd frontend
+            npm ci
+            npm run build
+            cd ..
+            
+            echo "🗄️  Running migrations..."
             npm run migrate:up || true
-            pm2 restart all
+            
+            echo "🔄 Restarting application..."
+            pm2 restart all || pm2 start src/index.js --name episode-api
             pm2 save
+            
+            echo "✅ Deployment complete!"
           EOF
           
           echo "✅ Deployment to EC2 complete"
