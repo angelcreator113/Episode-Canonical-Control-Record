@@ -101,14 +101,6 @@ exports.up = (pgm) => {
     },
   });
 
-  // Add soft delete field
-  pgm.addColumn('scenes', {
-    deleted_at: {
-      type: 'timestamp',
-      comment: 'Soft delete timestamp (paranoid mode)',
-    },
-  });
-
   // Add indexes for frequently queried fields
   pgm.createIndex('scenes', 'scene_type', {
     name: 'idx_scenes_scene_type',
