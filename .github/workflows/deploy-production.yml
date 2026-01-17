@@ -191,7 +191,6 @@ jobs:
             
             echo "🏗️  Building frontend..."
             cd frontend
-            export NODE_ENV=production
             npm ci
             npm run build
             cd ..
