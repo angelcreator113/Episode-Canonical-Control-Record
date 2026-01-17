@@ -198,10 +198,12 @@ jobs:
             
             echo "🗄️  Running migrations ONLY (no test data seeding)..."
             export NODE_ENV=production
+            export DATABASE_URL="${{ secrets.PRODUCTION_DATABASE_URL }}"
             npm run migrate:up || true
             
             echo "🔄 Restarting application..."
-            pm2 restart all || pm2 start src/index.js --name episode-api
+            export DATABASE_URL="${{ secrets.PRODUCTION_DATABASE_URL }}"
+            pm2 restart all || pm2 start src/server.js --name episode-api
             pm2 save
             
             echo "✅ Deployment complete!"
