@@ -5,7 +5,13 @@
  */
 
 const { Sequelize } = require('sequelize');
-require('dotenv').config();
+const path = require('path');
+
+// Load environment-specific config
+const env = process.env.NODE_ENV || 'development';
+const envFile = env === 'production' ? '.env.production' : `.env.${env}`;
+
+require('dotenv').config({ path: path.join(__dirname, envFile) });
 
 const testConnection = async () => {
   const dbUrl = process.env.DATABASE_URL;
@@ -27,9 +33,9 @@ const testConnection = async () => {
     dialect: 'postgres',
     logging: false,
     dialectOptions: {
-      ssl: process.env.DATABASE_SSL === 'true' ? {
+      ssl: process.env.DATABASE_SSL === 'true' || dbUrl.includes('sslmode=require') ? {
         require: true,
-        rejectUnauthorized: false
+        rejectUnauthorized: false // Accept AWS RDS self-signed certificates
       } : false
     },
     pool: {
