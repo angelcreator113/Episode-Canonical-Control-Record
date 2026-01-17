@@ -44,6 +44,10 @@ exports.up = (pgm) => {
       notNull: true,
       default: pgm.func('current_timestamp'),
     },
+    deleted_at: {
+      type: 'timestamp',
+      notNull: false,
+    },
   });
 
   // Add index on episode_id for faster queries
