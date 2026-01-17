@@ -126,16 +126,44 @@ jobs:
           echo "🚀 Deploying to development environment..."
           echo "Database: episode-control-dev"
           echo "Commit: ${{ github.sha }}"
-          echo "✅ Build artifacts created successfully"
-          echo "Note: AWS deployment skipped - configure AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY secrets to enable"
-          # Add your deployment commands here when AWS is configured
-          # Example: aws ecs update-service --cluster dev --service episode-metadata --force-new-deployment
+          
+          # Install AWS CLI v2 if not present
+          which aws || (curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip" && unzip -q awscliv2.zip && sudo ./aws/install)
+          
+          # Install AWS SSM Session Manager plugin
+          curl "https://s3.amazonaws.com/session-manager-downloads/plugin/latest/ubuntu_64bit/session-manager-plugin.deb" -o "session-manager-plugin.deb"
+          sudo dpkg -i session-manager-plugin.deb
+          
+          # Get backend instance ID
+          BACKEND_INSTANCE=$(aws ec2 describe-instances \
+            --region us-east-1 \
+            --filters "Name=tag:Name,Values=episode-backend" "Name=instance-state-name,Values=running" \
+            --query "Reservations[0].Instances[0].InstanceId" \
+            --output text)
+          
+          echo "Deploying to backend instance: $BACKEND_INSTANCE"
+          
+          # Deploy to backend via SSM
+          aws ssm send-command \
+            --region us-east-1 \
+            --instance-ids $BACKEND_INSTANCE \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=[
+              "cd /home/ubuntu/episode-backend || cd /home/ec2-user/episode-backend",
+              "git pull origin dev",
+              "npm install --production",
+              "pm2 restart all || npm run start"
+            ]' \
+            --output text
 
       - name: Run smoke tests
         run: |
+          echo "⏳ Waiting for deployment to complete..."
+          sleep 30
+          
+          echo "🧪 Running smoke tests..."
+          curl -f http://primepisodes-alb-1912818060.us-east-1.elb.amazonaws.com/health || exit 1
           echo "✅ Smoke tests passed"
-          echo "Note: Configure AWS credentials to enable full deployment"
-          # curl -f https://dev.episodes.primestudios.dev/health || exit 1
 
       - name: Deployment summary
         run: |
