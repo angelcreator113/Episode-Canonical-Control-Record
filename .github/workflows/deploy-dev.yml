@@ -130,22 +130,31 @@ jobs:
           
           # Setup SSH key
           mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
           
-          # Deploy via SSH
-          ssh -i ~/.ssh/deploy_key ubuntu@${{ secrets.EC2_HOST }} << 'EOF'
-            cd /home/ubuntu/episode-metadata
-            git fetch origin
-            git checkout dev
-            git pull origin dev
+          # Deploy via SSH - run commands in user's shell environment
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_HOST }} << 'ENDSSH'
+            #!/bin/bash
+            
+            cd ~/episode-metadata || { echo \"Directory not found\"; exit 1; }
+            
+            git fetch origin && git checkout dev && git pull origin dev
             npm ci --production
             cd frontend && npm ci && npm run build && cd ..
             npm run migrate:up || true
-            pm2 restart all
+            
+            # Install pm2 globally if not present
+            if ! command -v pm2 &> /dev/null; then
+              sudo npm install -g pm2
+            fi
+            
+            # Start or restart app with pm2
+            pm2 restart all || pm2 start src/index.js --name episode-api
             pm2 save
-          EOF
+            pm2 status
+            echo "✅ Deployed!"
+          ENDSSH
           
           echo "✅ Deployment to EC2 complete"
 
