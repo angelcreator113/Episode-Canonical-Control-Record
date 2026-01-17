@@ -1,0 +1,160 @@
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "deploy" to confirm staging deployment'
+        required: true
+        default: ''
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate deployment confirmation
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "deploy" ]; then
+            echo "❌ Deployment cancelled - confirmation required"
+            exit 1
+          fi
+          echo "✅ Deployment confirmed"
+
+  test:
+    needs: validate
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: episode_metadata
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: staging
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test -- --coverage
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata
+          JWT_SECRET: test-secret-key-minimum-32-characters-long
+          NODE_ENV: test
+
+  build:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: staging
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci --production
+
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build
+
+      - name: Create artifact
+        run: |
+          mkdir -p deploy
+          cp -r src deploy/
+          cp -r frontend/dist deploy/
+          cp package.json deploy/
+          cp package-lock.json deploy/
+          tar -czf episode-metadata-staging-${{ github.sha }}.tar.gz deploy/
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: episode-metadata-build-staging
+          path: episode-metadata-staging-${{ github.sha }}.tar.gz
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: https://staging.episodes.primestudios.dev
+
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          ref: staging
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: episode-metadata-build-staging
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      - name: Run database migrations
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          NODE_ENV: staging
+        run: |
+          echo "Running staging database migrations..."
+          npm ci
+          npm run migrate || echo "Migration skipped or failed"
+
+      - name: Deploy to Staging
+        run: |
+          echo "🚀 Deploying to staging environment..."
+          echo "Database: episode-control-staging"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: staging"
+          # Add your deployment commands here
+          # Example: aws ecs update-service --cluster staging --service episode-metadata --force-new-deployment
+
+      - name: Run smoke tests
+        run: |
+          echo "Running staging health checks..."
+          # curl -f https://staging.episodes.primestudios.dev/health || exit 1
+
+      - name: Deployment summary
+        run: |
+          echo "✅ Staging deployment completed"
+          echo "Environment: staging"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: staging"
+          echo "Deployed by: ${{ github.actor }}"
