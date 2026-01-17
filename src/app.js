@@ -77,6 +77,17 @@ app.use(
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
         'http://127.0.0.1:3000',
+        'http://primepisodes.com',
+        'https://primepisodes.com',
+        'http://www.primepisodes.com',
+        'https://www.primepisodes.com',
+        'http://api.primepisodes.com',
+        'https://api.primepisodes.com',
+        'http://dev.primepisodes.com',
+        'https://dev.primepisodes.com',
+        'http://primepisodes-alb-1912818060.us-east-1.elb.amazonaws.com',
+        'http://52.91.217.230',
+        'http://3.94.166.174',
       ];
       
       console.log('🔍 CORS Check - Origin:', origin, 'Allowed:', allowedOrigins.includes(origin));
