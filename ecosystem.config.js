@@ -19,16 +19,16 @@ module.exports = {
       ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
       
       // Database Config - AWS RDS Development
-      DATABASE_URL: 'postgresql://postgres:Ayanna123!!@episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata',
+      DATABASE_URL: 'postgresql://postgres:Ayanna123%21%21@episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata',
       DB_HOST: 'episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com',
-      DB_PORT: 5432,
+      DB_PORT: '5432',
       DB_NAME: 'episode_metadata',
       DB_USER: 'postgres',
       DB_PASSWORD: 'Ayanna123!!',
-      DATABASE_POOL_MIN: 2,
-      DATABASE_POOL_MAX: 10,
-      DATABASE_TIMEOUT: 30000,
-      DATABASE_SSL: true,
+      DATABASE_POOL_MIN: '2',
+      DATABASE_POOL_MAX: '10',
+      DATABASE_TIMEOUT: '30000',
+      DATABASE_SSL: 'true',
       DB_SSL: 'true',
       
       // AWS Config
@@ -41,7 +41,7 @@ module.exports = {
       AWS_S3_BUCKET: 'episode-metadata-storage-dev',
       S3_PRIMARY_BUCKET: 'episode-metadata-storage-dev',
       S3_THUMBNAIL_BUCKET: 'episode-metadata-thumbnails-dev',
-      MAX_FILE_UPLOAD_SIZE_MB: 500,
+      MAX_FILE_UPLOAD_SIZE_MB: '500',
       
       // Cognito Auth - Development Pool
       COGNITO_USER_POOL_ID: 'us-east-1_mFVU52978',

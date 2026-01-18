@@ -216,10 +216,11 @@ jobs:
             head -20 ecosystem.config.js
             
             echo "📋 Starting PM2 with ecosystem config..."
-            pm2 start ecosystem.config.js --update-env
+            pm2 start ecosystem.config.js --update-env 2>&1 | tee pm2-start.log
             
             if [ $? -ne 0 ]; then
-              echo "❌ PM2 start failed! Checking for errors..."
+              echo "❌ PM2 start failed! Output:"
+              cat pm2-start.log
               cat ~/episode-metadata/logs/error.log 2>/dev/null || echo "No error log"
               exit 1
             fi
