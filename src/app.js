@@ -401,18 +401,31 @@ const frontendDistPath = path.join(__dirname, '../frontend/dist');
 if (fs.existsSync(frontendDistPath)) {
   console.log('✓ Serving frontend from:', frontendDistPath);
   
-  // Serve static assets
-  app.use(express.static(frontendDistPath));
+  // Serve static assets with proper caching
+  app.use(express.static(frontendDistPath, {
+    maxAge: 0, // No caching for dev
+    etag: true,
+    lastModified: true,
+    setHeaders: (res) => {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }));
   
-  // Handle React Router - serve index.html for all non-API routes
+  // Handle React Router - serve index.html for all non-API/file routes (MUST be last)
   app.get('*', (req, res, next) => {
-    // Skip API routes and specific endpoints
+    // Skip API routes
     if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/ping') {
+      return next();
+    }
+    
+    // If file has extension and doesn't exist, 404 instead of serving index.html
+    if (path.extname(req.path)) {
       return next();
     }
     
     const indexPath = path.join(frontendDistPath, 'index.html');
     if (fs.existsSync(indexPath)) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
       res.sendFile(indexPath);
     } else {
       next();
