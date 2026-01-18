@@ -11,7 +11,7 @@ module.exports = {
     out_file: '/home/ubuntu/episode-metadata/logs/out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     env: {
-      NODE_ENV: 'development',
+      NODE_ENV: 'staging',
       PORT: 3002,
       HOST: '0.0.0.0',
       API_VERSION: 'v1',
@@ -34,6 +34,8 @@ module.exports = {
       // AWS Config
       AWS_REGION: 'us-east-1',
       AWS_ACCOUNT_ID: '637423256673',
+      AWS_ACCESS_KEY_ID: 'dummy-key-for-dev',
+      AWS_SECRET_ACCESS_KEY: 'dummy-secret-for-dev',
       
       // S3 Buckets - Development
       AWS_S3_BUCKET: 'episode-metadata-storage-dev',
