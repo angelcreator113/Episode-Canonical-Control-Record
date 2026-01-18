@@ -1,12 +1,15 @@
 module.exports = {
   apps: [{
     name: 'episode-api',
-    script: './app.js',
-    cwd: '/home/ubuntu/episode-metadata/src',
+    script: '/home/ubuntu/episode-metadata/src/app.js',
+    cwd: '/home/ubuntu/episode-metadata',
     instances: 1,
     autorestart: true,
     watch: false,
     max_memory_restart: '1G',
+    error_file: '/home/ubuntu/episode-metadata/logs/error.log',
+    out_file: '/home/ubuntu/episode-metadata/logs/out.log',
+    log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     env: {
       NODE_ENV: 'development',
       PORT: 3002,
