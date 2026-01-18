@@ -199,13 +199,25 @@ jobs:
             
             # Start fresh with ecosystem config (includes environment variables)
             cd ~/episode-metadata
+            
+            # Verify ecosystem config exists
+            if [ ! -f ecosystem.config.js ]; then
+              echo "❌ ERROR: ecosystem.config.js not found!"
+              ls -la
+              exit 1
+            fi
+            
             echo "📋 Starting PM2 with ecosystem config..."
-            pm2 start ecosystem.config.js --update-env
+            pm2 start ecosystem.config.js --update-env || { echo "❌ PM2 start failed!"; exit 1; }
             pm2 save
             pm2 status
             
             echo "🔍 Verifying PM2 environment variables:"
-            pm2 env 0 | grep -E "DATABASE_URL|NODE_ENV|PORT" || true
+            pm2 env 0 | grep -E "DATABASE_URL|NODE_ENV|PORT|DB_SSL" || echo "⚠️ Env vars not found"
+            
+            echo "🔍 Testing app locally:"
+            sleep 3
+            curl -s http://localhost:3002/health | jq . || echo "⚠️ Health check failed"
             
             echo "📋 Checking logs for errors:"
             sleep 2

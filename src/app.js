@@ -159,6 +159,19 @@ app.get('/health', async (req, res) => {
   res.status(200).json(health);
 });
 
+// Debug endpoint to check environment (should be removed in production)
+app.get('/debug/env', (req, res) => {
+  res.json({
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
+    DATABASE_URL: process.env.DATABASE_URL ? '***SET***' : 'NOT SET',
+    DB_SSL: process.env.DB_SSL,
+    AWS_REGION: process.env.AWS_REGION,
+    cwd: process.cwd(),
+    __dirname,
+  });
+});
+
 // ============================================================================
 // AUTHENTICATION ROUTES
 // ============================================================================
