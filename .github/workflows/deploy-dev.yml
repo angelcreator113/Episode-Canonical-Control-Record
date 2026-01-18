@@ -144,6 +144,9 @@ jobs:
             echo "Removing old build artifacts..."
             rm -rf dist node_modules
             
+            echo "Verifying dist was deleted:"
+            ls -la dist/ 2>&1 || echo "dist not found (good)"
+            
             echo "Installing frontend dependencies..."
             npm ci 2>&1 | tail -20
             
@@ -160,10 +163,10 @@ jobs:
             echo "✓ Frontend built successfully"
             echo "Dist contents:"
             ls -lh dist/
-            echo "Asset files:"
-            ls -lh dist/assets/*.js | head -5
+            echo "ALL asset files:"
+            ls -lh dist/assets/
             echo "File hashes:"
-            md5sum dist/assets/*.js | head -3
+            md5sum dist/assets/*.js
             echo "Checking index.html:"
             cat dist/index.html
             cd ..
