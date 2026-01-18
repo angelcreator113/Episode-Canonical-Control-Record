@@ -132,9 +132,28 @@ jobs:
             
             cd ~/episode-metadata || { echo \"Directory not found\"; exit 1; }
             
+            echo "📦 Fetching latest code..."
             git fetch origin && git checkout dev && git pull origin dev
+            
+            echo "📦 Installing backend dependencies..."
             npm ci
-            cd frontend && npm ci && npm run build && cd ..
+            
+            echo "🎨 Building frontend..."
+            cd frontend
+            rm -rf dist node_modules
+            npm ci
+            npm run build
+            
+            if [ ! -d "dist" ]; then
+              echo "❌ Frontend build failed - dist directory not created"
+              exit 1
+            fi
+            
+            echo "✓ Frontend built successfully"
+            ls -lh dist/
+            cd ..
+            
+            echo "🗄️ Running migrations..."
             npm run migrate:up || true
             
             # Install pm2 globally if not present
@@ -142,8 +161,8 @@ jobs:
               sudo npm install -g pm2
             fi
             
-            # Start or restart app with pm2
-            pm2 restart all || pm2 start src/index.js --name episode-api
+            echo "🔄 Restarting application..."
+            pm2 restart all || pm2 start app.js --name episode-api
             pm2 save
             pm2 status
             echo "✅ Deployed!"
