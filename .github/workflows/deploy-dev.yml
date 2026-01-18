@@ -199,6 +199,10 @@ jobs:
             pm2 save
             pm2 status
             
+            echo "📋 Checking logs for errors:"
+            sleep 2
+            pm2 logs episode-api --lines 50 --nostream || true
+            
             echo "✅ Deployed!"
             echo "📋 Build info:"
             git log -1 --oneline
