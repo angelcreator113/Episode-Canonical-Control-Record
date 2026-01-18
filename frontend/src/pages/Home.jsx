@@ -17,7 +17,7 @@ const Home = () => {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('http://localhost:3000/api/v1/episodes?limit=100');
+      const response = await fetch('/api/v1/episodes?limit=100');
       const data = await response.json();
       
       if (data.success && data.data) {
