@@ -215,6 +215,13 @@ jobs:
             echo "📋 Ecosystem config found, contents:"
             head -20 ecosystem.config.js
             
+            echo "🧪 Testing if Node can load app.js..."
+            cd ~/episode-metadata
+            node --check src/app.js || echo "❌ Syntax error in app.js!"
+            
+            echo "🧪 Testing if app starts at all..."
+            timeout 5 node src/app.js 2>&1 | head -20 || echo "App failed to start"
+            
             echo "📋 Starting PM2 with ecosystem config..."
             pm2 start ecosystem.config.js --update-env 2>&1 | tee pm2-start.log
             
