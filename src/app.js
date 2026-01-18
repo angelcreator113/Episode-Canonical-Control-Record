@@ -5,11 +5,17 @@ const cors = require('cors');
 const helmet = require('helmet');
 require('dotenv').config();
 
+console.log('🚀 Starting application...');
+console.log('📋 Environment:', process.env.NODE_ENV || 'development');
+console.log('📋 Database URL:', process.env.DATABASE_URL ? '***SET***' : '❌ NOT SET');
+console.log('📋 Port:', process.env.PORT || 3002);
+
 const app = express();
 
 // ============================================================================
 // DATABASE INITIALIZATION
 // ============================================================================
+console.log('📦 Loading database models...');
 const db = require('./models');
 
 let isDbConnected = false;
@@ -17,6 +23,7 @@ const isOpenSearchReady = false;
 
 // Initialize database - non-blocking, runs in background
 if (process.env.NODE_ENV !== 'test') {
+  console.log('🔌 Initializing database connection...');
   (async () => {
     try {
       await db.authenticate();
@@ -28,6 +35,14 @@ if (process.env.NODE_ENV !== 'test') {
 
       isDbConnected = true;
     } catch (err) {
+      console.error('❌ Database initialization error:', err.message);
+      console.error('Full error:', err);
+      // Don't exit - allow app to start in degraded mode
+    }
+  })();
+} else {
+  console.log('⏭️  Skipping database initialization (test mode)');
+}
       console.warn('⚠ Database not available:', err.message.split('\n')[0]);
       isDbConnected = true; // Allow degraded mode
     }
@@ -426,22 +441,32 @@ if (fs.existsSync(frontendDistPath)) {
   
   // Handle React Router - serve index.html for all non-API/file routes (MUST be last)
   app.get('*', (req, res, next) => {
-    // Skip API routes
-    if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/ping') {
-      return next();
-    }
-    
-    // If file has extension and doesn't exist, 404 instead of serving index.html
-    if (path.extname(req.path)) {
-      return next();
-    }
-    
-    const indexPath = path.join(frontendDistPath, 'index.html');
-    if (fs.existsSync(indexPath)) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.sendFile(indexPath);
-    } else {
-      next();
+    try {
+      console.log(`📄 Serving route: ${req.path}`);
+      
+      // Skip API routes
+      if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/ping' || req.path === '/debug') {
+        return next();
+      }
+      
+      // If file has extension and doesn't exist, 404 instead of serving index.html
+      if (path.extname(req.path)) {
+        return next();
+      }
+      
+      const indexPath = path.join(frontendDistPath, 'index.html');
+      console.log(`📄 Index path: ${indexPath}, exists: ${fs.existsSync(indexPath)}`);
+      
+      if (fs.existsSync(indexPath)) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.sendFile(indexPath);
+      } else {
+        console.log('⚠️ index.html not found!');
+        next();
+      }
+    } catch (error) {
+      console.error('❌ Error serving static file:', error);
+      next(error);
     }
   });
 } else {
