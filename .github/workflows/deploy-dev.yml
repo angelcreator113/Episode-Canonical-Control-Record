@@ -184,15 +184,15 @@ jobs:
             fi
             
             echo "🔄 Stopping and restarting application..."
-            # Kill any Node processes that might be serving old code
-            pkill -f "node.*episode" || true
-            sleep 2
             
-            # Stop all PM2 processes
+            # Nuclear option: completely remove PM2 state
             pm2 stop all || true
             pm2 delete all || true
             pm2 kill || true
-            sleep 2
+            rm -rf ~/.pm2 || true
+            pkill -9 -f "PM2" || true
+            pkill -9 -f "node.*app.js" || true
+            sleep 3
             
             # Create logs directory for PM2
             mkdir -p ~/episode-metadata/logs
@@ -207,9 +207,17 @@ jobs:
               exit 1
             fi
             
+            echo "📋 Ecosystem config found, contents:"
+            head -20 ecosystem.config.js
+            
+            # Reinstall PM2 to ensure clean state
+            echo "📦 Reinstalling PM2..."
+            sudo npm install -g pm2@latest
+            
             echo "📋 Starting PM2 with ecosystem config..."
-            pm2 start ecosystem.config.js --update-env || { echo "❌ PM2 start failed!"; exit 1; }
-            pm2 save
+            NODE_ENV=development pm2 start ecosystem.config.js --env env
+            pm2 save --force
+            sleep 2
             pm2 status
             
             echo "🔍 Verifying PM2 environment variables:"
