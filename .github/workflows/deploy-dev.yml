@@ -180,9 +180,15 @@ jobs:
             fi
             
             echo "🔄 Stopping and restarting application..."
+            # Kill any Node processes that might be serving old code
+            pkill -f "node.*episode" || true
+            sleep 2
+            
             # Stop all PM2 processes
             pm2 stop all || true
             pm2 delete all || true
+            pm2 kill || true
+            sleep 2
             
             # Start fresh
             pm2 start app.js --name episode-api
