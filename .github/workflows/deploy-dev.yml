@@ -194,8 +194,9 @@ jobs:
             pm2 kill || true
             sleep 2
             
-            # Start fresh
-            pm2 start app.js --name episode-api
+            # Start fresh with ecosystem config (includes environment variables)
+            cd ~/episode-metadata
+            pm2 start ecosystem.config.js
             pm2 save
             pm2 status
             
