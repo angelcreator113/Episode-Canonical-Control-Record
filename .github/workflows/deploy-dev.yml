@@ -132,7 +132,10 @@ jobs:
             
             cd ~/episode-metadata || { echo \"Directory not found\"; exit 1; }
             
-            echo "📦 Fetching latest code..."
+            echo "�️ Removing old directories..."
+            rm -rf ~/Episode-Canonical-Control-Record 2>/dev/null || true
+            
+            echo "�📦 Fetching latest code..."
             git fetch origin && git checkout dev && git pull origin dev
             
             echo "📦 Installing backend dependencies..."
