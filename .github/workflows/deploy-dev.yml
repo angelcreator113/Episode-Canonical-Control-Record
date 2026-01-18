@@ -199,6 +199,10 @@ jobs:
             echo "📋 Build info:"
             git log -1 --oneline
             ls -lh frontend/dist/assets/*.js | head -3
+            
+            echo "🔍 Verifying what the app is serving:"
+            sleep 3
+            curl -s http://localhost:3002/ | grep -o 'index-[^"]*\.js' || echo "Pattern not found in localhost response"
           ENDSSH
           
           echo "✅ Deployment to EC2 complete"
