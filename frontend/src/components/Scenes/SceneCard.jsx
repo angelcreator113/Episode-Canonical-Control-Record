@@ -45,11 +45,53 @@ const SceneCard = ({
     return tc || '--:--:--';
   };
 
+  // NEW: Generate thumbnail URL or fallback
+  const getThumbnailStyle = () => {
+    if (scene.thumbnail && scene.thumbnail.url) {
+      return {
+        backgroundImage: `url(${scene.thumbnail.url})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      };
+    }
+    // Fallback gradient based on scene type
+    const gradients = {
+      intro: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+      main: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
+      transition: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
+      outro: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
+      montage: 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
+      broll: 'linear-gradient(135deg, #30cfd0 0%, #330867 100%)'
+    };
+    return {
+      background: gradients[scene.sceneType] || gradients.main
+    };
+  };
+
   return (
     <div 
       className={`scene-card ${isDragging ? 'dragging' : ''} ${scene.isLocked ? 'locked' : ''}`}
       data-scene-id={scene.id}
     >
+      {/* NEW: Thumbnail Preview */}
+      <div 
+        className="scene-thumbnail-preview"
+        style={getThumbnailStyle()}
+      >
+        {!scene.thumbnail?.url && (
+          <div className="thumbnail-placeholder">
+            <span className="placeholder-icon">
+              {sceneTypeIcons[scene.sceneType] || '🎬'}
+            </span>
+          </div>
+        )}
+        {scene.isLocked && (
+          <div className="locked-overlay">
+            <span className="lock-icon">🔒</span>
+          </div>
+        )}
+      </div>
+
       {/* Scene Header */}
       <div className="scene-header">
         <div className="scene-number-badge">

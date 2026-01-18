@@ -3,55 +3,100 @@ import './Timeline.css';
 
 /**
  * TimelineRuler - Shows time markers along the timeline
+ * Enhanced with minor ticks and better formatting
  */
-const TimelineRuler = ({ totalDuration, zoom }) => {
-  // Calculate interval based on total duration
+const TimelineRuler = ({ totalDuration, zoom, currentTime }) => {
+  // Calculate interval based on total duration and zoom
   const getInterval = () => {
-    if (totalDuration <= 120) return 30; // 30 second intervals for ≤2 min
-    if (totalDuration <= 300) return 60; // 1 min intervals for ≤5 min
-    if (totalDuration <= 600) return 120; // 2 min intervals for ≤10 min
-    return 300; // 5 min intervals for >10 min
+    const visibleDuration = totalDuration / (zoom / 100);
+    
+    if (visibleDuration <= 60) return 10;    // 10s intervals for ≤1 min visible
+    if (visibleDuration <= 120) return 15;   // 15s intervals for ≤2 min
+    if (visibleDuration <= 300) return 30;   // 30s intervals for ≤5 min
+    if (visibleDuration <= 600) return 60;   // 1 min intervals for ≤10 min
+    if (visibleDuration <= 1800) return 120; // 2 min intervals for ≤30 min
+    return 300; // 5 min intervals for >30 min
   };
 
   const interval = getInterval();
-  const markers = [];
+  const majorMarkers = [];
+  const minorMarkers = [];
   
+  // Generate major markers
   for (let time = 0; time <= totalDuration; time += interval) {
     const position = totalDuration > 0 ? (time / totalDuration) * 100 : 0;
-    markers.push({
+    majorMarkers.push({
       time,
       position,
       label: formatTime(time)
     });
   }
 
+  // Generate minor markers (halfway between major)
+  for (let i = 0; i < majorMarkers.length - 1; i++) {
+    const midTime = (majorMarkers[i].time + majorMarkers[i + 1].time) / 2;
+    const position = totalDuration > 0 ? (midTime / totalDuration) * 100 : 0;
+    minorMarkers.push({ time: midTime, position });
+  }
+
   // Add final marker if needed
-  if (markers.length === 0 || markers[markers.length - 1].time < totalDuration) {
-    markers.push({
+  if (majorMarkers.length === 0 || majorMarkers[majorMarkers.length - 1].time < totalDuration) {
+    const position = 100;
+    majorMarkers.push({
       time: totalDuration,
-      position: 100,
+      position,
       label: formatTime(totalDuration)
     });
   }
 
   function formatTime(seconds) {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
+    const hrs = Math.floor(seconds / 3600);
+    const mins = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    
+    if (hrs > 0) {
+      return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+    }
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   }
 
   return (
     <div className="timeline-ruler" style={{ width: `${zoom}%` }}>
-      {markers.map((marker, index) => (
+      {/* Minor markers */}
+      {minorMarkers.map((marker, index) => (
         <div 
-          key={index}
-          className="timeline-marker"
+          key={`minor-${index}`}
+          className="timeline-marker minor"
+          style={{ left: `${marker.position}%` }}
+        >
+          <div className="marker-tick"></div>
+        </div>
+      ))}
+      
+      {/* Major markers */}
+      {majorMarkers.map((marker, index) => (
+        <div 
+          key={`major-${index}`}
+          className="timeline-marker major"
           style={{ left: `${marker.position}%` }}
         >
           <div className="marker-tick"></div>
           <div className="marker-label">{marker.label}</div>
         </div>
       ))}
+
+      {/* Playhead (current time indicator) */}
+      {currentTime !== null && currentTime !== undefined && (
+        <div 
+          className="timeline-playhead"
+          style={{ 
+            left: `${totalDuration > 0 ? (currentTime / totalDuration) * 100 : 0}%` 
+          }}
+        >
+          <div className="playhead-line"></div>
+          <div className="playhead-handle"></div>
+        </div>
+      )}
     </div>
   );
 };

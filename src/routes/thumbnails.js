@@ -133,17 +133,19 @@ router.post(
 
 // Get thumbnails by episode (new method for gallery)
 router.get(
-  '/episode/:episodeId/all',
+  '/episode/:episodeId',
   asyncHandler(async (req, res) => {
     try {
       const ThumbnailService = require('../services/ThumbnailService');
       const thumbnails = await ThumbnailService.getThumbnailsByEpisode(req.params.episodeId);
       res.json({
         success: true,
-        thumbnails,
+        data: thumbnails,
       });
     } catch (error) {
+      console.error('❌ Error getting thumbnails for episode:', error);
       res.status(500).json({
+        success: false,
         error: error.message,
       });
     }

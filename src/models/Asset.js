@@ -69,6 +69,35 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
 
+      // Video-specific fields
+      media_type: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        defaultValue: 'image',
+        comment: 'Type of media: image or video',
+      },
+      duration_seconds: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Duration for video assets',
+      },
+      video_codec: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
+      audio_codec: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+      },
+      bitrate: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+      },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+
       // Processing info
       processing_job_id: {
         type: DataTypes.STRING(255),
@@ -137,6 +166,23 @@ module.exports = (sequelize) => {
     return this.findAll({
       where: { approval_status: 'PENDING' },
       order: [['created_at', 'ASC']],
+    });
+  };
+
+  // Define associations
+  Asset.associate = function (models) {
+    // Many-to-many with labels through junction table
+    Asset.belongsToMany(models.AssetLabel, {
+      through: 'asset_label_mappings',
+      foreignKey: 'asset_id',
+      otherKey: 'label_id',
+      as: 'labels',
+    });
+
+    // Has many usage records
+    Asset.hasMany(models.AssetUsage, {
+      foreignKey: 'asset_id',
+      as: 'usages',
     });
   };
 

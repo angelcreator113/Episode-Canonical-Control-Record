@@ -3,13 +3,26 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-require('dotenv').config();
+
+// Only load .env if not running via PM2 with ecosystem config
+if (!process.env.PM2_HOME) {
+  require('dotenv').config();
+  console.log('📋 Loaded environment from .env file');
+} else {
+  console.log('📋 Using PM2 environment variables');
+}
+
+console.log('🚀 Starting application...');
+console.log('📋 Environment:', process.env.NODE_ENV || 'development');
+console.log('📋 Database URL:', process.env.DATABASE_URL ? '***SET***' : '❌ NOT SET');
+console.log('📋 Port:', process.env.PORT || 3002);
 
 const app = express();
 
 // ============================================================================
 // DATABASE INITIALIZATION
 // ============================================================================
+console.log('📦 Loading database models...');
 const db = require('./models');
 
 let isDbConnected = false;
@@ -17,6 +30,7 @@ const isOpenSearchReady = false;
 
 // Initialize database - non-blocking, runs in background
 if (process.env.NODE_ENV !== 'test') {
+  console.log('🔌 Initializing database connection...');
   (async () => {
     try {
       await db.authenticate();
@@ -28,12 +42,13 @@ if (process.env.NODE_ENV !== 'test') {
 
       isDbConnected = true;
     } catch (err) {
-      console.warn('⚠ Database not available:', err.message.split('\n')[0]);
-      isDbConnected = true; // Allow degraded mode
+      console.error('❌ Database initialization error:', err.message);
+      console.error('Full error:', err);
+      // Don't exit - allow app to start in degraded mode
     }
-  })().catch((err) => console.error('⚠ DB init error:', err.message));
+  })();
 } else {
-  isDbConnected = true;
+  console.log('⏭️  Skipping database initialization (test mode)');
 }
 
 // ============================================================================
@@ -157,6 +172,19 @@ app.get('/health', async (req, res) => {
   }
 
   res.status(200).json(health);
+});
+
+// Debug endpoint to check environment (should be removed in production)
+app.get('/debug/env', (req, res) => {
+  res.json({
+    NODE_ENV: process.env.NODE_ENV,
+    PORT: process.env.PORT,
+    DATABASE_URL: process.env.DATABASE_URL ? '***SET***' : 'NOT SET',
+    DB_SSL: process.env.DB_SSL,
+    AWS_REGION: process.env.AWS_REGION,
+    cwd: process.cwd(),
+    __dirname,
+  });
 });
 
 // ============================================================================
@@ -388,6 +416,62 @@ app.get('/api/v1', (req, res) => {
     },
   });
 });
+
+// ============================================================================
+// STATIC FRONTEND SERVING (Production/Development)
+// ============================================================================
+const path = require('path');
+const fs = require('fs');
+
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+
+// Serve static files from frontend/dist if it exists
+if (fs.existsSync(frontendDistPath)) {
+  console.log('✓ Serving frontend from:', frontendDistPath);
+  
+  // Serve static assets with proper caching
+  app.use(express.static(frontendDistPath, {
+    maxAge: 0, // No caching for dev
+    etag: true,
+    lastModified: true,
+    setHeaders: (res) => {
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    }
+  }));
+  
+  // Handle React Router - serve index.html for all non-API/file routes (MUST be last)
+  app.get('*', (req, res, next) => {
+    try {
+      console.log(`📄 Serving route: ${req.path}`);
+      
+      // Skip API routes
+      if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/ping' || req.path === '/debug') {
+        return next();
+      }
+      
+      // If file has extension and doesn't exist, 404 instead of serving index.html
+      if (path.extname(req.path)) {
+        return next();
+      }
+      
+      const indexPath = path.join(frontendDistPath, 'index.html');
+      console.log(`📄 Index path: ${indexPath}, exists: ${fs.existsSync(indexPath)}`);
+      
+      if (fs.existsSync(indexPath)) {
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.sendFile(indexPath);
+      } else {
+        console.log('⚠️ index.html not found!');
+        next();
+      }
+    } catch (error) {
+      console.error('❌ Error serving static file:', error);
+      next(error);
+    }
+  });
+} else {
+  console.log('⚠ Frontend dist not found, skipping static file serving');
+}
 
 // ============================================================================
 // ERROR HANDLING

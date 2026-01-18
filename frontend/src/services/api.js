@@ -1,16 +1,12 @@
 import axios from 'axios';
 
-// Use full backend URL in development, relative path in production
-const baseURL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:3000'
-  : '/';
-
+// Create axios instance with BACKEND port
 const apiClient = axios.create({
-  baseURL,
+  baseURL: 'http://localhost:3002',  // ← BACKEND PORT (NOT 5173 or 5174)
+  timeout: 10000,
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 second timeout
 });
 
 // ✅ REQUEST INTERCEPTOR - Add token to requests
@@ -20,6 +16,7 @@ apiClient.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    console.log('API Request:', config.method.toUpperCase(), config.url); // Debug log
     return config;
   },
   (error) => {

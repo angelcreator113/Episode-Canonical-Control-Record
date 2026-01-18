@@ -68,13 +68,17 @@ module.exports = {
         ],
       });
 
-      // Log activity
-      await logger.logAction(req.user?.id, 'view', 'episode', 'all', {
-        count,
-        filters: { status, sort },
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
+      // Log activity (wrapped in try-catch to prevent failures)
+      try {
+        await logger.logAction(req.user?.id, 'view', 'episode', 'all', {
+          count,
+          filters: { status, sort },
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        });
+      } catch (logError) {
+        console.warn('⚠️ Failed to log activity:', logError.message);
+      }
 
       res.json({
         data: rows,
@@ -123,12 +127,16 @@ module.exports = {
         });
       }
 
-      // Log viewing activity
-      await logger.logAction(req.user?.id, 'view', 'episode', id, {
-        episodeTitle: episode.title,
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
+      // Log viewing activity (wrapped in try-catch to prevent failures)
+      try {
+        await logger.logAction(req.user?.id, 'view', 'episode', id, {
+          episodeTitle: episode.title,
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        });
+      } catch (logError) {
+        console.warn('⚠️ Failed to log activity:', logError.message);
+      }
 
       res.json({
         data: episode,
@@ -194,26 +202,18 @@ module.exports = {
         air_date: finalAirDate ? new Date(finalAirDate) : null,
         status: finalStatus,
         categories: Array.isArray(categories) ? categories : [],
-        // Keep old fields for backward compatibility
-        showName,
-        seasonNumber: seasonNumber ? parseInt(seasonNumber) : null,
-        episodeTitle: episodeTitle || finalTitle,
-        airDate: finalAirDate ? new Date(finalAirDate) : null,
-        plotSummary: finalDescription,
-        director,
-        writer,
-        durationMinutes: durationMinutes ? parseInt(durationMinutes) : null,
-        rating: rating ? parseFloat(rating) : null,
-        genre,
-        processingStatus: 'pending',
       });
 
-      // Log creation activity
-      await logger.logAction(req.user?.id, 'create', 'episode', episode.id, {
-        newValues: episode.toJSON(),
-        ipAddress: req.ip,
-        userAgent: req.get('user-agent'),
-      });
+      // Log creation activity (wrapped in try-catch to prevent failures)
+      try {
+        await logger.logAction(req.user?.id, 'create', 'episode', episode.id, {
+          newValues: episode.toJSON(),
+          ipAddress: req.ip,
+          userAgent: req.get('user-agent'),
+        });
+      } catch (logError) {
+        console.warn('⚠️ Failed to log activity:', logError.message);
+      }
 
       // ✅ SAFE: Phase 3A Integration with proper checks
       const userId = req.user?.id || 'anonymous';
@@ -324,32 +324,14 @@ module.exports = {
 
     const oldValues = episode.toJSON();
 
-    // Whitelist updatable fields (support both new and old field names)
+    // Whitelist updatable fields
     const allowedFields = {
-      // New field names
       title: true,
       episode_number: true,
       description: true,
       air_date: true,
       status: true,
       categories: true,
-      // Old field names
-      episodeTitle: true,
-      episodeNumber: true,
-      airDate: true,
-      plotSummary: true,
-      director: true,
-      writer: true,
-      durationMinutes: true,
-      rating: true,
-      genre: true,
-      thumbnailUrl: true,
-      posterUrl: true,
-      videoUrl: true,
-      rawVideoS3Key: true,
-      processedVideoS3Key: true,
-      metadataJsonS3Key: true,
-      processingStatus: true,
     };
 
     const updateData = {};
@@ -357,19 +339,12 @@ module.exports = {
     // Process each field in the updates
     Object.keys(updates).forEach((field) => {
       if (allowedFields[field]) {
-        // Map new field names to their Sequelize equivalents
-        if (field === 'title' || field === 'episodeTitle') {
-          updateData.title = updates[field];
-        } else if (field === 'episode_number' || field === 'episodeNumber') {
+        // Handle type conversions
+        if (field === 'episode_number') {
           updateData.episode_number = parseInt(updates[field]);
-        } else if (field === 'description' || field === 'plotSummary') {
-          updateData.description = updates[field];
-        } else if (field === 'air_date' || field === 'airDate') {
+        } else if (field === 'air_date') {
           updateData.air_date = updates[field] ? new Date(updates[field]) : null;
-        } else if (field === 'status') {
-          updateData.status = updates[field];
         } else {
-          // For other fields, just pass through
           updateData[field] = updates[field];
         }
       }
@@ -516,12 +491,7 @@ module.exports = {
     const { id } = req.params;
 
     const episode = await Episode.findByPk(id, {
-      attributes: ['id', 'episodeTitle', 'processingStatus', 'uploadDate'],
-      include: {
-        model: ProcessingQueue,
-        as: 'processingJobs',
-        attributes: ['jobType', 'status', 'createdAt', 'completedAt'],
-      },
+      attributes: ['id', 'title', 'status', 'created_at'],
     });
 
     if (!episode) {
@@ -555,7 +525,7 @@ module.exports = {
     );
 
     // Update episode status
-    await episode.updateStatus('processing');
+    await episode.update({ status: 'processing' });
 
     // Log activity
     await logger.logAction(req.user?.id, 'create', 'processing', id, {

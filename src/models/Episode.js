@@ -85,27 +85,15 @@ module.exports = (sequelize) => {
         // Exclude soft-deleted records
         active: {
           where: {
-            deletedAt: null,
+            deleted_at: null,
           },
         },
         // Only deleted records
         deleted: {
           where: {
-            deletedAt: {
+            deleted_at: {
               [sequelize.Sequelize.Op.ne]: null,
             },
-          },
-        },
-        // Processing episodes
-        processing: {
-          where: {
-            processingStatus: 'processing',
-          },
-        },
-        // Failed episodes
-        failed: {
-          where: {
-            processingStatus: 'failed',
           },
         },
       },
@@ -120,7 +108,7 @@ module.exports = (sequelize) => {
    * Mark episode as deleted (soft delete)
    */
   Episode.prototype.softDelete = async function () {
-    this.deletedAt = new Date();
+    this.deleted_at = new Date();
     return this.save();
   };
 
@@ -128,33 +116,8 @@ module.exports = (sequelize) => {
    * Restore soft-deleted episode
    */
   Episode.prototype.restore = async function () {
-    this.deletedAt = null;
+    this.deleted_at = null;
     return this.save();
-  };
-
-  /**
-   * Update processing status
-   */
-  Episode.prototype.updateStatus = async function (status) {
-    if (!['pending', 'processing', 'complete', 'failed'].includes(status)) {
-      throw new Error('Invalid processing status');
-    }
-    this.processingStatus = status;
-    return this.save();
-  };
-
-  /**
-   * Get S3 bucket and key information
-   */
-  Episode.prototype.getS3Info = function () {
-    return {
-      bucket: process.env.AWS_S3_BUCKET_STORAGE || 'episode-metadata-storage-dev',
-      keys: {
-        raw: this.rawVideoS3Key,
-        processed: this.processedVideoS3Key,
-        metadata: this.metadataJsonS3Key,
-      },
-    };
   };
 
   /**
@@ -166,44 +129,6 @@ module.exports = (sequelize) => {
    */
   Episode.findActive = function (options = {}) {
     return Episode.scope('active').findAll(options);
-  };
-
-  /**
-   * Find by show name and season
-   */
-  Episode.findBySeason = async function (showName, seasonNumber) {
-    return Episode.scope('active').findAll({
-      where: { showName, seasonNumber },
-      order: [['episodeNumber', 'ASC']],
-    });
-  };
-
-  /**
-   * Find by show name, season, and episode number
-   */
-  Episode.findByEpisodeNumber = async function (showName, seasonNumber, episodeNumber) {
-    return Episode.scope('active').findOne({
-      where: { showName, seasonNumber, episodeNumber },
-    });
-  };
-
-  /**
-   * Get processing queue information
-   */
-  Episode.getProcessingStatus = async function (id) {
-    const episode = await Episode.findByPk(id, {
-      attributes: ['id', 'episodeTitle', 'processingStatus', 'uploadDate'],
-    });
-    return episode;
-  };
-
-  /**
-   * Get episodes requiring processing
-   */
-  Episode.getPendingProcessing = function () {
-    return Episode.scope(['active', 'processing']).findAll({
-      order: [['uploadDate', 'ASC']],
-    });
   };
 
   return Episode;

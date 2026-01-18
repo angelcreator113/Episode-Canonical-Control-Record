@@ -4,13 +4,6 @@ on:
   push:
     branches:
       - dev
-    paths:
-      - 'src/**'
-      - 'frontend/**'
-      - 'migrations/**'
-      - 'package.json'
-      - 'jest.config.js'
-      - '.github/workflows/**'
   workflow_dispatch:
 
 jobs:
@@ -139,9 +132,50 @@ jobs:
             
             cd ~/episode-metadata || { echo \"Directory not found\"; exit 1; }
             
+            echo "�️ Removing old directories..."
+            rm -rf ~/Episode-Canonical-Control-Record 2>/dev/null || true
+            
+            echo "�📦 Fetching latest code..."
             git fetch origin && git checkout dev && git pull origin dev
-            npm ci --production
-            cd frontend && npm ci && npm run build && cd ..
+            
+            echo "📦 Installing backend dependencies..."
+            npm ci
+            
+            echo "🎨 Building frontend..."
+            cd frontend
+            
+            echo "Removing old build artifacts and clearing all caches..."
+            rm -rf dist node_modules .vite
+            rm -rf ~/.pm2/logs/* ~/.pm2/.pm2 2>/dev/null || true
+            
+            echo "Verifying dist was deleted:"
+            ls -la dist/ 2>&1 || echo "dist not found (good)"
+            
+            echo "Installing frontend dependencies..."
+            npm ci 2>&1 | tail -20
+            
+            echo "Running Vite build..."
+            NODE_ENV=production npm run build 2>&1 | tee build.log
+            
+            if [ ! -d "dist" ]; then
+              echo "❌ Frontend build failed - dist directory not created"
+              echo "Build log:"
+              cat build.log
+              exit 1
+            fi
+            
+            echo "✓ Frontend built successfully"
+            echo "Dist contents:"
+            ls -lh dist/
+            echo "ALL asset files:"
+            ls -lh dist/assets/
+            echo "File hashes:"
+            md5sum dist/assets/*.js
+            echo "Checking index.html:"
+            cat dist/index.html
+            cd ..
+            
+            echo "🗄️ Running migrations..."
             npm run migrate:up || true
             
             # Install pm2 globally if not present
@@ -149,11 +183,108 @@ jobs:
               sudo npm install -g pm2
             fi
             
-            # Start or restart app with pm2
-            pm2 restart all || pm2 start src/index.js --name episode-api
-            pm2 save
+            echo "🔄 Stopping and restarting application..."
+            
+            # Stop PM2 processes gracefully first
+            pm2 stop all || true
+            pm2 delete all || true
+            sleep 2
+            
+            # Kill any remaining node processes
+            pkill -f "node.*app.js" || true
+            pkill -f "node.*episode" || true
+            sleep 1
+            
+            # Create logs directory for PM2
+            mkdir -p ~/episode-metadata/logs
+            
+            # Clear old PM2 logs to see fresh errors
+            rm -f ~/episode-metadata/logs/*.log
+            pm2 flush || true
+            
+            # Start fresh with ecosystem config (includes environment variables)
+            cd ~/episode-metadata
+            
+            # Verify ecosystem config exists
+            if [ ! -f ecosystem.config.js ]; then
+              echo "❌ ERROR: ecosystem.config.js not found!"
+              ls -la
+              exit 1
+            fi
+            
+            echo "📋 Ecosystem config found, contents:"
+            head -20 ecosystem.config.js
+            
+            echo "🧪 Testing if Node can load app.js..."
+            cd ~/episode-metadata
+            node --check src/app.js || echo "❌ Syntax error in app.js!"
+            
+            echo "🧪 Testing if app starts at all..."
+            timeout 5 node src/app.js 2>&1 | head -20 || echo "App failed to start"
+            
+            echo "📋 Starting PM2 with ecosystem config..."
+            pm2 start ecosystem.config.js --update-env 2>&1 | tee pm2-start.log
+            
+            if [ $? -ne 0 ]; then
+              echo "❌ PM2 start failed! Output:"
+              cat pm2-start.log
+              cat ~/episode-metadata/logs/error.log 2>/dev/null || echo "No error log"
+              exit 1
+            fi
+            
+            pm2 save --force
+            sleep 3
             pm2 status
+            
+            # Verify the app is actually running
+            if ! pm2 list | grep -q "episode-api.*online"; then
+              echo "❌ App is not online!"
+              pm2 logs episode-api --lines 50 --nostream
+              exit 1
+            fi
+            
+            echo "✅ App is online!"
+            
+            echo "🔍 Verifying PM2 environment variables:"
+            pm2 env 0 | grep -E "DATABASE_URL|NODE_ENV|PORT|DB_SSL" || echo "⚠️ Env vars not found"
+            
+            echo "🧪 Testing if app is listening on port 3002..."
+            sleep 2
+            netstat -tlnp | grep 3002 || echo "⚠️ Nothing listening on port 3002!"
+            
+            echo "🧪 Testing health endpoint..."
+            curl -v http://localhost:3002/health 2>&1 | head -30 || echo "⚠️ Health check failed"
+            
+            echo "🧪 Testing root endpoint..."
+            curl -I http://localhost:3002/ 2>&1 | head -10 || echo "⚠️ Root endpoint failed"
+            
+            echo "🔍 Testing app locally:"
+            sleep 3
+            curl -s http://localhost:3002/health | jq . || echo "⚠️ Health check failed"
+            
+            echo "📋 Checking logs for errors:"
+            sleep 2
+            pm2 logs episode-api --lines 50 --nostream || true
+            
+            echo "🔍 Checking app startup errors:"
+            cat ~/episode-metadata/logs/error.log 2>/dev/null | tail -50 || echo "No error log yet"
+            
+            echo "📋 Checking PM2 environment:"
+            pm2 show episode-api || true
+            
             echo "✅ Deployed!"
+            echo "📋 Build info:"
+            git log -1 --oneline
+            ls -lh frontend/dist/assets/*.js | head -3
+            
+            echo "🔍 Verifying what the app is serving:"
+            sleep 3
+            curl -s http://localhost:3002/ | grep -o 'index-[^"]*\.js' || echo "Pattern not found in localhost response"
+            
+            echo "🔍 Searching for ALL dist folders and old index files:"
+            find ~ -name "dist" -type d 2>/dev/null | head -10
+            find ~ -name "index-2tx_xbRM.js" 2>/dev/null || echo "Old file not found"
+            find ~ -name "index.html" -path "*/dist/*" -exec grep -l "index-2tx_xbRM" {} \; 2>/dev/null || echo "No old index.html found"
           ENDSSH
           
           echo "✅ Deployment to EC2 complete"
