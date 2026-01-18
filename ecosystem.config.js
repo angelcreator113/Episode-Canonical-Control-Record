@@ -1,7 +1,7 @@
 module.exports = {
   apps: [{
     name: 'episode-api',
-    script: '/home/ubuntu/episode-metadata/src/app.js',
+    script: '/home/ubuntu/episode-metadata/src/server.js',
     cwd: '/home/ubuntu/episode-metadata',
     instances: 1,
     autorestart: true,
