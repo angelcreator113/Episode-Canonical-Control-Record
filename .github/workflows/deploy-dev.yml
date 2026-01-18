@@ -185,14 +185,15 @@ jobs:
             
             echo "🔄 Stopping and restarting application..."
             
-            # Nuclear option: completely remove PM2 state
+            # Stop PM2 processes gracefully first
             pm2 stop all || true
             pm2 delete all || true
-            pm2 kill || true
-            rm -rf ~/.pm2 || true
-            pkill -9 -f "PM2" || true
-            pkill -9 -f "node.*app.js" || true
-            sleep 3
+            sleep 2
+            
+            # Kill any remaining node processes
+            pkill -f "node.*app.js" || true
+            pkill -f "node.*episode" || true
+            sleep 1
             
             # Create logs directory for PM2
             mkdir -p ~/episode-metadata/logs
@@ -210,15 +211,25 @@ jobs:
             echo "📋 Ecosystem config found, contents:"
             head -20 ecosystem.config.js
             
-            # Reinstall PM2 to ensure clean state
-            echo "📦 Reinstalling PM2..."
-            sudo npm install -g pm2@latest
-            
             echo "📋 Starting PM2 with ecosystem config..."
-            NODE_ENV=development pm2 start ecosystem.config.js --env env
+            pm2 start ecosystem.config.js --update-env
+            
+            if [ $? -ne 0 ]; then
+              echo "❌ PM2 start failed! Checking for errors..."
+              cat ~/episode-metadata/logs/error.log 2>/dev/null || echo "No error log"
+              exit 1
+            fi
+            
             pm2 save --force
-            sleep 2
+            sleep 3
             pm2 status
+            
+            # Verify the app is actually running
+            if ! pm2 list | grep -q "episode-api.*online"; then
+              echo "❌ App is not online!"
+              pm2 logs episode-api --lines 50 --nostream
+              exit 1
+            fi
             
             echo "🔍 Verifying PM2 environment variables:"
             pm2 env 0 | grep -E "DATABASE_URL|NODE_ENV|PORT|DB_SSL" || echo "⚠️ Env vars not found"
