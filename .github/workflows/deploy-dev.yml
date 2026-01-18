@@ -133,7 +133,7 @@ jobs:
             cd ~/episode-metadata || { echo \"Directory not found\"; exit 1; }
             
             git fetch origin && git checkout dev && git pull origin dev
-            npm ci --production
+            npm ci
             cd frontend && npm ci && npm run build && cd ..
             npm run migrate:up || true
             
