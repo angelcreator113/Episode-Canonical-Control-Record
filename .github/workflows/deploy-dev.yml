@@ -211,6 +211,12 @@ jobs:
             sleep 2
             pm2 logs episode-api --lines 50 --nostream || true
             
+            echo "🔍 Checking app startup errors:"
+            cat ~/episode-metadata/logs/error.log 2>/dev/null | tail -50 || echo "No error log yet"
+            
+            echo "📋 Checking PM2 environment:"
+            pm2 show episode-api || true
+            
             echo "✅ Deployed!"
             echo "📋 Build info:"
             git log -1 --oneline

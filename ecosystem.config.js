@@ -29,6 +29,7 @@ module.exports = {
       DATABASE_POOL_MAX: 10,
       DATABASE_TIMEOUT: 30000,
       DATABASE_SSL: true,
+      DB_SSL: 'true',
       
       // AWS Config
       AWS_REGION: 'us-east-1',
