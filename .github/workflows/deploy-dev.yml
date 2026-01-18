@@ -164,6 +164,8 @@ jobs:
             ls -lh dist/assets/*.js | head -5
             echo "File hashes:"
             md5sum dist/assets/*.js | head -3
+            echo "Checking index.html:"
+            cat dist/index.html
             cd ..
             
             echo "🗄️ Running migrations..."
