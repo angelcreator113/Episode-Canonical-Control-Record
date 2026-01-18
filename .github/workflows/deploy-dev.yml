@@ -161,11 +161,20 @@ jobs:
               sudo npm install -g pm2
             fi
             
-            echo "🔄 Restarting application..."
-            pm2 restart all || pm2 start app.js --name episode-api
+            echo "🔄 Stopping and restarting application..."
+            # Stop all PM2 processes
+            pm2 stop all || true
+            pm2 delete all || true
+            
+            # Start fresh
+            pm2 start app.js --name episode-api
             pm2 save
             pm2 status
+            
             echo "✅ Deployed!"
+            echo "📋 Build info:"
+            git log -1 --oneline
+            ls -lh frontend/dist/assets/*.js | head -3
           ENDSSH
           
           echo "✅ Deployment to EC2 complete"
