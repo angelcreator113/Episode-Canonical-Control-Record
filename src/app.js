@@ -50,13 +50,6 @@ if (process.env.NODE_ENV !== 'test') {
 } else {
   console.log('⏭️  Skipping database initialization (test mode)');
 }
-      console.warn('⚠ Database not available:', err.message.split('\n')[0]);
-      isDbConnected = true; // Allow degraded mode
-    }
-  })().catch((err) => console.error('⚠ DB init error:', err.message));
-} else {
-  isDbConnected = true;
-}
 
 // ============================================================================
 // PROCESS ERROR HANDLERS (Set up early)
