@@ -20,7 +20,7 @@ const AssetDetailsModal = ({ asset: initialAsset, onClose, onUpdate }) => {
       // ✅ UPDATE LOCAL STATE IMMEDIATELY (OPTIMISTIC UPDATE)
       setIsFavorite(newFavoriteState);
 
-      const response = await fetch(`http://localhost:3000/api/v1/assets/${asset.id}`, {
+      const response = await fetch(`http://localhost:3002/api/v1/assets/${asset.id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -73,7 +73,7 @@ const AssetDetailsModal = ({ asset: initialAsset, onClose, onUpdate }) => {
 
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3000/api/v1/assets/${asset.id}`, {
+      const response = await fetch(`http://localhost:3002/api/v1/assets/${asset.id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken') || localStorage.getItem('token')}`

@@ -246,6 +246,37 @@ module.exports = (sequelize) => {
           this.setDataValue('updated_by', value);
         },
       },
+      thumbnail_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'thumbnail_id',
+        references: {
+          model: 'thumbnails',
+          key: 'id'
+        }
+      },
+      // CamelCase alias for thumbnail_id
+      thumbnailId: {
+        type: DataTypes.VIRTUAL,
+        get() {
+          return this.getDataValue('thumbnail_id');
+        },
+        set(value) {
+          this.setDataValue('thumbnail_id', value);
+        },
+      },
+      assets: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: {},
+        validate: {
+          isValidAssets(value) {
+            if (value && typeof value !== 'object') {
+              throw new Error('Assets must be a JSON object');
+            }
+          }
+        }
+      },
     },
     {
       sequelize,
@@ -335,6 +366,58 @@ module.exports = (sequelize) => {
       await this.save();
     }
     return this;
+  };
+
+  Scene.prototype.setThumbnail = async function (thumbnailId, userId) {
+    if (this.is_locked) {
+      throw new Error('Cannot modify thumbnail on locked scene');
+    }
+    this.thumbnail_id = thumbnailId;
+    this.updated_by = userId;
+    await this.save();
+    return this;
+  };
+
+  Scene.prototype.updateAssets = async function (assetData, userId) {
+    if (this.is_locked) {
+      throw new Error('Cannot modify assets on locked scene');
+    }
+    this.assets = {
+      ...this.assets,
+      ...assetData
+    };
+    this.updated_by = userId;
+    await this.save();
+    return this;
+  };
+
+  Scene.prototype.toJSON = function () {
+    return {
+      id: this.id,
+      episodeId: this.episode_id,
+      sceneNumber: this.scene_number,
+      title: this.title,
+      description: this.description,
+      sceneType: this.scene_type,
+      location: this.location,
+      characters: this.characters,
+      mood: this.mood,
+      startTimecode: this.start_timecode,
+      endTimecode: this.end_timecode,
+      durationSeconds: this.duration_seconds,
+      productionStatus: this.production_status,
+      scriptNotes: this.script_notes,
+      isLocked: this.is_locked,
+      lockedAt: this.locked_at,
+      lockedBy: this.locked_by,
+      thumbnailId: this.thumbnail_id,
+      thumbnail: this.thumbnail,
+      assets: this.assets,
+      createdAt: this.created_at,
+      updatedAt: this.updated_at,
+      createdBy: this.created_by,
+      updatedBy: this.updated_by
+    };
   };
 
   return Scene;

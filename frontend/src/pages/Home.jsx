@@ -18,21 +18,45 @@ const Home = () => {
   const loadStats = async () => {
     try {
       const response = await fetch('/api/v1/episodes?limit=100');
-      const data = await response.json();
       
-      if (data.success && data.data) {
+      // Check if response is ok before parsing
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      // Check if response has content
+      const text = await response.text();
+      if (!text) {
+        throw new Error('Empty response from server');
+      }
+      
+      const data = JSON.parse(text);
+      
+      if (data.data) {
         const episodes = data.data;
         setStats({
           total: episodes.length,
-          draft: episodes.filter(e => e.status === 'DRAFT').length,
-          published: episodes.filter(e => e.status === 'PUBLISHED').length,
-          inProgress: episodes.filter(e => e.status === 'IN_PROGRESS').length
+          draft: episodes.filter(e => {
+            const status = e.status?.toLowerCase();
+            return status === 'draft';
+          }).length,
+          published: episodes.filter(e => {
+            const status = e.status?.toLowerCase();
+            return status === 'published';
+          }).length,
+          inProgress: episodes.filter(e => {
+            const status = e.status?.toLowerCase();
+            return status === 'in_progress' || status === 'in progress';
+          }).length
         });
+      } else {
+        // Empty dataset
+        setStats({ total: 0, draft: 0, published: 0, inProgress: 0 });
       }
     } catch (error) {
       console.error('Failed to load stats:', error);
-      // Use defaults
-      setStats({ total: 6, draft: 2, published: 2, inProgress: 1 });
+      // Use empty defaults on error
+      setStats({ total: 0, draft: 0, published: 0, inProgress: 0 });
     } finally {
       setLoading(false);
     }

@@ -1,5 +1,5 @@
 const { models } = require('../models');
-const { Scene, Episode } = models;
+const { Scene, Episode, Thumbnail } = models;
 
 /**
  * Scene Controller
@@ -86,6 +86,11 @@ exports.getScene = async (req, res) => {
           as: 'episode',
           attributes: ['id', 'title', 'episode_number', 'status'],
         },
+        {
+          model: Thumbnail,
+          as: 'thumbnail',
+          attributes: ['id', 'url', 's3_key', 'metadata'],
+        }
       ],
     });
 
@@ -708,6 +713,120 @@ exports.getSceneStats = async (req, res) => {
       success: false,
       error: 'Failed to get scene stats',
       message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   PUT /api/v1/scenes/:id/thumbnail
+ * @desc    Set scene thumbnail
+ * @access  Editor+
+ * @param   {string} id - Scene UUID
+ * @body    {string} thumbnailId - Thumbnail UUID
+ */
+exports.setSceneThumbnail = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { thumbnailId } = req.body;
+    const userId = req.user?.id;
+
+    if (!thumbnailId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Thumbnail ID is required'
+      });
+    }
+
+    const scene = await Scene.findByPk(id);
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scene not found'
+      });
+    }
+
+    if (scene.is_locked) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot modify thumbnail on locked scene'
+      });
+    }
+
+    // Verify thumbnail exists
+    const thumbnail = await Thumbnail.findByPk(thumbnailId);
+    if (!thumbnail) {
+      return res.status(404).json({
+        success: false,
+        message: 'Thumbnail not found'
+      });
+    }
+
+    await scene.setThumbnail(thumbnailId, userId);
+    await scene.reload({ include: [{ model: Thumbnail, as: 'thumbnail' }] });
+
+    res.json({
+      success: true,
+      data: scene,
+      message: 'Scene thumbnail updated successfully'
+    });
+  } catch (error) {
+    console.error('Set scene thumbnail error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to set scene thumbnail',
+      error: error.message
+    });
+  }
+};
+
+/**
+ * @route   PUT /api/v1/scenes/:id/assets
+ * @desc    Update scene assets
+ * @access  Editor+
+ * @param   {string} id - Scene UUID
+ * @body    {object} assets - Asset data object
+ */
+exports.updateSceneAssets = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assets } = req.body;
+    const userId = req.user?.id;
+
+    if (!assets || typeof assets !== 'object') {
+      return res.status(400).json({
+        success: false,
+        message: 'Assets object is required'
+      });
+    }
+
+    const scene = await Scene.findByPk(id);
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        message: 'Scene not found'
+      });
+    }
+
+    if (scene.is_locked) {
+      return res.status(403).json({
+        success: false,
+        message: 'Cannot modify assets on locked scene'
+      });
+    }
+
+    await scene.updateAssets(assets, userId);
+
+    res.json({
+      success: true,
+      data: scene,
+      message: 'Scene assets updated successfully'
+    });
+  } catch (error) {
+    console.error('Update scene assets error:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update scene assets',
+      error: error.message
     });
   }
 };

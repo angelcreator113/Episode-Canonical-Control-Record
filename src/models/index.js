@@ -43,7 +43,7 @@ const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.p
  */
 let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
-let Show, Scene;
+let Show, Scene, AssetLabel, AssetUsage;
 
 try {
   // Core models
@@ -65,6 +65,10 @@ try {
   // Phase 6 models
   Show = require('./Show')(sequelize);
   Scene = require('./Scene')(sequelize);
+
+  // Asset enhancement models
+  AssetLabel = require('./AssetLabel')(sequelize);
+  AssetUsage = require('./AssetUsage')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -88,6 +92,8 @@ const requiredModels = {
   EpisodeTemplate,
   Show,
   Scene,
+  AssetLabel,
+  AssetUsage,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -181,6 +187,19 @@ Scene.belongsTo(Episode, {
   as: 'episode',
 });
 
+// Scene → Thumbnail (N:1)
+Scene.belongsTo(Thumbnail, {
+  foreignKey: 'thumbnail_id',
+  as: 'thumbnail',
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE',
+});
+
+Thumbnail.hasMany(Scene, {
+  foreignKey: 'thumbnail_id',
+  as: 'scenes',
+});
+
 // ==================== PROCESSING QUEUE ASSOCIATIONS ====================
 
 // ProcessingQueue → FileStorage (1:1)
@@ -249,6 +268,35 @@ Asset.hasMany(ThumbnailComposition, {
   as: 'backgroundCompositions',
 });
 
+// ==================== ASSET LABEL ASSOCIATIONS ====================
+
+// Asset ←→ AssetLabel (Many-to-Many)
+Asset.belongsToMany(AssetLabel, {
+  through: 'asset_label_mappings',
+  foreignKey: 'asset_id',
+  otherKey: 'label_id',
+  as: 'labels',
+});
+
+AssetLabel.belongsToMany(Asset, {
+  through: 'asset_label_mappings',
+  foreignKey: 'label_id',
+  otherKey: 'asset_id',
+  as: 'assets',
+});
+
+// Asset → AssetUsage (1:N)
+Asset.hasMany(AssetUsage, {
+  foreignKey: 'asset_id',
+  as: 'usages',
+  onDelete: 'CASCADE',
+});
+
+AssetUsage.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+});
+
 console.log('✅ Model associations defined');
 
 /**
@@ -272,6 +320,8 @@ const db = {
     ThumbnailTemplate,
     EpisodeTemplate,
     Scene,
+    AssetLabel,
+    AssetUsage,
   },
 
   /**
@@ -451,3 +501,5 @@ module.exports.ThumbnailTemplate = ThumbnailTemplate;
 module.exports.EpisodeTemplate = EpisodeTemplate;
 module.exports.Show = Show;
 module.exports.Scene = Scene;
+module.exports.AssetLabel = AssetLabel;
+module.exports.AssetUsage = AssetUsage;

@@ -8,7 +8,7 @@ const { fromIni, fromEnv } = require('@aws-sdk/credential-providers');
 const { v4: uuidv4 } = require('uuid');
 const sharp = require('sharp');
 const { models } = require('../models');
-const { Asset } = models;
+const { Asset, AssetLabel, AssetUsage } = models;
 
 // Configure AWS SDK v3 with credential chain
 let s3Client = null;
@@ -47,6 +47,9 @@ class AssetService {
         'PROMO_GUEST',
         'BRAND_LOGO',
         'EPISODE_FRAME',
+        'PROMO_VIDEO',
+        'EPISODE_VIDEO',
+        'BACKGROUND_VIDEO',
       ];
 
       if (!validTypes.includes(assetType)) {
@@ -63,37 +66,48 @@ class AssetService {
         PROMO_GUEST: 'promotional/guests/raw',
         BRAND_LOGO: 'promotional/brands',
         EPISODE_FRAME: 'thumbnails/auto',
+        PROMO_VIDEO: 'promotional/videos',
+        EPISODE_VIDEO: 'episodes/videos',
+        BACKGROUND_VIDEO: 'backgrounds/videos',
       };
 
       const folder = folderMap[assetType];
       const fileExtension = this._getFileExtension(file.mimetype);
       const s3Key = `${folder}/${timestamp}-${assetId}${fileExtension}`;
 
-      // Generate thumbnail (max 150px)
+      // Determine if this is a video file
+      const isVideo = file.mimetype.startsWith('video/');
+      const mediaType = isVideo ? 'video' : 'image';
+
+      // Generate thumbnail (max 150px) - only for images
       let thumbnailBuffer = null;
       let thumbnailKey = null;
       let imageDimensions = null;
 
-      try {
-        // Get image dimensions and generate thumbnail
-        const imageInfo = await sharp(file.buffer).metadata();
-        imageDimensions = {
-          width: imageInfo.width,
-          height: imageInfo.height,
-        };
+      if (!isVideo) {
+        try {
+          // Get image dimensions and generate thumbnail
+          const imageInfo = await sharp(file.buffer).metadata();
+          imageDimensions = {
+            width: imageInfo.width,
+            height: imageInfo.height,
+          };
 
-        thumbnailBuffer = await sharp(file.buffer)
-          .resize(150, 150, {
-            fit: 'inside',
-            withoutEnlargement: true,
-          })
-          .jpeg({ quality: 80 })
-          .toBuffer();
+          thumbnailBuffer = await sharp(file.buffer)
+            .resize(150, 150, {
+              fit: 'inside',
+              withoutEnlargement: true,
+            })
+            .jpeg({ quality: 80 })
+            .toBuffer();
 
-        thumbnailKey = `${folder}/thumbnails/${timestamp}-${assetId}-thumb.jpg`;
-      } catch (thumbError) {
-        console.warn(`⚠️ Thumbnail generation failed: ${thumbError.message}`);
-        // Continue without thumbnail
+          thumbnailKey = `${folder}/thumbnails/${timestamp}-${assetId}-thumb.jpg`;
+        } catch (thumbError) {
+          console.warn(`⚠️ Thumbnail generation failed: ${thumbError.message}`);
+          // Continue without thumbnail
+        }
+      } else {
+        console.log('📹 Video file detected, skipping thumbnail generation');
       }
 
       // Upload to S3 using AWS SDK v3
@@ -157,18 +171,24 @@ class AssetService {
         asset_type: assetType,
         approval_status: 'APPROVED', // Auto-approve for now
 
+        // Media type field
+        media_type: mediaType,
+
         // Raw image fields
         s3_key_raw: s3Key,
         s3_url_raw: s3Url,
         file_size_bytes: file.size,
 
-        // Dimensions
+        // Dimensions (for images)
         width: imageDimensions?.width || null,
         height: imageDimensions?.height || null,
 
         // Legacy fields (for backward compatibility)
         s3_key: s3Key,
         url: s3Url,
+
+        // Description (optional)
+        description: metadata?.description || null,
 
         // Metadata
         metadata: {
@@ -357,6 +377,14 @@ class AssetService {
         throw new Error('Asset not found');
       }
 
+      // Check if already processed
+      if (asset.s3_url_processed) {
+        console.log(`⚠️ Asset ${assetId} already has processed version`);
+        return asset.toJSON();
+      }
+
+      console.log(`🎨 Processing background removal for ${assetId}`);
+
       // Mock processing - replace with actual Runway ML integration
       const processedKey = asset.s3_key_raw.replace('/raw/', '/processed/');
       const processedUrl = asset.s3_url_raw.replace('/raw/', '/processed/');
@@ -377,6 +405,384 @@ class AssetService {
     }
   }
 
+  // ==================== LABEL MANAGEMENT ====================
+
+  /**
+   * Get all labels
+   * @returns {Array} List of all labels
+   */
+  async getAllLabels() {
+    try {
+      const labels = await AssetLabel.findAll({
+        order: [['name', 'ASC']],
+      });
+      return labels.map(l => l.toJSON());
+    } catch (error) {
+      console.error('Failed to get labels:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create new label
+   * @param {String} name - Label name
+   * @param {String} color - Hex color code
+   * @param {String} description - Optional description
+   * @returns {Object} Created label
+   */
+  async createLabel(name, color = '#6366f1', description = null) {
+    try {
+      const label = await AssetLabel.create({
+        name,
+        color,
+        description,
+      });
+      console.log(`✅ Label created: ${name}`);
+      return label.toJSON();
+    } catch (error) {
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        throw new Error(`Label "${name}" already exists`);
+      }
+      console.error('Failed to create label:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Add labels to asset
+   * @param {String} assetId - Asset UUID
+   * @param {Array} labelIds - Array of label UUIDs
+   * @returns {Object} Updated asset with labels
+   */
+  async addLabelsToAsset(assetId, labelIds) {
+    try {
+      const asset = await Asset.findByPk(assetId);
+      if (!asset) {
+        throw new Error('Asset not found');
+      }
+
+      // Verify labels exist
+      const labels = await AssetLabel.findAll({
+        where: { id: labelIds },
+      });
+
+      if (labels.length !== labelIds.length) {
+        throw new Error('Some labels not found');
+      }
+
+      // Add labels to asset
+      await asset.addLabels(labels);
+
+      console.log(`✅ Added ${labelIds.length} labels to asset ${assetId}`);
+
+      // Return asset with labels
+      return this.getAssetWithLabels(assetId);
+    } catch (error) {
+      console.error('Failed to add labels:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remove label from asset
+   * @param {String} assetId - Asset UUID
+   * @param {String} labelId - Label UUID
+   * @returns {Object} Updated asset
+   */
+  async removeLabelFromAsset(assetId, labelId) {
+    try {
+      const asset = await Asset.findByPk(assetId);
+      if (!asset) {
+        throw new Error('Asset not found');
+      }
+
+      const label = await AssetLabel.findByPk(labelId);
+      if (!label) {
+        throw new Error('Label not found');
+      }
+
+      await asset.removeLabel(label);
+
+      console.log(`✅ Removed label ${labelId} from asset ${assetId}`);
+      return this.getAssetWithLabels(assetId);
+    } catch (error) {
+      console.error('Failed to remove label:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get asset with labels
+   * @param {String} assetId - Asset UUID
+   * @returns {Object} Asset with labels
+   */
+  async getAssetWithLabels(assetId) {
+    try {
+      const asset = await Asset.findByPk(assetId, {
+        include: [
+          {
+            model: AssetLabel,
+            as: 'labels',
+            through: { attributes: [] }, // Exclude junction table data
+          },
+        ],
+      });
+
+      if (!asset) {
+        throw new Error('Asset not found');
+      }
+
+      const assetData = asset.toJSON();
+      return {
+        ...this._formatAssetForFrontend(asset),
+        labels: assetData.labels || [],
+      };
+    } catch (error) {
+      console.error('Failed to get asset with labels:', error);
+      throw error;
+    }
+  }
+
+  // ==================== USAGE TRACKING ====================
+
+  /**
+   * Track asset usage
+   * @param {String} assetId - Asset UUID
+   * @param {String} usedInType - Type: 'composition', 'episode', 'template'
+   * @param {String} usedInId - ID of the entity using this asset
+   * @returns {Object} Usage record
+   */
+  async trackAssetUsage(assetId, usedInType, usedInId) {
+    try {
+      const usage = await AssetUsage.create({
+        asset_id: assetId,
+        used_in_type: usedInType,
+        used_in_id: usedInId,
+      });
+      console.log(`✅ Tracked usage: ${assetId} → ${usedInType}:${usedInId}`);
+      return usage.toJSON();
+    } catch (error) {
+      console.error('Failed to track usage:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Get asset usage information
+   * @param {String} assetId - Asset UUID
+   * @returns {Array} List of usage records
+   */
+  async getAssetUsage(assetId) {
+    try {
+      const usages = await AssetUsage.findAll({
+        where: { asset_id: assetId },
+        order: [['created_at', 'DESC']],
+      });
+      return usages.map(u => u.toJSON());
+    } catch (error) {
+      console.error('Failed to get asset usage:', error);
+      throw error;
+    }
+  }
+
+  // ==================== BULK OPERATIONS ====================
+
+  /**
+   * Bulk delete assets
+   * @param {Array} assetIds - Array of asset UUIDs
+   * @returns {Object} Result summary
+   */
+  async bulkDeleteAssets(assetIds) {
+    try {
+      const results = await Promise.allSettled(
+        assetIds.map(async id => {
+          console.log(`Attempting to delete asset: ${id}`);
+          const result = await Asset.destroy({ where: { id } });
+          console.log(`Delete result for ${id}:`, result);
+          if (result === 0) {
+            throw new Error(`Asset ${id} not found or already deleted`);
+          }
+          return result;
+        })
+      );
+
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+      
+      // Log failures
+      results.forEach((r, i) => {
+        if (r.status === 'rejected') {
+          console.error(`Failed to delete ${assetIds[i]}:`, r.reason);
+        }
+      });
+
+      console.log(`✅ Bulk delete: ${succeeded} succeeded, ${failed} failed`);
+      
+      if (failed > 0 && succeeded === 0) {
+        throw new Error(`All ${failed} delete operations failed`);
+      }
+      
+      return { succeeded, failed, total: assetIds.length };
+    } catch (error) {
+      console.error('Bulk delete failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk process background removal
+   * @param {Array} assetIds - Array of asset UUIDs
+   * @returns {Object} Result summary
+   */
+  async bulkProcessBackground(assetIds) {
+    try {
+      const results = await Promise.allSettled(
+        assetIds.map(id => this.processAssetBackgroundRemoval(id))
+      );
+
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+
+      console.log(`✅ Bulk process: ${succeeded} succeeded, ${failed} failed`);
+      return { succeeded, failed, total: assetIds.length };
+    } catch (error) {
+      console.error('Bulk process failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk add labels
+   * @param {Array} assetIds - Array of asset UUIDs
+   * @param {Array} labelIds - Array of label UUIDs
+   * @returns {Object} Result summary
+   */
+  async bulkAddLabels(assetIds, labelIds) {
+    try {
+      const results = await Promise.allSettled(
+        assetIds.map(assetId => this.addLabelsToAsset(assetId, labelIds))
+      );
+
+      const succeeded = results.filter(r => r.status === 'fulfilled').length;
+      const failed = results.filter(r => r.status === 'rejected').length;
+
+      console.log(`✅ Bulk label: ${succeeded} succeeded, ${failed} failed`);
+      return { succeeded, failed, total: assetIds.length };
+    } catch (error) {
+      console.error('Bulk label failed:', error);
+      throw error;
+    }
+  }
+
+  // ==================== UPDATE OPERATIONS ====================
+
+  /**
+   * Update asset metadata
+   * @param {String} assetId - Asset UUID
+   * @param {Object} updates - Fields to update (name, description, metadata)
+   * @returns {Object} Updated asset
+   */
+  async updateAsset(assetId, updates) {
+    try {
+      const asset = await Asset.findByPk(assetId);
+      if (!asset) {
+        throw new Error('Asset not found');
+      }
+
+      const allowedFields = ['name', 'description', 'metadata', 'asset_type'];
+      const updateData = {};
+
+      Object.keys(updates).forEach(key => {
+        if (allowedFields.includes(key)) {
+          updateData[key] = updates[key];
+        }
+      });
+
+      updateData.updated_at = new Date();
+
+      await asset.update(updateData);
+
+      console.log(`✅ Asset updated: ${assetId}`);
+      return this.getAssetWithLabels(assetId);
+    } catch (error) {
+      console.error('Failed to update asset:', error);
+      throw error;
+    }
+  }
+
+  // ==================== SEARCH & FILTER ====================
+
+  /**
+   * Search assets with advanced filters
+   * @param {Object} filters - Search filters
+   * @returns {Array} Filtered assets
+   */
+  async searchAssets(filters = {}) {
+    try {
+      const {
+        query,
+        assetType,
+        mediaType,
+        labelIds,
+        approvalStatus = 'APPROVED',
+        sortBy = 'created_at',
+        sortOrder = 'DESC',
+        limit = 100,
+      } = filters;
+
+      const where = { approval_status: approvalStatus };
+
+      if (assetType) {
+        where.asset_type = assetType;
+      }
+
+      if (mediaType) {
+        where.media_type = mediaType;
+      }
+
+      if (query) {
+        const { Op } = require('sequelize');
+        where.name = { [Op.iLike]: `%${query}%` };
+      }
+
+      const include = [];
+
+      if (labelIds && labelIds.length > 0) {
+        include.push({
+          model: AssetLabel,
+          as: 'labels',
+          where: { id: labelIds },
+          through: { attributes: [] },
+        });
+      } else {
+        include.push({
+          model: AssetLabel,
+          as: 'labels',
+          through: { attributes: [] },
+          required: false,
+        });
+      }
+
+      const assets = await Asset.findAll({
+        where,
+        include,
+        order: [[sortBy, sortOrder]],
+        limit,
+      });
+
+      return assets.map(asset => {
+        const assetData = asset.toJSON();
+        return {
+          ...this._formatAssetForFrontend(asset),
+          labels: assetData.labels || [],
+        };
+      });
+    } catch (error) {
+      console.error('Search assets failed:', error);
+      throw error;
+    }
+  }
+
   /**
    * Format asset for frontend consumption
    * @private
@@ -393,6 +799,9 @@ class AssetService {
       asset_type: assetData.asset_type,
       type: assetData.asset_type, // Alias
       approval_status: assetData.approval_status,
+      media_type: assetData.media_type || 'image',
+      duration_seconds: assetData.duration_seconds,
+      description: assetData.description,
       s3_url: assetData.s3_url_raw || assetData.s3_url,
       s3_url_raw: assetData.s3_url_raw,
       s3_url_processed: assetData.s3_url_processed,
@@ -401,11 +810,16 @@ class AssetService {
       file_size_bytes: assetData.file_size_bytes,
       width: assetData.width,
       height: assetData.height,
+      video_codec: assetData.video_codec,
+      audio_codec: assetData.audio_codec,
+      bitrate: assetData.bitrate,
       thumbnail: assetData.metadata?.thumbnail_url || assetData.s3_url_raw,
       uploadedAt: assetData.created_at,
       created_at: assetData.created_at,
       updated_at: assetData.updated_at,
+      processed_at: assetData.processed_at,
       metadata: assetData.metadata || {},
+      labels: assetData.labels || [],
     };
   }
 

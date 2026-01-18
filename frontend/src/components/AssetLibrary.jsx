@@ -50,7 +50,7 @@ const AssetLibrary = ({
       for (const type of validTypes) {
         try {
           // Use full URL with correct backend port
-          const apiUrl = `http://localhost:3000/api/v1/assets/approved/${type}`;
+          const apiUrl = `http://localhost:3002/api/v1/assets/approved/${type}`;
           console.log(`📥 Fetching assets for type: ${type}`);
           
           const response = await fetch(apiUrl, { 

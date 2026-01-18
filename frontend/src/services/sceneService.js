@@ -8,13 +8,20 @@ import api from './api';
 const sceneService = {
   // List scenes for an episode
   async getScenes(episodeId, params = {}) {
-    const { data } = await api.get(`/api/v1/episodes/${episodeId}/scenes`, { params });
+    const { data } = await api.get(`/api/v1/episodes/${episodeId}/scenes`, { 
+      params: {
+        ...params,
+        include: 'thumbnail' // ← ADD THIS to fetch thumbnail data
+      }
+    });
     return data;
   },
 
   // Get single scene
   async getScene(sceneId) {
-    const { data } = await api.get(`/api/v1/scenes/${sceneId}`);
+    const { data } = await api.get(`/api/v1/scenes/${sceneId}`, {
+      params: { include: 'thumbnail' } // ← ADD THIS
+    });
     return data;
   },
 
@@ -67,6 +74,22 @@ const sceneService = {
   // Get scene statistics
   async getSceneStats(episodeId) {
     const { data } = await api.get(`/api/v1/episodes/${episodeId}/scenes/stats`);
+    return data;
+  },
+
+  // NEW: Set scene thumbnail
+  async setSceneThumbnail(sceneId, thumbnailId) {
+    const { data } = await api.put(`/api/v1/scenes/${sceneId}/thumbnail`, {
+      thumbnailId
+    });
+    return data;
+  },
+
+  // NEW: Update scene assets
+  async updateSceneAssets(sceneId, assets) {
+    const { data } = await api.put(`/api/v1/scenes/${sceneId}/assets`, {
+      assets
+    });
     return data;
   }
 };

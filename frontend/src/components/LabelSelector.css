@@ -1,0 +1,225 @@
+/* LabelSelector.css */
+
+.label-selector {
+  position: relative;
+  margin: 0.75rem 0;
+}
+
+.current-labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.label-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  background: #6366f1;
+  color: white;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.label-remove {
+  background: transparent;
+  border: none;
+  color: white;
+  font-size: 1.25rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 0.25rem;
+  opacity: 0.8;
+  transition: opacity 0.2s;
+}
+
+.label-remove:hover {
+  opacity: 1;
+}
+
+.label-add-btn {
+  padding: 0.375rem 0.875rem;
+  background: #f3f4f6;
+  border: 2px dashed #d1d5db;
+  border-radius: 999px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.label-add-btn:hover {
+  background: #e5e7eb;
+  border-color: #9ca3af;
+  color: #374151;
+}
+
+.label-add-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Dropdown */
+.label-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  margin-top: 0.5rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+  z-index: 100;
+  min-width: 250px;
+  max-width: 300px;
+}
+
+.label-dropdown-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  font-weight: 600;
+  color: #374151;
+}
+
+.label-dropdown-close {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  transition: color 0.2s;
+}
+
+.label-dropdown-close:hover {
+  color: #374151;
+}
+
+.label-dropdown-list {
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.label-dropdown-empty {
+  padding: 1.5rem;
+  text-align: center;
+  color: #9ca3af;
+  font-size: 0.875rem;
+}
+
+.label-option {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.label-option:hover {
+  background: #f9fafb;
+}
+
+.label-color-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.label-option-name {
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+/* Create Form */
+.label-create-form {
+  padding: 1rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.label-create-form input[type="text"] {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  margin-bottom: 0.5rem;
+}
+
+.label-create-form input[type="color"] {
+  width: 60px;
+  height: 40px;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  cursor: pointer;
+  margin-bottom: 0.5rem;
+}
+
+.label-create-actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.label-create-actions button {
+  flex: 1;
+  padding: 0.5rem;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.label-create-actions button:first-child {
+  background: #6366f1;
+  color: white;
+}
+
+.label-create-actions button:first-child:hover {
+  background: #4f46e5;
+}
+
+.label-create-actions button:first-child:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
+.label-create-actions button:last-child {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+.label-create-actions button:last-child:hover {
+  background: #e5e7eb;
+}
+
+.label-create-btn {
+  width: 100%;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-top: none;
+  border-radius: 0 0 8px 8px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #6366f1;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.label-create-btn:hover {
+  background: #f3f4f6;
+}

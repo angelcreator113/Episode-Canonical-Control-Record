@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+import AssetPicker from './AssetPicker';
+import thumbnailService from '../../services/thumbnailService';
 import './SceneFormModal.css';
 
 const SceneFormModal = ({ 
@@ -21,11 +23,16 @@ const SceneFormModal = ({
     durationSeconds: '',
     productionStatus: 'draft',
     scriptNotes: '',
-    characters: []
+    characters: [],
+    thumbnailId: null,
+    linkedAssets: []
   });
 
   const [characterInput, setCharacterInput] = useState('');
   const [errors, setErrors] = useState({});
+  const [showAssetPicker, setShowAssetPicker] = useState(false);
+  const [assetPickerMode, setAssetPickerMode] = useState('thumbnail');
+  const [thumbnailPreview, setThumbnailPreview] = useState(null);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -42,10 +49,45 @@ const SceneFormModal = ({
         durationSeconds: scene.durationSeconds || '',
         productionStatus: scene.productionStatus || 'draft',
         scriptNotes: scene.scriptNotes || '',
-        characters: scene.characters || []
+        characters: scene.characters || [],
+        thumbnailId: scene.thumbnailId || null,
+        linkedAssets: scene.assets || []
       });
+
+      // Load thumbnail preview if exists
+      if (scene.thumbnailId) {
+        loadThumbnailPreview(scene.thumbnailId);
+      }
     }
   }, [scene, episodeId]);
+
+  const loadThumbnailPreview = async (thumbnailId) => {
+    try {
+      const thumbnail = await thumbnailService.getThumbnail(thumbnailId);
+      setThumbnailPreview(thumbnail);
+    } catch (error) {
+      console.error('Failed to load thumbnail preview:', error);
+    }
+  };
+
+  const handleThumbnailSelect = async (thumbnailId) => {
+    setFormData(prev => ({ ...prev, thumbnailId }));
+    await loadThumbnailPreview(thumbnailId);
+  };
+
+  const handleAssetsSelect = (assetIds) => {
+    setFormData(prev => ({ ...prev, linkedAssets: assetIds }));
+  };
+
+  const openThumbnailPicker = () => {
+    setAssetPickerMode('thumbnail');
+    setShowAssetPicker(true);
+  };
+
+  const openAssetsPicker = () => {
+    setAssetPickerMode('assets');
+    setShowAssetPicker(true);
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -334,7 +376,53 @@ const SceneFormModal = ({
               rows={3}
             />
           </div>
+          {/* Thumbnail Selection */}
+          <div className="form-group">
+            <label>Scene Thumbnail</label>
+            <button
+              type="button"
+              onClick={openThumbnailPicker}
+              className="asset-picker-btn"
+            >
+              📁 {thumbnailPreview ? 'Change Thumbnail' : 'Select Thumbnail'}
+            </button>
+            {thumbnailPreview && (
+              <div className="thumbnail-preview">
+                <img src={thumbnailPreview.url || thumbnailPreview.s3Url} alt="Selected thumbnail" />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setFormData(prev => ({ ...prev, thumbnailId: null }));
+                    setThumbnailPreview(null);
+                  }}
+                  className="remove-thumbnail-btn"
+                >
+                  × Remove
+                </button>
+              </div>
+            )}
+          </div>
 
+          {/* Linked Assets */}
+          <div className="form-group">
+            <label>Linked Assets</label>
+            <button
+              type="button"
+              onClick={openAssetsPicker}
+              className="asset-picker-btn"
+            >
+              📎 Manage Linked Assets ({formData.linkedAssets.length})
+            </button>
+            {formData.linkedAssets.length > 0 && (
+              <div className="linked-assets-preview">
+                {formData.linkedAssets.map(assetId => (
+                  <span key={assetId} className="asset-id-badge">
+                    {assetId.substring(0, 8)}...
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
           {/* Form Actions */}
           <div className="form-actions">
             <button 
@@ -355,6 +443,16 @@ const SceneFormModal = ({
           </div>
         </form>
       </div>
+
+      {/* Asset Picker Modal */}
+      <AssetPicker
+        isOpen={showAssetPicker}
+        onClose={() => setShowAssetPicker(false)}
+        onSelect={assetPickerMode === 'thumbnail' ? handleThumbnailSelect : handleAssetsSelect}
+        multiSelect={assetPickerMode === 'assets'}
+        selectedIds={assetPickerMode === 'assets' ? formData.linkedAssets : []}
+        allowUpload={true}
+      />
     </div>
   );
 };

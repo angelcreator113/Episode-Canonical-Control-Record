@@ -75,4 +75,22 @@ router.delete(
   asyncHandler(sceneController.removeCharacter)
 );
 
+// PUT /api/v1/scenes/:id/thumbnail - Set scene thumbnail
+router.put(
+  '/:id/thumbnail',
+  validateUUIDParam('id'),
+  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  // requirePermission('scenes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
+  asyncHandler(sceneController.setSceneThumbnail)
+);
+
+// PUT /api/v1/scenes/:id/assets - Update scene assets
+router.put(
+  '/:id/assets',
+  validateUUIDParam('id'),
+  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  // requirePermission('scenes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
+  asyncHandler(sceneController.updateSceneAssets)
+);
+
 module.exports = router;

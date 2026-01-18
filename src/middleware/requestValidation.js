@@ -250,10 +250,13 @@ const validateAssetUpload = (req, res, next) => {
     // Validate asset type
     const validTypes = [
       'PROMO_LALA',
-      'PROMO_JUSTAWOMANINPERPRIME',
+      'PROMO_JUSTAWOMANINHERPRIME',
       'PROMO_GUEST',
       'BRAND_LOGO',
       'EPISODE_FRAME',
+      'PROMO_VIDEO',
+      'EPISODE_VIDEO',
+      'BACKGROUND_VIDEO',
     ];
 
     if (!assetType) {

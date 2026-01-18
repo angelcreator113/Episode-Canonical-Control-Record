@@ -65,12 +65,12 @@ function AppContent() {
     console.log('[AppContent] Auth state changed:', { isAuthenticated, loading, pathname: location.pathname });
   }, [isAuthenticated, loading, location.pathname]);
 
-  // Redirect to episodes when logged in from login page
+  // Redirect to home when logged in from login page
   React.useEffect(() => {
     if (!loading && isAuthenticated && location.pathname === '/login' && !isNavigatingRef.current) {
-      console.log('[AppContent] User authenticated on login page, redirecting to episodes...');
+      console.log('[AppContent] User authenticated on login page, redirecting to home...');
       isNavigatingRef.current = true;
-      navigate('/episodes', { replace: true });
+      navigate('/', { replace: true });
       setTimeout(() => { isNavigatingRef.current = false; }, 100);
     }
   }, [isAuthenticated, loading, location.pathname, navigate]);
@@ -155,8 +155,8 @@ function AppContent() {
           {/* Test Routes */}
           {/* <Route path="/test/assets" element={<AssetLibraryTest />} /> */}
 
-          {/* If authenticated user tries to access login, redirect to episodes */}
-          <Route path="/login" element={<Navigate to="/episodes" replace />} />
+          {/* If authenticated user tries to access login, redirect to home */}
+          <Route path="/login" element={<Navigate to="/" replace />} />
           
           {/* Fallback - redirect unknown routes to home */}
           <Route path="*" element={<Navigate to="/" replace />} />

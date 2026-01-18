@@ -3,20 +3,23 @@ import './Timeline.css';
 
 /**
  * TimelineScene - Individual scene bar on timeline
+ * Enhanced with drag-to-resize and better visuals
  */
 const TimelineScene = ({ 
   scene, 
   startTime, 
   widthPercent,
   isEditing,
+  isActive,
   onEdit,
   onSave,
-  onCancel
+  onCancel,
+  onResizeStart
 }) => {
   const [durationInput, setDurationInput] = useState('');
 
-  const handleEditClick = () => {
-    // Handle null/undefined/0 duration
+  const handleEditClick = (e) => {
+    e.stopPropagation();
     const duration = scene.durationSeconds || 0;
     const mins = Math.floor(duration / 60);
     const secs = duration % 60;
@@ -25,14 +28,13 @@ const TimelineScene = ({
   };
 
   const handleSave = () => {
-    // Parse MM:SS format
     const parts = durationInput.split(':');
     if (parts.length === 2) {
       const mins = parseInt(parts[0]) || 0;
       const secs = parseInt(parts[1]) || 0;
       const totalSeconds = (mins * 60) + secs;
       
-      if (totalSeconds > 0 && totalSeconds <= 3600) { // Max 1 hour
+      if (totalSeconds > 0 && totalSeconds <= 3600) {
         onSave(totalSeconds);
       } else {
         alert('Duration must be between 0:01 and 60:00');
@@ -50,15 +52,14 @@ const TimelineScene = ({
     }
   };
 
-  // Scene type colors
   const getSceneColor = () => {
     const colors = {
-      intro: '#3b82f6',      // Blue
-      main: '#10b981',       // Green
-      transition: '#f59e0b', // Orange
-      outro: '#8b5cf6',      // Purple
-      montage: '#ec4899',    // Pink
-      broll: '#6b7280'       // Gray
+      intro: '#3b82f6',
+      main: '#10b981',
+      transition: '#f59e0b',
+      outro: '#8b5cf6',
+      montage: '#ec4899',
+      broll: '#6b7280'
     };
     return colors[scene.sceneType] || colors.main;
   };
@@ -77,16 +78,19 @@ const TimelineScene = ({
 
   return (
     <div 
-      className="timeline-scene"
+      className={`timeline-scene ${isActive ? 'active' : ''} ${isEditing ? 'editing' : ''}`}
       style={{ 
-        width: `${widthPercent}%`,
-        background: getSceneColor()
+        width: '100%',
+        height: '100%',
+        background: getSceneColor(),
+        position: 'relative'
       }}
       onClick={!isEditing ? handleEditClick : undefined}
-      title={`${scene.title} - Click to edit duration`}
+      title={`${scene.title} - Click to edit`}
     >
+      {/* Scene content */}
       <div className="scene-content">
-        <span className="scene-number">#{scene.sceneNumber || scene.id}</span>
+        <span className="scene-number">#{scene.sceneNumber || scene.index + 1}</span>
         <span className="scene-title">{scene.title}</span>
         
         {isEditing ? (
@@ -110,11 +114,28 @@ const TimelineScene = ({
         )}
       </div>
 
+      {/* Resize handle */}
+      {!isEditing && (
+        <div 
+          className="scene-resize-handle"
+          onMouseDown={onResizeStart}
+          onClick={(e) => e.stopPropagation()}
+          title="Drag to resize"
+        >
+          <div className="resize-handle-icon">⋮</div>
+        </div>
+      )}
+
+      {/* Tooltip */}
       <div className="scene-tooltip">
         <strong>{scene.title}</strong><br />
         Type: {scene.sceneType}<br />
         Start: {formatStartTime(startTime)}<br />
-        Duration: {formatDuration(scene.durationSeconds || 0)}
+        Duration: {formatDuration(scene.durationSeconds || 0)}<br />
+        {scene.location && <><br />📍 {scene.location}</>}
+        {scene.characters && scene.characters.length > 0 && (
+          <><br />👥 {scene.characters.join(', ')}</>
+        )}
       </div>
     </div>
   );

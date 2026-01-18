@@ -564,6 +564,26 @@
   border-radius: 4px;
 }
 
+/* Manage Scenes Button */
+.manage-scenes-btn {
+  background: #8b5cf6;
+  color: white;
+  border: none;
+  padding: 12px 24px;
+  border-radius: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  margin: 10px 0;
+}
+
+.manage-scenes-btn:hover {
+  background: #7c3aed;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
 @media (max-width: 768px) {
   .episode-detail-container {
     padding: 1rem;

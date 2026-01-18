@@ -89,26 +89,20 @@ class ThumbnailService {
    */
   async getThumbnailsByEpisode(episodeId) {
     try {
-      // Only select columns that exist in the current database schema (before migration)
-      // New columns (is_primary, publish_status, etc.) will be available after migration runs.
       const thumbnails = await Thumbnail.findAll({
         where: { episode_id: episodeId },
         attributes: [
           'id',
           'episode_id',
-          's3_bucket',
+          'composition_id',
+          'url',
           's3_key',
-          'file_size_bytes',
-          'mime_type',
-          'width_pixels',
-          'height_pixels',
-          'format',
+          'metadata',
           'thumbnail_type',
-          'position_seconds',
-          'generated_at',
-          'quality_rating',
+          'created_at',
+          'updated_at',
         ],
-        order: [['generated_at', 'DESC']],
+        order: [['created_at', 'DESC']],
         raw: true,
       });
 
