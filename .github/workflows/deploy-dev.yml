@@ -203,6 +203,11 @@ jobs:
             echo "🔍 Verifying what the app is serving:"
             sleep 3
             curl -s http://localhost:3002/ | grep -o 'index-[^"]*\.js' || echo "Pattern not found in localhost response"
+            
+            echo "🔍 Searching for ALL dist folders and old index files:"
+            find ~ -name "dist" -type d 2>/dev/null | head -10
+            find ~ -name "index-2tx_xbRM.js" 2>/dev/null || echo "Old file not found"
+            find ~ -name "index.html" -path "*/dist/*" -exec grep -l "index-2tx_xbRM" {} \; 2>/dev/null || echo "No old index.html found"
           ENDSSH
           
           echo "✅ Deployment to EC2 complete"
