@@ -198,6 +198,10 @@ jobs:
             # Create logs directory for PM2
             mkdir -p ~/episode-metadata/logs
             
+            # Clear old PM2 logs to see fresh errors
+            rm -f ~/episode-metadata/logs/*.log
+            pm2 flush || true
+            
             # Start fresh with ecosystem config (includes environment variables)
             cd ~/episode-metadata
             
@@ -230,6 +234,8 @@ jobs:
               pm2 logs episode-api --lines 50 --nostream
               exit 1
             fi
+            
+            echo "✅ App is online!"
             
             echo "🔍 Verifying PM2 environment variables:"
             pm2 env 0 | grep -E "DATABASE_URL|NODE_ENV|PORT|DB_SSL" || echo "⚠️ Env vars not found"

@@ -3,7 +3,14 @@
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-require('dotenv').config();
+
+// Only load .env if not running via PM2 with ecosystem config
+if (!process.env.PM2_HOME) {
+  require('dotenv').config();
+  console.log('📋 Loaded environment from .env file');
+} else {
+  console.log('📋 Using PM2 environment variables');
+}
 
 console.log('🚀 Starting application...');
 console.log('📋 Environment:', process.env.NODE_ENV || 'development');
