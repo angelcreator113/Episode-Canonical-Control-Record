@@ -390,6 +390,39 @@ app.get('/api/v1', (req, res) => {
 });
 
 // ============================================================================
+// STATIC FRONTEND SERVING (Production/Development)
+// ============================================================================
+const path = require('path');
+const fs = require('fs');
+
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
+
+// Serve static files from frontend/dist if it exists
+if (fs.existsSync(frontendDistPath)) {
+  console.log('✓ Serving frontend from:', frontendDistPath);
+  
+  // Serve static assets
+  app.use(express.static(frontendDistPath));
+  
+  // Handle React Router - serve index.html for all non-API routes
+  app.get('*', (req, res, next) => {
+    // Skip API routes and specific endpoints
+    if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/ping') {
+      return next();
+    }
+    
+    const indexPath = path.join(frontendDistPath, 'index.html');
+    if (fs.existsSync(indexPath)) {
+      res.sendFile(indexPath);
+    } else {
+      next();
+    }
+  });
+} else {
+  console.log('⚠ Frontend dist not found, skipping static file serving');
+}
+
+// ============================================================================
 // ERROR HANDLING
 // ============================================================================
 const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
