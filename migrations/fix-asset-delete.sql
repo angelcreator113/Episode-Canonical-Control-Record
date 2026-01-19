@@ -2,30 +2,30 @@
 -- This allows assets to be deleted without triggering the broken composition versioning
 
 -- Option 1: Disable the broken trigger temporarily
-DROP TRIGGER IF EXISTS track_composition_changes_trigger ON compositions;
+DROP TRIGGER IF EXISTS track_composition_changes_trigger ON thumbnail_compositions;
 
 -- Option 2: Make sure foreign keys use CASCADE so deleting assets doesn't break
-ALTER TABLE compositions 
-  DROP CONSTRAINT IF EXISTS compositions_background_frame_asset_id_fkey,
-  ADD CONSTRAINT compositions_background_frame_asset_id_fkey 
+ALTER TABLE thumbnail_compositions 
+  DROP CONSTRAINT IF EXISTS thumbnail_compositions_background_frame_asset_id_fkey,
+  ADD CONSTRAINT thumbnail_compositions_background_frame_asset_id_fkey 
     FOREIGN KEY (background_frame_asset_id) 
     REFERENCES assets(id) ON DELETE SET NULL;
 
-ALTER TABLE compositions 
-  DROP CONSTRAINT IF EXISTS compositions_lala_asset_id_fkey,
-  ADD CONSTRAINT compositions_lala_asset_id_fkey 
+ALTER TABLE thumbnail_compositions 
+  DROP CONSTRAINT IF EXISTS thumbnail_compositions_lala_asset_id_fkey,
+  ADD CONSTRAINT thumbnail_compositions_lala_asset_id_fkey 
     FOREIGN KEY (lala_asset_id) 
     REFERENCES assets(id) ON DELETE SET NULL;
 
-ALTER TABLE compositions 
-  DROP CONSTRAINT IF EXISTS compositions_guest_asset_id_fkey,
-  ADD CONSTRAINT compositions_guest_asset_id_fkey 
+ALTER TABLE thumbnail_compositions 
+  DROP CONSTRAINT IF EXISTS thumbnail_compositions_guest_asset_id_fkey,
+  ADD CONSTRAINT thumbnail_compositions_guest_asset_id_fkey 
     FOREIGN KEY (guest_asset_id) 
     REFERENCES assets(id) ON DELETE SET NULL;
 
-ALTER TABLE compositions 
-  DROP CONSTRAINT IF EXISTS compositions_justawomen_asset_id_fkey,
-  ADD CONSTRAINT compositions_justawomen_asset_id_fkey 
+ALTER TABLE thumbnail_compositions 
+  DROP CONSTRAINT IF EXISTS thumbnail_compositions_justawomen_asset_id_fkey,
+  ADD CONSTRAINT thumbnail_compositions_justawomen_asset_id_fkey 
     FOREIGN KEY (justawomen_asset_id) 
     REFERENCES assets(id) ON DELETE SET NULL;
 
@@ -44,5 +44,5 @@ $$ LANGUAGE plpgsql;
 
 -- Re-enable trigger if needed
 -- CREATE TRIGGER track_composition_changes_trigger
--- AFTER INSERT OR UPDATE ON compositions
+-- AFTER INSERT OR UPDATE ON thumbnail_compositions
 -- FOR EACH ROW EXECUTE FUNCTION track_composition_changes();
