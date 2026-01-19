@@ -352,13 +352,17 @@ module.exports = {
 
     await episode.update(updateData);
 
-    // Log activity (existing logger)
-    await logger.logAction(req.user?.id, 'edit', 'episode', id, {
-      oldValues,
-      newValues: episode.toJSON(),
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Log activity (existing logger) - wrapped in try-catch to prevent failures
+    try {
+      await logger.logAction(req.user?.id, 'edit', 'episode', id, {
+        oldValues,
+        newValues: episode.toJSON(),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+    } catch (logError) {
+      console.warn('⚠️ Failed to log activity:', logError.message);
+    }
 
     // Phase 3A Integration: Activity Logging (non-blocking)
     ActivityService.logActivity({
@@ -425,12 +429,16 @@ module.exports = {
       await episode.softDelete();
     }
 
-    // Log activity
-    await logger.logAction(req.user?.id, 'delete', 'episode', id, {
-      oldValues,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Log activity - wrapped in try-catch to prevent failures
+    try {
+      await logger.logAction(req.user?.id, 'delete', 'episode', id, {
+        oldValues,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+    } catch (logError) {
+      console.warn('⚠️ Failed to log activity:', logError.message);
+    }
 
     // Phase 3A Integration: Activity Logging (non-blocking)
     ActivityService.logActivity({
@@ -527,12 +535,16 @@ module.exports = {
     // Update episode status
     await episode.update({ status: 'processing' });
 
-    // Log activity
-    await logger.logAction(req.user?.id, 'create', 'processing', id, {
-      newValues: { jobTypes, count: jobs.length },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Log activity - wrapped in try-catch to prevent failures
+    try {
+      await logger.logAction(req.user?.id, 'create', 'processing', id, {
+        newValues: { jobTypes, count: jobs.length },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+    } catch (logError) {
+      console.warn('⚠️ Failed to log activity:', logError.message);
+    }
 
     res.json({
       data: jobs,
