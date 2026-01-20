@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import './OutfitSets.css';
 
 const OutfitSets = () => {
@@ -34,14 +35,14 @@ const OutfitSets = () => {
       setLoading(true);
       
       // Load outfit sets
-      const setsResponse = await fetch(import.meta.env.VITE_API_URL || '/api/v1/outfit-sets');
+      const setsResponse = await fetch(`${API_URL}/outfit-sets`);
       if (setsResponse.ok) {
         const setsData = await setsResponse.json();
         setOutfitSets(setsData.data || []);
       }
       
       // Load wardrobe items
-      const itemsResponse = await fetch(import.meta.env.VITE_API_URL || '/api/v1/wardrobe?limit=1000');
+      const itemsResponse = await fetch(`${API_URL}/wardrobe?limit=1000`);
       if (itemsResponse.ok) {
         const itemsData = await itemsResponse.json();
         setWardrobeItems(itemsData.data || []);

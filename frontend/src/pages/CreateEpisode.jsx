@@ -7,6 +7,7 @@ import React, { useMemo, useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
+import { API_URL } from '../config/api';
 import episodeService from '../services/episodeService';
 import thumbnailService from '../services/thumbnailService';
 import AssetPicker from '../components/Scenes/AssetPicker';
@@ -57,7 +58,7 @@ const CreateEpisode = () => {
     const fetchShows = async () => {
       try {
         setLoadingShows(true);
-        const response = await fetch(import.meta.env.VITE_API_URL || '/api/v1/shows', {
+        const response = await fetch(`${API_URL}/shows`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           },
@@ -186,7 +187,7 @@ const CreateEpisode = () => {
 
     try {
       const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-      await fetch(import.meta.env.VITE_API_URL || '/api/v1/files/upload', {
+      await fetch(`${API_URL}/files/upload`, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
