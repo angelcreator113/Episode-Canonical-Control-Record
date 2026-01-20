@@ -83,12 +83,13 @@ echo "🗄️ Running migrations..."
 source "$NVM_DIR/nvm.sh" 2>/dev/null || true
 nvm use 20 2>/dev/null || true
 
-# Set DATABASE_URL from ecosystem config
-export DATABASE_URL="postgresql://postgres:Ayanna123!!@episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata"
+# Set DATABASE_URL from ecosystem config with SSL parameter
+export DATABASE_URL="postgresql://postgres:Ayanna123!!@episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata?sslmode=require"
 export DB_SSL="true"
+export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
 # Run migrations and capture output
-echo "Running database migrations with DATABASE_URL..."
+echo "Running database migrations with SSL..."
 npm run migrate:up 2>&1 | tee migration.log
 MIGRATION_STATUS=$?
 
