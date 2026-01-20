@@ -3,6 +3,7 @@ module.exports = {
     name: 'episode-api',
     script: '/home/ubuntu/episode-metadata/src/server.js',
     cwd: '/home/ubuntu/episode-metadata',
+    interpreter: '/home/ubuntu/.nvm/versions/node/v20.20.0/bin/node',
     instances: 1,
     autorestart: true,
     watch: false,
