@@ -41,7 +41,7 @@ const ShowManagement = () => {
   const fetchShows = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3002/api/v1/shows', {
+      const response = await fetch(`${API_URL}/shows`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
@@ -92,8 +92,8 @@ const ShowManagement = () => {
       setError(null);
       
       const url = editingShow
-        ? `http://localhost:3002/api/v1/shows/${editingShow.id}`
-        : 'http://localhost:3002/api/v1/shows';
+        ? `${API_URL}/shows/${editingShow.id}`
+        : `${API_URL}/shows`;
       
       const method = editingShow ? 'PUT' : 'POST';
       

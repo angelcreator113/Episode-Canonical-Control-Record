@@ -34,14 +34,14 @@ const OutfitSets = () => {
       setLoading(true);
       
       // Load outfit sets
-      const setsResponse = await fetch('http://localhost:3002/api/v1/outfit-sets');
+      const setsResponse = await fetch(import.meta.env.VITE_API_URL || '/api/v1/outfit-sets');
       if (setsResponse.ok) {
         const setsData = await setsResponse.json();
         setOutfitSets(setsData.data || []);
       }
       
       // Load wardrobe items
-      const itemsResponse = await fetch('http://localhost:3002/api/v1/wardrobe?limit=1000');
+      const itemsResponse = await fetch(import.meta.env.VITE_API_URL || '/api/v1/wardrobe?limit=1000');
       if (itemsResponse.ok) {
         const itemsData = await itemsResponse.json();
         setWardrobeItems(itemsData.data || []);
@@ -83,7 +83,7 @@ const OutfitSets = () => {
     try {
       const url = selectedSet 
         ? `http://localhost:3002/api/v1/outfit-sets/${selectedSet.id}`
-        : 'http://localhost:3002/api/v1/outfit-sets';
+        : import.meta.env.VITE_API_URL || '/api/v1/outfit-sets';
       
       const method = selectedSet ? 'PUT' : 'POST';
       

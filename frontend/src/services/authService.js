@@ -7,7 +7,7 @@ import axios from 'axios';
 
 // Use full backend URL in development, relative path in production
 const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? 'http://localhost:3002/api/v1'
+  ? import.meta.env.VITE_API_URL || '/api/v1'
   : '/api/v1';
 
 export const authService = {

@@ -47,7 +47,7 @@ const EditEpisode = () => {
     const fetchShows = async () => {
       try {
         setLoadingShows(true);
-        const response = await fetch('http://localhost:3002/api/v1/shows', {
+        const response = await fetch(import.meta.env.VITE_API_URL || '/api/v1/shows', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           },
