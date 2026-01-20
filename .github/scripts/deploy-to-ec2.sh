@@ -163,6 +163,14 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f create-compositions-table.sql 2>&1 | head -30 || echo "Compositions table creation completed with warnings..."
 
+# Create episode_assets junction table
+echo "Creating episode_assets table..."
+node create-episode-assets-table.js 2>&1 | head -30 || echo "Episode assets table creation completed with warnings..."
+
+# Create wardrobe and episode_wardrobe tables
+echo "Creating wardrobe tables..."
+node migrate-wardrobe.js 2>&1 | head -30 || echo "Wardrobe tables creation completed with warnings..."
+
 # Mark existing migrations as complete to prevent recreation attempts
 echo "Marking existing migrations as complete..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
