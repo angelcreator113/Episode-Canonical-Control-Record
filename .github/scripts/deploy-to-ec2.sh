@@ -83,8 +83,12 @@ echo "🗄️ Running migrations..."
 source "$NVM_DIR/nvm.sh" 2>/dev/null || true
 nvm use 20 2>/dev/null || true
 
+# Set DATABASE_URL from ecosystem config
+export DATABASE_URL="postgresql://postgres:Ayanna123!!@episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata"
+export DB_SSL="true"
+
 # Run migrations and capture output
-echo "Running database migrations..."
+echo "Running database migrations with DATABASE_URL..."
 npm run migrate:up 2>&1 | tee migration.log
 MIGRATION_STATUS=$?
 
