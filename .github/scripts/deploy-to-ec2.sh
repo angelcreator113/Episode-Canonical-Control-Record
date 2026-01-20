@@ -30,13 +30,24 @@ if ! node --version 2>/dev/null | grep -q "v20"; then
   nvm alias default 20
   echo "✓ Node.js 20 installed"
 else
-  echo "✓ Node.js 20 detected, using it..."
+  echo "✓ Node.js 20 detected, ensuring it's active..."
   nvm use 20 2>/dev/null || true
+  nvm alias default 20  # Make sure it's the default
 fi
 
 echo "Active Node version:"
 node --version
 npm --version
+which node
+
+# Verify Node 20 binary exists
+if [ -f ~/.nvm/versions/node/v20.20.0/bin/node ]; then
+  echo "✓ Node 20 binary confirmed at: ~/.nvm/versions/node/v20.20.0/bin/node"
+  ~/.nvm/versions/node/v20.20.0/bin/node --version
+else
+  echo "⚠️ Node 20 binary not at expected location, listing available versions:"
+  ls -la ~/.nvm/versions/node/
+fi
 
 echo "🗑️ Removing old directories..."
 rm -rf ~/Episode-Canonical-Control-Record 2>/dev/null || true
@@ -110,6 +121,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -U postgres \
   -d episode_metadata \
   -f fix-shows-schema.sql 2>&1 | head -30 || echo "Shows schema fix completed with warnings..."
+
+# Mark existing migrations as complete to prevent recreation attempts
+echo "Marking existing migrations as complete..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f mark-migrations-complete.sql || echo "Migration marking completed..."
 
 # Only run the new migrations we need
 echo "Running database migrations with SSL..."
@@ -205,7 +223,22 @@ sleep 2
 pm2 logs episode-api --lines 50 --nostream || true
 echo "🔍 Checking app startup errors:"
 cat ~/episode-metadata/logs/error.log 2>/dev/null | tail -50 || echo "No error log yet"
-echo "📋 Checking PM2 environment:"
+echo "� Diagnosing Node version issue:"
+echo "NVM default:"
+nvm current
+echo "Which node:"
+which node
+node --version
+echo "Node 20 binary check:"
+if [ -f /home/ubuntu/.nvm/versions/node/v20.20.0/bin/node ]; then
+    /home/ubuntu/.nvm/versions/node/v20.20.0/bin/node --version
+else
+    echo "❌ Node 20 binary missing, reinstalling..."
+    nvm install 20
+    nvm alias default 20
+fi
+
+echo "�📋 Checking PM2 environment:"
 pm2 show episode-api || true
 echo "✅ Deployed!"
 echo "📋 Build info:"

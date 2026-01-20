@@ -3,7 +3,9 @@ module.exports = {
     name: 'episode-api',
     script: '/home/ubuntu/episode-metadata/src/server.js',
     cwd: '/home/ubuntu/episode-metadata',
-    interpreter: '/home/ubuntu/.nvm/versions/node/v20.20.0/bin/node',
+    // Force use of Node 20 by setting it in the interpreter field
+    interpreter: 'node',  // Use node from PATH
+    interpreter_args: '',
     instances: 1,
     autorestart: true,
     watch: false,
@@ -15,6 +17,7 @@ module.exports = {
       NODE_ENV: 'staging',
       PORT: 3002,
       HOST: '0.0.0.0',
+      // Prepend Node 20 bin to PATH to ensure it's used
       PATH: '/home/ubuntu/.nvm/versions/node/v20.20.0/bin:' + process.env.PATH,
       API_VERSION: 'v1',
       APP_NAME: 'Episode Metadata API (Development)',
