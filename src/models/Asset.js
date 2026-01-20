@@ -142,5 +142,16 @@ module.exports = (sequelize) => {
     }
   );
 
+  // Define associations
+  Asset.associate = function (models) {
+    // Many-to-many with Episodes through episode_assets junction table
+    Asset.belongsToMany(models.Episode, {
+      through: 'episode_assets',
+      foreignKey: 'asset_id',
+      otherKey: 'episode_id',
+      as: 'episodes',
+    });
+  };
+
   return Asset;
 };
