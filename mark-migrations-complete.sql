@@ -1,3 +1,6 @@
+-- First ensure the pgmigrations table has proper constraints
+ALTER TABLE pgmigrations ADD CONSTRAINT IF NOT EXISTS pgmigrations_name_key UNIQUE (name);
+
 -- Mark existing migrations as completed to prevent re-creation attempts
 INSERT INTO pgmigrations (name, run_on) 
 VALUES 

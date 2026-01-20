@@ -159,6 +159,12 @@ rm -f ~/episode-metadata/logs/*.log
 pm2 flush || true
 cd ~/episode-metadata
 
+# Force PM2 to use Node 20 by updating PM2 with the correct Node version
+echo "🔄 Updating PM2 to use Node 20..."
+pm2 update
+pm2 kill || true  # Kill PM2 daemon to force fresh start with new Node
+sleep 2
+
 if [ ! -f ecosystem.config.js ]; then
   echo "❌ ERROR: ecosystem.config.js not found!"
   ls -la
@@ -185,8 +191,15 @@ cd ~/episode-metadata
 node --check src/app.js || echo "❌ Syntax error in app.js!"
 echo "🧪 Testing if app starts at all..."
 timeout 5 node src/app.js 2>&1 | head -20 || echo "App failed to start"
+
+echo "🔍 Final Node version verification before PM2 start:"
+echo "Shell node: $(node --version)"
+echo "Which node: $(which node)"
+echo "PATH: $PATH"
+
 echo "📋 Starting PM2 with ecosystem config..."
-pm2 start ecosystem.config.js --update-env 2>&1 | tee pm2-start.log
+# Use full path to node from nvm to force correct version
+PM2_HOME=/home/ubuntu/.pm2 pm2 start ecosystem.config.js --update-env 2>&1 | tee pm2-start.log
 
 if [ $? -ne 0 ]; then
   echo "❌ PM2 start failed! Output:"
@@ -206,6 +219,18 @@ if ! pm2 list | grep -q "episode-api.*online"; then
 fi
 
 echo "✅ App is online!"
+
+echo "🔍 CRITICAL: Verifying PM2 is actually using Node 20:"
+pm2 show episode-api | grep -E "node.js version|interpreter"
+PM2_NODE_VERSION=$(pm2 show episode-api | grep "node.js version" | awk '{print $NF}')
+echo "PM2 detected Node version: $PM2_NODE_VERSION"
+if [[ "$PM2_NODE_VERSION" != "20."* ]]; then
+  echo "⚠️⚠️⚠️ WARNING: PM2 is still using Node $PM2_NODE_VERSION instead of Node 20!"
+  echo "This may cause runtime issues!"
+else
+  echo "✅ PM2 is correctly using Node 20"
+fi
+
 echo "🔍 Verifying PM2 environment variables:"
 pm2 env 0 | grep -E "DATABASE_URL|NODE_ENV|PORT|DB_SSL" || echo "⚠️ Env vars not found"
 echo "🧪 Testing if app is listening on port 3002..."

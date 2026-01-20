@@ -19,6 +19,7 @@ module.exports = {
       HOST: '0.0.0.0',
       // Prepend Node 20 bin to PATH to ensure it's used
       PATH: '/home/ubuntu/.nvm/versions/node/v20.20.0/bin:' + process.env.PATH,
+      NODE_VERSION: '20.20.0',  // Explicitly specify Node version
       API_VERSION: 'v1',
       APP_NAME: 'Episode Metadata API (Development)',
       ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
