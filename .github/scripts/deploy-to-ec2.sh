@@ -1,6 +1,33 @@
 #!/bin/bash
 set -x
 
+# Deployment lock to prevent concurrent deployments
+LOCK_FILE="/tmp/episode-metadata-deploy.lock"
+if [ -f "$LOCK_FILE" ]; then
+  LOCK_PID=$(cat "$LOCK_FILE")
+  if ps -p "$LOCK_PID" > /dev/null 2>&1; then
+    echo "⚠️  Another deployment is in progress (PID: $LOCK_PID)"
+    echo "Waiting up to 5 minutes for it to complete..."
+    for i in {1..60}; do
+      sleep 5
+      if [ ! -f "$LOCK_FILE" ] || ! ps -p "$LOCK_PID" > /dev/null 2>&1; then
+        echo "✓ Previous deployment completed"
+        break
+      fi
+      if [ $i -eq 60 ]; then
+        echo "❌ Previous deployment still running after 5 minutes, removing stale lock"
+        rm -f "$LOCK_FILE"
+      fi
+    done
+  else
+    echo "✓ Removing stale lock file"
+    rm -f "$LOCK_FILE"
+  fi
+fi
+
+echo $$ > "$LOCK_FILE"
+trap "rm -f $LOCK_FILE" EXIT
+
 if [ ! -d ~/episode-metadata ]; then
   echo "📁 Creating episode-metadata directory..."
   mkdir -p ~/episode-metadata
