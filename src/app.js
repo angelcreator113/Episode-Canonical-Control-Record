@@ -155,6 +155,12 @@ app.get('/health', async (req, res) => {
     uptime: process.uptime(),
     version: process.env.API_VERSION || 'v1',
     environment: process.env.NODE_ENV || 'development',
+    config: {
+      DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT SET',
+      DB_HOST: process.env.DB_HOST || 'NOT SET',
+      DB_NAME: process.env.DB_NAME || 'NOT SET',
+      DB_SSL: process.env.DB_SSL || 'NOT SET',
+    }
   };
 
   // Only check DB in non-test environment or if DB is available
@@ -162,10 +168,22 @@ app.get('/health', async (req, res) => {
     try {
       await db.sequelize.authenticate();
       health.database = 'connected';
+      
+      // Check if shows table exists
+      try {
+        const [results] = await db.sequelize.query(
+          "SELECT EXISTS (SELECT FROM information_schema.tables WHERE table_name = 'shows')"
+        );
+        health.showsTableExists = results[0].exists;
+      } catch (err) {
+        health.showsTableExists = false;
+        health.tableCheckError = err.message;
+      }
     } catch (error) {
       health.database = 'disconnected';
-      health.status = 'degraded'; // Not fully unhealthy, just degraded
-      return res.status(200).json(health); // Still return 200, not 503
+      health.databaseError = error.message;
+      health.status = 'degraded';
+      return res.status(503).json(health);
     }
   } else {
     health.database = 'skipped'; // In test mode without DB

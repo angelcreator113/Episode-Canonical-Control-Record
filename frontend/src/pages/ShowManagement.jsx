@@ -6,6 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { API_URL } from '../config/api';
 import '../styles/ShowManagement.css';
 
 const ShowManagement = () => {
@@ -134,7 +135,7 @@ const ShowManagement = () => {
 
     try {
       setError(null);
-      const response = await fetch(`http://localhost:3002/api/v1/shows/${showId}`, {
+      const response = await fetch(`${API_URL}/shows/${showId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

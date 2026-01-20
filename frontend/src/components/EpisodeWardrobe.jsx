@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import WardrobeCalendarView from './WardrobeCalendarView';
 import WardrobeTimelineView from './WardrobeTimelineView';
 import wardrobeEnhancements from '../utils/wardrobeEnhancements';
@@ -58,7 +59,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
   const loadEpisodeWardrobe = useCallback(async () => {
     try {
       setLoading(true);
-      const response = await fetch(`http://localhost:3002/api/v1/episodes/${episodeId}/wardrobe`);
+      const response = await fetch(`${API_URL}/episodes/${episodeId}/wardrobe`);
 
       if (!response.ok) {
         console.error('Failed to load wardrobe:', response.status);
@@ -198,7 +199,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
 
       if (editingItem) {
         // Update existing wardrobe item
-        const response = await fetch(`http://localhost:3002/api/v1/wardrobe/${editingItem.id}`, {
+        const response = await fetch(`${API_URL}/wardrobe/${editingItem.id}`, {
           method: 'PUT',
           body: uploadData
         });
@@ -212,7 +213,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
           clothingCategory: formData.clothingCategory
         });
         
-        const createResponse = await fetch(import.meta.env.VITE_API_URL || '/api/v1/wardrobe', {
+        const createResponse = await fetch(`${API_URL}/wardrobe`, {
           method: 'POST',
           body: uploadData
         });
@@ -226,7 +227,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
         const { data: newItem } = await createResponse.json();
 
         // Link the new wardrobe item to this episode
-        const linkResponse = await fetch(`http://localhost:3002/api/v1/episodes/${episodeId}/wardrobe/${newItem.id}`, {
+        const linkResponse = await fetch(`${API_URL}/episodes/${episodeId}/wardrobe/${newItem.id}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -243,7 +244,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
         if (formData.additionalEpisodes && formData.additionalEpisodes.length > 0) {
           for (const additionalEpisodeId of formData.additionalEpisodes) {
             try {
-              await fetch(`http://localhost:3002/api/v1/episodes/${additionalEpisodeId}/wardrobe/${newItem.id}`, {
+              await fetch(`${API_URL}/episodes/${additionalEpisodeId}/wardrobe/${newItem.id}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ scene: null, notes: null })
@@ -274,7 +275,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
 
     try {
       // Unlink from this episode
-      const response = await fetch(`http://localhost:3002/api/v1/episodes/${episodeId}/wardrobe/${item.id}`, {
+      const response = await fetch(`${API_URL}/episodes/${episodeId}/wardrobe/${item.id}`, {
         method: 'DELETE'
       });
 
@@ -381,7 +382,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
       setTimeout(() => setProcessingStatus('AI processing your image...'), 3000);
       setTimeout(() => setProcessingStatus('Almost done, uploading result...'), 25000);
 
-      const response = await fetch(`http://localhost:3002/api/v1/wardrobe/${item.id}/process-background`, {
+      const response = await fetch(`${API_URL}/wardrobe/${item.id}/process-background`, {
         method: 'POST',
         signal: controller.signal
       });

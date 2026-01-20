@@ -225,10 +225,14 @@ const validateUUIDParam = (paramName = "id") => {
         });
       }
 
-      if (!validateUUID(id)) {
+      // Accept both UUIDs and integer IDs for backward compatibility
+      const isValidUUID = validateUUID(id);
+      const isValidInteger = /^\d+$/.test(id);
+
+      if (!isValidUUID && !isValidInteger) {
         return res.status(400).json({
           error: "Validation failed",
-          details: [`${paramName} must be a valid UUID`],
+          details: [`${paramName} must be a valid UUID or integer ID`],
         });
       }
 
