@@ -104,6 +104,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f fix-episodes-schema.sql 2>&1 | head -30 || echo "Schema fix completed with warnings..."
 
+# Fix shows table schema to match Sequelize models
+echo "Fixing shows table schema..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f fix-shows-schema.sql 2>&1 | head -30 || echo "Shows schema fix completed with warnings..."
+
 # Only run the new migrations we need
 echo "Running database migrations with SSL..."
 npm run migrate:up 2>&1 | tee migration.log

@@ -15,6 +15,7 @@ module.exports = {
       NODE_ENV: 'staging',
       PORT: 3002,
       HOST: '0.0.0.0',
+      PATH: '/home/ubuntu/.nvm/versions/node/v20.20.0/bin:' + process.env.PATH,
       API_VERSION: 'v1',
       APP_NAME: 'Episode Metadata API (Development)',
       ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
