@@ -44,6 +44,7 @@ const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.p
 let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
 let Show, Scene, AssetLabel, AssetUsage;
+let Wardrobe, EpisodeWardrobe, OutfitSet;
 
 try {
   // Core models
@@ -70,6 +71,13 @@ try {
   AssetLabel = require('./AssetLabel')(sequelize);
   AssetUsage = require('./AssetUsage')(sequelize);
 
+  // Wardrobe models
+  Wardrobe = require('./Wardrobe')(sequelize);
+  EpisodeWardrobe = require('./EpisodeWardrobe')(sequelize);
+  
+  // Outfit sets model
+  OutfitSet = require('./OutfitSet')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -94,6 +102,9 @@ const requiredModels = {
   Scene,
   AssetLabel,
   AssetUsage,
+  Wardrobe,
+  EpisodeWardrobe,
+  OutfitSet,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -270,6 +281,9 @@ Asset.hasMany(ThumbnailComposition, {
 
 // ==================== ASSET LABEL ASSOCIATIONS ====================
 
+// TEMPORARILY DISABLED: asset_labels table doesn't exist yet
+// TODO: Create asset_labels and asset_label_mappings tables, then re-enable
+/*
 // Asset ←→ AssetLabel (Many-to-Many)
 Asset.belongsToMany(AssetLabel, {
   through: 'asset_label_mappings',
@@ -284,6 +298,7 @@ AssetLabel.belongsToMany(Asset, {
   otherKey: 'asset_id',
   as: 'assets',
 });
+*/
 
 // Asset → AssetUsage (1:N)
 Asset.hasMany(AssetUsage, {
@@ -295,6 +310,45 @@ Asset.hasMany(AssetUsage, {
 AssetUsage.belongsTo(Asset, {
   foreignKey: 'asset_id',
   as: 'asset',
+});
+
+// ==================== WARDROBE ASSOCIATIONS ====================
+
+// Episode ←→ Wardrobe (Many-to-Many through EpisodeWardrobe)
+Episode.belongsToMany(Wardrobe, {
+  through: EpisodeWardrobe,
+  foreignKey: 'episode_id',
+  otherKey: 'wardrobe_id',
+  as: 'wardrobeItems',
+});
+
+Wardrobe.belongsToMany(Episode, {
+  through: EpisodeWardrobe,
+  foreignKey: 'wardrobe_id',
+  otherKey: 'episode_id',
+  as: 'episodes',
+});
+
+// Episode → EpisodeWardrobe (1:N)
+Episode.hasMany(EpisodeWardrobe, {
+  foreignKey: 'episode_id',
+  as: 'wardrobeLinks',
+});
+
+EpisodeWardrobe.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Wardrobe → EpisodeWardrobe (1:N)
+Wardrobe.hasMany(EpisodeWardrobe, {
+  foreignKey: 'wardrobe_id',
+  as: 'episodeLinks',
+});
+
+EpisodeWardrobe.belongsTo(Wardrobe, {
+  foreignKey: 'wardrobe_id',
+  as: 'wardrobeItem',
 });
 
 console.log('✅ Model associations defined');
@@ -322,6 +376,8 @@ const db = {
     Scene,
     AssetLabel,
     AssetUsage,
+    Wardrobe,
+    EpisodeWardrobe,
   },
 
   /**
@@ -501,5 +557,9 @@ module.exports.ThumbnailTemplate = ThumbnailTemplate;
 module.exports.EpisodeTemplate = EpisodeTemplate;
 module.exports.Show = Show;
 module.exports.Scene = Scene;
+module.exports.Wardrobe = Wardrobe;
+module.exports.EpisodeWardrobe = EpisodeWardrobe;
+module.exports.OutfitSet = OutfitSet;
+module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.AssetLabel = AssetLabel;
 module.exports.AssetUsage = AssetUsage;

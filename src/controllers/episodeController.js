@@ -63,12 +63,22 @@ module.exports = {
           'air_date',
           'status',
           'categories',
+          'show_id',
           'created_at',
           'updated_at',
+        ],
+        include: [
+          {
+            model: db.Show,
+            as: 'show',
+            attributes: ['id', 'name', 'icon', 'color'],
+          },
         ],
       });
 
       // Log activity (wrapped in try-catch to prevent failures)
+      // TEMPORARILY DISABLED DUE TO AUDIT LOG ERRORS
+      /*
       try {
         await logger.logAction(req.user?.id, 'view', 'episode', 'all', {
           count,
@@ -79,6 +89,7 @@ module.exports = {
       } catch (logError) {
         console.warn('⚠️ Failed to log activity:', logError.message);
       }
+      */
 
       res.json({
         data: rows,
@@ -115,8 +126,16 @@ module.exports = {
           'air_date',
           'status',
           'categories',
+          'show_id',
           'created_at',
           'updated_at',
+        ],
+        include: [
+          {
+            model: db.Show,
+            as: 'show',
+            attributes: ['id', 'name', 'icon', 'color'],
+          },
         ],
       });
 
@@ -128,6 +147,8 @@ module.exports = {
       }
 
       // Log viewing activity (wrapped in try-catch to prevent failures)
+      // TEMPORARILY DISABLED DUE TO AUDIT LOG ERRORS
+      /*
       try {
         await logger.logAction(req.user?.id, 'view', 'episode', id, {
           episodeTitle: episode.title,
@@ -137,6 +158,7 @@ module.exports = {
       } catch (logError) {
         console.warn('⚠️ Failed to log activity:', logError.message);
       }
+      */
 
       res.json({
         data: episode,

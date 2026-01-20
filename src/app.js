@@ -206,7 +206,7 @@ app.use('/api/v1/auth', authRoutes);
 let episodeRoutes, thumbnailRoutes, metadataRoutes, processingRoutes;
 let filesRoutes, searchRoutes, jobsRoutes;
 let assetRoutes, compositionRoutes, templateRoutes;
-let sceneRoutes;
+let sceneRoutes, wardrobeRoutes;
 
 try {
   episodeRoutes = require('./routes/episodes');
@@ -299,6 +299,25 @@ try {
   sceneRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// Wardrobe routes
+try {
+  wardrobeRoutes = require('./routes/wardrobe');
+  console.log('✓ Wardrobe routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load wardrobe routes:', e.message);
+  wardrobeRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Outfit sets routes
+let outfitSetsRoutes;
+try {
+  outfitSetsRoutes = require('./routes/outfitSets');
+  console.log('✓ Outfit sets routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load outfit sets routes:', e.message);
+  outfitSetsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 // Phase 3A controllers (real-time notifications)
 let notificationController, activityController, presenceController, socketController;
 
@@ -372,6 +391,12 @@ app.use('/api/v1/templates', templateRoutes);
 
 // Scene routes
 app.use('/api/v1/scenes', sceneRoutes);
+
+// Wardrobe routes
+app.use('/api/v1/wardrobe', wardrobeRoutes);
+
+// Outfit sets routes
+app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 
 // Phase 6 routes (Shows)
 const showRoutes = require('./routes/shows');

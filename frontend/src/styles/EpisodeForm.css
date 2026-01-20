@@ -57,6 +57,13 @@
   align-items: center;
 }
 
+.episode-form-page .ce-header__actions {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  align-items: center;
+}
+
 .episode-form-page .ce-link {
   background: transparent !important;
   border: none !important;
@@ -153,6 +160,9 @@
   border-color: #fecaca !important;
   color: #991b1b !important;
 }
+.episode-form-page .ce-btn--danger:hover:not(:disabled) {
+  background: #fecaca !important;
+}
 
 .episode-form-page .ce-btn--sm {
   padding: 8px 12px !important;
@@ -161,7 +171,7 @@
 }
 
 /* =========================================================
-   TABS
+   TABS (kept for edit pages etc.)
 ========================================================= */
 
 .episode-form-page .ce-tabs {
@@ -296,127 +306,54 @@
 }
 
 /* =========================================================
-   TAGS
+   THUMBNAIL (NEW)
 ========================================================= */
 
-.episode-form-page .ce-tagRow {
+.episode-form-page .ce-thumbActions {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr 1fr;
   gap: 10px;
   align-items: center;
 }
 
-.episode-form-page .ce-tags {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
+.episode-form-page .ce-thumbFileInput {
+  display: none;
+}
+
+.episode-form-page .ce-thumbPreview {
   margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  overflow: hidden;
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
 }
 
-.episode-form-page .ce-tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 999px;
-  background: #f1f5f9;
-  border: 1px solid #e2e8f0;
-  color: #0f172a;
-  font-weight: 800;
-  font-size: 13px;
+.episode-form-page .ce-thumbPreview img {
+  width: 100%;
+  max-width: 520px;
+  display: block;
+  border-bottom: 1px solid var(--border);
 }
 
-.episode-form-page .ce-tagX {
-  width: 26px;
-  height: 26px;
-  border-radius: 999px;
-  border: 1px solid #e2e8f0 !important;
-  background: #ffffff !important;
-  cursor: pointer;
-  font-weight: 950;
-  color: #64748b;
-}
-.episode-form-page .ce-tagX:hover {
-  background: #fee2e2 !important;
-  border-color: #fecaca !important;
-  color: #991b1b;
-}
-
-.episode-form-page .ce-emptySmall {
-  margin-top: 10px;
-  color: var(--muted);
-  font-weight: 700;
-  font-size: 13px;
-}
-
-/* =========================================================
-   SIDEBAR
-========================================================= */
-
-.episode-form-page .ce-sideTitle {
-  font-weight: 950;
-  margin-bottom: 10px;
-}
-
-.episode-form-page .ce-progress {
-  padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--border2);
+.episode-form-page .ce-thumbPreviewBar {
+  padding: 10px;
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
   background: #fbfdff;
 }
 
-.episode-form-page .ce-progressTop {
+.episode-form-page .ce-thumbEmpty {
+  margin-top: 12px;
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px dashed #cbd5e1;
+  background: #fbfdff;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 10px;
-}
-
-.episode-form-page .ce-progressBar {
-  height: 10px;
-  border-radius: 999px;
-  background: #eef2f7;
-  overflow: hidden;
-}
-
-.episode-form-page .ce-progressFill {
-  height: 100%;
-  background: #93c5fd;
-  border-radius: 999px;
-}
-
-.episode-form-page .ce-checklist {
-  margin-top: 12px;
-  display: grid;
   gap: 10px;
-}
-
-.episode-form-page .ce-checkItem {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-
-.episode-form-page .ce-checkDot {
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  background: #e2e8f0;
-}
-.episode-form-page .ce-checkDot.done { background: #22c55e; }
-
-.episode-form-page .ce-checkLabel {
-  font-weight: 750;
-  color: #334155;
-  font-size: 13px;
-}
-
-.episode-form-page .ce-sideHint {
-  margin-top: 14px;
-  color: var(--muted);
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1.4;
 }
 
 /* =========================================================
@@ -453,4 +390,13 @@
   .episode-form-page .ce-footerActions { display: flex; }
   .episode-form-page .ce-btn { width: 100%; }
   .episode-form-page .ce-tagRow { grid-template-columns: 1fr; }
+
+  .episode-form-page .ce-thumbActions {
+    grid-template-columns: 1fr;
+  }
+
+  .episode-form-page .ce-thumbEmpty {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

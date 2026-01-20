@@ -523,6 +523,30 @@ const ShowManagement = () => {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
+                          navigate(`/episodes?show=${show.id}`);
+                        }}
+                        style={{
+                          padding: '0.375rem 0.625rem',
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.85rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'all 0.2s',
+                          lineHeight: 1,
+                          whiteSpace: 'nowrap'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        title="View episodes in this show"
+                      >
+                        📺 Episodes
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
                           handleEdit(show);
                         }}
                         style={{

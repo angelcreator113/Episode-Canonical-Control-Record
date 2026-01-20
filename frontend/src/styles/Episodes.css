@@ -3,6 +3,7 @@
    ============================================ */
 
 .episodes-page-modern {
+  --episodes-header-height: 72px;
   min-height: 100vh;
   background: #f8fafc;
   display: flex;
@@ -15,9 +16,10 @@
 .episodes-header-modern {
   position: sticky;
   top: 0;
-  z-index: 100;
-  background: white;
+  z-index: 110;
+  background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
+  min-height: var(--episodes-header-height);
   padding: 0.75rem 1rem;
   display: flex;
   justify-content: space-between;
@@ -30,6 +32,7 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  min-width: 0;
 }
 
 .header-left h1 {
@@ -37,13 +40,14 @@
   font-size: 1.25rem;
   font-weight: 700;
   color: #111827;
+  white-space: nowrap;
 }
 
 .episode-count {
   background: #f3f4f6;
   color: #6b7280;
   padding: 0.25rem 0.75rem;
-  border-radius: 12px;
+  border-radius: 999px;
   font-size: 0.875rem;
   font-weight: 600;
 }
@@ -52,25 +56,27 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
+  width: 42px;
+  height: 42px;
   border: none;
   background: #f3f4f6;
-  border-radius: 8px;
+  border-radius: 10px;
   cursor: pointer;
   color: #374151;
   transition: all 0.2s;
+  flex-shrink: 0;
 }
 
 .mobile-menu-btn:hover {
   background: #e5e7eb;
-  transform: scale(1.05);
+  transform: scale(1.03);
 }
 
 .header-actions {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-shrink: 0;
 }
 
 .view-toggle {
@@ -78,25 +84,25 @@
   gap: 0.25rem;
   background: #f3f4f6;
   padding: 0.25rem;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .view-toggle button {
-  width: 36px;
-  height: 36px;
+  width: 38px;
+  height: 38px;
   display: flex;
   align-items: center;
   justify-content: center;
   border: none;
   background: transparent;
-  border-radius: 6px;
+  border-radius: 8px;
   cursor: pointer;
   color: #6b7280;
   transition: all 0.2s;
 }
 
 .view-toggle button:hover {
-  background: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.7);
 }
 
 .view-toggle button.active {
@@ -113,8 +119,8 @@
   background: #3b82f6;
   color: white;
   border: none;
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: 10px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
   white-space: nowrap;
@@ -123,11 +129,7 @@
 .btn-create:hover {
   background: #2563eb;
   transform: translateY(-1px);
-  box-shadow: 0 4px 6px rgba(59, 130, 246, 0.3);
-}
-
-.btn-create span {
-  display: inline;
+  box-shadow: 0 4px 10px rgba(59, 130, 246, 0.25);
 }
 
 /* ============================================
@@ -143,12 +145,12 @@
    SIDEBAR
    ============================================ */
 .episodes-sidebar-modern {
-  width: 240px;
+  width: 280px;
   background: white;
   border-right: 1px solid #e5e7eb;
   overflow-y: auto;
   flex-shrink: 0;
-  transition: transform 0.3s ease;
+  transition: transform 0.25s ease;
 }
 
 .sidebar-section {
@@ -159,7 +161,7 @@
 .sidebar-section h3 {
   margin: 0 0 0.75rem 0;
   font-size: 0.875rem;
-  font-weight: 700;
+  font-weight: 800;
   color: #374151;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -170,16 +172,17 @@
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.75rem 1rem;
+  padding: 0.8rem 1rem;
   background: #f9fafb;
   border: 2px solid #e5e7eb;
-  border-radius: 8px;
+  border-radius: 10px;
   transition: all 0.2s;
 }
 
 .search-box:focus-within {
   border-color: #3b82f6;
   background: white;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 .search-box svg {
@@ -191,7 +194,7 @@
   flex: 1;
   border: none;
   background: transparent;
-  font-size: 0.9375rem;
+  font-size: 0.95rem;
   color: #111827;
   outline: none;
 }
@@ -208,18 +211,18 @@
 .filter-group label {
   display: block;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 700;
   color: #374151;
   margin-bottom: 0.5rem;
 }
 
 .filter-group select {
   width: 100%;
-  padding: 0.625rem 0.75rem;
+  padding: 0.65rem 0.75rem;
   border: 2px solid #e5e7eb;
-  border-radius: 6px;
+  border-radius: 10px;
   background: white;
-  font-size: 0.9375rem;
+  font-size: 0.95rem;
   color: #111827;
   cursor: pointer;
   transition: all 0.2s;
@@ -232,17 +235,17 @@
 .filter-group select:focus {
   outline: none;
   border-color: #3b82f6;
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
 }
 
 .btn-sort {
   width: 100%;
-  padding: 0.625rem 0.75rem;
+  padding: 0.65rem 0.75rem;
   border: 2px solid #e5e7eb;
   background: white;
-  border-radius: 6px;
-  font-size: 0.9375rem;
-  font-weight: 500;
+  border-radius: 10px;
+  font-size: 0.95rem;
+  font-weight: 700;
   color: #374151;
   cursor: pointer;
   transition: all 0.2s;
@@ -251,17 +254,17 @@
 .btn-sort:hover {
   border-color: #3b82f6;
   background: #f0f9ff;
-  color: #3b82f6;
+  color: #2563eb;
 }
 
 .btn-reset {
   width: 100%;
-  padding: 0.625rem;
+  padding: 0.7rem;
   background: #f3f4f6;
   border: none;
-  border-radius: 6px;
+  border-radius: 10px;
   font-size: 0.875rem;
-  font-weight: 600;
+  font-weight: 800;
   color: #6b7280;
   cursor: pointer;
   transition: all 0.2s;
@@ -273,44 +276,112 @@
   color: #374151;
 }
 
-/* Stats */
-.sidebar-section.stats {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
+/* Stats (cleaned + responsive-friendly) */
+.episode-stats-card {
+  background: #ffffff;
+  border: 2px solid #667eea;
+  border-radius: 12px;
 }
 
-.sidebar-section.stats h3 {
-  color: white;
+.episode-stats-title {
+  color: #667eea;
+  font-weight: 900;
+  font-size: 0.85rem;
+  margin-bottom: 1rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
 }
 
-.stat-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+.episode-stats-stack {
+  display: flex;
+  flex-direction: column;
   gap: 0.75rem;
 }
 
-.stat {
-  background: rgba(255, 255, 255, 0.15);
-  padding: 0.75rem;
-  border-radius: 8px;
+.episode-stats-total {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 1rem;
+  border-radius: 12px;
   text-align: center;
-  backdrop-filter: blur(10px);
 }
 
-.stat-value {
-  display: block;
-  font-size: 1.5rem;
-  font-weight: 700;
+.episode-stats-total-value {
+  font-size: 2.25rem;
+  font-weight: 900;
+  color: #ffffff;
+  line-height: 1;
   margin-bottom: 0.25rem;
 }
 
-.stat-label {
-  display: block;
+.episode-stats-total-label {
   font-size: 0.75rem;
-  opacity: 0.9;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  color: #ffffff;
+  font-weight: 800;
+  opacity: 0.95;
+}
+
+.episode-stats-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.6rem;
+}
+
+.episode-stat {
+  padding: 0.8rem;
+  border-radius: 12px;
+  border: 2px solid transparent;
+}
+
+.episode-stat .value {
+  font-size: 1.6rem;
+  font-weight: 900;
+  line-height: 1;
+  margin-bottom: 0.25rem;
+}
+
+.episode-stat .label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+}
+
+/* themed stats */
+.episode-stat.draft {
+  background: #fef3c7;
+  border-color: #fbbf24;
+}
+.episode-stat.draft .value,
+.episode-stat.draft .label {
+  color: #92400e;
+}
+
+.episode-stat.published {
+  background: #d1fae5;
+  border-color: #10b981;
+}
+.episode-stat.published .value,
+.episode-stat.published .label {
+  color: #065f46;
+}
+
+.episode-stat.progress {
+  background: #e0e7ff;
+  border-color: #6366f1;
+}
+.episode-stat.progress .value,
+.episode-stat.progress .label {
+  color: #3730a3;
+}
+
+.episode-stat.selected {
+  background: #f3f4f6;
+  border-color: #6b7280;
+}
+.episode-stat.selected .value,
+.episode-stat.selected .label {
+  color: #374151;
 }
 
 /* ============================================
@@ -330,19 +401,19 @@
   padding: 0.75rem 1rem;
   background: #dbeafe;
   border: 1px solid #93c5fd;
-  border-radius: 8px;
-  margin-bottom: 1.5rem;
+  border-radius: 12px;
+  margin-bottom: 1.25rem;
   color: #1e40af;
-  font-weight: 600;
+  font-weight: 800;
 }
 
 .selection-bar button {
-  padding: 0.5rem 1rem;
+  padding: 0.55rem 1rem;
   background: white;
   border: none;
-  border-radius: 6px;
-  font-weight: 600;
-  color: #3b82f6;
+  border-radius: 10px;
+  font-weight: 900;
+  color: #2563eb;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -354,8 +425,8 @@
 /* Episodes Grid */
 .episodes-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 1.5rem;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 1.25rem;
   margin-bottom: 2rem;
 }
 
@@ -373,15 +444,15 @@
   justify-content: center;
   align-items: center;
   gap: 1rem;
-  padding: 1.5rem 0;
+  padding: 1.25rem 0;
 }
 
 .pagination-btn {
-  padding: 0.625rem 1.25rem;
+  padding: 0.7rem 1.25rem;
   background: white;
   border: 2px solid #e5e7eb;
-  border-radius: 8px;
-  font-weight: 600;
+  border-radius: 12px;
+  font-weight: 900;
   color: #374151;
   cursor: pointer;
   transition: all 0.2s;
@@ -389,17 +460,17 @@
 
 .pagination-btn:hover:not(:disabled) {
   border-color: #3b82f6;
-  color: #3b82f6;
+  color: #2563eb;
   background: #f0f9ff;
 }
 
 .pagination-btn:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .pagination-info {
-  font-weight: 600;
+  font-weight: 800;
   color: #6b7280;
 }
 
@@ -423,6 +494,7 @@
   margin: 0 0 0.5rem 0;
   font-size: 1.5rem;
   color: #111827;
+  font-weight: 900;
 }
 
 .empty-state-modern p {
@@ -438,9 +510,9 @@
   background: #3b82f6;
   color: white;
   border: none;
-  border-radius: 8px;
-  font-size: 1.0625rem;
-  font-weight: 600;
+  border-radius: 14px;
+  font-size: 1.05rem;
+  font-weight: 900;
   cursor: pointer;
   transition: all 0.2s;
 }
@@ -448,54 +520,68 @@
 .btn-create-large:hover {
   background: #2563eb;
   transform: translateY(-2px);
-  box-shadow: 0 8px 12px rgba(59, 130, 246, 0.3);
+  box-shadow: 0 8px 14px rgba(59, 130, 246, 0.25);
 }
 
 /* Sidebar Overlay */
 .sidebar-overlay {
   display: none;
   position: fixed;
-  top: 0;
+  top: var(--episodes-header-height);
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  z-index: 99;
+  background: rgba(17, 24, 39, 0.45);
+  z-index: 105;
+}
+
+.sidebar-overlay.open {
+  display: block;
 }
 
 /* ============================================
-   RESPONSIVE - MOBILE & TABLET
+   RESPONSIVE - DESKTOP
    ============================================ */
-
-/* Desktop */
 @media (min-width: 1025px) {
   .mobile-menu-btn {
     display: none;
   }
 
+  .sidebar-overlay {
+    display: none !important;
+  }
+
   .episodes-sidebar-modern {
     position: relative;
+    transform: none !important;
   }
 }
 
-/* Tablet & Mobile */
+/* ============================================
+   RESPONSIVE - TABLET & MOBILE
+   ============================================ */
 @media (max-width: 1024px) {
+  .episodes-header-modern {
+    gap: 0.5rem;
+  }
+
+  .header-actions {
+    gap: 0.5rem;
+  }
+
   .episodes-sidebar-modern {
     position: fixed;
     left: 0;
-    top: 73px;
-    height: calc(100vh - 73px);
-    z-index: 100;
-    transform: translateX(-100%);
-    box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+    top: var(--episodes-header-height);
+    height: calc(100vh - var(--episodes-header-height));
+    z-index: 109;
+    transform: translateX(-105%);
+    box-shadow: 12px 0 30px rgba(0, 0, 0, 0.18);
+    border-right: 1px solid #e5e7eb;
   }
 
   .episodes-sidebar-modern.open {
     transform: translateX(0);
-  }
-
-  .sidebar-overlay {
-    display: block;
   }
 
   .episodes-content-modern {
@@ -507,14 +593,12 @@
   }
 }
 
-/* Mobile */
+/* ============================================
+   RESPONSIVE - MOBILE
+   ============================================ */
 @media (max-width: 640px) {
   .episodes-header-modern {
     padding: 0.75rem;
-  }
-
-  .header-left h1 {
-    font-size: 1.25rem;
   }
 
   .episode-count {
@@ -531,22 +615,13 @@
     min-width: 48px !important;
     padding: 0 !important;
     justify-content: center !important;
-    border-radius: 50% !important;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.5) !important;
-    background: #3b82f6 !important;
-  }
-
-  .btn-create svg {
-    margin: 0 !important;
-    width: 24px !important;
-    height: 24px !important;
-    color: white !important;
-    fill: white !important;
+    border-radius: 999px !important;
+    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.35) !important;
   }
 
   .btn-create:hover {
-    transform: scale(1.05) !important;
-    box-shadow: 0 6px 16px rgba(59, 130, 246, 0.6) !important;
+    transform: scale(1.03) !important;
+    box-shadow: 0 8px 22px rgba(59, 130, 246, 0.45) !important;
   }
 
   .view-toggle {
@@ -583,7 +658,7 @@
 
 .episodes-sidebar-modern::-webkit-scrollbar-thumb {
   background: #d1d5db;
-  border-radius: 3px;
+  border-radius: 999px;
 }
 
 .episodes-sidebar-modern::-webkit-scrollbar-thumb:hover {
@@ -715,6 +790,7 @@
     min-width: 100px;
   }
 }
+
 .episodes-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));

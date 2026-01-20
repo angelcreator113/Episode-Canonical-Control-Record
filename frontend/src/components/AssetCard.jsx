@@ -8,6 +8,19 @@ import LabelSelector from './LabelSelector';
 import assetService from '../services/assetService';
 import './AssetCard.css';
 
+// Add this helper function in AssetCard.jsx
+const getEpisodeInfo = (asset) => {
+  const metadata = asset.metadata || {};
+  if (metadata.episodeNumber && metadata.episodeTitle) {
+    return {
+      number: metadata.episodeNumber,
+      title: metadata.episodeTitle,
+      scene: metadata.scene || ''
+    };
+  }
+  return null;
+};
+
 const AssetCard = ({
   asset,
   onRefresh,
@@ -29,7 +42,10 @@ const AssetCard = ({
   const isVideo = asset.media_type === 'video';
   const displayUrl = showProcessed && hasProcessedVersion ? asset.s3_url_processed : asset.s3_url_raw;
   const [imgError, setImgError] = useState(false);
-  
+
+  // In the render section, add this badge after the asset type badge:
+  const episodeInfo = getEpisodeInfo(asset);
+
   // Handle mock S3 URLs and errors in development
   const getImageSrc = () => {
     // Check for mock URLs or missing URLs first
@@ -133,7 +149,11 @@ const AssetCard = ({
       )}
 
       {/* Media Preview */}
-      <div className="asset-preview" onClick={() => onPreview && onPreview(asset)} style={{ cursor: onPreview ? 'pointer' : 'default' }}>
+      <div
+        className="asset-preview"
+        onClick={() => onPreview && onPreview(asset)}
+        style={{ cursor: onPreview ? 'pointer' : 'default' }}
+      >
         {isVideo ? (
           <video
             src={displayUrl}
@@ -210,6 +230,14 @@ const AssetCard = ({
 
         {/* Type Badge */}
         <span className="asset-type-badge">{asset.asset_type.replace(/_/g, ' ')}</span>
+
+        {/* Add this JSX in the card header area: */}
+        {episodeInfo && (
+          <div className="episode-badge" title={`Episode ${episodeInfo.number}: ${episodeInfo.title}`}>
+            <span className="badge-icon">📺</span>
+            <span className="badge-text">Ep {episodeInfo.number}</span>
+          </div>
+        )}
 
         {/* Meta Info */}
         <div className="asset-meta">

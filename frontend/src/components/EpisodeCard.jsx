@@ -28,6 +28,20 @@ const CardBody = ({ episode }) => {
 
   return (
   <div className="episode-card-body">
+    {episode.show && (
+      <p className="episode-show" style={{ 
+        fontSize: '0.9rem', 
+        color: '#667eea', 
+        fontWeight: '600',
+        marginBottom: '0.5rem',
+        display: 'flex',
+        alignItems: 'center',
+        gap: '0.25rem'
+      }}>
+        <span>{episode.show.icon || '📺'}</span>
+        <span>{episode.show.name}</span>
+      </p>
+    )}
     {episode.episode_number && (
       <p className="episode-number">
         <strong>Episode:</strong> {episode.episode_number}

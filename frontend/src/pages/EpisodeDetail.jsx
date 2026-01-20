@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import episodeService from '../services/episodeService';
+import EpisodeWardrobe from '../components/EpisodeWardrobe';
 import './EpisodeDetail.css';  // ← ADD THIS LINE!
 
 
@@ -188,6 +189,13 @@ const EpisodeDetail = () => {
             🎬 Scenes
           </button>
           <button
+            className={`tab ${activeTab === 'wardrobe' ? 'active' : ''}`}
+            onClick={() => setActiveTab('wardrobe')}
+            style={{ flex: 1, padding: '0.875rem 1.5rem', background: activeTab === 'wardrobe' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent', color: activeTab === 'wardrobe' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
+          >
+            👗 Wardrobe
+          </button>
+          <button
             className={`tab ${activeTab === 'assets' ? 'active' : ''}`}
             onClick={() => setActiveTab('assets')}
             style={{ flex: 1, padding: '0.875rem 1.5rem', background: activeTab === 'assets' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent', color: activeTab === 'assets' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
@@ -343,6 +351,16 @@ const EpisodeDetail = () => {
                 </ul>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Wardrobe Tab */}
+        {activeTab === 'wardrobe' && (
+          <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <EpisodeWardrobe
+              episodeId={episode.id}
+              episodeNumber={episode.episode_number}
+            />
           </div>
         )}
 

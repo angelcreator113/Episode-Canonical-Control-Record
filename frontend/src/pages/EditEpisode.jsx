@@ -31,13 +31,39 @@ const EditEpisode = () => {
     airDate: '',
     categories: [],
     categoryInput: '',
+    showId: '',
   });
 
+  const [shows, setShows] = useState([]);
+  const [loadingShows, setLoadingShows] = useState(false);
   const [errors, setErrors] = useState({});
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [touched, setTouched] = useState({});
+
+  // Load shows
+  useEffect(() => {
+    const fetchShows = async () => {
+      try {
+        setLoadingShows(true);
+        const response = await fetch('http://localhost:3002/api/v1/shows', {
+          headers: {
+            'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+          },
+        });
+        if (response.ok) {
+          const data = await response.json();
+          setShows(data.data || []);
+        }
+      } catch (err) {
+        console.error('Failed to load shows:', err);
+      } finally {
+        setLoadingShows(false);
+      }
+    };
+    fetchShows();
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -64,6 +90,7 @@ const EditEpisode = () => {
           airDate: episode.air_date ? episode.air_date.split('T')[0] : '',
           categories: Array.isArray(episode.categories) ? episode.categories : [],
           categoryInput: '',
+          showId: episode.show_id || '',
         };
 
         setFormData(newFormData);
@@ -189,6 +216,7 @@ const EditEpisode = () => {
         description: formData.description,
         air_date: formData.airDate,
         categories: formData.categories,
+        show_id: formData.showId || null,
       };
 
       await episodeService.updateEpisode(episodeId, submitData);
@@ -388,6 +416,27 @@ const EditEpisode = () => {
                     />
                     {errors.airDate && <div className="ce-error">{errors.airDate}</div>}
                   </div>
+                </div>
+
+                {/* Show Selection */}
+                <div className="ce-field">
+                  <label htmlFor="showId">Show</label>
+                  <select
+                    className="ce-input"
+                    id="showId"
+                    name="showId"
+                    value={formData.showId}
+                    onChange={handleChange}
+                    disabled={submitting || loadingShows}
+                  >
+                    <option value="">No Show / Standalone Episode</option>
+                    {shows.map((show) => (
+                      <option key={show.id} value={show.id}>
+                        {show.icon || '📺'} {show.name}
+                      </option>
+                    ))}
+                  </select>
+                  <div className="ce-hint">Assign this episode to a show series.</div>
                 </div>
               </div>
             )}

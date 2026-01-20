@@ -56,6 +56,9 @@ body {
   -moz-osx-font-smoothing: grayscale;
   background-color: var(--light-gray);
   color: var(--text-primary);
+  overflow-x: hidden;
+  width: 100%;
+  position: relative;
 }
 
 code {
