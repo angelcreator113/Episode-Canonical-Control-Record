@@ -1,7 +1,11 @@
 -- Create wardrobe and episode_wardrobe tables
 
+-- Drop existing tables to ensure clean creation
+DROP TABLE IF EXISTS episode_wardrobe CASCADE;
+DROP TABLE IF EXISTS wardrobe CASCADE;
+
 -- Main wardrobe table
-CREATE TABLE IF NOT EXISTS wardrobe (
+CREATE TABLE wardrobe (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
   character VARCHAR(100),
@@ -21,7 +25,7 @@ CREATE TABLE IF NOT EXISTS wardrobe (
 );
 
 -- Junction table linking wardrobe items to episodes
-CREATE TABLE IF NOT EXISTS episode_wardrobe (
+CREATE TABLE episode_wardrobe (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
   wardrobe_id UUID NOT NULL REFERENCES wardrobe(id) ON DELETE CASCADE,

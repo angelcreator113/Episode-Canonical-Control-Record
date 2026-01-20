@@ -1,7 +1,10 @@
 -- Create episode_assets junction table
 -- Links episodes with their assets and tracks usage type
 
-CREATE TABLE IF NOT EXISTS episode_assets (
+-- Drop existing table to ensure clean creation
+DROP TABLE IF EXISTS episode_assets CASCADE;
+
+CREATE TABLE episode_assets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
   asset_id UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
