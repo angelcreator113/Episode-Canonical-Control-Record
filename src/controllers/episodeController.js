@@ -591,7 +591,6 @@ module.exports = {
             },
             attributes: [
               'id',
-              'name',
               'asset_type',
               'approval_status',
               's3_url_raw',
