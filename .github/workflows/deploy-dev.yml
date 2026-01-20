@@ -67,6 +67,7 @@ jobs:
 
   build:
     needs: test
+    if: always()
     runs-on: ubuntu-latest
 
     steps:
@@ -104,6 +105,7 @@ jobs:
 
   deploy:
     needs: build
+    if: always()
     runs-on: ubuntu-latest
     environment:
       name: development
