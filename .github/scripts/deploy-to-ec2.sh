@@ -177,6 +177,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f create-wardrobe-tables.sql 2>&1 | head -30 || echo "Wardrobe tables creation completed with warnings..."
 
+# Verify critical tables exist
+echo "🔍 Verifying junction tables were created..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('episode_assets', 'episode_wardrobe', 'wardrobe') ORDER BY table_name;" 2>&1 || echo "Verification query failed"
+
 # Mark existing migrations as complete to prevent recreation attempts
 echo "Marking existing migrations as complete..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
