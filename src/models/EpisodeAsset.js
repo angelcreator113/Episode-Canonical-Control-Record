@@ -92,5 +92,16 @@ module.exports = (sequelize) => {
     }
   );
 
+  EpisodeAsset.associate = function (models) {
+    EpisodeAsset.belongsTo(models.Episode, {
+      foreignKey: 'episode_id',
+      as: 'episode',
+    });
+    EpisodeAsset.belongsTo(models.Asset, {
+      foreignKey: 'asset_id',
+      as: 'asset',
+    });
+  };
+
   return EpisodeAsset;
 };

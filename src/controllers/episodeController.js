@@ -601,8 +601,8 @@ module.exports = {
               'height',
               'file_size_bytes',
               'created_at',
+              'deleted_at',
             ],
-            where: { deleted_at: null },
           },
         ],
       });
@@ -614,9 +614,12 @@ module.exports = {
         });
       }
 
+      // Filter out soft-deleted assets
+      const activeAssets = (episode.assets || []).filter(asset => !asset.deleted_at);
+
       res.json({
-        data: episode.assets || [],
-        count: episode.assets?.length || 0,
+        data: activeAssets,
+        count: activeAssets.length,
       });
     } catch (error) {
       console.error('❌ Error getting episode assets:', error);
