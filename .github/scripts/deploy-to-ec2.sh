@@ -222,13 +222,13 @@ echo "✅ App is online!"
 
 echo "🔍 CRITICAL: Verifying PM2 is actually using Node 20:"
 pm2 show episode-api | grep -E "node.js version|interpreter"
-PM2_NODE_VERSION=$(pm2 show episode-api | grep "node.js version" | awk '{print $NF}')
+PM2_NODE_VERSION=$(pm2 show episode-api | grep "node.js version" | awk '{print $4}')
 echo "PM2 detected Node version: $PM2_NODE_VERSION"
-if [[ "$PM2_NODE_VERSION" != "20."* ]]; then
-  echo "⚠️⚠️⚠️ WARNING: PM2 is still using Node $PM2_NODE_VERSION instead of Node 20!"
-  echo "This may cause runtime issues!"
-else
+if [[ "$PM2_NODE_VERSION" == "20."* ]]; then
   echo "✅ PM2 is correctly using Node 20"
+else
+  echo "⚠️⚠️⚠️ WARNING: PM2 is using Node $PM2_NODE_VERSION instead of Node 20!"
+  echo "This may cause runtime issues!"
 fi
 
 echo "🔍 Verifying PM2 environment variables:"

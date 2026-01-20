@@ -1,5 +1,12 @@
 -- First ensure the pgmigrations table has proper constraints
-ALTER TABLE pgmigrations ADD CONSTRAINT IF NOT EXISTS pgmigrations_name_key UNIQUE (name);
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'pgmigrations_name_key'
+  ) THEN
+    ALTER TABLE pgmigrations ADD CONSTRAINT pgmigrations_name_key UNIQUE (name);
+  END IF;
+END $$;
 
 -- Mark existing migrations as completed to prevent re-creation attempts
 INSERT INTO pgmigrations (name, run_on) 
