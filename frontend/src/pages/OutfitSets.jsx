@@ -82,8 +82,8 @@ const OutfitSets = () => {
   const handleSaveSet = async () => {
     try {
       const url = selectedSet 
-        ? `http://localhost:3002/api/v1/outfit-sets/${selectedSet.id}`
-        : import.meta.env.VITE_API_URL || '/api/v1/outfit-sets';
+        ? `${API_URL}/outfit-sets/${selectedSet.id}`
+        : `${API_URL}/outfit-sets`;
       
       const method = selectedSet ? 'PUT' : 'POST';
       
@@ -113,7 +113,7 @@ const OutfitSets = () => {
     }
 
     try {
-      const response = await fetch(`http://localhost:3002/api/v1/outfit-sets/${setId}`, {
+      const response = await fetch(`${API_URL}/outfit-sets/${setId}`, {
         method: 'DELETE'
       });
 

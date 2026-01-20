@@ -135,7 +135,7 @@ const ShowManagement = () => {
 
     try {
       setError(null);
-      const response = await fetch(`http://localhost:3002/api/v1/shows/${showId}`, {
+      const response = await fetch(`${API_URL}/shows/${showId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,

@@ -1,8 +1,8 @@
 import axios from 'axios';
 
-// Create axios instance with BACKEND port
+// Create axios instance with environment-aware base URL
 const apiClient = axios.create({
-  baseURL: 'http://localhost:3002',  // ← BACKEND PORT (NOT 5173 or 5174)
+  baseURL: import.meta.env.VITE_API_BASE || '',  // Empty for production (relative URLs)
   timeout: 10000,
   headers: {
     'Content-Type': 'application/json',

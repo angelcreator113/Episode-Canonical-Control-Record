@@ -3,6 +3,7 @@
  * Display thumbnails for an episode
  */
 import React, { useState, useEffect } from 'react';
+import { API_URL } from '../config/api';
 
 const ThumbnailSection = ({ episodeId }) => {
   const [thumbnails, setThumbnails] = useState([]);
@@ -20,7 +21,7 @@ const ThumbnailSection = ({ episodeId }) => {
       try {
         const token = localStorage.getItem('authToken');
         const response = await fetch(
-          `http://localhost:3002/api/v1/thumbnails/episode/${episodeId}`,
+          `${API_URL}/thumbnails/episode/${episodeId}`,
           { headers: { 'Authorization': `Bearer ${token}` } }
         );
         
