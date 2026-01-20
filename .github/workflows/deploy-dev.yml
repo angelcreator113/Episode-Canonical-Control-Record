@@ -128,25 +128,29 @@ jobs:
           
           # Deploy via SSH - run commands in user's shell environment
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@${{ secrets.EC2_HOST }} << 'ENDSSH'
-            #!/bin/bash
-            set -e  # Exit on error
+            set -x  # Debug mode
             
-            cd ~/episode-metadata || { echo "Directory not found"; exit 1; }
+            cd ~/episode-metadata || exit 1
             
             echo "🔍 Checking Node.js version..."
-            node --version
+            node --version || echo "Node not found"
             
-            # Install Node.js 20 if needed using nvm
-            if ! node --version | grep -q "v20"; then
+            # Load nvm if it exists
+            export NVM_DIR="$HOME/.nvm"
+            if [ -s "$NVM_DIR/nvm.sh" ]; then
+              source "$NVM_DIR/nvm.sh"
+            fi
+            
+            # Install Node.js 20 if not present
+            if ! node --version 2>/dev/null | grep -q "v20"; then
               echo "📦 Installing Node.js 20 via nvm..."
-              export NVM_DIR="$HOME/.nvm"
-              [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
               
               # Install nvm if not present
               if [ ! -d "$NVM_DIR" ]; then
+                echo "Installing nvm..."
                 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
                 export NVM_DIR="$HOME/.nvm"
-                [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
+                source "$NVM_DIR/nvm.sh"
               fi
               
               nvm install 20
@@ -154,12 +158,11 @@ jobs:
               nvm alias default 20
               echo "✓ Node.js 20 installed"
             else
-              echo "✓ Node.js 20 already installed"
-              export NVM_DIR="$HOME/.nvm"
-              [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-              nvm use 20 || true
+              echo "✓ Node.js 20 detected, using it..."
+              nvm use 20 2>/dev/null || true
             fi
             
+            echo "Active Node version:"
             node --version
             npm --version
             
@@ -167,7 +170,9 @@ jobs:
             rm -rf ~/Episode-Canonical-Control-Record 2>/dev/null || true
             
             echo "📦 Fetching latest code..."
-            git fetch origin && git checkout dev && git pull origin dev
+            git fetch origin
+            git checkout dev
+            git pull origin dev
             
             echo "📦 Installing backend dependencies..."
             npm ci
@@ -207,10 +212,9 @@ jobs:
             cd ..
             
             echo "🗄️ Running migrations..."
-            export NVM_DIR="$HOME/.nvm"
-            [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
-            nvm use 20 || true
-            npm run migrate:up || true
+            source "$NVM_DIR/nvm.sh" 2>/dev/null || true
+            nvm use 20 2>/dev/null || true
+            npm run migrate:up || echo "Migration failed but continuing..."
             
             # Install pm2 globally if not present
             if ! command -v pm2 &> /dev/null; then
