@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import episodeService from '../services/episodeService';
 import EpisodeWardrobe from '../components/EpisodeWardrobe';
+import EpisodeAssetsTab from '../components/EpisodeAssetsTab';
 import './EpisodeDetail.css';  // ← ADD THIS LINE!
 
 
@@ -366,68 +367,7 @@ const EpisodeDetail = () => {
 
         {/* Assets Tab */}
         {activeTab === 'assets' && (
-          <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2 className="card-title" style={{ margin: 0, fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>📸 Episode Assets</h2>
-                <div style={{ display: 'flex', gap: '0.75rem' }}>
-                  <button style={{ padding: '0.75rem 1.5rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                    ⬆️ Upload Files
-                  </button>
-                  <button onClick={() => navigate('/assets')} style={{ padding: '0.75rem 1.5rem', background: 'white', color: '#667eea', border: '2px solid #667eea', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer' }}>
-                    🗂️ Asset Manager
-                  </button>
-                </div>
-              </div>
-              
-              <div className="assets-placeholder" style={{ padding: '3rem', textAlign: 'center', background: '#f9fafb', borderRadius: '8px', border: '2px dashed #e5e7eb' }}>
-                <span style={{ fontSize: '4rem', display: 'block', marginBottom: '1rem' }}>🖼️</span>
-                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>No Assets Yet</h3>
-                <p style={{ margin: '0 0 1.5rem 0', color: '#6b7280', fontSize: '1rem' }}>Upload images, videos, audio, and other media for this episode</p>
-                <button style={{ padding: '0.875rem 1.75rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                  📤 Upload First Asset
-                </button>
-              </div>
-
-              {/* Asset Types Grid */}
-              <div style={{ marginTop: '2rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
-                <div style={{ padding: '1.5rem', background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)', borderRadius: '8px', border: '1px solid #fbbf24' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🖼️</div>
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '700', color: '#78350f' }}>Images</h4>
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: '#92400e' }}>Thumbnails, posters, stills</p>
-                </div>
-                <div style={{ padding: '1.5rem', background: 'linear-gradient(135deg, #ddd6fe 0%, #c4b5fd 100%)', borderRadius: '8px', border: '1px solid #8b5cf6' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎥</div>
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '700', color: '#5b21b6' }}>Videos</h4>
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: '#6b21a8' }}>Raw footage, clips, trailers</p>
-                </div>
-                <div style={{ padding: '1.5rem', background: 'linear-gradient(135deg, #bfdbfe 0%, #93c5fd 100%)', borderRadius: '8px', border: '1px solid #3b82f6' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>🎵</div>
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '700', color: '#1e3a8a' }}>Audio</h4>
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: '#1e40af' }}>Music, voiceovers, sound FX</p>
-                </div>
-                <div style={{ padding: '1.5rem', background: 'linear-gradient(135deg, #d1fae5 0%, #a7f3d0 100%)', borderRadius: '8px', border: '1px solid #10b981' }}>
-                  <div style={{ fontSize: '2rem', marginBottom: '0.5rem' }}>📄</div>
-                  <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '1rem', fontWeight: '700', color: '#065f46' }}>Documents</h4>
-                  <p style={{ margin: 0, fontSize: '0.875rem', color: '#047857' }}>Scripts, notes, subtitles</p>
-                </div>
-              </div>
-
-              {/* Asset Features Info */}
-              <div style={{ marginTop: '2rem', padding: '1.5rem', background: 'linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%)', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-                <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: '700', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  ✨ Asset Management Features
-                </h4>
-                <ul style={{ margin: 0, paddingLeft: '1.5rem', color: '#1e3a8a', lineHeight: '1.8' }}>
-                  <li><strong>Cloud Storage:</strong> Secure S3 storage with CDN delivery</li>
-                  <li><strong>Auto Thumbnails:</strong> Automatic thumbnail generation for videos</li>
-                  <li><strong>Version Control:</strong> Track changes and maintain asset history</li>
-                  <li><strong>Smart Tags:</strong> Organize with custom tags and metadata</li>
-                  <li><strong>Bulk Upload:</strong> Upload multiple files at once with drag & drop</li>
-                </ul>
-              </div>
-            </div>
-          </div>
+          <EpisodeAssetsTab episodeId={episode.id} />
         )}
 
         {/* Metadata Tab */}

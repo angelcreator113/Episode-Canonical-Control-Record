@@ -43,7 +43,7 @@ const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.p
  */
 let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
-let Show, Scene, AssetLabel, AssetUsage;
+let Show, Scene, AssetLabel, AssetUsage, EpisodeAsset;
 let Wardrobe, EpisodeWardrobe, OutfitSet;
 
 try {
@@ -70,6 +70,7 @@ try {
   // Asset enhancement models
   AssetLabel = require('./AssetLabel')(sequelize);
   AssetUsage = require('./AssetUsage')(sequelize);
+  EpisodeAsset = require('./EpisodeAsset')(sequelize);
 
   // Wardrobe models
   Wardrobe = require('./Wardrobe')(sequelize);
@@ -102,6 +103,7 @@ const requiredModels = {
   Scene,
   AssetLabel,
   AssetUsage,
+  EpisodeAsset,
   Wardrobe,
   EpisodeWardrobe,
   OutfitSet,
@@ -170,6 +172,17 @@ Episode.hasMany(FileStorage, {
 FileStorage.belongsTo(Episode, {
   foreignKey: 'episode_id',
   as: 'episode',
+});
+
+// Episode → Show (N:1)
+Episode.belongsTo(Show, {
+  foreignKey: 'show_id',
+  as: 'show',
+});
+
+Show.hasMany(Episode, {
+  foreignKey: 'show_id',
+  as: 'episodes',
 });
 
 // Episode → ThumbnailComposition (1:N)
@@ -351,6 +364,42 @@ EpisodeWardrobe.belongsTo(Wardrobe, {
   as: 'wardrobeItem',
 });
 
+// Episode ↔ Asset (M:N via EpisodeAsset)
+Episode.belongsToMany(Asset, {
+  through: EpisodeAsset,
+  foreignKey: 'episode_id',
+  otherKey: 'asset_id',
+  as: 'assets',
+});
+
+Asset.belongsToMany(Episode, {
+  through: EpisodeAsset,
+  foreignKey: 'asset_id',
+  otherKey: 'episode_id',
+  as: 'episodes',
+});
+
+// Direct associations for easier querying
+Episode.hasMany(EpisodeAsset, {
+  foreignKey: 'episode_id',
+  as: 'episodeAssets',
+});
+
+EpisodeAsset.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+Asset.hasMany(EpisodeAsset, {
+  foreignKey: 'asset_id',
+  as: 'assetUsages',
+});
+
+EpisodeAsset.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+});
+
 console.log('✅ Model associations defined');
 
 /**
@@ -373,11 +422,14 @@ const db = {
     ThumbnailComposition,
     ThumbnailTemplate,
     EpisodeTemplate,
+    Show,
     Scene,
     AssetLabel,
     AssetUsage,
+    EpisodeAsset,
     Wardrobe,
     EpisodeWardrobe,
+    OutfitSet,
   },
 
   /**

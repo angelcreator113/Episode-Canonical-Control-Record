@@ -420,7 +420,9 @@ const EditEpisode = () => {
 
                 {/* Show Selection */}
                 <div className="ce-field">
-                  <label htmlFor="showId">Show</label>
+                  <label htmlFor="showId">
+                    Show <span className="ce-required">*</span>
+                  </label>
                   <select
                     className="ce-input"
                     id="showId"
@@ -428,15 +430,16 @@ const EditEpisode = () => {
                     value={formData.showId}
                     onChange={handleChange}
                     disabled={submitting || loadingShows}
+                    required
                   >
-                    <option value="">No Show / Standalone Episode</option>
+                    <option value="">-- Select a Show --</option>
                     {shows.map((show) => (
                       <option key={show.id} value={show.id}>
                         {show.icon || '📺'} {show.name}
                       </option>
                     ))}
                   </select>
-                  <div className="ce-hint">Assign this episode to a show series.</div>
+                  <div className="ce-hint">Select the show this episode belongs to. Required for organization.</div>
                 </div>
               </div>
             )}

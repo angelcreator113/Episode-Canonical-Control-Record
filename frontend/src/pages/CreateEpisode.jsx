@@ -365,7 +365,9 @@ const CreateEpisode = () => {
 
               {/* Show Selection */}
               <div className="ce-field">
-                <label htmlFor="showId">Show (Optional)</label>
+                <label htmlFor="showId">
+                  Show <span className="ce-required">*</span>
+                </label>
                 <select
                   id="showId"
                   name="showId"
@@ -373,15 +375,16 @@ const CreateEpisode = () => {
                   value={formData.showId}
                   onChange={handleChange}
                   disabled={loading || loadingShows}
+                  required
                 >
-                  <option value="">No Show / Standalone Episode</option>
+                  <option value="">-- Select a Show --</option>
                   {shows.map((show) => (
                     <option key={show.id} value={show.id}>
                       {show.icon || '📺'} {show.name}
                     </option>
                   ))}
                 </select>
-                <div className="ce-hint">Assign this episode to a show series for better organization.</div>
+                <div className="ce-hint">Select the show this episode belongs to. Required for organization.</div>
               </div>
 
               {/* Description */}
@@ -413,35 +416,8 @@ const CreateEpisode = () => {
                   disabled={loading}
                 />
               </div>
-                    className="ce-input"
-                    value={formData.status}
-                    onChange={handleChange}
-                    disabled={loading}
-                  >
-                    {STATUS_OPTIONS.map((option) => (
-                      <option key={option.value} value={option.value}>
-                        {option.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
 
-              {/* Air Date */}
-              <div className="ce-field">
-                <label htmlFor="airDate">Air Date (Optional)</label>
-                <input
-                  id="airDate"
-                  name="airDate"
-                  type="date"
-                  className="ce-input"
-                  value={formData.airDate}
-                  onChange={handleChange}
-                  disabled={loading}
-                />
-              </div>
-
-              {/* Description */}
+              {/* Categories */}
               <div className="ce-field">
                 <label htmlFor="description">Description (Optional)</label>
                 <textarea

@@ -39,6 +39,33 @@ router.delete(
   asyncHandler(wardrobeController.unlinkWardrobeFromEpisode)
 );
 
+// ==================== ASSET ROUTES ====================
+// These must come BEFORE /:id route to avoid being caught by it
+
+// GET /api/v1/episodes/:id/assets - Get all assets for episode
+router.get('/:id/assets', validateUUIDParam('id'), asyncHandler(episodeController.getEpisodeAssets));
+
+// POST /api/v1/episodes/:id/assets - Add asset(s) to episode
+router.post(
+  '/:id/assets',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.addEpisodeAsset)
+);
+
+// DELETE /api/v1/episodes/:id/assets/:assetId - Remove asset from episode
+router.delete(
+  '/:id/assets/:assetId',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.removeEpisodeAsset)
+);
+
+// PATCH /api/v1/episodes/:id/assets/:assetId - Update asset usage in episode
+router.patch(
+  '/:id/assets/:assetId',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.updateEpisodeAsset)
+);
+
 // ==================== STANDARD EPISODE ROUTES ====================
 router.get('/:id/status', asyncHandler(episodeController.getEpisodeStatus));
 
