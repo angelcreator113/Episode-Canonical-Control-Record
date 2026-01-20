@@ -146,7 +146,7 @@ module.exports = (sequelize) => {
   Asset.associate = function (models) {
     // Many-to-many with Episodes through episode_assets junction table
     Asset.belongsToMany(models.Episode, {
-      through: 'episode_assets',
+      through: models.EpisodeAsset,
       foreignKey: 'asset_id',
       otherKey: 'episode_id',
       as: 'episodes',
