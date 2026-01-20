@@ -33,7 +33,7 @@ const WardrobeGallery = () => {
   const loadAllWardrobe = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3002/api/v1/wardrobe?limit=1000');
+      const response = await fetch(import.meta.env.VITE_API_URL || '/api/v1/wardrobe?limit=1000');
       
       if (!response.ok) {
         console.error('Failed to load wardrobe:', response.status);

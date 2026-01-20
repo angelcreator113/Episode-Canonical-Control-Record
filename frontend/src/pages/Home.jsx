@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { API_URL } from '../config/api';
 import './Home.css';
 
 const Home = () => {
@@ -23,7 +24,7 @@ const Home = () => {
 
   const loadStats = async () => {
     try {
-      const response = await fetch('http://localhost:3002/api/v1/episodes?limit=100');
+      const response = await fetch(`${API_URL}/episodes?limit=100`);
 
       if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
 

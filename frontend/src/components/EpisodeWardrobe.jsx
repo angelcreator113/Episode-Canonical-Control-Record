@@ -212,7 +212,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
           clothingCategory: formData.clothingCategory
         });
         
-        const createResponse = await fetch('http://localhost:3002/api/v1/wardrobe', {
+        const createResponse = await fetch(import.meta.env.VITE_API_URL || '/api/v1/wardrobe', {
           method: 'POST',
           body: uploadData
         });

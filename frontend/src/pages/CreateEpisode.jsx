@@ -57,7 +57,7 @@ const CreateEpisode = () => {
     const fetchShows = async () => {
       try {
         setLoadingShows(true);
-        const response = await fetch('http://localhost:3002/api/v1/shows', {
+        const response = await fetch(import.meta.env.VITE_API_URL || '/api/v1/shows', {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           },
@@ -186,7 +186,7 @@ const CreateEpisode = () => {
 
     try {
       const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-      await fetch('http://localhost:3002/api/v1/files/upload', {
+      await fetch(import.meta.env.VITE_API_URL || '/api/v1/files/upload', {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${token}`,
