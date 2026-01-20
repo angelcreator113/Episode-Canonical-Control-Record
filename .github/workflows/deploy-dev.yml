@@ -146,7 +146,14 @@ jobs:
           # Deploy via SSH - run commands in user's shell environment
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ServerAliveInterval=60 -o ServerAliveCountMax=10 ubuntu@${{ secrets.EC2_HOST }} << 'ENDSSH'
 set -x
-cd ~/episode-metadata || exit 1
+if [ ! -d ~/episode-metadata ]; then
+  echo "📁 Creating episode-metadata directory..."
+  mkdir -p ~/episode-metadata
+  cd ~/episode-metadata
+  git clone https://github.com/angelcreator113/Episode-Canonical-Control-Record.git .
+else
+  cd ~/episode-metadata
+fi
 echo "🔍 Checking Node.js version..."
 node --version || echo "Node not found"
 export NVM_DIR="$HOME/.nvm"
