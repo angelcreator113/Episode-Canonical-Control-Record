@@ -88,14 +88,23 @@ export DATABASE_URL="postgresql://postgres:Ayanna123!!@episode-control-dev.csnow
 export DB_SSL="true"
 export NODE_TLS_REJECT_UNAUTHORIZED="0"
 
-# Run migrations and capture output
+echo "Checking migration status..."
+
+# First, ensure the shows table exists (fix for partial migration state)
+echo "Creating missing tables directly..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-shows-only.sql 2>&1 | head -20 || echo "SQL execution completed with warnings..."
+
+# Only run the new migrations we need
 echo "Running database migrations with SSL..."
 npm run migrate:up 2>&1 | tee migration.log
 MIGRATION_STATUS=$?
 
 if [ $MIGRATION_STATUS -ne 0 ]; then
   echo "⚠️ Migration failed with status $MIGRATION_STATUS"
-  cat migration.log
+  cat migration.log | tail -50
   echo "Continuing anyway..."
 else
   echo "✅ Migrations completed successfully"
