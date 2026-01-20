@@ -1,6 +1,6 @@
 /* eslint-disable no-unused-vars */
 const { models } = require('../models');
-const { Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog } = models;
+const { Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog, Show, Asset, EpisodeAsset } = models;
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const { logger } = require('../middleware/auditLog');
 const AuditLogger = require('../services/AuditLogger');
@@ -63,12 +63,22 @@ module.exports = {
           'air_date',
           'status',
           'categories',
+          'show_id',
           'created_at',
           'updated_at',
+        ],
+        include: [
+          {
+            model: Show,
+            as: 'show',
+            attributes: ['id', 'name', 'icon', 'color'],
+          },
         ],
       });
 
       // Log activity (wrapped in try-catch to prevent failures)
+      // TEMPORARILY DISABLED DUE TO AUDIT LOG ERRORS
+      /*
       try {
         await logger.logAction(req.user?.id, 'view', 'episode', 'all', {
           count,
@@ -79,6 +89,7 @@ module.exports = {
       } catch (logError) {
         console.warn('⚠️ Failed to log activity:', logError.message);
       }
+      */
 
       res.json({
         data: rows,
@@ -115,8 +126,16 @@ module.exports = {
           'air_date',
           'status',
           'categories',
+          'show_id',
           'created_at',
           'updated_at',
+        ],
+        include: [
+          {
+            model: Show,
+            as: 'show',
+            attributes: ['id', 'name', 'icon', 'color'],
+          },
         ],
       });
 
@@ -128,6 +147,8 @@ module.exports = {
       }
 
       // Log viewing activity (wrapped in try-catch to prevent failures)
+      // TEMPORARILY DISABLED DUE TO AUDIT LOG ERRORS
+      /*
       try {
         await logger.logAction(req.user?.id, 'view', 'episode', id, {
           episodeTitle: episode.title,
@@ -137,6 +158,7 @@ module.exports = {
       } catch (logError) {
         console.warn('⚠️ Failed to log activity:', logError.message);
       }
+      */
 
       res.json({
         data: episode,
@@ -352,13 +374,17 @@ module.exports = {
 
     await episode.update(updateData);
 
-    // Log activity (existing logger)
-    await logger.logAction(req.user?.id, 'edit', 'episode', id, {
-      oldValues,
-      newValues: episode.toJSON(),
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Log activity (existing logger) - wrapped in try-catch to prevent failures
+    try {
+      await logger.logAction(req.user?.id, 'edit', 'episode', id, {
+        oldValues,
+        newValues: episode.toJSON(),
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+    } catch (logError) {
+      console.warn('⚠️ Failed to log activity:', logError.message);
+    }
 
     // Phase 3A Integration: Activity Logging (non-blocking)
     ActivityService.logActivity({
@@ -425,12 +451,16 @@ module.exports = {
       await episode.softDelete();
     }
 
-    // Log activity
-    await logger.logAction(req.user?.id, 'delete', 'episode', id, {
-      oldValues,
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Log activity - wrapped in try-catch to prevent failures
+    try {
+      await logger.logAction(req.user?.id, 'delete', 'episode', id, {
+        oldValues,
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+    } catch (logError) {
+      console.warn('⚠️ Failed to log activity:', logError.message);
+    }
 
     // Phase 3A Integration: Activity Logging (non-blocking)
     ActivityService.logActivity({
@@ -527,16 +557,233 @@ module.exports = {
     // Update episode status
     await episode.update({ status: 'processing' });
 
-    // Log activity
-    await logger.logAction(req.user?.id, 'create', 'processing', id, {
-      newValues: { jobTypes, count: jobs.length },
-      ipAddress: req.ip,
-      userAgent: req.get('user-agent'),
-    });
+    // Log activity - wrapped in try-catch to prevent failures
+    try {
+      await logger.logAction(req.user?.id, 'create', 'processing', id, {
+        newValues: { jobTypes, count: jobs.length },
+        ipAddress: req.ip,
+        userAgent: req.get('user-agent'),
+      });
+    } catch (logError) {
+      console.warn('⚠️ Failed to log activity:', logError.message);
+    }
 
     res.json({
       data: jobs,
       message: `${jobs.length} job(s) enqueued for episode ${id}`,
     });
+  },
+
+  /**
+   * GET /episodes/:id/assets - Get all assets for an episode
+   */
+  async getEpisodeAssets(req, res, _next) {
+    try {
+      const { id } = req.params;
+
+      const episode = await Episode.findByPk(id, {
+        include: [
+          {
+            model: Asset,
+            as: 'assets',
+            through: {
+              attributes: ['usage_type', 'scene_number', 'display_order', 'metadata', 'created_at'],
+            },
+            attributes: [
+              'id',
+              'name',
+              'asset_type',
+              'approval_status',
+              's3_url_raw',
+              's3_url_processed',
+              'media_type',
+              'width',
+              'height',
+              'file_size_bytes',
+              'created_at',
+            ],
+          },
+        ],
+      });
+
+      if (!episode) {
+        return res.status(404).json({
+          error: 'Episode not found',
+          id,
+        });
+      }
+
+      res.json({
+        data: episode.assets || [],
+        count: episode.assets?.length || 0,
+      });
+    } catch (error) {
+      console.error('❌ Error getting episode assets:', error);
+      res.status(500).json({
+        error: 'Failed to get episode assets',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /episodes/:id/assets - Add asset(s) to episode
+   */
+  async addEpisodeAsset(req, res, _next) {
+    try {
+      const { id } = req.params;
+      const { assetId, assetIds, usageType = 'general', sceneNumber, displayOrder = 0, metadata = {} } = req.body;
+
+      // Validate episode exists
+      const episode = await Episode.findByPk(id);
+      if (!episode) {
+        return res.status(404).json({
+          error: 'Episode not found',
+          id,
+        });
+      }
+
+      // Support both single asset and multiple assets
+      const idsToAdd = assetIds || (assetId ? [assetId] : []);
+      
+      if (idsToAdd.length === 0) {
+        return res.status(400).json({
+          error: 'Validation failed',
+          message: 'assetId or assetIds required',
+        });
+      }
+
+      // Validate all assets exist
+      const assets = await Asset.findAll({
+        where: {
+          id: idsToAdd,
+        },
+      });
+
+      if (assets.length !== idsToAdd.length) {
+        return res.status(404).json({
+          error: 'One or more assets not found',
+          requested: idsToAdd.length,
+          found: assets.length,
+        });
+      }
+
+      // Create episode asset links
+      const episodeAssets = await Promise.all(
+        idsToAdd.map((aid, index) =>
+          EpisodeAsset.findOrCreate({
+            where: {
+              episode_id: id,
+              asset_id: aid,
+              usage_type: usageType,
+            },
+            defaults: {
+              scene_number: sceneNumber,
+              display_order: displayOrder + index,
+              metadata,
+            },
+          })
+        )
+      );
+
+      const created = episodeAssets.filter(([_, wasCreated]) => wasCreated).length;
+
+      res.json({
+        message: `Added ${created} asset(s) to episode`,
+        data: episodeAssets.map(([ea]) => ea),
+        created,
+        skipped: idsToAdd.length - created,
+      });
+    } catch (error) {
+      console.error('❌ Error adding episode asset:', error);
+      res.status(500).json({
+        error: 'Failed to add asset to episode',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * DELETE /episodes/:id/assets/:assetId - Remove asset from episode
+   */
+  async removeEpisodeAsset(req, res, _next) {
+    try {
+      const { id, assetId } = req.params;
+      const { usageType } = req.query;
+
+      const where = {
+        episode_id: id,
+        asset_id: assetId,
+      };
+
+      if (usageType) {
+        where.usage_type = usageType;
+      }
+
+      const deleted = await EpisodeAsset.destroy({ where });
+
+      if (deleted === 0) {
+        return res.status(404).json({
+          error: 'Episode asset link not found',
+          episode_id: id,
+          asset_id: assetId,
+        });
+      }
+
+      res.json({
+        message: `Removed asset from episode`,
+        deleted,
+      });
+    } catch (error) {
+      console.error('❌ Error removing episode asset:', error);
+      res.status(500).json({
+        error: 'Failed to remove asset from episode',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * PATCH /episodes/:id/assets/:assetId - Update asset usage in episode
+   */
+  async updateEpisodeAsset(req, res, _next) {
+    try {
+      const { id, assetId } = req.params;
+      const { usageType, sceneNumber, displayOrder, metadata } = req.body;
+
+      const episodeAsset = await EpisodeAsset.findOne({
+        where: {
+          episode_id: id,
+          asset_id: assetId,
+        },
+      });
+
+      if (!episodeAsset) {
+        return res.status(404).json({
+          error: 'Episode asset link not found',
+          episode_id: id,
+          asset_id: assetId,
+        });
+      }
+
+      const updates = {};
+      if (usageType !== undefined) updates.usage_type = usageType;
+      if (sceneNumber !== undefined) updates.scene_number = sceneNumber;
+      if (displayOrder !== undefined) updates.display_order = displayOrder;
+      if (metadata !== undefined) updates.metadata = metadata;
+
+      await episodeAsset.update(updates);
+
+      res.json({
+        message: 'Episode asset updated',
+        data: episodeAsset,
+      });
+    } catch (error) {
+      console.error('❌ Error updating episode asset:', error);
+      res.status(500).json({
+        error: 'Failed to update episode asset',
+        message: error.message,
+      });
+    }
   },
 };

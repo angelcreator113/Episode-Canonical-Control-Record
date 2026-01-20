@@ -44,6 +44,15 @@ module.exports = (sequelize) => {
         defaultValue: [],
         comment: 'Array of category/tag strings for the episode',
       },
+      show_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'shows',
+          key: 'id',
+        },
+        field: 'show_id',
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: true,
@@ -123,6 +132,16 @@ module.exports = (sequelize) => {
   /**
    * Class Methods
    */
+
+  /**
+   * Associate Episode with other models
+   */
+  Episode.associate = function (models) {
+    Episode.belongsTo(models.Show, {
+      foreignKey: 'show_id',
+      as: 'show',
+    });
+  };
 
   /**
    * Find active episodes (excluding soft-deleted)

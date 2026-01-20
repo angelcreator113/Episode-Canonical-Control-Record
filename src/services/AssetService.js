@@ -385,9 +385,55 @@ class AssetService {
 
       console.log(`🎨 Processing background removal for ${assetId}`);
 
-      // Mock processing - replace with actual Runway ML integration
+      // Download the image from S3
+      const getCommand = new GetObjectCommand({
+        Bucket: this.s3Bucket,
+        Key: asset.s3_key_raw,
+      });
+      
+      const response = await this.s3.send(getCommand);
+      const imageBuffer = await this.streamToBuffer(response.Body);
+
+      // Call RunwayML API for background removal
+      const runwayApiKey = process.env.RUNWAY_ML_API_KEY;
+      if (!runwayApiKey) {
+        throw new Error('RUNWAY_ML_API_KEY not configured');
+      }
+
+      const FormData = require('form-data');
+      const axios = require('axios');
+      
+      const formData = new FormData();
+      formData.append('image', imageBuffer, {
+        filename: asset.file_name,
+        contentType: asset.content_type,
+      });
+
+      console.log(`📤 Sending to RunwayML API...`);
+      const runwayResponse = await axios.post(
+        'https://api.runwayml.com/v1/remove-background',
+        formData,
+        {
+          headers: {
+            ...formData.getHeaders(),
+            'Authorization': `Bearer ${runwayApiKey}`,
+          },
+          responseType: 'arraybuffer',
+          timeout: 30000, // 30 second timeout
+        }
+      );
+
+      // Upload processed image to S3
       const processedKey = asset.s3_key_raw.replace('/raw/', '/processed/');
-      const processedUrl = asset.s3_url_raw.replace('/raw/', '/processed/');
+      const putCommand = new PutObjectCommand({
+        Bucket: this.s3Bucket,
+        Key: processedKey,
+        Body: Buffer.from(runwayResponse.data),
+        ContentType: 'image/png', // RunwayML returns PNG
+      });
+
+      await this.s3.send(putCommand);
+      const processedUrl = `https://${this.s3Bucket}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${processedKey}`;
 
       await asset.update({
         s3_key_processed: processedKey,
@@ -401,8 +447,26 @@ class AssetService {
       return asset.toJSON();
     } catch (error) {
       console.error('Failed to process asset:', error);
+      
+      // If RunwayML fails, still mark as processed but log the error
+      if (error.response) {
+        console.error('RunwayML API error:', error.response.status, error.response.data);
+      }
+      
       throw error;
     }
+  }
+
+  /**
+   * Helper to convert stream to buffer
+   */
+  async streamToBuffer(stream) {
+    return new Promise((resolve, reject) => {
+      const chunks = [];
+      stream.on('data', (chunk) => chunks.push(chunk));
+      stream.on('error', reject);
+      stream.on('end', () => resolve(Buffer.concat(chunks)));
+    });
   }
 
   // ==================== LABEL MANAGEMENT ====================

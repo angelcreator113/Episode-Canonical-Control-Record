@@ -43,7 +43,8 @@ const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.p
  */
 let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
-let Show, Scene, AssetLabel, AssetUsage;
+let Show, Scene, AssetLabel, AssetUsage, EpisodeAsset;
+let Wardrobe, EpisodeWardrobe, OutfitSet;
 
 try {
   // Core models
@@ -69,6 +70,14 @@ try {
   // Asset enhancement models
   AssetLabel = require('./AssetLabel')(sequelize);
   AssetUsage = require('./AssetUsage')(sequelize);
+  EpisodeAsset = require('./EpisodeAsset')(sequelize);
+
+  // Wardrobe models
+  Wardrobe = require('./Wardrobe')(sequelize);
+  EpisodeWardrobe = require('./EpisodeWardrobe')(sequelize);
+  
+  // Outfit sets model
+  OutfitSet = require('./OutfitSet')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -94,6 +103,10 @@ const requiredModels = {
   Scene,
   AssetLabel,
   AssetUsage,
+  EpisodeAsset,
+  Wardrobe,
+  EpisodeWardrobe,
+  OutfitSet,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -159,6 +172,17 @@ Episode.hasMany(FileStorage, {
 FileStorage.belongsTo(Episode, {
   foreignKey: 'episode_id',
   as: 'episode',
+});
+
+// Episode → Show (N:1)
+Episode.belongsTo(Show, {
+  foreignKey: 'show_id',
+  as: 'show',
+});
+
+Show.hasMany(Episode, {
+  foreignKey: 'show_id',
+  as: 'episodes',
 });
 
 // Episode → ThumbnailComposition (1:N)
@@ -270,6 +294,9 @@ Asset.hasMany(ThumbnailComposition, {
 
 // ==================== ASSET LABEL ASSOCIATIONS ====================
 
+// TEMPORARILY DISABLED: asset_labels table doesn't exist yet
+// TODO: Create asset_labels and asset_label_mappings tables, then re-enable
+/*
 // Asset ←→ AssetLabel (Many-to-Many)
 Asset.belongsToMany(AssetLabel, {
   through: 'asset_label_mappings',
@@ -284,6 +311,7 @@ AssetLabel.belongsToMany(Asset, {
   otherKey: 'asset_id',
   as: 'assets',
 });
+*/
 
 // Asset → AssetUsage (1:N)
 Asset.hasMany(AssetUsage, {
@@ -293,6 +321,81 @@ Asset.hasMany(AssetUsage, {
 });
 
 AssetUsage.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+});
+
+// ==================== WARDROBE ASSOCIATIONS ====================
+
+// Episode ←→ Wardrobe (Many-to-Many through EpisodeWardrobe)
+Episode.belongsToMany(Wardrobe, {
+  through: EpisodeWardrobe,
+  foreignKey: 'episode_id',
+  otherKey: 'wardrobe_id',
+  as: 'wardrobeItems',
+});
+
+Wardrobe.belongsToMany(Episode, {
+  through: EpisodeWardrobe,
+  foreignKey: 'wardrobe_id',
+  otherKey: 'episode_id',
+  as: 'episodes',
+});
+
+// Episode → EpisodeWardrobe (1:N)
+Episode.hasMany(EpisodeWardrobe, {
+  foreignKey: 'episode_id',
+  as: 'wardrobeLinks',
+});
+
+EpisodeWardrobe.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Wardrobe → EpisodeWardrobe (1:N)
+Wardrobe.hasMany(EpisodeWardrobe, {
+  foreignKey: 'wardrobe_id',
+  as: 'episodeLinks',
+});
+
+EpisodeWardrobe.belongsTo(Wardrobe, {
+  foreignKey: 'wardrobe_id',
+  as: 'wardrobeItem',
+});
+
+// Episode ↔ Asset (M:N via EpisodeAsset)
+Episode.belongsToMany(Asset, {
+  through: EpisodeAsset,
+  foreignKey: 'episode_id',
+  otherKey: 'asset_id',
+  as: 'assets',
+});
+
+Asset.belongsToMany(Episode, {
+  through: EpisodeAsset,
+  foreignKey: 'asset_id',
+  otherKey: 'episode_id',
+  as: 'episodes',
+});
+
+// Direct associations for easier querying
+Episode.hasMany(EpisodeAsset, {
+  foreignKey: 'episode_id',
+  as: 'episodeAssets',
+});
+
+EpisodeAsset.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+Asset.hasMany(EpisodeAsset, {
+  foreignKey: 'asset_id',
+  as: 'assetUsages',
+});
+
+EpisodeAsset.belongsTo(Asset, {
   foreignKey: 'asset_id',
   as: 'asset',
 });
@@ -319,9 +422,14 @@ const db = {
     ThumbnailComposition,
     ThumbnailTemplate,
     EpisodeTemplate,
+    Show,
     Scene,
     AssetLabel,
     AssetUsage,
+    EpisodeAsset,
+    Wardrobe,
+    EpisodeWardrobe,
+    OutfitSet,
   },
 
   /**
@@ -501,5 +609,9 @@ module.exports.ThumbnailTemplate = ThumbnailTemplate;
 module.exports.EpisodeTemplate = EpisodeTemplate;
 module.exports.Show = Show;
 module.exports.Scene = Scene;
+module.exports.Wardrobe = Wardrobe;
+module.exports.EpisodeWardrobe = EpisodeWardrobe;
+module.exports.OutfitSet = OutfitSet;
+module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.AssetLabel = AssetLabel;
 module.exports.AssetUsage = AssetUsage;

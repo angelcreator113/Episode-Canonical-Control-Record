@@ -1,4 +1,4 @@
-/* App Layout - Mobile First */
+/* App Layout - Mobile First, Fully Responsive */
 * {
   box-sizing: border-box;
 }
@@ -6,6 +6,9 @@
 html, body {
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 .app-layout {
@@ -13,6 +16,9 @@ html, body {
   flex-direction: column;
   min-height: 100vh;
   background-color: #f1f5f9;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
 }
 
 .app-layout > header {
@@ -24,6 +30,7 @@ html, body {
   border-bottom: 1px solid #e2e8f0;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
   height: 60px;
+  width: 100%;
 }
 
 .app-layout > nav {
@@ -33,21 +40,23 @@ html, body {
 
 .app-content {
   flex: 1;
-  padding: 2rem;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
   overflow-y: auto;
+  -webkit-overflow-scrolling: touch; /* Smooth scrolling on iOS */
 }
 
 .app-footer {
   flex-shrink: 0;
   background-color: #1e293b;
   color: #cbd5e1;
-  padding: 1rem 2rem;
   text-align: center;
   border-top: 1px solid #334155;
   display: flex;
   align-items: center;
   justify-content: center;
-  height: 80px;
+  width: 100%;
 }
 
 .app-footer p {
@@ -55,23 +64,107 @@ html, body {
   font-size: 0.875rem;
 }
 
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+   Mobile First Approach
+============================================ */
 
-/* Responsive Design - Tablet and Desktop */
-@media (min-width: 769px) {
-  .app-content {
-    padding: 2rem;
-  }
-}
-
-@media (max-width: 768px) {
-  .app-content {
-    padding: 2rem 1rem;
-  }
-}
-
+/* Small Mobile: 320px - 480px */
 @media (max-width: 480px) {
   .app-content {
-    padding: 1rem;
+    padding: 0.75rem;
+  }
+  
+  .app-footer {
+    padding: 0.75rem 1rem;
+    height: 60px;
+    font-size: 0.75rem;
+  }
+  
+  .app-footer p {
+    font-size: 0.75rem;
+  }
+}
+
+/* Mobile: 481px - 768px */
+@media (min-width: 481px) and (max-width: 768px) {
+  .app-content {
+    padding: 1rem 1.25rem;
+  }
+  
+  .app-footer {
+    padding: 1rem 1.5rem;
+    height: 70px;
+  }
+}
+
+/* Tablet: 769px - 1024px */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .app-content {
+    padding: 1.5rem 2rem;
+  }
+  
+  .app-footer {
+    padding: 1rem 2rem;
+    height: 80px;
+  }
+}
+
+/* Desktop: 1025px and above */
+@media (min-width: 1025px) {
+  .app-content {
+    padding: 2rem 2.5rem;
+  }
+  
+  .app-footer {
+    padding: 1rem 2rem;
+    height: 80px;
+  }
+}
+
+/* Large Desktop: 1440px and above */
+@media (min-width: 1440px) {
+  .app-content {
+    padding: 2.5rem 3rem;
+    max-width: 1600px;
+    margin: 0 auto;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+  /* Larger touch targets for touch devices */
+  button, a, input, select, textarea {
+    min-height: 44px; /* iOS Human Interface Guidelines */
+  }
+}
+
+/* Landscape Mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .app-layout > header {
+    height: 50px;
+  }
+  
+  .app-content {
+    padding: 0.75rem 1rem;
+  }
+  
+  .app-footer {
+    height: 50px;
+    padding: 0.5rem 1rem;
+  }
+}
+
+/* Print Styles */
+@media print {
+  .app-layout > header,
+  .app-layout > nav,
+  .app-footer {
+    display: none;
+  }
+  
+  .app-content {
+    padding: 0;
   }
 }
 

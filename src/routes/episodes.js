@@ -1,7 +1,9 @@
 const express = require('express');
 const router = express.Router();
+
 const episodeController = require('../controllers/episodeController');
 const sceneController = require('../controllers/sceneController');
+const wardrobeController = require('../controllers/wardrobeController');
 const { _authenticateToken } = require('../middleware/auth');
 const { _requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -17,7 +19,54 @@ const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/reque
 // List episodes
 router.get('/', validateEpisodeQuery, asyncHandler(episodeController.listEpisodes));
 
-// Get episode status
+// ==================== WARDROBE ROUTES ====================
+// These must come BEFORE /:id route to avoid being caught by it
+
+// GET /api/v1/episodes/:id/wardrobe - Get all wardrobe items for episode
+router.get('/:id/wardrobe', validateUUIDParam('id'), asyncHandler(wardrobeController.getEpisodeWardrobe));
+
+// POST /api/v1/episodes/:id/wardrobe/:wardrobeId - Link wardrobe item to episode
+router.post(
+  '/:id/wardrobe/:wardrobeId',
+  validateUUIDParam('id'),
+  asyncHandler(wardrobeController.linkWardrobeToEpisode)
+);
+
+// DELETE /api/v1/episodes/:id/wardrobe/:wardrobeId - Unlink wardrobe from episode
+router.delete(
+  '/:id/wardrobe/:wardrobeId',
+  validateUUIDParam('id'),
+  asyncHandler(wardrobeController.unlinkWardrobeFromEpisode)
+);
+
+// ==================== ASSET ROUTES ====================
+// These must come BEFORE /:id route to avoid being caught by it
+
+// GET /api/v1/episodes/:id/assets - Get all assets for episode
+router.get('/:id/assets', validateUUIDParam('id'), asyncHandler(episodeController.getEpisodeAssets));
+
+// POST /api/v1/episodes/:id/assets - Add asset(s) to episode
+router.post(
+  '/:id/assets',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.addEpisodeAsset)
+);
+
+// DELETE /api/v1/episodes/:id/assets/:assetId - Remove asset from episode
+router.delete(
+  '/:id/assets/:assetId',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.removeEpisodeAsset)
+);
+
+// PATCH /api/v1/episodes/:id/assets/:assetId - Update asset usage in episode
+router.patch(
+  '/:id/assets/:assetId',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.updateEpisodeAsset)
+);
+
+// ==================== STANDARD EPISODE ROUTES ====================
 router.get('/:id/status', asyncHandler(episodeController.getEpisodeStatus));
 
 // Get single episode

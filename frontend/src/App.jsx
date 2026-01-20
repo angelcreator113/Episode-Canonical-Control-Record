@@ -25,6 +25,9 @@ import TemplateManagement from './pages/TemplateManagement';
 import AuditLogViewer from './pages/AuditLogViewer';
 import ShowManagement from './pages/ShowManagement';
 import ShowForm from './components/ShowForm';
+import WardrobeGallery from './pages/WardrobeGallery';
+import WardrobeAnalytics from './pages/WardrobeAnalytics';
+import OutfitSets from './pages/OutfitSets';
 
 // Components
 import Navigation from './components/Navigation';
@@ -148,6 +151,9 @@ function AppContent() {
           <Route path="/shows" element={<ShowManagement />} />
           <Route path="/shows/create" element={<ShowForm />} />
           <Route path="/shows/:id/edit" element={<ShowForm />} />
+          <Route path="/wardrobe" element={<WardrobeGallery />} />
+          <Route path="/wardrobe/analytics" element={<WardrobeAnalytics />} />
+          <Route path="/wardrobe/outfits" element={<OutfitSets />} />
           <Route path="/admin" element={<AdminPanel />} />
           <Route path="/admin/templates" element={<TemplateManagement />} />
           <Route path="/audit-log" element={<AuditLogViewer />} />

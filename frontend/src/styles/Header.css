@@ -1,4 +1,4 @@
-/* Header Styles */
+/* Header Styles - Fully Responsive */
 .header {
   background-color: white;
   border-bottom: 1px solid var(--border);
@@ -9,6 +9,7 @@
   height: 60px;
   display: flex;
   align-items: center;
+  width: 100%;
 }
 
 .header-content {
@@ -19,16 +20,20 @@
   justify-content: space-between;
   align-items: center;
   height: 100%;
+  flex-wrap: nowrap;
+  gap: 0.5rem;
 }
 
 .header-left {
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: 0.75rem;
   min-width: 0;
+  flex: 0 1 auto;
+  justify-content: flex-start;
 }
 
-/* ✅ FIX: Menu button should ALWAYS show on mobile, explicitly */
+/* ✅ Menu button - touch-friendly on mobile */
 .menu-button {
   background: none;
   border: none;
@@ -40,17 +45,20 @@
   align-items: center;
   justify-content: center;
   line-height: 1;
-  width: auto;
-  height: auto;
+  width: 44px;
+  height: 44px;
   flex-shrink: 0;
+  border-radius: 0.375rem;
+  transition: background-color 0.2s ease;
 }
 
 .menu-button:hover {
-  opacity: 0.7;
+  background-color: rgba(0, 0, 0, 0.05);
 }
 
 .menu-button:active {
   transform: scale(0.95);
+  background-color: rgba(0, 0, 0, 0.1);
 }
 
 .header-title {
@@ -58,6 +66,8 @@
   font-size: 1.5rem;
   color: var(--primary);
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .header-right {
@@ -65,6 +75,7 @@
   align-items: center;
   gap: 1rem;
   margin-left: auto;
+  flex-shrink: 0;
 }
 
 .user-info {
@@ -83,6 +94,7 @@
   color: var(--dark);
   font-size: 0.95rem;
   white-space: nowrap;
+  min-height: 40px;
 }
 
 .logout-button:hover {
@@ -91,17 +103,110 @@
   color: var(--primary);
 }
 
-@media (max-width: 768px) {
-  .header-title {
-    font-size: 1.25rem;
-  }
+/* ============================================
+   RESPONSIVE BREAKPOINTS
+============================================ */
 
+/* Small Mobile: 320px - 480px */
+@media (max-width: 480px) {
+  .header {
+    height: 50px;
+  }
+  
+  .header-content {
+    padding: 0 0.5rem;
+    flex-wrap: nowrap !important;
+  }
+  
+  .header-left {
+    gap: 0.5rem;
+    flex-direction: row !important;
+    align-items: center !important;
+  }
+  
+  .menu-button {
+    width: 40px;
+    height: 40px;
+    padding: 0.375rem;
+    margin: 0;
+    flex-shrink: 0;
+  }
+  
+  .header-title {
+    font-size: 0.95rem;
+    flex-shrink: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: inline-block !important;
+  }
+  
+  .header-right {
+    margin-left: auto;
+    flex-shrink: 0;
+  }
+  
   .user-info {
     display: none;
   }
+  
+  .logout-button {
+    padding: 0.375rem 0.5rem;
+    font-size: 0.85rem;
+    white-space: nowrap;
+  }
+}
 
+/* Mobile: 481px - 768px */
+@media (min-width: 481px) and (max-width: 768px) {
+  .header-title {
+    font-size: 1.25rem;
+  }
+  
+  .user-info {
+    display: none;
+  }
+  
   .logout-button {
     padding: 0.4rem 0.8rem;
     font-size: 0.9rem;
+  }
+}
+
+/* Tablet: 769px - 1024px */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .header-content {
+    padding: 0 1.5rem;
+  }
+  
+  .user-info {
+    font-size: 0.9rem;
+  }
+}
+
+/* Desktop: 1025px and above */
+@media (min-width: 1025px) {
+  .header-content {
+    padding: 0 2rem;
+  }
+}
+
+/* Landscape Mobile */
+@media (max-width: 768px) and (orientation: landscape) {
+  .header {
+    height: 50px;
+  }
+  
+  .header-title {
+    font-size: 1.1rem;
+  }
+}
+
+/* Touch Device Optimizations */
+@media (hover: none) and (pointer: coarse) {
+  .menu-button,
+  .logout-button {
+    min-height: 44px;
+    min-width: 44px;
   }
 }

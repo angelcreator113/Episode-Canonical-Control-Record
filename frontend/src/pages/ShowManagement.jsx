@@ -41,7 +41,7 @@ const ShowManagement = () => {
   const fetchShows = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://localhost:3000/api/v1/shows', {
+      const response = await fetch('http://localhost:3002/api/v1/shows', {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
         },
@@ -92,8 +92,8 @@ const ShowManagement = () => {
       setError(null);
       
       const url = editingShow
-        ? `http://localhost:3000/api/v1/shows/${editingShow.id}`
-        : 'http://localhost:3000/api/v1/shows';
+        ? `http://localhost:3002/api/v1/shows/${editingShow.id}`
+        : 'http://localhost:3002/api/v1/shows';
       
       const method = editingShow ? 'PUT' : 'POST';
       
@@ -134,7 +134,7 @@ const ShowManagement = () => {
 
     try {
       setError(null);
-      const response = await fetch(`http://localhost:3000/api/v1/shows/${showId}`, {
+      const response = await fetch(`http://localhost:3002/api/v1/shows/${showId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
@@ -495,104 +495,164 @@ const ShowManagement = () => {
                   }}
                   onClick={() => navigate(`/shows/${show.slug}`)}
                 >
-                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flex: 1 }}>
-                      <span style={{ fontSize: '2rem', lineHeight: 1 }}>{show.icon || '📺'}</span>
-                      <div style={{ flex: 1 }}>
-                        <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.1rem', fontWeight: '700', color: '#1f2937' }}>
-                          {show.name}
-                        </h3>
-                        <span style={{
-                          display: 'inline-block',
-                          padding: '0.25rem 0.625rem',
-                          borderRadius: '6px',
-                          fontSize: '0.75rem',
-                          fontWeight: '600',
-                          background: show.status === 'active' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
-                                     show.status === 'coming_soon' ? 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)' :
-                                     'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
-                          color: 'white',
-                          textTransform: 'uppercase',
-                          letterSpacing: '0.5px'
-                        }}>
-                          {show.status === 'coming_soon' ? 'Coming Soon' : show.status}
-                        </span>
-                      </div>
+                  {/* Header with Icon, Title, and Buttons */}
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
+                    {/* Icon */}
+                    <div style={{ flexShrink: 0, fontSize: '2.5rem', lineHeight: 1 }}>
+                      {show.icon || '📺'}
                     </div>
-                    <div style={{ display: 'flex', gap: '0.375rem' }}>
+                    
+                    {/* Title and Status */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <h3 style={{ 
+                        margin: '0 0 0.625rem 0', 
+                        fontSize: '1.25rem', 
+                        fontWeight: '700', 
+                        color: '#1f2937',
+                        lineHeight: '1.3',
+                        wordWrap: 'break-word',
+                        overflowWrap: 'break-word'
+                      }}>
+                        {show.name}
+                      </h3>
+                      <span style={{
+                        display: 'inline-block',
+                        padding: '0.375rem 0.75rem',
+                        borderRadius: '6px',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        background: show.status === 'active' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
+                                   show.status === 'coming_soon' ? 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)' :
+                                   'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
+                        color: 'white',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px'
+                      }}>
+                        {show.status === 'coming_soon' ? 'Coming Soon' : show.status}
+                      </span>
+                    </div>
+                    
+                    {/* Action Buttons */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0 }}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleEdit(show);
+                          navigate(`/episodes?show=${show.id}`);
                         }}
                         style={{
-                          padding: '0.375rem 0.625rem',
-                          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          padding: '0.5rem 0.875rem',
+                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                           color: 'white',
                           border: 'none',
                           borderRadius: '6px',
-                          fontSize: '1rem',
+                          fontSize: '0.875rem',
+                          fontWeight: '600',
                           cursor: 'pointer',
                           transition: 'all 0.2s',
-                          lineHeight: 1
+                          whiteSpace: 'nowrap',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '0.375rem'
                         }}
                         onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
                         onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                        title="Edit show"
+                        title="View episodes in this show"
                       >
-                        ✏️
+                        <span>📺</span>
+                        <span>Episodes</span>
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleDelete(show.id);
-                        }}
-                        style={{
-                          padding: '0.375rem 0.625rem',
-                          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '1rem',
-                          cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          lineHeight: 1
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                        title="Delete show"
-                      >
-                        🗑️
-                      </button>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleEdit(show);
+                          }}
+                          style={{
+                            padding: '0.5rem',
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '1.125rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            lineHeight: 1,
+                            width: '36px',
+                            height: '36px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                          title="Edit show"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleDelete(show.id);
+                          }}
+                          style={{
+                            padding: '0.5rem',
+                            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '6px',
+                            fontSize: '1.125rem',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            lineHeight: 1,
+                            width: '36px',
+                            height: '36px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                          title="Delete show"
+                        >
+                          🗑️
+                        </button>
+                      </div>
                     </div>
                   </div>
 
-                  <p style={{
-                    margin: '0 0 0.75rem 0',
-                    fontSize: '0.875rem',
-                    color: '#6b7280',
-                    lineHeight: '1.5'
-                  }}>
-                    {show.description}
-                  </p>
+                  {/* Description */}
+                  {show.description && (
+                    <p style={{
+                      margin: '0 0 1rem 0',
+                      fontSize: '0.9375rem',
+                      color: '#6b7280',
+                      lineHeight: '1.6',
+                      wordBreak: 'break-word',
+                      overflowWrap: 'break-word',
+                      paddingLeft: '3.5rem'
+                    }}>
+                      {show.description}
+                    </p>
+                  )}
 
+                  {/* Metadata */}
                   <div style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                    padding: '0.75rem',
+                    display: 'grid',
+                    gridTemplateColumns: '1fr 1fr',
+                    gap: '0.75rem',
+                    padding: '1rem',
                     background: '#f9fafb',
                     borderRadius: '8px',
-                    marginBottom: '0.5rem'
+                    marginLeft: '3.5rem'
                   }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                      <span style={{ color: '#6b7280', fontWeight: '500' }}>Slug:</span>
-                      <span style={{ color: '#1f2937', fontWeight: '600', fontFamily: 'monospace' }}>{show.slug}</span>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <span style={{ color: '#6b7280', fontWeight: '500', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Slug</span>
+                      <span style={{ color: '#1f2937', fontWeight: '600', fontFamily: 'monospace', fontSize: '0.875rem' }}>{show.slug}</span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                      <span style={{ color: '#6b7280', fontWeight: '500' }}>Created:</span>
-                      <span style={{ color: '#1f2937', fontWeight: '600' }}>
-                        {new Date(show.created_at).toLocaleDateString()}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                      <span style={{ color: '#6b7280', fontWeight: '500', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Created</span>
+                      <span style={{ color: '#1f2937', fontWeight: '600', fontSize: '0.875rem' }}>
+                        {show.createdAt ? new Date(show.createdAt).toLocaleDateString() : 'N/A'}
                       </span>
                     </div>
                   </div>

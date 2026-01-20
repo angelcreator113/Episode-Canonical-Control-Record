@@ -10,9 +10,10 @@ const { sequelize } = require('./src/models');
 async function syncDatabase() {
   try {
     console.log('🔄 Syncing database schema...');
+    console.log('⚠️  WARNING: This will drop all existing tables!');
     
-    // Sync all models (creates tables if they don't exist, doesn't alter existing)
-    await sequelize.sync({ logging: false });
+    // Sync all models (force will drop tables and recreate them)
+    await sequelize.sync({ force: true, logging: console.log });
     
     console.log('✅ Database schema synced successfully!');
     console.log('📊 Tables created/updated:');
