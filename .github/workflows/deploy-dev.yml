@@ -37,6 +37,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Setup test database
+        run: |
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "DROP DATABASE IF EXISTS episode_metadata;"
+          PGPASSWORD=postgres psql -h localhost -U postgres -c "CREATE DATABASE episode_metadata;"
+
       - name: Run database migrations
         run: npm run migrate:up
         env:
