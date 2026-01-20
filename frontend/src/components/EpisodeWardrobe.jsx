@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import WardrobeCalendarView from './WardrobeCalendarView';
 import WardrobeTimelineView from './WardrobeTimelineView';
 import wardrobeEnhancements from '../utils/wardrobeEnhancements';
@@ -212,7 +213,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
           clothingCategory: formData.clothingCategory
         });
         
-        const createResponse = await fetch(import.meta.env.VITE_API_URL || '/api/v1/wardrobe', {
+        const createResponse = await fetch(`${API_URL}/wardrobe`, {
           method: 'POST',
           body: uploadData
         });
