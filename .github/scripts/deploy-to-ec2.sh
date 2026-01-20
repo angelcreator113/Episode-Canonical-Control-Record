@@ -82,7 +82,19 @@ cd ..
 echo "🗄️ Running migrations..."
 source "$NVM_DIR/nvm.sh" 2>/dev/null || true
 nvm use 20 2>/dev/null || true
-npm run migrate:up || echo "Migration failed but continuing..."
+
+# Run migrations and capture output
+echo "Running database migrations..."
+npm run migrate:up 2>&1 | tee migration.log
+MIGRATION_STATUS=$?
+
+if [ $MIGRATION_STATUS -ne 0 ]; then
+  echo "⚠️ Migration failed with status $MIGRATION_STATUS"
+  cat migration.log
+  echo "Continuing anyway..."
+else
+  echo "✅ Migrations completed successfully"
+fi
 
 if ! command -v pm2 &> /dev/null; then
   npm install -g pm2
@@ -109,6 +121,19 @@ fi
 
 echo "📋 Ecosystem config found, contents:"
 head -20 ecosystem.config.js
+
+echo "🧪 Testing database connection..."
+node -e "
+const { Sequelize } = require('sequelize');
+const sequelize = new Sequelize(process.env.DATABASE_URL || 'postgresql://postgres:Ayanna123!!@episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata', {
+  dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
+  logging: false
+});
+sequelize.authenticate()
+  .then(() => { console.log('✅ Database connection successful'); process.exit(0); })
+  .catch(err => { console.error('❌ Database connection failed:', err.message); process.exit(1); });
+" || echo "⚠️ Database connection test failed"
+
 echo "🧪 Testing if Node can load app.js..."
 cd ~/episode-metadata
 node --check src/app.js || echo "❌ Syntax error in app.js!"
