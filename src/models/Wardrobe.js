@@ -30,22 +30,16 @@ module.exports = (sequelize) => {
         allowNull: false,
         comment: 'Category: dress, top, bottom, shoes, accessories, jewelry, perfume',
       },
+      description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
 
       // Image storage
-      s3_key: {
-        type: DataTypes.STRING(500),
-        allowNull: true,
-        comment: 'S3 key for wardrobe item image',
-      },
       s3_url: {
         type: DataTypes.TEXT,
         allowNull: true,
         comment: 'Full S3 URL for wardrobe item image',
-      },
-      s3_key_processed: {
-        type: DataTypes.STRING(500),
-        allowNull: true,
-        comment: 'S3 key for background-removed image',
       },
       s3_url_processed: {
         type: DataTypes.TEXT,
@@ -58,84 +52,28 @@ module.exports = (sequelize) => {
         comment: 'Thumbnail image URL',
       },
 
-      // Detailed metadata
-      brand: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
-      price: {
-        type: DataTypes.DECIMAL(10, 2),
-        allowNull: true,
-      },
-      purchase_link: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-      },
-      website: {
-        type: DataTypes.STRING(500),
-        allowNull: true,
-      },
+      // Metadata
       color: {
         type: DataTypes.STRING(100),
-        allowNull: true,
-      },
-      size: {
-        type: DataTypes.STRING(50),
         allowNull: true,
       },
       season: {
         type: DataTypes.STRING(50),
         allowNull: true,
-        comment: 'spring, summer, fall, winter, all-season',
       },
-      occasion: {
-        type: DataTypes.STRING(100),
+      tags: {
+        type: DataTypes.ARRAY(DataTypes.TEXT),
         allowNull: true,
-        comment: 'casual, formal, party, red-carpet, everyday',
+        defaultValue: [],
       },
-
-      // Outfit tracking
-      outfit_set_id: {
-        type: DataTypes.STRING(100),
-        allowNull: true,
-        comment: 'Groups items into complete outfits',
-      },
-      outfit_set_name: {
-        type: DataTypes.STRING(255),
-        allowNull: true,
-      },
-      scene_description: {
+      notes: {
         type: DataTypes.TEXT,
-        allowNull: true,
-      },
-      outfit_notes: {
-        type: DataTypes.TEXT,
-        allowNull: true,
-        comment: 'Styling notes, care instructions, etc.',
-      },
-
-      // Usage tracking
-      times_worn: {
-        type: DataTypes.INTEGER,
-        allowNull: false,
-        defaultValue: 0,
-      },
-      last_worn_date: {
-        type: DataTypes.DATE,
         allowNull: true,
       },
       is_favorite: {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
-      },
-
-      // Tags (stored as JSON array)
-      tags: {
-        type: DataTypes.JSONB,
-        allowNull: true,
-        defaultValue: [],
-        comment: 'Array of tags for filtering/search',
       },
 
       // Timestamps

@@ -66,18 +66,13 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: DataTypes.NOW,
       },
-      deleted_at: {
-        type: DataTypes.DATE,
-        allowNull: true,
-      },
     },
     {
       tableName: 'episode_assets',
       timestamps: true,
-      paranoid: true,
+      paranoid: false,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
-      deletedAt: 'deleted_at',
       underscored: true,
       indexes: [
         {
