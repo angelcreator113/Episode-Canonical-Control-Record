@@ -235,14 +235,20 @@ echo "🔍 Verifying PM2 environment variables:"
 pm2 env 0 | grep -E "DATABASE_URL|NODE_ENV|PORT|DB_SSL" || echo "⚠️ Env vars not found"
 echo "🧪 Testing if app is listening on port 3002..."
 sleep 2
-netstat -tlnp | grep 3002 || echo "⚠️ Nothing listening on port 3002!"
+ss -tlnp 2>/dev/null | grep 3002 || lsof -i :3002 || echo "⚠️ Nothing listening on port 3002 (but this is normal if curl works)"
 echo "🧪 Testing health endpoint..."
 curl -v http://localhost:3002/health 2>&1 | head -30 || echo "⚠️ Health check failed"
 echo "🧪 Testing root endpoint..."
 curl -I http://localhost:3002/ 2>&1 | head -10 || echo "⚠️ Root endpoint failed"
 echo "🔍 Testing app locally:"
 sleep 3
-curl -s http://localhost:3002/health | jq . || echo "⚠️ Health check failed"
+HEALTH_RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:3002/health)
+HTTP_CODE=$(echo "$HEALTH_RESPONSE" | tail -n1)
+if [[ "$HTTP_CODE" == "200" ]]; then
+  echo "✅ Health check successful (HTTP $HTTP_CODE)"
+else
+  echo "⚠️ Health check returned HTTP $HTTP_CODE"
+fi
 echo "📋 Checking logs for errors:"
 sleep 2
 pm2 logs episode-api --lines 50 --nostream || true

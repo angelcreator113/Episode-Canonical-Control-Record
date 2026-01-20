@@ -1,15 +1,23 @@
 -- Fix episodes table schema to match Sequelize models
 
--- Rename episode_title to title
-ALTER TABLE episodes
-  ALTER COLUMN episode_title DROP NOT NULL;
-  
-ALTER TABLE episodes
-  RENAME COLUMN episode_title TO title;
+-- Rename episode_title to title (only if episode_title exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns 
+             WHERE table_name = 'episodes' AND column_name = 'episode_title') THEN
+    ALTER TABLE episodes ALTER COLUMN episode_title DROP NOT NULL;
+    ALTER TABLE episodes RENAME COLUMN episode_title TO title;
+  END IF;
+END $$;
 
--- Add description column if plot_summary should become description
-ALTER TABLE episodes
-  RENAME COLUMN plot_summary TO description;
+-- Rename plot_summary to description (only if plot_summary exists)
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns 
+             WHERE table_name = 'episodes' AND column_name = 'plot_summary') THEN
+    ALTER TABLE episodes RENAME COLUMN plot_summary TO description;
+  END IF;
+END $$;
 
 -- Add air_date as date type (it's currently timestamp with time zone)
 ALTER TABLE episodes
