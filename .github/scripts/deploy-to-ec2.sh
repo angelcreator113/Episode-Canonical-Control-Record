@@ -149,6 +149,20 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f fix-shows-schema.sql 2>&1 | head -30 || echo "Shows schema fix completed with warnings..."
 
+# Create assets table if it doesn't exist
+echo "Creating assets table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-assets-table.sql 2>&1 | head -30 || echo "Assets table creation completed with warnings..."
+
+# Create compositions table if it doesn't exist
+echo "Creating compositions table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-compositions-table.sql 2>&1 | head -30 || echo "Compositions table creation completed with warnings..."
+
 # Mark existing migrations as complete to prevent recreation attempts
 echo "Marking existing migrations as complete..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
