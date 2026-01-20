@@ -3,7 +3,7 @@
 
 CREATE TABLE IF NOT EXISTS episode_assets (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  episode_id INTEGER NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+  episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
   asset_id UUID NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
   usage_type VARCHAR(50) NOT NULL DEFAULT 'general',
   scene_number INTEGER,

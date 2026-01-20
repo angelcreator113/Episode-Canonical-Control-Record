@@ -23,7 +23,7 @@ CREATE TABLE IF NOT EXISTS wardrobe (
 -- Junction table linking wardrobe items to episodes
 CREATE TABLE IF NOT EXISTS episode_wardrobe (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  episode_id INTEGER NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
+  episode_id UUID NOT NULL REFERENCES episodes(id) ON DELETE CASCADE,
   wardrobe_id UUID NOT NULL REFERENCES wardrobe(id) ON DELETE CASCADE,
   scene VARCHAR(255),
   worn_at TIMESTAMP WITH TIME ZONE,
