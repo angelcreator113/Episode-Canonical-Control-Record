@@ -588,6 +588,7 @@ module.exports = {
             as: 'assets',
             through: {
               attributes: ['usage_type', 'scene_number', 'display_order', 'metadata', 'created_at'],
+              where: { deleted_at: null },
             },
             attributes: [
               'id',
@@ -602,6 +603,7 @@ module.exports = {
               'file_size_bytes',
               'created_at',
             ],
+            where: { deleted_at: null },
           },
         ],
       });
