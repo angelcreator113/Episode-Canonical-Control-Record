@@ -27,6 +27,15 @@ jobs:
 
     steps:
       - uses: actions/checkout@v3
+        with:
+          clean: true
+          
+      - name: Debug - List migration files
+        run: |
+          echo "=== Migrations in repo ==="
+          ls -la migrations/
+          echo "=== Current commit ==="
+          git log -1 --oneline
 
       - name: Setup Node.js
         uses: actions/setup-node@v3
