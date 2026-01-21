@@ -90,10 +90,12 @@ npm ci
 echo "🎨 Building frontend..."
 cd frontend
 echo "Removing old build artifacts and clearing all caches..."
-rm -rf dist node_modules .vite
+rm -rf dist node_modules .vite .env.local .env.production.local .env.development.local
 rm -rf ~/.pm2/logs/* ~/.pm2/.pm2 2>/dev/null || true
 echo "Verifying dist was deleted:"
 ls -la dist/ 2>&1 || echo "dist not found (good)"
+echo "Using .env.production for build (VITE_API_BASE should be empty):"
+cat .env.production || echo "No .env.production found"
 echo "Installing frontend dependencies..."
 npm ci 2>&1 | tail -20
 echo "Running Vite build..."
@@ -176,6 +178,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -U postgres \
   -d episode_metadata \
   -f create-wardrobe-tables.sql 2>&1 | head -30 || echo "Wardrobe tables creation completed with warnings..."
+
+# Verify critical tables exist
+echo "🔍 Verifying junction tables were created..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('episode_assets', 'episode_wardrobe', 'wardrobe') ORDER BY table_name;" 2>&1 || echo "Verification query failed"
 
 # Mark existing migrations as complete to prevent recreation attempts
 echo "Marking existing migrations as complete..."

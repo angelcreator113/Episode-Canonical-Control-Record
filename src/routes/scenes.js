@@ -47,6 +47,14 @@ router.delete(
   asyncHandler(sceneController.deleteScene)
 );
 
+// POST /api/v1/scenes/:id/duplicate - Duplicate scene
+router.post(
+  '/:id/duplicate',
+  validateUUIDParam('id'),
+  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  asyncHandler(sceneController.duplicateScene)
+);
+
 /**
  * Advanced Scene Management Routes
  */
@@ -91,6 +99,43 @@ router.put(
   // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
   // requirePermission('scenes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
   asyncHandler(sceneController.updateSceneAssets)
+);
+
+/**
+ * Scene Asset Management Routes (NEW)
+ */
+
+// GET /api/v1/scenes/:id/assets - Get all assets for a scene
+router.get(
+  '/:id/assets',
+  validateUUIDParam('id'),
+  asyncHandler(sceneController.getSceneAssets)
+);
+
+// POST /api/v1/scenes/:id/assets - Link asset(s) to scene
+router.post(
+  '/:id/assets',
+  validateUUIDParam('id'),
+  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  asyncHandler(sceneController.addSceneAsset)
+);
+
+// DELETE /api/v1/scenes/:id/assets/:assetId - Remove asset from scene
+router.delete(
+  '/:id/assets/:assetId',
+  validateUUIDParam('id'),
+  validateUUIDParam('assetId'),
+  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  asyncHandler(sceneController.removeSceneAsset)
+);
+
+// PATCH /api/v1/scenes/:id/assets/:assetId - Update asset positioning/timing
+router.patch(
+  '/:id/assets/:assetId',
+  validateUUIDParam('id'),
+  validateUUIDParam('assetId'),
+  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  asyncHandler(sceneController.updateSceneAsset)
 );
 
 module.exports = router;

@@ -141,6 +141,22 @@ module.exports = (sequelize) => {
       foreignKey: 'show_id',
       as: 'show',
     });
+
+    // Many-to-many with Assets through episode_assets junction table
+    Episode.belongsToMany(models.Asset, {
+      through: 'episode_assets',
+      foreignKey: 'episode_id',
+      otherKey: 'asset_id',
+      as: 'assets',
+    });
+
+    // Many-to-many with Wardrobe through episode_wardrobe junction table
+    Episode.belongsToMany(models.Wardrobe, {
+      through: 'episode_wardrobe',
+      foreignKey: 'episode_id',
+      otherKey: 'wardrobe_id',
+      as: 'wardrobeItems',
+    });
   };
 
   /**

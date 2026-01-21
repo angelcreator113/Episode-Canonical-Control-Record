@@ -4,6 +4,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { API_URL } from '../config/api';
 import '../styles/TemplateSelector.css';
 
 const TemplateSelector = ({ onTemplateSelected = () => {}, readOnly = false }) => {
@@ -24,7 +25,7 @@ const TemplateSelector = ({ onTemplateSelected = () => {}, readOnly = false }) =
       const token = localStorage.getItem('authToken');
       const headers = token ? { 'Authorization': `Bearer ${token}` } : {};
 
-      const response = await fetch(import.meta.env.VITE_API_URL || '/api/v1/templates', { headers });
+      const response = await fetch(`${API_URL}/templates`, { headers });
       if (!response.ok) throw new Error('Failed to load templates');
 
       const data = await response.json();

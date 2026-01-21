@@ -2,12 +2,12 @@
 const { DataTypes } = require('sequelize');
 
 /**
- * EpisodeAsset Model
- * Junction table linking episodes with their assets
+ * SceneAsset Model
+ * Junction table linking scenes with their assets
  */
 module.exports = (sequelize) => {
-  const EpisodeAsset = sequelize.define(
-    'EpisodeAsset',
+  const SceneAsset = sequelize.define(
+    'SceneAsset',
     {
       id: {
         type: DataTypes.UUID,
@@ -15,11 +15,11 @@ module.exports = (sequelize) => {
         defaultValue: DataTypes.UUIDV4,
         allowNull: false,
       },
-      episode_id: {
-        type: DataTypes.INTEGER,
+      scene_id: {
+        type: DataTypes.UUID,
         allowNull: false,
         references: {
-          model: 'episodes',
+          model: 'scenes',
           key: 'id',
         },
         onDelete: 'CASCADE',
@@ -36,19 +36,40 @@ module.exports = (sequelize) => {
       usage_type: {
         type: DataTypes.STRING(50),
         allowNull: false,
-        defaultValue: 'general',
-        comment: 'Usage type: thumbnail, promo, scene_background, general',
+        defaultValue: 'overlay',
+        comment: 'How asset is used: overlay, background, promo, watermark',
       },
-      scene_number: {
-        type: DataTypes.INTEGER,
+      start_timecode: {
+        type: DataTypes.STRING(20),
         allowNull: true,
-        comment: 'Scene number if asset is used in a specific scene',
+        comment: 'When asset appears in scene (HH:MM:SS:FF)',
       },
-      display_order: {
+      end_timecode: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        comment: 'When asset disappears from scene (HH:MM:SS:FF)',
+      },
+      layer_order: {
         type: DataTypes.INTEGER,
         allowNull: false,
         defaultValue: 0,
-        comment: 'Order for displaying assets in the episode',
+        comment: 'Z-index/stacking order (higher = on top)',
+      },
+      opacity: {
+        type: DataTypes.DECIMAL(3, 2),
+        allowNull: false,
+        defaultValue: 1.00,
+        validate: {
+          min: 0.00,
+          max: 1.00,
+        },
+        comment: 'Asset opacity 0.00-1.00',
+      },
+      position: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: { x: 0, y: 0, width: '100%', height: '100%' },
+        comment: 'Asset position/size: {x, y, width, height}',
       },
       metadata: {
         type: DataTypes.JSONB,
@@ -66,21 +87,26 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: DataTypes.NOW,
       },
+      deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
     },
     {
-      tableName: 'episode_assets',
+      tableName: 'scene_assets',
       timestamps: true,
-      paranoid: false,
+      paranoid: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
+      deletedAt: 'deleted_at',
       underscored: true,
       indexes: [
         {
           unique: true,
-          fields: ['episode_id', 'asset_id', 'usage_type'],
+          fields: ['scene_id', 'asset_id', 'usage_type'],
         },
         {
-          fields: ['episode_id'],
+          fields: ['scene_id'],
         },
         {
           fields: ['asset_id'],
@@ -88,20 +114,12 @@ module.exports = (sequelize) => {
         {
           fields: ['usage_type'],
         },
+        {
+          fields: ['layer_order'],
+        },
       ],
     }
   );
 
-  EpisodeAsset.associate = function (models) {
-    EpisodeAsset.belongsTo(models.Episode, {
-      foreignKey: 'episode_id',
-      as: 'episode',
-    });
-    EpisodeAsset.belongsTo(models.Asset, {
-      foreignKey: 'asset_id',
-      as: 'asset',
-    });
-  };
-
-  return EpisodeAsset;
+  return SceneAsset;
 };

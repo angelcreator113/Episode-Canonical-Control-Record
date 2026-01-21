@@ -5,7 +5,8 @@ const SceneCard = ({
   scene, 
   onEdit, 
   onDelete, 
-  onStatusChange, 
+  onStatusChange,
+  onDuplicate,
   isDragging = false 
 }) => {
   const statusColors = {
@@ -193,6 +194,16 @@ const SceneCard = ({
             title="Edit scene"
           >
             ✏️ Edit
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onDuplicate && onDuplicate(scene.id);
+            }}
+            className="btn-duplicate"
+            title="Duplicate scene"
+          >
+            📋 Duplicate
           </button>
           <button
             onClick={(e) => {

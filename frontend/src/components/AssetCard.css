@@ -304,3 +304,99 @@
     padding: 0 0.75rem 0.75rem;
   }
 }
+
+/* Asset Organization Badges */
+.asset-organization-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+}
+
+.org-badge {
+  display: inline-block;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+}
+
+.org-badge-lala {
+  background: #e9d5ff;
+  color: #7c3aed;
+}
+
+.org-badge-show {
+  background: #fce7f3;
+  color: #db2777;
+}
+
+.org-badge-guest {
+  background: #d1fae5;
+  color: #059669;
+}
+
+.org-badge-episode {
+  background: #fed7aa;
+  color: #ea580c;
+}
+
+.org-badge-wardrobe {
+  background: #ddd6fe;
+  color: #7c3aed;
+}
+
+.org-badge-purpose {
+  background: #bfdbfe;
+  color: #2563eb;
+}
+
+.org-badge-global {
+  background: #ccfbf1;
+  color: #0f766e;
+}
+
+/* Allowed Uses */
+.asset-uses {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid #e5e7eb;
+}
+
+.uses-label {
+  display: block;
+  font-size: 0.75rem;
+  color: #6b7280;
+  margin-bottom: 0.25rem;
+  font-weight: 500;
+}
+
+.uses-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+}
+
+.use-tag {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  background: #f3f4f6;
+  color: #4b5563;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  border: 1px solid #e5e7eb;
+}
+
+.use-tag-more {
+  display: inline-block;
+  padding: 0.125rem 0.375rem;
+  background: #e5e7eb;
+  color: #6b7280;
+  border-radius: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+}

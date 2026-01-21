@@ -21,6 +21,7 @@ import EpisodeCard from '../components/EpisodeCard';
 import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import { PAGINATION } from '../utils/constants';
+import { API_URL } from '../config/api';
 import '../styles/Episodes.css';
 
 const Episodes = () => {
@@ -81,7 +82,7 @@ const Episodes = () => {
   useEffect(() => {
     const fetchShows = async () => {
       try {
-        const response = await fetch(import.meta.env.VITE_API_URL || '/api/v1/shows', {
+        const response = await fetch(`${API_URL}/shows`, {
           headers: {
             'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
           },

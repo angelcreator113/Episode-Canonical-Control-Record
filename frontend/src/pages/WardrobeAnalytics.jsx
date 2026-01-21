@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import wardrobeEnhancements from '../utils/wardrobeEnhancements';
 import './WardrobeAnalytics.css';
 
@@ -38,7 +39,7 @@ const WardrobeAnalytics = () => {
   const loadAnalytics = async () => {
     try {
       setLoading(true);
-      const response = await fetch(import.meta.env.VITE_API_URL || '/api/v1/wardrobe?limit=1000');
+      const response = await fetch(`${API_URL}/wardrobe?limit=1000`);
       
       if (!response.ok) {
         console.error('Failed to load wardrobe:', response.status);

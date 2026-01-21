@@ -56,6 +56,26 @@ const ScenesList = () => {
     }
   };
 
+  const handleDuplicate = async (sceneId) => {
+    try {
+      const response = await fetch(`/api/v1/scenes/${sceneId}/duplicate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to duplicate scene');
+      }
+
+      // Reload scenes to show the duplicate
+      await loadScenes(episodeId);
+      alert('Scene duplicated successfully!');
+    } catch (err) {
+      console.error('Duplicate failed:', err);
+      alert('Failed to duplicate scene');
+    }
+  };
+
   const handleStatusChange = async (sceneId, newStatus) => {
     try {
       await updateStatus(sceneId, newStatus);
@@ -218,6 +238,7 @@ const ScenesList = () => {
                 scene={scene}
                 onEdit={handleEdit}
                 onDelete={handleDelete}
+                onDuplicate={handleDuplicate}
                 onStatusChange={handleStatusChange}
                 isDragging={draggedScene?.id === scene.id}
               />

@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import ReactQuill from 'react-quill';
+import 'react-quill/dist/quill.snow.css';
 import AssetPicker from './AssetPicker';
+import TemplatePickerModal from './TemplatePickerModal';
 import thumbnailService from '../../services/thumbnailService';
 import './SceneFormModal.css';
 
@@ -33,6 +36,7 @@ const SceneFormModal = ({
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [assetPickerMode, setAssetPickerMode] = useState('thumbnail');
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
+  const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
   // Pre-fill form when editing
   useEffect(() => {
@@ -144,6 +148,21 @@ const SceneFormModal = ({
     return Object.keys(newErrors).length === 0;
   };
 
+  const handleApplyTemplate = (template) => {
+    setFormData({
+      ...formData,
+      title: template.name,
+      description: template.description || '',
+      sceneType: template.scene_type || 'main',
+      mood: template.mood || 'neutral',
+      location: template.location || '',
+      durationSeconds: template.duration_seconds || '',
+      // Keep existing values for these fields
+      // episodeId, productionStatus, characters, thumbnailId remain unchanged
+    });
+    setShowTemplatePicker(false);
+  };
+
   const handleSubmit = (e) => {
     e.preventDefault();
     
@@ -171,6 +190,15 @@ const SceneFormModal = ({
       <div className="modal-content" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{scene ? 'Edit Scene' : 'Create New Scene'}</h2>
+          {!scene && (
+            <button 
+              type="button"
+              className="template-btn"
+              onClick={() => setShowTemplatePicker(true)}
+            >
+              📋 Use Template
+            </button>
+          )}
           <button className="close-btn" onClick={onClose}>×</button>
         </div>
 
@@ -364,16 +392,31 @@ const SceneFormModal = ({
             </select>
           </div>
 
-          {/* Script Notes */}
+          {/* Script Notes with Rich Text Editor */}
           <div className="form-group">
             <label htmlFor="scriptNotes">Script Notes</label>
-            <textarea
-              id="scriptNotes"
-              name="scriptNotes"
+            <ReactQuill
+              theme="snow"
               value={formData.scriptNotes}
-              onChange={handleChange}
+              onChange={(value) => setFormData({ ...formData, scriptNotes: value })}
               placeholder="Additional notes, directions, or technical requirements..."
-              rows={3}
+              modules={{
+                toolbar: [
+                  [{ header: [1, 2, 3, false] }],
+                  ['bold', 'italic', 'underline', 'strike'],
+                  [{ list: 'ordered' }, { list: 'bullet' }],
+                  [{ color: [] }, { background: [] }],
+                  ['link'],
+                  ['clean'],
+                ],
+              }}
+              formats={[
+                'header',
+                'bold', 'italic', 'underline', 'strike',
+                'list', 'bullet',
+                'color', 'background',
+                'link',
+              ]}
             />
           </div>
           {/* Thumbnail Selection */}
@@ -452,6 +495,13 @@ const SceneFormModal = ({
         multiSelect={assetPickerMode === 'assets'}
         selectedIds={assetPickerMode === 'assets' ? formData.linkedAssets : []}
         allowUpload={true}
+      />
+
+      {/* Template Picker Modal */}
+      <TemplatePickerModal
+        isOpen={showTemplatePicker}
+        onClose={() => setShowTemplatePicker(false)}
+        onApplyTemplate={handleApplyTemplate}
       />
     </div>
   );

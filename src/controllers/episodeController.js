@@ -593,6 +593,10 @@ module.exports = {
               'id',
               'name',
               'asset_type',
+              'asset_group',
+              'purpose',
+              'allowed_uses',
+              'is_global',
               'approval_status',
               's3_url_raw',
               's3_url_processed',
@@ -600,6 +604,7 @@ module.exports = {
               'width',
               'height',
               'file_size_bytes',
+              'metadata',
               'created_at',
             ],
           },
@@ -613,9 +618,12 @@ module.exports = {
         });
       }
 
+      // Filter out soft-deleted assets
+      const activeAssets = (episode.assets || []).filter(asset => !asset.deleted_at);
+
       res.json({
-        data: episode.assets || [],
-        count: episode.assets?.length || 0,
+        data: activeAssets,
+        count: activeAssets.length,
       });
     } catch (error) {
       console.error('❌ Error getting episode assets:', error);
