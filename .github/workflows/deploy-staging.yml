@@ -194,7 +194,16 @@ jobs:
             npm run migrate:up || true
             
             echo "🔄 Restarting application..."
-            pm2 restart all || pm2 start src/index.js --name episode-api
+            # Verify backend can find the frontend dist
+            if [ -d "frontend/dist" ]; then
+              echo "✅ Frontend dist found at: $(pwd)/frontend/dist"
+              ls -la frontend/dist/ | head -10
+            else
+              echo "❌ Frontend dist not found!"
+              exit 1
+            fi
+            
+            pm2 reload all || pm2 restart all || pm2 start src/index.js --name episode-api
             pm2 save
             
             echo "✅ Deployment complete!"
