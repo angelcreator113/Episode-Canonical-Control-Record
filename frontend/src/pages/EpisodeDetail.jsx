@@ -100,61 +100,61 @@ const EpisodeDetail = () => {
   }
 
   return (
-    <div className="episode-detail-page" style={{ minHeight: '100vh', background: '#f8fafc', paddingBottom: '3rem' }}>
-      {/* Hero Header - Smaller */}
-      <div className="episode-hero" style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '0', padding: '1.5rem 2rem', color: 'white', marginBottom: '2rem' }}>
-        <div className="hero-content" style={{ maxWidth: '1200px', margin: '0 auto' }}>
-          <div className="hero-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <button onClick={() => navigate('/episodes')} className="back-button" style={{ padding: '0.5rem 1rem', background: 'rgba(255,255,255,0.2)', border: '2px solid rgba(255,255,255,0.3)', borderRadius: '8px', color: 'white', cursor: 'pointer', fontWeight: '600', fontSize: '0.95rem', backdropFilter: 'blur(10px)' }}>
+    <div className="episode-detail-page">
+      {/* Hero Header - Responsive */}
+      <div className="episode-hero">
+        <div className="hero-content">
+          <div className="hero-header">
+            <button onClick={() => navigate('/episodes')} className="hero-back-button">
               ← Back
             </button>
             <div className="hero-badge">
-              <span className={`status-badge status-${getStatusColor(episode.status)}`} style={{ background: episode.status === 'draft' ? 'rgba(156, 163, 175, 0.9)' : 'rgba(16, 185, 129, 0.9)', color: 'white', padding: '0.4rem 0.9rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <span className={`status-badge status-${getStatusColor(episode.status)}`}>
                 {episode.status || 'Draft'}
               </span>
             </div>
           </div>
 
-          <div className="hero-title-section" style={{ marginBottom: '1rem' }}>
-            <h1 className="hero-title" style={{ margin: '0 0 0.25rem 0', fontSize: '1.75rem', fontWeight: '800', color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
-            <p className="hero-subtitle" style={{ margin: 0, fontSize: '1rem', color: 'rgba(255,255,255,0.9)', fontWeight: '500' }}>Episode {episode.episode_number || episode.episodeNumber || '?'}</p>
+          <div className="hero-title-section">
+            <h1 className="hero-title">{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
+            <p className="hero-subtitle">Episode {episode.episode_number || episode.episodeNumber || '?'}</p>
           </div>
 
-          <div className="hero-meta" style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
+          <div className="hero-meta">
             {(episode.air_date || episode.airDate) && (
-              <div className="meta-item" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.95)', fontSize: '0.875rem' }}>
+              <div className="meta-item">
                 <span className="meta-icon">📅</span>
                 <span>{formatDate(episode.air_date || episode.airDate)}</span>
               </div>
             )}
             {episode.duration && (
-              <div className="meta-item" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.95)', fontSize: '0.875rem' }}>
+              <div className="meta-item">
                 <span className="meta-icon">⏱️</span>
                 <span>{episode.duration} min</span>
               </div>
             )}
             {(episode.created_at || episode.createdAt) && (
-              <div className="meta-item" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'rgba(255,255,255,0.95)', fontSize: '0.875rem' }}>
+              <div className="meta-item">
                 <span className="meta-icon">📝</span>
                 <span>Created {formatDate(episode.created_at || episode.createdAt)}</span>
               </div>
             )}
           </div>
 
-          <div className="hero-actions" style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div className="hero-actions">
             <button
               onClick={() => navigate(`/episodes/${episode.id}/edit`)}
-              className="btn-primary"
-              style={{ padding: '0.65rem 1.25rem', background: 'white', color: '#667eea', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}
+              className="hero-btn hero-btn-primary"
             >
-              ✏️ Edit Episode
+              <span className="btn-icon">✏️</span>
+              <span className="btn-text">Edit Episode</span>
             </button>
             <button
               onClick={() => navigate(`/composer/${episode.id}`)}
-              className="btn-secondary"
-              style={{ padding: '0.65rem 1.25rem', background: 'rgba(255,255,255,0.2)', color: 'white', border: '2px solid rgba(255,255,255,0.3)', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s', backdropFilter: 'blur(10px)' }}
+              className="hero-btn hero-btn-secondary"
             >
-              🎨 Create Thumbnail
+              <span className="btn-icon">🎨</span>
+              <span className="btn-text">Create Thumbnail</span>
             </button>
             <button
               onClick={() => {
@@ -163,104 +163,104 @@ const EpisodeDetail = () => {
                   console.log('Delete episode:', episode.id);
                 }
               }}
-              className="btn-danger"
-              style={{ padding: '0.65rem 1.25rem', background: 'rgba(239, 68, 68, 0.9)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.9rem', cursor: 'pointer', transition: 'all 0.2s' }}
+              className="hero-btn hero-btn-danger"
             >
-              🗑️ Delete
+              <span className="btn-icon">🗑️</span>
+              <span className="btn-text">Delete</span>
             </button>
           </div>
         </div>
       </div>
 
       {/* Tabs Navigation */}
-      <div className="tabs-container" style={{ maxWidth: '1200px', margin: '0 auto 2rem', padding: '0 2rem' }}>
-        <div className="tabs" style={{ display: 'flex', gap: '0.5rem', background: 'white', padding: '0.5rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
+      <div className="tabs-container">
+        <div className="tabs">
           <button
             className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
             onClick={() => setActiveTab('overview')}
-            style={{ flex: 1, padding: '0.875rem 1.5rem', background: activeTab === 'overview' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent', color: activeTab === 'overview' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
           >
-            📋 Overview
+            <span className="tab-icon">📋</span>
+            <span className="tab-text">Overview</span>
           </button>
           <button
             className={`tab ${activeTab === 'scenes' ? 'active' : ''}`}
             onClick={() => setActiveTab('scenes')}
-            style={{ flex: 1, padding: '0.875rem 1.5rem', background: activeTab === 'scenes' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent', color: activeTab === 'scenes' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
           >
-            🎬 Scenes
+            <span className="tab-icon">🎬</span>
+            <span className="tab-text">Scenes</span>
           </button>
           <button
             className={`tab ${activeTab === 'wardrobe' ? 'active' : ''}`}
             onClick={() => setActiveTab('wardrobe')}
-            style={{ flex: 1, padding: '0.875rem 1.5rem', background: activeTab === 'wardrobe' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent', color: activeTab === 'wardrobe' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
           >
-            👗 Wardrobe
+            <span className="tab-icon">👗</span>
+            <span className="tab-text">Wardrobe</span>
           </button>
           <button
             className={`tab ${activeTab === 'assets' ? 'active' : ''}`}
             onClick={() => setActiveTab('assets')}
-            style={{ flex: 1, padding: '0.875rem 1.5rem', background: activeTab === 'assets' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent', color: activeTab === 'assets' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
           >
-            📸 Assets
+            <span className="tab-icon">📸</span>
+            <span className="tab-text">Assets</span>
           </button>
           <button
             className={`tab ${activeTab === 'metadata' ? 'active' : ''}`}
             onClick={() => setActiveTab('metadata')}
-            style={{ flex: 1, padding: '0.875rem 1.5rem', background: activeTab === 'metadata' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent', color: activeTab === 'metadata' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
           >
-            🔧 Metadata
+            <span className="tab-icon">🔧</span>
+            <span className="tab-text">Metadata</span>
           </button>
           <button
             className={`tab ${activeTab === 'history' ? 'active' : ''}`}
             onClick={() => setActiveTab('history')}
-            style={{ flex: 1, padding: '0.875rem 1.5rem', background: activeTab === 'history' ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' : 'transparent', color: activeTab === 'history' ? 'white' : '#6b7280', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', transition: 'all 0.2s' }}
           >
-            📜 History
+            <span className="tab-icon">📜</span>
+            <span className="tab-text">History</span>
           </button>
         </div>
       </div>
 
       {/* Content Area */}
-      <div className="episode-content" style={{ maxWidth: '1200px', margin: '0 auto', padding: '0 2rem' }}>
+      <div className="episode-content">
         {/* Overview Tab */}
         {activeTab === 'overview' && (
-          <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="tab-content">
             {/* Description Section */}
             {episode.description && (
-              <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                <h2 className="card-title" style={{ margin: '0 0 1rem 0', fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>📝 Description</h2>
-                <p className="description-text" style={{ margin: 0, fontSize: '1rem', lineHeight: '1.7', color: '#4b5563' }}>{episode.description}</p>
+              <div className="content-card">
+                <h2 className="card-title">📝 Description</h2>
+                <p className="description-text">{episode.description}</p>
               </div>
             )}
 
             {/* Quick Stats */}
-            <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <h2 className="card-title" style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>📊 Quick Stats</h2>
-              <div className="stats-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.5rem' }}>
-                <div className="stat-item" style={{ padding: '1.25rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <span className="stat-label" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Status</span>
-                  <span className={`stat-value status-${getStatusColor(episode.status)}`} style={{ display: 'block', fontSize: '1.25rem', fontWeight: '700', color: episode.status === 'draft' ? '#9ca3af' : '#10b981', textTransform: 'capitalize' }}>
+            <div className="content-card">
+              <h2 className="card-title">📊 Quick Stats</h2>
+              <div className="stats-grid">
+                <div className="stat-item">
+                  <span className="stat-label">Status</span>
+                  <span className={`stat-value stat-${episode.status?.toLowerCase() || 'draft'}`}>
                     {episode.status || 'Draft'}
                   </span>
                 </div>
-                <div className="stat-item" style={{ padding: '1.25rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <span className="stat-label" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Episode Number</span>
-                  <span className="stat-value" style={{ display: 'block', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>
+                <div className="stat-item">
+                  <span className="stat-label">Episode Number</span>
+                  <span className="stat-value">
                     {episode.episode_number || episode.episodeNumber || 'N/A'}
                   </span>
                 </div>
                 {(episode.air_date || episode.airDate) && (
-                  <div className="stat-item" style={{ padding: '1.25rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                    <span className="stat-label" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Air Date</span>
-                    <span className="stat-value" style={{ display: 'block', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>
+                  <div className="stat-item">
+                    <span className="stat-label">Air Date</span>
+                    <span className="stat-value">
                       {formatDate(episode.air_date || episode.airDate)}
                     </span>
                   </div>
                 )}
                 {episode.duration && (
-                  <div className="stat-item" style={{ padding: '1.25rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                    <span className="stat-label" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Duration</span>
-                    <span className="stat-value" style={{ display: 'block', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>{episode.duration} minutes</span>
+                  <div className="stat-item">
+                    <span className="stat-label">Duration</span>
+                    <span className="stat-value">{episode.duration} minutes</span>
                   </div>
                 )}
               </div>
@@ -268,11 +268,11 @@ const EpisodeDetail = () => {
 
             {/* Categories */}
             {episode.categories && Array.isArray(episode.categories) && episode.categories.length > 0 && (
-              <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-                <h2 className="card-title" style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>🏷️ Categories</h2>
-                <div className="categories-list" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
+              <div className="content-card">
+                <h2 className="card-title">🏷️ Categories</h2>
+                <div className="categories-list">
                   {episode.categories.map((cat, idx) => (
-                    <span key={idx} className="category-tag" style={{ padding: '0.5rem 1rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', borderRadius: '20px', fontSize: '0.875rem', fontWeight: '600' }}>
+                    <span key={idx} className="category-tag">
                       {cat}
                     </span>
                   ))}
@@ -281,25 +281,25 @@ const EpisodeDetail = () => {
             )}
 
             {/* System Info */}
-            <div className="content-card system-info" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <h2 className="card-title" style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>🔐 System Information</h2>
-              <div className="info-grid" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                <div className="info-item" style={{ padding: '1rem', background: '#f9fafb', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span className="info-label" style={{ fontSize: '0.875rem', fontWeight: '600', color: '#6b7280' }}>ID</span>
-                  <span className="info-value monospace" style={{ fontSize: '0.875rem', color: '#1f2937', fontFamily: 'monospace', wordBreak: 'break-all' }}>{episode.id}</span>
+            <div className="content-card system-info">
+              <h2 className="card-title">🔐 System Information</h2>
+              <div className="info-grid">
+                <div className="info-item">
+                  <span className="info-label">ID</span>
+                  <span className="info-value monospace">{episode.id}</span>
                 </div>
                 {(episode.created_at || episode.createdAt) && (
-                  <div className="info-item" style={{ padding: '1rem', background: '#f9fafb', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="info-label" style={{ fontSize: '0.875rem', fontWeight: '600', color: '#6b7280' }}>Created</span>
-                    <span className="info-value" style={{ fontSize: '0.875rem', color: '#1f2937' }}>
+                  <div className="info-item">
+                    <span className="info-label">Created</span>
+                    <span className="info-value">
                       {formatDateTime(episode.created_at || episode.createdAt)}
                     </span>
                   </div>
                 )}
                 {(episode.updated_at || episode.updatedAt) && (
-                  <div className="info-item" style={{ padding: '1rem', background: '#f9fafb', borderRadius: '6px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span className="info-label" style={{ fontSize: '0.875rem', fontWeight: '600', color: '#6b7280' }}>Last Updated</span>
-                    <span className="info-value" style={{ fontSize: '0.875rem', color: '#1f2937' }}>
+                  <div className="info-item">
+                    <span className="info-label">Last Updated</span>
+                    <span className="info-value">
                       {formatDateTime(episode.updated_at || episode.updatedAt)}
                     </span>
                   </div>
@@ -311,40 +311,38 @@ const EpisodeDetail = () => {
 
         {/* Scenes Tab */}
         {activeTab === 'scenes' && (
-          <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2 className="card-title" style={{ margin: 0, fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>🎬 Episode Scenes</h2>
+          <div className="tab-content">
+            <div className="content-card">
+              <div className="card-header">
+                <h2 className="card-title">🎬 Episode Scenes</h2>
                 <button 
                   onClick={() => navigate(`/episodes/${episodeId}/scenes`)}
-                  style={{ padding: '0.75rem 1.5rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.2s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                  className="btn-action btn-primary"
                 >
-                  ➕ Add Scene
+                  <span className="btn-icon">➕</span>
+                  <span className="btn-text">Add Scene</span>
                 </button>
               </div>
               
-              <div className="scenes-placeholder" style={{ padding: '3rem', textAlign: 'center', background: '#f9fafb', borderRadius: '8px', border: '2px dashed #e5e7eb' }}>
-                <span style={{ fontSize: '4rem', display: 'block', marginBottom: '1rem' }}>🎥</span>
-                <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>No Scenes Yet</h3>
-                <p style={{ margin: '0 0 1.5rem 0', color: '#6b7280', fontSize: '1rem' }}>Break down your episode into scenes for better organization</p>
+              <div className="empty-placeholder">
+                <span className="placeholder-icon">🎥</span>
+                <h3 className="placeholder-title">No Scenes Yet</h3>
+                <p className="placeholder-text">Break down your episode into scenes for better organization</p>
                 <button 
                   onClick={() => navigate(`/episodes/${episodeId}/scenes`)}
-                  style={{ padding: '0.875rem 1.75rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '1rem', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)', transition: 'all 0.2s' }}
-                  onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
-                  onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+                  className="btn-action btn-primary btn-large"
                 >
-                  🎬 Create First Scene
+                  <span className="btn-icon">🎬</span>
+                  <span className="btn-text">Create First Scene</span>
                 </button>
               </div>
 
               {/* Scene Features Info */}
-              <div style={{ marginTop: '2rem', padding: '1.5rem', background: 'linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%)', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-                <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: '700', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <div className="info-box info-box-blue">
+                <h4 className="info-box-title">
                   ✨ Scene Features
                 </h4>
-                <ul style={{ margin: 0, paddingLeft: '1.5rem', color: '#1e3a8a', lineHeight: '1.8' }}>
+                <ul className="info-box-list">
                   <li><strong>Timestamps:</strong> Mark start and end times for each scene</li>
                   <li><strong>Descriptions:</strong> Add notes and details for each scene</li>
                   <li><strong>Asset Linking:</strong> Connect specific assets to scenes</li>
@@ -357,7 +355,7 @@ const EpisodeDetail = () => {
 
         {/* Wardrobe Tab */}
         {activeTab === 'wardrobe' && (
-          <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="tab-content tab-content-full">
             <EpisodeWardrobe
               episodeId={episode.id}
               episodeNumber={episode.episode_number}
@@ -372,62 +370,63 @@ const EpisodeDetail = () => {
 
         {/* Metadata Tab */}
         {activeTab === 'metadata' && (
-          <div className="tab-content" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+          <div className="tab-content">
             {/* Episode Metadata Card */}
-            <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-                <h2 className="card-title" style={{ margin: 0, fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>📊 Episode Metadata</h2>
-                <button style={{ padding: '0.75rem 1.5rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', color: 'white', border: 'none', borderRadius: '8px', fontWeight: '600', fontSize: '0.95rem', cursor: 'pointer', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' }}>
-                  ✏️ Edit Metadata
+            <div className="content-card">
+              <div className="card-header">
+                <h2 className="card-title">📊 Episode Metadata</h2>
+                <button className="btn-action btn-primary">
+                  <span className="btn-icon">✏️</span>
+                  <span className="btn-text">Edit Metadata</span>
                 </button>
               </div>
 
               {/* Metadata Fields Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '1.5rem' }}>
-                <div style={{ padding: '1.5rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Episode Number</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>{episode.episode_number || 'N/A'}</div>
+              <div className="metadata-grid">
+                <div className="metadata-item">
+                  <div className="metadata-label">Episode Number</div>
+                  <div className="metadata-value">{episode.episode_number || 'N/A'}</div>
                 </div>
-                <div style={{ padding: '1.5rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Status</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: '700', color: episode.status === 'published' ? '#10b981' : '#f59e0b' }}>{episode.status || 'draft'}</div>
+                <div className="metadata-item">
+                  <div className="metadata-label">Status</div>
+                  <div className="metadata-value" style={{ color: episode.status === 'published' ? '#10b981' : '#f59e0b' }}>{episode.status || 'draft'}</div>
                 </div>
-                <div style={{ padding: '1.5rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Air Date</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>{episode.air_date ? new Date(episode.air_date).toLocaleDateString() : 'Not set'}</div>
+                <div className="metadata-item">
+                  <div className="metadata-label">Air Date</div>
+                  <div className="metadata-value">{episode.air_date ? new Date(episode.air_date).toLocaleDateString() : 'Not set'}</div>
                 </div>
-                <div style={{ padding: '1.5rem', background: '#f9fafb', borderRadius: '8px', border: '1px solid #e5e7eb' }}>
-                  <div style={{ fontSize: '0.75rem', fontWeight: '600', color: '#6b7280', textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '0.5rem' }}>Duration</div>
-                  <div style={{ fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>{episode.duration ? `${episode.duration} min` : 'Not set'}</div>
+                <div className="metadata-item">
+                  <div className="metadata-label">Duration</div>
+                  <div className="metadata-value">{episode.duration ? `${episode.duration} min` : 'Not set'}</div>
                 </div>
               </div>
             </div>
 
             {/* Raw JSON Metadata Card */}
-            <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <h2 className="card-title" style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>🔧 Raw JSON Metadata</h2>
+            <div className="content-card">
+              <h2 className="card-title">🔧 Raw JSON Metadata</h2>
               {episode.metadata && Object.keys(episode.metadata).length > 0 ? (
-                <div style={{ background: '#1f2937', padding: '1.5rem', borderRadius: '8px', overflow: 'auto', maxHeight: '400px' }}>
-                  <pre style={{ margin: 0, color: '#a5f3fc', fontFamily: 'monospace', fontSize: '0.875rem', lineHeight: '1.6' }}>
+                <div className="json-container">
+                  <pre className="json-pre">
                     {JSON.stringify(episode.metadata, null, 2)}
                   </pre>
                 </div>
               ) : (
-                <div style={{ padding: '3rem', textAlign: 'center', background: '#f9fafb', borderRadius: '8px', border: '2px dashed #e5e7eb' }}>
-                  <span style={{ fontSize: '3rem', display: 'block', marginBottom: '1rem' }}>📋</span>
-                  <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>No Additional Metadata</h3>
-                  <p style={{ margin: 0, color: '#6b7280', fontSize: '1rem' }}>Custom metadata fields will appear here</p>
+                <div className="empty-placeholder">
+                  <span className="placeholder-icon">📋</span>
+                  <h3 className="placeholder-title">No Additional Metadata</h3>
+                  <p className="placeholder-text">Custom metadata fields will appear here</p>
                 </div>
               )}
             </div>
 
             {/* Metadata Features Info */}
-            <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}>
-              <div style={{ padding: '1.5rem', background: 'linear-gradient(135deg, #eff6ff 0%, #f0f9ff 100%)', borderRadius: '8px', border: '1px solid #bfdbfe' }}>
-                <h4 style={{ margin: '0 0 1rem 0', fontSize: '1.1rem', fontWeight: '700', color: '#1e40af', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div className="content-card">
+              <div className="info-box info-box-blue">
+                <h4 className="info-box-title">
                   ✨ Metadata Capabilities
                 </h4>
-                <ul style={{ margin: 0, paddingLeft: '1.5rem', color: '#1e3a8a', lineHeight: '1.8' }}>
+                <ul className="info-box-list">
                   <li><strong>Custom Fields:</strong> Add any custom data fields you need</li>
                   <li><strong>Structured Data:</strong> Store complex nested objects and arrays</li>
                   <li><strong>API Integration:</strong> Import metadata from external sources</li>

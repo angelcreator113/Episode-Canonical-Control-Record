@@ -23,10 +23,12 @@
 
 /* Base Container */
 .home-page-modern {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 1.5rem;
   background: var(--dash-bg);
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .home-page-modern.loading {
@@ -60,8 +62,8 @@
 .dashboard-hero {
   background: var(--dash-surface);
   border-radius: var(--dash-radius-lg);
-  padding: 2rem;
-  margin-bottom: 2rem;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
   box-shadow: var(--dash-shadow);
   border: 1px solid var(--dash-border);
 }
@@ -70,9 +72,9 @@
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 2rem;
-  margin-bottom: 2rem;
-  padding-bottom: 2rem;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+  padding-bottom: 1.5rem;
   border-bottom: 1px solid var(--dash-border);
 }
 
@@ -90,7 +92,7 @@
 }
 
 .hero-title {
-  font-size: 2.25rem;
+  font-size: 1.75rem;
   font-weight: 800;
   color: var(--dash-text);
   margin: 0 0 0.75rem 0;
@@ -118,10 +120,10 @@
 
 /* Buttons */
 .btn {
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 1rem;
   border-radius: var(--dash-radius);
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.875rem;
   text-decoration: none;
   display: inline-flex;
   align-items: center;
@@ -586,16 +588,16 @@
   }
 
   .dashboard-hero {
-    padding: 1.5rem;
+    padding: 1.25rem;
   }
 
   .dashboard-hero-inner {
     flex-direction: column;
-    gap: 1.5rem;
+    gap: 1.25rem;
   }
 
   .hero-title {
-    font-size: 1.75rem;
+    font-size: 1.5rem;
   }
 
   .hero-actions {
@@ -641,11 +643,11 @@
   }
 
   .hero-title {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
 
   .hero-subtitle {
-    font-size: 0.9rem;
+    font-size: 0.875rem;
   }
 
   .stats-strip {

@@ -6,9 +6,11 @@
 }
 
 .asset-manager-container {
-  max-width: 1600px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: 1.25rem;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 /* ==================== HEADER ==================== */
@@ -23,7 +25,7 @@
 
 .asset-manager-header h1 {
   margin: 0 0 0.5rem 0;
-  font-size: 2rem;
+  font-size: 1.75rem;
   font-weight: 700;
   color: #1f2937;
 }

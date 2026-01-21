@@ -9,32 +9,32 @@
 .outfit-header {
   background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
   color: white;
-  padding: 2rem 1.5rem;
+  padding: 1.5rem 1.25rem;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 }
 
 .header-content {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 0 auto;
 }
 
 .outfit-header h1 {
   margin: 0.5rem 0;
-  font-size: 2rem;
+  font-size: 1.5rem;
   font-weight: 700;
 }
 
 .outfit-header p {
   margin: 0.5rem 0 0 0;
   opacity: 0.9;
-  font-size: 1.1rem;
+  font-size: 0.95rem;
 }
 
 /* Controls */
 .outfit-controls {
-  max-width: 1400px;
+  max-width: 1200px;
   margin: 2rem auto;
-  padding: 0 1.5rem;
+  padding: 0 1.25rem;
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -46,9 +46,9 @@
   background: white;
   color: #f5576c;
   border: none;
-  padding: 0.75rem 1.5rem;
+  padding: 0.5rem 1rem;
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.875rem;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
@@ -69,10 +69,10 @@
 
 .search-input,
 .filter-select {
-  padding: 0.75rem 1rem;
+  padding: 0.5rem 0.875rem;
   border: 2px solid rgba(255, 255, 255, 0.5);
   border-radius: 8px;
-  font-size: 1rem;
+  font-size: 0.875rem;
   background: white;
   transition: border-color 0.3s ease;
 }

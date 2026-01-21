@@ -16,7 +16,7 @@
 .episodes-header-modern {
   position: sticky;
   top: 0;
-  z-index: 110;
+  z-index: 90;
   background: #ffffff;
   border-bottom: 1px solid #e5e7eb;
   min-height: var(--episodes-header-height);
@@ -149,8 +149,29 @@
   background: white;
   border-right: 1px solid #e5e7eb;
   overflow-y: auto;
+  overflow-x: hidden;
   flex-shrink: 0;
   transition: transform 0.25s ease;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f9fafb;
+}
+
+.episodes-sidebar-modern::-webkit-scrollbar {
+  width: 6px;
+}
+
+.episodes-sidebar-modern::-webkit-scrollbar-track {
+  background: #f9fafb;
+}
+
+.episodes-sidebar-modern::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 3px;
+}
+
+.episodes-sidebar-modern::-webkit-scrollbar-thumb:hover {
+  background: #9ca3af;
 }
 
 .sidebar-section {
@@ -391,6 +412,10 @@
   flex: 1;
   overflow-y: auto;
   padding: 1.5rem;
+  max-width: 1400px;
+  margin: 0 auto;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 /* Selection Bar */
@@ -532,7 +557,7 @@
   right: 0;
   bottom: 0;
   background: rgba(17, 24, 39, 0.45);
-  z-index: 105;
+  z-index: 88;
 }
 
 .sidebar-overlay.open {
@@ -562,11 +587,16 @@
    ============================================ */
 @media (max-width: 1024px) {
   .episodes-header-modern {
-    gap: 0.5rem;
+    gap: 0.75rem;
+    padding: 0.875rem 1rem;
+  }
+
+  .header-left h1 {
+    font-size: 1.25rem;
   }
 
   .header-actions {
-    gap: 0.5rem;
+    gap: 0.625rem;
   }
 
   .episodes-sidebar-modern {
@@ -574,10 +604,12 @@
     left: 0;
     top: var(--episodes-header-height);
     height: calc(100vh - var(--episodes-header-height));
-    z-index: 109;
+    z-index: 89;
     transform: translateX(-105%);
     box-shadow: 12px 0 30px rgba(0, 0, 0, 0.18);
     border-right: 1px solid #e5e7eb;
+    width: 280px;
+    max-width: 85vw;
   }
 
   .episodes-sidebar-modern.open {
@@ -586,10 +618,18 @@
 
   .episodes-content-modern {
     width: 100%;
+    padding: 1.25rem;
   }
 
   .episodes-grid {
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1.25rem;
+  }
+
+  .filter-group select,
+  .btn-sort {
+    font-size: 0.9rem;
+    padding: 0.65rem;
   }
 }
 
@@ -598,11 +638,16 @@
    ============================================ */
 @media (max-width: 640px) {
   .episodes-header-modern {
-    padding: 0.75rem;
+    padding: 0.875rem;
+  }
+
+  .header-left h1 {
+    font-size: 1.15rem;
   }
 
   .episode-count {
-    display: none;
+    font-size: 0.8rem;
+    padding: 0.2rem 0.6rem;
   }
 
   .btn-create span {
@@ -624,8 +669,17 @@
     box-shadow: 0 8px 22px rgba(59, 130, 246, 0.45) !important;
   }
 
+  .btn-create:active {
+    transform: scale(0.97) !important;
+  }
+
   .view-toggle {
     display: none;
+  }
+
+  .episodes-sidebar-modern {
+    width: 90vw;
+    max-width: 320px;
   }
 
   .episodes-content-modern {
@@ -637,13 +691,26 @@
     gap: 1rem;
   }
 
+  .episode-card {
+    max-width: 100%;
+  }
+
   .pagination-modern {
     flex-direction: column;
-    gap: 0.75rem;
+    gap: 0.875rem;
+    align-items: stretch;
   }
 
   .pagination-btn {
     width: 100%;
+    justify-content: center;
+    min-height: 48px;
+  }
+
+  .page-indicator {
+    order: -1;
+    text-align: center;
+    font-size: 0.9rem;
   }
 }
 
@@ -770,11 +837,14 @@
   .filter-select,
   .filter-group .btn {
     width: 100%;
+    padding: 0.75rem;
+    min-height: 48px;
   }
 
   .batch-actions {
     flex-direction: column;
     align-items: stretch;
+    gap: 0.875rem;
   }
 
   .batch-info {
@@ -783,11 +853,13 @@
 
   .batch-controls {
     justify-content: stretch;
+    flex-wrap: wrap;
   }
 
   .batch-controls .btn {
     flex: 1;
-    min-width: 100px;
+    min-width: 120px;
+    min-height: 48px;
   }
 }
 
@@ -896,15 +968,76 @@
 
   .pagination-controls {
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.75rem;
   }
 
   .pagination-options {
     gap: 1rem;
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .pagination-item {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .pagination-select,
+  .pagination-input {
+    min-height: 48px;
   }
 
   .pagination-controls .btn {
     width: 100%;
+    min-height: 48px;
+  }
+}
+
+/* Add extra small screen optimizations */
+@media (max-width: 480px) {
+  .episodes-header-modern {
+    padding: 0.75rem;
+  }
+
+  .header-left h1 {
+    font-size: 1rem;
+  }
+
+  .mobile-menu-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .episodes-sidebar-modern {
+    width: 100vw;
+    max-width: 100vw;
+  }
+
+  .sidebar-section {
+    padding: 0.875rem;
+  }
+
+  .filter-group label {
+    font-size: 0.8rem;
+  }
+
+  .filter-group select,
+  .btn-sort,
+  .btn-reset {
+    font-size: 0.875rem;
+    padding: 0.65rem;
+  }
+
+  .episode-stat .value {
+    font-size: 1.4rem;
+  }
+
+  .episode-stat .label {
+    font-size: 0.65rem;
+  }
+
+  .episodes-content-modern {
+    padding: 0.875rem;
   }
 }
 

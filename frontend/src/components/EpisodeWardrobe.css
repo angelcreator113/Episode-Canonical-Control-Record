@@ -38,9 +38,9 @@
 .episode-wardrobe {
   background: var(--ew-bg);
   border-radius: var(--ew-radius-lg);
-  padding: 1.25rem;
-  border: 1px solid var(--ew-border);
-  box-shadow: var(--ew-shadow);
+  padding: 0;
+  border: none;
+  box-shadow: none;
 }
 
 /* -------------------------
@@ -49,19 +49,51 @@
 .wardrobe-header {
   display: flex;
   justify-content: space-between;
-  align-items: flex-start;
+  align-items: center;
   gap: 1rem;
   margin-bottom: 1.25rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--ew-border);
+  padding: 1.25rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
 }
 
+.header-title h2,
 .wardrobe-header h2 {
   margin: 0;
-  font-size: 1.35rem;
-  font-weight: 800;
+  font-size: 1.25rem;
+  font-weight: 700;
   color: var(--ew-text);
   letter-spacing: -0.02em;
+}
+
+.header-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* -------------------------
+   Stats Row (separate from header)
+-------------------------- */
+.wardrobe-stats-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.25rem;
+  padding: 1.25rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+.wardrobe-stats-row .stat {
+  text-align: center;
+  padding: 0.75rem;
+  background: #f9fafb;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
 }
 
 /* Buttons (primary / secondary) */
@@ -88,35 +120,43 @@
 
 .btn-add-wardrobe,
 .btn-view-gallery {
-  padding: 0.45rem 0.85rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 1.25rem;
   color: white;
   border: none;
-  border-radius: 10px;
+  border-radius: 8px;
   font-weight: 600;
-  font-size: 0.8rem;
+  font-size: 0.875rem;
   cursor: pointer;
-  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
-  box-shadow: 0 4px 12px rgba(17,24,39,0.1);
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-add-wardrobe .btn-icon,
+.btn-view-gallery .btn-icon {
+  font-size: 1rem;
 }
 
 .btn-add-wardrobe {
   background: linear-gradient(135deg, var(--ew-primary) 0%, var(--ew-primary-2) 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .btn-view-gallery {
   background: linear-gradient(135deg, var(--ew-success) 0%, var(--ew-success-2) 100%);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
 .btn-add-wardrobe:hover,
 .btn-view-gallery:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.02);
-  box-shadow: 0 10px 20px rgba(17,24,39,0.14);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
 }
 
-.btn-add-wardrobe:active,
-.btn-view-gallery:active {
-  transform: translateY(0);
+.btn-export {
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
 }
 
 /* -------------------------
@@ -165,7 +205,7 @@
 .search-filter-bar {
   background: var(--ew-surface-2);
   border-radius: var(--ew-radius);
-  padding: 1rem;
+  padding: 0.9rem;
   margin-bottom: 1.25rem;
   display: flex;
   flex-direction: column;
@@ -190,10 +230,10 @@
 
 .search-input {
   width: 100%;
-  padding: 0.7rem 2.5rem 0.7rem 2.5rem;
+  padding: 0.6rem 2.5rem 0.6rem 2.5rem;
   border: 1px solid var(--ew-border);
   border-radius: 12px;
-  font-size: 0.95rem;
+  font-size: 0.9rem;
   background: white;
   transition: box-shadow 0.12s ease, border-color 0.12s ease;
 }
@@ -236,16 +276,53 @@
   align-items: center;
 }
 
+.filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 140px;
+}
+
+.filter-label {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #1f2937;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.25rem;
+}
+
 .filter-select {
-  padding: 0.55rem 0.75rem;
-  border: 1px solid var(--ew-border);
-  border-radius: 12px;
-  font-size: 0.9rem;
+  padding: 0.75rem 0.875rem;
+  border: 2px solid #d1d5db;
+  border-radius: 10px;
+  font-size: 1rem;
   background: white;
   cursor: pointer;
-  transition: box-shadow 0.12s ease, border-color 0.12s ease;
+  transition: all 0.2s ease;
   font-weight: 600;
-  color: var(--ew-text);
+  color: #111827;
+  min-height: 48px;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23374151' d='M6 9L1 4h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.875rem center;
+  padding-right: 2.5rem;
+}
+
+.filter-select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.filter-select option {
+  color: #111827;
+  background: white;
+  padding: 0.75rem;
+  font-weight: 600;
+  font-size: 1rem;
 }
 
 .filter-select:hover {
@@ -1739,41 +1816,124 @@
 -------------------------- */
 @media (max-width: 768px) {
   .episode-wardrobe {
-    padding: 1rem;
-    border-radius: 14px;
+    padding: 0;
   }
 
   .wardrobe-header {
     flex-direction: column;
     align-items: flex-start;
+    padding: 0.75rem;
+    gap: 0.75rem;
   }
 
+  .header-title h2,
   .wardrobe-header h2 {
-    font-size: 1.25rem;
+    font-size: 1.15rem;
+    margin: 0;
   }
 
-  .wardrobe-stats {
-    width: 100%;
-    gap: 0.6rem;
+  .header-actions {
+    width: 100% !important;
+    display: flex !important;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+    gap: 0.375rem;
+    overflow-x: auto !important;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 0.15rem;
   }
 
-  .stat {
-    min-width: 105px;
-    flex: 1;
+  .header-actions::-webkit-scrollbar {
+    display: none;
+  }
+
+  .btn-add-wardrobe,
+  .btn-view-gallery,
+  .btn-export {
+    flex: 0 0 auto !important;
+    min-width: fit-content;
+    padding: 0.5rem 0.75rem;
+    font-size: 0.8rem;
+    min-height: 40px;
+    white-space: nowrap;
+  }
+
+  .btn-add-wardrobe .btn-text,
+  .btn-view-gallery .btn-text {
+    display: inline !important;
+  }
+
+  .wardrobe-stats-row {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
+    padding: 0.75rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .wardrobe-stats-row .stat {
+    padding: 0.5rem;
+  }
+
+  .stat-value {
+    font-size: 1.1rem;
+  }
+
+  .stat-label {
+    font-size: 0.7rem;
   }
 
   .search-filter-bar {
-    padding: 0.9rem;
+    padding: 0.75rem;
+    margin-bottom: 1rem;
+    margin-left: 0;
+    margin-right: 0;
+    gap: 1rem;
+  }
+
+  .search-box {
+    width: 100%;
+  }
+
+  .search-input {
+    width: 100%;
+    max-width: none;
   }
 
   .filter-controls {
     flex-direction: column;
     width: 100%;
     align-items: stretch;
+    gap: 1rem;
+  }
+
+  .filter-group {
+    width: 100%;
+    min-width: unset;
+  }
+
+  .filter-label {
+    font-size: 0.8rem;
+    font-weight: 800;
+    color: #1f2937;
+    margin-bottom: 0.35rem;
   }
 
   .filter-select {
     width: 100%;
+    font-size: 1rem;
+    padding: 0.875rem 1rem;
+    padding-right: 2.5rem;
+    min-height: 52px;
+    border-width: 2px;
+    border-color: #d1d5db;
+    font-weight: 700;
+  }
+
+  .price-filter {
+    width: 100%;
+    min-width: unset;
   }
 
   .view-mode-toggle {
@@ -1784,11 +1944,24 @@
   .view-btn {
     flex: 1;
     text-align: center;
+    padding: 0.65rem;
+    min-height: 44px;
+  }
+
+  .character-tabs {
+    padding: 0.5rem;
+    gap: 0.5rem;
+  }
+
+  .character-tab {
+    padding: 0.65rem 0.95rem;
+    font-size: 0.875rem;
+    min-height: 44px;
   }
 
   .wardrobe-items-grid {
-    grid-template-columns: 1fr;
-    gap: 0.85rem;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 1rem;
   }
 
   .calendar-grid {
@@ -1817,18 +1990,22 @@
   .modal-content {
     width: 96%;
     max-height: 92vh;
+    border-radius: 12px;
   }
 
   .form-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
   }
 
   .modal-footer {
     flex-direction: column;
+    gap: 0.75rem;
   }
 
   .modal-footer button {
     width: 100%;
+    min-height: 48px;
   }
 
   /* Touch friendly */
@@ -1839,30 +2016,222 @@
   .btn-remove-bg,
   .view-btn,
   .character-tab {
-    min-height: 44px;
     touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  .item-card:active {
+    transform: scale(0.98);
+  }
+}
+
+@media (max-width: 640px) {
+  .wardrobe-header {
+    padding: 0.625rem;
+  }
+
+  .header-title h2 {
+    font-size: 1.05rem;
+  }
+
+  .header-actions {
+    gap: 0.375rem;
+    flex-direction: row !important;
+    flex-wrap: nowrap !important;
+  }
+
+  .btn-add-wardrobe .btn-text,
+  .btn-view-gallery .btn-text {
+    display: none;
+  }
+
+  .btn-add-wardrobe .btn-icon,
+  .btn-view-gallery .btn-icon {
+    font-size: 1.1rem;
+  }
+
+  .btn-add-wardrobe,
+  .btn-view-gallery {
+    padding: 0.5rem;
+    min-width: 40px;
+    min-height: 40px;
+    flex: 1 1 auto;
+  }
+
+  .wardrobe-stats-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0.625rem;
+  }
+
+  .wardrobe-stats-row .stat {
+    padding: 0.5rem;
+  }
+
+  .stat-value {
+    font-size: 1rem;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+  }
+
+  .search-filter-bar {
+    padding: 0.875rem;
+  }
+
+  .filter-controls {
+    gap: 0.875rem;
+  }
+
+  .filter-label {
+    font-size: 0.75rem;
+    font-weight: 800;
+    margin-bottom: 0.3rem;
+    color: #1f2937;
+  }
+
+  .filter-select {
+    font-size: 0.95rem;
+    padding: 0.875rem 1rem;
+    padding-right: 2.5rem;
+    min-height: 52px;
+    border-width: 2px;
+    font-weight: 700;
+    border-color: #d1d5db;
+  }
+
+  .btn-add-wardrobe,
+  .btn-view-gallery {
+    padding: 0.5rem;
+    min-width: 40px;
+    min-height: 40px;
+    flex: 1 1 auto;
+  }
+
+  .wardrobe-stats-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    padding: 0.625rem;
+  }
+
+  .wardrobe-stats-row .stat {
+    padding: 0.5rem;
+  }
+
+  .stat-value {
+    font-size: 1rem;
+  }
+
+  .stat-label {
+    font-size: 0.65rem;
+  }
+
+  .search-filter-bar {
+    padding: 0.875rem;
+  }
+
+  .filter-controls {
+    gap: 0.875rem;
+  }
+
+  .filter-label {
+    font-size: 0.75rem;
+    font-weight: 800;
+    margin-bottom: 0.3rem;
+  }
+
+  .filter-select {
+    font-size: 0.95rem;
+    padding: 0.875rem 1rem;
+    padding-right: 2.5rem;
+    min-height: 52px;
+    border-width: 2px;
+    font-weight: 700;
+  }
+
+  .character-tabs {
+    gap: 0.375rem;
+    padding: 0.375rem;
+  }
+
+  .character-tab {
+    padding: 0.6rem 0.8rem;
+    font-size: 0.85rem;
+    min-height: 44px;
+  }
+
+  .wardrobe-items-grid {
+    grid-template-columns: 1fr;
+    gap: 0.875rem;
+  }
+
+  .item-image {
+    min-height: 200px;
   }
 }
 
 @media (max-width: 480px) {
-  .wardrobe-header h2 {
-    font-size: 1.15rem;
+  .wardrobe-header {
+    padding: 0.875rem;
   }
 
-  .stat-value {
+  .header-title h2 {
     font-size: 1.05rem;
   }
 
+  .wardrobe-stats-row {
+    padding: 0.875rem;
+    gap: 0.75rem;
+  }
+
+  .stat-value {
+    font-size: 1rem;
+  }
+
   .stat-label {
-    font-size: 0.68rem;
+    font-size: 0.7rem;
+  }
+
+  .search-filter-bar {
+    padding: 0.875rem;
+  }
+
+  .filter-label {
+    font-size: 0.7rem;
   }
 
   .search-input {
     font-size: 0.9rem;
+    padding: 0.65rem 0.875rem;
+  }
+
+  .filter-select {
+    font-size: 0.9rem;
+    padding: 0.65rem 0.75rem;
+    min-height: 48px;
+    border-width: 2px;
+    font-weight: 700;
   }
 
   .item-image {
-    height: 150px;
+    height: 180px;
+    min-height: 180px;
+  }
+
+  .item-info {
+    padding: 0.875rem;
+  }
+
+  .item-name {
+    font-size: 0.95rem;
+  }
+
+  .modal-content {
+    width: 100%;
+    max-height: 100vh;
+    border-radius: 0;
+    padding: 1rem;
   }
 }
 

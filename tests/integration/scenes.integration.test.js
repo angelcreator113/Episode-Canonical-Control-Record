@@ -8,7 +8,10 @@ const { generateToken } = require('../../src/services/tokenService');
  * Tests all 11 scene endpoints with authentication
  */
 
-describe('Scenes API Integration Tests', () => {
+// Skip integration tests if test database is not configured
+const testDbConfigured = !process.env.DATABASE_URL?.includes('amazonaws.com');
+
+(testDbConfigured ? describe : describe.skip)('Scenes API Integration Tests', () => {
   let authToken;
   let testShow;
   let testEpisode;
