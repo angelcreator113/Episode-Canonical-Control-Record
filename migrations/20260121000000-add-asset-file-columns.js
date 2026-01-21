@@ -25,23 +25,44 @@ exports.up = async (pgm) => {
     ifNotExists: true,
   });
 
+  // Add s3_key_raw column if it doesn't exist
+  pgm.addColumn('assets', {
+    s3_key_raw: {
+      type: 'text',
+      notNull: false,
+    },
+  }, {
+    ifNotExists: true,
+  });
+
   // Backfill s3_key_raw from s3_url_raw for existing records that are missing it
+  // Only run if s3_url_raw column exists
   pgm.sql(`
-    UPDATE assets 
-    SET s3_key_raw = SUBSTRING(s3_url_raw FROM 'amazonaws.com/(.*)$')
-    WHERE s3_key_raw IS NULL 
-      AND s3_url_raw IS NOT NULL 
-      AND s3_url_raw LIKE '%amazonaws.com/%'
+    DO $$
+    BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns 
+        WHERE table_name = 'assets' AND column_name = 's3_url_raw'
+      ) THEN
+        UPDATE assets 
+        SET s3_key_raw = SUBSTRING(s3_url_raw FROM 'amazonaws.com/(.*)$')
+        WHERE s3_key_raw IS NULL 
+          AND s3_url_raw IS NOT NULL 
+          AND s3_url_raw LIKE '%amazonaws.com/%';
+      END IF;
+    END $$;
   `);
 
-  // Add comment to document the columns
+  // Add comments to document the columns
   pgm.sql(`
     COMMENT ON COLUMN assets.file_name IS 'Original filename of the uploaded asset';
     COMMENT ON COLUMN assets.content_type IS 'MIME type of the asset (e.g., image/jpeg, video/mp4)';
+    COMMENT ON COLUMN assets.s3_key_raw IS 'S3 object key for the raw/original asset';
   `);
 };
 
 exports.down = async (pgm) => {
   pgm.dropColumn('assets', 'file_name', { ifExists: true });
   pgm.dropColumn('assets', 'content_type', { ifExists: true });
+  pgm.dropColumn('assets', 's3_key_raw', { ifExists: true });
 };
