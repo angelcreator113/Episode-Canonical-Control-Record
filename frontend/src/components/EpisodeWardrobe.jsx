@@ -561,33 +561,36 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
       ) : (
         <div className="episode-wardrobe">
           <div className="wardrobe-header">
-            <div>
+            <div className="header-title">
               <h2>👗 Episode {episodeNumber} Wardrobe</h2>
             </div>
-            <div style={{ display: 'flex', gap: '0.6rem', alignItems: 'center' }}>
+            <div className="header-actions">
               <button
                 className="btn-view-gallery"
                 onClick={() => navigate('/wardrobe')}
                 title="View all wardrobe items across episodes"
               >
-                🖼️ View Gallery
+                <span className="btn-icon">🖼️</span>
+                <span className="btn-text">Gallery</span>
               </button>
               <button
                 className="btn-view-gallery"
                 onClick={() => navigate('/wardrobe/analytics')}
                 title="View analytics and insights"
               >
-                📊 Analytics
+                <span className="btn-icon">📊</span>
+                <span className="btn-text">Analytics</span>
               </button>
               <button
                 className="btn-add-wardrobe"
                 onClick={openAddForm}
                 title="Add wardrobe items for this episode"
               >
-                ➕ Add Item
+                <span className="btn-icon">➕</span>
+                <span className="btn-text">Add Item</span>
               </button>
               <button
-                className="btn-add-wardrobe"
+                className="btn-add-wardrobe btn-export"
                 onClick={() => wardrobeEnhancements.exportToPDF(wardrobeItems, {
                   title: `Episode ${episodeNumber} Wardrobe`,
                   character: activeCharacter === 'all' ? 'All' : activeCharacter,
@@ -595,26 +598,29 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
                 })}
                 title="Export to PDF lookbook"
               >
-                📄 Export PDF
+                <span className="btn-icon">📄</span>
+                <span className="btn-text">Export</span>
               </button>
-              <div className="wardrobe-stats" style={{ display: 'flex', gap: '2rem' }}>
-                <div className="stat">
-                  <span className="stat-value">{wardrobeItems.length}</span>
-                  <span className="stat-label">Total Items</span>
-                </div>
-                <div className="stat">
-                  <span className="stat-value">{Object.keys(groupedByCharacter).length}</span>
-                  <span className="stat-label">Characters</span>
-                </div>
-                <div className="stat budget-stat">
-                  <span className="stat-value">${totalBudget.toFixed(2)}</span>
-                  <span className="stat-label">Total Budget</span>
-                </div>
-                <div className="stat">
-                  <span className="stat-value">{favoriteItems.length}</span>
-                  <span className="stat-label">⭐ Favorites</span>
-                </div>
-              </div>
+            </div>
+          </div>
+
+          {/* Stats Row */}
+          <div className="wardrobe-stats-row">
+            <div className="stat">
+              <span className="stat-value">{wardrobeItems.length}</span>
+              <span className="stat-label">Total Items</span>
+            </div>
+            <div className="stat">
+              <span className="stat-value">{Object.keys(groupedByCharacter).length}</span>
+              <span className="stat-label">Characters</span>
+            </div>
+            <div className="stat budget-stat">
+              <span className="stat-value">${totalBudget.toFixed(2)}</span>
+              <span className="stat-label">Total Budget</span>
+            </div>
+            <div className="stat">
+              <span className="stat-value">{favoriteItems.length}</span>
+              <span className="stat-label">⭐ Favorites</span>
             </div>
           </div>
 
@@ -637,27 +643,33 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
             </div>
 
             <div className="filter-controls">
-              <select
-                value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="filter-select"
-              >
-                <option value="all">All Categories</option>
-                <option value="dress">👗 Dresses</option>
-                <option value="top">👚 Tops</option>
-                <option value="bottom">👖 Bottoms</option>
-                <option value="shoes">👠 Shoes</option>
-                <option value="accessories">👜 Accessories</option>
-                <option value="jewelry">💎 Jewelry</option>
-                <option value="perfume">🌸 Perfume</option>
-              </select>
+              <div className="filter-group">
+                <label className="filter-label">Category</label>
+                <select
+                  value={filterCategory}
+                  onChange={(e) => setFilterCategory(e.target.value)}
+                  className="filter-select"
+                >
+                  <option value="all">All Categories</option>
+                  <option value="dress">👗 Dresses</option>
+                  <option value="top">👚 Tops</option>
+                  <option value="bottom">👖 Bottoms</option>
+                  <option value="shoes">👠 Shoes</option>
+                  <option value="accessories">👜 Accessories</option>
+                  <option value="jewelry">💎 Jewelry</option>
+                  <option value="perfume">🌸 Perfume</option>
+                </select>
+              </div>
 
-              <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
-                <option value="name">Sort: A-Z</option>
-                <option value="price-asc">Sort: Price ↑</option>
-                <option value="price-desc">Sort: Price ↓</option>
-                <option value="recent">Sort: Recent</option>
-              </select>
+              <div className="filter-group">
+                <label className="filter-label">Sort By</label>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
+                  <option value="name">A-Z</option>
+                  <option value="price-asc">Price ↑</option>
+                  <option value="price-desc">Price ↓</option>
+                  <option value="recent">Recent</option>
+                </select>
+              </div>
 
               <div className="price-filter">
                 <label>

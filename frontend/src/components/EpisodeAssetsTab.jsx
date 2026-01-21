@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import EnhancedAssetPicker from './Assets/EnhancedAssetPicker';
+import './EpisodeAssetsTab.css';
 
 const EpisodeAssetsTab = ({ episodeId }) => {
   const navigate = useNavigate();
@@ -236,18 +237,18 @@ const EpisodeAssetsTab = ({ episodeId }) => {
     const height = asset.height || 0;
     
     if (width >= 3840 && height >= 2160) {
-      return { label: '4K', color: '#10b981' };
+      return { label: '4K', color: '#10b981', type: 'hd' };
     } else if (width >= 1920 && height >= 1080) {
-      return { label: 'HD', color: '#3b82f6' };
+      return { label: 'HD', color: '#3b82f6', type: 'hd' };
     } else if (width >= 1280 && height >= 720) {
-      return { label: 'HD', color: '#f59e0b' };
+      return { label: 'HD', color: '#f59e0b', type: 'sd' };
     }
-    return { label: 'SD', color: '#9ca3af' };
+    return { label: 'SD', color: '#9ca3af', type: 'sd' };
   };
 
   if (loading) {
     return (
-      <div style={{ padding: '3rem', textAlign: 'center' }}>
+      <div className="loading-state">
         <div className="spinner-large"></div>
         <p>Loading assets...</p>
       </div>
@@ -257,83 +258,38 @@ const EpisodeAssetsTab = ({ episodeId }) => {
   return (
     <div className="episode-assets-tab">
       {/* Header */}
-      <div className="content-card" style={{ background: 'white', padding: '2rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '1.5rem' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-          <div>
-            <h2 style={{ margin: '0 0 0.5rem 0', fontSize: '1.5rem', fontWeight: '700', color: '#1f2937' }}>📸 Episode Assets</h2>
-            <p style={{ margin: 0, color: '#6b7280', fontSize: '0.95rem' }}>
+      <div className="assets-header">
+        <div className="assets-header-top">
+          <div className="header-title">
+            <h2>📸 Episode Assets</h2>
+            <p className="header-subtitle">
               {assets.length} asset{assets.length !== 1 ? 's' : ''} linked to this episode
             </p>
           </div>
-          <div style={{ display: 'flex', gap: '0.75rem' }}>
-            <button
-              onClick={() => navigate('/assets')}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: '600',
-                fontSize: '0.95rem',
-                cursor: 'pointer',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                transition: 'transform 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-            >
-              🗂️ Asset Manager
+          <div className="header-actions">
+            <button onClick={() => navigate('/assets')} className="btn-asset-manager">
+              <span className="btn-icon">🗂️</span>
+              <span className="btn-text">Asset Manager</span>
             </button>
-            <button
-              onClick={() => setShowAssetPicker(true)}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: '600',
-                fontSize: '0.95rem',
-                cursor: 'pointer',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                transition: 'transform 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-            >
-              🔗 Link Existing
+            <button onClick={() => setShowAssetPicker(true)} className="btn-link-existing">
+              <span className="btn-icon">🔗</span>
+              <span className="btn-text">Link Existing</span>
             </button>
-            <button
-              onClick={() => setShowUploadModal(true)}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontWeight: '600',
-                fontSize: '0.95rem',
-                cursor: 'pointer',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-                transition: 'transform 0.2s',
-              }}
-              onMouseEnter={(e) => (e.currentTarget.style.transform = 'translateY(-2px)')}
-              onMouseLeave={(e) => (e.currentTarget.style.transform = 'translateY(0)')}
-            >
-              ⬆️ Upload Files
+            <button onClick={() => setShowUploadModal(true)} className="btn-upload-files">
+              <span className="btn-icon">⬆️</span>
+              <span className="btn-text">Upload Files</span>
             </button>
           </div>
         </div>
 
         {/* Messages */}
         {error && (
-          <div style={{ padding: '1rem', background: '#fee2e2', border: '1px solid #ef4444', borderRadius: '8px', color: '#991b1b', marginBottom: '1rem' }}>
+          <div className="message message-error">
             {error}
           </div>
         )}
         {success && (
-          <div style={{ padding: '1rem', background: '#d1fae5', border: '1px solid #10b981', borderRadius: '8px', color: '#065f46', marginBottom: '1rem' }}>
+          <div className="message message-success">
             {success}
           </div>
         )}
@@ -341,7 +297,7 @@ const EpisodeAssetsTab = ({ episodeId }) => {
 
       {/* Assets Grid */}
       {assets.length > 0 ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.5rem' }}>
+        <div className="assets-grid">
           {assets.map((asset) => {
             const usageData = asset.EpisodeAsset || {};
             const quality = getQualityBadge(asset);
@@ -349,27 +305,11 @@ const EpisodeAssetsTab = ({ episodeId }) => {
             return (
               <div
                 key={asset.id}
-                style={{
-                  background: 'white',
-                  borderRadius: '12px',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-                  overflow: 'hidden',
-                  transition: 'transform 0.2s, box-shadow 0.2s',
-                  cursor: 'pointer',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translateY(-4px)';
-                  e.currentTarget.style.boxShadow = '0 4px 16px rgba(0,0,0,0.12)';
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translateY(0)';
-                  e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                }}
+                className="asset-card"
                 onClick={() => setPreviewAsset(asset)}
               >
                 {/* Image/Video Preview */}
-                <div style={{ position: 'relative', paddingTop: '66.67%', background: '#f3f4f6' }}>
-                  {(() => {
+                <div className="asset-preview">{(() => {
                     const url = asset.s3_url_processed || asset.s3_url_raw;
                     
                     // Check for invalid or mock URLs
@@ -382,14 +322,6 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                         <img
                           src={'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)}
                           alt={asset.name}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                          }}
                         />
                       );
                     }
@@ -415,14 +347,6 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                             img.style.cssText = e.target.style.cssText;
                             e.target.parentNode.replaceChild(img, e.target);
                           }}
-                          style={{
-                            position: 'absolute',
-                            top: 0,
-                            left: 0,
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                          }}
                         />
                       );
                     }
@@ -438,228 +362,77 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                           const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="#6366f1"/><text x="50%" y="45%" font-family="Arial, sans-serif" font-size="16" fill="white" text-anchor="middle" dominant-baseline="middle">${typeLabel}</text><text x="50%" y="60%" font-family="Arial, sans-serif" font-size="32" fill="rgba(255,255,255,0.7)" text-anchor="middle" dominant-baseline="middle">🖼️</text></svg>`;
                           e.target.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
                         }}
-                        style={{
-                          position: 'absolute',
-                          top: 0,
-                          left: 0,
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                        }}
                       />
                     );
                   })()}
 
-                  {/* Usage Badge */}
-                  <div style={{ position: 'absolute', top: '0.75rem', left: '0.75rem' }}>
-                    {getUsageBadge(usageData.usage_type)}
-                  </div>
-
-                  {/* Quality Badge */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: '0.75rem',
-                      right: '0.75rem',
-                      padding: '0.25rem 0.75rem',
-                      background: quality.color,
-                      color: 'white',
-                      borderRadius: '12px',
-                      fontSize: '0.75rem',
-                      fontWeight: '700',
-                    }}
-                  >
-                    {quality.label}
+                  {/* Badges */}
+                  <div className="asset-badges">
+                    <span className={`badge badge-quality-${quality.type || 'unknown'}`}>
+                      {quality.label}
+                    </span>
                   </div>
                 </div>
 
                 {/* Asset Info */}
-                <div style={{ padding: '1rem' }}>
-                  <h3 style={{ 
-                    margin: '0 0 0.5rem 0', 
-                    fontSize: '1rem', 
-                    fontWeight: '700', 
-                    color: '#1f2937'
-                  }}>
+                <div className="asset-info">
+                  <h3 className="asset-name">
                     {asset.name || 'Untitled'}
                   </h3>
 
-                  {/* Organization Badges */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.375rem', marginBottom: '0.5rem' }}>
+                  <div className="asset-details">
+                    <span>{asset.media_type}</span>
+                    <span>{asset.width}x{asset.height}</span>
+                    <span>{formatFileSize(asset.file_size_bytes)}</span>
+                  </div>
+
+                  <div className="asset-type-badge">
+                    {asset.asset_type?.replace(/_/g, ' ') || 'Asset'}
+                  </div>
+
+                  <div className="asset-metadata">
                     {asset.asset_group && (
-                      <span style={{
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.025em',
-                        background: asset.asset_group === 'LALA' ? '#e9d5ff' : asset.asset_group === 'SHOW' ? '#fce7f3' : asset.asset_group === 'GUEST' ? '#d1fae5' : asset.asset_group === 'EPISODE' ? '#fed7aa' : '#ddd6fe',
-                        color: asset.asset_group === 'LALA' ? '#7c3aed' : asset.asset_group === 'SHOW' ? '#db2777' : asset.asset_group === 'GUEST' ? '#059669' : asset.asset_group === 'EPISODE' ? '#ea580c' : '#7c3aed'
-                      }}>
-                        {asset.asset_group}
-                      </span>
+                      <div className="metadata-item">
+                        <span className="metadata-label">Group</span>
+                        <span className="metadata-value">{asset.asset_group}</span>
+                      </div>
                     )}
                     {asset.purpose && (
-                      <span style={{
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.025em',
-                        background: '#bfdbfe',
-                        color: '#2563eb'
-                      }}>
-                        {asset.purpose}
-                      </span>
-                    )}
-                    {asset.is_global && (
-                      <span style={{
-                        padding: '0.25rem 0.5rem',
-                        borderRadius: '4px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        background: '#ccfbf1',
-                        color: '#0f766e'
-                      }}>
-                        🌐 Global
-                      </span>
+                      <div className="metadata-item">
+                        <span className="metadata-label">Purpose</span>
+                        <span className="metadata-value">{asset.purpose}</span>
+                      </div>
                     )}
                   </div>
 
-                  {/* Allowed Uses */}
-                  {asset.allowed_uses && asset.allowed_uses.length > 0 && (
-                    <div style={{ marginBottom: '0.5rem' }}>
-                      <div style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.25rem', fontWeight: '500' }}>
-                        Can be used for:
-                      </div>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                        {asset.allowed_uses.slice(0, 3).map(use => (
-                          <span key={use} style={{
-                            padding: '0.125rem 0.375rem',
-                            background: '#f3f4f6',
-                            color: '#4b5563',
-                            borderRadius: '3px',
-                            fontSize: '0.6875rem',
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.025em',
-                            border: '1px solid #e5e7eb'
-                          }}>
-                            {use}
-                          </span>
-                        ))}
-                        {asset.allowed_uses.length > 3 && (
-                          <span style={{
-                            padding: '0.125rem 0.375rem',
-                            background: '#e5e7eb',
-                            color: '#6b7280',
-                            borderRadius: '3px',
-                            fontSize: '0.6875rem',
-                            fontWeight: '600'
-                          }}>
-                            +{asset.allowed_uses.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
-                    <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                      <span>{asset.width}x{asset.height}</span>
-                      <span>{formatFileSize(asset.file_size_bytes)}</span>
-                    </div>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEditAsset(asset);
-                        }}
-                        style={{
-                          flex: 1,
-                          minWidth: '90px',
-                          padding: '0.5rem',
-                          background: '#f3f4f6',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '0.875rem',
-                          fontWeight: '600',
-                          color: '#374151',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        ✏️ Edit
-                      </button>
-                      {!asset.s3_url_processed && asset.media_type !== 'video' && (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRemoveBackground(asset.id);
-                          }}
-                          disabled={processingAssets.has(asset.id)}
-                          style={{
-                            flex: 1,
-                            minWidth: '120px',
-                            padding: '0.5rem',
-                            background: processingAssets.has(asset.id) 
-                              ? '#9ca3af' 
-                              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '0.875rem',
-                            fontWeight: '600',
-                            color: 'white',
-                            cursor: processingAssets.has(asset.id) ? 'not-allowed' : 'pointer',
-                            opacity: processingAssets.has(asset.id) ? 0.7 : 1,
-                          }}
-                        >
-                          {processingAssets.has(asset.id) ? '⏳ Processing...' : '✨ Remove BG'}
-                        </button>
-                      )}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigator.clipboard.writeText(asset.s3_url_processed || asset.s3_url_raw);
-                          setSuccess('✅ URL copied!');
-                          setTimeout(() => setSuccess(null), 2000);
-                        }}
-                        style={{
-                          flex: 1,
-                          minWidth: '90px',
-                          padding: '0.5rem',
-                          background: '#f3f4f6',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '0.875rem',
-                          fontWeight: '600',
-                          color: '#374151',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        📋 Copy URL
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRemoveAsset(asset.id);
-                        }}
-                        style={{
-                          flex: 1,
-                          minWidth: '90px',
-                          padding: '0.5rem',
-                          background: '#fee2e2',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '0.875rem',
-                          fontWeight: '600',
-                          color: '#991b1b',
-                          cursor: 'pointer',
-                        }}
-                      >
-                        🗑️ Remove
-                      </button>
-                    </div>
+                  <div className="asset-actions">
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        window.open(asset.s3_url_processed || asset.s3_url_raw, '_blank');
+                      }}
+                      className="btn-view"
+                    >
+                      👁️ View
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigate(`/analytics/assets/${asset.id}`);
+                      }}
+                      className="btn-analytics"
+                    >
+                      📊
+                    </button>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRemoveAsset(asset.id);
+                      }}
+                      className="btn-unlink"
+                    >
+                      🗑️
+                    </button>
                   </div>
                 </div>
               </div>
@@ -667,25 +440,13 @@ const EpisodeAssetsTab = ({ episodeId }) => {
           })}
         </div>
       ) : (
-        <div className="content-card" style={{ background: 'white', padding: '3rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', textAlign: 'center' }}>
-          <span style={{ fontSize: '4rem', display: 'block', marginBottom: '1rem' }}>🖼️</span>
-          <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>No Assets Yet</h3>
-          <p style={{ margin: '0 0 1.5rem 0', color: '#6b7280', fontSize: '1rem' }}>Upload images, videos, and other media for this episode</p>
-          <button
-            onClick={() => setShowUploadModal(true)}
-            style={{
-              padding: '0.875rem 1.75rem',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '8px',
-              fontWeight: '600',
-              fontSize: '1rem',
-              cursor: 'pointer',
-              boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-            }}
-          >
-            📤 Upload First Asset
+        <div className="empty-state">
+          <div className="empty-state-icon">🖼️</div>
+          <h3>No Assets Yet</h3>
+          <p>Upload images, videos, and other media for this episode</p>
+          <button onClick={() => setShowUploadModal(true)} className="btn-upload-files">
+            <span className="btn-icon">📤</span>
+            <span className="btn-text">Upload First Asset</span>
           </button>
         </div>
       )}
