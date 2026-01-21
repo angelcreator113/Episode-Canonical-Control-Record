@@ -23,7 +23,11 @@ router.get('/', validateEpisodeQuery, asyncHandler(episodeController.listEpisode
 // These must come BEFORE /:id route to avoid being caught by it
 
 // GET /api/v1/episodes/:id/wardrobe - Get all wardrobe items for episode
-router.get('/:id/wardrobe', validateUUIDParam('id'), asyncHandler(wardrobeController.getEpisodeWardrobe));
+router.get(
+  '/:id/wardrobe',
+  validateUUIDParam('id'),
+  asyncHandler(wardrobeController.getEpisodeWardrobe)
+);
 
 // POST /api/v1/episodes/:id/wardrobe/:wardrobeId - Link wardrobe item to episode
 router.post(
@@ -43,7 +47,11 @@ router.delete(
 // These must come BEFORE /:id route to avoid being caught by it
 
 // GET /api/v1/episodes/:id/assets - Get all assets for episode
-router.get('/:id/assets', validateUUIDParam('id'), asyncHandler(episodeController.getEpisodeAssets));
+router.get(
+  '/:id/assets',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.getEpisodeAssets)
+);
 
 // POST /api/v1/episodes/:id/assets - Add asset(s) to episode
 router.post(

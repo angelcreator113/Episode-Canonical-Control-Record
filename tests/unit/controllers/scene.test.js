@@ -37,19 +37,19 @@ describe('Scene Controller Tests', () => {
   describe('listScenes()', () => {
     test('should return scenes list with pagination', async () => {
       const mockScenes = [
-        { 
-          id: 'scene-1', 
+        {
+          id: 'scene-1',
           episode_id: 'ep-1',
           scene_number: 1,
           title: 'Opening Scene',
-          episode: { id: 'ep-1', title: 'Episode 1' }
+          episode: { id: 'ep-1', title: 'Episode 1' },
         },
-        { 
-          id: 'scene-2', 
+        {
+          id: 'scene-2',
           episode_id: 'ep-1',
           scene_number: 2,
           title: 'Main Scene',
-          episode: { id: 'ep-1', title: 'Episode 1' }
+          episode: { id: 'ep-1', title: 'Episode 1' },
         },
       ];
 

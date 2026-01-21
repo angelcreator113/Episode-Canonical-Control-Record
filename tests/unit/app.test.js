@@ -11,14 +11,18 @@ process.env.AWS_REGION = 'us-east-1';
 
 // Mock AWS credential providers
 jest.mock('@aws-sdk/credential-providers', () => ({
-  fromIni: jest.fn(() => jest.fn().mockResolvedValue({
-    accessKeyId: 'test-access-key',
-    secretAccessKey: 'test-secret-key',
-  })),
-  fromEnv: jest.fn(() => jest.fn().mockResolvedValue({
-    accessKeyId: 'test-access-key',
-    secretAccessKey: 'test-secret-key',
-  })),
+  fromIni: jest.fn(() =>
+    jest.fn().mockResolvedValue({
+      accessKeyId: 'test-access-key',
+      secretAccessKey: 'test-secret-key',
+    })
+  ),
+  fromEnv: jest.fn(() =>
+    jest.fn().mockResolvedValue({
+      accessKeyId: 'test-access-key',
+      secretAccessKey: 'test-secret-key',
+    })
+  ),
 }));
 
 // Mock AWS SDK before app loads

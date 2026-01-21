@@ -58,10 +58,10 @@ module.exports = (sequelize) => {
       opacity: {
         type: DataTypes.DECIMAL(3, 2),
         allowNull: false,
-        defaultValue: 1.00,
+        defaultValue: 1.0,
         validate: {
-          min: 0.00,
-          max: 1.00,
+          min: 0.0,
+          max: 1.0,
         },
         comment: 'Asset opacity 0.00-1.00',
       },

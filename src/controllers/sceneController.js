@@ -4,7 +4,7 @@ const { Scene, Episode, Thumbnail, Asset, SceneAsset } = models;
 /**
  * Scene Controller
  * Handles all scene CRUD operations and scene management
- * 
+ *
  * @module controllers/sceneController
  */
 
@@ -18,13 +18,7 @@ const { Scene, Episode, Thumbnail, Asset, SceneAsset } = models;
  */
 exports.listScenes = async (req, res) => {
   try {
-    const {
-      episode_id,
-      sceneType,
-      productionStatus,
-      page = 1,
-      limit = 50,
-    } = req.query;
+    const { episode_id, sceneType, productionStatus, page = 1, limit = 50 } = req.query;
 
     const where = {};
 
@@ -90,7 +84,7 @@ exports.getScene = async (req, res) => {
           model: Thumbnail,
           as: 'thumbnail',
           attributes: ['id', 'url', 's3_key', 'metadata'],
-        }
+        },
       ],
     });
 
@@ -268,7 +262,7 @@ exports.updateScene = async (req, res) => {
       'characters',
     ];
 
-    Object.keys(updates).forEach(key => {
+    Object.keys(updates).forEach((key) => {
       if (allowedUpdates.includes(key)) {
         // Handle camelCase to snake_case mapping
         if (key === 'durationSeconds') {
@@ -347,32 +341,29 @@ exports.deleteScene = async (req, res) => {
     // Renumber remaining scenes to fill gap
     const sequelize = Scene.sequelize;
     const transaction = await sequelize.transaction();
-    
+
     try {
       // Temporarily drop the unique index to allow renumbering
-      await sequelize.query(
-        'DROP INDEX IF EXISTS idx_scenes_episode_scene_number',
-        { transaction, type: sequelize.QueryTypes.RAW }
-      );
+      await sequelize.query('DROP INDEX IF EXISTS idx_scenes_episode_scene_number', {
+        transaction,
+        type: sequelize.QueryTypes.RAW,
+      });
 
       // Get all non-deleted scenes for this episode and renumber them
       const scenes = await Scene.findAll({
         where: { episode_id },
         order: [['scene_number', 'ASC']],
         paranoid: true,
-        transaction
+        transaction,
       });
 
       // Update scene numbers to sequential values
       for (let i = 0; i < scenes.length; i++) {
-        await sequelize.query(
-          'UPDATE scenes SET scene_number = :new_number WHERE id = :id',
-          {
-            replacements: { new_number: i + 1, id: scenes[i].id },
-            transaction,
-            type: sequelize.QueryTypes.UPDATE
-          }
-        );
+        await sequelize.query('UPDATE scenes SET scene_number = :new_number WHERE id = :id', {
+          replacements: { new_number: i + 1, id: scenes[i].id },
+          transaction,
+          type: sequelize.QueryTypes.UPDATE,
+        });
       }
 
       // Recreate the unique index (partial - only for non-deleted scenes)
@@ -433,14 +424,15 @@ exports.getEpisodeScenes = async (req, res) => {
       byStatus: {},
     };
 
-    scenes.forEach(scene => {
+    scenes.forEach((scene) => {
       // Count by type
       if (scene.scene_type) {
         stats.byType[scene.scene_type] = (stats.byType[scene.scene_type] || 0) + 1;
       }
       // Count by status
       if (scene.production_status) {
-        stats.byStatus[scene.production_status] = (stats.byStatus[scene.production_status] || 0) + 1;
+        stats.byStatus[scene.production_status] =
+          (stats.byStatus[scene.production_status] || 0) + 1;
       }
     });
 
@@ -694,12 +686,13 @@ exports.getSceneStats = async (req, res) => {
       byStatus: {},
     };
 
-    scenes.forEach(scene => {
+    scenes.forEach((scene) => {
       if (scene.scene_type) {
         stats.byType[scene.scene_type] = (stats.byType[scene.scene_type] || 0) + 1;
       }
       if (scene.production_status) {
-        stats.byStatus[scene.production_status] = (stats.byStatus[scene.production_status] || 0) + 1;
+        stats.byStatus[scene.production_status] =
+          (stats.byStatus[scene.production_status] || 0) + 1;
       }
     });
 
@@ -733,7 +726,7 @@ exports.setSceneThumbnail = async (req, res) => {
     if (!thumbnailId) {
       return res.status(400).json({
         success: false,
-        message: 'Thumbnail ID is required'
+        message: 'Thumbnail ID is required',
       });
     }
 
@@ -741,14 +734,14 @@ exports.setSceneThumbnail = async (req, res) => {
     if (!scene) {
       return res.status(404).json({
         success: false,
-        message: 'Scene not found'
+        message: 'Scene not found',
       });
     }
 
     if (scene.is_locked) {
       return res.status(403).json({
         success: false,
-        message: 'Cannot modify thumbnail on locked scene'
+        message: 'Cannot modify thumbnail on locked scene',
       });
     }
 
@@ -757,7 +750,7 @@ exports.setSceneThumbnail = async (req, res) => {
     if (!thumbnail) {
       return res.status(404).json({
         success: false,
-        message: 'Thumbnail not found'
+        message: 'Thumbnail not found',
       });
     }
 
@@ -767,14 +760,14 @@ exports.setSceneThumbnail = async (req, res) => {
     res.json({
       success: true,
       data: scene,
-      message: 'Scene thumbnail updated successfully'
+      message: 'Scene thumbnail updated successfully',
     });
   } catch (error) {
     console.error('Set scene thumbnail error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to set scene thumbnail',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -795,7 +788,7 @@ exports.updateSceneAssets = async (req, res) => {
     if (!assets || typeof assets !== 'object') {
       return res.status(400).json({
         success: false,
-        message: 'Assets object is required'
+        message: 'Assets object is required',
       });
     }
 
@@ -803,14 +796,14 @@ exports.updateSceneAssets = async (req, res) => {
     if (!scene) {
       return res.status(404).json({
         success: false,
-        message: 'Scene not found'
+        message: 'Scene not found',
       });
     }
 
     if (scene.is_locked) {
       return res.status(403).json({
         success: false,
-        message: 'Cannot modify assets on locked scene'
+        message: 'Cannot modify assets on locked scene',
       });
     }
 
@@ -819,14 +812,14 @@ exports.updateSceneAssets = async (req, res) => {
     res.json({
       success: true,
       data: scene,
-      message: 'Scene assets updated successfully'
+      message: 'Scene assets updated successfully',
     });
   } catch (error) {
     console.error('Update scene assets error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update scene assets',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -1073,15 +1066,8 @@ exports.removeSceneAsset = async (req, res) => {
 exports.updateSceneAsset = async (req, res) => {
   try {
     const { id, assetId } = req.params;
-    const {
-      usageType,
-      startTimecode,
-      endTimecode,
-      layerOrder,
-      opacity,
-      position,
-      metadata,
-    } = req.body;
+    const { usageType, startTimecode, endTimecode, layerOrder, opacity, position, metadata } =
+      req.body;
 
     // Validate scene exists
     const scene = await Scene.findByPk(id);
@@ -1156,7 +1142,15 @@ exports.duplicateScene = async (req, res) => {
           model: Asset,
           as: 'linkedAssets',
           through: {
-            attributes: ['usage_type', 'start_timecode', 'end_timecode', 'layer_order', 'opacity', 'position', 'metadata'],
+            attributes: [
+              'usage_type',
+              'start_timecode',
+              'end_timecode',
+              'layer_order',
+              'opacity',
+              'position',
+              'metadata',
+            ],
           },
         },
       ],
@@ -1221,7 +1215,14 @@ exports.duplicateScene = async (req, res) => {
           model: Asset,
           as: 'linkedAssets',
           through: {
-            attributes: ['usage_type', 'start_timecode', 'end_timecode', 'layer_order', 'opacity', 'position'],
+            attributes: [
+              'usage_type',
+              'start_timecode',
+              'end_timecode',
+              'layer_order',
+              'opacity',
+              'position',
+            ],
           },
         },
         {

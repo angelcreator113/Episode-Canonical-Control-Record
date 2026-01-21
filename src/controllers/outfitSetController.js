@@ -6,19 +6,19 @@ const { OutfitSet } = require('../models');
 const listOutfitSets = async (req, res) => {
   try {
     const outfitSets = await OutfitSet.findAll({
-      order: [['created_at', 'DESC']]
+      order: [['created_at', 'DESC']],
     });
 
     res.json({
       success: true,
-      data: outfitSets
+      data: outfitSets,
     });
   } catch (error) {
     console.error('Error listing outfit sets:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to list outfit sets',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -34,20 +34,20 @@ const getOutfitSet = async (req, res) => {
     if (!outfitSet) {
       return res.status(404).json({
         success: false,
-        message: 'Outfit set not found'
+        message: 'Outfit set not found',
       });
     }
 
     res.json({
       success: true,
-      data: outfitSet
+      data: outfitSet,
     });
   } catch (error) {
     console.error('Error getting outfit set:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to get outfit set',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -62,7 +62,7 @@ const createOutfitSet = async (req, res) => {
     if (!name) {
       return res.status(400).json({
         success: false,
-        message: 'Name is required'
+        message: 'Name is required',
       });
     }
 
@@ -72,19 +72,19 @@ const createOutfitSet = async (req, res) => {
       character,
       occasion,
       season,
-      items: items || []
+      items: items || [],
     });
 
     res.status(201).json({
       success: true,
-      data: outfitSet
+      data: outfitSet,
     });
   } catch (error) {
     console.error('Error creating outfit set:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to create outfit set',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -102,7 +102,7 @@ const updateOutfitSet = async (req, res) => {
     if (!outfitSet) {
       return res.status(404).json({
         success: false,
-        message: 'Outfit set not found'
+        message: 'Outfit set not found',
       });
     }
 
@@ -112,19 +112,19 @@ const updateOutfitSet = async (req, res) => {
       character: character !== undefined ? character : outfitSet.character,
       occasion: occasion !== undefined ? occasion : outfitSet.occasion,
       season: season !== undefined ? season : outfitSet.season,
-      items: items !== undefined ? items : outfitSet.items
+      items: items !== undefined ? items : outfitSet.items,
     });
 
     res.json({
       success: true,
-      data: outfitSet
+      data: outfitSet,
     });
   } catch (error) {
     console.error('Error updating outfit set:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to update outfit set',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -141,7 +141,7 @@ const deleteOutfitSet = async (req, res) => {
     if (!outfitSet) {
       return res.status(404).json({
         success: false,
-        message: 'Outfit set not found'
+        message: 'Outfit set not found',
       });
     }
 
@@ -149,14 +149,14 @@ const deleteOutfitSet = async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Outfit set deleted successfully'
+      message: 'Outfit set deleted successfully',
     });
   } catch (error) {
     console.error('Error deleting outfit set:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to delete outfit set',
-      error: error.message
+      error: error.message,
     });
   }
 };
@@ -166,5 +166,5 @@ module.exports = {
   getOutfitSet,
   createOutfitSet,
   updateOutfitSet,
-  deleteOutfitSet
+  deleteOutfitSet,
 };

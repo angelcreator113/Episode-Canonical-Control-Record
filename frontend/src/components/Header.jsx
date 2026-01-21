@@ -37,7 +37,7 @@ const Header = ({ onMenuClick }) => {
           >
             ☰
           </button>
-          <h1 className="header-title">Episode Control</h1>
+          <h1 className="header-title">Episodes</h1>
         </div>
 
           <div className="header-right">

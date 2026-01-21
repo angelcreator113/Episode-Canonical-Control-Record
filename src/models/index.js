@@ -78,7 +78,7 @@ try {
   // Wardrobe models
   Wardrobe = require('./Wardrobe')(sequelize);
   EpisodeWardrobe = require('./EpisodeWardrobe')(sequelize);
-  
+
   // Outfit sets model
   OutfitSet = require('./OutfitSet')(sequelize);
 

@@ -1,6 +1,15 @@
 /* eslint-disable no-unused-vars */
 const { models } = require('../models');
-const { Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog, Show, Asset, EpisodeAsset } = models;
+const {
+  Episode,
+  MetadataStorage,
+  Thumbnail,
+  ProcessingQueue,
+  ActivityLog,
+  Show,
+  Asset,
+  EpisodeAsset,
+} = models;
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const { logger } = require('../middleware/auditLog');
 const AuditLogger = require('../services/AuditLogger');
@@ -619,7 +628,7 @@ module.exports = {
       }
 
       // Filter out soft-deleted assets
-      const activeAssets = (episode.assets || []).filter(asset => !asset.deleted_at);
+      const activeAssets = (episode.assets || []).filter((asset) => !asset.deleted_at);
 
       res.json({
         data: activeAssets,
@@ -640,7 +649,14 @@ module.exports = {
   async addEpisodeAsset(req, res, _next) {
     try {
       const { id } = req.params;
-      const { assetId, assetIds, usageType = 'general', sceneNumber, displayOrder = 0, metadata = {} } = req.body;
+      const {
+        assetId,
+        assetIds,
+        usageType = 'general',
+        sceneNumber,
+        displayOrder = 0,
+        metadata = {},
+      } = req.body;
 
       // Validate episode exists
       const episode = await Episode.findByPk(id);
@@ -653,7 +669,7 @@ module.exports = {
 
       // Support both single asset and multiple assets
       const idsToAdd = assetIds || (assetId ? [assetId] : []);
-      
+
       if (idsToAdd.length === 0) {
         return res.status(400).json({
           error: 'Validation failed',

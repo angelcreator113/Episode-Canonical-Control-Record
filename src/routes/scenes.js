@@ -7,7 +7,7 @@ const { validateUUIDParam } = require('../middleware/requestValidation');
 /**
  * Scene Routes
  * Base path: /api/v1/scenes
- * 
+ *
  * ✅ AUTH TEMPORARILY DISABLED FOR TESTING (matching episodes.js pattern)
  */
 
@@ -106,11 +106,7 @@ router.put(
  */
 
 // GET /api/v1/scenes/:id/assets - Get all assets for a scene
-router.get(
-  '/:id/assets',
-  validateUUIDParam('id'),
-  asyncHandler(sceneController.getSceneAssets)
-);
+router.get('/:id/assets', validateUUIDParam('id'), asyncHandler(sceneController.getSceneAssets));
 
 // POST /api/v1/scenes/:id/assets - Link asset(s) to scene
 router.post(

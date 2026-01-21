@@ -26,14 +26,14 @@ let s3Client = null;
 
 const getS3Client = async () => {
   if (s3Client) return s3Client;
-  
+
   // In test environment, return mock client
   if (process.env.NODE_ENV === 'test') {
     return {
-      send: async () => ({ ETag: 'mock-etag', $metadata: {} })
+      send: async () => ({ ETag: 'mock-etag', $metadata: {} }),
     };
   }
-  
+
   const credentials = process.env.AWS_PROFILE
     ? await fromIni({ profile: process.env.AWS_PROFILE })()
     : await fromEnv()();
@@ -42,12 +42,12 @@ const getS3Client = async () => {
     region: process.env.AWS_REGION || 'us-east-1',
     credentials,
   });
-  
+
   console.log(
     '✅ AWS SDK v3 configured with credentials from',
     process.env.AWS_PROFILE ? `profile: ${process.env.AWS_PROFILE}` : 'environment'
   );
-  
+
   return s3Client;
 };
 
