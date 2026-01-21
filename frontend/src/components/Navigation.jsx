@@ -64,7 +64,7 @@ const Navigation = ({ isOpen, onClose }) => {
         inert={!isOpen ? "" : undefined}
       >
         <div className="nav-header">
-          <h2>📺 Episode Control</h2>
+          <h2>Menu</h2>
           <button className="nav-close" onClick={onClose} aria-label="Close menu" type="button">
             ✕
           </button>

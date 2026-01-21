@@ -104,9 +104,9 @@ app.use(
         'http://52.91.217.230',
         'http://3.94.166.174',
       ];
-      
+
       console.log('🔍 CORS Check - Origin:', origin, 'Allowed:', allowedOrigins.includes(origin));
-      
+
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -160,7 +160,7 @@ app.get('/health', async (req, res) => {
       DB_HOST: process.env.DB_HOST || 'NOT SET',
       DB_NAME: process.env.DB_NAME || 'NOT SET',
       DB_SSL: process.env.DB_SSL || 'NOT SET',
-    }
+    },
   };
 
   // Only check DB in non-test environment or if DB is available
@@ -168,7 +168,7 @@ app.get('/health', async (req, res) => {
     try {
       await db.sequelize.authenticate();
       health.database = 'connected';
-      
+
       // Check if shows table exists
       try {
         const [results] = await db.sequelize.query(
@@ -482,35 +482,42 @@ const frontendDistPath = path.join(__dirname, '../frontend/dist');
 // Serve static files from frontend/dist if it exists
 if (fs.existsSync(frontendDistPath)) {
   console.log('✓ Serving frontend from:', frontendDistPath);
-  
+
   // Serve static assets with proper caching
-  app.use(express.static(frontendDistPath, {
-    maxAge: 0, // No caching for dev
-    etag: true,
-    lastModified: true,
-    setHeaders: (res) => {
-      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-  }));
-  
+  app.use(
+    express.static(frontendDistPath, {
+      maxAge: 0, // No caching for dev
+      etag: true,
+      lastModified: true,
+      setHeaders: (res) => {
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      },
+    })
+  );
+
   // Handle React Router - serve index.html for all non-API/file routes (MUST be last)
   app.get('*', (req, res, next) => {
     try {
       console.log(`📄 Serving route: ${req.path}`);
-      
+
       // Skip API routes
-      if (req.path.startsWith('/api/') || req.path === '/health' || req.path === '/ping' || req.path === '/debug') {
+      if (
+        req.path.startsWith('/api/') ||
+        req.path === '/health' ||
+        req.path === '/ping' ||
+        req.path === '/debug'
+      ) {
         return next();
       }
-      
+
       // If file has extension and doesn't exist, 404 instead of serving index.html
       if (path.extname(req.path)) {
         return next();
       }
-      
+
       const indexPath = path.join(frontendDistPath, 'index.html');
       console.log(`📄 Index path: ${indexPath}, exists: ${fs.existsSync(indexPath)}`);
-      
+
       if (fs.existsSync(indexPath)) {
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.sendFile(indexPath);

@@ -95,12 +95,14 @@ const getAssetOrganizationDefaults = (assetType) => {
     },
   };
 
-  return typeMap[assetType] || {
-    asset_group: 'EPISODE',
-    purpose: 'MAIN',
-    allowed_uses: ['SCENE', 'THUMBNAIL'],
-    is_global: false,
-  };
+  return (
+    typeMap[assetType] || {
+      asset_group: 'EPISODE',
+      purpose: 'MAIN',
+      allowed_uses: ['SCENE', 'THUMBNAIL'],
+      is_global: false,
+    }
+  );
 };
 
 class AssetService {
@@ -464,7 +466,9 @@ class AssetService {
 
       // Check if it's a video - can't remove background from videos
       if (asset.media_type === 'video') {
-        throw new Error('Background removal is not supported for video files. Only images can be processed.');
+        throw new Error(
+          'Background removal is not supported for video files. Only images can be processed.'
+        );
       }
 
       // Check if already processed
@@ -483,11 +487,11 @@ class AssetService {
         Bucket: BUCKET_NAME,
         Key: asset.s3_key_raw,
       });
-      
+
       console.log(`🔍 Attempting to download from S3: ${BUCKET_NAME}/${asset.s3_key_raw}`);
       console.log(`🔑 AWS Credentials configured: ${!!process.env.AWS_ACCESS_KEY_ID}`);
       console.log(`🔑 AWS Region: ${process.env.AWS_REGION}`);
-      
+
       let response;
       try {
         response = await s3.send(getCommand);
@@ -495,21 +499,30 @@ class AssetService {
         console.error('❌ S3 Download Error:', s3Error.message);
         console.error('❌ S3 Error Code:', s3Error.Code || s3Error.name);
         console.error('❌ S3 Error Details:', JSON.stringify(s3Error, null, 2));
-        
+
         if (s3Error.Code === 'SignatureDoesNotMatch' || s3Error.name === 'SignatureDoesNotMatch') {
-          throw new Error('AWS credential error: Invalid access key or secret. Please check your AWS configuration.');
+          throw new Error(
+            'AWS credential error: Invalid access key or secret. Please check your AWS configuration.'
+          );
         } else if (s3Error.Code === 'NoSuchKey' || s3Error.name === 'NoSuchKey') {
           throw new Error(`Asset file not found in S3: ${asset.s3_key_raw}`);
         } else if (s3Error.Code === 'AccessDenied' || s3Error.name === 'AccessDenied') {
-          throw new Error('AWS permission error: Access denied to S3 bucket. Check IAM permissions.');
+          throw new Error(
+            'AWS permission error: Access denied to S3 bucket. Check IAM permissions.'
+          );
         } else if (s3Error.Code === 'InvalidAccessKeyId' || s3Error.name === 'InvalidAccessKeyId') {
           throw new Error('AWS credential error: Access key ID is invalid or does not exist.');
-        } else if (s3Error.Code === 'SignatureDoesNotMatch' || s3Error.message?.includes('signature')) {
-          throw new Error('AWS signature error: The request signature does not match. Check your secret access key.');
+        } else if (
+          s3Error.Code === 'SignatureDoesNotMatch' ||
+          s3Error.message?.includes('signature')
+        ) {
+          throw new Error(
+            'AWS signature error: The request signature does not match. Check your secret access key.'
+          );
         }
         throw new Error(`S3 download failed: ${s3Error.message}`);
       }
-      
+
       const imageBuffer = await this.streamToBuffer(response.Body);
 
       const FormData = require('form-data');
@@ -533,7 +546,7 @@ class AssetService {
             {
               headers: {
                 ...formData.getHeaders(),
-                'Authorization': `Bearer ${runwayApiKey}`,
+                Authorization: `Bearer ${runwayApiKey}`,
               },
               responseType: 'arraybuffer',
               timeout: 30000,
@@ -544,7 +557,11 @@ class AssetService {
         } catch (runwayError) {
           console.warn('⚠️ RunwayML failed:', runwayError.message);
           if (runwayError.response) {
-            console.warn('RunwayML error details:', runwayError.response.status, runwayError.response.statusText);
+            console.warn(
+              'RunwayML error details:',
+              runwayError.response.status,
+              runwayError.response.statusText
+            );
           }
         }
       }
@@ -553,7 +570,9 @@ class AssetService {
       if (!processedImageBuffer) {
         const removebgApiKey = process.env.REMOVEBG_API_KEY;
         if (!removebgApiKey) {
-          throw new Error('No background removal API configured. Please set RUNWAY_ML_API_KEY or REMOVEBG_API_KEY.');
+          throw new Error(
+            'No background removal API configured. Please set RUNWAY_ML_API_KEY or REMOVEBG_API_KEY.'
+          );
         }
 
         try {
@@ -582,7 +601,11 @@ class AssetService {
         } catch (removebgError) {
           console.error('❌ remove.bg failed:', removebgError.message);
           if (removebgError.response) {
-            console.error('remove.bg error:', removebgError.response.status, removebgError.response.data);
+            console.error(
+              'remove.bg error:',
+              removebgError.response.status,
+              removebgError.response.data
+            );
           }
           throw new Error('All background removal services failed');
         }
@@ -602,7 +625,7 @@ class AssetService {
           processedKey = asset.s3_key_raw + '_processed.png';
         }
       }
-      
+
       const putCommand = new PutObjectCommand({
         Bucket: BUCKET_NAME,
         Key: processedKey,
@@ -618,11 +641,13 @@ class AssetService {
         if (uploadError.Code === 'SignatureDoesNotMatch') {
           throw new Error('AWS credential error during upload: Invalid access key or secret.');
         } else if (uploadError.Code === 'AccessDenied') {
-          throw new Error('AWS permission error: Cannot write to S3 bucket. Check IAM permissions.');
+          throw new Error(
+            'AWS permission error: Cannot write to S3 bucket. Check IAM permissions.'
+          );
         }
         throw new Error(`Failed to upload processed image to S3: ${uploadError.message}`);
       }
-      
+
       const processedUrl = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${processedKey}`;
 
       await asset.update({
@@ -664,7 +689,7 @@ class AssetService {
       const labels = await AssetLabel.findAll({
         order: [['name', 'ASC']],
       });
-      return labels.map(l => l.toJSON());
+      return labels.map((l) => l.toJSON());
     } catch (error) {
       console.error('Failed to get labels:', error);
       throw error;
@@ -844,7 +869,7 @@ class AssetService {
   async bulkDeleteAssets(assetIds) {
     try {
       const results = await Promise.allSettled(
-        assetIds.map(async id => {
+        assetIds.map(async (id) => {
           console.log(`Attempting to delete asset: ${id}`);
           const result = await Asset.destroy({ where: { id } });
           console.log(`Delete result for ${id}:`, result);
@@ -855,9 +880,9 @@ class AssetService {
         })
       );
 
-      const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected').length;
-      
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
+
       // Log failures
       results.forEach((r, i) => {
         if (r.status === 'rejected') {
@@ -866,11 +891,11 @@ class AssetService {
       });
 
       console.log(`✅ Bulk delete: ${succeeded} succeeded, ${failed} failed`);
-      
+
       if (failed > 0 && succeeded === 0) {
         throw new Error(`All ${failed} delete operations failed`);
       }
-      
+
       return { succeeded, failed, total: assetIds.length };
     } catch (error) {
       console.error('Bulk delete failed:', error);
@@ -886,11 +911,11 @@ class AssetService {
   async bulkProcessBackground(assetIds) {
     try {
       const results = await Promise.allSettled(
-        assetIds.map(id => this.processAssetBackgroundRemoval(id))
+        assetIds.map((id) => this.processAssetBackgroundRemoval(id))
       );
 
-      const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected').length;
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
 
       console.log(`✅ Bulk process: ${succeeded} succeeded, ${failed} failed`);
       return { succeeded, failed, total: assetIds.length };
@@ -909,11 +934,11 @@ class AssetService {
   async bulkAddLabels(assetIds, labelIds) {
     try {
       const results = await Promise.allSettled(
-        assetIds.map(assetId => this.addLabelsToAsset(assetId, labelIds))
+        assetIds.map((assetId) => this.addLabelsToAsset(assetId, labelIds))
       );
 
-      const succeeded = results.filter(r => r.status === 'fulfilled').length;
-      const failed = results.filter(r => r.status === 'rejected').length;
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
 
       console.log(`✅ Bulk label: ${succeeded} succeeded, ${failed} failed`);
       return { succeeded, failed, total: assetIds.length };
@@ -946,11 +971,11 @@ class AssetService {
         'asset_group',
         'purpose',
         'allowed_uses',
-        'is_global'
+        'is_global',
       ];
       const updateData = {};
 
-      Object.keys(updates).forEach(key => {
+      Object.keys(updates).forEach((key) => {
         if (allowedFields.includes(key)) {
           updateData[key] = updates[key];
         }
@@ -961,7 +986,7 @@ class AssetService {
       await asset.update(updateData);
 
       console.log(`✅ Asset updated: ${assetId}`);
-      
+
       // Return formatted asset without labels to avoid querying non-existent junction table
       return this._formatAssetForFrontend(asset);
     } catch (error) {
@@ -1012,7 +1037,7 @@ class AssetService {
         limit,
       });
 
-      return assets.map(asset => {
+      return assets.map((asset) => {
         const assetData = asset.toJSON();
         return {
           id: assetData.id,
@@ -1050,7 +1075,7 @@ class AssetService {
   async generateDownloadUrl(assetId, type = 'raw') {
     try {
       console.log(`🔗 Generating download URL for asset ${assetId}, type: ${type}`);
-      
+
       const asset = await Asset.findByPk(assetId);
       if (!asset) {
         throw new Error(`Asset ${assetId} not found`);
@@ -1088,8 +1113,8 @@ class AssetService {
         ResponseContentDisposition: `attachment; filename="${asset.file_name || asset.name}"`,
       });
 
-      const signedUrl = await getSignedUrl(client, command, { 
-        expiresIn: 3600 // 1 hour
+      const signedUrl = await getSignedUrl(client, command, {
+        expiresIn: 3600, // 1 hour
       });
 
       console.log(`✅ Download URL generated successfully`);

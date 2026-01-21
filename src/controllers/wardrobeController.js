@@ -17,7 +17,11 @@ const s3Client = new S3Client({
     : undefined,
 });
 
-const BUCKET_NAME = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET || process.env.S3_BUCKET_NAME || 'episode-metadata-storage-dev';
+const BUCKET_NAME =
+  process.env.S3_PRIMARY_BUCKET ||
+  process.env.AWS_S3_BUCKET ||
+  process.env.S3_BUCKET_NAME ||
+  'episode-metadata-storage-dev';
 
 /**
  * Wardrobe Controller
@@ -298,14 +302,20 @@ module.exports = {
         scene_description: updates.sceneDescription,
         outfit_notes: updates.outfitNotes,
         is_favorite: updates.isFavorite === 'true' || updates.isFavorite === true,
-        tags: updates.tags ? (typeof updates.tags === 'string' ? JSON.parse(updates.tags) : updates.tags) : undefined,
+        tags: updates.tags
+          ? typeof updates.tags === 'string'
+            ? JSON.parse(updates.tags)
+            : updates.tags
+          : undefined,
         s3_key: updates.s3_key,
         s3_url: updates.s3_url,
         updated_at: new Date(),
       };
 
       // Remove undefined values
-      Object.keys(updateData).forEach((key) => updateData[key] === undefined && delete updateData[key]);
+      Object.keys(updateData).forEach(
+        (key) => updateData[key] === undefined && delete updateData[key]
+      );
 
       await wardrobeItem.update(updateData);
 
@@ -540,7 +550,7 @@ module.exports = {
       // Call background removal API
       const runwayApiKey = process.env.RUNWAY_ML_API_KEY;
       const removeBgApiKey = process.env.REMOVEBG_API_KEY;
-      
+
       if (!runwayApiKey && !removeBgApiKey) {
         return res.status(500).json({
           error: 'No background removal API key configured',
@@ -558,29 +568,25 @@ module.exports = {
       formData.append('size', 'auto'); // Auto-detect best output size
 
       let runwayResponse;
-      
+
       // Try remove.bg first (more reliable)
       if (removeBgApiKey) {
         console.log(`📤 Sending to remove.bg API for wardrobe item ${id}...`);
         try {
-          runwayResponse = await axios.post(
-            'https://api.remove.bg/v1.0/removebg',
-            formData,
-            {
-              headers: {
-                ...formData.getHeaders(),
-                'X-Api-Key': removeBgApiKey,
-              },
-              responseType: 'arraybuffer',
-              timeout: 60000, // 60 second timeout for large images
-            }
-          );
+          runwayResponse = await axios.post('https://api.remove.bg/v1.0/removebg', formData, {
+            headers: {
+              ...formData.getHeaders(),
+              'X-Api-Key': removeBgApiKey,
+            },
+            responseType: 'arraybuffer',
+            timeout: 60000, // 60 second timeout for large images
+          });
         } catch (error) {
           console.error('remove.bg failed:', error.message);
           if (!runwayApiKey) throw error;
         }
       }
-      
+
       // Fallback to RunwayML if remove.bg failed or not configured
       if (!runwayResponse && runwayApiKey) {
         console.log(`📤 Sending to RunwayML API for wardrobe item ${id}...`);
@@ -590,7 +596,7 @@ module.exports = {
           {
             headers: {
               ...formData.getHeaders(),
-              'Authorization': `Bearer ${runwayApiKey}`,
+              Authorization: `Bearer ${runwayApiKey}`,
             },
             responseType: 'arraybuffer',
             timeout: 60000, // 60 second timeout

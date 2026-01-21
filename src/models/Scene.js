@@ -252,8 +252,8 @@ module.exports = (sequelize) => {
         field: 'thumbnail_id',
         references: {
           model: 'thumbnails',
-          key: 'id'
-        }
+          key: 'id',
+        },
       },
       // CamelCase alias for thumbnail_id
       thumbnailId: {
@@ -274,8 +274,8 @@ module.exports = (sequelize) => {
             if (value && typeof value !== 'object') {
               throw new Error('Assets must be a JSON object');
             }
-          }
-        }
+          },
+        },
       },
     },
     {
@@ -362,7 +362,7 @@ module.exports = (sequelize) => {
 
   Scene.prototype.removeCharacter = async function (characterName) {
     if (this.characters && this.characters.includes(characterName)) {
-      this.characters = this.characters.filter(c => c !== characterName);
+      this.characters = this.characters.filter((c) => c !== characterName);
       await this.save();
     }
     return this;
@@ -384,7 +384,7 @@ module.exports = (sequelize) => {
     }
     this.assets = {
       ...this.assets,
-      ...assetData
+      ...assetData,
     };
     this.updated_by = userId;
     await this.save();
@@ -416,7 +416,7 @@ module.exports = (sequelize) => {
       createdAt: this.created_at,
       updatedAt: this.updated_at,
       createdBy: this.created_by,
-      updatedBy: this.updated_by
+      updatedBy: this.updated_by,
     };
   };
 

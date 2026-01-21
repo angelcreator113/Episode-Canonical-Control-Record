@@ -8,8 +8,10 @@ const { generateToken } = require('../../src/services/tokenService');
  * Tests all 11 scene endpoints with authentication
  */
 
-// Skip integration tests if using production database or test DB doesn't exist
-const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com') || process.env.DATABASE_URL?.includes('episode_metadata_test') === false;
+// Skip integration tests if using production database (not using test DB)
+const shouldSkip =
+  process.env.DATABASE_URL?.includes('amazonaws.com') ||
+  !process.env.DATABASE_URL?.includes('episode_metadata_test');
 
 (shouldSkip ? describe.skip : describe)('Scenes API Integration Tests', () => {
   let authToken;
@@ -167,12 +169,10 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com') || proces
     });
 
     it.skip('should reject scene creation without auth token', async () => {
-      const response = await request(app)
-        .post('/api/v1/scenes')
-        .send({
-          episodeId: testEpisode.id,
-          title: 'Unauthorized Scene',
-        });
+      const response = await request(app).post('/api/v1/scenes').send({
+        episodeId: testEpisode.id,
+        title: 'Unauthorized Scene',
+      });
 
       expect(response.status).toBe(401);
     });
@@ -270,7 +270,7 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com') || proces
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.data.every(s => s.episodeId === testEpisode.id)).toBe(true);
+      expect(response.body.data.every((s) => s.episodeId === testEpisode.id)).toBe(true);
     });
 
     it('should filter scenes by sceneType', async () => {
@@ -280,7 +280,7 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com') || proces
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.data.every(s => s.sceneType === 'intro')).toBe(true);
+      expect(response.body.data.every((s) => s.sceneType === 'intro')).toBe(true);
       expect(response.body.data.length).toBe(1);
     });
 
@@ -291,7 +291,7 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com') || proces
         .set('Authorization', `Bearer ${authToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.data.every(s => s.productionStatus === 'draft')).toBe(true);
+      expect(response.body.data.every((s) => s.productionStatus === 'draft')).toBe(true);
       expect(response.body.data.length).toBe(2);
     });
 
@@ -684,7 +684,7 @@ const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com') || proces
       expect(response.status).toBe(200);
 
       // Should still only have one LaLa
-      const lalaCount = response.body.data.characters.filter(c => c === 'LaLa').length;
+      const lalaCount = response.body.data.characters.filter((c) => c === 'LaLa').length;
       expect(lalaCount).toBe(1);
     });
 

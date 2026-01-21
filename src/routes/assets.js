@@ -27,14 +27,24 @@ const upload = multer({
   fileFilter: (req, file, cb) => {
     const allowedMimes = [
       // Images
-      'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
       // Videos
-      'video/mp4', 'video/quicktime', 'video/webm', 'video/x-msvideo'
+      'video/mp4',
+      'video/quicktime',
+      'video/webm',
+      'video/x-msvideo',
     ];
     if (allowedMimes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only images (JPEG, PNG, GIF, WebP) and videos (MP4, MOV, WebM) allowed'));
+      cb(
+        new Error(
+          'Invalid file type. Only images (JPEG, PNG, GIF, WebP) and videos (MP4, MOV, WebM) allowed'
+        )
+      );
     }
   },
 });
@@ -59,17 +69,22 @@ const VALID_ASSET_TYPES = [
  */
 router.get('/', async (req, res) => {
   try {
-    const { 
-      limit = 500, 
-      offset = 0, 
+    const {
+      limit = 500,
+      offset = 0,
       approval_status,
       asset_type,
       sortBy = 'created_at',
-      sortOrder = 'DESC'
+      sortOrder = 'DESC',
     } = req.query;
 
-    console.log('📥 GET /assets - Listing assets with filters:', { 
-      limit, offset, approval_status, asset_type, sortBy, sortOrder 
+    console.log('📥 GET /assets - Listing assets with filters:', {
+      limit,
+      offset,
+      approval_status,
+      asset_type,
+      sortBy,
+      sortOrder,
     });
 
     const where = {};
@@ -86,11 +101,20 @@ router.get('/', async (req, res) => {
       offset: parseInt(offset),
       order: [[sortBy, sortOrder]],
       attributes: [
-        'id', 'name', 'asset_type', 'asset_group', 'purpose', 
-        's3_url_raw', 's3_url_processed', 'media_type',
-        'approval_status', 'is_global', 'allowed_uses',
-        'created_at', 'updated_at'
-      ]
+        'id',
+        'name',
+        'asset_type',
+        'asset_group',
+        'purpose',
+        's3_url_raw',
+        's3_url_processed',
+        'media_type',
+        'approval_status',
+        'is_global',
+        'allowed_uses',
+        'created_at',
+        'updated_at',
+      ],
     });
 
     console.log(`✅ Found ${assets.length} assets`);
@@ -99,14 +123,14 @@ router.get('/', async (req, res) => {
       status: 'SUCCESS',
       data: assets,
       count: assets.length,
-      filters: { limit, offset, approval_status, asset_type }
+      filters: { limit, offset, approval_status, asset_type },
     });
   } catch (error) {
     console.error('❌ Failed to list assets:', error);
     res.status(500).json({
       error: 'Failed to list assets',
       message: error.message,
-      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
   }
 });
@@ -721,16 +745,16 @@ router.get('/:id/usage', validateUUIDParam('id'), async (req, res) => {
 router.get('/:id/download/:type', validateUUIDParam('id'), async (req, res) => {
   try {
     const { id, type } = req.params;
-    
+
     if (!['raw', 'processed'].includes(type)) {
       return res.status(400).json({
         error: 'Invalid download type',
         message: 'Type must be "raw" or "processed"',
       });
     }
-    
+
     const downloadUrl = await AssetService.generateDownloadUrl(id, type);
-    
+
     res.json({
       status: 'SUCCESS',
       data: {
@@ -755,7 +779,9 @@ router.get('/config/check', async (req, res) => {
   try {
     const config = {
       awsRegion: process.env.AWS_REGION || 'not set',
-      awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ? `${process.env.AWS_ACCESS_KEY_ID.substring(0, 8)}...` : 'not set',
+      awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID
+        ? `${process.env.AWS_ACCESS_KEY_ID.substring(0, 8)}...`
+        : 'not set',
       awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'configured' : 'not set',
       s3Bucket: process.env.AWS_S3_BUCKET || 'not set',
       runwayApiKey: process.env.RUNWAY_ML_API_KEY ? 'configured' : 'not set',
