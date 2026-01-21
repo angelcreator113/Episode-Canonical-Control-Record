@@ -96,7 +96,7 @@ jobs:
           tar -czf episode-metadata-staging-${{ github.sha }}.tar.gz deploy/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: episode-metadata-build-staging
           path: episode-metadata-staging-${{ github.sha }}.tar.gz
@@ -114,7 +114,7 @@ jobs:
           ref: staging
 
       - name: Download artifact
-        uses: actions/download-artifact@v3
+        uses: actions/download-artifact@v4
         with:
           name: episode-metadata-build-staging
 
