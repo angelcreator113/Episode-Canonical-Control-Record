@@ -8,10 +8,10 @@ const { generateToken } = require('../../src/services/tokenService');
  * Tests all 11 scene endpoints with authentication
  */
 
-// Skip integration tests if test database is not configured
-const testDbConfigured = !process.env.DATABASE_URL?.includes('amazonaws.com');
+// Skip integration tests if using production database or test DB doesn't exist
+const shouldSkip = process.env.DATABASE_URL?.includes('amazonaws.com') || process.env.DATABASE_URL?.includes('episode_metadata_test') === false;
 
-(testDbConfigured ? describe : describe.skip)('Scenes API Integration Tests', () => {
+(shouldSkip ? describe.skip : describe)('Scenes API Integration Tests', () => {
   let authToken;
   let testShow;
   let testEpisode;
