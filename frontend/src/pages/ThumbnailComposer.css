@@ -35,7 +35,7 @@
 /* ==================== HEADER ==================== */
 .composer-header {
   background: white;
-  padding: 2rem 3rem;
+  padding: 1.5rem 2rem;
   border-bottom: 1px solid var(--gray-200);
   position: sticky;
   top: 0;
@@ -44,7 +44,7 @@
 }
 
 .composer-header-content {
-  max-width: 1600px;
+  max-width: 1400px;
   margin: 0 auto;
   display: flex;
   justify-content: space-between;
@@ -59,7 +59,7 @@
 
 .composer-title h1 {
   margin: 0;
-  font-size: 1.75rem;
+  font-size: 1.35rem;
   font-weight: 700;
   color: var(--gray-900);
   display: flex;
@@ -70,7 +70,7 @@
 .composer-title .subtitle {
   margin: 0;
   color: var(--gray-700);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
   font-weight: 400;
 }
 

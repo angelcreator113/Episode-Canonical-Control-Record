@@ -4,7 +4,7 @@
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.5);
-  z-index: 998;
+  z-index: 100;
   opacity: 0;
   visibility: hidden;
   transition: opacity 0.25s ease, visibility 0.25s ease;
@@ -29,7 +29,7 @@
 
   background: linear-gradient(180deg, #2c3e50 0%, #34495e 100%);
   box-shadow: 2px 0 15px rgba(0, 0, 0, 0.4);
-  z-index: 999;
+  z-index: 101;
 
   display: flex;
   flex-direction: column;
@@ -50,7 +50,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 1.1rem 1rem;
+  padding: 0.9rem 1rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.15);
   flex-shrink: 0;
   background: rgba(0, 0, 0, 0.2);
@@ -58,7 +58,7 @@
 
 .nav-header h2 {
   margin: 0;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
   color: #fff;
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -208,27 +208,27 @@
 /* Small mobile */
 @media (max-width: 480px) {
   .navigation {
-    width: 280px;
-    max-width: 75vw;
+    width: 260px;
+    max-width: 80vw;
   }
 
   .nav-header {
-    padding: 1rem 0.9rem;
+    padding: 0.9rem 0.75rem;
   }
 
   .nav-close {
-    width: 38px;
-    height: 38px;
+    width: 36px;
+    height: 36px;
   }
 
   .nav-items li button {
-    padding: 0.78rem 0.9rem;
+    padding: 0.7rem 0.85rem;
     min-height: 44px;
-    font-size: 0.92rem;
+    font-size: 0.9rem;
   }
 
   .nav-footer {
-    padding: 1rem;
+    padding: 0.9rem;
   }
 }
 
