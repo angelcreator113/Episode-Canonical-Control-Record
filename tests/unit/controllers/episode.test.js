@@ -244,12 +244,6 @@ describe('Episode Controller - Real Tests', () => {
       // Logger is wrapped in try-catch, verify endpoint succeeded
       expect(mockRes.status).toHaveBeenCalledWith(201);
     });
-        'create',
-        'episode',
-        expect.any(Number),
-        expect.any(Object)
-      );
-    });
   });
 
   describe('updateEpisode()', () => {
