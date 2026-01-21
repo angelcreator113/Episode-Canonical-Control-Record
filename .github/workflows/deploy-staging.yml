@@ -181,6 +181,13 @@ jobs:
             cd frontend
             npm ci
             npm run build
+            
+            # Verify build succeeded
+            if [ ! -d "dist" ] || [ ! -f "dist/index.html" ]; then
+              echo "❌ Frontend build failed - dist directory not created"
+              exit 1
+            fi
+            echo "✅ Frontend build successful"
             cd ..
             
             echo "🗄️  Running migrations..."
