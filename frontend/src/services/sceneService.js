@@ -91,7 +91,40 @@ const sceneService = {
       assets
     });
     return data;
-  }
+  },
+
+  // NEW: Get scene assets
+  async getSceneAssets(sceneId) {
+    const { data } = await api.get(`/api/v1/scenes/${sceneId}/assets`);
+    return data;
+  },
+
+  // NEW: Add asset to scene
+  async addSceneAsset(sceneId, assetData) {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/assets`, assetData);
+    return data;
+  },
+
+  // NEW: Remove asset from scene
+  async removeSceneAsset(sceneId, assetId, usageType = null) {
+    const params = usageType ? { usageType } : {};
+    const { data } = await api.delete(`/api/v1/scenes/${sceneId}/assets/${assetId}`, { params });
+    return data;
+  },
+
+  // NEW: Update scene asset positioning/timing
+  async updateSceneAssetDetails(sceneId, assetId, updates) {
+    const { data } = await api.patch(`/api/v1/scenes/${sceneId}/assets/${assetId}`, updates);
+    return data;
+  },
+
+  /**
+   * Duplicate a scene
+   */
+  duplicateScene: async (sceneId) => {
+    const response = await api.post(`/scenes/${sceneId}/duplicate`);
+    return response.data;
+  },
 };
 
 export default sceneService;

@@ -3,7 +3,7 @@ import axios from 'axios';
 // Create axios instance with environment-aware base URL
 const apiClient = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '',  // Empty for production (relative URLs)
-  timeout: 10000,
+  timeout: 60000, // 60 seconds for background removal operations
   headers: {
     'Content-Type': 'application/json',
   },

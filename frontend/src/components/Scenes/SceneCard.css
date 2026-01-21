@@ -259,7 +259,8 @@
 }
 
 .btn-edit,
-.btn-delete {
+.btn-delete,
+.btn-duplicate {
   padding: 7px 12px;
   border: none;
   border-radius: 6px;
@@ -280,6 +281,16 @@
 .btn-edit:hover {
   transform: translateY(-1px);
   box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+}
+
+.btn-duplicate {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: white;
+}
+
+.btn-duplicate:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(16, 185, 129, 0.3);
 }
 
 .btn-delete {
@@ -312,6 +323,7 @@
   }
 
   .btn-edit,
+  .btn-duplicate,
   .btn-delete {
     flex: 1;
   }

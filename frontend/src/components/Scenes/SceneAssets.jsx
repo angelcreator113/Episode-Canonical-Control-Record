@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { HiPlus, HiTrash, HiPhotograph } from 'react-icons/hi';
+import sceneService from '../../services/sceneService';
+import api from '../../services/api';
 import './SceneAssets.css';
 
 /**
@@ -11,6 +13,7 @@ const SceneAssets = ({ sceneId, episodeId, onUpdate }) => {
   const [availableAssets, setAvailableAssets] = useState([]);
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     loadSceneAssets();
@@ -19,56 +22,50 @@ const SceneAssets = ({ sceneId, episodeId, onUpdate }) => {
 
   const loadSceneAssets = async () => {
     try {
-      // TODO: Replace with actual API call
-      // const response = await sceneService.getSceneAssets(sceneId);
-      const mockAssets = [
-        {
-          id: '1',
-          asset_id: 'asset-1',
-          asset_name: 'Lala Promo',
-          asset_type: 'PROMO_LALA',
-          asset_url: '/assets/lala-promo.png',
-          start_time: 0,
-          end_time: 5,
-          display_duration: 5
-        }
-      ];
-      setSceneAssets(mockAssets);
+      setLoading(true);
+      setError(null);
+      const response = await sceneService.getSceneAssets(sceneId);
+      
+      // Transform data to match component expectations
+      const assets = (response.data || []).map(asset => ({
+        id: asset.SceneAsset?.id || asset.id,
+        asset_id: asset.id,
+        asset_name: asset.name,
+        asset_type: asset.asset_type,
+        asset_url: asset.s3_url_processed || asset.s3_url_raw,
+        usage_type: asset.SceneAsset?.usage_type || 'overlay',
+        start_timecode: asset.SceneAsset?.start_timecode,
+        end_timecode: asset.SceneAsset?.end_timecode,
+        layer_order: asset.SceneAsset?.layer_order || 0,
+        opacity: asset.SceneAsset?.opacity || 1.0,
+        position: asset.SceneAsset?.position,
+        width: asset.width,
+        height: asset.height,
+      }));
+      
+      setSceneAssets(assets);
       setLoading(false);
     } catch (error) {
       console.error('Error loading scene assets:', error);
+      setError('Failed to load scene assets');
       setLoading(false);
     }
   };
 
   const loadAvailableAssets = async () => {
     try {
-      // TODO: Replace with actual API call
-      // const response = await assetService.getEpisodeAssets(episodeId);
-      const mockAssets = [
-        {
-          id: 'asset-1',
-          name: 'Lala Promo',
-          type: 'PROMO_LALA',
-          url: '/assets/lala-promo.png',
-          thumbnail_url: '/assets/lala-promo-thumb.png'
-        },
-        {
-          id: 'asset-2',
-          name: 'Guest Intro',
-          type: 'PROMO_GUEST',
-          url: '/assets/guest-promo.png',
-          thumbnail_url: '/assets/guest-promo-thumb.png'
-        },
-        {
-          id: 'asset-3',
-          name: 'Brand Logo',
-          type: 'BRAND_LOGO',
-          url: '/assets/brand-logo.png',
-          thumbnail_url: '/assets/brand-logo-thumb.png'
-        }
-      ];
-      setAvailableAssets(mockAssets);
+      // Load episode assets
+      const response = await api.get(`/api/v1/episodes/${episodeId}/assets`);
+      const assets = (response.data.data || []).map(asset => ({
+        id: asset.id,
+        name: asset.name,
+        type: asset.asset_type,
+        url: asset.s3_url_processed || asset.s3_url_raw,
+        thumbnail_url: asset.s3_url_processed || asset.s3_url_raw,
+        width: asset.width,
+        height: asset.height,
+      }));
+      setAvailableAssets(assets);
     } catch (error) {
       console.error('Error loading available assets:', error);
     }
@@ -76,97 +73,98 @@ const SceneAssets = ({ sceneId, episodeId, onUpdate }) => {
 
   const handleAddAsset = async (asset) => {
     try {
-      // TODO: Replace with actual API call
-      // await sceneService.linkAsset(sceneId, asset.id, { start_time: 0, end_time: 5 });
-      
-      const newSceneAsset = {
-        id: `scene-asset-${Date.now()}`,
-        asset_id: asset.id,
-        asset_name: asset.name,
-        asset_type: asset.type,
-        asset_url: asset.url,
-        start_time: 0,
-        end_time: 5,
-        display_duration: 5
-      };
+      await sceneService.addSceneAsset(sceneId, {
+        assetId: asset.id,
+        usageType: 'overlay',
+        startTimecode: '00:00:00:00',
+        endTimecode: '00:00:05:00',
+        layerOrder: sceneAssets.length,
+        opacity: 1.0,
+      });
 
-      setSceneAssets([...sceneAssets, newSceneAsset]);
       setShowAssetPicker(false);
+      await loadSceneAssets();
       
       if (onUpdate) {
         onUpdate();
       }
     } catch (error) {
       console.error('Error adding asset to scene:', error);
-      alert('Failed to add asset');
+      alert('Failed to add asset: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  const handleRemoveAsset = async (sceneAssetId) => {
+  const handleRemoveAsset = async (sceneAssetId, assetId) => {
     if (!window.confirm('Remove this asset from the scene?')) {
       return;
     }
 
     try {
-      // TODO: Replace with actual API call
-      // await sceneService.unlinkAsset(sceneId, sceneAssetId);
-      
-      setSceneAssets(sceneAssets.filter(sa => sa.id !== sceneAssetId));
+      await sceneService.removeSceneAsset(sceneId, assetId);
+      await loadSceneAssets();
       
       if (onUpdate) {
         onUpdate();
       }
     } catch (error) {
       console.error('Error removing asset:', error);
-      alert('Failed to remove asset');
+      alert('Failed to remove asset: ' + (error.response?.data?.message || error.message));
     }
   };
 
-  const handleUpdateTiming = async (sceneAssetId, startTime, endTime) => {
+  const handleUpdateTiming = async (assetId, startTimecode, endTimecode) => {
     try {
-      // TODO: Replace with actual API call
-      // await sceneService.updateAssetTiming(sceneAssetId, { start_time: startTime, end_time: endTime });
+      await sceneService.updateSceneAssetDetails(sceneId, assetId, {
+        startTimecode,
+        endTimecode,
+      });
       
-      setSceneAssets(sceneAssets.map(sa => 
-        sa.id === sceneAssetId 
-          ? { ...sa, start_time: startTime, end_time: endTime, display_duration: endTime - startTime }
-          : sa
-      ));
+      await loadSceneAssets();
       
       if (onUpdate) {
         onUpdate();
       }
     } catch (error) {
       console.error('Error updating asset timing:', error);
-      alert('Failed to update timing');
+      alert('Failed to update timing: ' + (error.response?.data?.message || error.message));
     }
-  };
-
-  const formatTime = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   const getAssetTypeColor = (type) => {
     const colors = {
-      'PROMO_LALA': '#ec4899',
-      'PROMO_GUEST': '#f59e0b',
-      'PROMO_WOMANINPRIME': '#8b5cf6',
-      'BRAND_LOGO': '#3b82f6',
-      'EPISODE_FRAME': '#10b981',
+      'image': '#ec4899',
+      'video': '#f59e0b',
+      'logo': '#8b5cf6',
+      'graphic': '#3b82f6',
+      'thumbnail': '#10b981',
     };
-    return colors[type] || '#6b7280';
+    return colors[type?.toLowerCase()] || '#6b7280';
+  };
+
+  const getQualityBadge = (width, height) => {
+    if (!width || !height) return null;
+    if (width >= 3840 || height >= 2160) return '4K';
+    if (width >= 1920 || height >= 1080) return 'HD';
+    return 'SD';
   };
 
   if (loading) {
     return <div className="scene-assets-loading">Loading assets...</div>;
   }
 
+  if (error) {
+    return (
+      <div className="scene-assets-error">
+        <p>{error}</p>
+        <button onClick={loadSceneAssets}>Retry</button>
+      </div>
+    );
+  }
+
   return (
     <div className="scene-assets">
       <div className="scene-assets-header">
-        <h4>Scene Assets</h4>
+        <h4>Scene Assets ({sceneAssets.length})</h4>
         <button 
           onClick={() => setShowAssetPicker(true)}
           className="btn-add-asset"
@@ -196,64 +194,67 @@ const SceneAssets = ({ sceneId, episodeId, onUpdate }) => {
                 className="asset-thumbnail"
                 style={{ borderColor: getAssetTypeColor(sceneAsset.asset_type) }}
               >
-                <img 
-                  src={sceneAsset.asset_url} 
-                  alt={sceneAsset.asset_name}
-                  onError={(e) => {
-                    e.target.style.display = 'none';
-                    e.target.nextSibling.style.display = 'flex';
-                  }}
-                />
-                <div className="thumbnail-placeholder" style={{ display: 'none' }}>
+                {sceneAsset.asset_url ? (
+                  <img 
+                    src={sceneAsset.asset_url} 
+                    alt={sceneAsset.asset_name}
+                    onError={(e) => {
+                      e.target.style.display = 'none';
+                      e.target.nextSibling.style.display = 'flex';
+                    }}
+                  />
+                ) : null}
+                <div className="thumbnail-placeholder" style={{ display: sceneAsset.asset_url ? 'none' : 'flex' }}>
                   <HiPhotograph size={32} />
                 </div>
+                {getQualityBadge(sceneAsset.width, sceneAsset.height) && (
+                  <span className="quality-badge">{getQualityBadge(sceneAsset.width, sceneAsset.height)}</span>
+                )}
               </div>
 
               <div className="asset-info">
                 <h5>{sceneAsset.asset_name}</h5>
-                <span className="asset-type" style={{ background: getAssetTypeColor(sceneAsset.asset_type) }}>
-                  {sceneAsset.asset_type.replace('_', ' ')}
-                </span>
+                <div className="asset-meta">
+                  <span className="asset-type" style={{ background: getAssetTypeColor(sceneAsset.asset_type) }}>
+                    {sceneAsset.asset_type?.toUpperCase() || 'UNKNOWN'}
+                  </span>
+                  <span className="usage-type">{sceneAsset.usage_type}</span>
+                  <span className="layer-order">Layer {sceneAsset.layer_order}</span>
+                </div>
               </div>
 
               <div className="asset-timing">
                 <div className="timing-input">
                   <label>Start</label>
                   <input
-                    type="number"
-                    value={sceneAsset.start_time}
+                    type="text"
+                    value={sceneAsset.start_timecode || '00:00:00:00'}
                     onChange={(e) => handleUpdateTiming(
-                      sceneAsset.id,
-                      parseInt(e.target.value) || 0,
-                      sceneAsset.end_time
+                      sceneAsset.asset_id,
+                      e.target.value,
+                      sceneAsset.end_timecode
                     )}
-                    min="0"
+                    placeholder="HH:MM:SS:FF"
                   />
-                  <span>s</span>
                 </div>
 
                 <div className="timing-input">
                   <label>End</label>
                   <input
-                    type="number"
-                    value={sceneAsset.end_time}
+                    type="text"
+                    value={sceneAsset.end_timecode || '00:00:05:00'}
                     onChange={(e) => handleUpdateTiming(
-                      sceneAsset.id,
-                      sceneAsset.start_time,
-                      parseInt(e.target.value) || 0
+                      sceneAsset.asset_id,
+                      sceneAsset.start_timecode,
+                      e.target.value
                     )}
-                    min={sceneAsset.start_time}
+                    placeholder="HH:MM:SS:FF"
                   />
-                  <span>s</span>
-                </div>
-
-                <div className="timing-duration">
-                  Duration: {sceneAsset.display_duration}s
                 </div>
               </div>
 
               <button 
-                onClick={() => handleRemoveAsset(sceneAsset.id)}
+                onClick={() => handleRemoveAsset(sceneAsset.id, sceneAsset.asset_id)}
                 className="btn-remove-asset"
                 title="Remove asset"
               >
@@ -280,35 +281,48 @@ const SceneAssets = ({ sceneId, episodeId, onUpdate }) => {
             </div>
 
             <div className="modal-body">
-              <div className="asset-grid">
-                {availableAssets.map(asset => (
-                  <div 
-                    key={asset.id}
-                    className="asset-picker-item"
-                    onClick={() => handleAddAsset(asset)}
-                  >
-                    <div className="asset-picker-thumbnail">
-                      <img 
-                        src={asset.thumbnail_url || asset.url} 
-                        alt={asset.name}
-                        onError={(e) => {
-                          e.target.style.display = 'none';
-                          e.target.nextSibling.style.display = 'flex';
-                        }}
-                      />
-                      <div className="thumbnail-placeholder" style={{ display: 'none' }}>
-                        <HiPhotograph size={32} />
+              {availableAssets.length === 0 ? (
+                <div className="no-assets">
+                  <HiPhotograph size={48} />
+                  <p>No assets available</p>
+                  <p className="help-text">Add assets to this episode first</p>
+                </div>
+              ) : (
+                <div className="asset-grid">
+                  {availableAssets.map(asset => (
+                    <div 
+                      key={asset.id}
+                      className="asset-picker-item"
+                      onClick={() => handleAddAsset(asset)}
+                    >
+                      <div className="asset-picker-thumbnail">
+                        {asset.url ? (
+                          <img 
+                            src={asset.thumbnail_url || asset.url} 
+                            alt={asset.name}
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        <div className="thumbnail-placeholder" style={{ display: asset.url ? 'none' : 'flex' }}>
+                          <HiPhotograph size={32} />
+                        </div>
+                        {getQualityBadge(asset.width, asset.height) && (
+                          <span className="quality-badge">{getQualityBadge(asset.width, asset.height)}</span>
+                        )}
+                      </div>
+                      <div className="asset-picker-info">
+                        <h5>{asset.name}</h5>
+                        <span className="asset-type" style={{ background: getAssetTypeColor(asset.type) }}>
+                          {asset.type?.toUpperCase() || 'UNKNOWN'}
+                        </span>
                       </div>
                     </div>
-                    <div className="asset-picker-info">
-                      <h5>{asset.name}</h5>
-                      <span className="asset-type" style={{ background: getAssetTypeColor(asset.type) }}>
-                        {asset.type.replace('_', ' ')}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -318,3 +332,4 @@ const SceneAssets = ({ sceneId, episodeId, onUpdate }) => {
 };
 
 export default SceneAssets;
+

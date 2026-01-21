@@ -22,6 +22,7 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import ErrorMessage from '../components/ErrorMessage';
 import { PAGINATION } from '../utils/constants';
 import { API_URL } from '../config/api';
+import '../styles/Episodes.css';
 
 const Episodes = () => {
   const navigate = useNavigate();

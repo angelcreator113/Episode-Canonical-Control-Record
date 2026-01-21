@@ -18,18 +18,56 @@ module.exports = (sequelize) => {
       asset_type: {
         type: DataTypes.STRING(100),
         allowNull: false,
-        comment: 'Type of asset (PROMO_LALA, CLOTHING_DRESS, etc.)',
+        comment: 'Legacy type field - kept for backward compatibility',
+      },
+      asset_group: {
+        type: DataTypes.ENUM('LALA', 'SHOW', 'GUEST', 'EPISODE', 'WARDROBE'),
+        allowNull: true,
+        comment: 'Identity bucket - which brand/entity this asset belongs to',
+      },
+      purpose: {
+        type: DataTypes.ENUM('MAIN', 'TITLE', 'ICON', 'BACKGROUND'),
+        allowNull: true,
+        comment: 'Category - what kind of asset this is',
+      },
+      allowed_uses: {
+        type: DataTypes.ARRAY(DataTypes.TEXT),
+        allowNull: true,
+        defaultValue: [],
+        comment: 'What this asset CAN be used for',
+      },
+      is_global: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        comment: 'Available globally vs scoped to show/episode',
+      },
+      name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      s3_url_raw: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      s3_url_processed: {
+        type: DataTypes.TEXT,
+        allowNull: true,
       },
       s3_key_raw: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      file_name: {
         type: DataTypes.STRING(500),
         allowNull: true,
       },
-      s3_key_processed: {
-        type: DataTypes.STRING(500),
+      content_type: {
+        type: DataTypes.STRING(100),
         allowNull: true,
       },
-      has_transparency: {
-        type: DataTypes.BOOLEAN,
+      media_type: {
+        type: DataTypes.STRING(100),
         allowNull: true,
       },
       width: {
@@ -42,14 +80,6 @@ module.exports = (sequelize) => {
       },
       file_size_bytes: {
         type: DataTypes.INTEGER,
-        allowNull: true,
-      },
-      content_type: {
-        type: DataTypes.STRING(100),
-        allowNull: true,
-      },
-      uploaded_by: {
-        type: DataTypes.STRING(255),
         allowNull: true,
       },
       approval_status: {

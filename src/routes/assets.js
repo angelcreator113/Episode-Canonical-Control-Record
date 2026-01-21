@@ -12,7 +12,7 @@
 const express = require('express');
 const multer = require('multer');
 const AssetService = require('../services/AssetService');
-const { _models } = require('../models');
+const { models } = require('../models');
 const { authenticate, authorize } = require('../middleware/auth');
 const { validateAssetUpload, validateUUIDParam } = require('../middleware/requestValidation');
 
@@ -52,6 +52,64 @@ const VALID_ASSET_TYPES = [
   'SHOW_JAIA',
   'PROMO_JUSTAMOVIE',
 ];
+
+/**
+ * GET /api/v1/assets
+ * List all assets (with optional filters)
+ */
+router.get('/', async (req, res) => {
+  try {
+    const { 
+      limit = 500, 
+      offset = 0, 
+      approval_status,
+      asset_type,
+      sortBy = 'created_at',
+      sortOrder = 'DESC'
+    } = req.query;
+
+    console.log('📥 GET /assets - Listing assets with filters:', { 
+      limit, offset, approval_status, asset_type, sortBy, sortOrder 
+    });
+
+    const where = {};
+    if (approval_status) {
+      where.approval_status = approval_status;
+    }
+    if (asset_type) {
+      where.asset_type = asset_type;
+    }
+
+    const assets = await models.Asset.findAll({
+      where,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      order: [[sortBy, sortOrder]],
+      attributes: [
+        'id', 'name', 'asset_type', 'asset_group', 'purpose', 
+        's3_url_raw', 's3_url_processed', 'media_type',
+        'approval_status', 'is_global', 'allowed_uses',
+        'created_at', 'updated_at'
+      ]
+    });
+
+    console.log(`✅ Found ${assets.length} assets`);
+
+    res.json({
+      status: 'SUCCESS',
+      data: assets,
+      count: assets.length,
+      filters: { limit, offset, approval_status, asset_type }
+    });
+  } catch (error) {
+    console.error('❌ Failed to list assets:', error);
+    res.status(500).json({
+      error: 'Failed to list assets',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined
+    });
+  }
+});
 
 /**
  * GET /api/v1/assets/approved/:type
@@ -650,6 +708,68 @@ router.get('/:id/usage', validateUUIDParam('id'), async (req, res) => {
     console.error('Failed to get asset usage:', error);
     res.status(500).json({
       error: 'Failed to get asset usage',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/assets/:id/download/:type
+ * Generate pre-signed download URL for asset
+ * @param {string} type - 'raw' or 'processed'
+ */
+router.get('/:id/download/:type', validateUUIDParam('id'), async (req, res) => {
+  try {
+    const { id, type } = req.params;
+    
+    if (!['raw', 'processed'].includes(type)) {
+      return res.status(400).json({
+        error: 'Invalid download type',
+        message: 'Type must be "raw" or "processed"',
+      });
+    }
+    
+    const downloadUrl = await AssetService.generateDownloadUrl(id, type);
+    
+    res.json({
+      status: 'SUCCESS',
+      data: {
+        downloadUrl,
+        expiresIn: 3600, // 1 hour
+      },
+    });
+  } catch (error) {
+    console.error('Failed to generate download URL:', error);
+    res.status(500).json({
+      error: 'Failed to generate download URL',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/assets/config/check
+ * Check AWS and API configuration (for debugging)
+ */
+router.get('/config/check', async (req, res) => {
+  try {
+    const config = {
+      awsRegion: process.env.AWS_REGION || 'not set',
+      awsAccessKeyId: process.env.AWS_ACCESS_KEY_ID ? `${process.env.AWS_ACCESS_KEY_ID.substring(0, 8)}...` : 'not set',
+      awsSecretKey: process.env.AWS_SECRET_ACCESS_KEY ? 'configured' : 'not set',
+      s3Bucket: process.env.AWS_S3_BUCKET || 'not set',
+      runwayApiKey: process.env.RUNWAY_ML_API_KEY ? 'configured' : 'not set',
+      removeBgApiKey: process.env.REMOVEBG_API_KEY ? 'configured' : 'not set',
+    };
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Configuration check',
+      data: config,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: 'Failed to check config',
       message: error.message,
     });
   }

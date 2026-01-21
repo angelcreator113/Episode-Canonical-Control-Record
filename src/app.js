@@ -317,6 +317,16 @@ try {
   sceneRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// Scene template routes
+let sceneTemplateRoutes;
+try {
+  sceneTemplateRoutes = require('./routes/sceneTemplates');
+  console.log('✓ Scene templates routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load scene templates routes:', e.message);
+  sceneTemplateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 // Wardrobe routes
 try {
   wardrobeRoutes = require('./routes/wardrobe');
@@ -409,6 +419,7 @@ app.use('/api/v1/templates', templateRoutes);
 
 // Scene routes
 app.use('/api/v1/scenes', sceneRoutes);
+app.use('/api/v1/scene-templates', sceneTemplateRoutes);
 
 // Wardrobe routes
 app.use('/api/v1/wardrobe', wardrobeRoutes);

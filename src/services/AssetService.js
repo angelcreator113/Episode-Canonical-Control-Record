@@ -3,31 +3,105 @@
  * Handles asset management, validation, and S3 operations
  */
 
-const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { fromIni, fromEnv } = require('@aws-sdk/credential-providers');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { v4: uuidv4 } = require('uuid');
 const sharp = require('sharp');
 const { models } = require('../models');
-const { Asset, AssetLabel, AssetUsage } = models;
+const { Asset, AssetLabel } = models;
 
 // Configure AWS SDK v3 with credential chain
 let s3Client = null;
-const getS3Client = async () => {
+const getS3Client = () => {
   if (!s3Client) {
-    const credentials = process.env.AWS_PROFILE
-      ? await fromIni({ profile: process.env.AWS_PROFILE })()
-      : await fromEnv()();
-
-    s3Client = new S3Client({
+    const config = {
       region: process.env.AWS_REGION || 'us-east-1',
-      credentials,
-    });
+    };
+
+    // Only add explicit credentials if they're set
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      config.credentials = {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      };
+    }
+
+    s3Client = new S3Client(config);
   }
   return s3Client;
 };
 
 const BUCKET_NAME =
   process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'episode-metadata-assets-dev';
+
+/**
+ * Map asset_type to smart defaults for asset_group, purpose, and allowed_uses
+ */
+const getAssetOrganizationDefaults = (assetType) => {
+  const typeMap = {
+    // LALA promotional assets
+    PROMO_LALA: {
+      asset_group: 'LALA',
+      purpose: 'MAIN',
+      allowed_uses: ['THUMBNAIL', 'SOCIAL', 'UI'],
+      is_global: true,
+    },
+    // Show/JustAWoman assets
+    PROMO_JUSTAWOMANINHERPRIME: {
+      asset_group: 'SHOW',
+      purpose: 'MAIN',
+      allowed_uses: ['THUMBNAIL', 'SOCIAL', 'SCENE'],
+      is_global: false,
+    },
+    // Guest assets
+    PROMO_GUEST: {
+      asset_group: 'GUEST',
+      purpose: 'MAIN',
+      allowed_uses: ['THUMBNAIL', 'SCENE'],
+      is_global: false,
+    },
+    // Brand/Logo assets
+    BRAND_LOGO: {
+      asset_group: 'LALA',
+      purpose: 'ICON',
+      allowed_uses: ['UI', 'SOCIAL', 'SCENE'],
+      is_global: true,
+    },
+    // Episode frame assets
+    EPISODE_FRAME: {
+      asset_group: 'EPISODE',
+      purpose: 'MAIN',
+      allowed_uses: ['THUMBNAIL', 'SOCIAL'],
+      is_global: false,
+    },
+    // Video assets
+    PROMO_VIDEO: {
+      asset_group: 'LALA',
+      purpose: 'MAIN',
+      allowed_uses: ['SCENE', 'SOCIAL'],
+      is_global: false,
+    },
+    EPISODE_VIDEO: {
+      asset_group: 'EPISODE',
+      purpose: 'MAIN',
+      allowed_uses: ['SCENE', 'SOCIAL'],
+      is_global: false,
+    },
+    BACKGROUND_VIDEO: {
+      asset_group: 'EPISODE',
+      purpose: 'BACKGROUND',
+      allowed_uses: ['SCENE', 'BACKGROUND_PLATE'],
+      is_global: false,
+    },
+  };
+
+  return typeMap[assetType] || {
+    asset_group: 'EPISODE',
+    purpose: 'MAIN',
+    allowed_uses: ['SCENE', 'THUMBNAIL'],
+    is_global: false,
+  };
+};
 
 class AssetService {
   /**
@@ -116,7 +190,7 @@ class AssetService {
 
       try {
         console.log(`📤 Uploading to S3: ${s3Key}`);
-        const client = await getS3Client();
+        const client = getS3Client();
 
         // Upload original file
         const command = new PutObjectCommand({
@@ -164,6 +238,9 @@ class AssetService {
         thumbnailUrl = this._generateThumbnailDataUri();
       }
 
+      // Get smart defaults based on asset_type
+      const orgDefaults = getAssetOrganizationDefaults(assetType);
+
       // Create database record with new schema
       const asset = await Asset.create({
         id: assetId,
@@ -171,13 +248,21 @@ class AssetService {
         asset_type: assetType,
         approval_status: 'APPROVED', // Auto-approve for now
 
+        // Asset organization fields (new)
+        asset_group: orgDefaults.asset_group,
+        purpose: orgDefaults.purpose,
+        allowed_uses: orgDefaults.allowed_uses,
+        is_global: orgDefaults.is_global,
+
         // Media type field
         media_type: mediaType,
 
-        // Raw image fields
+        // Raw image fields - CRITICAL: both must be set!
         s3_key_raw: s3Key,
         s3_url_raw: s3Url,
         file_size_bytes: file.size,
+        file_name: file.originalname,
+        content_type: file.mimetype,
 
         // Dimensions (for images)
         width: imageDimensions?.width || null,
@@ -377,6 +462,11 @@ class AssetService {
         throw new Error('Asset not found');
       }
 
+      // Check if it's a video - can't remove background from videos
+      if (asset.media_type === 'video') {
+        throw new Error('Background removal is not supported for video files. Only images can be processed.');
+      }
+
       // Check if already processed
       if (asset.s3_url_processed) {
         console.log(`⚠️ Asset ${assetId} already has processed version`);
@@ -384,56 +474,156 @@ class AssetService {
       }
 
       console.log(`🎨 Processing background removal for ${assetId}`);
+      console.log(`📁 Asset S3 key: ${asset.s3_key_raw}`);
+      console.log(`📁 Asset S3 URL: ${asset.s3_url_raw}`);
 
       // Download the image from S3
+      const s3 = getS3Client();
       const getCommand = new GetObjectCommand({
-        Bucket: this.s3Bucket,
+        Bucket: BUCKET_NAME,
         Key: asset.s3_key_raw,
       });
       
-      const response = await this.s3.send(getCommand);
-      const imageBuffer = await this.streamToBuffer(response.Body);
-
-      // Call RunwayML API for background removal
-      const runwayApiKey = process.env.RUNWAY_ML_API_KEY;
-      if (!runwayApiKey) {
-        throw new Error('RUNWAY_ML_API_KEY not configured');
+      console.log(`🔍 Attempting to download from S3: ${BUCKET_NAME}/${asset.s3_key_raw}`);
+      console.log(`🔑 AWS Credentials configured: ${!!process.env.AWS_ACCESS_KEY_ID}`);
+      console.log(`🔑 AWS Region: ${process.env.AWS_REGION}`);
+      
+      let response;
+      try {
+        response = await s3.send(getCommand);
+      } catch (s3Error) {
+        console.error('❌ S3 Download Error:', s3Error.message);
+        console.error('❌ S3 Error Code:', s3Error.Code || s3Error.name);
+        console.error('❌ S3 Error Details:', JSON.stringify(s3Error, null, 2));
+        
+        if (s3Error.Code === 'SignatureDoesNotMatch' || s3Error.name === 'SignatureDoesNotMatch') {
+          throw new Error('AWS credential error: Invalid access key or secret. Please check your AWS configuration.');
+        } else if (s3Error.Code === 'NoSuchKey' || s3Error.name === 'NoSuchKey') {
+          throw new Error(`Asset file not found in S3: ${asset.s3_key_raw}`);
+        } else if (s3Error.Code === 'AccessDenied' || s3Error.name === 'AccessDenied') {
+          throw new Error('AWS permission error: Access denied to S3 bucket. Check IAM permissions.');
+        } else if (s3Error.Code === 'InvalidAccessKeyId' || s3Error.name === 'InvalidAccessKeyId') {
+          throw new Error('AWS credential error: Access key ID is invalid or does not exist.');
+        } else if (s3Error.Code === 'SignatureDoesNotMatch' || s3Error.message?.includes('signature')) {
+          throw new Error('AWS signature error: The request signature does not match. Check your secret access key.');
+        }
+        throw new Error(`S3 download failed: ${s3Error.message}`);
       }
+      
+      const imageBuffer = await this.streamToBuffer(response.Body);
 
       const FormData = require('form-data');
       const axios = require('axios');
-      
-      const formData = new FormData();
-      formData.append('image', imageBuffer, {
-        filename: asset.file_name,
-        contentType: asset.content_type,
-      });
+      let processedImageBuffer = null;
 
-      console.log(`📤 Sending to RunwayML API...`);
-      const runwayResponse = await axios.post(
-        'https://api.runwayml.com/v1/remove-background',
-        formData,
-        {
-          headers: {
-            ...formData.getHeaders(),
-            'Authorization': `Bearer ${runwayApiKey}`,
-          },
-          responseType: 'arraybuffer',
-          timeout: 30000, // 30 second timeout
+      // Try RunwayML first
+      const runwayApiKey = process.env.RUNWAY_ML_API_KEY;
+      if (runwayApiKey) {
+        try {
+          const formData = new FormData();
+          formData.append('image', imageBuffer, {
+            filename: asset.file_name,
+            contentType: asset.content_type,
+          });
+
+          console.log(`📤 Trying RunwayML API...`);
+          const runwayResponse = await axios.post(
+            'https://api.runwayml.com/v1/remove-background',
+            formData,
+            {
+              headers: {
+                ...formData.getHeaders(),
+                'Authorization': `Bearer ${runwayApiKey}`,
+              },
+              responseType: 'arraybuffer',
+              timeout: 30000,
+            }
+          );
+          processedImageBuffer = Buffer.from(runwayResponse.data);
+          console.log(`✅ RunwayML processing successful`);
+        } catch (runwayError) {
+          console.warn('⚠️ RunwayML failed:', runwayError.message);
+          if (runwayError.response) {
+            console.warn('RunwayML error details:', runwayError.response.status, runwayError.response.statusText);
+          }
         }
-      );
+      }
+
+      // Fallback to remove.bg if RunwayML failed or not configured
+      if (!processedImageBuffer) {
+        const removebgApiKey = process.env.REMOVEBG_API_KEY;
+        if (!removebgApiKey) {
+          throw new Error('No background removal API configured. Please set RUNWAY_ML_API_KEY or REMOVEBG_API_KEY.');
+        }
+
+        try {
+          const formData = new FormData();
+          formData.append('image_file', imageBuffer, {
+            filename: asset.file_name,
+            contentType: asset.content_type,
+          });
+          formData.append('size', 'auto');
+
+          console.log(`📤 Using remove.bg API as fallback...`);
+          const removebgResponse = await axios.post(
+            'https://api.remove.bg/v1.0/removebg',
+            formData,
+            {
+              headers: {
+                ...formData.getHeaders(),
+                'X-Api-Key': removebgApiKey,
+              },
+              responseType: 'arraybuffer',
+              timeout: 30000,
+            }
+          );
+          processedImageBuffer = Buffer.from(removebgResponse.data);
+          console.log(`✅ remove.bg processing successful`);
+        } catch (removebgError) {
+          console.error('❌ remove.bg failed:', removebgError.message);
+          if (removebgError.response) {
+            console.error('remove.bg error:', removebgError.response.status, removebgError.response.data);
+          }
+          throw new Error('All background removal services failed');
+        }
+      }
 
       // Upload processed image to S3
-      const processedKey = asset.s3_key_raw.replace('/raw/', '/processed/');
+      // Replace /raw/ with /processed/ in the S3 key, or append _processed if no /raw/ found
+      let processedKey;
+      if (asset.s3_key_raw.includes('/raw/')) {
+        processedKey = asset.s3_key_raw.replace('/raw/', '/processed/');
+      } else {
+        // Fallback: add _processed suffix before file extension
+        const lastDot = asset.s3_key_raw.lastIndexOf('.');
+        if (lastDot > 0) {
+          processedKey = asset.s3_key_raw.substring(0, lastDot) + '_processed.png';
+        } else {
+          processedKey = asset.s3_key_raw + '_processed.png';
+        }
+      }
+      
       const putCommand = new PutObjectCommand({
-        Bucket: this.s3Bucket,
+        Bucket: BUCKET_NAME,
         Key: processedKey,
-        Body: Buffer.from(runwayResponse.data),
-        ContentType: 'image/png', // RunwayML returns PNG
+        Body: processedImageBuffer,
+        ContentType: 'image/png',
       });
 
-      await this.s3.send(putCommand);
-      const processedUrl = `https://${this.s3Bucket}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${processedKey}`;
+      console.log(`📤 Uploading processed image to S3: ${BUCKET_NAME}/${processedKey}`);
+      try {
+        await s3.send(putCommand);
+      } catch (uploadError) {
+        console.error('❌ S3 Upload Error:', uploadError.message);
+        if (uploadError.Code === 'SignatureDoesNotMatch') {
+          throw new Error('AWS credential error during upload: Invalid access key or secret.');
+        } else if (uploadError.Code === 'AccessDenied') {
+          throw new Error('AWS permission error: Cannot write to S3 bucket. Check IAM permissions.');
+        }
+        throw new Error(`Failed to upload processed image to S3: ${uploadError.message}`);
+      }
+      
+      const processedUrl = `https://${BUCKET_NAME}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${processedKey}`;
 
       await asset.update({
         s3_key_processed: processedKey,
@@ -447,12 +637,6 @@ class AssetService {
       return asset.toJSON();
     } catch (error) {
       console.error('Failed to process asset:', error);
-      
-      // If RunwayML fails, still mark as processed but log the error
-      if (error.response) {
-        console.error('RunwayML API error:', error.response.status, error.response.data);
-      }
-      
       throw error;
     }
   }
@@ -609,45 +793,46 @@ class AssetService {
 
   // ==================== USAGE TRACKING ====================
 
-  /**
-   * Track asset usage
-   * @param {String} assetId - Asset UUID
-   * @param {String} usedInType - Type: 'composition', 'episode', 'template'
-   * @param {String} usedInId - ID of the entity using this asset
-   * @returns {Object} Usage record
-   */
-  async trackAssetUsage(assetId, usedInType, usedInId) {
-    try {
-      const usage = await AssetUsage.create({
-        asset_id: assetId,
-        used_in_type: usedInType,
-        used_in_id: usedInId,
-      });
-      console.log(`✅ Tracked usage: ${assetId} → ${usedInType}:${usedInId}`);
-      return usage.toJSON();
-    } catch (error) {
-      console.error('Failed to track usage:', error);
-      throw error;
-    }
-  }
+  // NOTE: asset_usage table doesn't exist, so these methods are commented out
+  // /**
+  //  * Track asset usage
+  //  * @param {String} assetId - Asset UUID
+  //  * @param {String} usedInType - Type: 'composition', 'episode', 'template'
+  //  * @param {String} usedInId - ID of the entity using this asset
+  //  * @returns {Object} Usage record
+  //  */
+  // async trackAssetUsage(assetId, usedInType, usedInId) {
+  //   try {
+  //     const usage = await AssetUsage.create({
+  //       asset_id: assetId,
+  //       used_in_type: usedInType,
+  //       used_in_id: usedInId,
+  //     });
+  //     console.log(`✅ Tracked usage: ${assetId} → ${usedInType}:${usedInId}`);
+  //     return usage.toJSON();
+  //   } catch (error) {
+  //     console.error('Failed to track usage:', error);
+  //     throw error;
+  //   }
+  // }
 
-  /**
-   * Get asset usage information
-   * @param {String} assetId - Asset UUID
-   * @returns {Array} List of usage records
-   */
-  async getAssetUsage(assetId) {
-    try {
-      const usages = await AssetUsage.findAll({
-        where: { asset_id: assetId },
-        order: [['created_at', 'DESC']],
-      });
-      return usages.map(u => u.toJSON());
-    } catch (error) {
-      console.error('Failed to get asset usage:', error);
-      throw error;
-    }
-  }
+  // /**
+  //  * Get asset usage information
+  //  * @param {String} assetId - Asset UUID
+  //  * @returns {Array} List of usage records
+  //  */
+  // async getAssetUsage(assetId) {
+  //   try {
+  //     const usages = await AssetUsage.findAll({
+  //       where: { asset_id: assetId },
+  //       order: [['created_at', 'DESC']],
+  //     });
+  //     return usages.map(u => u.toJSON());
+  //   } catch (error) {
+  //     console.error('Failed to get asset usage:', error);
+  //     throw error;
+  //   }
+  // }
 
   // ==================== BULK OPERATIONS ====================
 
@@ -753,7 +938,16 @@ class AssetService {
         throw new Error('Asset not found');
       }
 
-      const allowedFields = ['name', 'description', 'metadata', 'asset_type'];
+      const allowedFields = [
+        'name',
+        'description',
+        'metadata',
+        'asset_type',
+        'asset_group',
+        'purpose',
+        'allowed_uses',
+        'is_global'
+      ];
       const updateData = {};
 
       Object.keys(updates).forEach(key => {
@@ -767,7 +961,9 @@ class AssetService {
       await asset.update(updateData);
 
       console.log(`✅ Asset updated: ${assetId}`);
-      return this.getAssetWithLabels(assetId);
+      
+      // Return formatted asset without labels to avoid querying non-existent junction table
+      return this._formatAssetForFrontend(asset);
     } catch (error) {
       console.error('Failed to update asset:', error);
       throw error;
@@ -809,27 +1005,9 @@ class AssetService {
         where.name = { [Op.iLike]: `%${query}%` };
       }
 
-      const include = [];
-
-      if (labelIds && labelIds.length > 0) {
-        include.push({
-          model: AssetLabel,
-          as: 'labels',
-          where: { id: labelIds },
-          through: { attributes: [] },
-        });
-      } else {
-        include.push({
-          model: AssetLabel,
-          as: 'labels',
-          through: { attributes: [] },
-          required: false,
-        });
-      }
-
+      // Don't include labels - junction table doesn't exist
       const assets = await Asset.findAll({
         where,
-        include,
         order: [[sortBy, sortOrder]],
         limit,
       });
@@ -837,12 +1015,87 @@ class AssetService {
       return assets.map(asset => {
         const assetData = asset.toJSON();
         return {
-          ...this._formatAssetForFrontend(asset),
+          id: assetData.id,
+          name: assetData.name,
+          asset_type: assetData.asset_type,
+          asset_group: assetData.asset_group,
+          purpose: assetData.purpose,
+          allowed_uses: assetData.allowed_uses,
+          is_global: assetData.is_global,
+          s3_url_raw: assetData.s3_url_raw,
+          s3_url_processed: assetData.s3_url_processed,
+          media_type: assetData.media_type,
+          width: assetData.width,
+          height: assetData.height,
+          file_size_bytes: assetData.file_size_bytes,
+          approval_status: assetData.approval_status,
+          metadata: assetData.metadata,
+          created_at: assetData.created_at,
+          updated_at: assetData.updated_at,
           labels: assetData.labels || [],
         };
       });
     } catch (error) {
       console.error('Search assets failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Generate pre-signed download URL for asset
+   * @param {String} assetId - Asset UUID
+   * @param {String} type - 'raw' or 'processed'
+   * @returns {String} Pre-signed download URL
+   */
+  async generateDownloadUrl(assetId, type = 'raw') {
+    try {
+      console.log(`🔗 Generating download URL for asset ${assetId}, type: ${type}`);
+      
+      const asset = await Asset.findByPk(assetId);
+      if (!asset) {
+        throw new Error(`Asset ${assetId} not found`);
+      }
+
+      // Get the appropriate S3 key
+      let s3Key;
+      if (type === 'processed') {
+        // Use processed key if available
+        s3Key = asset.s3_key_processed || asset.s3_key_raw;
+        if (!s3Key && asset.s3_url_processed) {
+          // Extract key from URL
+          s3Key = asset.s3_url_processed.split('.com/')[1];
+        }
+      } else {
+        // Use raw key
+        s3Key = asset.s3_key_raw || asset.s3_key;
+        if (!s3Key && asset.s3_url_raw) {
+          // Extract key from URL
+          s3Key = asset.s3_url_raw.split('.com/')[1];
+        }
+      }
+
+      if (!s3Key) {
+        throw new Error(`No S3 key found for asset ${assetId} (${type})`);
+      }
+
+      console.log(`📁 S3 key for download: ${s3Key}`);
+
+      // Generate pre-signed URL with 1 hour expiration
+      const client = getS3Client();
+      const command = new GetObjectCommand({
+        Bucket: BUCKET_NAME,
+        Key: s3Key,
+        ResponseContentDisposition: `attachment; filename="${asset.file_name || asset.name}"`,
+      });
+
+      const signedUrl = await getSignedUrl(client, command, { 
+        expiresIn: 3600 // 1 hour
+      });
+
+      console.log(`✅ Download URL generated successfully`);
+      return signedUrl;
+    } catch (error) {
+      console.error('❌ Failed to generate download URL:', error);
       throw error;
     }
   }

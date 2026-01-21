@@ -1,5 +1,5 @@
 const { models } = require('../models');
-const { Scene, Episode, Thumbnail } = models;
+const { Scene, Episode, Thumbnail, Asset, SceneAsset } = models;
 
 /**
  * Scene Controller
@@ -827,6 +827,421 @@ exports.updateSceneAssets = async (req, res) => {
       success: false,
       message: 'Failed to update scene assets',
       error: error.message
+    });
+  }
+};
+
+/**
+ * @route   GET /api/v1/scenes/:id/assets
+ * @desc    Get all assets linked to a scene
+ * @access  Authenticated
+ */
+exports.getSceneAssets = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const scene = await Scene.findByPk(id, {
+      include: [
+        {
+          model: Asset,
+          as: 'linkedAssets',
+          through: {
+            attributes: [
+              'id',
+              'usage_type',
+              'start_timecode',
+              'end_timecode',
+              'layer_order',
+              'opacity',
+              'position',
+              'metadata',
+              'created_at',
+            ],
+          },
+          attributes: [
+            'id',
+            'name',
+            'asset_type',
+            'approval_status',
+            's3_url_raw',
+            's3_url_processed',
+            'media_type',
+            'width',
+            'height',
+            'file_size_bytes',
+            'created_at',
+          ],
+        },
+      ],
+    });
+
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      data: scene.linkedAssets || [],
+      count: scene.linkedAssets ? scene.linkedAssets.length : 0,
+    });
+  } catch (error) {
+    console.error('❌ Error getting scene assets:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get scene assets',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   POST /api/v1/scenes/:id/assets
+ * @desc    Link asset(s) to a scene
+ * @access  Authenticated
+ * @body    {string|string[]} assetId(s), {object} options (usage_type, timecodes, etc.)
+ */
+exports.addSceneAsset = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const {
+      assetId,
+      assetIds,
+      usageType = 'overlay',
+      startTimecode,
+      endTimecode,
+      layerOrder = 0,
+      opacity = 1.0,
+      position,
+      metadata,
+    } = req.body;
+
+    // Validate scene exists
+    const scene = await Scene.findByPk(id);
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene not found',
+      });
+    }
+
+    if (scene.is_locked) {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot modify locked scene',
+      });
+    }
+
+    // Handle both single assetId and array of assetIds
+    const idsToLink = assetIds || (assetId ? [assetId] : []);
+
+    if (idsToLink.length === 0) {
+      return res.status(400).json({
+        success: false,
+        error: 'No asset IDs provided',
+      });
+    }
+
+    // Validate all assets exist
+    const assets = await Asset.findAll({
+      where: {
+        id: idsToLink,
+      },
+    });
+
+    if (assets.length !== idsToLink.length) {
+      return res.status(404).json({
+        success: false,
+        error: 'One or more assets not found',
+      });
+    }
+
+    // Create scene asset links
+    const sceneAssets = [];
+    for (const id of idsToLink) {
+      const [sceneAsset, created] = await SceneAsset.findOrCreate({
+        where: {
+          scene_id: scene.id,
+          asset_id: id,
+          usage_type: usageType,
+        },
+        defaults: {
+          start_timecode: startTimecode || null,
+          end_timecode: endTimecode || null,
+          layer_order: layerOrder,
+          opacity,
+          position: position || { x: 0, y: 0, width: '100%', height: '100%' },
+          metadata: metadata || {},
+        },
+      });
+
+      if (!created) {
+        // Update existing if not created
+        await sceneAsset.update({
+          start_timecode: startTimecode || sceneAsset.start_timecode,
+          end_timecode: endTimecode || sceneAsset.end_timecode,
+          layer_order: layerOrder,
+          opacity,
+          position: position || sceneAsset.position,
+          metadata: metadata || sceneAsset.metadata,
+        });
+      }
+
+      sceneAssets.push(sceneAsset);
+    }
+
+    res.status(created ? 201 : 200).json({
+      success: true,
+      data: sceneAssets,
+      message: `Successfully linked ${sceneAssets.length} asset(s) to scene`,
+    });
+  } catch (error) {
+    console.error('❌ Error adding scene asset:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add asset to scene',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   DELETE /api/v1/scenes/:id/assets/:assetId
+ * @desc    Remove asset from scene
+ * @access  Authenticated
+ */
+exports.removeSceneAsset = async (req, res) => {
+  try {
+    const { id, assetId } = req.params;
+    const { usageType } = req.query;
+
+    // Validate scene exists
+    const scene = await Scene.findByPk(id);
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene not found',
+      });
+    }
+
+    if (scene.is_locked) {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot modify locked scene',
+      });
+    }
+
+    const where = {
+      scene_id: id,
+      asset_id: assetId,
+    };
+
+    if (usageType) {
+      where.usage_type = usageType;
+    }
+
+    const deleted = await SceneAsset.destroy({ where });
+
+    if (deleted === 0) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene asset link not found',
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Asset removed from scene',
+    });
+  } catch (error) {
+    console.error('❌ Error removing scene asset:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove asset from scene',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   PATCH /api/v1/scenes/:id/assets/:assetId
+ * @desc    Update asset positioning/timing in scene
+ * @access  Authenticated
+ */
+exports.updateSceneAsset = async (req, res) => {
+  try {
+    const { id, assetId } = req.params;
+    const {
+      usageType,
+      startTimecode,
+      endTimecode,
+      layerOrder,
+      opacity,
+      position,
+      metadata,
+    } = req.body;
+
+    // Validate scene exists
+    const scene = await Scene.findByPk(id);
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene not found',
+      });
+    }
+
+    if (scene.is_locked) {
+      return res.status(403).json({
+        success: false,
+        error: 'Cannot modify locked scene',
+      });
+    }
+
+    const where = {
+      scene_id: id,
+      asset_id: assetId,
+    };
+
+    if (usageType) {
+      where.usage_type = usageType;
+    }
+
+    const sceneAsset = await SceneAsset.findOne({ where });
+
+    if (!sceneAsset) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene asset link not found',
+      });
+    }
+
+    const updates = {};
+    if (startTimecode !== undefined) updates.start_timecode = startTimecode;
+    if (endTimecode !== undefined) updates.end_timecode = endTimecode;
+    if (layerOrder !== undefined) updates.layer_order = layerOrder;
+    if (opacity !== undefined) updates.opacity = opacity;
+    if (position !== undefined) updates.position = position;
+    if (metadata !== undefined) updates.metadata = metadata;
+
+    await sceneAsset.update(updates);
+
+    res.json({
+      success: true,
+      data: sceneAsset,
+      message: 'Scene asset updated successfully',
+    });
+  } catch (error) {
+    console.error('❌ Error updating scene asset:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update scene asset',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Duplicate a scene with a new scene number
+ * POST /api/v1/scenes/:id/duplicate
+ */
+exports.duplicateScene = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const originalScene = await Scene.findByPk(id, {
+      include: [
+        {
+          model: Asset,
+          as: 'linkedAssets',
+          through: {
+            attributes: ['usage_type', 'start_timecode', 'end_timecode', 'layer_order', 'opacity', 'position', 'metadata'],
+          },
+        },
+      ],
+    });
+
+    if (!originalScene) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene not found',
+      });
+    }
+
+    // Find the highest scene number in this episode
+    const maxSceneNumber = await Scene.max('scene_number', {
+      where: { episode_id: originalScene.episode_id },
+    });
+
+    const newSceneNumber = (maxSceneNumber || 0) + 1;
+
+    // Clone the scene data
+    const sceneData = {
+      episode_id: originalScene.episode_id,
+      scene_number: newSceneNumber,
+      title: `${originalScene.title} (Copy)`,
+      description: originalScene.description,
+      duration_seconds: originalScene.duration_seconds,
+      location: originalScene.location,
+      scene_type: originalScene.scene_type,
+      production_status: 'draft', // Reset to draft for new copy
+      mood: originalScene.mood,
+      script_notes: originalScene.script_notes,
+      start_timecode: null, // Will be set when scene is placed in timeline
+      end_timecode: null,
+      is_locked: false,
+      characters: originalScene.characters,
+      thumbnail_id: originalScene.thumbnail_id,
+    };
+
+    const duplicatedScene = await Scene.create(sceneData);
+
+    // Duplicate scene-asset links
+    if (originalScene.linkedAssets && originalScene.linkedAssets.length > 0) {
+      const assetLinks = originalScene.linkedAssets.map((asset) => ({
+        scene_id: duplicatedScene.id,
+        asset_id: asset.id,
+        usage_type: asset.SceneAsset.usage_type,
+        start_timecode: asset.SceneAsset.start_timecode,
+        end_timecode: asset.SceneAsset.end_timecode,
+        layer_order: asset.SceneAsset.layer_order,
+        opacity: asset.SceneAsset.opacity,
+        position: asset.SceneAsset.position,
+        metadata: asset.SceneAsset.metadata,
+      }));
+
+      await SceneAsset.bulkCreate(assetLinks);
+    }
+
+    // Reload with associations
+    const newScene = await Scene.findByPk(duplicatedScene.id, {
+      include: [
+        {
+          model: Asset,
+          as: 'linkedAssets',
+          through: {
+            attributes: ['usage_type', 'start_timecode', 'end_timecode', 'layer_order', 'opacity', 'position'],
+          },
+        },
+        {
+          model: Episode,
+          attributes: ['id', 'title'],
+        },
+      ],
+    });
+
+    res.status(201).json({
+      success: true,
+      data: newScene,
+      message: 'Scene duplicated successfully',
+    });
+  } catch (error) {
+    console.error('❌ Error duplicating scene:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to duplicate scene',
+      message: error.message,
     });
   }
 };

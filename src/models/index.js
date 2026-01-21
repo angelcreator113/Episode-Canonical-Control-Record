@@ -43,7 +43,7 @@ const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.p
  */
 let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
-let Show, Scene, AssetLabel, AssetUsage, EpisodeAsset;
+let Show, Scene, AssetLabel, EpisodeAsset, SceneAsset, SceneTemplate, ShowAsset;
 let Wardrobe, EpisodeWardrobe, OutfitSet;
 
 try {
@@ -66,11 +66,14 @@ try {
   // Phase 6 models
   Show = require('./Show')(sequelize);
   Scene = require('./Scene')(sequelize);
+  SceneTemplate = require('./SceneTemplate')(sequelize);
 
   // Asset enhancement models
   AssetLabel = require('./AssetLabel')(sequelize);
-  AssetUsage = require('./AssetUsage')(sequelize);
+  // AssetUsage = require('./AssetUsage')(sequelize); // Table doesn't exist
   EpisodeAsset = require('./EpisodeAsset')(sequelize);
+  SceneAsset = require('./SceneAsset')(sequelize);
+  ShowAsset = require('./ShowAsset')(sequelize);
 
   // Wardrobe models
   Wardrobe = require('./Wardrobe')(sequelize);
@@ -101,9 +104,12 @@ const requiredModels = {
   EpisodeTemplate,
   Show,
   Scene,
+  SceneTemplate,
   AssetLabel,
-  AssetUsage,
+  // AssetUsage, // Table doesn't exist
   EpisodeAsset,
+  SceneAsset,
+  ShowAsset,
   Wardrobe,
   EpisodeWardrobe,
   OutfitSet,
@@ -224,6 +230,42 @@ Thumbnail.hasMany(Scene, {
   as: 'scenes',
 });
 
+// Scene ↔ Asset (M:N through SceneAsset)
+Scene.belongsToMany(Asset, {
+  through: SceneAsset,
+  foreignKey: 'scene_id',
+  otherKey: 'asset_id',
+  as: 'linkedAssets', // Changed from 'assets' to avoid conflict with JSONB field
+});
+
+Asset.belongsToMany(Scene, {
+  through: SceneAsset,
+  foreignKey: 'asset_id',
+  otherKey: 'scene_id',
+  as: 'scenes',
+});
+
+// Direct associations for junction table access
+Scene.hasMany(SceneAsset, {
+  foreignKey: 'scene_id',
+  as: 'sceneAssets',
+});
+
+SceneAsset.belongsTo(Scene, {
+  foreignKey: 'scene_id',
+  as: 'scene',
+});
+
+Asset.hasMany(SceneAsset, {
+  foreignKey: 'asset_id',
+  as: 'sceneAssets',
+});
+
+SceneAsset.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+});
+
 // ==================== PROCESSING QUEUE ASSOCIATIONS ====================
 
 // ProcessingQueue → FileStorage (1:1)
@@ -294,36 +336,33 @@ Asset.hasMany(ThumbnailComposition, {
 
 // ==================== ASSET LABEL ASSOCIATIONS ====================
 
-// TEMPORARILY DISABLED: asset_labels table doesn't exist yet
-// TODO: Create asset_labels and asset_label_mappings tables, then re-enable
-/*
-// Asset ←→ AssetLabel (Many-to-Many)
+// Asset ←→ AssetLabel (Many-to-Many) - Sequelize will auto-create asset_asset_labels junction table
 Asset.belongsToMany(AssetLabel, {
-  through: 'asset_label_mappings',
+  through: 'asset_asset_labels',
   foreignKey: 'asset_id',
   otherKey: 'label_id',
   as: 'labels',
 });
 
 AssetLabel.belongsToMany(Asset, {
-  through: 'asset_label_mappings',
+  through: 'asset_asset_labels',
   foreignKey: 'label_id',
   otherKey: 'asset_id',
   as: 'assets',
 });
-*/
 
+// NOTE: AssetUsage associations commented out since asset_usage table doesn't exist
 // Asset → AssetUsage (1:N)
-Asset.hasMany(AssetUsage, {
-  foreignKey: 'asset_id',
-  as: 'usages',
-  onDelete: 'CASCADE',
-});
+// Asset.hasMany(AssetUsage, {
+//   foreignKey: 'asset_id',
+//   as: 'usages',
+//   onDelete: 'CASCADE',
+// });
 
-AssetUsage.belongsTo(Asset, {
-  foreignKey: 'asset_id',
-  as: 'asset',
-});
+// AssetUsage.belongsTo(Asset, {
+//   foreignKey: 'asset_id',
+//   as: 'asset',
+// });
 
 // ==================== WARDROBE ASSOCIATIONS ====================
 
@@ -400,6 +439,42 @@ EpisodeAsset.belongsTo(Asset, {
   as: 'asset',
 });
 
+// Show ↔ Asset (M:N via ShowAsset)
+Show.belongsToMany(Asset, {
+  through: ShowAsset,
+  foreignKey: 'show_id',
+  otherKey: 'asset_id',
+  as: 'assets',
+});
+
+Asset.belongsToMany(Show, {
+  through: ShowAsset,
+  foreignKey: 'asset_id',
+  otherKey: 'show_id',
+  as: 'shows',
+});
+
+// Direct associations for easier querying
+Show.hasMany(ShowAsset, {
+  foreignKey: 'show_id',
+  as: 'showAssets',
+});
+
+ShowAsset.belongsTo(Show, {
+  foreignKey: 'show_id',
+  as: 'show',
+});
+
+Asset.hasMany(ShowAsset, {
+  foreignKey: 'asset_id',
+  as: 'showAssetUsages',
+});
+
+ShowAsset.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+});
+
 console.log('✅ Model associations defined');
 
 /**
@@ -425,8 +500,11 @@ const db = {
     Show,
     Scene,
     AssetLabel,
-    AssetUsage,
+    // AssetUsage, // Table doesn't exist
     EpisodeAsset,
+    ShowAsset,
+    SceneAsset,
+    SceneTemplate,
     Wardrobe,
     EpisodeWardrobe,
     OutfitSet,
@@ -609,9 +687,12 @@ module.exports.ThumbnailTemplate = ThumbnailTemplate;
 module.exports.EpisodeTemplate = EpisodeTemplate;
 module.exports.Show = Show;
 module.exports.Scene = Scene;
+module.exports.SceneTemplate = SceneTemplate;
 module.exports.Wardrobe = Wardrobe;
 module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.OutfitSet = OutfitSet;
 module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.AssetLabel = AssetLabel;
-module.exports.AssetUsage = AssetUsage;
+// module.exports.AssetUsage = AssetUsage; // Table doesn't exist
+module.exports.EpisodeAsset = EpisodeAsset;
+module.exports.SceneAsset = SceneAsset;

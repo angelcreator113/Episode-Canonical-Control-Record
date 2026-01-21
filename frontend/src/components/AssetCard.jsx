@@ -231,6 +231,40 @@ const AssetCard = ({
         {/* Type Badge */}
         <span className="asset-type-badge">{asset.asset_type.replace(/_/g, ' ')}</span>
 
+        {/* New Organization Badges */}
+        <div className="asset-organization-badges">
+          {asset.asset_group && (
+            <span className={`org-badge org-badge-${asset.asset_group.toLowerCase()}`}>
+              {asset.asset_group}
+            </span>
+          )}
+          {asset.purpose && (
+            <span className="org-badge org-badge-purpose">
+              {asset.purpose}
+            </span>
+          )}
+          {asset.is_global && (
+            <span className="org-badge org-badge-global" title="Available globally">
+              🌐 Global
+            </span>
+          )}
+        </div>
+
+        {/* Allowed Uses */}
+        {asset.allowed_uses && asset.allowed_uses.length > 0 && (
+          <div className="asset-uses">
+            <small className="uses-label">Can be used for:</small>
+            <div className="uses-tags">
+              {asset.allowed_uses.slice(0, 3).map(use => (
+                <span key={use} className="use-tag">{use}</span>
+              ))}
+              {asset.allowed_uses.length > 3 && (
+                <span className="use-tag-more">+{asset.allowed_uses.length - 3}</span>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Add this JSX in the card header area: */}
         {episodeInfo && (
           <div className="episode-badge" title={`Episode ${episodeInfo.number}: ${episodeInfo.title}`}>
