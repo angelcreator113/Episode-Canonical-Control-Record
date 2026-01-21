@@ -482,6 +482,14 @@ const frontendDistPath = path.join(__dirname, '../frontend/dist');
 // Serve static files from frontend/dist if it exists
 if (fs.existsSync(frontendDistPath)) {
   console.log('✓ Serving frontend from:', frontendDistPath);
+  console.log('✓ Dist contents:', fs.readdirSync(frontendDistPath));
+  
+  const assetsPath = path.join(frontendDistPath, 'assets');
+  if (fs.existsSync(assetsPath)) {
+    console.log('✓ Assets found:', fs.readdirSync(assetsPath).slice(0, 5));
+  } else {
+    console.warn('⚠️ No assets directory found in dist');
+  }
 
   // Serve static assets with proper caching
   app.use(
@@ -489,7 +497,8 @@ if (fs.existsSync(frontendDistPath)) {
       maxAge: 0, // No caching for dev
       etag: true,
       lastModified: true,
-      setHeaders: (res) => {
+      setHeaders: (res, filePath) => {
+        console.log('📦 Serving static file:', filePath);
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       },
     })
