@@ -177,20 +177,6 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f fix-shows-schema.sql 2>&1 | head -30 || echo "Shows schema fix completed with warnings..."
 
-# Create episode_wardrobe junction table
-echo "Creating episode_wardrobe table..."
-PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
-  -U postgres \
-  -d episode_metadata \
-  -f create-episode-wardrobe-table.sql 2>&1 | head -20 || echo "Episode wardrobe table created..."
-
-# Create episode_assets and fix episode_scripts
-echo "Creating episode_assets and fixing episode_scripts..."
-PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
-  -U postgres \
-  -d episode_metadata \
-  -f create-missing-junction-tables.sql 2>&1 | head -20 || echo "Junction tables created..."
-
 # Create assets table if it doesn't exist
 echo "Creating assets table..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
@@ -245,6 +231,30 @@ if [ $MIGRATION_STATUS -ne 0 ]; then
 else
   echo "✅ Migrations completed successfully"
 fi
+
+# CREATE JUNCTION TABLES AFTER MIGRATIONS (so they don't get dropped)
+echo "🔧 Creating junction tables after migrations..."
+
+# Create episode_wardrobe junction table
+echo "Creating episode_wardrobe table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-episode-wardrobe-table.sql 2>&1 | head -20 || echo "Episode wardrobe table created..."
+
+# Create episode_assets and fix episode_scripts
+echo "Creating episode_assets and fixing episode_scripts..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-missing-junction-tables.sql 2>&1 | head -20 || echo "Junction tables created..."
+
+# Verify critical tables exist
+echo "🔍 Verifying junction tables were created..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -c "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_name IN ('episode_assets', 'episode_wardrobe') ORDER BY table_name;" 2>&1 || echo "Verification query failed"
 
 if ! command -v pm2 &> /dev/null; then
   npm install -g pm2
