@@ -495,7 +495,7 @@ const frontendDistPath = path.join(__dirname, '../frontend/dist');
 if (fs.existsSync(frontendDistPath)) {
   console.log('✓ Serving frontend from:', frontendDistPath);
   console.log('✓ Dist contents:', fs.readdirSync(frontendDistPath));
-  
+
   const assetsPath = path.join(frontendDistPath, 'assets');
   if (fs.existsSync(assetsPath)) {
     console.log('✓ Assets found:', fs.readdirSync(assetsPath).slice(0, 5));

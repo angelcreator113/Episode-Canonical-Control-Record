@@ -244,9 +244,7 @@ class ScriptsService {
       Object.keys(updates).forEach((key) => {
         if (allowedFields.includes(key)) {
           updateFields.push(`${key} = $${paramCount}`);
-          updateValues.push(
-            key === 'scene_markers' ? JSON.stringify(updates[key]) : updates[key]
-          );
+          updateValues.push(key === 'scene_markers' ? JSON.stringify(updates[key]) : updates[key]);
           paramCount++;
         }
       });

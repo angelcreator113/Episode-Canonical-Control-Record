@@ -131,7 +131,7 @@ exports.searchEpisodes = [
   validateSearch,
   async (req, res) => {
     const startTime = Date.now(); // Track search duration
-    
+
     try {
       const { q = '', status, _tags, limit = '20', offset = '0' } = req.query;
 
@@ -215,7 +215,9 @@ exports.searchEpisodes = [
 
       // Log search for analytics
       const searchDuration = Date.now() - startTime;
-      await logSearch(req.user?.userId || req.user?.id, q, 'episodes', total, searchDuration, { status: status || null });
+      await logSearch(req.user?.userId || req.user?.id, q, 'episodes', total, searchDuration, {
+        status: status || null,
+      });
 
       return res.json({
         success: true,
@@ -546,16 +548,9 @@ exports.searchScripts = [
   validateSearch,
   async (req, res) => {
     const startTime = Date.now(); // Track search duration
-    
+
     try {
-      const {
-        q,
-        episodeId,
-        scriptType,
-        status,
-        limit = 20,
-        offset = 0,
-      } = req.query;
+      const { q, episodeId, scriptType, status, limit = 20, offset = 0 } = req.query;
 
       if (!q || q.trim().length === 0) {
         return res.status(400).json({
@@ -625,7 +620,14 @@ exports.searchScripts = [
 
       // Script type filter
       if (scriptType) {
-        const validTypes = ['main', 'trailer', 'shorts', 'teaser', 'behind-the-scenes', 'bonus-content'];
+        const validTypes = [
+          'main',
+          'trailer',
+          'shorts',
+          'teaser',
+          'behind-the-scenes',
+          'bonus-content',
+        ];
         if (validTypes.includes(scriptType)) {
           sql += ` AND script_type = $${paramIndex}`;
           params.push(scriptType);
@@ -658,12 +660,12 @@ exports.searchScripts = [
         ${scriptType ? `AND script_type = $${episodeId ? 3 : 2}` : ''}
         ${status ? `AND status = $${[episodeId, scriptType].filter(Boolean).length + 2}` : ''}
       `;
-      
+
       const countParams = [q.trim()];
       if (episodeId) countParams.push(episodeId);
       if (scriptType) countParams.push(scriptType);
       if (status) countParams.push(status);
-      
+
       const countResult = await db.query(countSql, countParams);
       const total = parseInt(countResult.rows[0].count);
 
@@ -731,10 +733,8 @@ async function logSearch(userId, query, searchType, resultCount, durationMs, fil
 
   try {
     // Convert filters to JSON string if it's an object
-    const filtersJson = typeof filters === 'string' 
-      ? filters 
-      : JSON.stringify(filters || {});
-    
+    const filtersJson = typeof filters === 'string' ? filters : JSON.stringify(filters || {});
+
     await db.query(
       `INSERT INTO search_history 
        (user_id, query, search_type, result_count, search_duration_ms, filters)
@@ -745,16 +745,16 @@ async function logSearch(userId, query, searchType, resultCount, durationMs, fil
         searchType,
         resultCount || 0,
         durationMs || 0,
-        filtersJson
+        filtersJson,
       ]
     );
-    
+
     logger.debug('Search logged', { userId, query, searchType, resultCount });
   } catch (error) {
-    logger.warn('Failed to log search (non-fatal)', { 
+    logger.warn('Failed to log search (non-fatal)', {
       error: error.message,
       userId,
-      query: query?.substring(0, 30)
+      query: query?.substring(0, 30),
     });
     // Don't throw - logging failures shouldn't break search
   }
@@ -807,7 +807,7 @@ exports.getSearchHistory = [
         error: error.message,
         userId: req.user?.userId || req.user?.id,
       });
-      
+
       return res.status(500).json({
         success: false,
         error: 'Failed to get search history',
@@ -833,10 +833,7 @@ exports.clearSearchHistory = [
         });
       }
 
-      const result = await db.query(
-        'DELETE FROM search_history WHERE user_id = $1',
-        [userId]
-      );
+      const result = await db.query('DELETE FROM search_history WHERE user_id = $1', [userId]);
 
       const deletedCount = result.rowCount || 0;
 
@@ -851,7 +848,7 @@ exports.clearSearchHistory = [
         error: error.message,
         userId: req.user?.userId || req.user?.id,
       });
-      
+
       return res.status(500).json({
         success: false,
         error: 'Failed to clear search history',

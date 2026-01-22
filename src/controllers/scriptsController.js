@@ -37,10 +37,7 @@ module.exports = {
     const { scriptId } = req.params;
     const { includeContent } = req.query;
 
-    const script = await scriptsService.getScriptById(
-      scriptId,
-      includeContent === 'true'
-    );
+    const script = await scriptsService.getScriptById(scriptId, includeContent === 'true');
 
     res.json({
       success: true,
