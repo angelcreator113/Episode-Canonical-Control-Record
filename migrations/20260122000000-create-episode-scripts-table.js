@@ -36,7 +36,7 @@ exports.up = (pgm) => {
     },
     status: {
       type: 'varchar(50)',
-      default: "'draft'",
+      default: 'draft',
       check: "status IN ('draft', 'final', 'approved')",
     },
     duration: {
@@ -69,7 +69,7 @@ exports.up = (pgm) => {
     },
     scene_markers: {
       type: 'jsonb',
-      default: "'[]'::jsonb",
+      default: "[]",
     },
     created_by: {
       type: 'varchar(255)',
