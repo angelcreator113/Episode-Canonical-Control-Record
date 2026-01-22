@@ -226,18 +226,8 @@ module.exports = {
         });
       }
 
-      // Validate show_id if provided
-      let validatedShowId = null;
-      if (req.body.show_id) {
-        const showExists = await Show.findByPk(req.body.show_id);
-        if (!showExists) {
-          return res.status(400).json({
-            error: 'Invalid show_id',
-            message: `Show with ID ${req.body.show_id} does not exist. Please create the show first or leave show_id empty.`,
-          });
-        }
-        validatedShowId = req.body.show_id;
-      }
+      // Get show_id from request, let database foreign key constraint validate it
+      const validatedShowId = req.body.show_id || null;
 
       const episode = await Episode.create({
         title: finalTitle,
