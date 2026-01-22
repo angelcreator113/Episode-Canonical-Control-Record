@@ -111,13 +111,16 @@ const Home = () => {
 
           <div className="hero-actions">
             <Link to="/episodes/create" className="btn btn-primary">
-              ➕ New Episode
+              <span className="btn-icon" aria-hidden="true">➕</span>
+              <span className="btn-label">New Episode</span>
             </Link>
             <Link to="/composer/default" className="btn btn-secondary">
-              🎨 Composer
+              <span className="btn-icon" aria-hidden="true">🎨</span>
+              <span className="btn-label">Composer</span>
             </Link>
             <Link to="/assets" className="btn btn-ghost">
-              📸 Assets
+              <span className="btn-icon" aria-hidden="true">📸</span>
+              <span className="btn-label">Assets</span>
             </Link>
           </div>
         </div>

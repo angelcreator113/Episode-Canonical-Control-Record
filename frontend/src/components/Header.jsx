@@ -35,23 +35,23 @@ const Header = ({ onMenuClick }) => {
             onClick={onMenuClick}
             aria-label="Open menu"
           >
-            ☰
+            <span className="menu-icon" aria-hidden="true">☰</span>
           </button>
           <h1 className="header-title">Episodes</h1>
         </div>
 
-          <div className="header-right">
-            {isAuthenticated && user && (
-              <>
-                <span className="user-info">{user.email}</span>
-                <button className="logout-button" onClick={handleLogout}>
-                  Logout
-                </button>
-              </>
-            )}
-          </div>
+        <div className="header-right">
+          {isAuthenticated && user && (
+            <>
+              <span className="user-info">{user.email}</span>
+              <button className="logout-button" onClick={handleLogout}>
+                Logout
+              </button>
+            </>
+          )}
         </div>
-      </header>
+      </div>
+    </header>
   );
 };
 
