@@ -227,17 +227,13 @@ module.exports = {
         finalStatus,
       });
 
-      // Validate required fields
-      if (!finalTitle || !finalEpisodeNumber) {
-        console.log('❌ Validation failed:', {
-          title: !finalTitle ? 'required' : 'provided',
-          episode_number: !finalEpisodeNumber ? 'required' : 'provided',
-        });
+      // Validate required fields (only title is required)
+      if (!finalTitle) {
+        console.log('❌ Validation failed: title is required');
         return res.status(400).json({
           error: 'Missing required fields',
           fields: {
-            title: !finalTitle ? 'required' : null,
-            episode_number: !finalEpisodeNumber ? 'required' : null,
+            title: 'required',
           },
         });
       }
@@ -248,7 +244,7 @@ module.exports = {
       // Prepare episode data
       const episodeData = {
         title: finalTitle,
-        episode_number: parseInt(finalEpisodeNumber),
+        episode_number: finalEpisodeNumber ? parseInt(finalEpisodeNumber) : null,
         description: finalDescription || null,
         air_date: finalAirDate ? new Date(finalAirDate) : null,
         status: finalStatus,
