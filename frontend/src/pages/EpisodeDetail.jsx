@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import episodeService from '../services/episodeService';
 import EpisodeWardrobe from '../components/EpisodeWardrobe';
 import EpisodeAssetsTab from '../components/EpisodeAssetsTab';
+import EpisodeScripts from '../components/EpisodeScripts';
 import './EpisodeDetail.css';  // ← ADD THIS LINE!
 
 
@@ -219,6 +220,13 @@ const EpisodeDetail = () => {
             <span className="ed-tab-tx">Wardrobe</span>
           </button>
           <button
+            className={`ed-tab ${activeTab === 'scripts' ? 'is-active' : ''}`}
+            onClick={() => setActiveTab('scripts')}
+          >
+            <span className="ed-tab-ic">📝</span>
+            <span className="ed-tab-tx">Scripts</span>
+          </button>
+          <button
             className={`ed-tab ${activeTab === 'assets' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('assets')}
           >
@@ -390,6 +398,11 @@ const EpisodeDetail = () => {
               episodeNumber={episode.episode_number}
             />
           </div>
+        )}
+
+        {/* Scripts Tab */}
+        {activeTab === 'scripts' && (
+          <EpisodeScripts episodeId={episode.id} />
         )}
 
         {/* Assets Tab */}

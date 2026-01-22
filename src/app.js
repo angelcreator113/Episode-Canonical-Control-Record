@@ -346,6 +346,15 @@ try {
   outfitSetsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+let scriptsRoutes;
+try {
+  scriptsRoutes = require('./routes/scripts');
+  console.log('✓ Scripts routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load scripts routes:', e.message);
+  scriptsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 // Phase 3A controllers (real-time notifications)
 let notificationController, activityController, presenceController, socketController;
 
@@ -426,6 +435,9 @@ app.use('/api/v1/wardrobe', wardrobeRoutes);
 
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
+
+// Scripts routes
+app.use('/api/v1/scripts', scriptsRoutes);
 
 // Phase 6 routes (Shows)
 const showRoutes = require('./routes/shows');
