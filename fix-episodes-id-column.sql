@@ -51,6 +51,9 @@ ALTER TABLE episodes ADD COLUMN IF NOT EXISTS created_at timestamp DEFAULT NOW()
 ALTER TABLE episodes ADD COLUMN IF NOT EXISTS updated_at timestamp DEFAULT NOW();
 ALTER TABLE episodes ADD COLUMN IF NOT EXISTS deleted_at timestamp;
 
+-- Remove show_name column if it exists (should use show_id foreign key instead)
+ALTER TABLE episodes DROP COLUMN IF EXISTS show_name;
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS episodes_air_date_index ON episodes(air_date);
 CREATE INDEX IF NOT EXISTS episodes_deleted_at_index ON episodes(deleted_at);
