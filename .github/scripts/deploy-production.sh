@@ -12,63 +12,104 @@ export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
 
 # Ensure Node 20 is active
-nvm use 20 2>/dev/null || true
+if ! node --version 2>/dev/null | grep -q "v20"; then
+  echo "📦 Installing Node.js 20 via nvm..."
+  if [ ! -d "$NVM_DIR" ]; then
+    echo "Installing nvm..."
+    curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.39.7/install.sh | bash
+    export NVM_DIR="$HOME/.nvm"
+    source "$NVM_DIR/nvm.sh"
+  fi
+  nvm install 20
+  nvm use 20
+  nvm alias default 20
+  echo "✓ Node.js 20 installed"
+else
+  echo "✓ Node.js 20 detected, ensuring it's active..."
+  nvm use 20 2>/dev/null || true
+  nvm alias default 20
+fi
 
 echo "Active Node version:"
 node --version
 npm --version
+which node
 
-# Check if project directory exists
-if [ ! -d "/home/ubuntu/episode-metadata" ]; then
-  echo "📦 Creating project directory..."
-  mkdir -p /home/ubuntu/episode-metadata
+# Ensure we have a clean repository setup
+if [ ! -d ~/episode-metadata/.git ]; then
+  echo "📁 Setting up fresh episode-metadata repository..."
+  rm -rf ~/episode-metadata
+  mkdir -p ~/episode-metadata
+  cd ~/episode-metadata
+  git clone https://github.com/angelcreator113/Episode-Canonical-Control-Record.git .
+  echo "✓ Repository cloned successfully"
+else
+  echo "📁 Using existing repository..."
+  cd ~/episode-metadata
+  # Reset any local changes
+  git reset --hard HEAD
+  git clean -fd
+  echo "✓ Repository cleaned"
 fi
 
-# Deploy built files from staging area
-echo "📦 Deploying built files..."
-rsync -av --delete /home/ubuntu/episode-metadata-deploy/ /home/ubuntu/episode-metadata/
+echo "📦 Fetching latest code..."
+git fetch origin
+git checkout main
+git pull origin main
 
 cd /home/ubuntu/episode-metadata
 
 # Install production dependencies
-echo "📦 Installing production dependencies..."
-export NODE_ENV=production
-npm ci --production --omit=dev
+echo "📦 Installing backend dependencies..."
+npm ci
+
+# Build frontend
+echo "🎨 Building frontend..."
+cd frontend
+echo "Removing old build artifacts and clearing all caches..."
+rm -rf dist node_modules .vite .env.local .env.production.local .env.development.local
+rm -rf ~/.pm2/logs/* ~/.pm2/.pm2 2>/dev/null || true
+echo "Installing frontend dependencies..."
+npm ci 2>&1 | tail -20
+echo "Running Vite build with production config..."
+NODE_ENV=production npm run build 2>&1 | tee build.log
+
+if [ ! -d "dist" ]; then
+  echo "❌ Frontend build failed - dist directory not created"
+  echo "Build log:"
+  cat build.log
+  exit 1
+fi
+
+if [ ! -f "dist/index.html" ]; then
+  echo "❌ Frontend build incomplete - index.html not found in dist"
+  echo "Dist contents:"
+  ls -la dist/
+  exit 1
+fi
+
+echo "✓ Frontend built successfully"
+echo "Dist contents:"
+ls -lh dist/
+if [ -d "dist/assets" ]; then
+  echo "Asset files:"
+  ls -lh dist/assets/ | head -5
+fi
+echo "Verifying index.html has script tags:"
+grep -o '<script[^>]*src="[^"]*"' dist/index.html || echo "⚠️ No script tags found!"
+cd ..
 
 # Run migrations
 echo "🗄️  Running database migrations..."
+export DATABASE_URL="${DATABASE_URL}"
+export NODE_ENV=production
 npm run migrate:up || echo "⚠️  Migrations completed with warnings"
 
-# Setup frontend files
-echo "📁 Setting up frontend files..."
-sudo mkdir -p /var/www/primepisodes
-sudo rsync -av --delete frontend-dist/ /var/www/primepisodes/
-
-# Setup Nginx
-echo "🌐 Configuring Nginx..."
-if ! command -v nginx &> /dev/null; then
-  echo "Installing Nginx..."
-  sudo apt-get update -qq
-  sudo apt-get install -y nginx
-fi
-
-# Copy Nginx configuration if it exists
-if [ -f nginx.conf ]; then
-  sudo cp nginx.conf /etc/nginx/sites-available/primepisodes
-  sudo ln -sf /etc/nginx/sites-available/primepisodes /etc/nginx/sites-enabled/primepisodes
-  sudo rm -f /etc/nginx/sites-enabled/default
-  
-  # Test and reload Nginx
-  if sudo nginx -t; then
-    sudo systemctl enable nginx
-    sudo systemctl reload nginx || sudo systemctl restart nginx
-    echo "✅ Nginx configured and reloaded"
-  else
-    echo "⚠️  Nginx configuration test failed"
-  fi
-else
-  echo "⚠️  nginx.conf not found, skipping Nginx setup"
-fi
+# Run migrations
+echo "🗄️  Running database migrations..."
+export DATABASE_URL="${DATABASE_URL}"
+export NODE_ENV=production
+npm run migrate:up || echo "⚠️  Migrations completed with warnings"
 
 # Restart backend application
 echo "🔄 Restarting backend application..."
@@ -81,25 +122,44 @@ if ! command -v pm2 &> /dev/null; then
   npm install -g pm2
 fi
 
-# Check if app is running
-if pm2 list | grep -q "episode-api"; then
-  echo "Restarting existing PM2 process..."
-  pm2 restart episode-api
+# Stop any existing processes
+pm2 stop all || true
+pm2 delete all || true
+sleep 2
+pkill -f "node.*app.js" || true
+pkill -f "node.*episode" || true
+sleep 1
+
+# Start with ecosystem config if it exists, otherwise start manually
+if [ -f ecosystem.config.js ]; then
+  echo "📋 Starting with ecosystem config..."
+  pm2 start ecosystem.config.js --update-env
 else
-  echo "Starting new PM2 process..."
-  # Check if server.js exists, otherwise use app.js
+  echo "📋 Starting with direct PM2 command..."
   if [ -f src/server.js ]; then
     pm2 start src/server.js --name episode-api --env production
   elif [ -f app.js ]; then
     pm2 start app.js --name episode-api --env production
   else
-    echo "⚠️  No server file found (src/server.js or app.js)"
+    echo "❌ No server file found (src/server.js or app.js)"
     exit 1
   fi
 fi
 
-pm2 save
-echo "✅ PM2 process restarted and saved"
+pm2 save --force
+sleep 3
+pm2 status
+
+if ! pm2 list | grep -q "episode-api.*online"; then
+  echo "❌ App is not online!"
+  pm2 logs episode-api --lines 50 --nostream
+  exit 1
+fi
+
+echo "✅ App is online!"
+echo "🧪 Testing health endpoint..."
+sleep 3
+curl -v http://localhost:3000/health 2>&1 | head -30 || echo "⚠️ Health check failed"
 
 echo "✅ Production deployment complete!"
 echo "📊 Application status:"
