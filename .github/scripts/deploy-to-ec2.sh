@@ -184,6 +184,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f create-episode-wardrobe-table.sql 2>&1 | head -20 || echo "Episode wardrobe table created..."
 
+# Create episode_assets and fix episode_scripts
+echo "Creating episode_assets and fixing episode_scripts..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-missing-junction-tables.sql 2>&1 | head -20 || echo "Junction tables created..."
+
 # Create assets table if it doesn't exist
 echo "Creating assets table..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
