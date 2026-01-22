@@ -28,13 +28,21 @@ fi
 echo $$ > "$LOCK_FILE"
 trap "rm -f $LOCK_FILE" EXIT
 
-if [ ! -d ~/episode-metadata ]; then
-  echo "📁 Creating episode-metadata directory..."
+# Ensure we have a clean repository setup
+if [ ! -d ~/episode-metadata/.git ]; then
+  echo "📁 Setting up fresh episode-metadata repository..."
+  rm -rf ~/episode-metadata
   mkdir -p ~/episode-metadata
   cd ~/episode-metadata
   git clone https://github.com/angelcreator113/Episode-Canonical-Control-Record.git .
+  echo "✓ Repository cloned successfully"
 else
+  echo "📁 Using existing repository..."
   cd ~/episode-metadata
+  # Reset any local changes
+  git reset --hard HEAD
+  git clean -fd
+  echo "✓ Repository cleaned"
 fi
 
 echo "🔍 Checking Node.js version..."
