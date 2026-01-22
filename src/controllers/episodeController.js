@@ -239,15 +239,17 @@ module.exports = {
         show_id: validatedShowId,
       });
 
-      // Log creation activity (wrapped in try-catch to prevent failures)
-      try {
-        await logger.logAction(req.user?.id, 'create', 'episode', episode.id, {
+      console.log('✅ Episode created:', { id: episode.id, title: episode.title });
+
+      // Log creation activity (fully non-blocking, won't affect response)
+      if (logger && typeof logger.logAction === 'function') {
+        logger.logAction(req.user?.id, 'create', 'episode', episode.id, {
           newValues: episode.toJSON(),
           ipAddress: req.ip,
           userAgent: req.get('user-agent'),
+        }).catch((logError) => {
+          console.warn('⚠️ Failed to log activity:', logError.message);
         });
-      } catch (logError) {
-        console.warn('⚠️ Failed to log activity:', logError.message);
       }
 
       // ✅ SAFE: Phase 3A Integration with proper checks
