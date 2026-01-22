@@ -4,97 +4,61 @@
  * Tracks all edits made to scripts for complete edit history
  */
 
-const { Pool } = require('pg');
-require('dotenv').config();
+exports.up = (pgm) => {
+  // Create the script_edits table
+  pgm.createTable('script_edits', {
+    id: {
+      type: 'serial',
+      primaryKey: true,
+    },
+    script_id: {
+      type: 'integer',
+      notNull: true,
+      references: 'episode_scripts',
+      onDelete: 'CASCADE',
+    },
+    user_id: {
+      type: 'varchar(255)',
+    },
+    changes: {
+      type: 'jsonb',
+      notNull: true,
+    },
+    edit_type: {
+      type: 'varchar(50)',
+      notNull: true,
+      check: "edit_type IN ('create', 'update', 'delete', 'restore', 'set_primary')",
+    },
+    ip_address: {
+      type: 'varchar(45)',
+    },
+    user_agent: {
+      type: 'text',
+    },
+    created_at: {
+      type: 'timestamp with time zone',
+      default: pgm.func('CURRENT_TIMESTAMP'),
+    },
+  });
 
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false
-});
+  // Create indexes
+  pgm.createIndex('script_edits', 'script_id', {
+    name: 'idx_script_edits_script_id',
+  });
 
-async function createScriptEditsTable() {
-  const client = await pool.connect();
-  
-  try {
-    console.log('Creating script_edits table...');
+  pgm.createIndex('script_edits', 'user_id', {
+    name: 'idx_script_edits_user_id',
+  });
 
-    // Create the table
-    await client.query(`
-      CREATE TABLE IF NOT EXISTS script_edits (
-        id SERIAL PRIMARY KEY,
-        script_id INTEGER NOT NULL REFERENCES episode_scripts(id) ON DELETE CASCADE,
-        user_id VARCHAR(255), -- Username or user identifier
-        
-        -- Change tracking
-        changes JSONB NOT NULL, -- {before: {field: value}, after: {field: value}, diff: "text diff"}
-        edit_type VARCHAR(50) NOT NULL CHECK (edit_type IN ('create', 'update', 'delete', 'restore', 'set_primary')),
-        
-        -- Additional context
-        ip_address VARCHAR(45),
-        user_agent TEXT,
-        
-        -- Timestamp
-        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+  pgm.createIndex('script_edits', 'created_at', {
+    name: 'idx_script_edits_created_at',
+  });
 
-    console.log('✓ script_edits table created');
+  pgm.createIndex('script_edits', 'edit_type', {
+    name: 'idx_script_edits_edit_type',
+  });
+};
 
-    // Create indexes
-    console.log('Creating indexes...');
-
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_script_edits_script_id 
-      ON script_edits(script_id);
-    `);
-
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_script_edits_user_id 
-      ON script_edits(user_id);
-    `);
-
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_script_edits_created_at 
-      ON script_edits(created_at);
-    `);
-
-    await client.query(`
-      CREATE INDEX IF NOT EXISTS idx_script_edits_type 
-      ON script_edits(edit_type);
-    `);
-
-    console.log('✓ Indexes created');
-
-    // Verify table structure
-    const result = await client.query(`
-      SELECT column_name, data_type, is_nullable, column_default
-      FROM information_schema.columns
-      WHERE table_name = 'script_edits'
-      ORDER BY ordinal_position;
-    `);
-
-    console.log('\n📋 Table structure:');
-    console.table(result.rows);
-
-    console.log('\n✅ Migration completed successfully!');
-
-  } catch (error) {
-    console.error('❌ Error creating script_edits table:', error);
-    throw error;
-  } finally {
-    client.release();
-    await pool.end();
-  }
-}
-
-// Run migration
-if (require.main === module) {
-  createScriptEditsTable()
-    .then(() => process.exit(0))
-    .catch(err => {
-      console.error(err);
-      process.exit(1);
-    });
-}
-
-module.exports = { createScriptEditsTable };
+exports.down = (pgm) => {
+  pgm.dropTable('script_edits', { ifExists: true, cascade: true });
+};

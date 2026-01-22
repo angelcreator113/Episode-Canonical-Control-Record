@@ -130,6 +130,8 @@ exports.searchActivities = [
 exports.searchEpisodes = [
   validateSearch,
   async (req, res) => {
+    const startTime = Date.now(); // Track search duration
+    
     try {
       const { q = '', status, _tags, limit = '20', offset = '0' } = req.query;
 
@@ -146,12 +148,26 @@ exports.searchEpisodes = [
         'SELECT id, title, description, status, episode_number, created_at FROM episodes WHERE 1=1';
       const params = [];
       let paramIndex = 1;
+      let hasSearchQuery = false;
 
-      // Text search
+      // Full-text search using GIN index (idx_episodes_fulltext)
+      // This is much faster than ILIKE for text searching
       if (q && q.trim().length > 0) {
-        sql += ` AND (title ILIKE $${paramIndex} OR description ILIKE $${paramIndex})`;
-        params.push(`%${q}%`);
+        // Add relevance ranking to SELECT
+        // Note: categories is JSONB, so we convert it to text for full-text search
+        sql = sql.replace(
+          'SELECT id, title, description, status, episode_number, created_at FROM episodes',
+          `SELECT id, title, description, status, episode_number, created_at,
+           ts_rank(
+             to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(categories::text, '')),
+             plainto_tsquery('english', $${paramIndex})
+           ) AS search_rank
+           FROM episodes`
+        );
+        sql += ` AND to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(categories::text, '')) @@ plainto_tsquery('english', $${paramIndex})`;
+        params.push(q.trim());
         paramIndex++;
+        hasSearchQuery = true;
       }
 
       // Status filter
@@ -165,15 +181,27 @@ exports.searchEpisodes = [
       }
 
       // Get total count
-      const countSql = sql.replace(
-        'SELECT id, title, description, status, episode_number, created_at FROM episodes',
-        'SELECT COUNT(*) as count FROM episodes'
-      );
+      // Handle both versions of SELECT clause (with and without search_rank)
+      let countSql = sql;
+      if (hasSearchQuery) {
+        countSql = countSql.replace(
+          /SELECT id.*?FROM episodes/s,
+          'SELECT COUNT(*) as count FROM episodes'
+        );
+      } else {
+        countSql = countSql.replace(
+          'SELECT id, title, description, status, episode_number, created_at FROM episodes',
+          'SELECT COUNT(*) as count FROM episodes'
+        );
+      }
       const countResult = await db.query(countSql, params);
       const total = parseInt(countResult.rows[0].count);
 
       // Add sorting and pagination
-      sql += ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      // Order by relevance if search query exists, otherwise by created_at
+      sql += hasSearchQuery
+        ? ` ORDER BY search_rank DESC, created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`
+        : ` ORDER BY created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
       params.push(parsedLimit);
       params.push(parsedOffset);
 
@@ -184,6 +212,10 @@ exports.searchEpisodes = [
         resultCount: result.rowCount,
         total,
       });
+
+      // Log search for analytics
+      const searchDuration = Date.now() - startTime;
+      await logSearch(req.user?.userId || req.user?.id, q, 'episodes', total, searchDuration, { status: status || null });
 
       return res.json({
         success: true,
@@ -498,5 +530,338 @@ exports.reindexActivities = async (req, res) => {
     });
   }
 };
+
+/**
+ * GET /api/v1/search/scripts
+ * Search episode scripts with full-text search
+ * Query params:
+ *   - q: search query (searches content, notes, version_label, author)
+ *   - episodeId: filter by episode UUID
+ *   - scriptType: filter by script type (main, trailer, shorts, etc)
+ *   - status: filter by status (draft, final, approved)
+ *   - limit: results per page (default 20, max 100)
+ *   - offset: pagination offset (default 0)
+ */
+exports.searchScripts = [
+  validateSearch,
+  async (req, res) => {
+    const startTime = Date.now(); // Track search duration
+    
+    try {
+      const {
+        q,
+        episodeId,
+        scriptType,
+        status,
+        limit = 20,
+        offset = 0,
+      } = req.query;
+
+      if (!q || q.trim().length === 0) {
+        return res.status(400).json({
+          success: false,
+          error: 'Query required',
+          message: 'Search query (q) is required',
+        });
+      }
+
+      logger.info('Script search initiated', {
+        query: q.substring(0, 50),
+        episodeId,
+        scriptType,
+        status,
+        userId: req.user?.id,
+      });
+
+      const parsedLimit = Math.min(parseInt(limit) || 20, 100);
+      const parsedOffset = Math.max(parseInt(offset) || 0, 0);
+
+      // Build SQL query with full-text search
+      let sql = `
+        SELECT 
+          id, 
+          episode_id, 
+          script_type, 
+          version_number,
+          version_label,
+          author,
+          status,
+          duration,
+          scene_count,
+          created_at,
+          updated_at,
+          is_primary,
+          is_latest,
+          -- Calculate relevance rank
+          ts_rank(
+            to_tsvector('english', 
+              COALESCE(content, '') || ' ' || 
+              COALESCE(version_label, '') || ' ' ||
+              COALESCE(author, '') || ' ' ||
+              COALESCE(script_type, '')
+            ),
+            plainto_tsquery('english', $1)
+          ) AS search_rank,
+          -- Return truncated content preview (first 200 chars)
+          SUBSTRING(content, 1, 200) AS content_preview
+        FROM episode_scripts 
+        WHERE deleted_at IS NULL
+          AND to_tsvector('english', 
+                COALESCE(content, '') || ' ' || 
+                COALESCE(version_label, '') || ' ' ||
+                COALESCE(author, '')
+              ) @@ plainto_tsquery('english', $1)
+      `;
+
+      const params = [q.trim()];
+      let paramIndex = 2;
+
+      // Episode filter
+      if (episodeId) {
+        sql += ` AND episode_id = $${paramIndex}`;
+        params.push(episodeId);
+        paramIndex++;
+      }
+
+      // Script type filter
+      if (scriptType) {
+        const validTypes = ['main', 'trailer', 'shorts', 'teaser', 'behind-the-scenes', 'bonus-content'];
+        if (validTypes.includes(scriptType)) {
+          sql += ` AND script_type = $${paramIndex}`;
+          params.push(scriptType);
+          paramIndex++;
+        }
+      }
+
+      // Status filter
+      if (status) {
+        const validStatuses = ['draft', 'final', 'approved'];
+        if (validStatuses.includes(status)) {
+          sql += ` AND status = $${paramIndex}`;
+          params.push(status);
+          paramIndex++;
+        }
+      }
+
+      // Get total count
+      const countSql = `
+        SELECT COUNT(*) as count 
+        FROM episode_scripts 
+        WHERE deleted_at IS NULL
+          AND to_tsvector('english', 
+                COALESCE(content, '') || ' ' || 
+                COALESCE(version_label, '') || ' ' ||
+                COALESCE(author, '') || ' ' ||
+                COALESCE(script_type, '')
+              ) @@ plainto_tsquery('english', $1)
+        ${episodeId ? `AND episode_id = $2` : ''}
+        ${scriptType ? `AND script_type = $${episodeId ? 3 : 2}` : ''}
+        ${status ? `AND status = $${[episodeId, scriptType].filter(Boolean).length + 2}` : ''}
+      `;
+      
+      const countParams = [q.trim()];
+      if (episodeId) countParams.push(episodeId);
+      if (scriptType) countParams.push(scriptType);
+      if (status) countParams.push(status);
+      
+      const countResult = await db.query(countSql, countParams);
+      const total = parseInt(countResult.rows[0].count);
+
+      // Add sorting (by relevance) and pagination
+      sql += ` ORDER BY search_rank DESC, created_at DESC LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
+      params.push(parsedLimit);
+      params.push(parsedOffset);
+
+      const result = await db.query(sql, params);
+
+      logger.info('Script search completed', {
+        query: q.substring(0, 30),
+        resultCount: result.rowCount,
+        total,
+      });
+
+      // Log search for analytics
+      const searchDuration = Date.now() - startTime;
+      await logSearch(req.user?.userId || req.user?.id, q, 'scripts', total, searchDuration, {
+        episodeId: episodeId || null,
+        scriptType: scriptType || null,
+        status: status || null,
+      });
+
+      return res.json({
+        success: true,
+        data: result.rows,
+        pagination: {
+          total,
+          page: Math.floor(parsedOffset / parsedLimit) + 1,
+          page_size: parsedLimit,
+          pages: Math.ceil(total / parsedLimit),
+        },
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error('Script search error', {
+        error: error.message,
+        userId: req.user?.id,
+      });
+
+      return res.status(500).json({
+        success: false,
+        error: 'Search failed',
+        message: error.message,
+      });
+    }
+  },
+];
+
+/**
+ * Helper: Log search query (call this from search endpoints)
+ * @param {string} userId - User ID performing search
+ * @param {string} query - Search query text
+ * @param {string} searchType - Type of search (episodes, scripts, activities)
+ * @param {number} resultCount - Number of results returned
+ * @param {number} durationMs - Search duration in milliseconds
+ * @param {object} filters - Filter object to be stored as JSONB
+ */
+async function logSearch(userId, query, searchType, resultCount, durationMs, filters = {}) {
+  // Skip if no userId (unauthenticated search)
+  if (!userId) {
+    return;
+  }
+
+  try {
+    // Convert filters to JSON string if it's an object
+    const filtersJson = typeof filters === 'string' 
+      ? filters 
+      : JSON.stringify(filters || {});
+    
+    await db.query(
+      `INSERT INTO search_history 
+       (user_id, query, search_type, result_count, search_duration_ms, filters)
+       VALUES ($1, $2, $3, $4, $5, $6::jsonb)`,
+      [
+        userId || 'anonymous',
+        query || '',
+        searchType,
+        resultCount || 0,
+        durationMs || 0,
+        filtersJson
+      ]
+    );
+    
+    logger.debug('Search logged', { userId, query, searchType, resultCount });
+  } catch (error) {
+    logger.warn('Failed to log search (non-fatal)', { 
+      error: error.message,
+      userId,
+      query: query?.substring(0, 30)
+    });
+    // Don't throw - logging failures shouldn't break search
+  }
+}
+
+/**
+ * GET /api/v1/search/history
+ * Get user's recent searches
+ * Query params:
+ *   - limit: number of recent searches (default 10, max 50)
+ */
+exports.getSearchHistory = [
+  async (req, res) => {
+    try {
+      const { limit = '10' } = req.query;
+      const userId = req.user?.userId || req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication required',
+        });
+      }
+
+      const limitNum = Math.min(parseInt(limit) || 10, 50);
+
+      const result = await db.query(
+        `SELECT 
+          query,
+          search_type,
+          result_count,
+          created_at,
+          COUNT(*) OVER (PARTITION BY query) as search_count
+        FROM search_history
+        WHERE user_id = $1
+        GROUP BY id, query, search_type, result_count, created_at
+        ORDER BY created_at DESC
+        LIMIT $2`,
+        [userId, limitNum]
+      );
+
+      return res.json({
+        success: true,
+        data: result.rows,
+        count: result.rows.length,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error('Failed to get search history', {
+        error: error.message,
+        userId: req.user?.userId || req.user?.id,
+      });
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to get search history',
+        message: error.message,
+      });
+    }
+  },
+];
+
+/**
+ * DELETE /api/v1/search/history
+ * Clear user's search history
+ */
+exports.clearSearchHistory = [
+  async (req, res) => {
+    try {
+      const userId = req.user?.userId || req.user?.id;
+
+      if (!userId) {
+        return res.status(401).json({
+          success: false,
+          error: 'Authentication required',
+        });
+      }
+
+      const result = await db.query(
+        'DELETE FROM search_history WHERE user_id = $1',
+        [userId]
+      );
+
+      const deletedCount = result.rowCount || 0;
+
+      return res.json({
+        success: true,
+        message: 'Search history cleared',
+        deletedCount,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (error) {
+      logger.error('Failed to clear search history', {
+        error: error.message,
+        userId: req.user?.userId || req.user?.id,
+      });
+      
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to clear search history',
+        message: error.message,
+      });
+    }
+  },
+];
+
+// Export the helper function
+exports.logSearch = logSearch;
 
 module.exports = exports;
