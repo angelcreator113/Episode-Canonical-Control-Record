@@ -18,33 +18,36 @@ const { validateEpisodeQuery, validateUUIDParam } = require('../middleware/reque
  */
 
 // Test endpoint to verify basic functionality
-router.get('/test-create', asyncHandler(async (req, res) => {
-  const { models } = require('../models');
-  const { Episode } = models;
-  
-  try {
-    const testEpisode = await Episode.create({
-      title: 'Test Episode ' + Date.now(),
-      episode_number: Math.floor(Math.random() * 1000),
-      status: 'draft',
-      description: 'Test episode for debugging',
-      categories: ['test'],
-    });
-    
-    res.json({
-      success: true,
-      message: 'Test episode created successfully',
-      episode: testEpisode,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-      name: error.name,
-      sql: error.sql,
-    });
-  }
-}));
+router.get(
+  '/test-create',
+  asyncHandler(async (req, res) => {
+    const { models } = require('../models');
+    const { Episode } = models;
+
+    try {
+      const testEpisode = await Episode.create({
+        title: 'Test Episode ' + Date.now(),
+        episode_number: Math.floor(Math.random() * 1000),
+        status: 'draft',
+        description: 'Test episode for debugging',
+        categories: ['test'],
+      });
+
+      res.json({
+        success: true,
+        message: 'Test episode created successfully',
+        episode: testEpisode,
+      });
+    } catch (error) {
+      res.status(500).json({
+        success: false,
+        error: error.message,
+        name: error.name,
+        sql: error.sql,
+      });
+    }
+  })
+);
 
 // List episodes
 router.get('/', validateEpisodeQuery, asyncHandler(episodeController.listEpisodes));

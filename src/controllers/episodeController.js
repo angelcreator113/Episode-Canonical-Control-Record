@@ -189,7 +189,7 @@ module.exports = {
       console.log('📥 Received episode creation request');
       console.log('Request body:', JSON.stringify(req.body, null, 2));
       console.log('Request headers:', req.headers['content-type']);
-      
+
       const {
         // New field names (from frontend form)
         title,
@@ -271,13 +271,15 @@ module.exports = {
 
       // Log creation activity (fully non-blocking, won't affect response)
       if (logger && typeof logger.logAction === 'function') {
-        logger.logAction(req.user?.id, 'create', 'episode', episode.id, {
-          newValues: episode.toJSON(),
-          ipAddress: req.ip,
-          userAgent: req.get('user-agent'),
-        }).catch((logError) => {
-          console.warn('⚠️ Failed to log activity:', logError.message);
-        });
+        logger
+          .logAction(req.user?.id, 'create', 'episode', episode.id, {
+            newValues: episode.toJSON(),
+            ipAddress: req.ip,
+            userAgent: req.get('user-agent'),
+          })
+          .catch((logError) => {
+            console.warn('⚠️ Failed to log activity:', logError.message);
+          });
       }
 
       // ✅ SAFE: Phase 3A Integration with proper checks
@@ -374,37 +376,38 @@ module.exports = {
         stack: error.stack,
         sql: error.sql,
       });
-      
+
       // Handle Sequelize validation errors
       if (error.name === 'SequelizeValidationError') {
         return res.status(400).json({
           error: 'Validation failed',
           message: error.message,
-          fields: error.errors.map(err => ({
+          fields: error.errors.map((err) => ({
             field: err.path,
             message: err.message,
           })),
         });
       }
-      
+
       // Handle foreign key constraint errors
       if (error.name === 'SequelizeForeignKeyConstraintError') {
         return res.status(400).json({
           error: 'Invalid reference',
-          message: 'The show_id you provided does not exist. Please create a show first or leave show_id empty.',
+          message:
+            'The show_id you provided does not exist. Please create a show first or leave show_id empty.',
           details: error.message,
         });
       }
-      
+
       // Handle unique constraint errors
       if (error.name === 'SequelizeUniqueConstraintError') {
         return res.status(409).json({
           error: 'Duplicate entry',
           message: 'An episode with this information already exists',
-          fields: error.errors.map(err => err.path),
+          fields: error.errors.map((err) => err.path),
         });
       }
-      
+
       res.status(500).json({
         error: 'Failed to create episode',
         message: error.message,

@@ -228,9 +228,11 @@ class OpenSearchService {
       const total = parseInt(countResult.rows[0].total, 10);
 
       // Get paginated results - order by relevance if searching, otherwise by updated_at
-      const orderBy = query && query !== '*' ? 'ORDER BY search_rank DESC, updated_at DESC' : 'ORDER BY updated_at DESC';
-      const searchQuery =
-        `${selectClause} WHERE ${whereClause} ${orderBy} LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
+      const orderBy =
+        query && query !== '*'
+          ? 'ORDER BY search_rank DESC, updated_at DESC'
+          : 'ORDER BY updated_at DESC';
+      const searchQuery = `${selectClause} WHERE ${whereClause} ${orderBy} LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
 
       const result = await pool.query(searchQuery, [...params, limit, offset]);
 
