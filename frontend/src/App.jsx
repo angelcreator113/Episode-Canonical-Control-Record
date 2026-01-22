@@ -16,13 +16,16 @@ import CreateEpisode from './pages/CreateEpisode';
 import EditEpisode from './pages/EditEpisode';
 import SearchResults from './pages/SearchResults';
 import AssetGallery from './pages/AssetGallery';
+import AssetManager from './pages/AssetManager';
 // import CompositionManagement from './pages/CompositionManagement'; // Not needed for episode creation
 import ThumbnailComposer from './pages/ThumbnailComposer';
 import ThumbnailGallery from './pages/ThumbnailGallery';
 import SceneComposer from './pages/Scenes/SceneComposer';
+import ScenesList from './pages/Scenes/ScenesList';
 import AdminPanel from './pages/AdminPanel';
 import TemplateManagement from './pages/TemplateManagement';
 import AuditLogViewer from './pages/AuditLogViewer';
+import AuditLog from './pages/AuditLog';
 import ShowManagement from './pages/ShowManagement';
 import ShowForm from './components/ShowForm';
 import WardrobeGallery from './pages/WardrobeGallery';
@@ -141,6 +144,7 @@ function AppContent() {
           <Route path="/episodes/:episodeId/edit" element={<EditEpisode />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
           <Route path="/assets" element={<AssetGallery />} />
+          <Route path="/assets/manager" element={<AssetManager />} />
 
           {/* Additional Pages */}
           <Route path="/search" element={<SearchResults />} />
@@ -148,6 +152,7 @@ function AppContent() {
           <Route path="/composer/:episodeId" element={<ThumbnailComposer />} />
           <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
           <Route path="/episodes/:episodeId/scenes" element={<SceneComposer />} />
+          <Route path="/episodes/:episodeId/scenes/list" element={<ScenesList />} />
           <Route path="/shows" element={<ShowManagement />} />
           <Route path="/shows/create" element={<ShowForm />} />
           <Route path="/shows/:id/edit" element={<ShowForm />} />
@@ -156,6 +161,7 @@ function AppContent() {
           <Route path="/wardrobe/outfits" element={<OutfitSets />} />
           <Route path="/admin" element={<AdminPanel />} />
           <Route path="/admin/templates" element={<TemplateManagement />} />
+          <Route path="/admin/audit" element={<AuditLog />} />
           <Route path="/audit-log" element={<AuditLogViewer />} />
           
           {/* Test Routes */}
