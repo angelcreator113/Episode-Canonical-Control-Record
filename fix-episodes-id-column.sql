@@ -54,6 +54,9 @@ ALTER TABLE episodes ADD COLUMN IF NOT EXISTS deleted_at timestamp;
 -- Remove show_name column if it exists (should use show_id foreign key instead)
 ALTER TABLE episodes DROP COLUMN IF EXISTS show_name;
 
+-- Remove season_number column if it exists (not in current Episode model)
+ALTER TABLE episodes DROP COLUMN IF EXISTS season_number;
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS episodes_air_date_index ON episodes(air_date);
 CREATE INDEX IF NOT EXISTS episodes_deleted_at_index ON episodes(deleted_at);
