@@ -202,13 +202,21 @@ class OpenSearchService {
       const limit = Math.min(size, 100);
 
       let whereClause = '1=1';
+      let selectClause = 'SELECT * FROM episodes';
       const params = [];
       let paramCounter = 1;
 
       if (query && query !== '*') {
-        // Search in title and description using ILIKE (case-insensitive)
-        whereClause = `(title ILIKE $${paramCounter} OR description ILIKE $${paramCounter})`;
-        params.push(`%${query}%`);
+        // Use full-text search with GIN index (idx_episodes_fulltext)
+        // Much faster than ILIKE pattern matching
+        selectClause = `SELECT *, 
+          ts_rank(
+            to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(categories, '')),
+            plainto_tsquery('english', $${paramCounter})
+          ) AS search_rank
+          FROM episodes`;
+        whereClause = `to_tsvector('english', COALESCE(title, '') || ' ' || COALESCE(description, '') || ' ' || COALESCE(categories, '')) @@ plainto_tsquery('english', $${paramCounter})`;
+        params.push(query);
         paramCounter++;
       }
 
@@ -219,10 +227,10 @@ class OpenSearchService {
       );
       const total = parseInt(countResult.rows[0].total, 10);
 
-      // Get paginated results
+      // Get paginated results - order by relevance if searching, otherwise by updated_at
+      const orderBy = query && query !== '*' ? 'ORDER BY search_rank DESC, updated_at DESC' : 'ORDER BY updated_at DESC';
       const searchQuery =
-        `SELECT * FROM episodes WHERE ${whereClause} ` +
-        `ORDER BY updated_at DESC LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
+        `${selectClause} WHERE ${whereClause} ${orderBy} LIMIT $${paramCounter} OFFSET $${paramCounter + 1}`;
 
       const result = await pool.query(searchQuery, [...params, limit, offset]);
 

@@ -186,6 +186,10 @@ module.exports = {
    */
   async createEpisode(req, res, _next) {
     try {
+      console.log('📥 Received episode creation request');
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      console.log('Request headers:', req.headers['content-type']);
+      
       const {
         // New field names (from frontend form)
         title,
@@ -215,13 +219,21 @@ module.exports = {
       const finalAirDate = air_date || airDate;
       const finalStatus = status || 'draft';
 
-      // Validate required fields
-      if (!finalTitle || !finalEpisodeNumber) {
+      console.log('📊 Parsed fields:', {
+        finalTitle,
+        finalEpisodeNumber,
+        finalDescription,
+        finalAirDate,
+        finalStatus,
+      });
+
+      // Validate required fields (only title is required)
+      if (!finalTitle) {
+        console.log('❌ Validation failed: title is required');
         return res.status(400).json({
           error: 'Missing required fields',
           fields: {
-            title: !finalTitle ? 'required' : null,
-            episode_number: !finalEpisodeNumber ? 'required' : null,
+            title: 'required',
           },
         });
       }
@@ -229,17 +241,33 @@ module.exports = {
       // Get show_id from request, let database foreign key constraint validate it
       const validatedShowId = req.body.show_id || null;
 
-      const episode = await Episode.create({
+      // Prepare episode data
+      const episodeData = {
         title: finalTitle,
-        episode_number: parseInt(finalEpisodeNumber),
-        description: finalDescription,
+        episode_number: finalEpisodeNumber ? parseInt(finalEpisodeNumber) : null,
+        description: finalDescription || null,
         air_date: finalAirDate ? new Date(finalAirDate) : null,
         status: finalStatus,
         categories: Array.isArray(categories) ? categories : [],
         show_id: validatedShowId,
-      });
+      };
 
-      console.log('✅ Episode created:', { id: episode.id, title: episode.title });
+      console.log('📝 Creating episode with data:', JSON.stringify(episodeData, null, 2));
+
+      // Create episode with explicit error handling
+      let episode;
+      try {
+        episode = await Episode.create(episodeData);
+        console.log('✅ Episode created successfully:', { id: episode.id, title: episode.title });
+      } catch (createError) {
+        console.error('❌ Episode.create failed:', {
+          name: createError.name,
+          message: createError.message,
+          sql: createError.sql,
+          original: createError.original,
+        });
+        throw createError; // Re-throw to be caught by outer catch
+      }
 
       // Log creation activity (fully non-blocking, won't affect response)
       if (logger && typeof logger.logAction === 'function') {

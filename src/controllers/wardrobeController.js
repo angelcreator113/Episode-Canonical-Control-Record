@@ -1,4 +1,5 @@
-const { models } = require('../models');
+const db = require('../models');
+const { models, sequelize } = db;
 const { Wardrobe, EpisodeWardrobe, Episode } = models;
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const { Op } = require('sequelize');
@@ -374,50 +375,55 @@ module.exports = {
     try {
       const { id } = req.params;
 
-      const episode = await Episode.findByPk(id);
+      console.log('📥 Fetching wardrobe for episode:', id);
+
+      // Validate episode exists (non-blocking check)
+      const episode = await Episode.findOne({
+        where: { id, deleted_at: null },
+        attributes: ['id'],
+      });
+      
       if (!episode) {
+        console.log('❌ Episode not found:', id);
         return res.status(404).json({
           error: 'Episode not found',
         });
       }
 
-      const wardrobeItems = await Wardrobe.findAll({
-        include: [
-          {
-            model: EpisodeWardrobe,
-            as: 'episodeLinks',
-            where: { episode_id: id },
-            attributes: ['scene', 'worn_at', 'notes'],
-            required: false,
-          },
-        ],
-        attributes: [
-          'id',
-          'name',
-          'character',
-          'clothing_category',
-          's3_url',
-          's3_url_processed',
-          'thumbnail_url',
-          'color',
-          'season',
-          'is_favorite',
-          'created_at',
-        ],
-        where: { deleted_at: null },
-        order: [['created_at', 'DESC']],
-      });
+      console.log('✅ Episode found, fetching wardrobe items...');
+
+      // Query episode_wardrobe junction table directly
+      const wardrobeLinks = await sequelize.query(
+        `SELECT ew.wardrobe_id, ew.scene, ew.worn_at, ew.notes,
+                w.id, w.name, w.character, w.clothing_category, 
+                w.s3_url, w.s3_url_processed, w.thumbnail_url, 
+                w.color, w.season, w.is_favorite, w.created_at
+         FROM episode_wardrobe ew
+         JOIN wardrobe w ON w.id = ew.wardrobe_id
+         WHERE ew.episode_id = :episode_id 
+         AND w.deleted_at IS NULL
+         ORDER BY ew.created_at DESC`,
+        {
+          replacements: { episode_id: id },
+          type: sequelize.Sequelize.QueryTypes.SELECT
+        }
+      );
+
+      console.log(`✅ Found ${wardrobeLinks.length} wardrobe items`);
 
       res.json({
         success: true,
-        data: wardrobeItems,
-        count: wardrobeItems.length,
+        data: wardrobeLinks,
+        count: wardrobeLinks.length,
       });
     } catch (error) {
       console.error('❌ Error fetching episode wardrobe:', error);
+      console.error('Error details:', error.name, error.message);
+      console.error('Error stack:', error.stack);
       res.status(500).json({
         error: 'Failed to fetch episode wardrobe',
         message: error.message,
+        errorName: error.name,
       });
     }
   },
