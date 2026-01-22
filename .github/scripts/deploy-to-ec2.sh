@@ -184,6 +184,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f create-assets-table.sql 2>&1 | head -30 || echo "Assets table creation completed with warnings..."
 
+# Add missing columns to assets table
+echo "Adding missing columns to assets table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f add-missing-assets-columns.sql 2>&1 | head -20 || echo "Assets columns added..."
+
 # Create compositions table if it doesn't exist
 echo "Creating compositions table..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
