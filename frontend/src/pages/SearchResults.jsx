@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useSearch } from '../hooks/useSearch';
+import AdvancedSearchFilters from '../components/Search/AdvancedSearchFilters';
+import SearchHistory from '../components/Search/SearchHistory';
 import './SearchResults.css';
 
 export const SearchResults = () => {
@@ -10,6 +12,7 @@ export const SearchResults = () => {
   const page = parseInt(searchParams.get('page') || '1');
 
   const [searchInput, setSearchInput] = useState(initialQuery);
+  const [filters, setFilters] = useState({});
   const { results, loading, error, pagination } = useSearch(initialQuery, page);
 
   const handleSearch = (e) => {
@@ -72,6 +75,37 @@ export const SearchResults = () => {
           </button>
         </form>
       </div>
+
+      {/* Search History */}
+      <div className="search-bar-section">
+        <SearchHistory 
+          onQueryClick={(query) => {
+            setSearchInput(query);
+            navigate(`/search?q=${encodeURIComponent(query)}&page=1`);
+          }} 
+        />
+      </div>
+
+      {/* Advanced Filters */}
+      {initialQuery && (
+        <div className="search-bar-section">
+          <AdvancedSearchFilters
+            onFilterChange={(newFilters) => {
+              setFilters(newFilters);
+              // Reset to page 1 when filters change
+              const params = new URLSearchParams({
+                q: initialQuery,
+                page: '1',
+                ...Object.fromEntries(
+                  Object.entries(newFilters).filter(([_, value]) => value)
+                ),
+              });
+              navigate(`/search?${params.toString()}`);
+            }}
+            initialFilters={filters}
+          />
+        </div>
+      )}
 
       {/* Results Section */}
       <div className="search-results-container">

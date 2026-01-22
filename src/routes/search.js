@@ -52,4 +52,26 @@ router.get('/stats', authenticateToken, searchController.getSearchStats);
  */
 router.post('/reindex', authenticateToken, searchController.reindexActivities);
 
+/**
+ * GET /api/v1/search/scripts
+ * Search episode scripts with full-text search
+ * Searches content, notes, version labels, and author names
+ * Requires authentication
+ */
+router.get('/scripts', authenticateToken, searchController.searchScripts);
+
+/**
+ * GET /api/v1/search/history
+ * Get user's recent search history
+ * Requires authentication
+ */
+router.get('/history', authenticateToken, searchController.getSearchHistory);
+
+/**
+ * DELETE /api/v1/search/history
+ * Clear user's search history
+ * Requires authentication
+ */
+router.delete('/history', authenticateToken, searchController.clearSearchHistory);
+
 module.exports = router;

@@ -4,14 +4,22 @@
  * Part of Phase 4A - Advanced Search Integration
  */
 
-const { Client } = require('@opensearch-project/opensearch');
+// Make OpenSearch optional since it was removed from the project
+let Client;
+try {
+  Client = require('@opensearch-project/opensearch').Client;
+} catch (err) {
+  // OpenSearch not installed - will use PostgreSQL fallback only
+  Client = null;
+}
+
 const { getPool } = require('../config/database');
 const logger = require('./Logger');
 
 class ActivityIndexService {
   constructor() {
-    // Initialize OpenSearch client if configured
-    if (process.env.OPENSEARCH_ENDPOINT) {
+    // Initialize OpenSearch client if configured and available
+    if (Client && process.env.OPENSEARCH_ENDPOINT) {
       this.client = new Client({
         node: process.env.OPENSEARCH_ENDPOINT,
         auth: {
@@ -26,7 +34,11 @@ class ActivityIndexService {
     } else {
       this.client = null;
       this.isConfigured = false;
-      logger.warn('OpenSearch not configured - using PostgreSQL fallback for search');
+      if (!Client) {
+        logger.info('OpenSearch module not installed - using PostgreSQL fallback for search');
+      } else {
+        logger.warn('OpenSearch not configured - using PostgreSQL fallback for search');
+      }
     }
 
     this.indexName = 'activity-logs';

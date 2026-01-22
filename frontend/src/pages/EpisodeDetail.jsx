@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 import episodeService from '../services/episodeService';
 import EpisodeWardrobe from '../components/EpisodeWardrobe';
 import EpisodeAssetsTab from '../components/EpisodeAssetsTab';
+import EpisodeScripts from '../components/EpisodeScripts';
 import './EpisodeDetail.css';  // ← ADD THIS LINE!
 
 
@@ -75,9 +76,9 @@ const EpisodeDetail = () => {
 
   if (authLoading || loading) {
     return (
-      <div className="episode-detail-page">
-        <div className="loading-container">
-          <div className="spinner-large"></div>
+      <div className="ed-page">
+        <div className="ed-state">
+          <div className="ed-spinner"></div>
           <p>Loading episode...</p>
         </div>
       </div>
@@ -86,12 +87,12 @@ const EpisodeDetail = () => {
 
   if (error || !episode) {
     return (
-      <div className="episode-detail-page">
-        <div className="error-container">
-          <span className="error-icon">⚠️</span>
+      <div className="ed-page">
+        <div className="ed-state ed-state-error">
+          <span className="ed-error-icon">⚠️</span>
           <h2>Episode Not Found</h2>
           <p>{error || 'The episode you\'re looking for doesn\'t exist.'}</p>
-          <button onClick={() => navigate('/episodes')} className="btn-primary">
+          <button onClick={() => navigate('/episodes')} className="ed-btn ed-btn-primary">
             ← Back to Episodes
           </button>
         </div>
@@ -100,167 +101,201 @@ const EpisodeDetail = () => {
   }
 
   return (
-    <div className="episode-detail-page">
-      {/* Hero Header - Responsive */}
-      <div className="episode-hero">
-        <div className="hero-content">
-          <div className="hero-header">
-            <button onClick={() => navigate('/episodes')} className="hero-back-button">
-              ← Back
-            </button>
-            <div className="hero-badge">
-              <span className={`status-badge status-${getStatusColor(episode.status)}`}>
-                {episode.status || 'Draft'}
-              </span>
+    <div className="ed-page">
+      {/* Sticky Topbar */}
+      <div className="ed-topbar">
+        <div className="ed-topbar-left">
+          <button onClick={() => navigate('/episodes')} className="ed-iconbtn">
+            ←
+          </button>
+          <div className="ed-titlewrap">
+            <h1 className="ed-title">{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
+            <div className="ed-subrow">
+              <span className="ed-subtext">Episode {episode.episode_number || episode.episodeNumber || '?'}</span>
+              {(episode.air_date || episode.airDate) && (
+                <>
+                  <span>•</span>
+                  <span className="ed-subtext">📅 {formatDate(episode.air_date || episode.airDate)}</span>
+                </>
+              )}
+              {(episode.created_at || episode.createdAt) && (
+                <>
+                  <span>•</span>
+                  <span className="ed-subtext">📝 Created {formatDate(episode.created_at || episode.createdAt)}</span>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="ed-topbar-actions">
+          <button
+            onClick={() => navigate(`/episodes/${episode.id}/edit`)}
+            className="ed-btn ed-btn-primary"
+          >
+            <span>✏️</span>
+            <span>Edit Episode</span>
+          </button>
+          <button
+            onClick={() => navigate(`/composer/${episode.id}`)}
+            className="ed-btn ed-btn-ghost"
+          >
+            <span>🎨</span>
+            <span className="ed-only-desktop">Create Thumbnail</span>
+          </button>
+          <button
+            onClick={() => {
+              if (window.confirm('Delete this episode? This cannot be undone.')) {
+                // TODO: Implement delete
+                console.log('Delete episode:', episode.id);
+              }
+            }}
+            className="ed-btn ed-btn-danger"
+          >
+            <span>🗑️</span>
+            <span className="ed-only-desktop">Delete</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Content Wrapper */}
+      <div className="ed-wrap">
+        {/* Summary Card */}
+        <div className="ed-summary">
+          <div className="ed-summary-grid">
+            <div className="ed-chip">
+              <div className="k">Status</div>
+              <div className="v">
+                <span className={`ed-badge ed-badge-${episode.status?.toLowerCase() === 'published' ? 'success' : episode.status?.toLowerCase() === 'pending' ? 'warning' : 'neutral'}`}>
+                  {episode.status || 'Draft'}
+                </span>
+              </div>
+            </div>
+            <div className="ed-chip">
+              <div className="k">Episode Number</div>
+              <div className="v">{episode.episode_number || episode.episodeNumber || 'N/A'}</div>
+            </div>
+            <div className="ed-chip">
+              <div className="k">Air Date</div>
+              <div className="v">{formatDate(episode.air_date || episode.airDate)}</div>
             </div>
           </div>
 
-          <div className="hero-title-section">
-            <h1 className="hero-title">{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
-            <p className="hero-subtitle">Episode {episode.episode_number || episode.episodeNumber || '?'}</p>
-          </div>
-
-          <div className="hero-meta">
-            {(episode.air_date || episode.airDate) && (
-              <div className="meta-item">
-                <span className="meta-icon">📅</span>
-                <span>{formatDate(episode.air_date || episode.airDate)}</span>
-              </div>
-            )}
-            {episode.duration && (
-              <div className="meta-item">
-                <span className="meta-icon">⏱️</span>
-                <span>{episode.duration} min</span>
-              </div>
-            )}
-            {(episode.created_at || episode.createdAt) && (
-              <div className="meta-item">
-                <span className="meta-icon">📝</span>
-                <span>Created {formatDate(episode.created_at || episode.createdAt)}</span>
-              </div>
-            )}
-          </div>
-
-          <div className="hero-actions">
+          <div className="ed-quickactions">
             <button
               onClick={() => navigate(`/episodes/${episode.id}/edit`)}
-              className="hero-btn hero-btn-primary"
+              className="ed-btn ed-btn-primary ed-btn-full"
             >
-              <span className="btn-icon">✏️</span>
-              <span className="btn-text">Edit Episode</span>
+              ✏️ Edit Episode
             </button>
             <button
               onClick={() => navigate(`/composer/${episode.id}`)}
-              className="hero-btn hero-btn-secondary"
+              className="ed-btn ed-btn-ghost ed-btn-full"
             >
-              <span className="btn-icon">🎨</span>
-              <span className="btn-text">Create Thumbnail</span>
-            </button>
-            <button
-              onClick={() => {
-                if (window.confirm('Delete this episode? This cannot be undone.')) {
-                  // TODO: Implement delete
-                  console.log('Delete episode:', episode.id);
-                }
-              }}
-              className="hero-btn hero-btn-danger"
-            >
-              <span className="btn-icon">🗑️</span>
-              <span className="btn-text">Delete</span>
+              🎨 Create Thumbnail
             </button>
           </div>
         </div>
-      </div>
 
-      {/* Tabs Navigation */}
-      <div className="tabs-container">
-        <div className="tabs">
+        {/* Tabs */}
+        <div className="ed-tabs">
           <button
-            className={`tab ${activeTab === 'overview' ? 'active' : ''}`}
+            className={`ed-tab ${activeTab === 'overview' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('overview')}
           >
-            <span className="tab-icon">📋</span>
-            <span className="tab-text">Overview</span>
+            <span className="ed-tab-ic">📋</span>
+            <span className="ed-tab-tx">Overview</span>
           </button>
           <button
-            className={`tab ${activeTab === 'scenes' ? 'active' : ''}`}
+            className={`ed-tab ${activeTab === 'scenes' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('scenes')}
           >
-            <span className="tab-icon">🎬</span>
-            <span className="tab-text">Scenes</span>
+            <span className="ed-tab-ic">🎬</span>
+            <span className="ed-tab-tx">Scenes</span>
           </button>
           <button
-            className={`tab ${activeTab === 'wardrobe' ? 'active' : ''}`}
+            className={`ed-tab ${activeTab === 'wardrobe' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('wardrobe')}
           >
-            <span className="tab-icon">👗</span>
-            <span className="tab-text">Wardrobe</span>
+            <span className="ed-tab-ic">👗</span>
+            <span className="ed-tab-tx">Wardrobe</span>
           </button>
           <button
-            className={`tab ${activeTab === 'assets' ? 'active' : ''}`}
+            className={`ed-tab ${activeTab === 'scripts' ? 'is-active' : ''}`}
+            onClick={() => setActiveTab('scripts')}
+          >
+            <span className="ed-tab-ic">📝</span>
+            <span className="ed-tab-tx">Scripts</span>
+          </button>
+          <button
+            className={`ed-tab ${activeTab === 'assets' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('assets')}
           >
-            <span className="tab-icon">📸</span>
-            <span className="tab-text">Assets</span>
+            <span className="ed-tab-ic">📸</span>
+            <span className="ed-tab-tx">Assets</span>
           </button>
           <button
-            className={`tab ${activeTab === 'metadata' ? 'active' : ''}`}
+            className={`ed-tab ${activeTab === 'metadata' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('metadata')}
           >
-            <span className="tab-icon">🔧</span>
-            <span className="tab-text">Metadata</span>
+            <span className="ed-tab-ic">🔧</span>
+            <span className="ed-tab-tx">Metadata</span>
           </button>
           <button
-            className={`tab ${activeTab === 'history' ? 'active' : ''}`}
+            className={`ed-tab ${activeTab === 'history' ? 'is-active' : ''}`}
             onClick={() => setActiveTab('history')}
           >
-            <span className="tab-icon">📜</span>
-            <span className="tab-text">History</span>
+            <span className="ed-tab-ic">📜</span>
+            <span className="ed-tab-tx">History</span>
           </button>
         </div>
-      </div>
 
-      {/* Content Area */}
-      <div className="episode-content">
+        {/* Content Area */}
+        <div className="ed-content">
         {/* Overview Tab */}
         {activeTab === 'overview' && (
-          <div className="tab-content">
+          <div className="ed-stack">
             {/* Description Section */}
             {episode.description && (
-              <div className="content-card">
-                <h2 className="card-title">📝 Description</h2>
-                <p className="description-text">{episode.description}</p>
+              <div className="ed-card">
+                <div className="ed-cardhead">
+                  <h2 className="ed-cardtitle">📝 Description</h2>
+                </div>
+                <p className="ed-bodytext">{episode.description}</p>
               </div>
             )}
 
             {/* Quick Stats */}
-            <div className="content-card">
-              <h2 className="card-title">📊 Quick Stats</h2>
-              <div className="stats-grid">
-                <div className="stat-item">
-                  <span className="stat-label">Status</span>
-                  <span className={`stat-value stat-${episode.status?.toLowerCase() || 'draft'}`}>
-                    {episode.status || 'Draft'}
-                  </span>
+            <div className="ed-card">
+              <div className="ed-cardhead">
+                <h2 className="ed-cardtitle">📊 Quick Stats</h2>
+              </div>
+              <div className="ed-statgrid">
+                <div className="ed-stat">
+                  <div className="k">Status</div>
+                  <div className="v">
+                    <span className={`ed-badge ed-badge-${episode.status?.toLowerCase() === 'published' ? 'success' : episode.status?.toLowerCase() === 'pending' ? 'warning' : 'neutral'}`}>
+                      {episode.status || 'Draft'}
+                    </span>
+                  </div>
                 </div>
-                <div className="stat-item">
-                  <span className="stat-label">Episode Number</span>
-                  <span className="stat-value">
+                <div className="ed-stat">
+                  <div className="k">Episode Number</div>
+                  <div className="v">
                     {episode.episode_number || episode.episodeNumber || 'N/A'}
-                  </span>
+                  </div>
                 </div>
                 {(episode.air_date || episode.airDate) && (
-                  <div className="stat-item">
-                    <span className="stat-label">Air Date</span>
-                    <span className="stat-value">
+                  <div className="ed-stat">
+                    <div className="k">Air Date</div>
+                    <div className="v">
                       {formatDate(episode.air_date || episode.airDate)}
-                    </span>
+                    </div>
                   </div>
                 )}
                 {episode.duration && (
-                  <div className="stat-item">
-                    <span className="stat-label">Duration</span>
-                    <span className="stat-value">{episode.duration} minutes</span>
+                  <div className="ed-stat">
+                    <div className="k">Duration</div>
+                    <div className="v">{episode.duration} minutes</div>
                   </div>
                 )}
               </div>
@@ -268,11 +303,13 @@ const EpisodeDetail = () => {
 
             {/* Categories */}
             {episode.categories && Array.isArray(episode.categories) && episode.categories.length > 0 && (
-              <div className="content-card">
-                <h2 className="card-title">🏷️ Categories</h2>
-                <div className="categories-list">
+              <div className="ed-card">
+                <div className="ed-cardhead">
+                  <h2 className="ed-cardtitle">🏷️ Categories</h2>
+                </div>
+                <div className="ed-tags">
                   {episode.categories.map((cat, idx) => (
-                    <span key={idx} className="category-tag">
+                    <span key={idx} className="ed-tag">
                       {cat}
                     </span>
                   ))}
@@ -281,27 +318,29 @@ const EpisodeDetail = () => {
             )}
 
             {/* System Info */}
-            <div className="content-card system-info">
-              <h2 className="card-title">🔐 System Information</h2>
-              <div className="info-grid">
-                <div className="info-item">
-                  <span className="info-label">ID</span>
-                  <span className="info-value monospace">{episode.id}</span>
+            <div className="ed-card">
+              <div className="ed-cardhead">
+                <h2 className="ed-cardtitle">🔐 System Information</h2>
+              </div>
+              <div className="ed-infogrid">
+                <div className="ed-info">
+                  <div className="k">ID</div>
+                  <div className="v ed-mono">{episode.id}</div>
                 </div>
                 {(episode.created_at || episode.createdAt) && (
-                  <div className="info-item">
-                    <span className="info-label">Created</span>
-                    <span className="info-value">
+                  <div className="ed-info">
+                    <div className="k">Created</div>
+                    <div className="v">
                       {formatDateTime(episode.created_at || episode.createdAt)}
-                    </span>
+                    </div>
                   </div>
                 )}
                 {(episode.updated_at || episode.updatedAt) && (
-                  <div className="info-item">
-                    <span className="info-label">Last Updated</span>
-                    <span className="info-value">
+                  <div className="ed-info">
+                    <div className="k">Last Updated</div>
+                    <div className="v">
                       {formatDateTime(episode.updated_at || episode.updatedAt)}
-                    </span>
+                    </div>
                   </div>
                 )}
               </div>
@@ -311,38 +350,36 @@ const EpisodeDetail = () => {
 
         {/* Scenes Tab */}
         {activeTab === 'scenes' && (
-          <div className="tab-content">
-            <div className="content-card">
-              <div className="card-header">
-                <h2 className="card-title">🎬 Episode Scenes</h2>
+          <div className="ed-stack">
+            <div className="ed-card">
+              <div className="ed-cardhead">
+                <h2 className="ed-cardtitle">🎬 Episode Scenes</h2>
                 <button 
                   onClick={() => navigate(`/episodes/${episodeId}/scenes`)}
-                  className="btn-action btn-primary"
+                  className="ed-btn ed-btn-primary"
                 >
-                  <span className="btn-icon">➕</span>
-                  <span className="btn-text">Add Scene</span>
+                  <span>➕</span>
+                  <span>Add Scene</span>
                 </button>
               </div>
               
-              <div className="empty-placeholder">
-                <span className="placeholder-icon">🎥</span>
-                <h3 className="placeholder-title">No Scenes Yet</h3>
-                <p className="placeholder-text">Break down your episode into scenes for better organization</p>
+              <div className="ed-empty">
+                <div className="ed-empty-ic">🎥</div>
+                <h3>No Scenes Yet</h3>
+                <p>Break down your episode into scenes for better organization</p>
                 <button 
                   onClick={() => navigate(`/episodes/${episodeId}/scenes`)}
-                  className="btn-action btn-primary btn-large"
+                  className="ed-btn ed-btn-primary ed-btn-lg"
                 >
-                  <span className="btn-icon">🎬</span>
-                  <span className="btn-text">Create First Scene</span>
+                  <span>🎬</span>
+                  <span>Create First Scene</span>
                 </button>
               </div>
 
               {/* Scene Features Info */}
-              <div className="info-box info-box-blue">
-                <h4 className="info-box-title">
-                  ✨ Scene Features
-                </h4>
-                <ul className="info-box-list">
+              <div className="ed-callout">
+                <h4>✨ Scene Features</h4>
+                <ul>
                   <li><strong>Timestamps:</strong> Mark start and end times for each scene</li>
                   <li><strong>Descriptions:</strong> Add notes and details for each scene</li>
                   <li><strong>Asset Linking:</strong> Connect specific assets to scenes</li>
@@ -355,12 +392,17 @@ const EpisodeDetail = () => {
 
         {/* Wardrobe Tab */}
         {activeTab === 'wardrobe' && (
-          <div className="tab-content tab-content-full">
+          <div className="ed-fullbleed">
             <EpisodeWardrobe
               episodeId={episode.id}
               episodeNumber={episode.episode_number}
             />
           </div>
+        )}
+
+        {/* Scripts Tab */}
+        {activeTab === 'scripts' && (
+          <EpisodeScripts episodeId={episode.id} />
         )}
 
         {/* Assets Tab */}
@@ -370,63 +412,67 @@ const EpisodeDetail = () => {
 
         {/* Metadata Tab */}
         {activeTab === 'metadata' && (
-          <div className="tab-content">
+          <div className="ed-stack">
             {/* Episode Metadata Card */}
-            <div className="content-card">
-              <div className="card-header">
-                <h2 className="card-title">📊 Episode Metadata</h2>
-                <button className="btn-action btn-primary">
-                  <span className="btn-icon">✏️</span>
-                  <span className="btn-text">Edit Metadata</span>
+            <div className="ed-card">
+              <div className="ed-cardhead">
+                <h2 className="ed-cardtitle">📊 Episode Metadata</h2>
+                <button className="ed-btn ed-btn-primary">
+                  <span>✏️</span>
+                  <span>Edit Metadata</span>
                 </button>
               </div>
 
               {/* Metadata Fields Grid */}
-              <div className="metadata-grid">
-                <div className="metadata-item">
-                  <div className="metadata-label">Episode Number</div>
-                  <div className="metadata-value">{episode.episode_number || 'N/A'}</div>
+              <div className="ed-metagrid">
+                <div className="ed-meta">
+                  <div className="k">Episode Number</div>
+                  <div className="v">{episode.episode_number || 'N/A'}</div>
                 </div>
-                <div className="metadata-item">
-                  <div className="metadata-label">Status</div>
-                  <div className="metadata-value" style={{ color: episode.status === 'published' ? '#10b981' : '#f59e0b' }}>{episode.status || 'draft'}</div>
+                <div className="ed-meta">
+                  <div className="k">Status</div>
+                  <div className="v">
+                    <span className={`ed-badge ed-badge-${episode.status?.toLowerCase() === 'published' ? 'success' : 'warning'}`}>
+                      {episode.status || 'draft'}
+                    </span>
+                  </div>
                 </div>
-                <div className="metadata-item">
-                  <div className="metadata-label">Air Date</div>
-                  <div className="metadata-value">{episode.air_date ? new Date(episode.air_date).toLocaleDateString() : 'Not set'}</div>
+                <div className="ed-meta">
+                  <div className="k">Air Date</div>
+                  <div className="v">{episode.air_date ? new Date(episode.air_date).toLocaleDateString() : 'Not set'}</div>
                 </div>
-                <div className="metadata-item">
-                  <div className="metadata-label">Duration</div>
-                  <div className="metadata-value">{episode.duration ? `${episode.duration} min` : 'Not set'}</div>
+                <div className="ed-meta">
+                  <div className="k">Duration</div>
+                  <div className="v">{episode.duration ? `${episode.duration} min` : 'Not set'}</div>
                 </div>
               </div>
             </div>
 
             {/* Raw JSON Metadata Card */}
-            <div className="content-card">
-              <h2 className="card-title">🔧 Raw JSON Metadata</h2>
+            <div className="ed-card">
+              <div className="ed-cardhead">
+                <h2 className="ed-cardtitle">🔧 Raw JSON Metadata</h2>
+              </div>
               {episode.metadata && Object.keys(episode.metadata).length > 0 ? (
-                <div className="json-container">
-                  <pre className="json-pre">
+                <div className="ed-codebox">
+                  <pre>
                     {JSON.stringify(episode.metadata, null, 2)}
                   </pre>
                 </div>
               ) : (
-                <div className="empty-placeholder">
-                  <span className="placeholder-icon">📋</span>
-                  <h3 className="placeholder-title">No Additional Metadata</h3>
-                  <p className="placeholder-text">Custom metadata fields will appear here</p>
+                <div className="ed-empty ed-empty-tight">
+                  <div className="ed-empty-ic">📋</div>
+                  <h3>No Additional Metadata</h3>
+                  <p>Custom metadata fields will appear here</p>
                 </div>
               )}
             </div>
 
             {/* Metadata Features Info */}
-            <div className="content-card">
-              <div className="info-box info-box-blue">
-                <h4 className="info-box-title">
-                  ✨ Metadata Capabilities
-                </h4>
-                <ul className="info-box-list">
+            <div className="ed-card">
+              <div className="ed-callout">
+                <h4>✨ Metadata Capabilities</h4>
+                <ul>
                   <li><strong>Custom Fields:</strong> Add any custom data fields you need</li>
                   <li><strong>Structured Data:</strong> Store complex nested objects and arrays</li>
                   <li><strong>API Integration:</strong> Import metadata from external sources</li>
@@ -440,28 +486,30 @@ const EpisodeDetail = () => {
 
         {/* History Tab */}
         {activeTab === 'history' && (
-          <div className="tab-content">
-            <div className="content-card">
-              <h2 className="card-title">📜 Edit History</h2>
-              <div className="history-timeline">
-                <div className="timeline-item">
-                  <div className="timeline-dot"></div>
-                  <div className="timeline-content">
-                    <span className="timeline-time">
+          <div className="ed-stack">
+            <div className="ed-card">
+              <div className="ed-cardhead">
+                <h2 className="ed-cardtitle">📜 Edit History</h2>
+              </div>
+              <div className="ed-timeline">
+                <div className="ed-timeitem">
+                  <div className="dot"></div>
+                  <div className="body">
+                    <div className="t">
                       {formatDateTime(episode.created_at || episode.createdAt)}
-                    </span>
-                    <p className="timeline-text">Episode created</p>
+                    </div>
+                    <div className="d">Episode created</div>
                   </div>
                 </div>
                 {(episode.updated_at || episode.updatedAt) && 
                  (episode.updated_at !== episode.created_at) && (
-                  <div className="timeline-item">
-                    <div className="timeline-dot"></div>
-                    <div className="timeline-content">
-                      <span className="timeline-time">
+                  <div className="ed-timeitem">
+                    <div className="dot"></div>
+                    <div className="body">
+                      <div className="t">
                         {formatDateTime(episode.updated_at || episode.updatedAt)}
-                      </span>
-                      <p className="timeline-text">Episode updated</p>
+                      </div>
+                      <div className="d">Episode updated</div>
                     </div>
                   </div>
                 )}
@@ -470,6 +518,7 @@ const EpisodeDetail = () => {
           </div>
         )}
       </div>
+    </div>
     </div>
   );
 };

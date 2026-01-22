@@ -11,7 +11,7 @@ import '../styles/AuditLog.css';
 
 const AuditLog = () => {
   const { isAuthenticated, loading: authLoading, user } = useAuth();
-  const [logs, logs] = useState([]);
+  const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filters, setFilters] = useState({

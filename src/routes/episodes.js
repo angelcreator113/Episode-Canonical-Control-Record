@@ -4,6 +4,7 @@ const router = express.Router();
 const episodeController = require('../controllers/episodeController');
 const sceneController = require('../controllers/sceneController');
 const wardrobeController = require('../controllers/wardrobeController');
+const scriptsController = require('../controllers/scriptsController');
 const { _authenticateToken } = require('../middleware/auth');
 const { _requirePermission } = require('../middleware/rbac');
 const { asyncHandler } = require('../middleware/errorHandler');
@@ -136,6 +137,33 @@ router.get(
   '/:episodeId/scenes/stats',
   validateUUIDParam('episodeId'),
   asyncHandler(sceneController.getSceneStats)
+);
+
+/**
+ * Episode Scripts Management
+ */
+
+// GET /api/v1/episodes/:episodeId/scripts - Get all scripts for episode
+router.get(
+  '/:episodeId/scripts',
+  validateUUIDParam('episodeId'),
+  asyncHandler(scriptsController.getScriptsByEpisode)
+);
+
+// POST /api/v1/episodes/:episodeId/scripts - Create new script
+router.post(
+  '/:episodeId/scripts',
+  validateUUIDParam('episodeId'),
+  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  // requireAdmin,
+  asyncHandler(scriptsController.createScript)
+);
+
+// GET /api/v1/episodes/:episodeId/scripts/:scriptType/versions - Get versions
+router.get(
+  '/:episodeId/scripts/:scriptType/versions',
+  validateUUIDParam('episodeId'),
+  asyncHandler(scriptsController.getScriptVersions)
 );
 
 module.exports = router;

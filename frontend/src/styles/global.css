@@ -37,6 +37,16 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--dark);
 }
 
+/* Reset margins for header elements */
+.header h1,
+.header h2,
+.header h3,
+.header h4,
+.header h5,
+.header h6 {
+  margin: 0;
+}
+
 h1 { font-size: 2rem; }
 h2 { font-size: 1.5rem; }
 h3 { font-size: 1.25rem; }
