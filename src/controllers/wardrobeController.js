@@ -374,7 +374,12 @@ module.exports = {
     try {
       const { id } = req.params;
 
-      const episode = await Episode.findByPk(id);
+      // Validate episode exists (non-blocking check)
+      const episode = await Episode.findOne({
+        where: { id, deleted_at: null },
+        attributes: ['id'],
+      });
+      
       if (!episode) {
         return res.status(404).json({
           error: 'Episode not found',
@@ -415,9 +420,12 @@ module.exports = {
       });
     } catch (error) {
       console.error('❌ Error fetching episode wardrobe:', error);
+      console.error('Error details:', error.name, error.message);
+      console.error('Error stack:', error.stack);
       res.status(500).json({
         error: 'Failed to fetch episode wardrobe',
         message: error.message,
+        errorName: error.name,
       });
     }
   },
