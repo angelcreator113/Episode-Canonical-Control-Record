@@ -229,17 +229,33 @@ module.exports = {
       // Get show_id from request, let database foreign key constraint validate it
       const validatedShowId = req.body.show_id || null;
 
-      const episode = await Episode.create({
+      // Prepare episode data
+      const episodeData = {
         title: finalTitle,
         episode_number: parseInt(finalEpisodeNumber),
-        description: finalDescription,
+        description: finalDescription || null,
         air_date: finalAirDate ? new Date(finalAirDate) : null,
         status: finalStatus,
         categories: Array.isArray(categories) ? categories : [],
         show_id: validatedShowId,
-      });
+      };
 
-      console.log('✅ Episode created:', { id: episode.id, title: episode.title });
+      console.log('📝 Creating episode with data:', JSON.stringify(episodeData, null, 2));
+
+      // Create episode with explicit error handling
+      let episode;
+      try {
+        episode = await Episode.create(episodeData);
+        console.log('✅ Episode created successfully:', { id: episode.id, title: episode.title });
+      } catch (createError) {
+        console.error('❌ Episode.create failed:', {
+          name: createError.name,
+          message: createError.message,
+          sql: createError.sql,
+          original: createError.original,
+        });
+        throw createError; // Re-throw to be caught by outer catch
+      }
 
       // Log creation activity (fully non-blocking, won't affect response)
       if (logger && typeof logger.logAction === 'function') {
