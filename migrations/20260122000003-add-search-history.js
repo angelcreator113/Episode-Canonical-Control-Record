@@ -27,7 +27,7 @@ exports.up = (pgm) => {
     },
     filters: {
       type: 'jsonb',
-      default: "'{}'::jsonb",
+      default: '{}',
       comment: 'JSON object of applied filters',
     },
     result_count: {
