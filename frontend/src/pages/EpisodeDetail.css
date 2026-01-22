@@ -644,6 +644,299 @@
 }
 
 /* =========================================================
+   DESKTOP LAYOUT OPTIMIZATIONS
+   ========================================================= */
+
+@media (min-width: 1025px) {
+  /* Increase max-width for desktop */
+  .ed-wrap {
+    max-width: 1400px;
+    padding: 2rem 2.5rem 3rem;
+  }
+
+  /* Enhanced topbar for desktop */
+  .ed-topbar {
+    padding: 1.25rem 2.5rem;
+  }
+
+  .ed-title {
+    font-size: 1.5rem;
+    max-width: none;
+  }
+
+  .ed-subrow {
+    font-size: 0.95rem;
+  }
+
+  .ed-topbar-actions {
+    gap: 1rem;
+  }
+
+  /* Restore full button labels on desktop */
+  .ed-topbar-actions .ed-btn span {
+    display: inline;
+  }
+
+  .ed-btn {
+    padding: 0.75rem 1.25rem;
+    gap: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .ed-iconbtn {
+    width: 44px;
+    height: 44px;
+  }
+
+  /* Enhanced summary section */
+  .ed-summary {
+    padding: 2rem;
+    gap: 1.5rem;
+  }
+
+  .ed-summary-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .ed-chip {
+    padding: 1rem 1.15rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .ed-chip:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  .ed-chip .k {
+    font-size: 0.75rem;
+  }
+
+  .ed-chip .v {
+    font-size: 1.1rem;
+  }
+
+  /* Quick actions in row on desktop */
+  .ed-quickactions {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1rem;
+  }
+
+  /* Tabs with better spacing */
+  .ed-tabs {
+    margin-top: 1.5rem;
+    gap: 0.75rem;
+    justify-content: flex-start;
+  }
+
+  .ed-tab {
+    padding: 0.75rem 1.25rem;
+    gap: 0.6rem;
+  }
+
+  .ed-tab-tx {
+    font-size: 0.95rem;
+  }
+
+  /* Content spacing */
+  .ed-content {
+    margin-top: 1.5rem;
+  }
+
+  .ed-stack {
+    gap: 1.5rem;
+  }
+
+  /* Enhanced cards */
+  .ed-card {
+    padding: 1.75rem 2rem;
+    transition: box-shadow 0.2s ease;
+  }
+
+  .ed-card:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+  }
+
+  .ed-cardhead {
+    margin-bottom: 1.25rem;
+  }
+
+  .ed-cardtitle {
+    font-size: 1.25rem;
+  }
+
+  .ed-bodytext {
+    font-size: 1rem;
+    line-height: 1.8;
+  }
+
+  /* Stats grid - 3 columns on desktop */
+  .ed-statgrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .ed-stat {
+    padding: 1.25rem;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  .ed-stat:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  .ed-stat .k {
+    font-size: 0.75rem;
+    margin-bottom: 0.4rem;
+  }
+
+  .ed-stat .v {
+    font-size: 1.5rem;
+  }
+
+  /* Info grids - 4 columns */
+  .ed-infogrid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .ed-info {
+    padding: 1rem 1.15rem;
+  }
+
+  .ed-info .k {
+    font-size: 0.75rem;
+  }
+
+  .ed-info .v {
+    font-size: 1rem;
+  }
+
+  /* Meta grids - 3 columns */
+  .ed-metagrid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+  }
+
+  .ed-meta {
+    padding: 1rem 1.15rem;
+  }
+
+  /* Tags with better spacing */
+  .ed-tags {
+    gap: 0.75rem;
+  }
+
+  .ed-tag {
+    padding: 0.45rem 0.9rem;
+    font-size: 0.9rem;
+  }
+
+  /* Empty states */
+  .ed-empty {
+    padding: 3rem 2rem;
+  }
+
+  .ed-empty-ic {
+    font-size: 3rem;
+  }
+
+  .ed-empty h3 {
+    font-size: 1.25rem;
+  }
+
+  .ed-empty p {
+    font-size: 1rem;
+  }
+
+  /* Callouts */
+  .ed-callout {
+    padding: 1.5rem;
+  }
+
+  .ed-callout h4 {
+    font-size: 1.1rem;
+  }
+
+  /* Timeline */
+  .ed-timeline {
+    gap: 1.25rem;
+  }
+
+  .ed-timeitem {
+    gap: 1rem;
+  }
+
+  .ed-timeitem .dot {
+    width: 12px;
+    height: 12px;
+  }
+
+  .ed-timeitem .t {
+    font-size: 0.9rem;
+  }
+
+  .ed-timeitem .d {
+    font-size: 1rem;
+  }
+
+  /* Code boxes */
+  .ed-codebox {
+    max-height: 600px;
+    padding: 1.5rem;
+  }
+
+  .ed-codebox pre {
+    font-size: 0.9rem;
+  }
+
+  /* Badge sizes */
+  .ed-badge {
+    padding: 0.3rem 0.85rem;
+    font-size: 0.8rem;
+  }
+
+  /* Button sizes */
+  .ed-btn-lg {
+    padding: 1.1rem 1.75rem;
+    font-size: 1.05rem;
+  }
+}
+
+/* Extra large desktop (1440px+) */
+@media (min-width: 1440px) {
+  .ed-wrap {
+    max-width: 1600px;
+    padding: 2.5rem 3rem 4rem;
+  }
+
+  .ed-topbar {
+    padding: 1.5rem 3rem;
+  }
+
+  .ed-title {
+    font-size: 1.75rem;
+  }
+
+  .ed-summary {
+    padding: 2.5rem;
+  }
+
+  .ed-summary-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+
+  .ed-card {
+    padding: 2rem 2.5rem;
+  }
+
+  .ed-cardtitle {
+    font-size: 1.35rem;
+  }
+}
+/* =========================================================
    MOBILE LAYOUT OPTIMIZATIONS
    ========================================================= */
 
