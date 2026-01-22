@@ -62,3 +62,34 @@ CREATE INDEX IF NOT EXISTS episodes_air_date_index ON episodes(air_date);
 CREATE INDEX IF NOT EXISTS episodes_deleted_at_index ON episodes(deleted_at);
 CREATE INDEX IF NOT EXISTS episodes_show_id_index ON episodes(show_id);
 CREATE INDEX IF NOT EXISTS episodes_status_index ON episodes(status);
+
+-- Fix episode_wardrobe table to use UUID for episode_id (must match episodes.id type)
+DO $$ 
+BEGIN
+  -- Check if episode_id column is integer type
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns 
+    WHERE table_name = 'episode_wardrobe' 
+    AND column_name = 'episode_id' 
+    AND data_type IN ('integer', 'bigint')
+  ) THEN
+    RAISE NOTICE 'Converting episode_wardrobe.episode_id from integer to uuid...';
+    
+    -- Drop foreign key constraint if it exists
+    ALTER TABLE episode_wardrobe DROP CONSTRAINT IF EXISTS episode_wardrobe_episode_id_fkey;
+    ALTER TABLE episode_wardrobe DROP CONSTRAINT IF EXISTS fk_episode_wardrobe_episode;
+    
+    -- Drop the old integer column and add new uuid column
+    ALTER TABLE episode_wardrobe DROP COLUMN IF EXISTS episode_id;
+    ALTER TABLE episode_wardrobe ADD COLUMN episode_id uuid;
+    
+    -- Make it NOT NULL and add foreign key
+    ALTER TABLE episode_wardrobe ALTER COLUMN episode_id SET NOT NULL;
+    ALTER TABLE episode_wardrobe ADD CONSTRAINT episode_wardrobe_episode_id_fkey 
+      FOREIGN KEY (episode_id) REFERENCES episodes(id) ON DELETE CASCADE;
+    
+    RAISE NOTICE 'Successfully converted episode_wardrobe.episode_id to uuid type';
+  ELSE
+    RAISE NOTICE 'episode_wardrobe.episode_id is already uuid type, no conversion needed';
+  END IF;
+END $$;
