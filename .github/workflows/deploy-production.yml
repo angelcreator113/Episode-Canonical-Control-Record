@@ -92,9 +92,11 @@ jobs:
         run: |
           mkdir -p deploy
           cp -r src deploy/
-          cp -r frontend/dist deploy/
+          cp -r migrations deploy/
+          cp -r frontend/dist deploy/frontend-dist
           cp package.json deploy/
           cp package-lock.json deploy/
+          cp nginx.conf deploy/ || true
           tar -czf episode-metadata-production-${{ github.sha }}.tar.gz deploy/
 
       - name: Upload artifact
@@ -157,12 +159,20 @@ jobs:
           echo "Reason: ${{ github.event.inputs.reason }}"
           echo "Deployed by: ${{ github.actor }}"
           
+          # Extract artifact
+          tar -xzf episode-metadata-production-${{ github.sha }}.tar.gz
+          
           # Setup SSH key
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           
-          # Deploy via SSH
+          # Upload built files to server
+          echo "📤 Uploading built files to production server..."
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -r deploy/* ubuntu@${{ secrets.EC2_HOST }}:/home/ubuntu/episode-metadata-deploy/
+          
+          # Deploy via SSH (no frontend build needed)
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null ubuntu@${{ secrets.EC2_HOST }} 'bash -l' << 'EOF'
             set -e
             
@@ -170,36 +180,28 @@ jobs:
             export NVM_DIR="$HOME/.nvm"
             [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
             
-            # Check if project directory exists, if not clone it
+            # Check if project directory exists
             if [ ! -d "/home/ubuntu/episode-metadata" ]; then
-              echo "📦 First time setup - cloning repository..."
-              cd /home/ubuntu
-              git clone https://github.com/angelcreator113/Episode-Canonical-Control-Record.git episode-metadata
-              cd episode-metadata
-            else
-              cd /home/ubuntu/episode-metadata
+              echo "📦 Creating project directory..."
+              mkdir -p /home/ubuntu/episode-metadata
             fi
             
-            echo "📥 Fetching latest changes..."
-            git fetch origin
-            git checkout main
-            git pull origin main
+            echo "📦 Deploying built files..."
+            rsync -av --delete /home/ubuntu/episode-metadata-deploy/ /home/ubuntu/episode-metadata/
             
-            echo "📦 Installing backend dependencies..."
+            cd /home/ubuntu/episode-metadata
+            
+            echo "📦 Installing production dependencies..."
             export NODE_ENV=production
             npm ci --production --omit=dev
             
-            echo "🏗️  Building frontend..."
-            cd frontend
-            export NODE_ENV=development
-            npm ci
-            npm run build
-            cd ..
-            
-            echo "🗄️  Running migrations ONLY (no test data seeding)..."
-            export NODE_ENV=production
+            echo "🗄️  Running migrations..."
             export DATABASE_URL="${{ secrets.PRODUCTION_DATABASE_URL }}"
             npm run migrate:up || true
+            
+            echo "📁 Setting up frontend files..."
+            mkdir -p /var/www/primepisodes
+            sudo rsync -av frontend-dist/ /var/www/primepisodes/
             
             echo "🌐 Setting up Nginx..."
             # Install Nginx if not present
