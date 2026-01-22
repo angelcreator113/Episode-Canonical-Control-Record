@@ -393,7 +393,7 @@ module.exports = {
       console.log('✅ Episode found, fetching wardrobe items...');
 
       // Query episode_wardrobe junction table directly
-      const [wardrobeLinks] = await sequelize.query(
+      const wardrobeLinks = await sequelize.query(
         `SELECT ew.wardrobe_id, ew.scene, ew.worn_at, ew.notes,
                 w.id, w.name, w.character, w.clothing_category, 
                 w.s3_url, w.s3_url_processed, w.thumbnail_url, 
@@ -405,7 +405,7 @@ module.exports = {
          ORDER BY ew.created_at DESC`,
         {
           replacements: { episode_id: id },
-          type: sequelize.QueryTypes.SELECT
+          type: sequelize.Sequelize.QueryTypes.SELECT
         }
       );
 
