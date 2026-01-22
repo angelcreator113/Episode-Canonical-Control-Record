@@ -665,13 +665,14 @@ module.exports = {
     try {
       const { id } = req.params;
 
-      const episode = await Episode.findByPk(id, {
+      const episode = await Episode.findOne({
+        where: { id, deleted_at: null },
         include: [
           {
             model: Asset,
             as: 'assets',
             through: {
-              attributes: ['usage_type', 'scene_number', 'display_order', 'metadata', 'created_at'],
+              attributes: ['usage_context', 'display_order', 'created_at'],
             },
             attributes: [
               'id',
@@ -711,9 +712,11 @@ module.exports = {
       });
     } catch (error) {
       console.error('❌ Error getting episode assets:', error);
+      console.error('Error details:', error.name, error.message);
       res.status(500).json({
         error: 'Failed to get episode assets',
         message: error.message,
+        errorName: error.name,
       });
     }
   },
