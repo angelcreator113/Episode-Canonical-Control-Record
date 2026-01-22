@@ -490,9 +490,15 @@ const path = require('path');
 const fs = require('fs');
 
 const frontendDistPath = path.join(__dirname, '../frontend/dist');
+const indexHtmlPath = path.join(frontendDistPath, 'index.html');
+
+console.log('🔍 Frontend serving check:');
+console.log('  - Looking for dist at:', frontendDistPath);
+console.log('  - Dist exists:', fs.existsSync(frontendDistPath));
+console.log('  - Index.html exists:', fs.existsSync(indexHtmlPath));
 
 // Serve static files from frontend/dist if it exists
-if (fs.existsSync(frontendDistPath)) {
+if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
   console.log('✓ Serving frontend from:', frontendDistPath);
   console.log('✓ Dist contents:', fs.readdirSync(frontendDistPath));
 
@@ -552,7 +558,15 @@ if (fs.existsSync(frontendDistPath)) {
     }
   });
 } else {
-  console.log('⚠ Frontend dist not found, skipping static file serving');
+  console.log('⚠ Frontend dist not found or index.html missing!');
+  console.log('  - frontendDistPath:', frontendDistPath);
+  console.log('  - indexHtmlPath:', indexHtmlPath);
+  console.log('  - Dist exists:', fs.existsSync(frontendDistPath));
+  console.log('  - Index exists:', fs.existsSync(indexHtmlPath));
+  if (fs.existsSync(frontendDistPath)) {
+    console.log('  - Dist contents:', fs.readdirSync(frontendDistPath));
+  }
+  console.log('  -> Frontend will NOT be served, API-only mode');
 }
 
 // ============================================================================

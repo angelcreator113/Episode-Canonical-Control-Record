@@ -108,15 +108,26 @@ if [ ! -d "dist" ]; then
   exit 1
 fi
 
+if [ ! -f "dist/index.html" ]; then
+  echo "❌ Frontend build incomplete - index.html not found in dist"
+  echo "Dist contents:"
+  ls -la dist/
+  exit 1
+fi
+
 echo "✓ Frontend built successfully"
 echo "Dist contents:"
 ls -lh dist/
-echo "ALL asset files:"
-ls -lh dist/assets/
-echo "File hashes:"
-md5sum dist/assets/*.js
+if [ -d "dist/assets" ]; then
+  echo "ALL asset files:"
+  ls -lh dist/assets/
+  echo "File hashes:"
+  md5sum dist/assets/*.js
+fi
 echo "Checking index.html:"
 cat dist/index.html
+echo "Verifying index.html has script tags:"
+grep -o '<script[^>]*src="[^"]*"' dist/index.html || echo "⚠️ No script tags found in index.html!"
 cd ..
 
 echo "🗄️ Running migrations..."
