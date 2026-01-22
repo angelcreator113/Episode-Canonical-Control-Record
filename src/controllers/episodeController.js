@@ -186,6 +186,10 @@ module.exports = {
    */
   async createEpisode(req, res, _next) {
     try {
+      console.log('📥 Received episode creation request');
+      console.log('Request body:', JSON.stringify(req.body, null, 2));
+      console.log('Request headers:', req.headers['content-type']);
+      
       const {
         // New field names (from frontend form)
         title,
@@ -215,8 +219,20 @@ module.exports = {
       const finalAirDate = air_date || airDate;
       const finalStatus = status || 'draft';
 
+      console.log('📊 Parsed fields:', {
+        finalTitle,
+        finalEpisodeNumber,
+        finalDescription,
+        finalAirDate,
+        finalStatus,
+      });
+
       // Validate required fields
       if (!finalTitle || !finalEpisodeNumber) {
+        console.log('❌ Validation failed:', {
+          title: !finalTitle ? 'required' : 'provided',
+          episode_number: !finalEpisodeNumber ? 'required' : 'provided',
+        });
         return res.status(400).json({
           error: 'Missing required fields',
           fields: {
