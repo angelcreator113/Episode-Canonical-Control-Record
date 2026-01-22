@@ -1,4 +1,5 @@
-const { models, sequelize } = require('../models');
+const db = require('../models');
+const { models, sequelize } = db;
 const { Wardrobe, EpisodeWardrobe, Episode } = models;
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const { Op } = require('sequelize');
