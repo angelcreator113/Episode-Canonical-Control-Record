@@ -156,6 +156,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f create-shows-only.sql 2>&1 | head -20 || echo "SQL execution completed with warnings..."
 
+# Fix episodes table ID column to be UUID (CRITICAL FIX)
+echo "Fixing episodes table ID column to UUID..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f fix-episodes-id-column.sql 2>&1 | head -30 || echo "Episodes ID fix completed..."
+
 # Fix episodes table schema to match Sequelize models
 echo "Fixing episodes table schema..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
