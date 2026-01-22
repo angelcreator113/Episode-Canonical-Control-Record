@@ -226,6 +226,19 @@ module.exports = {
         });
       }
 
+      // Validate show_id if provided
+      let validatedShowId = null;
+      if (req.body.show_id) {
+        const showExists = await Show.findByPk(req.body.show_id);
+        if (!showExists) {
+          return res.status(400).json({
+            error: 'Invalid show_id',
+            message: `Show with ID ${req.body.show_id} does not exist. Please create the show first or leave show_id empty.`,
+          });
+        }
+        validatedShowId = req.body.show_id;
+      }
+
       const episode = await Episode.create({
         title: finalTitle,
         episode_number: parseInt(finalEpisodeNumber),
@@ -233,6 +246,7 @@ module.exports = {
         air_date: finalAirDate ? new Date(finalAirDate) : null,
         status: finalStatus,
         categories: Array.isArray(categories) ? categories : [],
+        show_id: validatedShowId,
       });
 
       // Log creation activity (wrapped in try-catch to prevent failures)
@@ -334,9 +348,47 @@ module.exports = {
       });
     } catch (error) {
       console.error('❌ Error in createEpisode:', error);
+      console.error('Error details:', {
+        name: error.name,
+        message: error.message,
+        stack: error.stack,
+        sql: error.sql,
+      });
+      
+      // Handle Sequelize validation errors
+      if (error.name === 'SequelizeValidationError') {
+        return res.status(400).json({
+          error: 'Validation failed',
+          message: error.message,
+          fields: error.errors.map(err => ({
+            field: err.path,
+            message: err.message,
+          })),
+        });
+      }
+      
+      // Handle foreign key constraint errors
+      if (error.name === 'SequelizeForeignKeyConstraintError') {
+        return res.status(400).json({
+          error: 'Invalid reference',
+          message: 'The show_id you provided does not exist. Please create a show first or leave show_id empty.',
+          details: error.message,
+        });
+      }
+      
+      // Handle unique constraint errors
+      if (error.name === 'SequelizeUniqueConstraintError') {
+        return res.status(409).json({
+          error: 'Duplicate entry',
+          message: 'An episode with this information already exists',
+          fields: error.errors.map(err => err.path),
+        });
+      }
+      
       res.status(500).json({
         error: 'Failed to create episode',
         message: error.message,
+        type: error.name,
       });
     }
   },
