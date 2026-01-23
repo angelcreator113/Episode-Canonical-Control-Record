@@ -14,7 +14,7 @@ module.exports = {
     out_file: '/home/ubuntu/episode-metadata/logs/out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     env: {
-      NODE_ENV: 'production',
+      NODE_ENV: 'development',
       PORT: 3002,
       HOST: '0.0.0.0',
       // Prepend Node 20 bin to PATH to ensure it's used
@@ -24,8 +24,7 @@ module.exports = {
       APP_NAME: 'Episode Metadata API (Development)',
       ALLOWED_ORIGINS: 'https://dev.episodes.primestudios.dev,http://localhost:3000,http://localhost:3002,http://localhost:5173,http://127.0.0.1:3002,http://127.0.0.1:5173,https://dev.primepisodes.com',
       
-      // Database Config - AWS RDS Development
-      DATABASE_URL: 'postgresql://postgres:Ayanna123%21%21@episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com:5432/episode_metadata',
+      // Database Config - AWS RDS Development (use individual vars, not DATABASE_URL)
       DB_HOST: 'episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com',
       DB_PORT: '5432',
       DB_NAME: 'episode_metadata',
@@ -34,7 +33,6 @@ module.exports = {
       DATABASE_POOL_MIN: '2',
       DATABASE_POOL_MAX: '10',
       DATABASE_TIMEOUT: '30000',
-      DATABASE_SSL: 'true',
       DB_SSL: 'true',
       
       // AWS Config
