@@ -87,10 +87,25 @@ fi
 echo "🗑️ Removing old directories..."
 rm -rf ~/Episode-Canonical-Control-Record 2>/dev/null || true
 
+echo "🛑 Stopping all Node processes..."
+pkill -9 node || true
+pm2 kill || true
+
 echo "📦 Fetching latest code..."
 git fetch origin
 git checkout dev
 git pull origin dev
+
+echo "🔍 Verifying file content after git pull..."
+echo "Current commit:"
+git log -1 --oneline
+echo ""
+echo "First 35 lines of src/app.js:"
+head -35 src/app.js
+echo ""
+echo "PM2 ecosystem config script path:"
+grep "script:" ecosystem.config.js
+echo ""
 
 echo "�️ Clearing Node.js cache and node_modules..."
 rm -rf node_modules package-lock.json
