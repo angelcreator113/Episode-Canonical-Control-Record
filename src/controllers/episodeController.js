@@ -664,50 +664,43 @@ module.exports = {
   async getEpisodeAssets(req, res, _next) {
     try {
       const { id } = req.params;
+      const db = require('../models');
 
-      const episode = await Episode.findOne({
-        where: { id, deleted_at: null },
-        include: [
-          {
-            model: Asset,
-            as: 'assets',
-            through: {
-              attributes: ['usage_context', 'display_order', 'created_at'],
-            },
-            attributes: [
-              'id',
-              'name',
-              'asset_type',
-              'asset_group',
-              'purpose',
-              'allowed_uses',
-              'is_global',
-              'approval_status',
-              's3_url_raw',
-              's3_url_processed',
-              'media_type',
-              'width',
-              'height',
-              'file_size_bytes',
-              'metadata',
-              'created_at',
-            ],
-          },
-        ],
-      });
-
-      if (!episode) {
-        return res.status(404).json({
-          error: 'Episode not found',
-          id,
-        });
-      }
-
-      // Filter out soft-deleted assets
-      const activeAssets = (episode.assets || []).filter((asset) => !asset.deleted_at);
+      // Use raw SQL query to avoid Sequelize association issues
+      const assets = await db.sequelize.query(
+        `SELECT 
+          a.id,
+          a.name,
+          a.asset_type,
+          a.asset_group,
+          a.purpose,
+          a.allowed_uses,
+          a.is_global,
+          a.approval_status,
+          a.s3_url_raw,
+          a.s3_url_processed,
+          a.media_type,
+          a.width,
+          a.height,
+          a.file_size_bytes,
+          a.metadata,
+          a.created_at,
+          ea.usage_context,
+          ea.display_order,
+          ea.created_at as linked_at
+        FROM episode_assets ea
+        INNER JOIN assets a ON ea.asset_id = a.id
+        WHERE ea.episode_id = $1 
+        AND a.deleted_at IS NULL
+        ORDER BY ea.display_order ASC, ea.created_at DESC`,
+        {
+          bind: [id],
+          type: db.sequelize.QueryTypes.SELECT,
+        }
+      );
 
       res.json({
-        data: activeAssets,
+        data: assets,
         count: activeAssets.length,
       });
     } catch (error) {
