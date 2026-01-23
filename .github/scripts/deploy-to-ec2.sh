@@ -92,8 +92,12 @@ git fetch origin
 git checkout dev
 git pull origin dev
 
-echo "📦 Installing backend dependencies..."
-npm ci
+echo "�️ Clearing Node.js cache and node_modules..."
+rm -rf node_modules package-lock.json
+rm -rf ~/.pm2/dump.pm2
+
+echo "📦 Installing backend dependencies (fresh install)..."
+npm install
 
 echo "🎨 Building frontend..."
 cd frontend
