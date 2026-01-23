@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS scenes (
   characters JSONB DEFAULT '[]',
   thumbnail_id UUID,
   is_locked BOOLEAN DEFAULT false,
+  locked_at TIMESTAMP,
   created_by VARCHAR(255),
   updated_by VARCHAR(255),
   created_at TIMESTAMP NOT NULL DEFAULT NOW(),
