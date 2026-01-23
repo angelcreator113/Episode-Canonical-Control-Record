@@ -12,6 +12,7 @@ const Navigation = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
+  const [expandedMenus, setExpandedMenus] = React.useState({});
 
   // Lock background scroll when nav is open (mobile especially)
   useEffect(() => {
@@ -36,12 +37,38 @@ const Navigation = ({ isOpen, onClose }) => {
     navigate(path);
     onClose?.();
   };
+  
+  const toggleSubmenu = (label) => {
+    setExpandedMenus(prev => ({
+      ...prev,
+      [label]: !prev[label]
+    }));
+  };
+  
+  const isPathActive = (item) => {
+    if (item.path) {
+      return location.pathname === item.path;
+    }
+    if (item.subItems) {
+      return item.subItems.some(sub => location.pathname === sub.path);
+    }
+    return false;
+  };
 
   const navItems = [
     { label: 'Home', path: '/', icon: '🏠' },
     { label: 'Shows', path: '/shows', icon: '🎬' },
     { label: 'Episodes', path: '/episodes', icon: '📺' },
-    { label: 'Wardrobe', path: '/wardrobe', icon: '👗' },
+    { 
+      label: 'Wardrobe', 
+      icon: '👗',
+      subItems: [
+        { label: 'Gallery', path: '/wardrobe', icon: '🖼️' },
+        { label: 'Library', path: '/wardrobe-library', icon: '📚' },
+        { label: 'Outfit Sets', path: '/wardrobe/outfits', icon: '👔' },
+        { label: 'Analytics', path: '/wardrobe/analytics', icon: '📊' },
+      ]
+    },
   ];
 
   if (user?.role === 'admin' || user?.groups?.includes('ADMIN')) {
@@ -72,15 +99,45 @@ const Navigation = ({ isOpen, onClose }) => {
 
         <ul className="nav-items">
           {navItems.map((item) => (
-            <li key={item.path}>
-              <button
-                type="button"
-                onClick={() => handleNavigation(item.path)}
-                className={location.pathname === item.path ? 'active' : ''}
-              >
-                <span className="nav-icon">{item.icon}</span>
-                <span>{item.label}</span>
-              </button>
+            <li key={item.label} className={item.subItems ? 'has-submenu' : ''}>
+              {item.subItems ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => toggleSubmenu(item.label)}
+                    className={`nav-item-button ${isPathActive(item) ? 'active' : ''} ${expandedMenus[item.label] ? 'expanded' : ''}`}
+                  >
+                    <span className="nav-icon">{item.icon}</span>
+                    <span>{item.label}</span>
+                    <span className="submenu-arrow">{expandedMenus[item.label] ? '▼' : '▶'}</span>
+                  </button>
+                  {expandedMenus[item.label] && (
+                    <ul className="submenu">
+                      {item.subItems.map((subItem) => (
+                        <li key={subItem.path}>
+                          <button
+                            type="button"
+                            onClick={() => handleNavigation(subItem.path)}
+                            className={location.pathname === subItem.path ? 'active' : ''}
+                          >
+                            <span className="nav-icon">{subItem.icon}</span>
+                            <span>{subItem.label}</span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => handleNavigation(item.path)}
+                  className={`nav-item-button ${location.pathname === item.path ? 'active' : ''}`}
+                >
+                  <span className="nav-icon">{item.icon}</span>
+                  <span>{item.label}</span>
+                </button>
+              )}
             </li>
           ))}
         </ul>
