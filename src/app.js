@@ -446,6 +446,10 @@ app.use('/api/v1/wardrobe', wardrobeRoutes);
 // Wardrobe Library routes
 app.use('/api/v1/wardrobe-library', wardrobeLibraryRoutes);
 
+// Wardrobe Approval routes
+const wardrobeApprovalRoutes = require('./routes/wardrobeApproval');
+app.use('/api/v1/episodes', wardrobeApprovalRoutes);
+
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 

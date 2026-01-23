@@ -49,6 +49,27 @@ module.exports = (sequelize) => {
         allowNull: true,
         comment: 'Episode-specific notes about wearing this item',
       },
+      approval_status: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        defaultValue: 'pending',
+        comment: 'Approval status: pending, approved, rejected',
+      },
+      approved_by: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'User who approved this item',
+      },
+      approved_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'When this item was approved',
+      },
+      rejection_reason: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'Reason for rejection if applicable',
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,
@@ -89,7 +110,7 @@ module.exports = (sequelize) => {
 
     EpisodeWardrobe.belongsTo(models.Wardrobe, {
       foreignKey: 'wardrobe_id',
-      as: 'wardrobeItem',
+      as: 'wardrobe',
     });
   };
 

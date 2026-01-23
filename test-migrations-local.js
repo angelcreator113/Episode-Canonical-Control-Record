@@ -7,12 +7,13 @@ const { execSync } = require('child_process');
 const { Client } = require('pg');
 
 // Local test database configuration
+// Override with environment variables if needed
 const TEST_DB_CONFIG = {
-  host: 'localhost',
-  port: 5432,
-  user: 'postgres',
-  password: 'postgres',
-  database: 'episode_metadata_test',
+  host: process.env.TEST_DB_HOST || 'localhost',
+  port: process.env.TEST_DB_PORT || 5433, // Using 5433 to avoid conflicts
+  user: process.env.TEST_DB_USER || 'postgres',
+  password: process.env.TEST_DB_PASSWORD || 'postgres',
+  database: process.env.TEST_DB_NAME || 'episode_metadata_test',
 };
 
 async function createTestDatabase() {
