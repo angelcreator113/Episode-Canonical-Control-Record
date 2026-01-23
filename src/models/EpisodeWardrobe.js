@@ -33,10 +33,20 @@ module.exports = (sequelize) => {
         },
         onDelete: 'CASCADE',
       },
+      scene_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        references: {
+          model: 'scenes',
+          key: 'id',
+        },
+        onDelete: 'SET NULL',
+        comment: 'Link to specific scene where wardrobe was used',
+      },
       scene: {
         type: DataTypes.STRING(255),
         allowNull: true,
-        comment: 'Scene where this item was worn',
+        comment: 'Scene description/name (legacy text field - use scene_id instead)',
       },
       worn_at: {
         type: DataTypes.DATE,
@@ -111,6 +121,11 @@ module.exports = (sequelize) => {
     EpisodeWardrobe.belongsTo(models.Wardrobe, {
       foreignKey: 'wardrobe_id',
       as: 'wardrobe',
+    });
+
+    EpisodeWardrobe.belongsTo(models.Scene, {
+      foreignKey: 'scene_id',
+      as: 'sceneDetails',  // Use different alias to avoid collision with 'scene' attribute
     });
   };
 
