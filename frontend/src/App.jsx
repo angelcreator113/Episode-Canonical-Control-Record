@@ -31,6 +31,9 @@ import ShowForm from './components/ShowForm';
 import WardrobeGallery from './pages/WardrobeGallery';
 import WardrobeAnalytics from './pages/WardrobeAnalytics';
 import OutfitSets from './pages/OutfitSets';
+import WardrobeLibraryBrowser from './pages/WardrobeLibraryBrowser';
+import WardrobeLibraryUpload from './pages/WardrobeLibraryUpload';
+import WardrobeLibraryDetail from './pages/WardrobeLibraryDetail';
 
 // Components
 import Navigation from './components/Navigation';
@@ -159,6 +162,9 @@ function AppContent() {
           <Route path="/wardrobe" element={<WardrobeGallery />} />
           <Route path="/wardrobe/analytics" element={<WardrobeAnalytics />} />
           <Route path="/wardrobe/outfits" element={<OutfitSets />} />
+          <Route path="/wardrobe-library" element={<WardrobeLibraryBrowser />} />
+          <Route path="/wardrobe-library/upload" element={<WardrobeLibraryUpload />} />
+          <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />
           <Route path="/admin" element={<AdminPanel />} />
           <Route path="/admin/templates" element={<TemplateManagement />} />
           <Route path="/admin/audit" element={<AuditLog />} />
