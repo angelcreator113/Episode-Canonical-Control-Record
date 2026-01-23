@@ -242,6 +242,20 @@ fi
 # CREATE JUNCTION TABLES AFTER MIGRATIONS (so they don't get dropped)
 echo "🔧 Creating junction tables after migrations..."
 
+# Create scenes table
+echo "Creating scenes table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-scenes-table.sql 2>&1 | head -20 || echo "Scenes table created..."
+
+# Create scene_templates table
+echo "Creating scene_templates table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-scene-templates-table.sql 2>&1 | head -20 || echo "Scene templates table created..."
+
 # Create episode_wardrobe junction table
 echo "Creating episode_wardrobe table..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
