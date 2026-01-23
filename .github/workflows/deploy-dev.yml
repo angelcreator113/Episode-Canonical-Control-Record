@@ -171,10 +171,29 @@ jobs:
       - name: Run smoke tests
         run: |
           echo "🧪 Running smoke tests against load balancer..."
-          curl -f https://dev.primepisodes.com/health || echo "⚠️  Health check failed - service may be starting"
-          echo "✅ Deployment workflow completed"
-          echo "🌐 Site: https://dev.primepisodes.com"
-          echo "✅ Smoke tests passed"
+          echo "Waiting 10 seconds for PM2 to stabilize..."
+          sleep 10
+          
+          # Test health endpoint with retries
+          MAX_RETRIES=5
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Health check attempt $i/$MAX_RETRIES..."
+            if curl -f -m 10 https://dev.primepisodes.com/health; then
+              echo "✅ Health check passed!"
+              echo "✅ Deployment workflow completed"
+              echo "🌐 Site: https://dev.primepisodes.com"
+              exit 0
+            fi
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⚠️  Health check failed, waiting 10 seconds before retry..."
+              sleep 10
+            fi
+          done
+          
+          echo "❌ Health check failed after $MAX_RETRIES attempts"
+          echo "🔍 Checking PM2 logs on EC2..."
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_HOST }} "pm2 logs episode-api --lines 50 --nostream" || true
+          exit 1
 
       - name: Deployment summary
         run: |
