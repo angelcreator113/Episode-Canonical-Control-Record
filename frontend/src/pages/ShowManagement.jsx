@@ -3,7 +3,7 @@
  * Create, edit, and manage shows
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
@@ -12,6 +12,7 @@ import '../styles/ShowManagement.css';
 const ShowManagement = () => {
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const formRef = useRef(null);
   
   const [shows, setShows] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -26,6 +27,10 @@ const ShowManagement = () => {
     color: '#667eea',
     status: 'active',
   });
+
+  const [coverImage, setCoverImage] = useState(null);
+  const [coverImagePreview, setCoverImagePreview] = useState(null);
+  const [uploadingCover, setUploadingCover] = useState(false);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -79,6 +84,48 @@ const ShowManagement = () => {
     });
     setEditingShow(null);
     setShowForm(false);
+    setCoverImage(null);
+    setCoverImagePreview(null);
+  };
+
+  const handleCoverImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setCoverImage(file);
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setCoverImagePreview(reader.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const uploadCoverImage = async (showId) => {
+    if (!coverImage) return null;
+
+    const coverFormData = new FormData();
+    coverFormData.append('image', coverImage);
+
+    setUploadingCover(true);
+    try {
+      const response = await fetch(`${API_URL}/shows/${showId}/cover-image`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+        body: coverFormData,
+      });
+
+      if (!response.ok) throw new Error('Failed to upload cover image');
+
+      const data = await response.json();
+      return data.data.coverImageUrl;
+    } catch (err) {
+      console.error('Error uploading cover:', err);
+      throw err;
+    } finally {
+      setUploadingCover(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -108,6 +155,19 @@ const ShowManagement = () => {
       });
 
       if (!response.ok) throw new Error('Failed to save show');
+
+      const result = await response.json();
+      const savedShow = result.data;
+
+      // Upload cover image if provided
+      if (coverImage) {
+        try {
+          await uploadCoverImage(savedShow.id);
+        } catch (coverError) {
+          console.error('Cover upload failed:', coverError);
+          // Continue anyway - show was created
+        }
+      }
 
       alert(`Show ${editingShow ? 'updated' : 'created'} successfully!`);
       await fetchShows();
@@ -257,7 +317,7 @@ const ShowManagement = () => {
 
         {/* Show Form */}
         {showForm && (
-          <div style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '1.5rem' }}>
+          <div ref={formRef} style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '1.5rem' }}>
             <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>
               {editingShow ? '✏️ Edit Show' : '🆕 Create New Show'}
             </h2>
@@ -334,6 +394,54 @@ const ShowManagement = () => {
                 />
               </div>
 
+              {/* Cover Image Upload */}
+              <div>
+                <label style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
+                  Cover Image (Portrait 2:3 ratio - like Netflix)
+                </label>
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'flex-start' }}>
+                  {coverImagePreview && (
+                    <div style={{ width: '150px', height: '225px', border: '2px solid #e5e7eb', borderRadius: '8px', overflow: 'hidden', flexShrink: 0 }}>
+                      <img src={coverImagePreview} alt="Cover preview" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    </div>
+                  )}
+                  <div style={{ flex: 1 }}>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleCoverImageSelect}
+                      id="coverImage"
+                      style={{ display: 'none' }}
+                    />
+                    <label
+                      htmlFor="coverImage"
+                      style={{
+                        display: 'inline-block',
+                        padding: '0.65rem 1.25rem',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white',
+                        borderRadius: '8px',
+                        fontSize: '0.875rem',
+                        fontWeight: '600',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        boxShadow: '0 2px 6px rgba(102, 126, 234, 0.3)'
+                      }}
+                    >
+                      📸 Choose Cover Image
+                    </label>
+                    <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.75rem', color: '#6b7280' }}>
+                      Recommended: 800x1200px (2:3 ratio). Max 10MB. JPG, PNG, or WebP.
+                    </p>
+                    {coverImage && (
+                      <p style={{ margin: '0.5rem 0 0 0', fontSize: '0.85rem', color: '#10b981', fontWeight: '600' }}>
+                        ✓ {coverImage.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              </div>
+
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem' }}>
                 <div>
                   <label htmlFor="color" style={{ display: 'block', fontSize: '0.875rem', fontWeight: '600', color: '#374151', marginBottom: '0.5rem' }}>
@@ -385,21 +493,22 @@ const ShowManagement = () => {
               <div style={{ display: 'flex', gap: '0.75rem', marginTop: '0.5rem' }}>
                 <button 
                   type="submit"
+                  disabled={uploadingCover}
                   style={{
                     flex: '1',
                     padding: '0.75rem 1.5rem',
-                    background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                    background: uploadingCover ? '#9ca3af' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '8px',
                     fontSize: '1rem',
                     fontWeight: '700',
-                    cursor: 'pointer',
+                    cursor: uploadingCover ? 'not-allowed' : 'pointer',
                     boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)',
                     transition: 'all 0.2s'
                   }}
                 >
-                  {editingShow ? '💾 Update Show' : '✨ Create Show'}
+                  {uploadingCover ? '⏳ Uploading...' : (editingShow ? '💾 Update Show' : '✨ Create Show')}
                 </button>
                 <button 
                   type="button" 
@@ -468,193 +577,178 @@ const ShowManagement = () => {
           )}
 
           {!loading && shows.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1.25rem' }}>
               {shows.map((show) => (
                 <div
                   key={show.id}
                   style={{
                     background: 'white',
-                    padding: '1.25rem',
                     borderRadius: '12px',
                     boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
                     transition: 'all 0.2s',
-                    border: '2px solid transparent',
-                    borderLeft: `4px solid ${show.color || '#667eea'}`,
-                    cursor: 'pointer',
+                    overflow: 'hidden',
                     position: 'relative'
                   }}
                   onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-2px)';
-                    e.currentTarget.style.boxShadow = '0 8px 20px rgba(0,0,0,0.12)';
-                    e.currentTarget.style.borderColor = show.color || '#667eea';
+                    e.currentTarget.style.transform = 'translateY(-4px)';
+                    e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.15)';
                   }}
                   onMouseLeave={(e) => {
                     e.currentTarget.style.transform = 'translateY(0)';
                     e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                    e.currentTarget.style.borderColor = 'transparent';
-                    e.currentTarget.style.borderLeft = `4px solid ${show.color || '#667eea'}`;
                   }}
-                  onClick={() => navigate(`/shows/${show.slug}`)}
                 >
-                  {/* Header with Icon, Title, and Buttons */}
-                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: '1rem', marginBottom: '1rem' }}>
-                    {/* Icon */}
-                    <div style={{ flexShrink: 0, fontSize: '2.5rem', lineHeight: 1 }}>
-                      {show.icon || '📺'}
-                    </div>
+                  {/* Cover Image (Portrait 2:3) */}
+                  <div style={{ 
+                    width: '100%', 
+                    paddingTop: '150%', /* 2:3 aspect ratio */
+                    position: 'relative',
+                    background: show.coverImageUrl 
+                      ? `url(${show.coverImageUrl}) center/cover` 
+                      : `linear-gradient(135deg, ${show.color || '#667eea'} 0%, ${show.color || '#764ba2'} 100%)`,
+                    overflow: 'hidden'
+                  }}>
+                    {!show.coverImageUrl && (
+                      <div style={{ 
+                        position: 'absolute', 
+                        top: '50%', 
+                        left: '50%', 
+                        transform: 'translate(-50%, -50%)',
+                        fontSize: '5rem',
+                        opacity: 0.3
+                      }}>
+                        {show.icon || '📺'}
+                      </div>
+                    )}
                     
-                    {/* Title and Status */}
-                    <div style={{ flex: 1, minWidth: 0 }}>
+                    {/* Status Badge */}
+                    <div style={{
+                      position: 'absolute',
+                      top: '0.75rem',
+                      right: '0.75rem',
+                      padding: '0.375rem 0.75rem',
+                      borderRadius: '6px',
+                      fontSize: '0.7rem',
+                      fontWeight: '700',
+                      background: show.status === 'active' ? 'rgba(16, 185, 129, 0.95)' :
+                                 show.status === 'coming_soon' ? 'rgba(245, 158, 11, 0.95)' :
+                                 'rgba(107, 114, 128, 0.95)',
+                      color: 'white',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      backdropFilter: 'blur(4px)',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
+                    }}>
+                      {show.status === 'coming_soon' ? 'Coming Soon' : show.status}
+                    </div>
+                  </div>
+
+                  {/* Show Info */}
+                  <div style={{ padding: '1rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'start', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                      <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{show.icon || '📺'}</span>
                       <h3 style={{ 
-                        margin: '0 0 0.625rem 0', 
-                        fontSize: '1.25rem', 
+                        margin: 0, 
+                        fontSize: '1rem', 
                         fontWeight: '700', 
                         color: '#1f2937',
                         lineHeight: '1.3',
-                        wordWrap: 'break-word',
-                        overflowWrap: 'break-word'
+                        flex: 1
                       }}>
                         {show.name}
                       </h3>
-                      <span style={{
-                        display: 'inline-block',
-                        padding: '0.375rem 0.75rem',
-                        borderRadius: '6px',
-                        fontSize: '0.75rem',
-                        fontWeight: '600',
-                        background: show.status === 'active' ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)' :
-                                   show.status === 'coming_soon' ? 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)' :
-                                   'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)',
-                        color: 'white',
-                        textTransform: 'uppercase',
-                        letterSpacing: '0.5px'
-                      }}>
-                        {show.status === 'coming_soon' ? 'Coming Soon' : show.status}
-                      </span>
                     </div>
                     
+                    {show.description && (
+                      <p style={{
+                        margin: '0 0 0.75rem 0',
+                        fontSize: '0.8rem',
+                        color: '#6b7280',
+                        lineHeight: '1.4',
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
+                        overflow: 'hidden'
+                      }}>
+                        {show.description}
+                      </p>
+                    )}
+                    
                     {/* Action Buttons */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/episodes?show=${show.id}`);
                         }}
                         style={{
-                          padding: '0.5rem 0.875rem',
+                          flex: 1,
+                          padding: '0.5rem',
                           background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
                           color: 'white',
                           border: 'none',
                           borderRadius: '6px',
-                          fontSize: '0.875rem',
+                          fontSize: '0.8rem',
                           fontWeight: '600',
                           cursor: 'pointer',
-                          transition: 'all 0.2s',
-                          whiteSpace: 'nowrap',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.375rem'
+                          transition: 'opacity 0.2s'
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.85'}
                         onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                        title="View episodes in this show"
                       >
-                        <span>📺</span>
-                        <span>Episodes</span>
+                        📺 Episodes
                       </button>
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleEdit(show);
-                          }}
-                          style={{
-                            padding: '0.5rem',
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '1.125rem',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            lineHeight: 1,
-                            width: '36px',
-                            height: '36px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                          title="Edit show"
-                        >
-                          ✏️
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setEditingShow(show);
+                          setFormData(show);
+                          setCoverImage(null);
+                          setShowForm(true);
+                          setTimeout(() => {
+                            formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                          }, 100);
+                        }}
+                        style={{
+                          flex: 1,
+                          padding: '0.5rem',
+                          background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.85'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (window.confirm(`Delete "${show.name}"? This cannot be undone.`)) {
                             handleDelete(show.id);
-                          }}
-                          style={{
-                            padding: '0.5rem',
-                            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                            color: 'white',
-                            border: 'none',
-                            borderRadius: '6px',
-                            fontSize: '1.125rem',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s',
-                            lineHeight: 1,
-                            width: '36px',
-                            height: '36px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.opacity = '0.9'}
-                          onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                          title="Delete show"
-                        >
-                          🗑️
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Description */}
-                  {show.description && (
-                    <p style={{
-                      margin: '0 0 1rem 0',
-                      fontSize: '0.9375rem',
-                      color: '#6b7280',
-                      lineHeight: '1.6',
-                      wordBreak: 'break-word',
-                      overflowWrap: 'break-word',
-                      paddingLeft: '3.5rem'
-                    }}>
-                      {show.description}
-                    </p>
-                  )}
-
-                  {/* Metadata */}
-                  <div style={{
-                    display: 'grid',
-                    gridTemplateColumns: '1fr 1fr',
-                    gap: '0.75rem',
-                    padding: '1rem',
-                    background: '#f9fafb',
-                    borderRadius: '8px',
-                    marginLeft: '3.5rem'
-                  }}>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      <span style={{ color: '#6b7280', fontWeight: '500', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Slug</span>
-                      <span style={{ color: '#1f2937', fontWeight: '600', fontFamily: 'monospace', fontSize: '0.875rem' }}>{show.slug}</span>
-                    </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                      <span style={{ color: '#6b7280', fontWeight: '500', fontSize: '0.75rem', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Created</span>
-                      <span style={{ color: '#1f2937', fontWeight: '600', fontSize: '0.875rem' }}>
-                        {show.createdAt ? new Date(show.createdAt).toLocaleDateString() : 'N/A'}
-                      </span>
+                          }
+                        }}
+                        style={{
+                          padding: '0.5rem',
+                          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          fontSize: '0.8rem',
+                          fontWeight: '600',
+                          cursor: 'pointer',
+                          transition: 'opacity 0.2s'
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.85'}
+                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                      >
+                        🗑️
+                      </button>
                     </div>
                   </div>
                 </div>

@@ -28,10 +28,9 @@ import AuditLogViewer from './pages/AuditLogViewer';
 import AuditLog from './pages/AuditLog';
 import ShowManagement from './pages/ShowManagement';
 import ShowForm from './components/ShowForm';
-import WardrobeGallery from './pages/WardrobeGallery';
+import WardrobeBrowser from './pages/WardrobeBrowser';
 import WardrobeAnalytics from './pages/WardrobeAnalytics';
 import OutfitSets from './pages/OutfitSets';
-import WardrobeLibraryBrowser from './pages/WardrobeLibraryBrowser';
 import WardrobeLibraryUpload from './pages/WardrobeLibraryUpload';
 import WardrobeLibraryDetail from './pages/WardrobeLibraryDetail';
 
@@ -159,10 +158,10 @@ function AppContent() {
           <Route path="/shows" element={<ShowManagement />} />
           <Route path="/shows/create" element={<ShowForm />} />
           <Route path="/shows/:id/edit" element={<ShowForm />} />
-          <Route path="/wardrobe" element={<WardrobeGallery />} />
+          <Route path="/wardrobe" element={<WardrobeBrowser mode="gallery" />} />
           <Route path="/wardrobe/analytics" element={<WardrobeAnalytics />} />
           <Route path="/wardrobe/outfits" element={<OutfitSets />} />
-          <Route path="/wardrobe-library" element={<WardrobeLibraryBrowser />} />
+          <Route path="/wardrobe-library" element={<WardrobeBrowser mode="library" />} />
           <Route path="/wardrobe-library/upload" element={<WardrobeLibraryUpload />} />
           <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />
           <Route path="/admin" element={<AdminPanel />} />

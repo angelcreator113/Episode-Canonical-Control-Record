@@ -5,6 +5,15 @@
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
+// Helper to get auth headers
+const getAuthHeaders = () => {
+  const token = localStorage.getItem('authToken');
+  return {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+};
+
 export const wardrobeLibraryService = {
   /**
    * Upload new item to library
@@ -46,9 +55,7 @@ export const wardrobeLibraryService = {
       
       const response = await fetch(`${API_BASE}/wardrobe-library?${queryParams}`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
       });
       
       if (!response.ok) {
@@ -442,9 +449,7 @@ export const wardrobeLibraryService = {
     try {
       const response = await fetch(`${API_BASE}/wardrobe-library/stats`, {
         method: 'GET',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers: getAuthHeaders(),
       });
       
       if (!response.ok) {

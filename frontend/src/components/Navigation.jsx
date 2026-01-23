@@ -59,16 +59,7 @@ const Navigation = ({ isOpen, onClose }) => {
     { label: 'Home', path: '/', icon: '🏠' },
     { label: 'Shows', path: '/shows', icon: '🎬' },
     { label: 'Episodes', path: '/episodes', icon: '📺' },
-    { 
-      label: 'Wardrobe', 
-      icon: '👗',
-      subItems: [
-        { label: 'Gallery', path: '/wardrobe', icon: '🖼️' },
-        { label: 'Library', path: '/wardrobe-library', icon: '📚' },
-        { label: 'Outfit Sets', path: '/wardrobe/outfits', icon: '👔' },
-        { label: 'Analytics', path: '/wardrobe/analytics', icon: '📊' },
-      ]
-    },
+    { label: 'Wardrobe', path: '/wardrobe', icon: '👗' },
   ];
 
   if (user?.role === 'admin' || user?.groups?.includes('ADMIN')) {
