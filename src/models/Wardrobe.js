@@ -76,6 +76,17 @@ module.exports = (sequelize) => {
         defaultValue: false,
       },
 
+      // Library reference
+      library_item_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        references: {
+          model: 'wardrobe_library',
+          key: 'id',
+        },
+        comment: 'Reference to wardrobe library item',
+      },
+
       // Timestamps
       created_at: {
         type: DataTypes.DATE,
@@ -157,6 +168,12 @@ module.exports = (sequelize) => {
     Wardrobe.hasMany(models.EpisodeWardrobe, {
       foreignKey: 'wardrobe_id',
       as: 'episodeLinks',
+    });
+
+    // Belongs to library item (optional)
+    Wardrobe.belongsTo(models.WardrobeLibrary, {
+      foreignKey: 'library_item_id',
+      as: 'libraryItem',
     });
   };
 

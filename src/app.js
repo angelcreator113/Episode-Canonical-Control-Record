@@ -336,6 +336,16 @@ try {
   wardrobeRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// Wardrobe Library routes
+let wardrobeLibraryRoutes;
+try {
+  wardrobeLibraryRoutes = require('./routes/wardrobeLibrary');
+  console.log('✓ Wardrobe Library routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load wardrobe library routes:', e.message);
+  wardrobeLibraryRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 // Outfit sets routes
 let outfitSetsRoutes;
 try {
@@ -432,6 +442,9 @@ app.use('/api/v1/scene-templates', sceneTemplateRoutes);
 
 // Wardrobe routes
 app.use('/api/v1/wardrobe', wardrobeRoutes);
+
+// Wardrobe Library routes
+app.use('/api/v1/wardrobe-library', wardrobeLibraryRoutes);
 
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
