@@ -41,7 +41,7 @@ async function runCompleteE2ETest() {
   console.log('║   SEARCH SYSTEM - COMPLETE END-TO-END TEST            ║');
   console.log('╚════════════════════════════════════════════════════════╝\n');
 
-  const baseURL = 'http://127.0.0.1:3002';
+  const baseURL = process.env.API_BASE_URL || 'https://dev.primepisodes.com';
   
   // Check if server is ready
   const serverReady = await checkServerReady(baseURL);
