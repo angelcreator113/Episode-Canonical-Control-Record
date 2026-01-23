@@ -27,15 +27,9 @@ const app = express();
 // DATABASE INITIALIZATION
 // ============================================================================
 console.log('📦 Loading database models...');
+let db;
 try {
-  const db = require('./models');
-  console.log('✅ Models loaded successfully');
-} catch (err) {
-  console.error('❌ FATAL: Failed to load models:', err.message);
-  console.error('Stack:', err.stack);
-  process.exit(1);
-}
-
+  db = require('./models');
   console.log('✅ Models loaded successfully');
 } catch (err) {
   console.error('❌ FATAL: Failed to load models:', err.message);
