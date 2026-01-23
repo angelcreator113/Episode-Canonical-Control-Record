@@ -382,7 +382,7 @@ module.exports = {
         where: { id, deleted_at: null },
         attributes: ['id'],
       });
-      
+
       if (!episode) {
         console.log('❌ Episode not found:', id);
         return res.status(404).json({
@@ -405,7 +405,7 @@ module.exports = {
          ORDER BY ew.created_at DESC`,
         {
           replacements: { episode_id: id },
-          type: sequelize.Sequelize.QueryTypes.SELECT
+          type: sequelize.Sequelize.QueryTypes.SELECT,
         }
       );
 
