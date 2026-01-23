@@ -94,7 +94,7 @@ module.exports = (sequelize) => {
       },
       // Show Association (optional - NULL means cross-show)
       showId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: true,
         field: 'show_id',
         references: {
