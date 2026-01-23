@@ -14,7 +14,7 @@ module.exports = {
     out_file: '/home/ubuntu/episode-metadata/logs/out.log',
     log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     env: {
-      NODE_ENV: 'staging',
+      NODE_ENV: 'production',
       PORT: 3002,
       HOST: '0.0.0.0',
       // Prepend Node 20 bin to PATH to ensure it's used
