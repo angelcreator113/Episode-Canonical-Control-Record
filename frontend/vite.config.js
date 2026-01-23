@@ -8,7 +8,14 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [react()],
     server: {
-      port: 5173
+      port: 5173,
+      proxy: {
+        '/api': {
+          target: 'http://127.0.0.1:3002',
+          changeOrigin: true,
+          secure: false
+        }
+      }
     },
     // Environment variables are automatically loaded from .env files
     // No need to override them here

@@ -254,6 +254,21 @@
   gap: var(--gap-1);
 }
 
+/* Wardrobe stats styling - distinct visual treatment */
+.stats-strip.wardrobe-stats {
+  margin-top: var(--gap-2);
+}
+
+.stats-strip.wardrobe-stats .stat-tile {
+  background: linear-gradient(135deg, #f3e7ff 0%, #fdf4ff 100%);
+  border: 1px solid #e9d5ff;
+}
+
+.stats-strip.wardrobe-stats .stat-tile:hover {
+  border-color: #d8b4fe;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.12);
+}
+
 .stat-tile {
   background: linear-gradient(135deg, #f8f9fb 0%, #ffffff 100%);
   border: 1px solid var(--dash-border);

@@ -80,7 +80,8 @@ const WardrobeLibraryBrowser = () => {
       console.error('Error loading shows:', err);
     }
   };
-  Stats = async () => {
+  
+  const loadStats = async () => {
     try {
       const result = await wardrobeLibraryService.getStats();
       setStats(result);
@@ -89,7 +90,6 @@ const WardrobeLibraryBrowser = () => {
     }
   };
   
-  const load
   const loadLibrary = useCallback(async () => {
     try {
       setLoading(true);

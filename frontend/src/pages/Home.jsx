@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
+import { wardrobeLibraryService } from '../services/wardrobeLibraryService';
 import './Home.css';
 
 const Home = () => {
@@ -14,11 +15,18 @@ const Home = () => {
     published: 0,
     inProgress: 0
   });
+  const [wardrobeStats, setWardrobeStats] = useState({
+    total: 0,
+    items: 0,
+    sets: 0,
+    recentUploads: 0
+  });
   const [recentEpisodes, setRecentEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     loadStats();
+    loadWardrobeStats();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -64,6 +72,18 @@ const Home = () => {
       setRecentEpisodes([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadWardrobeStats = async () => {
+    try {
+      const data = await wardrobeLibraryService.getStats();
+      if (data) {
+        setWardrobeStats(data);
+      }
+    } catch (error) {
+      console.error('Failed to load wardrobe stats:', error);
+      setWardrobeStats({ total: 0, items: 0, sets: 0, recentUploads: 0 });
     }
   };
 
@@ -125,7 +145,7 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Stats */}
+        {/* Episode Stats */}
         <section className="stats-strip">
           <div className="stat-tile">
             <div className="stat-top">
@@ -157,6 +177,41 @@ const Home = () => {
               <span className="stat-name">Draft</span>
             </div>
             <div className="stat-number">{stats.draft}</div>
+          </div>
+        </section>
+
+        {/* Wardrobe Stats */}
+        <section className="stats-strip wardrobe-stats">
+          <div className="stat-tile">
+            <div className="stat-top">
+              <span className="stat-emoji">👗</span>
+              <span className="stat-name">Wardrobe Items</span>
+            </div>
+            <div className="stat-number">{wardrobeStats.total}</div>
+          </div>
+
+          <div className="stat-tile">
+            <div className="stat-top">
+              <span className="stat-emoji">👕</span>
+              <span className="stat-name">Individual Items</span>
+            </div>
+            <div className="stat-number">{wardrobeStats.items}</div>
+          </div>
+
+          <div className="stat-tile">
+            <div className="stat-top">
+              <span className="stat-emoji">👔</span>
+              <span className="stat-name">Outfit Sets</span>
+            </div>
+            <div className="stat-number">{wardrobeStats.sets}</div>
+          </div>
+
+          <div className="stat-tile">
+            <div className="stat-top">
+              <span className="stat-emoji">⬆️</span>
+              <span className="stat-name">Recent Uploads</span>
+            </div>
+            <div className="stat-number">{wardrobeStats.recentUploads}</div>
           </div>
         </section>
       </header>
