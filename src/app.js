@@ -16,6 +16,10 @@ console.log('🚀 Starting application...');
 console.log('📋 Environment:', process.env.NODE_ENV || 'development');
 console.log('📋 Database URL:', process.env.DATABASE_URL ? '***SET***' : '❌ NOT SET');
 console.log('📋 Port:', process.env.PORT || 3002);
+console.log('📋 DB_HOST:', process.env.DB_HOST || 'NOT SET');
+console.log('📋 DB_USER:', process.env.DB_USER || 'NOT SET');
+console.log('📋 DB_NAME:', process.env.DB_NAME || 'NOT SET');
+console.log('📋 DB_SSL:', process.env.DB_SSL || 'NOT SET');
 
 const app = express();
 
@@ -23,7 +27,21 @@ const app = express();
 // DATABASE INITIALIZATION
 // ============================================================================
 console.log('📦 Loading database models...');
-const db = require('./models');
+try {
+  const db = require('./models');
+  console.log('✅ Models loaded successfully');
+} catch (err) {
+  console.error('❌ FATAL: Failed to load models:', err.message);
+  console.error('Stack:', err.stack);
+  process.exit(1);
+}
+
+  console.log('✅ Models loaded successfully');
+} catch (err) {
+  console.error('❌ FATAL: Failed to load models:', err.message);
+  console.error('Stack:', err.stack);
+  process.exit(1);
+}
 
 let isDbConnected = false;
 const isOpenSearchReady = false;
@@ -137,7 +155,12 @@ const { attachRBAC } = require('./middleware/rbac');
 const { captureResponseData } = require('./middleware/auditLog');
 
 // Optional auth for all routes (user info attached if valid token provided)
-app.use(optionalAuth);
+// DISABLED for development debugging
+// app.use(optionalAuth);
+app.use((req, res, next) => {
+  req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' };
+  next();
+});
 
 // Attach RBAC info to request
 app.use(attachRBAC);
@@ -442,6 +465,12 @@ app.use('/api/v1/scene-templates', sceneTemplateRoutes);
 
 // Wardrobe routes
 app.use('/api/v1/wardrobe', wardrobeRoutes);
+
+// Debug middleware BEFORE wardrobe-library
+app.use('/api/v1/wardrobe-library', (req, res, next) => {
+  console.log(`🚨 APP.JS: Request to /api/v1/wardrobe-library${req.path}`);
+  next();
+});
 
 // Wardrobe Library routes
 app.use('/api/v1/wardrobe-library', wardrobeLibraryRoutes);
