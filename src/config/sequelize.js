@@ -96,10 +96,13 @@ const development = {
     acquire: 30000, // Maximum time (ms) to try to get connection before throwing error
     idle: 10000, // Maximum time (ms) a connection can be idle before being released
   },
-  // Disable SSL in development
+  // Enable SSL for AWS RDS in development
   dialectOptions: {
     ...baseConfig.dialectOptions,
-    ssl: false,
+    ssl: process.env.DB_SSL === 'true' ? {
+      require: true,
+      rejectUnauthorized: false,
+    } : false,
   },
 };
 
