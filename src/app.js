@@ -12,7 +12,8 @@ if (!process.env.PM2_HOME) {
   console.log('📋 Using PM2 environment variables');
 }
 
-console.log('🚀 Starting application...');
+console.log('🚀 Starting application... [VERSION 2026-01-23-19:25]');
+console.log('🔍 This log confirms latest code is running!');
 console.log('📋 Environment:', process.env.NODE_ENV || 'development');
 console.log('📋 Database URL:', process.env.DATABASE_URL ? '***SET***' : '❌ NOT SET');
 console.log('📋 Port:', process.env.PORT || 3002);
