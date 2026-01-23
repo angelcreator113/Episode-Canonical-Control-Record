@@ -68,7 +68,7 @@ exports.up = (pgm) => {
     },
     // Show Association (optional - NULL means cross-show)
     show_id: {
-      type: 'integer',
+      type: 'uuid',
       references: 'shows',
       onDelete: 'SET NULL',
     },
