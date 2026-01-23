@@ -63,9 +63,14 @@ exports.up = (pgm) => {
     END $$;
   `);
 
-  // 5. Add approval status index
+  // 5. Add approval status index (only if table exists)
   pgm.sql(`
-    CREATE INDEX IF NOT EXISTS idx_episode_wardrobe_approval ON episode_wardrobe (approval_status) WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe');
+    DO $$ 
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe') THEN
+        CREATE INDEX IF NOT EXISTS idx_episode_wardrobe_approval ON episode_wardrobe (approval_status);
+      END IF;
+    END $$;
   `);
 };
 
