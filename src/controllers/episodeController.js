@@ -685,7 +685,7 @@ module.exports = {
           a.file_size_bytes,
           a.metadata,
           a.created_at,
-          ea.usage_context,
+          ea.usage_type,
           ea.display_order,
           ea.created_at as linked_at
         FROM episode_assets ea
@@ -701,7 +701,7 @@ module.exports = {
 
       res.json({
         data: assets,
-        count: activeAssets.length,
+        count: assets.length,
       });
     } catch (error) {
       console.error('❌ Error getting episode assets:', error);
