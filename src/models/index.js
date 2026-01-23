@@ -45,6 +45,7 @@ let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
 let Show, Scene, AssetLabel, EpisodeAsset, SceneAsset, SceneTemplate, ShowAsset;
 let Wardrobe, EpisodeWardrobe, OutfitSet;
+let WardrobeLibrary, OutfitSetItems, WardrobeUsageHistory, WardrobeLibraryReferences;
 
 try {
   // Core models
@@ -82,6 +83,12 @@ try {
   // Outfit sets model
   OutfitSet = require('./OutfitSet')(sequelize);
 
+  // Wardrobe Library models
+  WardrobeLibrary = require('./WardrobeLibrary')(sequelize);
+  OutfitSetItems = require('./OutfitSetItems')(sequelize);
+  WardrobeUsageHistory = require('./WardrobeUsageHistory')(sequelize);
+  WardrobeLibraryReferences = require('./WardrobeLibraryReferences')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -113,6 +120,10 @@ const requiredModels = {
   Wardrobe,
   EpisodeWardrobe,
   OutfitSet,
+  WardrobeLibrary,
+  OutfitSetItems,
+  WardrobeUsageHistory,
+  WardrobeLibraryReferences,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -403,6 +414,117 @@ EpisodeWardrobe.belongsTo(Wardrobe, {
   as: 'wardrobeItem',
 });
 
+// Wardrobe → WardrobeLibrary (N:1)
+Wardrobe.belongsTo(WardrobeLibrary, {
+  foreignKey: 'library_item_id',
+  as: 'libraryItem',
+});
+
+WardrobeLibrary.hasMany(Wardrobe, {
+  foreignKey: 'library_item_id',
+  as: 'wardrobeItems',
+});
+
+// ==================== WARDROBE LIBRARY ASSOCIATIONS ====================
+
+// WardrobeLibrary → Show (N:1)
+WardrobeLibrary.belongsTo(Show, {
+  foreignKey: 'show_id',
+  as: 'show',
+});
+
+Show.hasMany(WardrobeLibrary, {
+  foreignKey: 'show_id',
+  as: 'libraryItems',
+});
+
+// WardrobeLibrary → WardrobeUsageHistory (1:N)
+WardrobeLibrary.hasMany(WardrobeUsageHistory, {
+  foreignKey: 'library_item_id',
+  as: 'usageHistory',
+});
+
+WardrobeUsageHistory.belongsTo(WardrobeLibrary, {
+  foreignKey: 'library_item_id',
+  as: 'libraryItem',
+});
+
+// WardrobeUsageHistory → Episode (N:1)
+WardrobeUsageHistory.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// WardrobeUsageHistory → Scene (N:1)
+WardrobeUsageHistory.belongsTo(Scene, {
+  foreignKey: 'scene_id',
+  as: 'scene',
+});
+
+// WardrobeUsageHistory → Show (N:1)
+WardrobeUsageHistory.belongsTo(Show, {
+  foreignKey: 'show_id',
+  as: 'show',
+});
+
+// WardrobeLibrary → WardrobeLibraryReferences (1:N)
+WardrobeLibrary.hasMany(WardrobeLibraryReferences, {
+  foreignKey: 'library_item_id',
+  as: 's3References',
+});
+
+WardrobeLibraryReferences.belongsTo(WardrobeLibrary, {
+  foreignKey: 'library_item_id',
+  as: 'libraryItem',
+});
+
+// WardrobeLibrary self-referential: Outfit sets contain items (M:N through OutfitSetItems)
+WardrobeLibrary.belongsToMany(WardrobeLibrary, {
+  through: OutfitSetItems,
+  foreignKey: 'outfit_set_id',
+  otherKey: 'wardrobe_item_id',
+  as: 'items',
+});
+
+WardrobeLibrary.belongsToMany(WardrobeLibrary, {
+  through: OutfitSetItems,
+  foreignKey: 'wardrobe_item_id',
+  otherKey: 'outfit_set_id',
+  as: 'outfitSets',
+});
+
+// Direct associations for OutfitSetItems
+OutfitSetItems.belongsTo(WardrobeLibrary, {
+  foreignKey: 'outfit_set_id',
+  as: 'outfitSet',
+});
+
+OutfitSetItems.belongsTo(WardrobeLibrary, {
+  foreignKey: 'wardrobe_item_id',
+  as: 'wardrobeItem',
+});
+
+WardrobeLibrary.hasMany(OutfitSetItems, {
+  foreignKey: 'outfit_set_id',
+  as: 'outfitItems',
+});
+
+WardrobeLibrary.hasMany(OutfitSetItems, {
+  foreignKey: 'wardrobe_item_id',
+  as: 'itemMemberships',
+});
+
+// EpisodeWardrobe → Scene (N:1)
+EpisodeWardrobe.belongsTo(Scene, {
+  foreignKey: 'scene_id',
+  as: 'scene',
+});
+
+Scene.hasMany(EpisodeWardrobe, {
+  foreignKey: 'scene_id',
+  as: 'wardrobeItems',
+});
+
 // Episode ↔ Asset (M:N via EpisodeAsset)
 Episode.belongsToMany(Asset, {
   through: EpisodeAsset,
@@ -508,6 +630,10 @@ const db = {
     Wardrobe,
     EpisodeWardrobe,
     OutfitSet,
+    WardrobeLibrary,
+    OutfitSetItems,
+    WardrobeUsageHistory,
+    WardrobeLibraryReferences,
   },
 
   /**
@@ -692,6 +818,10 @@ module.exports.Wardrobe = Wardrobe;
 module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.OutfitSet = OutfitSet;
 module.exports.EpisodeWardrobe = EpisodeWardrobe;
+module.exports.WardrobeLibrary = WardrobeLibrary;
+module.exports.OutfitSetItems = OutfitSetItems;
+module.exports.WardrobeUsageHistory = WardrobeUsageHistory;
+module.exports.WardrobeLibraryReferences = WardrobeLibraryReferences;
 module.exports.AssetLabel = AssetLabel;
 // module.exports.AssetUsage = AssetUsage; // Table doesn't exist
 module.exports.EpisodeAsset = EpisodeAsset;
