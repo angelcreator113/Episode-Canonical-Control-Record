@@ -1,0 +1,24 @@
+name: Fetch Server Logs
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fetch-logs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch PM2 Error Logs
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ubuntu
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            echo "=== Current PM2 Status ==="
+            pm2 status
+            echo ""
+            echo "=== Last 200 lines of error log ==="
+            tail -200 /home/ubuntu/episode-metadata/logs/error-0.log
+            echo ""
+            echo "=== Last 100 lines of output log ==="
+            tail -100 /home/ubuntu/episode-metadata/logs/out-0.log
