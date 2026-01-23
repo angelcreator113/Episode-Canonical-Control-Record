@@ -414,6 +414,12 @@ EpisodeWardrobe.belongsTo(Wardrobe, {
   as: 'wardrobeItem',
 });
 
+// EpisodeWardrobe → Scene (N:1) - Use 'sceneDetails' to avoid collision with 'scene' text field
+EpisodeWardrobe.belongsTo(Scene, {
+  foreignKey: 'scene_id',
+  as: 'sceneDetails',
+});
+
 // Wardrobe → WardrobeLibrary (N:1)
 Wardrobe.belongsTo(WardrobeLibrary, {
   foreignKey: 'library_item_id',
@@ -512,17 +518,6 @@ WardrobeLibrary.hasMany(OutfitSetItems, {
 WardrobeLibrary.hasMany(OutfitSetItems, {
   foreignKey: 'wardrobe_item_id',
   as: 'itemMemberships',
-});
-
-// EpisodeWardrobe → Scene (N:1)
-EpisodeWardrobe.belongsTo(Scene, {
-  foreignKey: 'scene_id',
-  as: 'scene',
-});
-
-Scene.hasMany(EpisodeWardrobe, {
-  foreignKey: 'scene_id',
-  as: 'wardrobeItems',
 });
 
 // Episode ↔ Asset (M:N via EpisodeAsset)
