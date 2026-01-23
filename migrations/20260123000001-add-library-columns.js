@@ -4,62 +4,69 @@
  */
 
 exports.up = (pgm) => {
-  // 1. Add library_item_id to wardrobe table
-  pgm.addColumn('wardrobe', {
-    library_item_id: {
-      type: 'integer',
-      references: 'wardrobe_library',
-      onDelete: 'SET NULL',
-    },
-  });
+  // 1. Add library_item_id to wardrobe table (if it exists)
+  pgm.sql(`
+    DO $$ 
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'wardrobe') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'wardrobe' AND column_name = 'library_item_id') THEN
+          ALTER TABLE wardrobe ADD COLUMN library_item_id integer REFERENCES wardrobe_library ON DELETE SET NULL;
+          CREATE INDEX IF NOT EXISTS idx_wardrobe_library_item ON wardrobe (library_item_id);
+        END IF;
+      END IF;
+    END $$;
+  `);
 
-  pgm.createIndex('wardrobe', 'library_item_id', { name: 'idx_wardrobe_library_item' });
-
-  // 2. Add approval columns to episode_wardrobe table
-  pgm.addColumn('episode_wardrobe', {
-    approval_status: {
-      type: 'varchar(50)',
-      default: 'pending',
-      comment: 'pending, approved, rejected',
-    },
-    approved_by: {
-      type: 'varchar(255)',
-    },
-    approved_at: {
-      type: 'timestamp',
-    },
-    rejection_reason: {
-      type: 'text',
-    },
-  });
+  // 2. Add approval columns to episode_wardrobe table (if it exists)
+  pgm.sql(`
+    DO $$ 
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'episode_wardrobe' AND column_name = 'approval_status') THEN
+          ALTER TABLE episode_wardrobe 
+            ADD COLUMN approval_status varchar(50) DEFAULT 'pending',
+            ADD COLUMN approved_by varchar(255),
+            ADD COLUMN approved_at timestamp,
+            ADD COLUMN rejection_reason text;
+          
+          COMMENT ON COLUMN episode_wardrobe.approval_status IS 'pending, approved, rejected';
+        END IF;
+      END IF;
+    END $$;
+  `);
 
   // 3. Add override columns to episode_wardrobe (NULL means use library defaults)
-  pgm.addColumn('episode_wardrobe', {
-    override_character: {
-      type: 'varchar(255)',
-    },
-    override_occasion: {
-      type: 'varchar(255)',
-    },
-    override_season: {
-      type: 'varchar(100)',
-    },
-  });
+  pgm.sql(`
+    DO $$ 
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'episode_wardrobe' AND column_name = 'override_character') THEN
+          ALTER TABLE episode_wardrobe
+            ADD COLUMN override_character varchar(255),
+            ADD COLUMN override_occasion varchar(255),
+            ADD COLUMN override_season varchar(100);
+        END IF;
+      END IF;
+    END $$;
+  `);
 
   // 4. Add scene_id to episode_wardrobe
-  pgm.addColumn('episode_wardrobe', {
-    scene_id: {
-      type: 'uuid',
-      references: 'scenes',
-      onDelete: 'SET NULL',
-    },
-  });
+  pgm.sql(`
+    DO $$ 
+    BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe') THEN
+        IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'episode_wardrobe' AND column_name = 'scene_id') THEN
+          ALTER TABLE episode_wardrobe ADD COLUMN scene_id uuid REFERENCES scenes ON DELETE SET NULL;
+          CREATE INDEX IF NOT EXISTS idx_episode_wardrobe_scene ON episode_wardrobe (scene_id);
+        END IF;
+      END IF;
+    END $$;
+  `);
 
-  // 5. Create indexes
-  pgm.createIndex('episode_wardrobe', 'approval_status', {
-    name: 'idx_episode_wardrobe_approval',
-  });
-  pgm.createIndex('episode_wardrobe', 'scene_id', { name: 'idx_episode_wardrobe_scene' });
+  // 5. Add approval status index
+  pgm.sql(`
+    CREATE INDEX IF NOT EXISTS idx_episode_wardrobe_approval ON episode_wardrobe (approval_status) WHERE EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe');
+  `);
 };
 
 exports.down = (pgm) => {
