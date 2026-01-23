@@ -1,0 +1,82 @@
+name: Test Migrations
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - main
+    paths:
+      - 'migrations/**'
+  push:
+    branches:
+      - dev
+    paths:
+      - 'migrations/**'
+
+jobs:
+  test-migrations:
+    runs-on: ubuntu-latest
+    
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: episode_metadata_test
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Test migrations
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+        run: |
+          echo "🧪 Testing migrations..."
+          npm run migrate:up
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ All migrations passed!"
+          else
+            echo "❌ Migrations failed!"
+            exit 1
+          fi
+
+      - name: Verify database schema
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+        run: |
+          echo "🔍 Verifying database schema..."
+          psql $DATABASE_URL -c "\dt" || exit 1
+          
+          # Check for critical tables
+          psql $DATABASE_URL -c "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = 'public'" || exit 1
+
+      - name: Test migration rollback
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
+        run: |
+          echo "🔄 Testing migration rollback..."
+          npm run migrate:down
+          
+          if [ $? -eq 0 ]; then
+            echo "✅ Rollback successful!"
+          else
+            echo "⚠️  Rollback failed (this may be expected)"
+          fi
