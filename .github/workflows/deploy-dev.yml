@@ -178,7 +178,7 @@ jobs:
           MAX_RETRIES=5
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Health check attempt $i/$MAX_RETRIES..."
-            if curl -f -m 10 https://dev.primepisodes.com/health; then
+            if curl -f -m 10 http://3.94.166.174/health; then
               echo "✅ Health check passed!"
               echo "✅ Deployment workflow completed"
               echo "🌐 Site: https://dev.primepisodes.com"

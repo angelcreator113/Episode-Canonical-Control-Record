@@ -101,6 +101,36 @@ module.exports = (sequelize, DataTypes = require('sequelize').DataTypes) => {
         field: 'is_active',
         comment: 'Whether the show is active',
       },
+
+      // Cover image for show (portrait format 2:3 ratio)
+      coverImageUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'cover_image_url',
+        comment: 'Public URL for show cover image (portrait 2:3 ratio)',
+      },
+
+      coverS3Key: {
+        type: DataTypes.STRING(512),
+        allowNull: true,
+        field: 'cover_s3_key',
+        comment: 'S3 key for show cover image',
+      },
+
+      // UI customization
+      icon: {
+        type: DataTypes.STRING(10),
+        defaultValue: '📺',
+        allowNull: true,
+        comment: 'Emoji icon for show',
+      },
+
+      color: {
+        type: DataTypes.STRING(7),
+        defaultValue: '#667eea',
+        allowNull: true,
+        comment: 'Brand color for show (hex)',
+      },
     },
     {
       sequelize,
