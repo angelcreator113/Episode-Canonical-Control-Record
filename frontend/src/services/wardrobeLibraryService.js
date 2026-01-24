@@ -7,6 +7,13 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 // Helper to get auth headers
 const getAuthHeaders = () => {
+  // In development, don't send tokens to avoid expiration errors
+  if (import.meta.env.DEV) {
+    return {
+      'Content-Type': 'application/json',
+    };
+  }
+  
   const token = localStorage.getItem('authToken');
   return {
     'Content-Type': 'application/json',
