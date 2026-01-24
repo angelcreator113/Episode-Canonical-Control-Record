@@ -115,43 +115,30 @@ module.exports = {
    * GET /api/v1/wardrobe-library/stats - Get library statistics
    */
   async getStats(req, res) {
-    console.log('🔍 getStats called');
     try {
-      console.log('📊 Fetching total count...');
-      const total = await WardrobeLibrary.count({ where: { deletedAt: null } });
-      console.log('✅ Total:', total);
+      // Use raw query to ensure we're querying the actual table
+      const { sequelize } = require('../models');
       
-      console.log('📊 Fetching items count...');
-      const items = await WardrobeLibrary.count({ where: { type: 'item', deletedAt: null } });
-      console.log('✅ Items:', items);
-      
-      console.log('📊 Fetching sets count...');
-      const sets = await WardrobeLibrary.count({ where: { type: 'set', deletedAt: null } });
-      console.log('✅ Sets:', sets);
-      
-      // Get recent uploads (last 30 days)
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-      console.log('📊 Fetching recent uploads...');
-      const recentUploads = await WardrobeLibrary.count({
-        where: {
-          deletedAt: null,
-          createdAt: { [Op.gte]: thirtyDaysAgo },
-        },
-      });
-      console.log('✅ Recent:', recentUploads);
+      const [results] = await sequelize.query(`
+        SELECT 
+          COUNT(*) FILTER (WHERE deleted_at IS NULL) as total,
+          COUNT(*) FILTER (WHERE type = 'item' AND deleted_at IS NULL) as items,
+          COUNT(*) FILTER (WHERE type = 'set' AND deleted_at IS NULL) as sets,
+          COUNT(*) FILTER (WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '30 days') as recent_uploads
+        FROM wardrobe_library
+      `);
 
-      console.log('📤 Sending response...');
+      const stats = results[0] || { total: '0', items: '0', sets: '0', recent_uploads: '0' };
+
       res.json({
         success: true,
         data: {
-          total,
-          items,
-          sets,
-          recentUploads,
+          total: parseInt(stats.total),
+          items: parseInt(stats.items),
+          sets: parseInt(stats.sets),
+          recentUploads: parseInt(stats.recent_uploads),
         },
       });
-      console.log('✅ Response sent');
     } catch (error) {
       console.error('❌ Error fetching stats:', error);
       res.status(500).json({
