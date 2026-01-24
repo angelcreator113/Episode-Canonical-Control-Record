@@ -210,7 +210,7 @@ module.exports = {
           {
             model: Episode,
             as: 'episodes',
-            through: { attributes: ['scene', 'worn_at', 'notes'] },
+            through: { attributes: ['scene_id', 'worn_at', 'notes'] },
             attributes: ['id', 'episode_number', 'title', 'air_date'],
           },
         ],

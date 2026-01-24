@@ -112,6 +112,56 @@ module.exports = {
   },
 
   /**
+   * GET /api/v1/wardrobe-library/stats - Get library statistics
+   */
+  async getStats(req, res) {
+    console.log('🔍 getStats called');
+    try {
+      console.log('📊 Fetching total count...');
+      const total = await WardrobeLibrary.count({ where: { deletedAt: null } });
+      console.log('✅ Total:', total);
+      
+      console.log('📊 Fetching items count...');
+      const items = await WardrobeLibrary.count({ where: { type: 'item', deletedAt: null } });
+      console.log('✅ Items:', items);
+      
+      console.log('📊 Fetching sets count...');
+      const sets = await WardrobeLibrary.count({ where: { type: 'set', deletedAt: null } });
+      console.log('✅ Sets:', sets);
+      
+      // Get recent uploads (last 30 days)
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      console.log('📊 Fetching recent uploads...');
+      const recentUploads = await WardrobeLibrary.count({
+        where: {
+          deletedAt: null,
+          createdAt: { [Op.gte]: thirtyDaysAgo },
+        },
+      });
+      console.log('✅ Recent:', recentUploads);
+
+      console.log('📤 Sending response...');
+      res.json({
+        success: true,
+        data: {
+          total,
+          items,
+          sets,
+          recentUploads,
+        },
+      });
+      console.log('✅ Response sent');
+    } catch (error) {
+      console.error('❌ Error fetching stats:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message,
+      });
+    }
+  },
+
+  /**
    * GET /api/v1/wardrobe-library - List library items with filters
    */
   async listLibrary(req, res) {
@@ -497,7 +547,7 @@ module.exports = {
           },
           {
             model: Scene,
-            as: 'scene',
+            as: 'sceneDetails',
             attributes: ['id', 'scene_number', 'title'],
           },
           {
