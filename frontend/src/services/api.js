@@ -12,6 +12,12 @@ const apiClient = axios.create({
 // ✅ REQUEST INTERCEPTOR - Add token to requests
 apiClient.interceptors.request.use(
   (config) => {
+    // In development, skip token to avoid expiration errors
+    if (import.meta.env.DEV) {
+      console.log('API Request (dev):', config.method.toUpperCase(), config.url);
+      return config;
+    }
+    
     const token = localStorage.getItem('authToken') || localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
