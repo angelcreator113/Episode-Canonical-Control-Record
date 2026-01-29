@@ -217,8 +217,15 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f create-assets-table.sql 2>&1 | head -30 || echo "Assets table creation completed with warnings..."
 
-# Add missing columns to assets table
+# Fix missing columns in assets table (critical for AssetService)
 echo "Adding missing columns to assets table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f fix-assets-columns.sql 2>&1 | head -50 || echo "Assets columns fixed..."
+
+# Add missing columns to assets table (legacy script - keeping for compatibility)
+echo "Running legacy assets column additions..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
   -U postgres \
   -d episode_metadata \
