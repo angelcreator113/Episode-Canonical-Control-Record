@@ -62,7 +62,7 @@ const DiagnosticPage = () => {
     const tests = [
       // Basic connectivity
       { name: '🔌 Ping', url: `${API_URL}/ping`, method: 'GET' },
-      { name: '🏥 Health Check', url: `${API_URL}/api/v1/health`, method: 'GET' },
+      { name: '🏥 Health Check', url: `${API_URL}/health`, method: 'GET' },
       
       // Episodes
       { name: '📺 List Episodes', url: `${API_URL}/api/v1/episodes?limit=5`, method: 'GET' },
