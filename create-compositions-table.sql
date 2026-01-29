@@ -8,6 +8,7 @@ CREATE TABLE IF NOT EXISTS thumbnail_compositions (
   lala_asset_id UUID,
   guest_asset_id UUID,
   justawomen_asset_id UUID,
+  justawomaninherprime_asset_id UUID,
   selected_formats JSONB DEFAULT '[]'::jsonb,
   status VARCHAR(50) DEFAULT 'draft',
   created_by VARCHAR(255),
@@ -16,5 +17,8 @@ CREATE TABLE IF NOT EXISTS thumbnail_compositions (
   current_version INTEGER DEFAULT 1,
   version_history JSONB,
   last_modified_by VARCHAR(100),
-  modification_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  modification_timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  is_primary BOOLEAN DEFAULT false,
+  composition_config JSONB DEFAULT '{}'::jsonb,
+  deleted_at TIMESTAMP
 );
