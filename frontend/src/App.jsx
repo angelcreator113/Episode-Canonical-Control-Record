@@ -41,6 +41,7 @@ import WardrobeLibraryUpload from './pages/WardrobeLibraryUpload';
 import WardrobeLibraryDetail from './pages/WardrobeLibraryDetail';
 import TemplateStudio from './pages/TemplateStudio';
 import TemplateDesigner from './pages/TemplateDesigner';
+import DiagnosticPage from './pages/DiagnosticPage';
 
 // Components
 import Navigation from './components/Navigation';
@@ -185,6 +186,7 @@ function AppContent() {
           <Route path="/admin/templates" element={<TemplateManagement />} />
           <Route path="/admin/audit" element={<AuditLog />} />
           <Route path="/audit-log" element={<AuditLogViewer />} />
+          <Route path="/diagnostics" element={<DiagnosticPage />} />
           
           {/* Test Routes */}
           {/* <Route path="/test/assets" element={<AssetLibraryTest />} /> */}

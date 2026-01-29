@@ -68,6 +68,7 @@ const Navigation = ({ isOpen, onClose }) => {
     navItems.push({ label: 'Audit Log', path: '/audit-log', icon: '📋' });
     navItems.push({ label: 'Episode Templates', path: '/admin/templates', icon: '📄' });
     navItems.push({ label: 'Admin Panel', path: '/admin', icon: '⚙️' });
+    navItems.push({ label: 'Diagnostics', path: '/diagnostics', icon: '🔧' });
   }
 
   return (
