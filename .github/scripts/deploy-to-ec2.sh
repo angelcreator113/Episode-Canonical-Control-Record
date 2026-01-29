@@ -124,9 +124,23 @@ ls -la dist/ 2>&1 || echo "dist not found (good)"
 echo "Using .env.production for build (VITE_API_BASE should be empty):"
 cat .env.production || echo "No .env.production found"
 echo "Installing frontend dependencies..."
-npm ci 2>&1 | tail -20
+npm ci 2>&1 | tee npm-install.log
+NPM_EXIT_CODE=${PIPESTATUS[0]}
+if [ $NPM_EXIT_CODE -ne 0 ]; then
+  echo "⚠️ npm ci failed with exit code $NPM_EXIT_CODE, trying npm install instead..."
+  cat npm-install.log | tail -50
+  npm install 2>&1 | tail -30
+fi
 echo "Running Vite build..."
 NODE_ENV=production npm run build 2>&1 | tee build.log
+BUILD_EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $BUILD_EXIT_CODE -ne 0 ]; then
+  echo "❌ Frontend build failed with exit code $BUILD_EXIT_CODE"
+  echo "Full build log:"
+  cat build.log
+  exit 1
+fi
 
 if [ ! -d "dist" ]; then
   echo "❌ Frontend build failed - dist directory not created"
@@ -373,13 +387,24 @@ pm2 save --force
 sleep 3
 pm2 status
 
-if ! pm2 list | grep -q "episode-api.*online"; then
-  echo "❌ App is not online!"
-  pm2 logs episode-api --lines 50 --nostream
-  exit 1
-fi
-
-echo "✅ App is online!"
+# Check if app is online with retries
+MAX_PM2_RETRIES=5
+for attempt in $(seq 1 $MAX_PM2_RETRIES); do
+  echo "🔍 Checking if app is online (attempt $attempt/$MAX_PM2_RETRIES)..."
+  if pm2 list | grep -q "episode-api.*online"; then
+    echo "✅ App is online!"
+    break
+  fi
+  
+  if [ $attempt -lt $MAX_PM2_RETRIES ]; then
+    echo "⚠️ App not online yet, waiting 3 seconds..."
+    sleep 3
+  else
+    echo "❌ App failed to come online after $MAX_PM2_RETRIES attempts"
+    pm2 logs episode-api --lines 50 --nostream
+    exit 1
+  fi
+done
 
 echo "🔍 CRITICAL: Verifying PM2 is actually using Node 20:"
 pm2 show episode-api | grep -E "node.js version|interpreter"
