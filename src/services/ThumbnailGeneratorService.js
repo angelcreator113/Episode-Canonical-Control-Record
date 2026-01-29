@@ -571,7 +571,7 @@ class ThumbnailGeneratorService {
       font_size = 48,
       color = '#ffffff',
       stroke,
-      shadow,
+      shadow: _shadow,
     } = textStyle || {};
 
     const { width, height } = position;
