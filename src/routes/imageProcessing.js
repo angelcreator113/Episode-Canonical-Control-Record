@@ -1,7 +1,7 @@
 /**
  * Image Processing Routes
  * Handles background removal and image enhancement for assets
- * 
+ *
  * Endpoints:
  * - POST /api/v1/assets/:id/remove-background
  * - POST /api/v1/assets/:id/enhance
@@ -19,22 +19,22 @@ const { uploadToS3 } = require('../services/s3Service');
 /**
  * POST /api/v1/assets/:id/remove-background
  * Remove background from an asset image using Remove.bg API
- * 
+ *
  * @returns {Object} { status, message, data: { asset_id, url, original_url, cached? } }
  */
 router.post('/:id/remove-background', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // TODO: Add authentication check
     // if (!req.user) return res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
-    
+
     const asset = await models.Asset.findByPk(id);
-    
+
     if (!asset) {
       return res.status(404).json({
         status: 'ERROR',
-        message: 'Asset not found'
+        message: 'Asset not found',
       });
     }
 
@@ -48,8 +48,8 @@ router.post('/:id/remove-background', async (req, res) => {
           asset_id: asset.id,
           url: asset.s3_url_no_bg,
           original_url: asset.s3_url_raw || asset.s3_url,
-          cached: true
-        }
+          cached: true,
+        },
       });
     }
 
@@ -60,10 +60,10 @@ router.post('/:id/remove-background', async (req, res) => {
     // }
 
     console.log('🎨 Starting background removal for asset:', id);
-    
+
     // Update status to processing
-    await asset.update({ 
-      processing_status: 'processing_bg_removal' 
+    await asset.update({
+      processing_status: 'processing_bg_removal',
     });
 
     // Validate API key exists
@@ -76,15 +76,15 @@ router.post('/:id/remove-background', async (req, res) => {
     const sourceUrl = asset.s3_url_raw || asset.s3_url;
     formData.append('image_url', sourceUrl);
     formData.append('size', 'auto');
-    
+
     console.log('📤 Calling Remove.bg API with URL:', sourceUrl.substring(0, 60));
-    
+
     const removeBgResponse = await fetch('https://api.remove.bg/v1.0/removebg', {
       method: 'POST',
       headers: {
         'X-Api-Key': process.env.REMOVE_BG_API_KEY,
       },
-      body: formData
+      body: formData,
     });
 
     if (!removeBgResponse.ok) {
@@ -113,9 +113,9 @@ router.post('/:id/remove-background', async (req, res) => {
           provider: 'remove.bg',
           timestamp: new Date().toISOString(),
           status: 'completed',
-          original_url: sourceUrl
-        }
-      }
+          original_url: sourceUrl,
+        },
+      },
     });
 
     console.log('✅ Background removal complete for asset:', id);
@@ -126,23 +126,22 @@ router.post('/:id/remove-background', async (req, res) => {
       data: {
         asset_id: asset.id,
         url: s3Url,
-        original_url: sourceUrl
-      }
+        original_url: sourceUrl,
+      },
     });
-
   } catch (error) {
     console.error('❌ Background removal error:', error);
-    
+
     // Update status to failed
     if (req.params.id) {
       try {
         await models.Asset.update(
-          { 
+          {
             processing_status: 'failed',
             processing_metadata: {
               error: error.message,
-              timestamp: new Date().toISOString()
-            }
+              timestamp: new Date().toISOString(),
+            },
           },
           { where: { id: req.params.id } }
         );
@@ -153,7 +152,7 @@ router.post('/:id/remove-background', async (req, res) => {
 
     res.status(500).json({
       status: 'ERROR',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -161,41 +160,44 @@ router.post('/:id/remove-background', async (req, res) => {
 /**
  * POST /api/v1/assets/:id/enhance
  * Enhance image with skin smoothing, color correction, etc. using Cloudinary
- * 
+ *
  * @body {Object} settings - Enhancement settings (skin_smooth, saturation, vibrance, contrast, sharpen)
  * @returns {Object} { status, message, data: { asset_id, url, original_url, settings, cached? } }
  */
 router.post('/:id/enhance', async (req, res) => {
   try {
     const { id } = req.params;
-    const { 
-      skin_smooth = 50, 
-      saturation = 20, 
+    const {
+      skin_smooth = 50,
+      saturation = 20,
       vibrance = 20,
       contrast = 10,
-      sharpen = 20 
+      sharpen = 20,
     } = req.body;
 
     // TODO: Add authentication check
     // if (!req.user) return res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
 
     const asset = await models.Asset.findByPk(id);
-    
+
     if (!asset) {
       return res.status(404).json({
         status: 'ERROR',
-        message: 'Asset not found'
+        message: 'Asset not found',
       });
     }
 
     // Check if already enhanced with same settings (return cached version)
     const existingSettings = asset.processing_metadata?.enhancement?.settings;
-    if (asset.s3_url_enhanced && existingSettings &&
-        existingSettings.skin_smooth === skin_smooth &&
-        existingSettings.saturation === saturation &&
-        existingSettings.vibrance === vibrance &&
-        existingSettings.contrast === contrast &&
-        existingSettings.sharpen === sharpen) {
+    if (
+      asset.s3_url_enhanced &&
+      existingSettings &&
+      existingSettings.skin_smooth === skin_smooth &&
+      existingSettings.saturation === saturation &&
+      existingSettings.vibrance === vibrance &&
+      existingSettings.contrast === contrast &&
+      existingSettings.sharpen === sharpen
+    ) {
       console.log('✅ Image already enhanced with same settings, returning cached version');
       return res.json({
         status: 'SUCCESS',
@@ -204,20 +206,24 @@ router.post('/:id/enhance', async (req, res) => {
           asset_id: asset.id,
           url: asset.s3_url_enhanced,
           cached: true,
-          settings: existingSettings
-        }
+          settings: existingSettings,
+        },
       });
     }
 
     console.log('✨ Starting image enhancement for asset:', id);
-    
+
     // Update status
-    await asset.update({ 
-      processing_status: 'processing_enhancement' 
+    await asset.update({
+      processing_status: 'processing_enhancement',
     });
 
     // Validate Cloudinary credentials
-    if (!process.env.CLOUDINARY_CLOUD_NAME || !process.env.CLOUDINARY_API_KEY || !process.env.CLOUDINARY_API_SECRET) {
+    if (
+      !process.env.CLOUDINARY_CLOUD_NAME ||
+      !process.env.CLOUDINARY_API_KEY ||
+      !process.env.CLOUDINARY_API_SECRET
+    ) {
       throw new Error('Cloudinary credentials not configured');
     }
 
@@ -233,7 +239,7 @@ router.post('/:id/enhance', async (req, res) => {
       `e_vibrance:${vibrance}`,
       `e_contrast:${contrast}`,
       `e_sharpen:${sharpen}`,
-      `q_auto:best`
+      `q_auto:best`,
     ].join(',');
 
     console.log('🎨 Applying transformations:', transformations);
@@ -243,14 +249,14 @@ router.post('/:id/enhance', async (req, res) => {
     cloudinary.config({
       cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
       api_key: process.env.CLOUDINARY_API_KEY,
-      api_secret: process.env.CLOUDINARY_API_SECRET
+      api_secret: process.env.CLOUDINARY_API_SECRET,
     });
 
     const uploadResult = await cloudinary.uploader.upload(sourceUrl, {
       folder: `enhanced/${asset.id}`,
       transformation: transformations,
       format: 'jpg',
-      quality: 'auto:best'
+      quality: 'auto:best',
     });
 
     const enhancedUrl = uploadResult.secure_url;
@@ -269,14 +275,14 @@ router.post('/:id/enhance', async (req, res) => {
             saturation,
             vibrance,
             contrast,
-            sharpen
+            sharpen,
           },
           timestamp: new Date().toISOString(),
           status: 'completed',
           cloudinary_public_id: uploadResult.public_id,
-          source_url: sourceUrl
-        }
-      }
+          source_url: sourceUrl,
+        },
+      },
     });
 
     console.log('✅ Enhancement complete for asset:', id);
@@ -293,23 +299,22 @@ router.post('/:id/enhance', async (req, res) => {
           saturation,
           vibrance,
           contrast,
-          sharpen
-        }
-      }
+          sharpen,
+        },
+      },
     });
-
   } catch (error) {
     console.error('❌ Enhancement error:', error);
-    
+
     if (req.params.id) {
       try {
         await models.Asset.update(
-          { 
+          {
             processing_status: 'failed',
             processing_metadata: {
               error: error.message,
-              timestamp: new Date().toISOString()
-            }
+              timestamp: new Date().toISOString(),
+            },
           },
           { where: { id: req.params.id } }
         );
@@ -320,7 +325,7 @@ router.post('/:id/enhance', async (req, res) => {
 
     res.status(500).json({
       status: 'ERROR',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -328,21 +333,27 @@ router.post('/:id/enhance', async (req, res) => {
 /**
  * GET /api/v1/assets/:id/processing-status
  * Get current processing status of an asset
- * 
+ *
  * @returns {Object} { status, data: { asset_id, processing_status, has_bg_removed, has_enhanced, metadata } }
  */
 router.get('/:id/processing-status', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const asset = await models.Asset.findByPk(id, {
-      attributes: ['id', 'processing_status', 'processing_metadata', 's3_url_no_bg', 's3_url_enhanced']
+      attributes: [
+        'id',
+        'processing_status',
+        'processing_metadata',
+        's3_url_no_bg',
+        's3_url_enhanced',
+      ],
     });
 
     if (!asset) {
       return res.status(404).json({
         status: 'ERROR',
-        message: 'Asset not found'
+        message: 'Asset not found',
       });
     }
 
@@ -353,15 +364,14 @@ router.get('/:id/processing-status', async (req, res) => {
         processing_status: asset.processing_status,
         has_bg_removed: !!asset.s3_url_no_bg,
         has_enhanced: !!asset.s3_url_enhanced,
-        metadata: asset.processing_metadata
-      }
+        metadata: asset.processing_metadata,
+      },
     });
-
   } catch (error) {
     console.error('❌ Status check error:', error);
     res.status(500).json({
       status: 'ERROR',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -369,7 +379,7 @@ router.get('/:id/processing-status', async (req, res) => {
 /**
  * POST /api/v1/assets/:id/reset-processing
  * Reset processed versions (for re-processing)
- * 
+ *
  * @body {string} reset_type - 'all', 'bg_removal', or 'enhancement'
  * @returns {Object} { status, message, data: { asset_id } }
  */
@@ -382,28 +392,28 @@ router.post('/:id/reset-processing', async (req, res) => {
     // if (!req.user) return res.status(401).json({ status: 'ERROR', message: 'Unauthorized' });
 
     const asset = await models.Asset.findByPk(id);
-    
+
     if (!asset) {
       return res.status(404).json({
         status: 'ERROR',
-        message: 'Asset not found'
+        message: 'Asset not found',
       });
     }
 
     console.log('🔄 Resetting processing for asset:', id, 'type:', reset_type);
 
     const updates = {};
-    
+
     if (reset_type === 'all' || reset_type === 'bg_removal') {
       updates.s3_url_no_bg = null;
     }
-    
+
     if (reset_type === 'all' || reset_type === 'enhancement') {
       updates.s3_url_enhanced = null;
     }
-    
+
     updates.processing_status = 'none';
-    
+
     if (reset_type === 'all') {
       updates.processing_metadata = {};
     } else {
@@ -424,14 +434,13 @@ router.post('/:id/reset-processing', async (req, res) => {
     res.json({
       status: 'SUCCESS',
       message: 'Processing reset successfully',
-      data: { asset_id: asset.id }
+      data: { asset_id: asset.id },
     });
-
   } catch (error) {
     console.error('❌ Reset error:', error);
     res.status(500).json({
       status: 'ERROR',
-      message: error.message
+      message: error.message,
     });
   }
 });

@@ -15,7 +15,7 @@ const express = require('express');
 const { Sequelize } = require('sequelize');
 const sequelize = new Sequelize(process.env.DATABASE_URL, {
   dialect: 'postgres',
-  logging: false
+  logging: false,
 });
 
 const router = express.Router();
@@ -81,8 +81,8 @@ router.get('/', async (req, res) => {
       ${whereClause}
     `;
 
-    const [countResult] = await sequelize.query(countQuery, { 
-      bind: params.slice(0, -2) 
+    const [countResult] = await sequelize.query(countQuery, {
+      bind: params.slice(0, -2),
     });
 
     res.json({
@@ -91,13 +91,13 @@ router.get('/', async (req, res) => {
       count: templates.length,
       total: parseInt(countResult[0].total, 10),
       limit: parseInt(limit, 10),
-      offset: parseInt(offset, 10)
+      offset: parseInt(offset, 10),
     });
   } catch (error) {
     console.error('Failed to list templates:', error);
     res.status(500).json({
       error: 'Failed to list templates',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -110,25 +110,28 @@ router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [templates] = await sequelize.query(`
+    const [templates] = await sequelize.query(
+      `
       SELECT * FROM template_studio WHERE id = $1
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     if (templates.length === 0) {
       return res.status(404).json({
-        error: 'Template not found'
+        error: 'Template not found',
       });
     }
 
     res.json({
       status: 'SUCCESS',
-      data: templates[0]
+      data: templates[0],
     });
   } catch (error) {
     console.error('Failed to get template:', error);
     res.status(500).json({
       error: 'Failed to get template',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -147,32 +150,33 @@ router.post('/', async (req, res) => {
       safe_zones,
       required_roles,
       optional_roles,
-      formats_supported
+      formats_supported,
     } = req.body;
 
     // Validation
     if (!name) {
       return res.status(400).json({
         error: 'Validation failed',
-        details: ['name is required']
+        details: ['name is required'],
       });
     }
 
     if (!canvas_config || !canvas_config.width || !canvas_config.height) {
       return res.status(400).json({
         error: 'Validation failed',
-        details: ['canvas_config with width and height is required']
+        details: ['canvas_config with width and height is required'],
       });
     }
 
     if (!Array.isArray(role_slots) || role_slots.length === 0) {
       return res.status(400).json({
         error: 'Validation failed',
-        details: ['role_slots array is required and must not be empty']
+        details: ['role_slots array is required and must not be empty'],
       });
     }
 
-    const [result] = await sequelize.query(`
+    const [result] = await sequelize.query(
+      `
       INSERT INTO template_studio (
         name, description, version, status, locked,
         canvas_config, role_slots, safe_zones,
@@ -183,29 +187,31 @@ router.post('/', async (req, res) => {
         $6::text[], $7::text[], $8::text[]
       )
       RETURNING *
-    `, {
-      bind: [
-        name,
-        description || null,
-        JSON.stringify(canvas_config),
-        JSON.stringify(role_slots),
-        JSON.stringify(safe_zones || {}),
-        required_roles || [],
-        optional_roles || [],
-        formats_supported || ['YOUTUBE']
-      ]
-    });
+    `,
+      {
+        bind: [
+          name,
+          description || null,
+          JSON.stringify(canvas_config),
+          JSON.stringify(role_slots),
+          JSON.stringify(safe_zones || {}),
+          required_roles || [],
+          optional_roles || [],
+          formats_supported || ['YOUTUBE'],
+        ],
+      }
+    );
 
     res.status(201).json({
       status: 'SUCCESS',
       message: 'Template created',
-      data: result[0]
+      data: result[0],
     });
   } catch (error) {
     console.error('Failed to create template:', error);
     res.status(500).json({
       error: 'Failed to create template',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -225,29 +231,32 @@ router.put('/:id', async (req, res) => {
       safe_zones,
       required_roles,
       optional_roles,
-      formats_supported
+      formats_supported,
     } = req.body;
 
     // Check if template exists and is editable
-    const [existing] = await sequelize.query(`
+    const [existing] = await sequelize.query(
+      `
       SELECT id, status, locked FROM template_studio WHERE id = $1
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     if (existing.length === 0) {
       return res.status(404).json({
-        error: 'Template not found'
+        error: 'Template not found',
       });
     }
 
     if (existing[0].locked) {
       return res.status(403).json({
-        error: 'Template is locked and cannot be edited'
+        error: 'Template is locked and cannot be edited',
       });
     }
 
     if (existing[0].status !== 'DRAFT') {
       return res.status(403).json({
-        error: 'Only DRAFT templates can be edited. Use clone endpoint to create new version.'
+        error: 'Only DRAFT templates can be edited. Use clone endpoint to create new version.',
       });
     }
 
@@ -297,29 +306,32 @@ router.put('/:id', async (req, res) => {
 
     if (updates.length === 0) {
       return res.status(400).json({
-        error: 'No fields to update'
+        error: 'No fields to update',
       });
     }
 
     values.push(id);
 
-    const [result] = await sequelize.query(`
+    const [result] = await sequelize.query(
+      `
       UPDATE template_studio
       SET ${updates.join(', ')}
       WHERE id = $${paramIndex}
       RETURNING *
-    `, { bind: values });
+    `,
+      { bind: values }
+    );
 
     res.json({
       status: 'SUCCESS',
       message: 'Template updated',
-      data: result[0]
+      data: result[0],
     });
   } catch (error) {
     console.error('Failed to update template:', error);
     res.status(500).json({
       error: 'Failed to update template',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -332,35 +344,41 @@ router.delete('/:id', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(`
+    const [existing] = await sequelize.query(
+      `
       SELECT id, status, locked FROM template_studio WHERE id = $1
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     if (existing.length === 0) {
       return res.status(404).json({
-        error: 'Template not found'
+        error: 'Template not found',
       });
     }
 
     if (existing[0].status !== 'DRAFT') {
       return res.status(403).json({
-        error: 'Only DRAFT templates can be deleted. Use archive endpoint instead.'
+        error: 'Only DRAFT templates can be deleted. Use archive endpoint instead.',
       });
     }
 
-    await sequelize.query(`
+    await sequelize.query(
+      `
       DELETE FROM template_studio WHERE id = $1
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     res.json({
       status: 'SUCCESS',
-      message: 'Template deleted'
+      message: 'Template deleted',
     });
   } catch (error) {
     console.error('Failed to delete template:', error);
     res.status(500).json({
       error: 'Failed to delete template',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -373,28 +391,35 @@ router.post('/:id/clone', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(`
+    const [existing] = await sequelize.query(
+      `
       SELECT * FROM template_studio WHERE id = $1
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     if (existing.length === 0) {
       return res.status(404).json({
-        error: 'Template not found'
+        error: 'Template not found',
       });
     }
 
     const original = existing[0];
 
     // Get next version number for this template name
-    const [versionCheck] = await sequelize.query(`
+    const [versionCheck] = await sequelize.query(
+      `
       SELECT MAX(version) as max_version
       FROM template_studio
       WHERE name = $1
-    `, { bind: [original.name] });
+    `,
+      { bind: [original.name] }
+    );
 
     const nextVersion = (versionCheck[0].max_version || 0) + 1;
 
-    const [result] = await sequelize.query(`
+    const [result] = await sequelize.query(
+      `
       INSERT INTO template_studio (
         name, description, version, status, locked,
         canvas_config, role_slots, safe_zones,
@@ -407,31 +432,33 @@ router.post('/:id/clone', async (req, res) => {
         $10
       )
       RETURNING *
-    `, {
-      bind: [
-        original.name,
-        original.description,
-        nextVersion,
-        JSON.stringify(original.canvas_config),
-        JSON.stringify(original.role_slots),
-        JSON.stringify(original.safe_zones),
-        original.required_roles,
-        original.optional_roles,
-        original.formats_supported,
-        id
-      ]
-    });
+    `,
+      {
+        bind: [
+          original.name,
+          original.description,
+          nextVersion,
+          JSON.stringify(original.canvas_config),
+          JSON.stringify(original.role_slots),
+          JSON.stringify(original.safe_zones),
+          original.required_roles,
+          original.optional_roles,
+          original.formats_supported,
+          id,
+        ],
+      }
+    );
 
     res.status(201).json({
       status: 'SUCCESS',
       message: 'Template cloned',
-      data: result[0]
+      data: result[0],
     });
   } catch (error) {
     console.error('Failed to clone template:', error);
     res.status(500).json({
       error: 'Failed to clone template',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -444,39 +471,45 @@ router.post('/:id/publish', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(`
+    const [existing] = await sequelize.query(
+      `
       SELECT id, status FROM template_studio WHERE id = $1
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     if (existing.length === 0) {
       return res.status(404).json({
-        error: 'Template not found'
+        error: 'Template not found',
       });
     }
 
     if (existing[0].status !== 'DRAFT') {
       return res.status(400).json({
-        error: 'Only DRAFT templates can be published'
+        error: 'Only DRAFT templates can be published',
       });
     }
 
-    const [result] = await sequelize.query(`
+    const [result] = await sequelize.query(
+      `
       UPDATE template_studio
       SET status = 'PUBLISHED', published_at = NOW()
       WHERE id = $1
       RETURNING *
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     res.json({
       status: 'SUCCESS',
       message: 'Template published',
-      data: result[0]
+      data: result[0],
     });
   } catch (error) {
     console.error('Failed to publish template:', error);
     res.status(500).json({
       error: 'Failed to publish template',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -489,39 +522,45 @@ router.post('/:id/lock', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(`
+    const [existing] = await sequelize.query(
+      `
       SELECT id, locked FROM template_studio WHERE id = $1
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     if (existing.length === 0) {
       return res.status(404).json({
-        error: 'Template not found'
+        error: 'Template not found',
       });
     }
 
     if (existing[0].locked) {
       return res.status(400).json({
-        error: 'Template is already locked'
+        error: 'Template is already locked',
       });
     }
 
-    const [result] = await sequelize.query(`
+    const [result] = await sequelize.query(
+      `
       UPDATE template_studio
       SET locked = true, locked_at = NOW()
       WHERE id = $1
       RETURNING *
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     res.json({
       status: 'SUCCESS',
       message: 'Template locked',
-      data: result[0]
+      data: result[0],
     });
   } catch (error) {
     console.error('Failed to lock template:', error);
     res.status(500).json({
       error: 'Failed to lock template',
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -534,39 +573,45 @@ router.post('/:id/archive', async (req, res) => {
   try {
     const { id } = req.params;
 
-    const [existing] = await sequelize.query(`
+    const [existing] = await sequelize.query(
+      `
       SELECT id, status FROM template_studio WHERE id = $1
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     if (existing.length === 0) {
       return res.status(404).json({
-        error: 'Template not found'
+        error: 'Template not found',
       });
     }
 
     if (existing[0].status === 'ARCHIVED') {
       return res.status(400).json({
-        error: 'Template is already archived'
+        error: 'Template is already archived',
       });
     }
 
-    const [result] = await sequelize.query(`
+    const [result] = await sequelize.query(
+      `
       UPDATE template_studio
       SET status = 'ARCHIVED'
       WHERE id = $1
       RETURNING *
-    `, { bind: [id] });
+    `,
+      { bind: [id] }
+    );
 
     res.json({
       status: 'SUCCESS',
       message: 'Template archived',
-      data: result[0]
+      data: result[0],
     });
   } catch (error) {
     console.error('Failed to archive template:', error);
     res.status(500).json({
       error: 'Failed to archive template',
-      message: error.message
+      message: error.message,
     });
   }
 });

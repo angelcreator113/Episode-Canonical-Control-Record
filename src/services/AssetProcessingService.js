@@ -24,7 +24,7 @@ class AssetProcessingService {
       removeBackground = false,
       smoothSkin = false,
       autoEnhance = false,
-      provider = 'runway' // 'runway' or 'removebg'
+      provider = 'runway', // 'runway' or 'removebg'
     } = options;
 
     try {
@@ -53,7 +53,7 @@ class AssetProcessingService {
         originalUrl: assetUrl,
         processedUrl,
         processingSteps,
-        provider
+        provider,
       };
     } catch (error) {
       logger.error('Asset processing failed', { error: error.message, assetUrl });
@@ -91,14 +91,14 @@ class AssetProcessingService {
       const response = await axios.post(
         'https://api.runwayml.com/v1/remove-background',
         {
-          image_url: assetUrl
+          image_url: assetUrl,
         },
         {
           headers: {
-            'Authorization': `Bearer ${process.env.RUNWAY_API_KEY}`,
-            'Content-Type': 'application/json'
+            Authorization: `Bearer ${process.env.RUNWAY_API_KEY}`,
+            'Content-Type': 'application/json',
           },
-          timeout: 30000 // 30 second timeout
+          timeout: 30000, // 30 second timeout
         }
       );
 
@@ -125,28 +125,30 @@ class AssetProcessingService {
         {
           image_url: assetUrl,
           size: 'auto',
-          format: 'png'
+          format: 'png',
         },
         {
           headers: {
-            'X-Api-Key': process.env.REMOVEBG_API_KEY
+            'X-Api-Key': process.env.REMOVEBG_API_KEY,
           },
           responseType: 'arraybuffer',
-          timeout: 30000
+          timeout: 30000,
         }
       );
 
       // Upload processed image to S3
       const buffer = Buffer.from(response.data);
       const key = `processed-assets/removebg/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.png`;
-      
-      await s3.putObject({
-        Bucket: process.env.S3_BUCKET,
-        Key: key,
-        Body: buffer,
-        ContentType: 'image/png',
-        ACL: 'public-read'
-      }).promise();
+
+      await s3
+        .putObject({
+          Bucket: process.env.S3_BUCKET,
+          Key: key,
+          Body: buffer,
+          ContentType: 'image/png',
+          ACL: 'public-read',
+        })
+        .promise();
 
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     } catch (error) {
@@ -170,7 +172,7 @@ class AssetProcessingService {
       const processedBuffer = await sharp(imageBuffer)
         .modulate({
           brightness: 1.05,
-          saturation: 0.95
+          saturation: 0.95,
         })
         .blur(0.5) // Gentle blur for smoothing
         .sharpen(0.5) // Re-sharpen to maintain detail
@@ -178,14 +180,16 @@ class AssetProcessingService {
 
       // Upload to S3
       const key = `processed-assets/smoothed/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.png`;
-      
-      await s3.putObject({
-        Bucket: process.env.S3_BUCKET,
-        Key: key,
-        Body: processedBuffer,
-        ContentType: 'image/png',
-        ACL: 'public-read'
-      }).promise();
+
+      await s3
+        .putObject({
+          Bucket: process.env.S3_BUCKET,
+          Key: key,
+          Body: processedBuffer,
+          ContentType: 'image/png',
+          ACL: 'public-read',
+        })
+        .promise();
 
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     } catch (error) {
@@ -210,21 +214,23 @@ class AssetProcessingService {
         .normalize() // Auto adjust brightness/contrast
         .modulate({
           brightness: 1.1,
-          saturation: 1.15
+          saturation: 1.15,
         })
         .sharpen()
         .toBuffer();
 
       // Upload to S3
       const key = `processed-assets/enhanced/${Date.now()}-${Math.random().toString(36).substr(2, 9)}.png`;
-      
-      await s3.putObject({
-        Bucket: process.env.S3_BUCKET,
-        Key: key,
-        Body: processedBuffer,
-        ContentType: 'image/png',
-        ACL: 'public-read'
-      }).promise();
+
+      await s3
+        .putObject({
+          Bucket: process.env.S3_BUCKET,
+          Key: key,
+          Body: processedBuffer,
+          ContentType: 'image/png',
+          ACL: 'public-read',
+        })
+        .promise();
 
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     } catch (error) {
@@ -256,27 +262,29 @@ class AssetProcessingService {
         throw new Error('Invalid processedImage type');
       }
 
-      await s3.putObject({
-        Bucket: process.env.S3_BUCKET,
-        Key: key,
-        Body: body,
-        ContentType: 'image/png',
-        ACL: 'public-read',
-        Metadata: {
-          templateId: String(templateId),
-          assetId: String(assetId),
-          processingType,
-          processedAt: new Date().toISOString()
-        }
-      }).promise();
+      await s3
+        .putObject({
+          Bucket: process.env.S3_BUCKET,
+          Key: key,
+          Body: body,
+          ContentType: 'image/png',
+          ACL: 'public-read',
+          Metadata: {
+            templateId: String(templateId),
+            assetId: String(assetId),
+            processingType,
+            processedAt: new Date().toISOString(),
+          },
+        })
+        .promise();
 
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;
     } catch (error) {
-      logger.error('Failed to save processed asset', { 
-        error: error.message, 
-        templateId, 
-        assetId, 
-        processingType 
+      logger.error('Failed to save processed asset', {
+        error: error.message,
+        templateId,
+        assetId,
+        processingType,
       });
       throw error;
     }
@@ -292,11 +300,13 @@ class AssetProcessingService {
   async checkCache(templateId, assetId, processingType) {
     try {
       const key = `template-studio-assets/${templateId}/${assetId}/${processingType}.png`;
-      
-      await s3.headObject({
-        Bucket: process.env.S3_BUCKET,
-        Key: key
-      }).promise();
+
+      await s3
+        .headObject({
+          Bucket: process.env.S3_BUCKET,
+          Key: key,
+        })
+        .promise();
 
       // If headObject succeeds, the file exists
       return `https://${process.env.S3_BUCKET}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${key}`;

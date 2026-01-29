@@ -220,7 +220,8 @@ module.exports = (sequelize) => {
         type: DataTypes.VIRTUAL,
         get() {
           if (this.title_override) return this.title_override;
-          if (this.type === 'note') return this.note_text ? this.note_text.substring(0, 50) : 'Note';
+          if (this.type === 'note')
+            return this.note_text ? this.note_text.substring(0, 50) : 'Note';
           const libraryScene = this.libraryScene || this.getDataValue('libraryScene');
           if (!libraryScene) return 'Missing Clip';
           return libraryScene.title || 'Untitled Clip';
@@ -234,7 +235,9 @@ module.exports = (sequelize) => {
           const libraryScene = this.libraryScene || this.getDataValue('libraryScene');
           if (!libraryScene) return 0;
           const trimStart = parseFloat(this.trim_start || 0);
-          const trimEnd = parseFloat(this.trim_end || libraryScene.duration || libraryScene.duration_seconds || 0);
+          const trimEnd = parseFloat(
+            this.trim_end || libraryScene.duration || libraryScene.duration_seconds || 0
+          );
           return trimEnd - trimStart;
         },
       },

@@ -8,7 +8,11 @@ const { authenticate } = require('../middleware/auth');
  */
 
 // Individual approval/rejection
-router.put('/:episodeId/wardrobe/:wardrobeId/approve', authenticate, controller.approveWardrobeItem);
+router.put(
+  '/:episodeId/wardrobe/:wardrobeId/approve',
+  authenticate,
+  controller.approveWardrobeItem
+);
 router.put('/:episodeId/wardrobe/:wardrobeId/reject', authenticate, controller.rejectWardrobeItem);
 
 // Approval status

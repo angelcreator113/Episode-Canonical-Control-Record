@@ -56,7 +56,7 @@ if (process.env.NODE_ENV !== 'test') {
         console.log('🔄 Syncing database models...');
         const syncOptions = {
           force: process.env.DB_SYNC_FORCE === 'true',
-          alter: process.env.DB_SYNC_ALTER === 'true'
+          alter: process.env.DB_SYNC_ALTER === 'true',
         };
         await db.sequelize.sync(syncOptions);
         console.log('✅ Database models synchronized');

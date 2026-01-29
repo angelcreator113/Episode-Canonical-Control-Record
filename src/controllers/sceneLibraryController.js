@@ -221,7 +221,11 @@ exports.uploadSceneClip = async (req, res) => {
       title: title || `Scene ${Date.now()}`,
       description: description || null,
       tags: tags ? (Array.isArray(tags) ? tags : JSON.parse(tags)) : [],
-      characters: characters ? (Array.isArray(characters) ? characters : JSON.parse(characters)) : [],
+      characters: characters
+        ? Array.isArray(characters)
+          ? characters
+          : JSON.parse(characters)
+        : [],
       processing_status: 'processing',
       created_by: req.user?.id || 'system',
       updated_by: req.user?.id || 'system',
@@ -373,7 +377,7 @@ async function extractVideoMetadata(sceneId) {
     // Download video from S3 to temp buffer for processing
     const s3Service = require('../services/S3Service');
     const bucket = process.env.S3_PRIMARY_BUCKET || process.env.AWS_S3_BUCKET;
-    
+
     // Get file from S3
     const videoBuffer = await s3Service.getFileAsBuffer(bucket, scene.s3_key);
 
@@ -423,7 +427,7 @@ async function extractVideoMetadata(sceneId) {
     console.log(`✅ Video processing complete for scene ${sceneId}`);
   } catch (error) {
     console.error(`❌ Video processing failed for scene ${sceneId}:`, error);
-    
+
     // Update scene with error status
     await SceneLibrary.update(
       {

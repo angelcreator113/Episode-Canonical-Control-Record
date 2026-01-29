@@ -374,12 +374,15 @@ class ThumbnailGeneratorService {
       const { Sequelize } = require('sequelize');
       const sequelize = new Sequelize(process.env.DATABASE_URL, {
         dialect: 'postgres',
-        logging: false
+        logging: false,
       });
 
-      const [templates] = await sequelize.query(`
+      const [templates] = await sequelize.query(
+        `
         SELECT * FROM template_studio WHERE id = $1
-      `, { bind: [composition.template_studio_id] });
+      `,
+        { bind: [composition.template_studio_id] }
+      );
 
       if (templates.length === 0) {
         console.error('❌ Template not found:', composition.template_studio_id);
@@ -393,18 +396,20 @@ class ThumbnailGeneratorService {
       const { CompositionAsset, Asset } = require('../models');
       const compositionAssets = await CompositionAsset.findAll({
         where: { composition_id: composition.id },
-        include: [{
-          model: Asset,
-          as: 'asset',
-          attributes: ['id', 'name', 's3_url_processed', 's3_url_raw', 'asset_role']
-        }]
+        include: [
+          {
+            model: Asset,
+            as: 'asset',
+            attributes: ['id', 'name', 's3_url_processed', 's3_url_raw', 'asset_role'],
+          },
+        ],
       });
 
       console.log(`📦 Found ${compositionAssets.length} assets for composition`);
 
       // Build asset map by role
       const assetsByRole = {};
-      compositionAssets.forEach(ca => {
+      compositionAssets.forEach((ca) => {
         if (ca.asset) {
           assetsByRole[ca.asset_role] = ca.asset;
         }
@@ -425,12 +430,14 @@ class ThumbnailGeneratorService {
           width,
           height,
           channels: 4,
-          background: background_color || '#000000'
-        }
+          background: background_color || '#000000',
+        },
       });
 
       // Sort role slots by z_index
-      const roleSlots = [...template.role_slots].sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
+      const roleSlots = [...template.role_slots].sort(
+        (a, b) => (a.z_index || 0) - (b.z_index || 0)
+      );
       console.log(`🎭 Processing ${roleSlots.length} role slots`);
 
       const composites = [];
@@ -440,7 +447,11 @@ class ThumbnailGeneratorService {
 
         // Check conditional visibility
         if (conditional_rules?.show_if) {
-          const shouldShow = this.evaluateConditionalRule(conditional_rules.show_if, composition, assetsByRole);
+          const shouldShow = this.evaluateConditionalRule(
+            conditional_rules.show_if,
+            composition,
+            assetsByRole
+          );
           if (!shouldShow) {
             console.log(`⏭️  Skipping ${role} (conditional rule not met)`);
             continue;
@@ -455,11 +466,15 @@ class ThumbnailGeneratorService {
         // Handle text fields
         if (role.startsWith('TEXT.') && textFields[role]) {
           const textValue = textFields[role];
-          const textBuffer = await this.createTextOverlayFromTemplate(textValue, text_style, position);
+          const textBuffer = await this.createTextOverlayFromTemplate(
+            textValue,
+            text_style,
+            position
+          );
           composites.push({
             input: textBuffer,
             top: position.y,
-            left: position.x
+            left: position.x,
           });
           console.log(`✅ Added text: ${role} = "${textValue}"`);
           continue;
@@ -489,14 +504,14 @@ class ThumbnailGeneratorService {
           const resizedBuffer = await sharp(imageBuffer)
             .resize(position.width, position.height, {
               fit: 'cover',
-              position: 'center'
+              position: 'center',
             })
             .toBuffer();
 
           composites.push({
             input: resizedBuffer,
             top: position.y,
-            left: position.x
+            left: position.x,
           });
 
           console.log(`✅ Added asset: ${role} at (${position.x}, ${position.y})`);
@@ -507,14 +522,10 @@ class ThumbnailGeneratorService {
 
       // Composite all layers
       console.log(`🎬 Compositing ${composites.length} layers`);
-      const thumbnail = await canvas
-        .composite(composites)
-        .png()
-        .toBuffer();
+      const thumbnail = await canvas.composite(composites).png().toBuffer();
 
       console.log(`✅ Generated thumbnail: ${thumbnail.length} bytes`);
       return thumbnail;
-
     } catch (error) {
       console.error('❌ Failed to generate from Template Studio:', error);
       throw error;
@@ -529,16 +540,20 @@ class ThumbnailGeneratorService {
     switch (ruleFlag) {
       case 'EPISODE.HAS_GUEST':
         return assetsByRole['CHAR.GUEST.1'] !== undefined;
-      
+
       case 'EPISODE.HAS_DUAL_GUESTS':
-        return assetsByRole['CHAR.GUEST.1'] !== undefined && assetsByRole['CHAR.GUEST.2'] !== undefined;
-      
+        return (
+          assetsByRole['CHAR.GUEST.1'] !== undefined && assetsByRole['CHAR.GUEST.2'] !== undefined
+        );
+
       case 'COMPOSITION.ICONS_ENABLED':
-        return Object.keys(assetsByRole).some(role => role.startsWith('UI.ICON.') && role !== 'UI.ICON.HOLDER.MAIN');
-      
+        return Object.keys(assetsByRole).some(
+          (role) => role.startsWith('UI.ICON.') && role !== 'UI.ICON.HOLDER.MAIN'
+        );
+
       case 'COMPOSITION.WARDROBE_ENABLED':
-        return Object.keys(assetsByRole).some(role => role.startsWith('WARDROBE.ITEM.'));
-      
+        return Object.keys(assetsByRole).some((role) => role.startsWith('WARDROBE.ITEM.'));
+
       default:
         console.warn(`⚠️  Unknown conditional rule: ${ruleFlag}`);
         return true; // Default to visible
@@ -556,7 +571,7 @@ class ThumbnailGeneratorService {
       font_size = 48,
       color = '#ffffff',
       stroke,
-      shadow
+      shadow,
     } = textStyle || {};
 
     const { width, height } = position;

@@ -47,17 +47,17 @@ class VideoProcessingService {
 
       // Use ffprobe to extract metadata (fallback to ffmpeg if ffprobe not available)
       const ffprobeCmd = `"${this.ffmpegPath}" -i "${inputPath}" -f null - 2>&1`;
-      
+
       try {
         const { stdout, stderr } = await execAsync(ffprobeCmd);
         // ffmpeg outputs to stderr, but we redirect with 2>&1
         const output = stdout || stderr;
-        
+
         // Parse duration from output
         const durationMatch = output.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})/);
         const videoMatch = output.match(/Stream.*Video:.*?(\d{3,5})x(\d{3,5})/);
         const bitRateMatch = output.match(/bitrate: (\d+) kb\/s/);
-        
+
         let duration = 0;
         if (durationMatch) {
           const hours = parseInt(durationMatch[1]);
@@ -80,7 +80,7 @@ class VideoProcessingService {
 
         // Get file size
         const stats = await fs.stat(inputPath);
-        
+
         // Clean up temp file
         if (tempFile) {
           await fs.unlink(tempFile).catch(() => {});
@@ -91,13 +91,16 @@ class VideoProcessingService {
           size: stats.size,
           bitRate,
           format: 'video',
-          video: width && height ? {
-            codec: 'unknown',
-            width,
-            height,
-            frameRate: 30, // Default assumption
-            bitRate,
-          } : null,
+          video:
+            width && height
+              ? {
+                  codec: 'unknown',
+                  width,
+                  height,
+                  frameRate: 30, // Default assumption
+                  bitRate,
+                }
+              : null,
           audio: null,
         };
       } catch (error) {
@@ -218,9 +221,7 @@ class VideoProcessingService {
 
       // Generate thumbnails in parallel
       const thumbnails = await Promise.all(
-        timestamps.map(timestamp =>
-          this.generateThumbnail(input, { ...options, timestamp })
-        )
+        timestamps.map((timestamp) => this.generateThumbnail(input, { ...options, timestamp }))
       );
 
       logger.info('Multiple thumbnails generated', {

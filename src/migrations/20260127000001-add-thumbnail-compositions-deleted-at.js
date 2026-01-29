@@ -23,7 +23,10 @@ module.exports = {
   },
 
   async down(queryInterface, Sequelize) {
-    await queryInterface.removeIndex('thumbnail_compositions', 'idx_thumbnail_compositions_deleted_at');
+    await queryInterface.removeIndex(
+      'thumbnail_compositions',
+      'idx_thumbnail_compositions_deleted_at'
+    );
     await queryInterface.removeColumn('thumbnail_compositions', 'deleted_at');
     console.log('✅ Removed deleted_at column from thumbnail_compositions table');
   },

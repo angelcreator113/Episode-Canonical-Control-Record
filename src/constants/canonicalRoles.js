@@ -1,13 +1,13 @@
 /**
  * Canonical Asset Roles
- * 
+ *
  * Single source of truth for all asset roles used across the system.
  * These roles define the contract between:
  * - Asset Manager (tagging assets)
  * - Thumbnail Composer (selecting assets)
  * - Template Studio (defining layouts)
  * - Thumbnail Generator (rendering final images)
- * 
+ *
  * CRITICAL: Do not modify role names without database migration.
  * Role names are stored in:
  * - assets.asset_role
@@ -25,7 +25,7 @@ const CANONICAL_ROLES = {
     color: '#667eea',
     category: 'CHAR',
     description: 'Primary host - Lala',
-    defaultSize: { width: 400, height: 600 }
+    defaultSize: { width: 400, height: 600 },
   },
   'CHAR.HOST.JUSTAWOMANINHERPRIME': {
     label: 'JustAWoman (Co-Host)',
@@ -34,7 +34,7 @@ const CANONICAL_ROLES = {
     color: '#9333ea',
     category: 'CHAR',
     description: 'Co-host - Just a Woman in Her Prime',
-    defaultSize: { width: 400, height: 600 }
+    defaultSize: { width: 400, height: 600 },
   },
   'CHAR.GUEST.1': {
     label: 'Guest 1',
@@ -43,7 +43,7 @@ const CANONICAL_ROLES = {
     color: '#3b82f6',
     category: 'CHAR',
     description: 'Primary guest',
-    defaultSize: { width: 350, height: 550 }
+    defaultSize: { width: 350, height: 550 },
   },
   'CHAR.GUEST.2': {
     label: 'Guest 2',
@@ -52,9 +52,9 @@ const CANONICAL_ROLES = {
     color: '#06b6d4',
     category: 'CHAR',
     description: 'Secondary guest',
-    defaultSize: { width: 350, height: 550 }
+    defaultSize: { width: 350, height: 550 },
   },
-  
+
   // ==================== ICONS (8) ====================
   'UI.ICON.CLOSET': {
     label: 'Closet Icon',
@@ -63,7 +63,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'UI',
     description: 'Wardrobe/closet themed icon',
-    defaultSize: { width: 80, height: 80 }
+    defaultSize: { width: 80, height: 80 },
   },
   'UI.ICON.JEWELRY_BOX': {
     label: 'Jewelry Box Icon',
@@ -72,7 +72,7 @@ const CANONICAL_ROLES = {
     color: '#8b5cf6',
     category: 'UI',
     description: 'Jewelry box themed icon',
-    defaultSize: { width: 80, height: 80 }
+    defaultSize: { width: 80, height: 80 },
   },
   'UI.ICON.TODO_LIST': {
     label: 'To-Do List Icon',
@@ -81,7 +81,7 @@ const CANONICAL_ROLES = {
     color: '#10b981',
     category: 'UI',
     description: 'Task list or checklist icon',
-    defaultSize: { width: 80, height: 80 }
+    defaultSize: { width: 80, height: 80 },
   },
   'UI.ICON.SPEECH': {
     label: 'Speech Bubble Icon',
@@ -90,7 +90,7 @@ const CANONICAL_ROLES = {
     color: '#3b82f6',
     category: 'UI',
     description: 'Speech or conversation bubble',
-    defaultSize: { width: 80, height: 80 }
+    defaultSize: { width: 80, height: 80 },
   },
   'UI.ICON.LOCATION': {
     label: 'Location Pin Icon',
@@ -99,7 +99,7 @@ const CANONICAL_ROLES = {
     color: '#ef4444',
     category: 'UI',
     description: 'Location or map pin',
-    defaultSize: { width: 80, height: 80 }
+    defaultSize: { width: 80, height: 80 },
   },
   'UI.ICON.PERFUME': {
     label: 'Perfume Bottle Icon',
@@ -108,7 +108,7 @@ const CANONICAL_ROLES = {
     color: '#a855f7',
     category: 'UI',
     description: 'Perfume or fragrance bottle',
-    defaultSize: { width: 80, height: 80 }
+    defaultSize: { width: 80, height: 80 },
   },
   'UI.ICON.POSE': {
     label: 'Pose Icon',
@@ -117,7 +117,7 @@ const CANONICAL_ROLES = {
     color: '#f59e0b',
     category: 'UI',
     description: 'Fashion pose or stance icon',
-    defaultSize: { width: 80, height: 80 }
+    defaultSize: { width: 80, height: 80 },
   },
   'UI.ICON.RESERVED': {
     label: 'Reserved Icon',
@@ -126,7 +126,7 @@ const CANONICAL_ROLES = {
     color: '#fbbf24',
     category: 'UI',
     description: 'Reserved for future use',
-    defaultSize: { width: 80, height: 80 }
+    defaultSize: { width: 80, height: 80 },
   },
 
   // ==================== ICON HOLDER (1) ====================
@@ -137,9 +137,9 @@ const CANONICAL_ROLES = {
     color: '#64748b',
     category: 'ASSET',
     description: 'Container panel for icon grid',
-    defaultSize: { width: 300, height: 400 }
+    defaultSize: { width: 300, height: 400 },
   },
-  
+
   // ==================== BRANDING (1) ====================
   'BRAND.SHOW.TITLE_GRAPHIC': {
     label: 'Show Title Graphic',
@@ -148,7 +148,7 @@ const CANONICAL_ROLES = {
     color: '#6366f1',
     category: 'ASSET',
     description: 'Show logo or title graphic',
-    defaultSize: { width: 500, height: 200 }
+    defaultSize: { width: 500, height: 200 },
   },
 
   // ==================== BACKGROUND (1) ====================
@@ -159,7 +159,7 @@ const CANONICAL_ROLES = {
     color: '#10b981',
     category: 'BG',
     description: 'Main background image or video frame',
-    defaultSize: { width: 1920, height: 1080 }
+    defaultSize: { width: 1920, height: 1080 },
   },
 
   // ==================== TEXT FIELDS (4) ====================
@@ -179,8 +179,8 @@ const CANONICAL_ROLES = {
       color: '#ffffff',
       textAlign: 'center',
       stroke: '#000000',
-      strokeWidth: 2
-    }
+      strokeWidth: 2,
+    },
   },
   'TEXT.CUSTOM.1': {
     label: 'Custom Text 1',
@@ -198,8 +198,8 @@ const CANONICAL_ROLES = {
       color: '#ffffff',
       textAlign: 'center',
       stroke: '#000000',
-      strokeWidth: 1
-    }
+      strokeWidth: 1,
+    },
   },
   'TEXT.CUSTOM.2': {
     label: 'Custom Text 2',
@@ -217,8 +217,8 @@ const CANONICAL_ROLES = {
       color: '#ffffff',
       textAlign: 'center',
       stroke: '#000000',
-      strokeWidth: 1
-    }
+      strokeWidth: 1,
+    },
   },
   'TEXT.CUSTOM.3': {
     label: 'Custom Text 3',
@@ -236,10 +236,10 @@ const CANONICAL_ROLES = {
       color: '#ffffff',
       textAlign: 'center',
       stroke: '#000000',
-      strokeWidth: 1
-    }
+      strokeWidth: 1,
+    },
   },
-  
+
   // ==================== UI CHROME (3) ====================
   'UI.MOUSE.CURSOR': {
     label: 'Mouse Cursor',
@@ -248,7 +248,7 @@ const CANONICAL_ROLES = {
     color: '#6b7280',
     category: 'UI',
     description: 'Animated cursor or pointer',
-    defaultSize: { width: 40, height: 40 }
+    defaultSize: { width: 40, height: 40 },
   },
   'UI.BUTTON.EXIT': {
     label: 'Exit Button',
@@ -257,7 +257,7 @@ const CANONICAL_ROLES = {
     color: '#ef4444',
     category: 'UI',
     description: 'Window close/exit button',
-    defaultSize: { width: 60, height: 60 }
+    defaultSize: { width: 60, height: 60 },
   },
   'UI.BUTTON.MINIMIZE': {
     label: 'Minimize Button',
@@ -266,9 +266,9 @@ const CANONICAL_ROLES = {
     color: '#f59e0b',
     category: 'UI',
     description: 'Window minimize button',
-    defaultSize: { width: 60, height: 60 }
+    defaultSize: { width: 60, height: 60 },
   },
-  
+
   // ==================== WARDROBE (9) ====================
   'WARDROBE.PANEL': {
     label: 'Wardrobe Panel',
@@ -278,7 +278,7 @@ const CANONICAL_ROLES = {
     category: 'WARDROBE',
     description: 'Container panel for wardrobe items',
     autoManaged: true,
-    defaultSize: { width: 350, height: 500 }
+    defaultSize: { width: 350, height: 500 },
   },
   'WARDROBE.ITEM.1': {
     label: 'Wardrobe Item 1',
@@ -287,7 +287,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'WARDROBE',
     description: 'Wardrobe showcase item slot 1',
-    defaultSize: { width: 100, height: 100 }
+    defaultSize: { width: 100, height: 100 },
   },
   'WARDROBE.ITEM.2': {
     label: 'Wardrobe Item 2',
@@ -296,7 +296,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'WARDROBE',
     description: 'Wardrobe showcase item slot 2',
-    defaultSize: { width: 100, height: 100 }
+    defaultSize: { width: 100, height: 100 },
   },
   'WARDROBE.ITEM.3': {
     label: 'Wardrobe Item 3',
@@ -305,7 +305,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'WARDROBE',
     description: 'Wardrobe showcase item slot 3',
-    defaultSize: { width: 100, height: 100 }
+    defaultSize: { width: 100, height: 100 },
   },
   'WARDROBE.ITEM.4': {
     label: 'Wardrobe Item 4',
@@ -314,7 +314,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'WARDROBE',
     description: 'Wardrobe showcase item slot 4',
-    defaultSize: { width: 100, height: 100 }
+    defaultSize: { width: 100, height: 100 },
   },
   'WARDROBE.ITEM.5': {
     label: 'Wardrobe Item 5',
@@ -323,7 +323,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'WARDROBE',
     description: 'Wardrobe showcase item slot 5',
-    defaultSize: { width: 100, height: 100 }
+    defaultSize: { width: 100, height: 100 },
   },
   'WARDROBE.ITEM.6': {
     label: 'Wardrobe Item 6',
@@ -332,7 +332,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'WARDROBE',
     description: 'Wardrobe showcase item slot 6',
-    defaultSize: { width: 100, height: 100 }
+    defaultSize: { width: 100, height: 100 },
   },
   'WARDROBE.ITEM.7': {
     label: 'Wardrobe Item 7',
@@ -341,7 +341,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'WARDROBE',
     description: 'Wardrobe showcase item slot 7',
-    defaultSize: { width: 100, height: 100 }
+    defaultSize: { width: 100, height: 100 },
   },
   'WARDROBE.ITEM.8': {
     label: 'Wardrobe Item 8',
@@ -350,7 +350,7 @@ const CANONICAL_ROLES = {
     color: '#ec4899',
     category: 'WARDROBE',
     description: 'Wardrobe showcase item slot 8',
-    defaultSize: { width: 100, height: 100 }
+    defaultSize: { width: 100, height: 100 },
   },
 };
 
@@ -405,7 +405,7 @@ const getRoleConfig = (role) => {
 
 // Get all categories
 const getCategories = () => {
-  return [...new Set(Object.values(CANONICAL_ROLES).map(config => config.category))];
+  return [...new Set(Object.values(CANONICAL_ROLES).map((config) => config.category))];
 };
 
 module.exports = {
@@ -417,5 +417,5 @@ module.exports = {
   getAutoManagedRoles,
   isValidRole,
   getRoleConfig,
-  getCategories
+  getCategories,
 };

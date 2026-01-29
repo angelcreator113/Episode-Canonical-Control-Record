@@ -133,7 +133,15 @@ router.post('/', async (req, res) => {
   try {
     console.log('📥 POST /compositions request body:', JSON.stringify(req.body, null, 2));
 
-    let { episode_id, template_id, template_studio_id, assets, selected_formats, composition_config, asset_map } = req.body;
+    let {
+      episode_id,
+      template_id,
+      template_studio_id,
+      assets,
+      selected_formats,
+      composition_config,
+      asset_map,
+    } = req.body;
 
     // LEGACY SUPPORT: Handle old format with individual asset fields
     const {
@@ -147,16 +155,16 @@ router.post('/', async (req, res) => {
 
     // Determine if this is new role-based format or legacy format
     // Check for template_studio_id OR asset_map/assets to determine format
-    const isRoleBasedFormat = 
-      template_studio_id || 
-      (asset_map && typeof asset_map === 'object' && Object.keys(asset_map).length > 0) || 
+    const isRoleBasedFormat =
+      template_studio_id ||
+      (asset_map && typeof asset_map === 'object' && Object.keys(asset_map).length > 0) ||
       (assets && typeof assets === 'object' && Object.keys(assets).length > 0);
 
     console.log('🔍 Format detection:', {
       template_studio_id,
       asset_map_keys: asset_map ? Object.keys(asset_map) : null,
       assets_keys: assets ? Object.keys(assets) : null,
-      isRoleBasedFormat
+      isRoleBasedFormat,
     });
 
     // Use asset_map if provided, otherwise fall back to assets
@@ -222,40 +230,43 @@ router.post('/', async (req, res) => {
 
     // Create composition with appropriate format
     let composition;
-    
+
     if (isRoleBasedFormat) {
       // NEW ROLE-BASED FORMAT
       console.log('✨ Creating composition with role-based assets');
-      
+
       // If template_studio_id is provided, validate it and skip old template validation
       if (template_studio_id) {
         console.log('🎨 Using Template Studio template:', template_studio_id);
-        
+
         // Fetch template from template_studio
         const { Sequelize } = require('sequelize');
         const sequelize = new Sequelize(process.env.DATABASE_URL, {
           dialect: 'postgres',
-          logging: false
+          logging: false,
         });
-        
-        const [templates] = await sequelize.query(`
+
+        const [templates] = await sequelize.query(
+          `
           SELECT * FROM template_studio WHERE id = $1
-        `, { bind: [template_studio_id] });
-        
+        `,
+          { bind: [template_studio_id] }
+        );
+
         if (templates.length === 0) {
           return res.status(400).json({
             error: 'Invalid template_studio_id',
             message: `Template ${template_studio_id} not found`,
           });
         }
-        
+
         const studioTemplate = templates[0];
         console.log(`✅ Found template: ${studioTemplate.name} v${studioTemplate.version}`);
-        
+
         // Validate required roles from template
         const requiredRoles = studioTemplate.required_roles || [];
-        const missingRoles = requiredRoles.filter(role => !assetData[role]);
-        
+        const missingRoles = requiredRoles.filter((role) => !assetData[role]);
+
         if (missingRoles.length > 0) {
           console.warn('⚠️  Missing required roles:', missingRoles);
           // Don't fail - allow partial compositions for now
@@ -271,8 +282,8 @@ router.post('/', async (req, res) => {
         }
 
         const requiredRoles = template.required_roles || [];
-        const missingRoles = requiredRoles.filter(role => !assetData[role]);
-        
+        const missingRoles = requiredRoles.filter((role) => !assetData[role]);
+
         if (missingRoles.length > 0) {
           return res.status(400).json({
             error: 'Missing required asset roles',
@@ -315,18 +326,18 @@ router.post('/', async (req, res) => {
           acc[role] = value;
           return acc;
         }, {});
-      
+
       if (Object.keys(textFields).length > 0) {
         composition.composition_config = {
           ...composition.composition_config,
-          text_fields: textFields
+          text_fields: textFields,
         };
         await composition.save();
         console.log(`✅ Stored ${Object.keys(textFields).length} text field values`);
       }
 
       // Create composition_output records for selected formats
-      const outputRecords = selected_formats.map(format => ({
+      const outputRecords = selected_formats.map((format) => ({
         composition_id: composition.id,
         format,
         status: 'PROCESSING',
@@ -335,11 +346,10 @@ router.post('/', async (req, res) => {
 
       await models.CompositionOutput.bulkCreate(outputRecords);
       console.log(`✅ Created ${outputRecords.length} composition_output records`);
-
     } else {
       // LEGACY FORMAT - use old service method
       console.log('⚠️  Using legacy format (individual asset fields)');
-      
+
       // Validate that if include_justawomaninherprime is true, asset is provided
       if (include_justawomaninherprime && !justawomen_asset_id) {
         return res.status(400).json({
@@ -940,10 +950,10 @@ router.patch('/:id', async (req, res) => {
 router.post('/:id/assets', async (req, res) => {
   try {
     const { asset_id, role } = req.body;
-    
+
     if (!asset_id || !role) {
       return res.status(400).json({
-        error: 'Missing required fields: asset_id and role'
+        error: 'Missing required fields: asset_id and role',
       });
     }
 
@@ -951,8 +961,8 @@ router.post('/:id/assets', async (req, res) => {
     const compositionAsset = await models.CompositionAsset.findOne({
       where: {
         composition_id: req.params.id,
-        asset_role: role
-      }
+        asset_role: role,
+      },
     });
 
     if (compositionAsset) {
@@ -963,30 +973,34 @@ router.post('/:id/assets', async (req, res) => {
       await models.CompositionAsset.create({
         composition_id: req.params.id,
         asset_id,
-        asset_role: role
+        asset_role: role,
       });
     }
 
     // Return updated composition with assets
     const composition = await models.ThumbnailComposition.findByPk(req.params.id, {
-      include: [{
-        model: models.CompositionAsset,
-        as: 'compositionAssets',
-        include: [{
-          model: models.Asset,
-          as: 'asset'
-        }]
-      }]
+      include: [
+        {
+          model: models.CompositionAsset,
+          as: 'compositionAssets',
+          include: [
+            {
+              model: models.Asset,
+              as: 'asset',
+            },
+          ],
+        },
+      ],
     });
 
     res.json({
       status: 'SUCCESS',
-      data: composition
+      data: composition,
     });
   } catch (error) {
     console.error('Failed to assign asset:', error);
     res.status(500).json({
-      error: error.message
+      error: error.message,
     });
   }
 });
@@ -1267,7 +1281,7 @@ router.get('/:id/outputs', async (req, res) => {
 /**
  * POST /api/v1/compositions/:id/outputs/generate
  * Generate or regenerate specific format outputs for a composition
- * 
+ *
  * Body: { formats: ['YOUTUBE', 'INSTAGRAM_FEED'], regenerate: false }
  */
 router.post('/:id/outputs/generate', async (req, res) => {
@@ -1330,7 +1344,7 @@ router.post('/:id/outputs/generate', async (req, res) => {
 
     // TODO: Queue actual generation jobs to Sharp/Lambda here
     // For now, mark as PROCESSING and return immediately
-    
+
     res.json({
       status: 'SUCCESS',
       message: `Queued ${formats.length} format(s) for generation`,
@@ -1355,7 +1369,7 @@ router.delete('/outputs/:id', async (req, res) => {
     const { CompositionOutput } = models;
 
     const output = await CompositionOutput.findByPk(id);
-    
+
     if (!output) {
       return res.status(404).json({
         status: 'ERROR',
@@ -1364,7 +1378,7 @@ router.delete('/outputs/:id', async (req, res) => {
     }
 
     // TODO: Delete file from S3 if image_url exists
-    
+
     await output.destroy();
 
     res.json({
@@ -1390,7 +1404,7 @@ router.delete('/:id/assets/:role', async (req, res) => {
     const { ThumbnailComposition, EpisodeAsset } = models;
 
     const composition = await ThumbnailComposition.findByPk(id);
-    
+
     if (!composition) {
       return res.status(404).json({
         status: 'ERROR',
@@ -1400,16 +1414,16 @@ router.delete('/:id/assets/:role', async (req, res) => {
 
     // Find and remove the asset assignment for this episode and role
     const assetAssignment = await EpisodeAsset.findOne({
-      where: { 
+      where: {
         episode_id: composition.episode_id,
-        role 
-      }
+        role,
+      },
     });
 
     if (assetAssignment) {
       await assetAssignment.destroy();
       console.log(`🗑️ Removed asset from ${role} in episode ${composition.episode_id}`);
-      
+
       res.json({
         status: 'SUCCESS',
         message: `Removed asset from ${role}`,
@@ -1432,7 +1446,7 @@ router.delete('/:id/assets/:role', async (req, res) => {
 /**
  * POST /api/v1/compositions/:id/save-draft
  * Save draft layout overrides without applying them
- * 
+ *
  * Body: { draft_overrides: { roles: { ... } } }
  */
 router.post('/:id/save-draft', async (req, res) => {
@@ -1449,7 +1463,7 @@ router.post('/:id/save-draft', async (req, res) => {
     }
 
     const composition = await ThumbnailComposition.findByPk(id);
-    
+
     if (!composition) {
       return res.status(404).json({
         status: 'ERROR',
@@ -1481,7 +1495,7 @@ router.post('/:id/save-draft', async (req, res) => {
 /**
  * POST /api/v1/compositions/:id/apply-draft
  * Apply draft overrides, create new version, and optionally regenerate outputs
- * 
+ *
  * Body: { regenerate_formats: ['YOUTUBE', 'INSTAGRAM_FEED'] }
  */
 router.post('/:id/apply-draft', async (req, res) => {
@@ -1491,7 +1505,7 @@ router.post('/:id/apply-draft', async (req, res) => {
     const { ThumbnailComposition } = models;
 
     const composition = await ThumbnailComposition.findByPk(id);
-    
+
     if (!composition) {
       return res.status(404).json({
         status: 'ERROR',
@@ -1509,7 +1523,7 @@ router.post('/:id/apply-draft', async (req, res) => {
     // Merge draft into layout_overrides
     const currentOverrides = composition.layout_overrides || {};
     const draftOverrides = composition.draft_overrides;
-    
+
     const mergedOverrides = {
       ...currentOverrides,
       roles: {
@@ -1520,7 +1534,7 @@ router.post('/:id/apply-draft', async (req, res) => {
 
     // Increment version
     const newVersion = (composition.current_version || 1) + 1;
-    
+
     // Update version history
     const versionHistory = composition.version_history || {};
     versionHistory[`v${newVersion}`] = {
@@ -1549,21 +1563,23 @@ router.post('/:id/apply-draft', async (req, res) => {
       // This would call the generate outputs endpoint internally
       // For now, just mark outputs as PROCESSING
       const { CompositionOutput } = models;
-      
-      await Promise.all(regenerate_formats.map(async (format) => {
-        const [output] = await CompositionOutput.findOrCreate({
-          where: { composition_id: id, format },
-          defaults: {
+
+      await Promise.all(
+        regenerate_formats.map(async (format) => {
+          const [output] = await CompositionOutput.findOrCreate({
+            where: { composition_id: id, format },
+            defaults: {
+              status: 'PROCESSING',
+              generated_by: req.user?.id || 'system',
+            },
+          });
+
+          await output.update({
             status: 'PROCESSING',
-            generated_by: req.user?.id || 'system',
-          },
-        });
-        
-        await output.update({
-          status: 'PROCESSING',
-          error_message: null,
-        });
-      }));
+            error_message: null,
+          });
+        })
+      );
     }
 
     res.json({
@@ -1593,7 +1609,7 @@ router.patch('/:id/slot-positions', async (req, res) => {
     if (!composition) {
       return res.status(404).json({
         status: 'ERROR',
-        error: 'Composition not found'
+        error: 'Composition not found',
       });
     }
 
@@ -1601,13 +1617,15 @@ router.patch('/:id/slot-positions', async (req, res) => {
     const currentConfig = composition.composition_config || {};
     const updatedConfig = {
       ...currentConfig,
-      slotPositions: slotPositions !== undefined ? slotPositions : currentConfig.slotPositions || {},
-      backgroundOpacity: backgroundOpacity !== undefined ? backgroundOpacity : currentConfig.backgroundOpacity || 1,
-      selectedFormat: selectedFormat || currentConfig.selectedFormat || 'youtube_hero'
+      slotPositions:
+        slotPositions !== undefined ? slotPositions : currentConfig.slotPositions || {},
+      backgroundOpacity:
+        backgroundOpacity !== undefined ? backgroundOpacity : currentConfig.backgroundOpacity || 1,
+      selectedFormat: selectedFormat || currentConfig.selectedFormat || 'youtube_hero',
     };
 
     await composition.update({
-      composition_config: updatedConfig
+      composition_config: updatedConfig,
     });
 
     console.log('✅ Saved composition config for:', id, updatedConfig);
@@ -1615,16 +1633,15 @@ router.patch('/:id/slot-positions', async (req, res) => {
     res.json({
       status: 'SUCCESS',
       message: 'Composition config saved',
-      data: composition
+      data: composition,
     });
   } catch (error) {
     console.error('Failed to save composition config:', error);
     res.status(500).json({
       status: 'ERROR',
-      error: error.message
+      error: error.message,
     });
   }
 });
 
 module.exports = router;
-

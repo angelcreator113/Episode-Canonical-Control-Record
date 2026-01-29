@@ -894,7 +894,8 @@ module.exports = {
       const { id } = req.params;
       const { SceneLibrary, EpisodeScene } = models;
       const S3Service = require('../services/S3Service');
-      const BUCKET_NAME = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+      const BUCKET_NAME =
+        process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
 
       // Verify episode exists
       const episode = await Episode.findByPk(id);
@@ -948,7 +949,7 @@ module.exports = {
 
         if (episodeScene.libraryScene) {
           const scene = episodeScene.libraryScene;
-          
+
           // Generate signed URL for thumbnail (7 days expiry)
           if (scene.thumbnail_url && scene.thumbnail_url.startsWith('shows/')) {
             try {
@@ -961,7 +962,7 @@ module.exports = {
               console.error('Failed to generate signed URL for thumbnail:', error);
             }
           }
-          
+
           // Generate signed URL for video (7 days expiry)
           if (scene.video_asset_url && scene.video_asset_url.startsWith('shows/')) {
             try {
@@ -1037,7 +1038,7 @@ module.exports = {
         // Update scene_order for each item
         for (let i = 0; i < itemIds.length; i++) {
           await EpisodeScene.update(
-            { 
+            {
               scene_order: i + 1,
               last_edited_at: new Date(),
             },
@@ -1051,7 +1052,8 @@ module.exports = {
 
       // Fetch updated data with stats
       const S3Service = require('../services/S3Service');
-      const BUCKET_NAME = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+      const BUCKET_NAME =
+        process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
 
       const updatedScenes = await EpisodeScene.findAll({
         where: { episode_id: id },
@@ -1087,14 +1089,22 @@ module.exports = {
           const libScene = scene.libraryScene;
           if (libScene.thumbnail_url?.startsWith('shows/')) {
             try {
-              libScene.thumbnail_url = await S3Service.getPreSignedUrl(BUCKET_NAME, libScene.thumbnail_url, 604800);
+              libScene.thumbnail_url = await S3Service.getPreSignedUrl(
+                BUCKET_NAME,
+                libScene.thumbnail_url,
+                604800
+              );
             } catch (err) {
               console.error('Failed to sign thumbnail URL:', err);
             }
           }
           if (libScene.video_asset_url?.startsWith('shows/')) {
             try {
-              libScene.video_asset_url = await S3Service.getPreSignedUrl(BUCKET_NAME, libScene.video_asset_url, 604800);
+              libScene.video_asset_url = await S3Service.getPreSignedUrl(
+                BUCKET_NAME,
+                libScene.video_asset_url,
+                604800
+              );
             } catch (err) {
               console.error('Failed to sign video URL:', err);
             }
@@ -1179,7 +1189,6 @@ module.exports = {
       });
     }
   },
-
 
   /**
    * POST /episodes/:id/scenes - Add scene to episode

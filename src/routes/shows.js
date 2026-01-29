@@ -62,7 +62,8 @@ router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
 
     // Process image: resize to portrait format (2:3 ratio) and optimize
     const processedImage = await sharp(file.buffer)
-      .resize(800, 1200, { // 2:3 ratio (portrait like Netflix)
+      .resize(800, 1200, {
+        // 2:3 ratio (portrait like Netflix)
         fit: 'cover',
         position: 'center',
       })
@@ -72,7 +73,7 @@ router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
     // Upload to S3
     const fileExt = 'jpg';
     const s3Key = `shows/covers/${id}-${Date.now()}.${fileExt}`;
-    
+
     const s3 = getS3Client();
     await s3.send(
       new PutObjectCommand({

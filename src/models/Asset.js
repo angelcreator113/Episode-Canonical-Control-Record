@@ -139,7 +139,8 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(50),
         allowNull: true,
         defaultValue: 'none',
-        comment: 'Status: none, processing_bg_removal, bg_removed, processing_enhancement, enhanced, failed',
+        comment:
+          'Status: none, processing_bg_removal, bg_removed, processing_enhancement, enhanced, failed',
       },
       processing_metadata: {
         type: DataTypes.JSONB,

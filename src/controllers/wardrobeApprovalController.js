@@ -1,11 +1,5 @@
 const { models } = require('../models');
-const {
-  EpisodeWardrobe,
-  Wardrobe,
-  WardrobeLibrary,
-  WardrobeUsageHistory,
-  Episode,
-} = models;
+const { EpisodeWardrobe, Wardrobe, WardrobeLibrary, WardrobeUsageHistory, Episode } = models;
 const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
 const { Op } = require('sequelize');
 
@@ -227,15 +221,7 @@ module.exports = {
               {
                 model: WardrobeLibrary,
                 as: 'libraryItem',
-                attributes: [
-                  'id',
-                  'name',
-                  'type',
-                  'itemType',
-                  'imageUrl',
-                  'thumbnailUrl',
-                  'color',
-                ],
+                attributes: ['id', 'name', 'type', 'itemType', 'imageUrl', 'thumbnailUrl', 'color'],
               },
             ],
           },

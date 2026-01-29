@@ -6,10 +6,10 @@
 const { models } = require('../models');
 const _AssetService = require('./AssetService');
 const { v4: _uuidv4 } = require('uuid');
-const { 
-  shouldRequireIconHolder, 
+const {
+  shouldRequireIconHolder,
   getTextRoles,
-  getRoleMetadata 
+  getRoleMetadata,
 } = require('../constants/canonicalRoles');
 
 class CompositionService {
@@ -45,7 +45,7 @@ class CompositionService {
         assets,
         episodeId // ✅ Use UUID directly
       );
-      
+
       if (validationErrors.length > 0) {
         throw new Error(`Composition validation failed: ${validationErrors.join('; ')}`);
       }
@@ -110,7 +110,7 @@ class CompositionService {
           asset_id: assetId,
           layer_order: index,
         }));
-        
+
         if (compositionAssetRecords.length > 0) {
           await models.CompositionAsset.bulkCreate(compositionAssetRecords);
         }
@@ -158,7 +158,7 @@ class CompositionService {
       }
 
       const json = composition.toJSON();
-      
+
       // Get composition assets from junction table
       const compositionAssets = await models.CompositionAsset.findAll({
         where: { composition_id: compositionId },
@@ -270,10 +270,14 @@ class CompositionService {
           await composition.models.Episode.update({
             thumbnail_url: primaryOutput.image_url,
           });
-          console.log(`✅ Updated episode ${composition.episode_id} thumbnail_url to ${primaryOutput.image_url}`);
+          console.log(
+            `✅ Updated episode ${composition.episode_id} thumbnail_url to ${primaryOutput.image_url}`
+          );
         }
       } else {
-        console.log(`⚠️ No READY outputs available for composition ${compositionId}, episode thumbnail not updated`);
+        console.log(
+          `⚠️ No READY outputs available for composition ${compositionId}, episode thumbnail not updated`
+        );
       }
 
       return composition.toJSON();
@@ -436,7 +440,9 @@ class CompositionService {
    */
   async generateThumbnailsFromTemplateStudio(composition, selectedFormats) {
     try {
-      console.log(`🎨 Generating thumbnails from Template Studio for composition ${composition.id}`);
+      console.log(
+        `🎨 Generating thumbnails from Template Studio for composition ${composition.id}`
+      );
 
       const ThumbnailGeneratorService = require('./ThumbnailGeneratorService');
       const thumbnails = [];
@@ -459,26 +465,26 @@ class CompositionService {
       for (const format of formatsToGenerate) {
         try {
           console.log(`  📐 Generating ${format.name} (${format.width}×${format.height})...`);
-          
+
           const thumbnailBuffer = await ThumbnailGeneratorService.generateFromTemplateStudio(
-            composition, 
+            composition,
             format
           );
 
           if (thumbnailBuffer) {
             // Save to S3 or local storage
             const s3Key = `thumbnails/${composition.id}/${format.name.toLowerCase()}.png`;
-            
+
             // TODO: Upload to S3 in production
             // For now, just return the buffer
-            
+
             thumbnails.push({
               format: format.name,
               width: format.width,
               height: format.height,
               buffer: thumbnailBuffer,
               size: thumbnailBuffer.length,
-              s3_key: s3Key
+              s3_key: s3Key,
             });
 
             console.log(`  ✅ ${format.name} complete (${thumbnailBuffer.length} bytes)`);
@@ -493,7 +499,6 @@ class CompositionService {
 
       console.log(`✅ Generated ${thumbnails.length} thumbnails using Template Studio`);
       return thumbnails;
-
     } catch (error) {
       console.error('❌ Failed to generate thumbnails from Template Studio:', error);
       throw error;

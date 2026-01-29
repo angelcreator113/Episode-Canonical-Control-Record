@@ -19,14 +19,11 @@ const router = express.Router();
 router.get('/', async (req, res) => {
   try {
     const { showId } = req.query;
-    
+
     const whereClause = {};
     if (showId) {
       // Filter by show: either show-specific templates OR global templates (show_id IS NULL)
-      whereClause[Op.or] = [
-        { show_id: showId },
-        { show_id: null }
-      ];
+      whereClause[Op.or] = [{ show_id: showId }, { show_id: null }];
     }
 
     const templates = await ThumbnailTemplate.findAll({
@@ -58,7 +55,7 @@ router.get('/', async (req, res) => {
 router.get('/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     const template = await ThumbnailTemplate.findByPk(id);
 
     if (!template) {

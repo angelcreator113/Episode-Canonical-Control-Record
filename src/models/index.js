@@ -580,7 +580,6 @@ Episode.hasMany(EpisodeScene, {
   as: 'episodeScenes',
 });
 
-
 WardrobeLibrary.belongsToMany(WardrobeLibrary, {
   through: OutfitSetItems,
   foreignKey: 'wardrobe_item_id',

@@ -9,10 +9,11 @@ const Logger = require('./Logger');
 class ScriptsService {
   constructor() {
     // Use SSL for RDS connections (production and staging)
-    const useSSL = process.env.DB_SSL === 'true' || 
-                   process.env.NODE_ENV === 'production' || 
-                   process.env.NODE_ENV === 'staging';
-    
+    const useSSL =
+      process.env.DB_SSL === 'true' ||
+      process.env.NODE_ENV === 'production' ||
+      process.env.NODE_ENV === 'staging';
+
     this.pool = new Pool({
       connectionString: process.env.DATABASE_URL,
       ssl: useSSL ? { rejectUnauthorized: false } : false,

@@ -4,7 +4,7 @@ const { authenticate } = require('../middleware/auth');
 
 // Development: Skip auth if in development mode
 const isDevelopment = process.env.NODE_ENV === 'development';
-const authMiddleware = isDevelopment 
+const authMiddleware = isDevelopment
   ? (req, res, next) => {
       req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' };
       next();

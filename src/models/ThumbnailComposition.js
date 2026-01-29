@@ -115,21 +115,21 @@ module.exports = (sequelize) => {
   /**
    * Get visibility config for a role
    */
-  ThumbnailComposition.prototype.getRoleVisibility = function(role) {
+  ThumbnailComposition.prototype.getRoleVisibility = function (role) {
     return this.composition_config?.visibility?.[role] ?? null;
   };
 
   /**
    * Get text field value for a role
    */
-  ThumbnailComposition.prototype.getTextField = function(role) {
+  ThumbnailComposition.prototype.getTextField = function (role) {
     return this.composition_config?.text_fields?.[role] ?? null;
   };
 
   /**
    * Check if icon holder is required based on enabled icons
    */
-  ThumbnailComposition.prototype.requiresIconHolder = function() {
+  ThumbnailComposition.prototype.requiresIconHolder = function () {
     const { shouldRequireIconHolder } = require('../constants/canonicalRoles');
     return shouldRequireIconHolder(this.composition_config?.visibility || {});
   };
@@ -137,7 +137,7 @@ module.exports = (sequelize) => {
   /**
    * Validate composition config structure
    */
-  ThumbnailComposition.prototype.validateConfig = function() {
+  ThumbnailComposition.prototype.validateConfig = function () {
     const config = this.composition_config || {};
     const errors = [];
 

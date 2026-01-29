@@ -234,11 +234,12 @@ module.exports = (sequelize) => {
         afterFind: async (result) => {
           // Generate signed URLs for S3 assets
           const S3Service = require('../services/S3Service');
-          const BUCKET_NAME = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
-          
+          const BUCKET_NAME =
+            process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+
           const generateSignedUrls = async (scene) => {
             if (!scene) return;
-            
+
             // Generate signed URL for thumbnail (7 days expiry)
             if (scene.thumbnail_url && scene.thumbnail_url.startsWith('shows/')) {
               try {
@@ -251,7 +252,7 @@ module.exports = (sequelize) => {
                 console.error('Failed to generate signed URL for thumbnail:', error);
               }
             }
-            
+
             // Generate signed URL for video (7 days expiry)
             if (scene.video_asset_url && scene.video_asset_url.startsWith('shows/')) {
               try {
@@ -265,7 +266,7 @@ module.exports = (sequelize) => {
               }
             }
           };
-          
+
           // Handle both single result and array of results
           if (Array.isArray(result)) {
             await Promise.all(result.map(generateSignedUrls));

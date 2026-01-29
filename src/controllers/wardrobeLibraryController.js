@@ -118,7 +118,7 @@ module.exports = {
     try {
       // Use raw query to ensure we're querying the actual table
       const { sequelize } = require('../models');
-      
+
       const [results] = await sequelize.query(`
         SELECT 
           COUNT(*) FILTER (WHERE deleted_at IS NULL) as total,
@@ -881,8 +881,17 @@ module.exports = {
         ],
         attributes: [
           'showId',
-          [models.sequelize.fn('COUNT', models.sequelize.col('WardrobeUsageHistory.id')), 'usageCount'],
-          [models.sequelize.fn('COUNT', models.sequelize.fn('DISTINCT', models.sequelize.col('episode_id'))), 'episodeCount'],
+          [
+            models.sequelize.fn('COUNT', models.sequelize.col('WardrobeUsageHistory.id')),
+            'usageCount',
+          ],
+          [
+            models.sequelize.fn(
+              'COUNT',
+              models.sequelize.fn('DISTINCT', models.sequelize.col('episode_id'))
+            ),
+            'episodeCount',
+          ],
         ],
         group: ['showId', 'show.id', 'show.name'],
         raw: false,
@@ -941,7 +950,10 @@ module.exports = {
       const timeline = await WardrobeUsageHistory.findAll({
         where: { libraryItemId: id },
         attributes: [
-          [models.sequelize.fn('TO_CHAR', models.sequelize.col('created_at'), dateFormat), 'period'],
+          [
+            models.sequelize.fn('TO_CHAR', models.sequelize.col('created_at'), dateFormat),
+            'period',
+          ],
           [models.sequelize.fn('COUNT', models.sequelize.col('id')), 'usageCount'],
           [
             models.sequelize.fn(
@@ -952,7 +964,9 @@ module.exports = {
           ],
         ],
         group: [models.sequelize.fn('TO_CHAR', models.sequelize.col('created_at'), dateFormat)],
-        order: [[models.sequelize.fn('TO_CHAR', models.sequelize.col('created_at'), dateFormat), 'ASC']],
+        order: [
+          [models.sequelize.fn('TO_CHAR', models.sequelize.col('created_at'), dateFormat), 'ASC'],
+        ],
         raw: true,
       });
 
@@ -1127,8 +1141,9 @@ module.exports = {
             { description: { [Op.iLike]: `%${query}%` } },
           ];
         }
-        
-        const sortColumn = sortBy === 'usage' ? 'totalUsageCount' : sortBy === 'date' ? 'createdAt' : 'name';
+
+        const sortColumn =
+          sortBy === 'usage' ? 'totalUsageCount' : sortBy === 'date' ? 'createdAt' : 'name';
         orderClause = [[sortColumn, order.toUpperCase()]];
       }
 
@@ -1255,9 +1270,7 @@ module.exports = {
       // Fuzzy name match (similarity > 0.7)
       if (name) {
         orConditions.push(
-          models.sequelize.literal(
-            `similarity(name, ${models.sequelize.escape(name)}) > 0.7`
-          )
+          models.sequelize.literal(`similarity(name, ${models.sequelize.escape(name)}) > 0.7`)
         );
       }
 
@@ -1282,13 +1295,18 @@ module.exports = {
           'createdAt',
           'createdBy',
           [
-            models.sequelize.literal(
-              `similarity(name, ${models.sequelize.escape(name || '')})`
-            ),
+            models.sequelize.literal(`similarity(name, ${models.sequelize.escape(name || '')})`),
             'nameSimilarity',
           ],
         ],
-        order: [[models.sequelize.literal('similarity(name, ' + models.sequelize.escape(name || '') + ')'), 'DESC']],
+        order: [
+          [
+            models.sequelize.literal(
+              'similarity(name, ' + models.sequelize.escape(name || '') + ')'
+            ),
+            'DESC',
+          ],
+        ],
         limit: 10,
       });
 

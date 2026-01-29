@@ -40,7 +40,7 @@ const BUCKET_NAME =
  */
 const getAssetGroupFromRole = (assetRole) => {
   if (!assetRole) return null;
-  
+
   if (assetRole.startsWith('CHAR.HOST.LALA')) return 'LALA';
   if (assetRole.startsWith('CHAR.HOST.JUSTAWOMANINHERPRIME')) return 'SHOW';
   if (assetRole.startsWith('CHAR.HOST')) return 'LALA'; // Default host to LALA
@@ -50,7 +50,7 @@ const getAssetGroupFromRole = (assetRole) => {
   if (assetRole.startsWith('BRAND.') || assetRole.startsWith('UI.ICON')) return 'SHOW'; // Other branding
   if (assetRole.startsWith('TEXT.')) return 'EPISODE'; // Text overlays
   if (assetRole.startsWith('WARDROBE.')) return 'WARDROBE';
-  
+
   return 'EPISODE'; // Default fallback
 };
 
@@ -265,15 +265,15 @@ class AssetService {
 
       // Get smart defaults based on asset_type
       const orgDefaults = getAssetOrganizationDefaults(assetType);
-      
+
       // Override asset_group if assetRole is provided (role is more specific than type)
       const assetGroup = assetRole ? getAssetGroupFromRole(assetRole) : orgDefaults.asset_group;
-      
+
       console.log('📁 Asset folder assignment:', {
         assetRole,
         assetType,
         derivedGroup: assetGroup,
-        defaultGroup: orgDefaults.asset_group
+        defaultGroup: orgDefaults.asset_group,
       });
 
       // Create database record with new schema

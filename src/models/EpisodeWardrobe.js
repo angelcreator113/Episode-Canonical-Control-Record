@@ -125,7 +125,7 @@ module.exports = (sequelize) => {
 
     EpisodeWardrobe.belongsTo(models.Scene, {
       foreignKey: 'scene_id',
-      as: 'sceneDetails',  // Use different alias to avoid collision with 'scene' attribute
+      as: 'sceneDetails', // Use different alias to avoid collision with 'scene' attribute
     });
   };
 

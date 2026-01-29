@@ -274,7 +274,7 @@ router.get('/by-folder', async (req, res) => {
       approvalStatus,
     });
 
-    const folderList = folders.split(',').map(f => f.trim());
+    const folderList = folders.split(',').map((f) => f.trim());
 
     // Build where clause
     const { Op } = require('sequelize');
@@ -655,7 +655,7 @@ router.post('/', upload.single('file'), validateAssetUpload, async (req, res) =>
       assetType,
       assetRole,
       metadata,
-      allBodyFields: Object.keys(req.body)
+      allBodyFields: Object.keys(req.body),
     });
 
     if (!assetType) {
@@ -711,7 +711,7 @@ router.post('/', upload.single('file'), validateAssetUpload, async (req, res) =>
       name: asset.name,
       asset_type: asset.asset_type,
       asset_role: asset.asset_role,
-      wasRoleProvided: !!assetRole
+      wasRoleProvided: !!assetRole,
     });
 
     res.status(201).json({
@@ -1049,13 +1049,14 @@ router.post('/process', async (req, res) => {
 
     // Check cache first
     const AssetProcessingService = require('../services/AssetProcessingService');
-    const processingType = Object.entries(processing)
-      .filter(([_, enabled]) => enabled)
-      .map(([key]) => key)
-      .join('-') || 'processed';
-    
+    const processingType =
+      Object.entries(processing)
+        .filter(([_, enabled]) => enabled)
+        .map(([key]) => key)
+        .join('-') || 'processed';
+
     const cached = await AssetProcessingService.checkCache(template_id, asset_id, processingType);
-    
+
     if (cached) {
       console.log('✅ Using cached processed asset:', cached);
       return res.json({
@@ -1069,9 +1070,10 @@ router.post('/process', async (req, res) => {
     }
 
     // Process the asset
-    const assetUrl = asset.s3_url_raw || asset.s3_bucket && asset.s3_key 
-      ? `https://${asset.s3_bucket}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${asset.s3_key}`
-      : null;
+    const assetUrl =
+      asset.s3_url_raw || (asset.s3_bucket && asset.s3_key)
+        ? `https://${asset.s3_bucket}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${asset.s3_key}`
+        : null;
 
     if (!assetUrl) {
       return res.status(400).json({
