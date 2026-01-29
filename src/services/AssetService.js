@@ -1047,7 +1047,7 @@ class AssetService {
         query,
         assetType,
         mediaType,
-        labelIds,
+        labelIds: _labelIds,
         approvalStatus = 'APPROVED',
         sortBy = 'created_at',
         sortOrder = 'DESC',

@@ -2,7 +2,6 @@ const express = require('express');
 const router = express.Router();
 const scriptsController = require('../controllers/scriptsController');
 const { asyncHandler } = require('../middleware/errorHandler');
-const { validateUUIDParam } = require('../middleware/requestValidation');
 
 /**
  * Scripts Routes

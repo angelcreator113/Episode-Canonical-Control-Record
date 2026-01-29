@@ -135,13 +135,15 @@ router.post('/', async (req, res) => {
 
     const {
       episode_id,
-      template_id,
+      template_id: provided_template_id,
       template_studio_id,
       assets,
       selected_formats,
       composition_config,
       asset_map,
     } = req.body;
+
+    let template_id = provided_template_id;
 
     // LEGACY SUPPORT: Handle old format with individual asset fields
     const {
@@ -307,7 +309,7 @@ router.post('/', async (req, res) => {
 
       // Create composition_assets records for each role
       const compositionAssetRecords = Object.entries(assetData)
-        .filter(([role, assetId]) => assetId && typeof assetId === 'string') // Only real asset IDs, not text values
+        .filter(([_role, assetId]) => assetId && typeof assetId === 'string') // Only real asset IDs, not text values
         .map(([role, assetId]) => ({
           composition_id: composition.id,
           asset_id: assetId,

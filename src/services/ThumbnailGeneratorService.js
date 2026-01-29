@@ -361,7 +361,7 @@ class ThumbnailGeneratorService {
    * @param {Object} format - Format specification
    * @returns {Promise<Buffer>} - Generated thumbnail buffer
    */
-  async generateFromTemplateStudio(composition, format) {
+  async generateFromTemplateStudio(composition, _format) {
     try {
       console.log(`🎨 Generating thumbnail using Template Studio (composition: ${composition.id})`);
 
@@ -443,7 +443,7 @@ class ThumbnailGeneratorService {
       const composites = [];
 
       for (const slot of roleSlots) {
-        const { role, position, z_index, conditional_rules, visible_by_default, text_style } = slot;
+        const { role, position, conditional_rules, visible_by_default, text_style } = slot;
 
         // Check conditional visibility
         if (conditional_rules?.show_if) {

@@ -68,6 +68,7 @@ class CompositionService {
         const frameAsset = await models.Asset.findByPk(background_frame_asset_id);
         if (!frameAsset) throw new Error('Background frame not found');
       }
+      let justawomanAsset;
       if (include_justawomaninherprime && justawomen_asset_id) {
         justawomanAsset = await models.Asset.findByPk(justawomen_asset_id);
         if (!justawomanAsset) throw new Error('JustAWoman asset not found');
@@ -103,7 +104,6 @@ class CompositionService {
 
       // NEW: Create CompositionAsset junction records for role-based assets
       if (assets && typeof assets === 'object') {
-        const { CompositionAsset } = models;
         const compositionAssetRecords = Object.entries(assets).map(([role, assetId], index) => ({
           composition_id: composition.id,
           asset_role: role,
