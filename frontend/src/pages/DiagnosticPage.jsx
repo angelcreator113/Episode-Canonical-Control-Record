@@ -79,8 +79,7 @@ const DiagnosticPage = () => {
       { name: '👔 List Wardrobe Library', url: `${API_URL}/wardrobe-library?limit=5`, method: 'GET' },
       
       // Scene Library
-      { name: '🎬 Scene Library Stats', url: `${API_URL}/scene-library/stats`, method: 'GET' },
-      { name: '🎥 List Scene Library', url: `${API_URL}/scene-library?limit=5`, method: 'GET' },
+      { name: ' List Scene Library', url: `${API_URL}/scene-library?limit=5`, method: 'GET' },
       
       // Templates
       { name: '🎨 List Templates', url: `${API_URL}/templates?limit=5`, method: 'GET' },
