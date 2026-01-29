@@ -48,6 +48,10 @@ module.exports = (sequelize) => {
         type: DataTypes.UUID,
         allowNull: true,
       },
+      justawomaninherprime_asset_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+      },
       selected_formats: {
         type: DataTypes.JSONB,
         allowNull: true,

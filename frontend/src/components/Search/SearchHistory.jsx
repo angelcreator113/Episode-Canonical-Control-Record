@@ -23,7 +23,7 @@ export default function SearchHistory({ onQueryClick }) {
       }
 
       const response = await fetch(
-        'http://localhost:3002/api/v1/search/history?limit=10',
+        '/api/v1/search/history?limit=10',
         {
           headers: { 
             'Authorization': `Bearer ${token}`,
@@ -62,7 +62,7 @@ export default function SearchHistory({ onQueryClick }) {
       }
 
       const response = await fetch(
-        'http://localhost:3002/api/v1/search/history',
+        '/api/v1/search/history',
         {
           method: 'DELETE',
           headers: { 

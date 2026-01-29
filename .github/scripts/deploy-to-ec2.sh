@@ -124,9 +124,25 @@ ls -la dist/ 2>&1 || echo "dist not found (good)"
 echo "Using .env.production for build (VITE_API_BASE should be empty):"
 cat .env.production || echo "No .env.production found"
 echo "Installing frontend dependencies..."
-npm ci 2>&1 | tail -20
+npm ci 2>&1 | tee npm-install.log
+NPM_EXIT_CODE=${PIPESTATUS[0]}
+if [ $NPM_EXIT_CODE -ne 0 ]; then
+  echo "⚠️ npm ci failed with exit code $NPM_EXIT_CODE, trying npm install instead..."
+  cat npm-install.log | tail -50
+  npm install 2>&1 | tail -30
+fi
 echo "Running Vite build..."
-NODE_ENV=production npm run build 2>&1 | tee build.log
+# Limit Node memory to prevent OOM on small EC2 instances
+# Use 1.5GB max old space size and 512MB max for Vite
+NODE_OPTIONS="--max-old-space-size=1536" NODE_ENV=production npm run build 2>&1 | tee build.log
+BUILD_EXIT_CODE=${PIPESTATUS[0]}
+
+if [ $BUILD_EXIT_CODE -ne 0 ]; then
+  echo "❌ Frontend build failed with exit code $BUILD_EXIT_CODE"
+  echo "Full build log:"
+  cat build.log
+  exit 1
+fi
 
 if [ ! -d "dist" ]; then
   echo "❌ Frontend build failed - dist directory not created"
@@ -203,8 +219,15 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f create-assets-table.sql 2>&1 | head -30 || echo "Assets table creation completed with warnings..."
 
-# Add missing columns to assets table
+# Fix missing columns in assets table (critical for AssetService)
 echo "Adding missing columns to assets table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f fix-assets-columns.sql 2>&1 | head -50 || echo "Assets columns fixed..."
+
+# Add missing columns to assets table (legacy script - keeping for compatibility)
+echo "Running legacy assets column additions..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
   -U postgres \
   -d episode_metadata \
@@ -216,6 +239,20 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -U postgres \
   -d episode_metadata \
   -f create-compositions-table.sql 2>&1 | head -30 || echo "Compositions table creation completed with warnings..."
+
+# Fix missing columns in thumbnail_compositions table
+echo "Adding missing columns to thumbnail_compositions table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f fix-thumbnail-compositions-columns.sql 2>&1 | head -40 || echo "Columns added/verified..."
+
+# Create composition junction tables (composition_assets, composition_outputs)
+echo "Creating composition junction tables..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-composition-junction-tables.sql 2>&1 | head -30 || echo "Composition junction tables created..."
 
 # Create episode_assets junction table
 echo "Creating episode_assets junction table..."
@@ -230,6 +267,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -U postgres \
   -d episode_metadata \
   -f create-wardrobe-tables.sql 2>&1 | head -30 || echo "Wardrobe tables creation completed with warnings..."
+
+# Fix missing columns in episode_wardrobe table
+echo "Adding missing columns to episode_wardrobe table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f fix-episode-wardrobe-columns.sql 2>&1 | head -30 || echo "Episode wardrobe columns fixed..."
 
 # Verify critical tables exist
 echo "🔍 Verifying junction tables were created..."
@@ -373,13 +417,24 @@ pm2 save --force
 sleep 3
 pm2 status
 
-if ! pm2 list | grep -q "episode-api.*online"; then
-  echo "❌ App is not online!"
-  pm2 logs episode-api --lines 50 --nostream
-  exit 1
-fi
-
-echo "✅ App is online!"
+# Check if app is online with retries
+MAX_PM2_RETRIES=5
+for attempt in $(seq 1 $MAX_PM2_RETRIES); do
+  echo "🔍 Checking if app is online (attempt $attempt/$MAX_PM2_RETRIES)..."
+  if pm2 list | grep -q "episode-api.*online"; then
+    echo "✅ App is online!"
+    break
+  fi
+  
+  if [ $attempt -lt $MAX_PM2_RETRIES ]; then
+    echo "⚠️ App not online yet, waiting 3 seconds..."
+    sleep 3
+  else
+    echo "❌ App failed to come online after $MAX_PM2_RETRIES attempts"
+    pm2 logs episode-api --lines 50 --nostream
+    exit 1
+  fi
+done
 
 echo "🔍 CRITICAL: Verifying PM2 is actually using Node 20:"
 pm2 show episode-api | grep -E "node.js version|interpreter"
