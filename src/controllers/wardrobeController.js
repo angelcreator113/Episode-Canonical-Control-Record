@@ -392,7 +392,7 @@ module.exports = {
 
       // Query episode_wardrobe junction table directly
       const wardrobeLinks = await sequelize.query(
-        `SELECT ew.wardrobe_id, ew.scene, ew.worn_at, ew.notes,
+        `SELECT ew.wardrobe_id, ew.scene_id, ew.worn_at, ew.notes,
                 w.id, w.name, w.character, w.clothing_category, 
                 w.s3_url, w.s3_url_processed, w.thumbnail_url, 
                 w.color, w.season, w.is_favorite, w.created_at

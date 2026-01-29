@@ -99,13 +99,10 @@ const development = {
   // Enable SSL for AWS RDS in development
   dialectOptions: {
     ...baseConfig.dialectOptions,
-    ssl:
-      process.env.DB_SSL === 'true'
-        ? {
-            require: true,
-            rejectUnauthorized: false,
-          }
-        : false,
+    ssl: process.env.DB_SSL === 'true' ? {
+      require: true,
+      rejectUnauthorized: false,
+    } : false,
   },
 };
 
