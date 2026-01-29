@@ -47,6 +47,10 @@ Thumbs.db
 tmp/
 temp/
 
+# Large binary files
+bin/ffmpeg.exe
+bin/*.exe
+
 # Docker
 .docker/
 docker-compose.override.yml
