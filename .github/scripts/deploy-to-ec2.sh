@@ -266,6 +266,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f create-wardrobe-tables.sql 2>&1 | head -30 || echo "Wardrobe tables creation completed with warnings..."
 
+# Fix missing columns in episode_wardrobe table
+echo "Adding missing columns to episode_wardrobe table..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f fix-episode-wardrobe-columns.sql 2>&1 | head -30 || echo "Episode wardrobe columns fixed..."
+
 # Verify critical tables exist
 echo "🔍 Verifying junction tables were created..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
