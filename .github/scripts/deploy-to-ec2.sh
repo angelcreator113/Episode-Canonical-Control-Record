@@ -238,6 +238,13 @@ PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.
   -d episode_metadata \
   -f fix-thumbnail-compositions-columns.sql 2>&1 | head -40 || echo "Columns added/verified..."
 
+# Create composition junction tables (composition_assets, composition_outputs)
+echo "Creating composition junction tables..."
+PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
+  -U postgres \
+  -d episode_metadata \
+  -f create-composition-junction-tables.sql 2>&1 | head -30 || echo "Composition junction tables created..."
+
 # Create episode_assets junction table
 echo "Creating episode_assets junction table..."
 PGPASSWORD="Ayanna123!!" psql -h episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com \
