@@ -963,9 +963,6 @@ function TemplateDesigner() {
               height={canvasHeight}
               scaleX={canvasScale}
               scaleY={canvasScale}
-              width={canvasWidth}
-              height={canvasHeight}
-              ref={stageRef}
               onClick={(e) => {
                 if (e.target === e.target.getStage()) {
                   setSelectedSlotId(null);

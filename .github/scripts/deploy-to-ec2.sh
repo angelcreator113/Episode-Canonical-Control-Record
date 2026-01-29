@@ -132,7 +132,9 @@ if [ $NPM_EXIT_CODE -ne 0 ]; then
   npm install 2>&1 | tail -30
 fi
 echo "Running Vite build..."
-NODE_ENV=production npm run build 2>&1 | tee build.log
+# Limit Node memory to prevent OOM on small EC2 instances
+# Use 1.5GB max old space size and 512MB max for Vite
+NODE_OPTIONS="--max-old-space-size=1536" NODE_ENV=production npm run build 2>&1 | tee build.log
 BUILD_EXIT_CODE=${PIPESTATUS[0]}
 
 if [ $BUILD_EXIT_CODE -ne 0 ]; then
