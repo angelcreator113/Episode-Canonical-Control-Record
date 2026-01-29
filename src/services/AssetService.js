@@ -35,6 +35,26 @@ const BUCKET_NAME =
   process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'episode-metadata-assets-dev';
 
 /**
+ * Map asset_role to asset_group folder
+ * This determines which folder/tab the asset appears in
+ */
+const getAssetGroupFromRole = (assetRole) => {
+  if (!assetRole) return null;
+  
+  if (assetRole.startsWith('CHAR.HOST.LALA')) return 'LALA';
+  if (assetRole.startsWith('CHAR.HOST.JUSTAWOMANINHERPRIME')) return 'SHOW';
+  if (assetRole.startsWith('CHAR.HOST')) return 'LALA'; // Default host to LALA
+  if (assetRole.startsWith('CHAR.GUEST') || assetRole.startsWith('GUEST')) return 'GUEST';
+  if (assetRole.startsWith('BG.')) return 'EPISODE'; // Backgrounds
+  if (assetRole.startsWith('BRAND.SHOW') || assetRole.startsWith('UI.ICON.SHOW')) return 'SHOW'; // Show branding/icons
+  if (assetRole.startsWith('BRAND.') || assetRole.startsWith('UI.ICON')) return 'SHOW'; // Other branding
+  if (assetRole.startsWith('TEXT.')) return 'EPISODE'; // Text overlays
+  if (assetRole.startsWith('WARDROBE.')) return 'WARDROBE';
+  
+  return 'EPISODE'; // Default fallback
+};
+
+/**
  * Map asset_type to smart defaults for asset_group, purpose, and allowed_uses
  */
 const getAssetOrganizationDefaults = (assetType) => {
@@ -110,11 +130,12 @@ class AssetService {
    * Upload asset to S3 and create database record
    * @param {Object} file - Multer file object
    * @param {String} assetType - Asset type enum
+   * @param {String} assetRole - Asset role (e.g., BG.MAIN, CHAR.HOST.PRIMARY)
    * @param {Object} metadata - Additional metadata
    * @param {String} uploadedBy - User ID
    * @returns {Object} Created asset with URLs
    */
-  async uploadAsset(file, assetType, metadata, uploadedBy) {
+  async uploadAsset(file, assetType, assetRole, metadata, uploadedBy) {
     try {
       // Validate asset type
       const validTypes = [
@@ -123,6 +144,7 @@ class AssetService {
         'PROMO_GUEST',
         'BRAND_LOGO',
         'EPISODE_FRAME',
+        'BACKGROUND_IMAGE',
         'PROMO_VIDEO',
         'EPISODE_VIDEO',
         'BACKGROUND_VIDEO',
@@ -142,6 +164,7 @@ class AssetService {
         PROMO_GUEST: 'promotional/guests/raw',
         BRAND_LOGO: 'promotional/brands',
         EPISODE_FRAME: 'thumbnails/auto',
+        BACKGROUND_IMAGE: 'backgrounds/images',
         PROMO_VIDEO: 'promotional/videos',
         EPISODE_VIDEO: 'episodes/videos',
         BACKGROUND_VIDEO: 'backgrounds/videos',
@@ -242,16 +265,30 @@ class AssetService {
 
       // Get smart defaults based on asset_type
       const orgDefaults = getAssetOrganizationDefaults(assetType);
+      
+      // Override asset_group if assetRole is provided (role is more specific than type)
+      const assetGroup = assetRole ? getAssetGroupFromRole(assetRole) : orgDefaults.asset_group;
+      
+      console.log('📁 Asset folder assignment:', {
+        assetRole,
+        assetType,
+        derivedGroup: assetGroup,
+        defaultGroup: orgDefaults.asset_group
+      });
 
       // Create database record with new schema
       const asset = await Asset.create({
         id: assetId,
         name: file.originalname || `${assetType}-${timestamp}`,
         asset_type: assetType,
+        asset_role: assetRole || null,
         approval_status: 'APPROVED', // Auto-approve for now
 
         // Asset organization fields (new)
-        asset_group: orgDefaults.asset_group,
+        asset_group: assetGroup,
+        asset_scope: orgDefaults.is_global ? 'GLOBAL' : 'EPISODE',
+        show_id: null,
+        episode_id: metadata?.episodeId || null,
         purpose: orgDefaults.purpose,
         allowed_uses: orgDefaults.allowed_uses,
         is_global: orgDefaults.is_global,
@@ -320,11 +357,12 @@ class AssetService {
       const assets = await Asset.findAll({
         where,
         order: [['created_at', 'DESC']],
+        paranoid: true, // Exclude soft-deleted assets
         raw: false,
       });
 
       console.log(
-        `✅ AssetService: Found ${assets.length} approved assets (type: ${assetType || 'all'})`
+        `✅ AssetService: Found ${assets.length} approved assets (type: ${assetType || 'all'}), excluding deleted`
       );
 
       return assets.map((asset) => this._formatAssetForFrontend(asset));
@@ -442,6 +480,7 @@ class AssetService {
           approval_status: 'PENDING',
         },
         order: [['created_at', 'ASC']],
+        paranoid: true, // Exclude soft-deleted assets
         raw: true,
       });
 
@@ -1034,6 +1073,7 @@ class AssetService {
       const assets = await Asset.findAll({
         where,
         order: [[sortBy, sortOrder]],
+        paranoid: true, // Exclude soft-deleted assets
         limit,
       });
 

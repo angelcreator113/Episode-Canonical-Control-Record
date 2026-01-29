@@ -184,15 +184,21 @@ router.post('/test-token', async (req, res) => {
 /**
  * POST /api/v1/auth/logout
  * Logout user by revoking token
+ * Note: Does not require authentication so users can logout with expired tokens
  */
-router.post('/logout', authenticateJWT, (req, res) => {
+router.post('/logout', (req, res) => {
   try {
     const { authorization } = req.headers;
 
     if (authorization) {
       const token = authorization.split(' ')[1];
-      // Revoke the token
-      TokenService.revokeToken(token);
+      // Revoke the token (even if expired)
+      try {
+        TokenService.revokeToken(token);
+      } catch (err) {
+        // Token might be invalid/expired, but that's okay for logout
+        console.log('Token revocation skipped (invalid token):', err.message);
+      }
     }
 
     // Clear refresh token cookie if set

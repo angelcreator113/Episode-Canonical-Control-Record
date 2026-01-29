@@ -198,4 +198,51 @@ router.get(
   asyncHandler(scriptsController.getScriptVersions)
 );
 
+/**
+ * Episode Scene Library Management
+ * New routes for scene library integration
+ */
+
+// GET /api/v1/episodes/:id/library-scenes - List scenes from library assigned to episode
+router.get(
+  '/:id/library-scenes',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.listEpisodeScenes)
+);
+
+// POST /api/v1/episodes/:id/library-scenes - Add scene from library to episode
+router.post(
+  '/:id/library-scenes',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.addSceneToEpisode)
+);
+
+// PUT /api/v1/episodes/:id/library-scenes/:sceneId - Update episode scene (trim, notes, order)
+router.put(
+  '/:id/library-scenes/:sceneId',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.updateEpisodeScene)
+);
+
+// DELETE /api/v1/episodes/:id/library-scenes/:sceneId - Remove scene from episode
+router.delete(
+  '/:id/library-scenes/:sceneId',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.removeSceneFromEpisode)
+);
+
+// PUT /api/v1/episodes/:id/sequence-items/reorder - Batch reorder sequence items
+router.put(
+  '/:id/sequence-items/reorder',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.reorderSequenceItems)
+);
+
+// POST /api/v1/episodes/:id/sequence-items/note - Add a note to the sequence
+router.post(
+  '/:id/sequence-items/note',
+  validateUUIDParam('id'),
+  asyncHandler(episodeController.addNoteToEpisode)
+);
+
 module.exports = router;

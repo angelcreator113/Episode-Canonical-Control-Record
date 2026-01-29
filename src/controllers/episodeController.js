@@ -672,7 +672,11 @@ module.exports = {
           a.id,
           a.name,
           a.asset_type,
+          a.asset_role,
           a.asset_group,
+          a.asset_scope,
+          a.show_id,
+          a.episode_id,
           a.purpose,
           a.allowed_uses,
           a.is_global,
@@ -877,6 +881,463 @@ module.exports = {
       console.error('❌ Error updating episode asset:', error);
       res.status(500).json({
         error: 'Failed to update episode asset',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * GET /episodes/:id/scenes - List episode scenes
+   */
+  async listEpisodeScenes(req, res) {
+    try {
+      const { id } = req.params;
+      const { SceneLibrary, EpisodeScene } = models;
+      const S3Service = require('../services/S3Service');
+      const BUCKET_NAME = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+
+      // Verify episode exists
+      const episode = await Episode.findByPk(id);
+      if (!episode) {
+        return res.status(404).json({ error: 'Episode not found' });
+      }
+
+      // Get all scenes for this episode with library data
+      const episodeScenes = await EpisodeScene.findAll({
+        where: { episode_id: id },
+        include: [
+          {
+            model: SceneLibrary,
+            as: 'libraryScene',
+            required: false, // Allow notes without library scenes
+            attributes: [
+              'id',
+              'title',
+              'description',
+              'video_asset_url',
+              'thumbnail_url',
+              'duration_seconds',
+              'resolution',
+              'characters',
+              'tags',
+              'processing_status',
+            ],
+          },
+        ],
+        order: [['scene_order', 'ASC']],
+      });
+
+      // Calculate stats
+      let readyDuration = 0;
+      let processingDuration = 0;
+      let readyCount = 0;
+      let processingCount = 0;
+
+      // Generate signed URLs and calculate stats
+      for (const episodeScene of episodeScenes) {
+        const effectiveDuration = episodeScene.effectiveDuration || 0;
+        const clipStatus = episodeScene.clipStatus;
+
+        if (clipStatus === 'ready') {
+          readyDuration += effectiveDuration;
+          readyCount++;
+        } else if (clipStatus === 'processing' || clipStatus === 'uploading') {
+          processingDuration += effectiveDuration;
+          processingCount++;
+        }
+
+        if (episodeScene.libraryScene) {
+          const scene = episodeScene.libraryScene;
+          
+          // Generate signed URL for thumbnail (7 days expiry)
+          if (scene.thumbnail_url && scene.thumbnail_url.startsWith('shows/')) {
+            try {
+              scene.thumbnail_url = await S3Service.getPreSignedUrl(
+                BUCKET_NAME,
+                scene.thumbnail_url,
+                604800 // 7 days
+              );
+            } catch (error) {
+              console.error('Failed to generate signed URL for thumbnail:', error);
+            }
+          }
+          
+          // Generate signed URL for video (7 days expiry)
+          if (scene.video_asset_url && scene.video_asset_url.startsWith('shows/')) {
+            try {
+              scene.video_asset_url = await S3Service.getPreSignedUrl(
+                BUCKET_NAME,
+                scene.video_asset_url,
+                604800 // 7 days
+              );
+            } catch (error) {
+              console.error('Failed to generate signed URL for video:', error);
+            }
+          }
+        }
+      }
+
+      res.json({
+        episode_id: id,
+        total: episodeScenes.length,
+        data: episodeScenes,
+        stats: {
+          totalClips: episodeScenes.length,
+          readyClips: readyCount,
+          processingClips: processingCount,
+          readyDuration: Math.round(readyDuration),
+          processingDuration: Math.round(processingDuration),
+          totalDuration: Math.round(readyDuration + processingDuration),
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error listing episode scenes:', error);
+      res.status(500).json({
+        error: 'Failed to list episode scenes',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * PUT /episodes/:id/sequence-items/reorder - Batch reorder sequence items
+   */
+  async reorderSequenceItems(req, res) {
+    try {
+      const { id } = req.params;
+      const { itemIds } = req.body;
+      const { EpisodeScene } = models;
+
+      // Validate input
+      if (!Array.isArray(itemIds) || itemIds.length === 0) {
+        return res.status(400).json({ error: 'itemIds must be a non-empty array' });
+      }
+
+      // Verify episode exists
+      const episode = await Episode.findByPk(id);
+      if (!episode) {
+        return res.status(404).json({ error: 'Episode not found' });
+      }
+
+      // Verify all items belong to this episode
+      const items = await EpisodeScene.findAll({
+        where: {
+          id: itemIds,
+          episode_id: id,
+        },
+      });
+
+      if (items.length !== itemIds.length) {
+        return res.status(400).json({ error: 'Some items do not belong to this episode' });
+      }
+
+      // Use transaction for atomic update
+      const sequelize = require('../models').sequelize;
+      await sequelize.transaction(async (t) => {
+        // Update scene_order for each item
+        for (let i = 0; i < itemIds.length; i++) {
+          await EpisodeScene.update(
+            { 
+              scene_order: i + 1,
+              last_edited_at: new Date(),
+            },
+            {
+              where: { id: itemIds[i] },
+              transaction: t,
+            }
+          );
+        }
+      });
+
+      // Fetch updated data with stats
+      const S3Service = require('../services/S3Service');
+      const BUCKET_NAME = process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
+
+      const updatedScenes = await EpisodeScene.findAll({
+        where: { episode_id: id },
+        include: [
+          {
+            model: models.SceneLibrary,
+            as: 'libraryScene',
+            required: false,
+          },
+        ],
+        order: [['scene_order', 'ASC']],
+      });
+
+      // Generate signed URLs and calculate stats
+      let readyDuration = 0;
+      let processingDuration = 0;
+      let readyCount = 0;
+      let processingCount = 0;
+
+      for (const scene of updatedScenes) {
+        const effectiveDuration = scene.effectiveDuration || 0;
+        const clipStatus = scene.clipStatus;
+
+        if (clipStatus === 'ready') {
+          readyDuration += effectiveDuration;
+          readyCount++;
+        } else if (clipStatus === 'processing' || clipStatus === 'uploading') {
+          processingDuration += effectiveDuration;
+          processingCount++;
+        }
+
+        if (scene.libraryScene) {
+          const libScene = scene.libraryScene;
+          if (libScene.thumbnail_url?.startsWith('shows/')) {
+            try {
+              libScene.thumbnail_url = await S3Service.getPreSignedUrl(BUCKET_NAME, libScene.thumbnail_url, 604800);
+            } catch (err) {
+              console.error('Failed to sign thumbnail URL:', err);
+            }
+          }
+          if (libScene.video_asset_url?.startsWith('shows/')) {
+            try {
+              libScene.video_asset_url = await S3Service.getPreSignedUrl(BUCKET_NAME, libScene.video_asset_url, 604800);
+            } catch (err) {
+              console.error('Failed to sign video URL:', err);
+            }
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        message: 'Sequence items reordered successfully',
+        data: updatedScenes,
+        stats: {
+          totalClips: updatedScenes.length,
+          readyClips: readyCount,
+          processingClips: processingCount,
+          readyDuration: Math.round(readyDuration),
+          processingDuration: Math.round(processingDuration),
+          totalDuration: Math.round(readyDuration + processingDuration),
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error reordering sequence items:', error);
+      res.status(500).json({
+        error: 'Failed to reorder sequence items',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * POST /episodes/:id/sequence-items/note - Add a note to the sequence
+   */
+  async addNoteToEpisode(req, res) {
+    try {
+      const { id } = req.params;
+      const { title, noteText, manualDurationSeconds, position } = req.body;
+      const { EpisodeScene } = models;
+
+      // Validate input
+      if (!noteText || noteText.trim().length === 0) {
+        return res.status(400).json({ error: 'noteText is required' });
+      }
+
+      // Verify episode exists
+      const episode = await Episode.findByPk(id);
+      if (!episode) {
+        return res.status(404).json({ error: 'Episode not found' });
+      }
+
+      // Get current max scene_order
+      const maxOrderScene = await EpisodeScene.findOne({
+        where: { episode_id: id },
+        order: [['scene_order', 'DESC']],
+      });
+
+      const nextOrder = maxOrderScene ? maxOrderScene.scene_order + 1 : 1;
+      const noteOrder = position !== undefined ? position : nextOrder;
+
+      // Create note
+      const note = await EpisodeScene.create({
+        episode_id: id,
+        type: 'note',
+        scene_library_id: null,
+        scene_order: noteOrder,
+        title_override: title || null,
+        note_text: noteText,
+        manual_duration_seconds: manualDurationSeconds || 0,
+        added_by: req.user?.id || req.user?.username || 'system',
+        last_edited_at: new Date(),
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'Note added successfully',
+        data: note,
+      });
+    } catch (error) {
+      console.error('❌ Error adding note to episode:', error);
+      res.status(500).json({
+        error: 'Failed to add note',
+        message: error.message,
+      });
+    }
+  },
+
+
+  /**
+   * POST /episodes/:id/scenes - Add scene to episode
+   */
+  async addSceneToEpisode(req, res) {
+    try {
+      const { id } = req.params;
+      const { sceneLibraryId, sceneOrder, trimStart, trimEnd, sceneType, episodeNotes } = req.body;
+      const { SceneLibrary, EpisodeScene } = models;
+
+      if (!sceneLibraryId) {
+        return res.status(400).json({ error: 'sceneLibraryId is required' });
+      }
+
+      // Verify episode exists
+      const episode = await Episode.findByPk(id);
+      if (!episode) {
+        return res.status(404).json({ error: 'Episode not found' });
+      }
+
+      // Verify library scene exists
+      const libraryScene = await SceneLibrary.findByPk(sceneLibraryId);
+      if (!libraryScene) {
+        return res.status(404).json({ error: 'Scene not found in library' });
+      }
+
+      // Auto-calculate scene order if not provided
+      let order = sceneOrder;
+      if (!order) {
+        const maxOrder = await EpisodeScene.max('scene_order', {
+          where: { episode_id: id },
+        });
+        order = (maxOrder || 0) + 1;
+      }
+
+      // Create episode scene link
+      const episodeScene = await EpisodeScene.create({
+        episode_id: id,
+        scene_library_id: sceneLibraryId,
+        scene_order: order,
+        trim_start: trimStart !== undefined ? trimStart : 0,
+        trim_end: trimEnd !== undefined ? trimEnd : parseFloat(libraryScene.duration_seconds || 0),
+        scene_type: sceneType || 'standard',
+        episode_notes: episodeNotes,
+        type: 'clip', // New field for clip sequence manager
+      });
+
+      // Return with library scene data
+      const result = await EpisodeScene.findByPk(episodeScene.id, {
+        include: [
+          {
+            model: SceneLibrary,
+            as: 'libraryScene',
+          },
+        ],
+      });
+
+      res.status(201).json({
+        message: 'Scene added to episode',
+        data: result,
+      });
+    } catch (error) {
+      console.error('❌ Error adding scene to episode:', error);
+      res.status(500).json({
+        error: 'Failed to add scene to episode',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * PUT /episodes/:id/scenes/:sceneId - Update episode scene
+   */
+  async updateEpisodeScene(req, res) {
+    try {
+      const { id, sceneId } = req.params;
+      const { sceneOrder, trimStart, trimEnd, sceneType, episodeNotes, productionStatus } =
+        req.body;
+      const { EpisodeScene, SceneLibrary } = models;
+
+      // Find episode scene
+      const episodeScene = await EpisodeScene.findOne({
+        where: {
+          id: sceneId,
+          episode_id: id,
+        },
+      });
+
+      if (!episodeScene) {
+        return res.status(404).json({ error: 'Episode scene not found' });
+      }
+
+      // Build updates
+      const updates = {};
+      if (sceneOrder !== undefined) updates.scene_order = sceneOrder;
+      if (trimStart !== undefined) updates.trim_start = trimStart;
+      if (trimEnd !== undefined) updates.trim_end = trimEnd;
+      if (sceneType !== undefined) updates.scene_type = sceneType;
+      if (episodeNotes !== undefined) updates.episode_notes = episodeNotes;
+      if (productionStatus !== undefined) updates.production_status = productionStatus;
+
+      await episodeScene.update(updates);
+
+      // Return with library scene data
+      const result = await EpisodeScene.findByPk(sceneId, {
+        include: [
+          {
+            model: SceneLibrary,
+            as: 'libraryScene',
+          },
+        ],
+      });
+
+      res.json({
+        message: 'Episode scene updated',
+        data: result,
+      });
+    } catch (error) {
+      console.error('❌ Error updating episode scene:', error);
+      res.status(500).json({
+        error: 'Failed to update episode scene',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * DELETE /episodes/:id/scenes/:sceneId - Remove scene from episode
+   */
+  async removeSceneFromEpisode(req, res) {
+    try {
+      const { id, sceneId } = req.params;
+      const { EpisodeScene } = models;
+
+      // Find episode scene
+      const episodeScene = await EpisodeScene.findOne({
+        where: {
+          id: sceneId,
+          episode_id: id,
+        },
+      });
+
+      if (!episodeScene) {
+        return res.status(404).json({ error: 'Episode scene not found' });
+      }
+
+      // Delete the link (not the library scene)
+      await episodeScene.destroy();
+
+      res.json({
+        message: 'Scene removed from episode',
+        episode_id: id,
+        scene_id: sceneId,
+      });
+    } catch (error) {
+      console.error('❌ Error removing episode scene:', error);
+      res.status(500).json({
+        error: 'Failed to remove episode scene',
         message: error.message,
       });
     }

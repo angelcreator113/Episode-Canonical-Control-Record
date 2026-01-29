@@ -439,7 +439,7 @@ export default function EpisodeScripts({ episodeId }) {
 // Temporary inline ScriptCard component (will be extracted later)
 function ScriptCard({ script, onEdit, onUpdate, onDelete }) {
   const [expanded, setExpanded] = useState(false);
-  const [showActions, setShowActions] = useState(false);
+  const [showActionsMenu, setShowActionsMenu] = useState(false);
 
   const formatDate = (dateString) => {
     return new Date(dateString).toLocaleDateString('en-US', {
@@ -450,6 +450,7 @@ function ScriptCard({ script, onEdit, onUpdate, onDelete }) {
   };
 
   const handleSetPrimary = async () => {
+    setShowActionsMenu(false);
     if (confirm(`Set "${script.version_label || `Version ${script.version_number}`}" as the primary ${script.script_type}?`)) {
       try {
         await scriptsService.setPrimary(script.id);
@@ -461,6 +462,7 @@ function ScriptCard({ script, onEdit, onUpdate, onDelete }) {
   };
 
   const handleDelete = async () => {
+    setShowActionsMenu(false);
     if (confirm(`Delete "${script.version_label || `Version ${script.version_number}`}"? This cannot be undone.`)) {
       try {
         await scriptsService.deleteScript(script.id);
@@ -472,6 +474,7 @@ function ScriptCard({ script, onEdit, onUpdate, onDelete }) {
   };
 
   const handleExport = () => {
+    setShowActionsMenu(false);
     // Create a text file download
     const blob = new Blob([script.content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
@@ -484,29 +487,199 @@ function ScriptCard({ script, onEdit, onUpdate, onDelete }) {
     URL.revokeObjectURL(url);
   };
 
+  const handleEdit = () => {
+    setShowActionsMenu(false);
+    onEdit(script);
+  };
+
   return (
-    <div className="ed-card" style={{ padding: '1rem' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem' }}>
-            <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900 }}>
-              {script.version_label || `Version ${script.version_number}`}
-            </h4>
-            {script.is_primary && (
-              <span className="ed-badge ed-badge-success">
-                <FiStar size={12} style={{ marginRight: '4px' }} />
-                Primary
+    <div className="ed-card script-card" style={{ padding: '1rem', position: 'relative' }}>
+      {/* Tappable card header */}
+      <div
+        onClick={() => setExpanded(!expanded)}
+        style={{ cursor: 'pointer' }}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+              <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 900 }}>
+                {script.version_label || `Version ${script.version_number}`}
+              </h4>
+              {script.is_primary && (
+                <span className="ed-badge ed-badge-success">Primary</span>
+              )}
+              {script.is_latest && (
+                <span className="ed-badge ed-badge-neutral">Latest</span>
+              )}
+              <span className={`ed-badge ed-badge-${scriptsService.getStatusColor(script.status)}`}>
+                {script.status}
               </span>
-            )}
-            {script.is_latest && (
-              <span className="ed-badge ed-badge-neutral">Latest</span>
-            )}
-            <span className={`ed-badge ed-badge-${scriptsService.getStatusColor(script.status)}`}>
-              {script.status}
-            </span>
+            </div>
+            <div style={{ marginTop: '0.375rem', fontSize: '0.875rem', color: '#6b7280' }}>
+              {formatDate(script.created_at)}
+            </div>
           </div>
 
-          <div className="ed-infogrid" style={{ marginTop: '0.75rem' }}>
+          {/* Actions menu button */}
+          <div style={{ position: 'relative', marginLeft: '1rem' }}>
+            <button
+              type="button"
+              className="ed-btn ed-btn-ghost"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowActionsMenu(!showActionsMenu);
+              }}
+              style={{ padding: '0.5rem', minWidth: '36px' }}
+              title="More actions"
+            >
+              ⋯
+            </button>
+            
+            {showActionsMenu && (
+              <>
+                <div
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowActionsMenu(false);
+                  }}
+                  style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    zIndex: 100,
+                  }}
+                />
+                <div
+                  className="script-actions-menu"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    position: 'absolute',
+                    top: 'calc(100% + 0.5rem)',
+                    right: 0,
+                    background: '#ffffff',
+                    border: '1px solid #e5e7eb',
+                    borderRadius: '12px',
+                    boxShadow: '0 10px 26px rgba(0,0,0,0.12)',
+                    minWidth: '180px',
+                    zIndex: 101,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={handleEdit}
+                    style={{
+                      width: '100%',
+                      background: 'transparent',
+                      border: 'none',
+                      padding: '0.875rem 1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      fontWeight: 600,
+                      color: '#1f2937',
+                      cursor: 'pointer',
+                      fontSize: '0.95rem',
+                      textAlign: 'left',
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                    onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <FiEdit2 size={16} />
+                    Edit
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExport}
+                    style={{
+                      width: '100%',
+                      background: 'transparent',
+                      border: 'none',
+                      padding: '0.875rem 1rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.75rem',
+                      fontWeight: 600,
+                      color: '#1f2937',
+                      cursor: 'pointer',
+                      fontSize: '0.95rem',
+                      textAlign: 'left',
+                    }}
+                    onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                    onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                  >
+                    <FiDownload size={16} />
+                    Download
+                  </button>
+                  {!script.is_primary && (
+                    <button
+                      type="button"
+                      onClick={handleSetPrimary}
+                      style={{
+                        width: '100%',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: '0.875rem 1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        fontWeight: 600,
+                        color: '#1f2937',
+                        cursor: 'pointer',
+                        fontSize: '0.95rem',
+                        textAlign: 'left',
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                      onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <FiCheck size={16} />
+                      Mark as Primary
+                    </button>
+                  )}
+                  <div style={{ borderTop: '1px solid #e5e7eb' }}>
+                    <button
+                      type="button"
+                      onClick={handleDelete}
+                      style={{
+                        width: '100%',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: '0.875rem 1rem',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.75rem',
+                        fontWeight: 600,
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '0.95rem',
+                        textAlign: 'left',
+                      }}
+                      onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
+                      onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <FiTrash2 size={16} />
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Expansion chevron */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', color: '#6b7280', fontSize: '0.875rem' }}>
+          <span>{expanded ? '⌄' : '›'}</span>
+          <span>{expanded ? 'Hide details' : 'Show details'}</span>
+        </div>
+      </div>
+
+      {/* Collapsed metadata - only shows when expanded */}
+      {expanded && (
+        <>
+          <div className="ed-infogrid" style={{ marginTop: '1rem' }}>
             {script.author && (
               <div className="ed-info">
                 <div className="k">Author</div>
@@ -525,71 +698,17 @@ function ScriptCard({ script, onEdit, onUpdate, onDelete }) {
                 <div className="v">{script.scene_count}</div>
               </div>
             )}
-            <div className="ed-info">
-              <div className="k">Created</div>
-              <div className="v">{formatDate(script.created_at)}</div>
-            </div>
           </div>
 
-          {expanded && script.content && (
+          {script.content && (
             <div style={{ marginTop: '1rem' }}>
               <div className="ed-codebox" style={{ maxHeight: '300px', overflow: 'auto' }}>
                 <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordWrap: 'break-word' }}>{script.content}</pre>
               </div>
             </div>
           )}
-        </div>
-
-        <div style={{ display: 'flex', gap: '0.5rem', marginLeft: '1rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-          <button
-            type="button"
-            className="ed-btn ed-btn-ghost"
-            onClick={() => setExpanded(!expanded)}
-            title={expanded ? 'Collapse' : 'Expand to view content'}
-          >
-            {expanded ? 'Collapse' : 'Expand'}
-          </button>
-          
-          <button
-            type="button"
-            className="ed-btn ed-btn-ghost"
-            onClick={() => onEdit(script)}
-            title="Edit and create new version"
-          >
-            <FiEdit2 size={16} />
-          </button>
-          
-          <button
-            type="button"
-            className="ed-btn ed-btn-ghost"
-            onClick={handleExport}
-            title="Download as text file"
-          >
-            <FiDownload size={16} />
-          </button>
-
-          {!script.is_primary && (
-            <button
-              type="button"
-              className="ed-btn ed-btn-ghost"
-              onClick={handleSetPrimary}
-              title="Set as primary version"
-            >
-              <FiCheck size={16} />
-            </button>
-          )}
-
-          <button
-            type="button"
-            className="ed-btn ed-btn-ghost"
-            onClick={handleDelete}
-            title="Delete this version"
-            style={{ color: '#ef4444' }}
-          >
-            <FiTrash2 size={16} />
-          </button>
-        </div>
-      </div>
+        </>
+      )}
     </div>
   );
 }

@@ -63,7 +63,7 @@ const isValidUUID = (uuid) => {
 
 /**
  * GET /api/v1/compositions
- * Get all compositions for an episode
+ * Get all compositions for an episode (includes composition_assets)
  */
 router.get('/', async (req, res) => {
   try {
@@ -78,7 +78,36 @@ router.get('/', async (req, res) => {
     const compositions = await models.ThumbnailComposition.findAll({
       where,
       order: [['created_at', 'DESC']],
-      raw: true,
+      include: [
+        {
+          model: models.CompositionAsset,
+          as: 'compositionAssets',
+          include: [
+            {
+              model: models.Asset,
+              as: 'asset',
+              attributes: ['id', 'name', 's3_url_processed', 's3_url_raw', 'asset_role'],
+            },
+          ],
+        },
+        {
+          model: models.CompositionOutput,
+          as: 'outputs',
+          attributes: ['id', 'format', 'status', 'image_url', 'created_at'],
+        },
+        {
+          model: models.Episode,
+          as: 'episode',
+          attributes: ['id', 'title', 'episode_number'],
+          include: [
+            {
+              model: models.Show,
+              as: 'show',
+              attributes: ['id', 'name'],
+            },
+          ],
+        },
+      ],
     });
 
     res.json({
@@ -104,8 +133,9 @@ router.post('/', async (req, res) => {
   try {
     console.log('📥 POST /compositions request body:', JSON.stringify(req.body, null, 2));
 
-    let { episode_id, template_id } = req.body;
+    let { episode_id, template_id, template_studio_id, assets, selected_formats, composition_config, asset_map } = req.body;
 
+    // LEGACY SUPPORT: Handle old format with individual asset fields
     const {
       lala_asset_id,
       justawomen_asset_id,
@@ -113,60 +143,65 @@ router.post('/', async (req, res) => {
       justawomaninherprime_position,
       guest_asset_id,
       background_frame_asset_id,
-      selected_formats,
     } = req.body;
 
-    // Validate required fields
-    if (!episode_id || !lala_asset_id) {
-      return res.status(400).json({
-        error: 'Missing required fields',
-        required: ['episode_id', 'lala_asset_id'],
-        received: {
-          episode_id: !!episode_id,
-          lala_asset_id: !!lala_asset_id,
-        },
-      });
-    }
+    // Determine if this is new role-based format or legacy format
+    // Check for template_studio_id OR asset_map/assets to determine format
+    const isRoleBasedFormat = 
+      template_studio_id || 
+      (asset_map && typeof asset_map === 'object' && Object.keys(asset_map).length > 0) || 
+      (assets && typeof assets === 'object' && Object.keys(assets).length > 0);
 
-    // Validate episode_id is an integer or parseable as integer
-    const episodeIdInt = parseInt(episode_id, 10);
-    if (isNaN(episodeIdInt) || episodeIdInt < 1) {
-      // If not an integer, check if it's a UUID (from frontend mock data)
-      const uuidRegex =
-        /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-      if (uuidRegex.test(episode_id)) {
-        // UUID provided - try to use episode ID 2 as default for testing
-        console.warn(`⚠️  UUID episode_id provided (${episode_id}), using default episode 2`);
-        episode_id = 2;
-      } else {
+    console.log('🔍 Format detection:', {
+      template_studio_id,
+      asset_map_keys: asset_map ? Object.keys(asset_map) : null,
+      assets_keys: assets ? Object.keys(assets) : null,
+      isRoleBasedFormat
+    });
+
+    // Use asset_map if provided, otherwise fall back to assets
+    const assetData = asset_map || assets;
+
+    // Validate required fields based on format
+    if (isRoleBasedFormat) {
+      // New role-based format validation
+      if (!episode_id || !assetData) {
         return res.status(400).json({
-          error: 'Invalid episode_id - must be a valid integer ID or UUID',
-          received: episode_id,
-          type: typeof episode_id,
+          error: 'Missing required fields',
+          required: ['episode_id', 'asset_map or assets'],
+          received: {
+            episode_id: !!episode_id,
+            asset_map: !!asset_map,
+            assets: !!assets,
+          },
         });
       }
     } else {
-      episode_id = episodeIdInt; // Use parsed integer
+      // Legacy format validation
+      if (!episode_id || !lala_asset_id) {
+        return res.status(400).json({
+          error: 'Missing required fields',
+          required: ['episode_id', 'lala_asset_id'],
+          received: {
+            episode_id: !!episode_id,
+            lala_asset_id: !!lala_asset_id,
+          },
+        });
+      }
     }
 
-    // Validate lala_asset_id is a proper UUID
-    if (!isValidUUID(lala_asset_id)) {
+    // Validate episode_id format (should be UUID)
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(episode_id)) {
       return res.status(400).json({
-        error: 'Invalid lala_asset_id - must be a valid UUID',
-        received: lala_asset_id,
+        error: 'Invalid episode_id - must be a valid UUID',
+        received: episode_id,
+        type: typeof episode_id,
       });
     }
 
-    // Validate justawomen_asset_id if provided
-    if (justawomen_asset_id && !isValidUUID(justawomen_asset_id)) {
-      return res.status(400).json({
-        error: 'Invalid justawomen_asset_id - must be a valid UUID',
-        received: justawomen_asset_id,
-      });
-    }
-
-    // If template_id not provided, get the first available template
-    if (!template_id) {
+    // If template_id not provided, get the first available template (legacy support)
+    if (!template_id && !template_studio_id) {
       const defaultTemplate = await models.ThumbnailTemplate.findOne({
         order: [['created_at', 'ASC']],
       });
@@ -178,37 +213,157 @@ router.post('/', async (req, res) => {
       template_id = defaultTemplate.id;
     }
 
-    // Validate that if include_justawomaninherprime is true, asset is provided
-    if (include_justawomaninherprime && !justawomen_asset_id) {
-      return res.status(400).json({
-        error: 'When include_justawomaninherprime is true, justawomen_asset_id is required',
-      });
-    }
-
-    // NEW: Validate selected_formats
+    // Validate selected_formats
     if (!Array.isArray(selected_formats) || selected_formats.length === 0) {
       return res.status(400).json({
         error: 'selected_formats must be a non-empty array',
       });
     }
 
-    // Create composition
-    const composition = await CompositionService.createComposition(
-      episode_id,
-      {
-        template_id,
-        lala_asset_id,
-        justawomen_asset_id,
-        include_justawomaninherprime: include_justawomaninherprime || false,
-        justawomaninherprime_position,
-        guest_asset_id,
-        background_frame_asset_id,
-        selected_formats, // Pass selected formats to service
-      },
-      req.user?.id || 'test-user'
-    );
+    // Create composition with appropriate format
+    let composition;
+    
+    if (isRoleBasedFormat) {
+      // NEW ROLE-BASED FORMAT
+      console.log('✨ Creating composition with role-based assets');
+      
+      // If template_studio_id is provided, validate it and skip old template validation
+      if (template_studio_id) {
+        console.log('🎨 Using Template Studio template:', template_studio_id);
+        
+        // Fetch template from template_studio
+        const { Sequelize } = require('sequelize');
+        const sequelize = new Sequelize(process.env.DATABASE_URL, {
+          dialect: 'postgres',
+          logging: false
+        });
+        
+        const [templates] = await sequelize.query(`
+          SELECT * FROM template_studio WHERE id = $1
+        `, { bind: [template_studio_id] });
+        
+        if (templates.length === 0) {
+          return res.status(400).json({
+            error: 'Invalid template_studio_id',
+            message: `Template ${template_studio_id} not found`,
+          });
+        }
+        
+        const studioTemplate = templates[0];
+        console.log(`✅ Found template: ${studioTemplate.name} v${studioTemplate.version}`);
+        
+        // Validate required roles from template
+        const requiredRoles = studioTemplate.required_roles || [];
+        const missingRoles = requiredRoles.filter(role => !assetData[role]);
+        
+        if (missingRoles.length > 0) {
+          console.warn('⚠️  Missing required roles:', missingRoles);
+          // Don't fail - allow partial compositions for now
+        }
+      } else if (template_id) {
+        // Legacy template validation
+        const template = await models.ThumbnailTemplate.findByPk(template_id);
+        if (!template) {
+          return res.status(400).json({
+            error: 'Invalid template_id',
+            message: `Template ${template_id} not found`,
+          });
+        }
 
-    // NEW: Generate thumbnails for selected formats
+        const requiredRoles = template.required_roles || [];
+        const missingRoles = requiredRoles.filter(role => !assetData[role]);
+        
+        if (missingRoles.length > 0) {
+          return res.status(400).json({
+            error: 'Missing required asset roles',
+            required: requiredRoles,
+            missing: missingRoles,
+            received: Object.keys(assetData),
+          });
+        }
+      }
+
+      // Create composition record
+      composition = await models.ThumbnailComposition.create({
+        episode_id,
+        template_id,
+        template_studio_id, // NEW: Store template_studio_id
+        selected_formats,
+        composition_config: composition_config || {},
+        status: 'PENDING',
+        created_by: req.user?.id || 'test-user',
+      });
+
+      // Create composition_assets records for each role
+      const compositionAssetRecords = Object.entries(assetData)
+        .filter(([role, assetId]) => assetId && typeof assetId === 'string') // Only real asset IDs, not text values
+        .map(([role, assetId]) => ({
+          composition_id: composition.id,
+          asset_id: assetId,
+          asset_role: role,
+        }));
+
+      if (compositionAssetRecords.length > 0) {
+        await models.CompositionAsset.bulkCreate(compositionAssetRecords);
+        console.log(`✅ Created ${compositionAssetRecords.length} composition_assets records`);
+      }
+
+      // Store text field values in composition_config
+      const textFields = Object.entries(assetData)
+        .filter(([role, value]) => typeof value === 'string' && role.startsWith('TEXT.'))
+        .reduce((acc, [role, value]) => {
+          acc[role] = value;
+          return acc;
+        }, {});
+      
+      if (Object.keys(textFields).length > 0) {
+        composition.composition_config = {
+          ...composition.composition_config,
+          text_fields: textFields
+        };
+        await composition.save();
+        console.log(`✅ Stored ${Object.keys(textFields).length} text field values`);
+      }
+
+      // Create composition_output records for selected formats
+      const outputRecords = selected_formats.map(format => ({
+        composition_id: composition.id,
+        format,
+        status: 'PROCESSING',
+        generated_by: req.user?.id || 'test-user',
+      }));
+
+      await models.CompositionOutput.bulkCreate(outputRecords);
+      console.log(`✅ Created ${outputRecords.length} composition_output records`);
+
+    } else {
+      // LEGACY FORMAT - use old service method
+      console.log('⚠️  Using legacy format (individual asset fields)');
+      
+      // Validate that if include_justawomaninherprime is true, asset is provided
+      if (include_justawomaninherprime && !justawomen_asset_id) {
+        return res.status(400).json({
+          error: 'When include_justawomaninherprime is true, justawomen_asset_id is required',
+        });
+      }
+
+      composition = await CompositionService.createComposition(
+        episode_id,
+        {
+          template_id,
+          lala_asset_id,
+          justawomen_asset_id,
+          include_justawomaninherprime: include_justawomaninherprime || false,
+          justawomaninherprime_position,
+          guest_asset_id,
+          background_frame_asset_id,
+          selected_formats,
+        },
+        req.user?.id || 'test-user'
+      );
+    }
+
+    // Generate thumbnails for selected formats
     console.log('🎬 About to generate thumbnails for composition:', composition.id);
     console.log('📋 Selected formats:', selected_formats);
 
@@ -779,6 +934,64 @@ router.patch('/:id', async (req, res) => {
 });
 
 /**
+ * POST /api/v1/compositions/:id/assets
+ * Assign an asset to a composition role slot
+ */
+router.post('/:id/assets', async (req, res) => {
+  try {
+    const { asset_id, role } = req.body;
+    
+    if (!asset_id || !role) {
+      return res.status(400).json({
+        error: 'Missing required fields: asset_id and role'
+      });
+    }
+
+    // Create or update composition_asset record
+    const compositionAsset = await models.CompositionAsset.findOne({
+      where: {
+        composition_id: req.params.id,
+        asset_role: role
+      }
+    });
+
+    if (compositionAsset) {
+      // Update existing
+      await compositionAsset.update({ asset_id });
+    } else {
+      // Create new
+      await models.CompositionAsset.create({
+        composition_id: req.params.id,
+        asset_id,
+        asset_role: role
+      });
+    }
+
+    // Return updated composition with assets
+    const composition = await models.ThumbnailComposition.findByPk(req.params.id, {
+      include: [{
+        model: models.CompositionAsset,
+        as: 'compositionAssets',
+        include: [{
+          model: models.Asset,
+          as: 'asset'
+        }]
+      }]
+    });
+
+    res.json({
+      status: 'SUCCESS',
+      data: composition
+    });
+  } catch (error) {
+    console.error('Failed to assign asset:', error);
+    res.status(500).json({
+      error: error.message
+    });
+  }
+});
+
+/**
  * GET /api/v1/compositions/:id/versions
  * Get complete version history for a composition
  */
@@ -1024,4 +1237,394 @@ router.get('/search/filters/options', async (req, res) => {
   }
 });
 
+/**
+ * GET /api/v1/compositions/:id/outputs
+ * Get all outputs (generated thumbnails) for a composition
+ */
+router.get('/:id/outputs', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { CompositionOutput } = models;
+
+    const outputs = await CompositionOutput.findAll({
+      where: { composition_id: id },
+      order: [['created_at', 'DESC']],
+    });
+
+    res.json({
+      status: 'SUCCESS',
+      data: outputs,
+    });
+  } catch (error) {
+    console.error('Failed to get outputs:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/compositions/:id/outputs/generate
+ * Generate or regenerate specific format outputs for a composition
+ * 
+ * Body: { formats: ['YOUTUBE', 'INSTAGRAM_FEED'], regenerate: false }
+ */
+router.post('/:id/outputs/generate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { formats, regenerate = false } = req.body;
+    const { ThumbnailComposition, CompositionOutput } = models;
+
+    if (!formats || !Array.isArray(formats) || formats.length === 0) {
+      return res.status(400).json({
+        status: 'ERROR',
+        error: 'formats array is required',
+      });
+    }
+
+    // Get composition with assets
+    const composition = await ThumbnailComposition.findByPk(id, {
+      include: [
+        {
+          model: models.CompositionAsset,
+          as: 'compositionAssets',
+          include: [{ model: models.Asset, as: 'asset' }],
+        },
+        {
+          model: models.ThumbnailTemplate,
+          as: 'template',
+        },
+      ],
+    });
+
+    if (!composition) {
+      return res.status(404).json({
+        status: 'ERROR',
+        error: 'Composition not found',
+      });
+    }
+
+    // Create or update output records
+    const outputPromises = formats.map(async (format) => {
+      const [output, created] = await CompositionOutput.findOrCreate({
+        where: { composition_id: id, format },
+        defaults: {
+          status: 'PROCESSING',
+          generated_by: req.user?.id || 'system',
+        },
+      });
+
+      if (!created && regenerate) {
+        await output.update({
+          status: 'PROCESSING',
+          error_message: null,
+          generated_by: req.user?.id || 'system',
+        });
+      }
+
+      return output;
+    });
+
+    const outputs = await Promise.all(outputPromises);
+
+    // TODO: Queue actual generation jobs to Sharp/Lambda here
+    // For now, mark as PROCESSING and return immediately
+    
+    res.json({
+      status: 'SUCCESS',
+      message: `Queued ${formats.length} format(s) for generation`,
+      data: outputs,
+    });
+  } catch (error) {
+    console.error('Failed to generate outputs:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/outputs/:id
+ * Delete a specific output (generated thumbnail)
+ */
+router.delete('/outputs/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { CompositionOutput } = models;
+
+    const output = await CompositionOutput.findByPk(id);
+    
+    if (!output) {
+      return res.status(404).json({
+        status: 'ERROR',
+        error: 'Output not found',
+      });
+    }
+
+    // TODO: Delete file from S3 if image_url exists
+    
+    await output.destroy();
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Output deleted successfully',
+    });
+  } catch (error) {
+    console.error('Failed to delete output:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/compositions/:id/assets/:role
+ * Remove an asset from a composition slot
+ */
+router.delete('/:id/assets/:role', async (req, res) => {
+  try {
+    const { id, role } = req.params;
+    const { ThumbnailComposition, EpisodeAsset } = models;
+
+    const composition = await ThumbnailComposition.findByPk(id);
+    
+    if (!composition) {
+      return res.status(404).json({
+        status: 'ERROR',
+        error: 'Composition not found',
+      });
+    }
+
+    // Find and remove the asset assignment for this episode and role
+    const assetAssignment = await EpisodeAsset.findOne({
+      where: { 
+        episode_id: composition.episode_id,
+        role 
+      }
+    });
+
+    if (assetAssignment) {
+      await assetAssignment.destroy();
+      console.log(`🗑️ Removed asset from ${role} in episode ${composition.episode_id}`);
+      
+      res.json({
+        status: 'SUCCESS',
+        message: `Removed asset from ${role}`,
+      });
+    } else {
+      res.status(404).json({
+        status: 'ERROR',
+        error: `No asset found in slot ${role}`,
+      });
+    }
+  } catch (error) {
+    console.error('Failed to remove asset:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/compositions/:id/save-draft
+ * Save draft layout overrides without applying them
+ * 
+ * Body: { draft_overrides: { roles: { ... } } }
+ */
+router.post('/:id/save-draft', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { draft_overrides } = req.body;
+    const { ThumbnailComposition } = models;
+
+    if (!draft_overrides || typeof draft_overrides !== 'object') {
+      return res.status(400).json({
+        status: 'ERROR',
+        error: 'draft_overrides object is required',
+      });
+    }
+
+    const composition = await ThumbnailComposition.findByPk(id);
+    
+    if (!composition) {
+      return res.status(404).json({
+        status: 'ERROR',
+        error: 'Composition not found',
+      });
+    }
+
+    await composition.update({
+      draft_overrides,
+      draft_updated_at: new Date(),
+      draft_updated_by: req.user?.id || 'system',
+      has_unsaved_changes: true,
+    });
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Draft saved successfully',
+      data: composition,
+    });
+  } catch (error) {
+    console.error('Failed to save draft:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/compositions/:id/apply-draft
+ * Apply draft overrides, create new version, and optionally regenerate outputs
+ * 
+ * Body: { regenerate_formats: ['YOUTUBE', 'INSTAGRAM_FEED'] }
+ */
+router.post('/:id/apply-draft', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { regenerate_formats = [] } = req.body;
+    const { ThumbnailComposition } = models;
+
+    const composition = await ThumbnailComposition.findByPk(id);
+    
+    if (!composition) {
+      return res.status(404).json({
+        status: 'ERROR',
+        error: 'Composition not found',
+      });
+    }
+
+    if (!composition.draft_overrides) {
+      return res.status(400).json({
+        status: 'ERROR',
+        error: 'No draft to apply',
+      });
+    }
+
+    // Merge draft into layout_overrides
+    const currentOverrides = composition.layout_overrides || {};
+    const draftOverrides = composition.draft_overrides;
+    
+    const mergedOverrides = {
+      ...currentOverrides,
+      roles: {
+        ...(currentOverrides.roles || {}),
+        ...(draftOverrides.roles || {}),
+      },
+    };
+
+    // Increment version
+    const newVersion = (composition.current_version || 1) + 1;
+    
+    // Update version history
+    const versionHistory = composition.version_history || {};
+    versionHistory[`v${newVersion}`] = {
+      timestamp: new Date().toISOString(),
+      user: req.user?.id || 'system',
+      changes: {
+        type: 'layout_adjustment',
+        overrides: draftOverrides,
+      },
+    };
+
+    await composition.update({
+      layout_overrides: mergedOverrides,
+      draft_overrides: null,
+      draft_updated_at: null,
+      draft_updated_by: null,
+      has_unsaved_changes: false,
+      current_version: newVersion,
+      version_history: versionHistory,
+      last_modified_by: req.user?.id || 'system',
+      modification_timestamp: new Date(),
+    });
+
+    // Queue regeneration if requested
+    if (regenerate_formats.length > 0) {
+      // This would call the generate outputs endpoint internally
+      // For now, just mark outputs as PROCESSING
+      const { CompositionOutput } = models;
+      
+      await Promise.all(regenerate_formats.map(async (format) => {
+        const [output] = await CompositionOutput.findOrCreate({
+          where: { composition_id: id, format },
+          defaults: {
+            status: 'PROCESSING',
+            generated_by: req.user?.id || 'system',
+          },
+        });
+        
+        await output.update({
+          status: 'PROCESSING',
+          error_message: null,
+        });
+      }));
+    }
+
+    res.json({
+      status: 'SUCCESS',
+      message: `Draft applied successfully (v${newVersion})`,
+      data: composition,
+    });
+  } catch (error) {
+    console.error('Failed to apply draft:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      error: error.message,
+    });
+  }
+});
+
+/**
+ * PATCH /api/v1/compositions/:id/slot-positions
+ * Save custom slot positions/sizes to composition config
+ */
+router.patch('/:id/slot-positions', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { slotPositions, backgroundOpacity, selectedFormat } = req.body;
+
+    const composition = await models.ThumbnailComposition.findByPk(id);
+    if (!composition) {
+      return res.status(404).json({
+        status: 'ERROR',
+        error: 'Composition not found'
+      });
+    }
+
+    // Merge slot positions, background opacity, and selected format into composition_config
+    const currentConfig = composition.composition_config || {};
+    const updatedConfig = {
+      ...currentConfig,
+      slotPositions: slotPositions !== undefined ? slotPositions : currentConfig.slotPositions || {},
+      backgroundOpacity: backgroundOpacity !== undefined ? backgroundOpacity : currentConfig.backgroundOpacity || 1,
+      selectedFormat: selectedFormat || currentConfig.selectedFormat || 'youtube_hero'
+    };
+
+    await composition.update({
+      composition_config: updatedConfig
+    });
+
+    console.log('✅ Saved composition config for:', id, updatedConfig);
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Composition config saved',
+      data: composition
+    });
+  } catch (error) {
+    console.error('Failed to save composition config:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;
+

@@ -6,7 +6,11 @@
       "Effect": "Allow",
       "Principal": "*",
       "Action": "s3:GetObject",
-      "Resource": "arn:aws:s3:::episode-metadata-storage-dev/*"
+      "Resource": [
+        "arn:aws:s3:::episode-metadata-storage-dev/wardrobe/*",
+        "arn:aws:s3:::episode-metadata-storage-dev/promotional/*",
+        "arn:aws:s3:::episode-metadata-storage-dev/backgrounds/*"
+      ]
     }
   ]
 }

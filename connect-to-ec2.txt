@@ -1,0 +1,13 @@
+﻿# Use this command to connect:
+
+# Option 1: Direct SSH (try this first)
+ssh -i 'C:\Users\12483\episode-prod-key.pem' ec2-user@3.94.166.174
+
+# Option 2: If using Git Bash (recommended):
+# Open Git Bash and run:
+ssh -i '/c/Users/12483/episode-prod-key.pem' ec2-user@3.94.166.174
+
+# Option 3: If you need to fix permissions (in Git Bash):
+chmod 400 /c/Users/12483/episode-prod-key.pem
+ssh -i '/c/Users/12483/episode-prod-key.pem' ec2-user@3.94.166.174
+

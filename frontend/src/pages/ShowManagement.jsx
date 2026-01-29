@@ -230,9 +230,17 @@ const ShowManagement = () => {
         <div style={{ marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
             <div>
-              <h1 style={{ margin: '0 0 0.25rem 0', fontSize: '1.75rem', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                🎬 Show Management
-              </h1>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
+                <button 
+                  onClick={() => navigate(-1)} 
+                  style={{ background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '6px', padding: '0.5rem 0.75rem', fontSize: '0.875rem', cursor: 'pointer', color: '#374151' }}
+                >
+                  ← Back
+                </button>
+                <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  🎬 Show Management
+                </h1>
+              </div>
               <p style={{ margin: 0, fontSize: '0.95rem', color: '#6b7280' }}>
                 Create and manage your content shows
               </p>
@@ -247,14 +255,13 @@ const ShowManagement = () => {
               }}
               style={{
                 padding: '0.75rem 1.5rem',
-                background: showForm ? '#6b7280' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                background: '#6b9bd1',
                 color: 'white',
                 border: 'none',
                 borderRadius: '8px',
                 fontSize: '1rem',
                 fontWeight: '600',
                 cursor: 'pointer',
-                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
                 transition: 'all 0.2s'
               }}
             >
@@ -262,21 +269,13 @@ const ShowManagement = () => {
             </button>
           </div>
 
-          {/* Stats Bar */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.75rem', marginTop: '1rem' }}>
-            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)' }}>
-              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>TOTAL SHOWS</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white' }}>{shows.length}</div>
+          {/* Stats - Subtle text */}
+          {shows.length > 0 && (
+            <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#6b7280' }}>
+              {shows.filter(s => s.status === 'active').length} active show{shows.filter(s => s.status === 'active').length !== 1 ? 's' : ''}
+              {shows.filter(s => s.status === 'coming_soon').length > 0 && ` · ${shows.filter(s => s.status === 'coming_soon').length} coming soon`}
             </div>
-            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(16, 185, 129, 0.3)' }}>
-              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>ACTIVE SHOWS</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white' }}>{shows.filter(s => s.status === 'active').length}</div>
-            </div>
-            <div style={{ padding: '1rem', background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)', borderRadius: '10px', boxShadow: '0 2px 8px rgba(245, 158, 11, 0.3)' }}>
-              <div style={{ fontSize: '0.75rem', color: 'rgba(255,255,255,0.9)', fontWeight: '600', marginBottom: '0.375rem' }}>COMING SOON</div>
-              <div style={{ fontSize: '1.5rem', fontWeight: '700', color: 'white' }}>{shows.filter(s => s.status === 'coming_soon').length}</div>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Error Message */}
@@ -561,14 +560,13 @@ const ShowManagement = () => {
                 onClick={() => setShowForm(true)}
                 style={{
                   padding: '0.75rem 1.5rem',
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  background: '#6b9bd1',
                   color: 'white',
                   border: 'none',
                   borderRadius: '8px',
                   fontSize: '1rem',
                   fontWeight: '600',
-                  cursor: 'pointer',
-                  boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+                  cursor: 'pointer'
                 }}
               >
                 + Create First Show
@@ -577,17 +575,27 @@ const ShowManagement = () => {
           )}
 
           {!loading && shows.length > 0 && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: '1.25rem' }}>
+            <div style={{ 
+              display: 'grid', 
+              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
+              gap: '1.5rem',
+              maxWidth: '1000px',
+              margin: '0 auto',
+              justifyContent: 'center'
+            }}>
               {shows.map((show) => (
                 <div
                   key={show.id}
                   style={{
                     background: 'white',
                     borderRadius: '12px',
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                    border: '1px solid #e5e7eb',
+                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
                     transition: 'all 0.2s',
                     overflow: 'hidden',
-                    position: 'relative'
+                    position: 'relative',
+                    display: 'flex',
+                    flexDirection: 'column'
                   }}
                   onMouseEnter={(e) => {
                     e.currentTarget.style.transform = 'translateY(-4px)';
@@ -598,14 +606,14 @@ const ShowManagement = () => {
                     e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
                   }}
                 >
-                  {/* Cover Image (Portrait 2:3) */}
+                  {/* Cover Image - Hub style */}
                   <div style={{ 
                     width: '100%', 
-                    paddingTop: '150%', /* 2:3 aspect ratio */
+                    height: '160px',
                     position: 'relative',
                     background: show.coverImageUrl 
                       ? `url(${show.coverImageUrl}) center/cover` 
-                      : `linear-gradient(135deg, ${show.color || '#667eea'} 0%, ${show.color || '#764ba2'} 100%)`,
+                      : show.color || '#e5e7eb',
                     overflow: 'hidden'
                   }}>
                     {!show.coverImageUrl && (
@@ -614,8 +622,8 @@ const ShowManagement = () => {
                         top: '50%', 
                         left: '50%', 
                         transform: 'translate(-50%, -50%)',
-                        fontSize: '5rem',
-                        opacity: 0.3
+                        fontSize: '4rem',
+                        opacity: 0.4
                       }}>
                         {show.icon || '📺'}
                       </div>
@@ -630,9 +638,9 @@ const ShowManagement = () => {
                       borderRadius: '6px',
                       fontSize: '0.7rem',
                       fontWeight: '700',
-                      background: show.status === 'active' ? 'rgba(16, 185, 129, 0.95)' :
-                                 show.status === 'coming_soon' ? 'rgba(245, 158, 11, 0.95)' :
-                                 'rgba(107, 114, 128, 0.95)',
+                      background: show.status === 'active' ? 'rgba(127, 176, 105, 0.9)' :
+                                 show.status === 'coming_soon' ? 'rgba(230, 176, 118, 0.9)' :
+                                 'rgba(139, 156, 181, 0.9)',
                       color: 'white',
                       textTransform: 'uppercase',
                       letterSpacing: '0.5px',
@@ -643,112 +651,121 @@ const ShowManagement = () => {
                     </div>
                   </div>
 
-                  {/* Show Info */}
-                  <div style={{ padding: '1rem' }}>
-                    <div style={{ display: 'flex', alignItems: 'start', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                      <span style={{ fontSize: '1.5rem', lineHeight: 1 }}>{show.icon || '📺'}</span>
-                      <h3 style={{ 
-                        margin: 0, 
-                        fontSize: '1rem', 
-                        fontWeight: '700', 
-                        color: '#1f2937',
-                        lineHeight: '1.3',
-                        flex: 1
-                      }}>
-                        {show.name}
-                      </h3>
-                    </div>
+                  {/* Show Info - Hub layout */}
+                  <div style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {/* Title */}
+                    <h3 style={{ 
+                      margin: 0, 
+                      fontSize: '1.1rem', 
+                      fontWeight: '700', 
+                      color: '#1f2937',
+                      lineHeight: '1.3'
+                    }}>
+                      {show.name}
+                    </h3>
                     
+                    {/* Description */}
                     {show.description && (
                       <p style={{
-                        margin: '0 0 0.75rem 0',
-                        fontSize: '0.8rem',
+                        margin: 0,
+                        fontSize: '0.85rem',
                         color: '#6b7280',
-                        lineHeight: '1.4',
+                        lineHeight: '1.5',
                         display: '-webkit-box',
                         WebkitLineClamp: 2,
                         WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden'
+                        overflow: 'hidden',
+                        flex: 1
                       }}>
                         {show.description}
                       </p>
                     )}
                     
-                    {/* Action Buttons */}
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    {/* Action Hierarchy - One primary, two secondary */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: 'auto' }}>
+                      {/* Primary Action */}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
                           navigate(`/episodes?show=${show.id}`);
                         }}
                         style={{
-                          flex: 1,
-                          padding: '0.5rem',
-                          background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+                          width: '100%',
+                          padding: '0.65rem 1rem',
+                          background: '#6b9bd1',
                           color: 'white',
                           border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '0.8rem',
+                          borderRadius: '8px',
+                          fontSize: '0.9rem',
                           fontWeight: '600',
                           cursor: 'pointer',
-                          transition: 'opacity 0.2s'
+                          transition: 'background 0.2s'
                         }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.85'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#5b8fc7'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = '#6b9bd1'}
                       >
-                        📺 Episodes
+                        Open Show
                       </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setEditingShow(show);
-                          setFormData(show);
-                          setCoverImage(null);
-                          setShowForm(true);
-                          setTimeout(() => {
-                            formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                          }, 100);
-                        }}
-                        style={{
-                          flex: 1,
-                          padding: '0.5rem',
-                          background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'opacity 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.85'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                      >
-                        ✏️ Edit
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          if (window.confirm(`Delete "${show.name}"? This cannot be undone.`)) {
-                            handleDelete(show.id);
-                          }
-                        }}
-                        style={{
-                          padding: '0.5rem',
-                          background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '6px',
-                          fontSize: '0.8rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'opacity 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.opacity = '0.85'}
-                        onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
-                      >
-                        🗑️
-                      </button>
+                      {/* Secondary Actions */}
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setEditingShow(show);
+                            setFormData(show);
+                            setCoverImage(null);
+                            setShowForm(true);
+                            setTimeout(() => {
+                              formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }, 100);
+                          }}
+                          style={{
+                            flex: 1,
+                            padding: '0.5rem',
+                            background: 'white',
+                            color: '#374151',
+                            border: '2px solid #e5e7eb',
+                            borderRadius: '6px',
+                            fontSize: '0.85rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'border-color 0.2s'
+                          }}
+                          onMouseEnter={(e) => e.currentTarget.style.borderColor = '#9ca3af'}
+                          onMouseLeave={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (window.confirm(`Delete "${show.name}"? This cannot be undone.`)) {
+                              handleDelete(show.id);
+                            }
+                          }}
+                          style={{
+                            padding: '0.5rem 0.75rem',
+                            background: 'white',
+                            color: '#d97b7b',
+                            border: '2px solid #f5dada',
+                            borderRadius: '6px',
+                            fontSize: '0.85rem',
+                            fontWeight: '600',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = '#fef5f5';
+                            e.currentTarget.style.borderColor = '#ead5d5';
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'white';
+                            e.currentTarget.style.borderColor = '#f5dada';
+                          }}
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </div>
                   </div>
                 </div>

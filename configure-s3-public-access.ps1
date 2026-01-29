@@ -5,13 +5,20 @@ $THUMBNAIL_BUCKET = "episode-metadata-thumbnails-dev"
 
 Write-Host "`nConfiguring S3 Buckets for Web Access`n" -ForegroundColor Cyan
 
-# CORS Configuration
+# CORS Configuration - Allow localhost for development
 $CORS_CONFIG = @"
 {
     "CORSRules": [
         {
-            "AllowedOrigins": ["*"],
-            "AllowedMethods": ["GET", "HEAD", "PUT", "POST", "DELETE"],
+            "AllowedOrigins": [
+                "http://localhost:5174",
+                "http://localhost:3000",
+                "http://localhost:3002",
+                "http://127.0.0.1:5174",
+                "http://127.0.0.1:3000",
+                "http://127.0.0.1:3002"
+            ],
+            "AllowedMethods": ["GET", "HEAD"],
             "AllowedHeaders": ["*"],
             "ExposeHeaders": ["ETag"],
             "MaxAgeSeconds": 3000
@@ -51,6 +58,8 @@ try {
             "Action": "s3:GetObject",
             "Resource": [
                 "arn:aws:s3:::$BUCKET_NAME/wardrobe/*",
+                "arn:aws:s3:::$BUCKET_NAME/promotional/*",
+                "arn:aws:s3:::$BUCKET_NAME/backgrounds/*",
                 "arn:aws:s3:::$THUMBNAIL_BUCKET/*"
             ]
         }

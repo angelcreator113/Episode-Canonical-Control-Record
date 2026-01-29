@@ -20,10 +20,31 @@ module.exports = (sequelize) => {
         allowNull: false,
         comment: 'Legacy type field - kept for backward compatibility',
       },
+      asset_role: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Canonical role - hierarchical (e.g., CHAR.HOST.LALA, UI.ICON.CLOSET)',
+      },
       asset_group: {
         type: DataTypes.ENUM('LALA', 'SHOW', 'GUEST', 'EPISODE', 'WARDROBE'),
         allowNull: true,
         comment: 'Identity bucket - which brand/entity this asset belongs to',
+      },
+      asset_scope: {
+        type: DataTypes.ENUM('GLOBAL', 'SHOW', 'EPISODE'),
+        allowNull: true,
+        defaultValue: 'GLOBAL',
+        comment: 'Scope of asset availability - GLOBAL, SHOW, or EPISODE',
+      },
+      show_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Show ID if asset_scope is SHOW',
+      },
+      episode_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Episode ID if asset_scope is EPISODE',
       },
       purpose: {
         type: DataTypes.ENUM('MAIN', 'TITLE', 'ICON', 'BACKGROUND'),
@@ -99,14 +120,42 @@ module.exports = (sequelize) => {
         type: DataTypes.DATE,
         allowNull: true,
       },
+      deleted_at: {
+        type: DataTypes.DATE,
+        allowNull: true,
+        comment: 'Soft delete timestamp',
+      },
+      s3_url_no_bg: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'S3 URL for version with background removed',
+      },
+      s3_url_enhanced: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'S3 URL for enhanced version (skin smoothing, color correction, etc)',
+      },
+      processing_status: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        defaultValue: 'none',
+        comment: 'Status: none, processing_bg_removal, bg_removed, processing_enhancement, enhanced, failed',
+      },
+      processing_metadata: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: {},
+        comment: 'Processing parameters and results (provider, settings, timestamps)',
+      },
     },
     {
       tableName: 'assets',
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
+      deletedAt: 'deleted_at',
       underscored: true,
-      paranoid: false,
+      paranoid: true,
     }
   );
 

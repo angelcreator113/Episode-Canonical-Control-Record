@@ -1,5 +1,5 @@
 const db = require('../models');
-const { models, sequelize } = db;
+const { models, sequelize, Sequelize } = db;
 const { Wardrobe, EpisodeWardrobe, Episode } = models;
 const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const { Op } = require('sequelize');
@@ -394,7 +394,7 @@ module.exports = {
 
       // Query episode_wardrobe junction table directly
       const wardrobeLinks = await sequelize.query(
-        `SELECT ew.wardrobe_id, ew.scene_id, ew.worn_at, ew.notes,
+        `SELECT ew.wardrobe_id, ew.scene, ew.worn_at, ew.notes,
                 w.id, w.name, w.character, w.clothing_category, 
                 w.s3_url, w.s3_url_processed, w.thumbnail_url, 
                 w.color, w.season, w.is_favorite, w.created_at
@@ -405,7 +405,7 @@ module.exports = {
          ORDER BY ew.created_at DESC`,
         {
           replacements: { episode_id: id },
-          type: sequelize.Sequelize.QueryTypes.SELECT,
+          type: Sequelize.QueryTypes.SELECT,
         }
       );
 
@@ -468,8 +468,8 @@ module.exports = {
         notes: notes || null,
       });
 
-      // Update wardrobe wear count
-      await wardrobeItem.incrementWearCount(new Date());
+      // Update wardrobe wear count - disabled until columns are added to model
+      // await wardrobeItem.incrementWearCount(new Date());
 
       res.status(201).json({
         success: true,

@@ -20,19 +20,27 @@ import AssetManager from './pages/AssetManager';
 // import CompositionManagement from './pages/CompositionManagement'; // Not needed for episode creation
 import ThumbnailComposer from './pages/ThumbnailComposer';
 import ThumbnailGallery from './pages/ThumbnailGallery';
+import CompositionLibrary from './pages/CompositionLibrary';
+import CompositionDetail from './pages/CompositionDetail';
 import SceneComposer from './pages/Scenes/SceneComposer';
 import ScenesList from './pages/Scenes/ScenesList';
+import SceneLibrary from './pages/SceneLibrary';
+import SceneDetail from './pages/SceneDetail';
+import TimelineEditor from './pages/TimelineEditor';
 import AdminPanel from './pages/AdminPanel';
 import TemplateManagement from './pages/TemplateManagement';
 import AuditLogViewer from './pages/AuditLogViewer';
 import AuditLog from './pages/AuditLog';
 import ShowManagement from './pages/ShowManagement';
 import ShowForm from './components/ShowForm';
+import Wardrobe from './pages/Wardrobe';
 import WardrobeBrowser from './pages/WardrobeBrowser';
 import WardrobeAnalytics from './pages/WardrobeAnalytics';
 import OutfitSets from './pages/OutfitSets';
 import WardrobeLibraryUpload from './pages/WardrobeLibraryUpload';
 import WardrobeLibraryDetail from './pages/WardrobeLibraryDetail';
+import TemplateStudio from './pages/TemplateStudio';
+import TemplateDesigner from './pages/TemplateDesigner';
 
 // Components
 import Navigation from './components/Navigation';
@@ -68,12 +76,12 @@ function AppContent() {
   const location = useLocation();
   const isNavigatingRef = React.useRef(false);
 
-  // Debug logging
-  React.useEffect(() => {
-    console.log('[AppContent] Auth state changed:', { isAuthenticated, loading, pathname: location.pathname });
-  }, [isAuthenticated, loading, location.pathname]);
+  // Debug logging - disabled to reduce console noise
+  // React.useEffect(() => {
+  //   console.log('[AppContent] Auth state changed:', { isAuthenticated, loading, pathname: location.pathname });
+  // }, [isAuthenticated, loading, location.pathname]);
 
-  // Redirect to home when logged in from login page
+  // Redirect to home when logged in from login page (but allow direct navigation to other authenticated pages)
   React.useEffect(() => {
     if (!loading && isAuthenticated && location.pathname === '/login' && !isNavigatingRef.current) {
       console.log('[AppContent] User authenticated on login page, redirecting to home...');
@@ -83,10 +91,11 @@ function AppContent() {
     }
   }, [isAuthenticated, loading, location.pathname, navigate]);
 
-  // Redirect to login when logged out (if not already on login page)
+  // Only redirect to login if not authenticated AND not currently loading auth state
+  // This preserves deep links on page refresh
   React.useEffect(() => {
     if (!loading && !isAuthenticated && location.pathname !== '/login' && !isNavigatingRef.current) {
-      console.log('[AppContent] User logged out, redirecting to login...');
+      console.log('[AppContent] User not authenticated, redirecting to login...');
       isNavigatingRef.current = true;
       navigate('/login', { replace: true });
       setTimeout(() => { isNavigatingRef.current = false; }, 100);
@@ -145,25 +154,31 @@ function AppContent() {
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<EditEpisode />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
+          <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
           <Route path="/assets" element={<AssetGallery />} />
           <Route path="/assets/manager" element={<AssetManager />} />
 
           {/* Additional Pages */}
           <Route path="/search" element={<SearchResults />} />
           {/* <Route path="/compositions/:compositionId" element={<CompositionManagement />} /> */}
+          <Route path="/library" element={<CompositionLibrary />} />
+          <Route path="/compositions/:id" element={<CompositionDetail />} />
           <Route path="/composer/:episodeId" element={<ThumbnailComposer />} />
           <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
+          <Route path="/scene-library" element={<SceneLibrary />} />
+          <Route path="/scene-library/:sceneId" element={<SceneDetail />} />
           <Route path="/episodes/:episodeId/scenes" element={<SceneComposer />} />
           <Route path="/episodes/:episodeId/scenes/list" element={<ScenesList />} />
           <Route path="/shows" element={<ShowManagement />} />
           <Route path="/shows/create" element={<ShowForm />} />
           <Route path="/shows/:id/edit" element={<ShowForm />} />
-          <Route path="/wardrobe" element={<WardrobeBrowser mode="gallery" />} />
-          <Route path="/wardrobe/analytics" element={<WardrobeAnalytics />} />
-          <Route path="/wardrobe/outfits" element={<OutfitSets />} />
+          <Route path="/wardrobe" element={<Wardrobe />} />
           <Route path="/wardrobe-library" element={<WardrobeBrowser mode="library" />} />
           <Route path="/wardrobe-library/upload" element={<WardrobeLibraryUpload />} />
           <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />
+          <Route path="/template-studio" element={<TemplateStudio />} />
+          <Route path="/template-studio/designer" element={<TemplateDesigner />} />
+          <Route path="/template-studio/designer/:templateId" element={<TemplateDesigner />} />
           <Route path="/admin" element={<AdminPanel />} />
           <Route path="/admin/templates" element={<TemplateManagement />} />
           <Route path="/admin/audit" element={<AuditLog />} />

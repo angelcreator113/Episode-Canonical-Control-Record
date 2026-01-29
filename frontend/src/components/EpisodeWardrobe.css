@@ -139,24 +139,66 @@
   font-size: 1rem;
 }
 
+/* Add Item - PRIMARY ACTION ONLY - Gradient with pure white text */
 .btn-add-wardrobe {
-  background: linear-gradient(135deg, var(--ew-primary) 0%, var(--ew-primary-2) 100%);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+  color: #ffffff !important;
+  font-weight: 700;
 }
 
+.btn-add-wardrobe .btn-icon,
+.btn-add-wardrobe .btn-text {
+  color: #ffffff !important;
+}
+
+.btn-add-wardrobe:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+  background: linear-gradient(135deg, #5568d3 0%, #6a3d8f 100%);
+}
+
+/* Gallery & Analytics - SOFT ACTION BUTTONS - Light tinted background, dark text */
 .btn-view-gallery {
-  background: linear-gradient(135deg, var(--ew-success) 0%, var(--ew-success-2) 100%);
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  background: #f0fdf4;
+  box-shadow: none;
+  border: 1px solid #86efac;
+  color: #065f46 !important;
+  font-weight: 600;
 }
 
-.btn-add-wardrobe:hover,
+.btn-view-gallery .btn-icon {
+  color: #10b981;
+}
+
+.btn-view-gallery .btn-text {
+  color: #065f46 !important;
+}
+
 .btn-view-gallery:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+  background: #dcfce7;
+  border-color: #4ade80;
+  transform: none;
 }
 
+/* Export - TERTIARY ACTION - White background, subtle border */
 .btn-export {
-  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  background: #ffffff;
+  border: 1px solid #3b82f6;
+  color: #3b82f6 !important;
+  box-shadow: none;
+  font-weight: 600;
+}
+
+.btn-export .btn-icon,
+.btn-export .btn-text {
+  color: #3b82f6 !important;
+}
+
+.btn-export:hover {
+  background: #eff6ff;
+  border-color: #2563eb;
+  transform: none;
 }
 
 /* -------------------------
@@ -665,7 +707,7 @@
 .item-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
   transform: scale(1.01);
   transition: transform 0.3s ease;
   cursor: zoom-in;
@@ -1589,7 +1631,7 @@
 .calendar-item-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .calendar-item-image .placeholder {
@@ -1734,7 +1776,7 @@
 .timeline-item-image img {
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
 }
 
 .timeline-item-image .placeholder {
@@ -2167,7 +2209,8 @@
   }
 
   .item-image {
-    min-height: 200px;
+    height: 140px;
+    min-height: 140px;
   }
 }
 
@@ -2214,17 +2257,109 @@
     font-weight: 700;
   }
 
-  .item-image {
-    height: 180px;
-    min-height: 180px;
+  /* Mobile: Horizontal card layout with compact image */
+  .wardrobe-item-card {
+    flex-direction: row;
+    min-height: auto;
   }
 
-  .item-info {
-    padding: 0.875rem;
+  .item-image {
+    width: 80px;
+    height: 80px;
+    min-height: 80px;
+    flex-shrink: 0;
+    border-bottom: none;
+    border-right: 1px solid var(--ew-border-2);
+    cursor: pointer;
+  }
+
+  .item-image img {
+    transform: scale(1) !important;
+  }
+
+  .wardrobe-item-card:hover .item-image img {
+    transform: scale(1) !important;
+  }
+
+  .calendar-item-image {
+    height: 80px;
+  }
+
+  .item-details {
+    flex: 1;
+    padding: 0.75rem;
   }
 
   .item-name {
-    font-size: 0.95rem;
+    font-size: 0.9rem;
+    -webkit-line-clamp: 1;
+  }
+
+  .item-brand {
+    font-size: 0.75rem;
+    margin-bottom: 0.3rem;
+  }
+
+  .item-meta {
+    font-size: 0.75rem;
+    margin-bottom: 0.25rem;
+  }
+
+  /* Collapse secondary actions into menu */
+  .item-actions {
+    flex-direction: row;
+    gap: 0.25rem;
+    padding-top: 0.5rem;
+    margin-top: 0.5rem;
+  }
+
+  .btn-edit-item {
+    flex: 1;
+  }
+
+  /* Hide secondary buttons, show in overflow menu instead */
+  .btn-download,
+  .btn-download-processed,
+  .btn-print,
+  .btn-remove-bg {
+    display: none;
+  }
+
+  .btn-delete-item {
+    flex: 0 0 auto;
+    min-width: auto;
+    padding: 0.4rem 0.6rem;
+  }
+
+  /* Compact badges */
+  .favorite-badge {
+    top: 6px;
+    right: 6px;
+    padding: 0.2rem 0.4rem;
+    font-size: 0.7rem;
+  }
+
+  .popularity-badge {
+    top: 6px;
+    left: 6px;
+    padding: 0.25rem 0.45rem;
+    font-size: 0.65rem;
+  }
+
+  .btn-toggle-processed {
+    bottom: 6px;
+    right: 6px;
+    padding: 0.3rem 0.5rem;
+    font-size: 0.65rem;
+  }
+
+  /* Hide extra meta on mobile */
+  .outfit-notes,
+  .season-occasion,
+  .item-tags,
+  .wear-info,
+  .price-per-wear {
+    display: none;
   }
 
   .modal-content {

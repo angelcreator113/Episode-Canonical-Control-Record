@@ -1,6 +1,6 @@
 /**
- * Create Episode Page - Upgraded
- * Mobile/tablet/desktop friendly, minimal + polished
+ * Create Episode Page - UPGRADED
+ * Sectioned, hierarchical, forgiving, confidence-building
  */
 
 import React, { useMemo, useState, useEffect } from 'react';
@@ -28,6 +28,7 @@ const CreateEpisode = () => {
   const [formData, setFormData] = useState({
     title: '',
     episodeNumber: '',
+    season: '',
     status: 'draft',
     description: '',
     airDate: '',
@@ -77,20 +78,47 @@ const CreateEpisode = () => {
   }, []);
 
   const progress = useMemo(() => {
-    const checks = {
-      title: Boolean(formData.title?.trim()),
-      status: Boolean(formData.status),
-      description: Boolean(formData.description?.trim()),
-      tags: (formData.categories?.length || 0) > 0,
-      thumbnail: Boolean(thumbnailPreview || thumbnailId || thumbnailFile),
+    const sections = {
+      essential: {
+        title: Boolean(formData.title?.trim()),
+        show: Boolean(formData.showId),
+      },
+      scheduling: {
+        status: Boolean(formData.status),
+        airDate: Boolean(formData.airDate),
+      },
+      discovery: {
+        description: Boolean(formData.description?.trim()),
+        tags: (formData.categories?.length || 0) > 0,
+      },
+      creative: {
+        thumbnail: Boolean(thumbnailPreview || thumbnailId || thumbnailFile),
+      },
     };
-    const done = Object.values(checks).filter(Boolean).length;
-    const total = Object.keys(checks).length;
+
+    const sectionCompletion = {};
+    let totalComplete = 0;
+    let totalFields = 0;
+
+    Object.keys(sections).forEach((sectionKey) => {
+      const fields = sections[sectionKey];
+      const complete = Object.values(fields).filter(Boolean).length;
+      const total = Object.keys(fields).length;
+      sectionCompletion[sectionKey] = {
+        complete,
+        total,
+        percent: Math.round((complete / total) * 100),
+        isComplete: complete === total,
+      };
+      totalComplete += complete;
+      totalFields += total;
+    });
+
     return {
-      checks,
-      percent: Math.round((done / total) * 100),
-      done,
-      total,
+      sections: sectionCompletion,
+      percent: Math.round((totalComplete / totalFields) * 100),
+      totalComplete,
+      totalFields,
     };
   }, [formData, thumbnailPreview, thumbnailId, thumbnailFile]);
 
@@ -105,98 +133,60 @@ const CreateEpisode = () => {
     clearFieldError(name);
   };
 
-  const handleCategoriesChange = (categories) => {
-    setFormData((prev) => ({ ...prev, categories }));
+  const handleCategoriesChange = (newCategories) => {
+    setFormData((prev) => ({ ...prev, categories: newCategories }));
   };
 
   const handleThumbnailChange = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate type
-    if (!file.type?.startsWith('image/')) {
-      setErrors((prev) => ({ ...prev, thumbnail: 'Please select an image file' }));
-      toast.showError('Please select an image file');
-      return;
-    }
-
-    // Validate size
     if (file.size > MAX_THUMB_BYTES) {
-      setErrors((prev) => ({ ...prev, thumbnail: `Image must be less than ${MAX_THUMB_MB}MB` }));
-      toast.showError(`Image must be less than ${MAX_THUMB_MB}MB`);
+      setErrors((prev) => ({ ...prev, thumbnail: `File too large (max ${MAX_THUMB_MB}MB)` }));
       return;
     }
 
     setThumbnailFile(file);
-    setThumbnailId(null);
-    setErrors((prev) => ({ ...prev, thumbnail: null }));
-
     const reader = new FileReader();
-    reader.onloadend = () => setThumbnailPreview(reader.result);
+    reader.onload = () => setThumbnailPreview(reader.result);
     reader.readAsDataURL(file);
+    clearFieldError('thumbnail');
   };
 
-  const handleThumbnailSelect = async (selectedThumbnailId) => {
-    try {
-      setThumbnailId(selectedThumbnailId);
-      setThumbnailFile(null);
-
-      const thumb = await thumbnailService.getThumbnail(selectedThumbnailId);
-      setThumbnailPreview(thumb?.url || thumb?.s3Url || null);
-
-      setErrors((prev) => ({ ...prev, thumbnail: null }));
-    } catch (err) {
-      console.error('Failed to load thumbnail:', err);
-      toast.showError('Failed to load thumbnail');
-    }
+  const handleThumbnailSelect = async (asset) => {
+    if (!asset?.id) return;
+    setThumbnailId(asset.id);
+    setThumbnailPreview(asset.thumbnail_url || asset.url || null);
+    setShowAssetPicker(false);
+    clearFieldError('thumbnail');
   };
 
   const handleRemoveThumbnail = () => {
     setThumbnailFile(null);
     setThumbnailPreview(null);
     setThumbnailId(null);
-
     const fileInput = document.getElementById('thumbnailFile');
     if (fileInput) fileInput.value = '';
   };
 
   const validate = () => {
-    const next = {};
-    if (!formData.title?.trim()) next.title = 'Title is required';
-
-    // Optionally validate episode number if present (must be positive int)
-    if (formData.episodeNumber !== '' && Number(formData.episodeNumber) < 0) {
-      next.episodeNumber = 'Episode number must be 0 or greater';
+    const newErrors = {};
+    if (!formData.title?.trim()) {
+      newErrors.title = 'Title is required';
     }
-
-    setErrors(next);
-    if (Object.keys(next).length > 0) {
-      toast.showError('Please fix the highlighted fields');
-      return false;
+    if (!formData.showId) {
+      newErrors.showId = 'Show is required';
     }
-    return true;
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
   };
 
   const uploadThumbnailIfNeeded = async (episodeId) => {
     if (!thumbnailFile) return;
-
-    const formDataToSend = new FormData();
-    formDataToSend.append('file', thumbnailFile);
-    formDataToSend.append('episodeId', episodeId);
-    formDataToSend.append('type', 'thumbnail');
-
     try {
-      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-      await fetch(`${API_URL}/files/upload`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-        body: formDataToSend,
-      });
-    } catch (uploadErr) {
-      console.warn('Thumbnail upload failed:', uploadErr);
-      // Don’t block create; just inform softly.
+      await thumbnailService.uploadThumbnail(episodeId, thumbnailFile);
+    } catch (err) {
+      console.error('Failed to upload thumbnail:', err);
       toast.showError('Episode created, but thumbnail upload failed.');
     }
   };
@@ -213,6 +203,7 @@ const CreateEpisode = () => {
       const response = await episodeService.createEpisode({
         title: formData.title.trim(),
         episode_number: formData.episodeNumber !== '' ? Number(formData.episodeNumber) : null,
+        season: formData.season !== '' ? Number(formData.season) : null,
         status: formData.status,
         description: formData.description,
         air_date: formData.airDate || null,
@@ -271,10 +262,10 @@ const CreateEpisode = () => {
           </div>
 
           {/* Desktop header actions */}
-          <div className="ce-header__actions" style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+          <div className="ce-header__actions">
             <button
               type="button"
-              className="ce-btn ce-btn--secondary"
+              className="ce-btn ce-btn--ghost"
               onClick={() => navigate('/episodes')}
               disabled={loading}
             >
@@ -285,7 +276,6 @@ const CreateEpisode = () => {
               form="create-episode-form"
               className="ce-btn ce-btn--primary"
               disabled={loading}
-              title={loading ? 'Creating…' : 'Create episode'}
             >
               {loading ? 'Creating…' : 'Create Episode'}
             </button>
@@ -299,18 +289,31 @@ const CreateEpisode = () => {
           {error && <ErrorMessage message={error} onDismiss={() => setError(null)} />}
           {!error && (
             <div className="ce-mutedSm">
-              Tip: you can create with just a <strong>Title</strong>. Everything else can be added later.
+              💡 Tip: you can create with just a <strong>Title</strong> and <strong>Show</strong>. Everything else can be added later.
             </div>
           )}
         </div>
 
-        <div className="ce-body ce-body--single" style={{ paddingTop: 0 }}>
-          <div className="ce-card">
-            <form id="create-episode-form" onSubmit={handleSubmit} className="ce-grid">
+        <form id="create-episode-form" onSubmit={handleSubmit} className="ce-formWrapper">
+          
+          {/* ===== SECTION: Essential Information ===== */}
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">✨</span>
+                <h2>Essential Information</h2>
+                {progress.sections.essential.isComplete && (
+                  <span className="ce-checkmark">✓</span>
+                )}
+              </div>
+              <div className="ce-sectionDesc">Required to get started</div>
+            </div>
+
+            <div className="ce-grid">
               {/* Title */}
               <div className="ce-field">
                 <label htmlFor="title">
-                  Title <span className="ce-required">*</span>
+                  Episode Title <span className="ce-required">*</span>
                 </label>
                 <input
                   id="title"
@@ -319,49 +322,12 @@ const CreateEpisode = () => {
                   className={`ce-input ${errors.title ? 'ce-input--error' : ''}`}
                   value={formData.title}
                   onChange={handleChange}
-                  placeholder="Enter episode title"
+                  placeholder="e.g., Winter Lookbook: Episode 1"
                   disabled={loading}
                   required
                 />
                 {errors.title && <div className="ce-error">{errors.title}</div>}
-                <div className="ce-hint">Make it searchable and clear (e.g., “Winter Lookbook: Ep 1”).</div>
-              </div>
-
-              {/* Row: Episode # + Status */}
-              <div className="ce-grid ce-grid--2">
-                <div className="ce-field">
-                  <label htmlFor="episodeNumber">Episode Number (Optional)</label>
-                  <input
-                    id="episodeNumber"
-                    name="episodeNumber"
-                    type="number"
-                    className={`ce-input ${errors.episodeNumber ? 'ce-input--error' : ''}`}
-                    value={formData.episodeNumber}
-                    onChange={handleChange}
-                    placeholder="e.g., 1"
-                    disabled={loading}
-                    min={0}
-                  />
-                  {errors.episodeNumber && <div className="ce-error">{errors.episodeNumber}</div>}
-                </div>
-
-                <div className="ce-field">
-                  <label htmlFor="status">Status</label>
-                  <select
-                    id="status"
-                    name="status"
-                    className="ce-input"
-                    value={formData.status}
-                    onChange={handleChange}
-                    disabled={loading}
-                  >
-                    {STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                <div className="ce-hint">Make it searchable and clear</div>
               </div>
 
               {/* Show Selection */}
@@ -372,7 +338,7 @@ const CreateEpisode = () => {
                 <select
                   id="showId"
                   name="showId"
-                  className="ce-input"
+                  className={`ce-input ${errors.showId ? 'ce-input--error' : ''}`}
                   value={formData.showId}
                   onChange={handleChange}
                   disabled={loading || loadingShows}
@@ -385,9 +351,106 @@ const CreateEpisode = () => {
                     </option>
                   ))}
                 </select>
-                <div className="ce-hint">Select the show this episode belongs to. Required for organization.</div>
+                {errors.showId && <div className="ce-error">{errors.showId}</div>}
+                <div className="ce-hint">Which show does this episode belong to?</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ===== SECTION: Scheduling & Publishing ===== */}
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">📅</span>
+                <h2>Scheduling & Publishing</h2>
+                {progress.sections.scheduling.isComplete && (
+                  <span className="ce-checkmark">✓</span>
+                )}
+              </div>
+              <div className="ce-sectionDesc">When and how to publish</div>
+            </div>
+
+            <div className="ce-grid ce-grid--3">
+              <div className="ce-field">
+                <label htmlFor="status">Status</label>
+                <select
+                  id="status"
+                  name="status"
+                  className="ce-input"
+                  value={formData.status}
+                  onChange={handleChange}
+                  disabled={loading}
+                >
+                  {STATUS_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
 
+              <div className="ce-field">
+                <label htmlFor="episodeNumber">Episode Number</label>
+                <input
+                  id="episodeNumber"
+                  name="episodeNumber"
+                  type="number"
+                  className={`ce-input ${errors.episodeNumber ? 'ce-input--error' : ''}`}
+                  value={formData.episodeNumber}
+                  onChange={handleChange}
+                  placeholder="e.g., 1"
+                  disabled={loading}
+                  min={0}
+                />
+                {errors.episodeNumber && <div className="ce-error">{errors.episodeNumber}</div>}
+              </div>
+
+              <div className="ce-field">
+                <label htmlFor="season">Season</label>
+                <input
+                  id="season"
+                  name="season"
+                  type="number"
+                  className="ce-input"
+                  value={formData.season}
+                  onChange={handleChange}
+                  placeholder="e.g., 1"
+                  disabled={loading}
+                  min={0}
+                />
+                <div className="ce-hint">Optional</div>
+              </div>
+            </div>
+
+            <div className="ce-field">
+              <label htmlFor="airDate">Air Date</label>
+              <input
+                id="airDate"
+                name="airDate"
+                type="date"
+                className="ce-input"
+                value={formData.airDate}
+                onChange={handleChange}
+                disabled={loading}
+              />
+              <div className="ce-hint">When will this episode be released?</div>
+            </div>
+          </div>
+
+          {/* ===== SECTION: Discovery & Metadata ===== */}
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">🔍</span>
+                <h2>Discovery & Metadata</h2>
+                {progress.sections.discovery.isComplete && (
+                  <span className="ce-checkmark">✓</span>
+                )}
+              </div>
+              <div className="ce-sectionDesc">Help people find this episode</div>
+            </div>
+
+            <div className="ce-grid">
               {/* Description */}
               <div className="ce-field">
                 <label htmlFor="description">Description</label>
@@ -397,40 +460,11 @@ const CreateEpisode = () => {
                   className="ce-input ce-textarea"
                   value={formData.description}
                   onChange={handleChange}
-                  placeholder="Enter a description..."
+                  placeholder="What is this episode about?"
                   disabled={loading}
-                  rows={3}
+                  rows={4}
                 />
-                <div className="ce-hint">Brief summary of the episode content.</div>
-              </div>
-
-              {/* Air Date */}
-              <div className="ce-field">
-                <label htmlFor="airDate">Air Date (Optional)</label>
-                <input
-                  id="airDate"
-                  name="airDate"
-                  type="date"
-                  className="ce-input"
-                  value={formData.airDate}
-                  onChange={handleChange}
-                  disabled={loading}
-                />
-              </div>
-
-              {/* Categories */}
-              <div className="ce-field">
-                <label htmlFor="description">Description (Optional)</label>
-                <textarea
-                  id="description"
-                  name="description"
-                  className="ce-input ce-textarea"
-                  value={formData.description}
-                  onChange={handleChange}
-                  placeholder="Enter episode description"
-                  rows={5}
-                  disabled={loading}
-                />
+                <div className="ce-hint">Brief summary visible in search and listings</div>
               </div>
 
               {/* Tags */}
@@ -439,109 +473,139 @@ const CreateEpisode = () => {
                 <TagInput
                   tags={formData.categories}
                   onChange={handleCategoriesChange}
-                  placeholder="Add categories (e.g., fashion, tutorial)"
+                  placeholder="Add tags (e.g., fashion, tutorial, winter)"
                   disabled={loading}
                   maxTags={10}
                 />
-                <div className="ce-hint">Tags help with organization + search.</div>
+                <div className="ce-hint">Tags improve searchability and organization</div>
               </div>
+            </div>
+          </div>
 
-              {/* Thumbnail */}
-              <div className="ce-field">
-                <label htmlFor="thumbnailFile">Thumbnail Image</label>
+          {/* ===== SECTION: Creative Workflow (Thumbnail) ===== */}
+          <div className="ce-card ce-section ce-section--creative">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">🎨</span>
+                <h2>Thumbnail</h2>
+                {progress.sections.creative.isComplete && (
+                  <span className="ce-checkmark">✓</span>
+                )}
+              </div>
+              <div className="ce-sectionDesc">Create an eye-catching cover</div>
+            </div>
 
-                <div className="ce-thumbActions">
+            {thumbnailPreview ? (
+              <div className="ce-thumbnailPreviewCard">
+                <img src={thumbnailPreview} alt="Thumbnail preview" className="ce-thumbnailPreviewImage" />
+                <div className="ce-thumbnailActions">
                   <button
                     type="button"
-                    className="ce-btn ce-btn--primary"
-                    onClick={() => setShowAssetPicker(true)}
-                    disabled={loading}
-                    title="Choose from gallery"
-                  >
-                    📁 Choose from Gallery
-                  </button>
-
-                  <label
                     className="ce-btn ce-btn--secondary"
-                    htmlFor="thumbnailFile"
-                    style={{ cursor: loading ? 'not-allowed' : 'pointer' }}
-                    title="Upload new thumbnail"
-                  >
-                    ⬆️ Upload New
-                  </label>
-
-                  <input
-                    type="file"
-                    id="thumbnailFile"
-                    accept="image/*"
-                    onChange={handleThumbnailChange}
+                    onClick={() => navigate('/composer/default')}
                     disabled={loading}
-                    className="ce-thumbFileInput"
-                  />
+                  >
+                    🎨 Edit in Composer
+                  </button>
+                  <button
+                    type="button"
+                    className="ce-btn ce-btn--ghost"
+                    onClick={handleRemoveThumbnail}
+                    disabled={loading}
+                  >
+                    Remove
+                  </button>
                 </div>
-
-                {errors.thumbnail && <div className="ce-error">{errors.thumbnail}</div>}
-
-                {thumbnailPreview ? (
-                  <div className="ce-thumbPreview">
-                    <img src={thumbnailPreview} alt="Thumbnail preview" />
-                    <div className="ce-thumbPreviewBar">
-                      <button
-                        type="button"
-                        className="ce-btn ce-btn--secondary ce-btn--sm"
-                        onClick={() => window.open('/composer/default', '_blank')}
-                        disabled={loading}
-                      >
-                        Open Composer
-                      </button>
-                      <button
-                        type="button"
-                        className="ce-btn ce-btn--danger ce-btn--sm"
-                        onClick={handleRemoveThumbnail}
-                        disabled={loading}
-                      >
-                        Remove
-                      </button>
-                    </div>
+              </div>
+            ) : (
+              <div className="ce-thumbnailEmpty">
+                <div className="ce-thumbnailEmptyIcon">🖼️</div>
+                <div className="ce-thumbnailEmptyText">No thumbnail yet</div>
+                <div className="ce-thumbnailEmptyHint">
+                  Create a professional thumbnail using our template-based composer
+                </div>
+                <div className="ce-thumbnailEmptyActions">
+                  <button
+                    type="button"
+                    className="ce-btn ce-btn--primary ce-btn--large"
+                    onClick={() => navigate('/composer/default')}
+                    disabled={loading}
+                  >
+                    🎨 Create with Thumbnail Composer
+                  </button>
+                  <div className="ce-orDivider">
+                    <span>or</span>
                   </div>
-                ) : (
-                  <div className="ce-thumbEmpty">
-                    <div className="ce-mutedSm">No thumbnail selected.</div>
+                  <div className="ce-quickOptions">
                     <button
                       type="button"
-                      className="ce-btn ce-btn--secondary ce-btn--sm"
-                      onClick={() => window.open('/composer/default', '_blank')}
+                      className="ce-btn ce-btn--ghost"
+                      onClick={() => setShowAssetPicker(true)}
                       disabled={loading}
                     >
-                      Use Thumbnail Composer
+                      📁 Choose from Gallery
                     </button>
+                    <label className="ce-btn ce-btn--ghost" htmlFor="thumbnailFile">
+                      ⬆️ Upload Image
+                    </label>
+                    <input
+                      type="file"
+                      id="thumbnailFile"
+                      accept="image/*"
+                      onChange={handleThumbnailChange}
+                      disabled={loading}
+                      className="ce-thumbFileInput"
+                    />
                   </div>
-                )}
-
-                <div className="ce-hint">
-                  Upload an image file (JPG/PNG/etc.) — max {MAX_THUMB_MB}MB.
                 </div>
               </div>
+            )}
 
-              {/* MOBILE FOOTER ACTIONS */}
-              <div className="ce-footerActions">
-                <button
-                  type="button"
-                  className="ce-btn ce-btn--secondary"
-                  onClick={() => navigate('/episodes')}
-                  disabled={loading}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="ce-btn ce-btn--primary"
-                  disabled={loading}
-                >
-                  {loading ? 'Creating…' : 'Create Episode'}
-                </button>
+            {errors.thumbnail && <div className="ce-error">{errors.thumbnail}</div>}
+            <div className="ce-hint" style={{ marginTop: '1rem' }}>
+              Recommended: 1920x1080px (16:9) — Max {MAX_THUMB_MB}MB
+            </div>
+          </div>
+
+        </form>
+
+        {/* Sticky Footer */}
+        <div className="ce-stickyFooter">
+          <div className="ce-stickyFooterContent">
+            <div className="ce-footerProgress">
+              <div className="ce-footerProgressText">
+                <span className="ce-footerProgressIcon">💪</span>
+                <span>{progress.percent}% Complete</span>
               </div>
-            </form>
+              <div className="ce-footerHint">
+                ✨ You can finish this later — your progress is saved
+              </div>
+            </div>
+            <div className="ce-footerActions">
+              <button
+                type="button"
+                className="ce-btn ce-btn--ghost"
+                onClick={() => navigate('/episodes')}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="create-episode-form"
+                className="ce-btn ce-btn--primary ce-btn--large"
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <span className="ce-spinner"></span>
+                    Creating...
+                  </>
+                ) : (
+                  'Create Episode'
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>

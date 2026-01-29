@@ -1,3 +1,6 @@
+/* Import Design Tokens */
+@import './styles/design-tokens.css';
+
 /* Tailwind CSS alternative - using custom CSS */
 
 :root {

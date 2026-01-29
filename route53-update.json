@@ -1,0 +1,12 @@
+{
+  "Comment": "Update dev.primepisodes.com to point to EC2",
+  "Changes": [{
+    "Action": "UPSERT",
+    "ResourceRecordSet": {
+      "Name": "dev.primepisodes.com",
+      "Type": "A",
+      "TTL": 300,
+      "ResourceRecords": [{"Value": "3.94.166.174"}]
+    }
+  }]
+}

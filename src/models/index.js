@@ -46,6 +46,8 @@ let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate
 let Show, Scene, AssetLabel, EpisodeAsset, SceneAsset, SceneTemplate, ShowAsset;
 let Wardrobe, EpisodeWardrobe, OutfitSet;
 let WardrobeLibrary, OutfitSetItems, WardrobeUsageHistory, WardrobeLibraryReferences;
+let SceneLibrary, EpisodeScene;
+let CompositionAsset, CompositionOutput;
 
 try {
   // Core models
@@ -63,6 +65,8 @@ try {
   ThumbnailComposition = require('./ThumbnailComposition')(sequelize);
   ThumbnailTemplate = require('./ThumbnailTemplate')(sequelize);
   EpisodeTemplate = require('./EpisodeTemplate')(sequelize);
+  CompositionAsset = require('./CompositionAsset')(sequelize);
+  CompositionOutput = require('./CompositionOutput')(sequelize);
 
   // Phase 6 models
   Show = require('./Show')(sequelize);
@@ -88,6 +92,10 @@ try {
   OutfitSetItems = require('./OutfitSetItems')(sequelize);
   WardrobeUsageHistory = require('./WardrobeUsageHistory')(sequelize);
   WardrobeLibraryReferences = require('./WardrobeLibraryReferences')(sequelize);
+
+  // Scene Library models (new system)
+  SceneLibrary = require('./SceneLibrary')(sequelize);
+  EpisodeScene = require('./EpisodeScene')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -124,6 +132,8 @@ const requiredModels = {
   OutfitSetItems,
   WardrobeUsageHistory,
   WardrobeLibraryReferences,
+  SceneLibrary,
+  EpisodeScene,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -303,7 +313,50 @@ ThumbnailTemplate.hasMany(ThumbnailComposition, {
   as: 'compositions',
 });
 
-// ThumbnailComposition → Assets (multiple relationships)
+// ThumbnailTemplate → Show (N:1)
+ThumbnailTemplate.belongsTo(Show, {
+  foreignKey: 'show_id',
+  as: 'show',
+});
+
+Show.hasMany(ThumbnailTemplate, {
+  foreignKey: 'show_id',
+  as: 'thumbnailTemplates',
+});
+
+// CompositionAsset junction table associations
+CompositionAsset.belongsTo(ThumbnailComposition, {
+  foreignKey: 'composition_id',
+  as: 'composition',
+});
+
+CompositionAsset.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+});
+
+ThumbnailComposition.hasMany(CompositionAsset, {
+  foreignKey: 'composition_id',
+  as: 'compositionAssets',
+});
+
+Asset.hasMany(CompositionAsset, {
+  foreignKey: 'asset_id',
+  as: 'compositionAssets',
+});
+
+// CompositionOutput associations
+CompositionOutput.belongsTo(ThumbnailComposition, {
+  foreignKey: 'composition_id',
+  as: 'composition',
+});
+
+ThumbnailComposition.hasMany(CompositionOutput, {
+  foreignKey: 'composition_id',
+  as: 'outputs',
+});
+
+// ThumbnailComposition → Assets (multiple relationships - LEGACY, kept for backwards compatibility)
 ThumbnailComposition.belongsTo(Asset, {
   foreignKey: 'lala_asset_id',
   as: 'lalaAsset',
@@ -492,6 +545,42 @@ WardrobeLibrary.belongsToMany(WardrobeLibrary, {
   as: 'items',
 });
 
+// ==================== SCENE LIBRARY ASSOCIATIONS ====================
+
+// SceneLibrary → Show (N:1)
+SceneLibrary.belongsTo(Show, {
+  foreignKey: 'show_id',
+  as: 'show',
+});
+
+Show.hasMany(SceneLibrary, {
+  foreignKey: 'show_id',
+  as: 'sceneLibrary',
+});
+
+// SceneLibrary → EpisodeScene (1:N) - one library scene can be used in many episodes
+SceneLibrary.hasMany(EpisodeScene, {
+  foreignKey: 'scene_library_id',
+  as: 'episodeScenes',
+});
+
+EpisodeScene.belongsTo(SceneLibrary, {
+  foreignKey: 'scene_library_id',
+  as: 'libraryScene',
+});
+
+// EpisodeScene → Episode (N:1)
+EpisodeScene.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+Episode.hasMany(EpisodeScene, {
+  foreignKey: 'episode_id',
+  as: 'episodeScenes',
+});
+
+
 WardrobeLibrary.belongsToMany(WardrobeLibrary, {
   through: OutfitSetItems,
   foreignKey: 'wardrobe_item_id',
@@ -614,6 +703,8 @@ const db = {
     ThumbnailComposition,
     ThumbnailTemplate,
     EpisodeTemplate,
+    CompositionAsset,
+    CompositionOutput,
     Show,
     Scene,
     AssetLabel,
@@ -629,6 +720,8 @@ const db = {
     OutfitSetItems,
     WardrobeUsageHistory,
     WardrobeLibraryReferences,
+    SceneLibrary,
+    EpisodeScene,
   },
 
   /**
@@ -806,6 +899,8 @@ module.exports.Asset = Asset;
 module.exports.ThumbnailComposition = ThumbnailComposition;
 module.exports.ThumbnailTemplate = ThumbnailTemplate;
 module.exports.EpisodeTemplate = EpisodeTemplate;
+module.exports.CompositionAsset = CompositionAsset;
+module.exports.CompositionOutput = CompositionOutput;
 module.exports.Show = Show;
 module.exports.Scene = Scene;
 module.exports.SceneTemplate = SceneTemplate;
@@ -815,6 +910,8 @@ module.exports.OutfitSet = OutfitSet;
 module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.WardrobeLibrary = WardrobeLibrary;
 module.exports.OutfitSetItems = OutfitSetItems;
+module.exports.SceneLibrary = SceneLibrary;
+module.exports.EpisodeScene = EpisodeScene;
 module.exports.WardrobeUsageHistory = WardrobeUsageHistory;
 module.exports.WardrobeLibraryReferences = WardrobeLibraryReferences;
 module.exports.AssetLabel = AssetLabel;

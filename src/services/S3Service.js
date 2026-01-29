@@ -209,6 +209,23 @@ class S3Service {
       throw error;
     }
   }
+
+  /**
+   * Get file as buffer from S3
+   * @param {string} bucket - S3 bucket name
+   * @param {string} key - S3 object key
+   * @returns {Promise<Buffer>} File buffer
+   */
+  async getFileAsBuffer(bucket, key) {
+    try {
+      const response = await this.s3.getObject({ Bucket: bucket, Key: key }).promise();
+      logger.debug('S3 file retrieved as buffer', { bucket, key, size: response.Body.length });
+      return response.Body;
+    } catch (error) {
+      logger.error('Failed to get S3 file as buffer', { bucket, key, error: error.message });
+      throw error;
+    }
+  }
 }
 
 module.exports = new S3Service();

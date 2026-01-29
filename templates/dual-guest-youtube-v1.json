@@ -1,0 +1,153 @@
+{
+  "id": "550e8400-e29b-41d4-a716-446655440002",
+  "name": "Dual Guest - YouTube v1",
+  "version": 1,
+  "status": "PUBLISHED",
+  "locked": true,
+  "canvas_config": {
+    "width": 1280,
+    "height": 720,
+    "background_color": "#9333ea"
+  },
+  "role_slots": [
+    {
+      "role": "BG.MAIN",
+      "visible_by_default": true,
+      "position": {
+        "x": 0,
+        "y": 0,
+        "width": 1280,
+        "height": 720
+      },
+      "z_index": 0
+    },
+    {
+      "role": "CHAR.HOST.LALA",
+      "visible_by_default": true,
+      "position": {
+        "x": 60,
+        "y": 180,
+        "width": 280,
+        "height": 500
+      },
+      "z_index": 10,
+      "transform": {
+        "scale": 0.9,
+        "rotation": 0
+      },
+      "filters": {
+        "dropShadow": true
+      }
+    },
+    {
+      "role": "CHAR.HOST.JUSTAWOMANINHERPRIME",
+      "visible_by_default": true,
+      "position": {
+        "x": 940,
+        "y": 180,
+        "width": 280,
+        "height": 500
+      },
+      "z_index": 10,
+      "transform": {
+        "scale": 0.9,
+        "rotation": 0
+      },
+      "filters": {
+        "dropShadow": true
+      }
+    },
+    {
+      "role": "CHAR.GUEST.1",
+      "visible_by_default": true,
+      "conditional_rules": {
+        "show_if": "EPISODE.HAS_DUAL_GUESTS"
+      },
+      "position": {
+        "x": 360,
+        "y": 120,
+        "width": 260,
+        "height": 560
+      },
+      "z_index": 15,
+      "transform": {
+        "scale": 1,
+        "rotation": 0
+      },
+      "filters": {
+        "dropShadow": true
+      }
+    },
+    {
+      "role": "CHAR.GUEST.2",
+      "visible_by_default": true,
+      "conditional_rules": {
+        "show_if": "EPISODE.HAS_DUAL_GUESTS"
+      },
+      "position": {
+        "x": 660,
+        "y": 120,
+        "width": 260,
+        "height": 560
+      },
+      "z_index": 15,
+      "transform": {
+        "scale": 1,
+        "rotation": 0
+      },
+      "filters": {
+        "dropShadow": true
+      }
+    },
+    {
+      "role": "TEXT.SHOW.TITLE",
+      "visible_by_default": true,
+      "position": {
+        "x": 340,
+        "y": 20,
+        "width": 600,
+        "height": 90
+      },
+      "z_index": 20,
+      "text_style": {
+        "font_family": "Montserrat",
+        "font_weight": 800,
+        "font_size": 52,
+        "color": "#ffffff",
+        "stroke": {
+          "color": "#000000",
+          "width": 5
+        },
+        "shadow": {
+          "blur": 8,
+          "offset": [4, 4],
+          "color": "#000000"
+        }
+      }
+    }
+  ],
+  "safe_zones": {
+    "youtube": {
+      "x": 40,
+      "y": 40,
+      "width": 1200,
+      "height": 640
+    }
+  },
+  "required_roles": [
+    "BG.MAIN",
+    "CHAR.HOST.LALA",
+    "CHAR.HOST.JUSTAWOMANINHERPRIME",
+    "CHAR.GUEST.1",
+    "CHAR.GUEST.2"
+  ],
+  "optional_roles": [
+    "TEXT.SHOW.TITLE",
+    "BRAND.SHOW.TITLE_GRAPHIC"
+  ],
+  "formats_supported": [
+    "YOUTUBE"
+  ],
+  "created_at": "2026-01-26T07:30:00Z",
+  "updated_at": "2026-01-26T07:30:00Z"
+}

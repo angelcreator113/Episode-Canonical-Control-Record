@@ -70,6 +70,12 @@ module.exports = (sequelize) => {
         allowNull: true,
         field: 'deleted_at',
       },
+      thumbnail_url: {
+        type: DataTypes.STRING(1024),
+        allowNull: true,
+        field: 'thumbnail_url',
+        comment: 'URL to episode cover image, typically from primary composition',
+      },
     },
     {
       sequelize,

@@ -22,13 +22,41 @@ const Home = () => {
     recentUploads: 0
   });
   const [recentEpisodes, setRecentEpisodes] = useState([]);
+  const [recentThumbnails, setRecentThumbnails] = useState([]);
+  const [recentAssets, setRecentAssets] = useState([]);
+  const [recentCompositions, setRecentCompositions] = useState([]);
+  const [shows, setShows] = useState([]);
+  const [nextActions, setNextActions] = useState([]);
+  const [activityFeed, setActivityFeed] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showUtilityPanels, setShowUtilityPanels] = useState({
+    thumbnails: false,
+    assets: false
+  });
+  const [onboardingProgress, setOnboardingProgress] = useState({
+    episodeCreated: false,
+    assetsUploaded: false,
+    thumbnailDesigned: false,
+    wardrobeAdded: false,
+  });
 
   useEffect(() => {
-    loadStats();
-    loadWardrobeStats();
+    loadAllData();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const loadAllData = async () => {
+    await Promise.all([
+      loadStats(),
+      loadWardrobeStats(),
+      loadRecentThumbnails(),
+      loadRecentAssets(),
+      loadRecentCompositions(),
+      loadShows(),
+      loadActivityFeed(),
+    ]);
+    setLoading(false);
+  };
 
   const loadStats = async () => {
     try {
@@ -41,9 +69,9 @@ const Home = () => {
 
       const data = JSON.parse(text);
 
-      if (data.data) {
-        const episodes = data.data;
+      const episodes = data.data || [];
 
+      if (episodes.length > 0) {
         const draft = episodes.filter((e) => (e.status || '').toLowerCase() === 'draft').length;
         const published = episodes.filter((e) => (e.status || '').toLowerCase() === 'published').length;
         const inProgress = episodes.filter((e) => {
@@ -66,13 +94,175 @@ const Home = () => {
         setStats({ total: 0, draft: 0, published: 0, inProgress: 0 });
         setRecentEpisodes([]);
       }
+      
+      // Calculate next actions and onboarding progress
+      calculateNextActions(episodes);
+      updateOnboardingProgress(episodes);
     } catch (error) {
       console.error('Failed to load stats:', error);
       setStats({ total: 0, draft: 0, published: 0, inProgress: 0 });
       setRecentEpisodes([]);
-    } finally {
-      setLoading(false);
     }
+  };
+
+  const updateOnboardingProgress = (episodes) => {
+    const progress = {
+      episodeCreated: episodes.length > 0,
+      assetsUploaded: recentAssets.length > 0,
+      thumbnailDesigned: recentThumbnails.length > 0,
+      wardrobeAdded: wardrobeStats.items > 0,
+    };
+    setOnboardingProgress(progress);
+  };
+
+  const loadRecentThumbnails = async () => {
+    try {
+      const response = await fetch(`${API_URL}/compositions?limit=3`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRecentThumbnails(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load thumbnails:', error);
+    }
+  };
+
+  const loadRecentAssets = async () => {
+    try {
+      const response = await fetch(`${API_URL}/assets?limit=4&sort=created_at:desc`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRecentAssets(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load assets:', error);
+    }
+  };
+
+  const loadRecentCompositions = async () => {
+    try {
+      const response = await fetch(`${API_URL}/compositions?limit=3`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setRecentCompositions(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load compositions:', error);
+    }
+  };
+
+  const loadShows = async () => {
+    try {
+      const response = await fetch(`${API_URL}/shows`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('authToken')}`,
+        },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setShows(data.data || []);
+      }
+    } catch (error) {
+      console.error('Failed to load shows:', error);
+    }
+  };
+
+  const loadActivityFeed = async () => {
+    try {
+      // Combine recent activities from multiple sources
+      const activities = [];
+      
+      // Recent episode updates
+      if (recentEpisodes.length > 0) {
+        recentEpisodes.slice(0, 3).forEach(ep => {
+          activities.push({
+            type: 'episode',
+            icon: '📺',
+            message: `Episode "${ep.title || 'Untitled'}" updated`,
+            time: new Date(ep.updatedAt || ep.createdAt),
+            link: `/episodes/${ep.id}`
+          });
+        });
+      }
+      
+      // Recent wardrobe uploads
+      if (wardrobeStats.recentUploads > 0) {
+        activities.push({
+          type: 'wardrobe',
+          icon: '👗',
+          message: `${wardrobeStats.recentUploads} new wardrobe items added`,
+          time: new Date(),
+          link: '/wardrobe'
+        });
+      }
+      
+      // Sort by time
+      activities.sort((a, b) => b.time - a.time);
+      setActivityFeed(activities.slice(0, 5));
+    } catch (error) {
+      console.error('Failed to load activity feed:', error);
+    }
+  };
+
+  const calculateNextActions = (episodes) => {
+    const actions = [];
+    
+    // Episodes without thumbnails
+    const episodesWithoutThumbnails = episodes.filter(ep => 
+      !ep.thumbnail_url && ep.status !== 'draft'
+    );
+    if (episodesWithoutThumbnails.length > 0) {
+      actions.push({
+        type: 'warning',
+        icon: '🎨',
+        title: `${episodesWithoutThumbnails.length} episodes need thumbnails`,
+        subtitle: 'Generate thumbnails to complete episodes',
+        link: '/composer/default',
+        cta: 'Compose'
+      });
+    }
+    
+    // Incomplete episodes
+    const incompleteEpisodes = episodes.filter(ep => 
+      !ep.description || !ep.title || ep.status === 'draft'
+    );
+    if (incompleteEpisodes.length > 0) {
+      actions.push({
+        type: 'info',
+        icon: '📝',
+        title: `${incompleteEpisodes.length} episodes incomplete`,
+        subtitle: 'Add metadata and details',
+        link: '/episodes',
+        cta: 'Review'
+      });
+    }
+    
+    // Admin: Pending approvals (placeholder)
+    if (user?.role === 'admin' || user?.groups?.includes('ADMIN')) {
+      // This would need backend support for pending approvals count
+      actions.push({
+        type: 'urgent',
+        icon: '✅',
+        title: 'Check pending approvals',
+        subtitle: 'Review assets and compositions',
+        link: '/admin',
+        cta: 'Review'
+      });
+    }
+    
+    setNextActions(actions);
   };
 
   const loadWardrobeStats = async () => {
@@ -145,184 +335,336 @@ const Home = () => {
           </div>
         </div>
 
-        {/* Episode Stats */}
-        <section className="stats-strip">
-          <div className="stat-tile">
-            <div className="stat-top">
-              <span className="stat-emoji">📺</span>
-              <span className="stat-name">Total Episodes</span>
+        {/* Stats Grid - 2 columns */}
+        <div className="hero-stats-wrapper">
+          {/* Episode Stats */}
+          <section className="stats-strip">
+            <div className="stat-tile">
+              <div className="stat-top">
+                <span className="stat-emoji">📺</span>
+                <span className="stat-name">Total Episodes</span>
+              </div>
+              <div className="stat-number">{stats.total}</div>
             </div>
-            <div className="stat-number">{stats.total}</div>
-          </div>
 
-          <div className="stat-tile">
-            <div className="stat-top">
-              <span className="stat-emoji">✅</span>
-              <span className="stat-name">Published</span>
+            <div className="stat-tile">
+              <div className="stat-top">
+                <span className="stat-emoji">✅</span>
+                <span className="stat-name">Published</span>
+              </div>
+              <div className="stat-number">{stats.published}</div>
             </div>
-            <div className="stat-number">{stats.published}</div>
-          </div>
 
-          <div className="stat-tile">
-            <div className="stat-top">
-              <span className="stat-emoji">🎬</span>
-              <span className="stat-name">In Progress</span>
+            <div className="stat-tile">
+              <div className="stat-top">
+                <span className="stat-emoji">🎬</span>
+                <span className="stat-name">In Progress</span>
+              </div>
+              <div className="stat-number">{stats.inProgress}</div>
             </div>
-            <div className="stat-number">{stats.inProgress}</div>
-          </div>
 
-          <div className="stat-tile">
-            <div className="stat-top">
-              <span className="stat-emoji">📝</span>
-              <span className="stat-name">Draft</span>
+            <div className="stat-tile">
+              <div className="stat-top">
+                <span className="stat-emoji">📝</span>
+                <span className="stat-name">Draft</span>
+              </div>
+              <div className="stat-number">{stats.draft}</div>
             </div>
-            <div className="stat-number">{stats.draft}</div>
-          </div>
-        </section>
+          </section>
 
-        {/* Wardrobe Stats */}
-        <section className="stats-strip wardrobe-stats">
-          <div className="stat-tile">
-            <div className="stat-top">
-              <span className="stat-emoji">👗</span>
-              <span className="stat-name">Wardrobe Items</span>
+          {/* Wardrobe Stats */}
+          <section className="stats-strip wardrobe-stats">
+            <div className="stat-tile">
+              <div className="stat-top">
+                <span className="stat-emoji">👗</span>
+                <span className="stat-name">Wardrobe Items</span>
+              </div>
+              <div className="stat-number">{wardrobeStats.total}</div>
             </div>
-            <div className="stat-number">{wardrobeStats.total}</div>
-          </div>
 
-          <div className="stat-tile">
-            <div className="stat-top">
-              <span className="stat-emoji">👕</span>
-              <span className="stat-name">Individual Items</span>
+            <div className="stat-tile">
+              <div className="stat-top">
+                <span className="stat-emoji">👕</span>
+                <span className="stat-name">Individual Items</span>
+              </div>
+              <div className="stat-number">{wardrobeStats.items}</div>
             </div>
-            <div className="stat-number">{wardrobeStats.items}</div>
-          </div>
 
-          <div className="stat-tile">
-            <div className="stat-top">
-              <span className="stat-emoji">👔</span>
-              <span className="stat-name">Outfit Sets</span>
+            <div className="stat-tile">
+              <div className="stat-top">
+                <span className="stat-emoji">👔</span>
+                <span className="stat-name">Outfit Sets</span>
+              </div>
+              <div className="stat-number">{wardrobeStats.sets}</div>
             </div>
-            <div className="stat-number">{wardrobeStats.sets}</div>
-          </div>
 
-          <div className="stat-tile">
-            <div className="stat-top">
-              <span className="stat-emoji">⬆️</span>
-              <span className="stat-name">Recent Uploads</span>
+            <div className="stat-tile">
+              <div className="stat-top">
+                <span className="stat-emoji">⬆️</span>
+                <span className="stat-name">Recent Uploads</span>
+              </div>
+              <div className="stat-number">{wardrobeStats.recentUploads}</div>
             </div>
-            <div className="stat-number">{wardrobeStats.recentUploads}</div>
-          </div>
-        </section>
+          </section>
+        </div>
       </header>
 
       {/* Main Grid */}
       <main className="dashboard-grid">
-        {/* Recent Episodes */}
-        <section className="panel panel-lg">
-          <div className="panel-header">
-            <div>
-              <h2 className="panel-title">Recent Episodes</h2>
-              <p className="panel-subtitle">Your latest updates and what to work on next.</p>
-            </div>
-            <Link to="/episodes" className="panel-link">
-              View all →
-            </Link>
-          </div>
+        {/* Main Content Column */}
+        <div className="main-column">
+          {/* Next Actions Panel */}
+          {nextActions.length > 0 && (
+            <section className="panel next-actions-panel">
+              <div className="panel-header">
+                <h2 className="panel-title">⚡ Next Actions</h2>
+                <p className="panel-subtitle">What needs your attention</p>
+              </div>
+              
+              <div className="next-actions-list">
+                {nextActions.map((action, idx) => (
+                  <div key={idx} className={`action-item action-${action.type}`}>
+                    <span className="action-icon">{action.icon}</span>
+                    <div className="action-text">
+                      <strong>{action.title}</strong>
+                      <span>{action.subtitle}</span>
+                    </div>
+                    <Link to={action.link} className="action-btn">
+                      {action.cta} →
+                    </Link>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
-          {recentEpisodes.length === 0 ? (
-            <div className="empty-state">
-              <div className="empty-icon">📺</div>
-              <h3>No episodes yet</h3>
-              <p>Create your first episode to start building your library.</p>
-              <Link to="/episodes/create" className="btn btn-primary">
-                ➕ Create Episode
+          {/* Recent Episodes */}
+          <section className="panel panel-lg">
+            <div className="panel-header">
+              <div>
+                <h2 className="panel-title">Recent Episodes</h2>
+                <p className="panel-subtitle">Your latest updates and what to work on next.</p>
+              </div>
+              <Link to="/episodes" className="panel-link">
+                View all →
               </Link>
             </div>
-          ) : (
-            <div className="recent-list">
-              {recentEpisodes.map((episode) => (
-                <div
-                  key={episode.id}
-                  className="recent-row"
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => navigate(`/episodes/${episode.id}`)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') navigate(`/episodes/${episode.id}`);
-                  }}
-                >
-                  <div className="recent-main">
-                    <div className="recent-title">
-                      {episode.episodeTitle || episode.title || 'Untitled'}
-                    </div>
 
-                    <div className="recent-meta">
-                      {episode.episodeNumber ? <span className="meta-pill">Ep {episode.episodeNumber}</span> : null}
-                      {episode.season ? <span className="meta-pill">Season {episode.season}</span> : null}
-                      <span className={`status-chip ${statusClass(episode.status)}`}>
-                        {statusLabel(episode.status)}
-                      </span>
-                    </div>
-
-                    {episode.description ? (
-                      <div className="recent-desc">
-                        {episode.description.length > 140
-                          ? `${episode.description.substring(0, 140)}…`
-                          : episode.description}
+            {recentEpisodes.length === 0 ? (
+              <div className="empty-state">
+                <div className="empty-icon">📺</div>
+                <h3>No episodes yet</h3>
+                <p>Create your first episode to start building your library.</p>
+                <Link to="/episodes/create" className="btn btn-primary">
+                  ➕ Create Episode
+                </Link>
+              </div>
+            ) : (
+              <div className="recent-list">
+                {recentEpisodes.map((episode) => (
+                  <div
+                    key={episode.id}
+                    className="recent-row"
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => navigate(`/episodes/${episode.id}`)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') navigate(`/episodes/${episode.id}`);
+                    }}
+                  >
+                    <div className="recent-main">
+                      <div className="recent-title">
+                        {episode.episodeTitle || episode.title || 'Untitled'}
                       </div>
-                    ) : (
-                      <div className="recent-desc muted">No description yet.</div>
+
+                      <div className="recent-meta">
+                        {episode.episodeNumber ? <span className="meta-pill">Ep {episode.episodeNumber}</span> : null}
+                        {episode.season ? <span className="meta-pill">Season {episode.season}</span> : null}
+                        <span className={`status-chip ${statusClass(episode.status)}`}>
+                          {statusLabel(episode.status)}
+                        </span>
+                      </div>
+
+                      {episode.description ? (
+                        <div className="recent-desc">
+                          {episode.description.length > 140
+                            ? `${episode.description.substring(0, 140)}…`
+                            : episode.description}
+                        </div>
+                      ) : (
+                        <div className="recent-desc muted">No description yet.</div>
+                      )}
+                    </div>
+
+                    <div className="recent-cta">Open →</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+
+          {/* Utility Panel - Compact & Collapsible */}
+          {(recentThumbnails.length > 0 || recentAssets.length > 0) && (
+            <section className="panel utility-panel">
+              <div className="panel-header">
+                <div>
+                  <h3 className="utility-title">🔧 Recent Utilities</h3>
+                  <p className="utility-subtitle">Quick reference for thumbnails and assets</p>
+                </div>
+              </div>
+
+              <div className="utility-sections">
+                {/* Recent Thumbnails */}
+                {recentThumbnails.length > 0 && (
+                  <div className="utility-section">
+                    <button 
+                      className="utility-section-header"
+                      onClick={() => setShowUtilityPanels(prev => ({ ...prev, thumbnails: !prev.thumbnails }))}
+                      aria-expanded={showUtilityPanels.thumbnails}
+                    >
+                      <span className="utility-section-title">
+                        <span className="utility-icon">🎬</span>
+                        Recent Thumbnails ({recentThumbnails.length})
+                      </span>
+                      <span className="utility-toggle">{showUtilityPanels.thumbnails ? '▼' : '▶'}</span>
+                    </button>
+                    
+                    {showUtilityPanels.thumbnails && (
+                      <div className="utility-content">
+                        <div className="thumbnails-grid-compact">
+                          {recentThumbnails.map((thumb) => (
+                            <Link 
+                              key={thumb.id} 
+                              to={`/compositions/${thumb.id}`}
+                              className="thumbnail-card-compact"
+                            >
+                              <div className="thumbnail-preview-compact">
+                                {thumb.thumbnail_url ? (
+                                  <img src={thumb.thumbnail_url} alt={thumb.composition_name || 'Thumbnail'} />
+                                ) : (
+                                  <div className="thumbnail-placeholder">🎨</div>
+                                )}
+                              </div>
+                              <div className="thumbnail-info-compact">
+                                <div className="thumbnail-name-compact">{thumb.composition_name || 'Untitled'}</div>
+                                <span className={`status-dot status-${thumb.approval_status}`}></span>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                        <Link to="/library" className="utility-view-all">
+                          View all thumbnails →
+                        </Link>
+                      </div>
                     )}
                   </div>
+                )}
 
-                  <div className="recent-cta">Open →</div>
-                </div>
-              ))}
-            </div>
+                {/* Recent Assets */}
+                {recentAssets.length > 0 && (
+                  <div className="utility-section">
+                    <button 
+                      className="utility-section-header"
+                      onClick={() => setShowUtilityPanels(prev => ({ ...prev, assets: !prev.assets }))}
+                      aria-expanded={showUtilityPanels.assets}
+                    >
+                      <span className="utility-section-title">
+                        <span className="utility-icon">📸</span>
+                        Recent Assets ({recentAssets.length})
+                      </span>
+                      <span className="utility-toggle">{showUtilityPanels.assets ? '▼' : '▶'}</span>
+                    </button>
+                    
+                    {showUtilityPanels.assets && (
+                      <div className="utility-content">
+                        <div className="assets-grid-compact">
+                          {recentAssets.map((asset) => (
+                            <Link key={asset.id} to={`/assets/${asset.id}`} className="asset-card-compact">
+                              <div className="asset-preview-compact">
+                                {asset.s3_url_processed || asset.s3_url_raw ? (
+                                  <img 
+                                    src={asset.s3_url_processed || asset.s3_url_raw} 
+                                    alt={asset.name || 'Asset'} 
+                                  />
+                                ) : (
+                                  <div className="asset-placeholder">📄</div>
+                                )}
+                              </div>
+                              <div className="asset-info-compact">
+                                <div className="asset-name-compact">{asset.name || 'Untitled'}</div>
+                                <span className="asset-role-compact">{asset.asset_role || 'General'}</span>
+                              </div>
+                            </Link>
+                          ))}
+                        </div>
+                        <Link to="/assets" className="utility-view-all">
+                          View all assets →
+                        </Link>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </section>
           )}
-        </section>
+
+          {/* Activity Feed */}
+          {activityFeed.length > 0 && (
+            <section className="panel">
+              <div className="panel-header">
+                <h2 className="panel-title">📋 Recent Activity</h2>
+                <p className="panel-subtitle">What's been happening</p>
+              </div>
+              
+              <div className="activity-feed">
+                {activityFeed.map((activity, idx) => (
+                  <Link key={idx} to={activity.link} className="activity-item">
+                    <span className="activity-icon">{activity.icon}</span>
+                    <div className="activity-content">
+                      <div className="activity-message">{activity.message}</div>
+                      <div className="activity-time">
+                        {new Date(activity.time).toLocaleDateString('en-US', { 
+                          month: 'short', 
+                          day: 'numeric',
+                          hour: 'numeric',
+                          minute: '2-digit'
+                        })}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
 
         {/* Right Rail */}
         <aside className="right-rail">
-          {/* Quick Actions */}
-          <section className="panel">
+          {/* Quick Actions - Compact */}
+          <section className="panel quick-actions-compact">
             <div className="panel-header">
               <h2 className="panel-title">Quick Actions</h2>
-              <p className="panel-subtitle">Jump in fast.</p>
             </div>
 
-            <div className="quick-grid">
-              <Link to="/episodes/create" className="quick-card primary">
-                <div className="quick-icon">➕</div>
-                <div className="quick-text">
-                  <div className="quick-title">Create Episode</div>
-                  <div className="quick-sub">Start a new episode</div>
-                </div>
+            <div className="quick-actions-list">
+              <Link to="/episodes/create" className="quick-action-item primary">
+                <span className="quick-action-icon">➕</span>
+                <span className="quick-action-label">Create Episode</span>
               </Link>
 
-              <Link to="/composer/default" className="quick-card">
-                <div className="quick-icon">🎨</div>
-                <div className="quick-text">
-                  <div className="quick-title">Thumbnail Composer</div>
-                  <div className="quick-sub">Design visuals</div>
-                </div>
+              <Link to="/composer/default" className="quick-action-item">
+                <span className="quick-action-icon">🎨</span>
+                <span className="quick-action-label">Thumbnail Composer</span>
               </Link>
 
-              <Link to="/assets" className="quick-card">
-                <div className="quick-icon">📸</div>
-                <div className="quick-text">
-                  <div className="quick-title">Asset Manager</div>
-                  <div className="quick-sub">Upload & organize</div>
-                </div>
+              <Link to="/assets" className="quick-action-item">
+                <span className="quick-action-icon">📸</span>
+                <span className="quick-action-label">Asset Manager</span>
               </Link>
 
-              <Link to="/wardrobe" className="quick-card">
-                <div className="quick-icon">👗</div>
-                <div className="quick-text">
-                  <div className="quick-title">Wardrobe</div>
-                  <div className="quick-sub">Browse outfits</div>
-                </div>
+              <Link to="/wardrobe" className="quick-action-item">
+                <span className="quick-action-icon">👗</span>
+                <span className="quick-action-label">Wardrobe</span>
               </Link>
             </div>
           </section>
@@ -353,64 +695,188 @@ const Home = () => {
               </div>
 
               <div className="shortcut-group">
-                <div className="shortcut-title">🖼️ Thumbnails</div>
-                <div className="shortcut-links">
+                <div className="shortcut-card-title">Thumbnails</div>
+                <div className="shortcut-card-links">
                   <Link to="/composer/default">Composer</Link>
-                  <Link to="/assets">Asset Library</Link>
+                  <Link to="/assets">Assets</Link>
                 </div>
               </div>
 
-              <div className="shortcut-group">
-                <div className="shortcut-title">👗 Wardrobe</div>
-                <div className="shortcut-links">
+              <div className="shortcut-card">
+                <div className="shortcut-card-icon">👗</div>
+                <div className="shortcut-card-title">Wardrobe</div>
+                <div className="shortcut-card-links">
                   <Link to="/wardrobe">Gallery</Link>
                   <Link to="/wardrobe/analytics">Analytics</Link>
-                  <Link to="/wardrobe/outfits">Outfit Sets</Link>
                 </div>
               </div>
 
               {(user?.role === 'admin' || user?.groups?.includes('ADMIN')) && (
-                <div className="shortcut-group">
-                  <div className="shortcut-title">⚙️ Admin</div>
-                  <div className="shortcut-links">
-                    <Link to="/admin">Admin Panel</Link>
+                <div className="shortcut-card">
+                  <div className="shortcut-card-icon">⚙️</div>
+                  <div className="shortcut-card-title">Admin</div>
+                  <div className="shortcut-card-links">
+                    <Link to="/admin">Panel</Link>
                     <Link to="/admin/templates">Templates</Link>
-                    <Link to="/audit-log">Audit Log</Link>
                   </div>
                 </div>
               )}
             </div>
           </section>
 
-          {/* Getting started (only if empty library) */}
+          {/* Show Management Panel */}
+          {shows.length > 0 && (
+            <section className="panel">
+              <div className="panel-header">
+                <div>
+                  <h2 className="panel-title">🎬 Shows</h2>
+                  <p className="panel-subtitle">Active show management</p>
+                </div>
+                <Link to="/shows" className="panel-link">
+                  Manage →
+                </Link>
+              </div>
+              
+              <div className="shows-list">
+                {shows.slice(0, 3).map((show) => (
+                  <Link key={show.id} to={`/episodes?show=${show.id}`} className="show-item">
+                    <span className="show-icon">{show.icon || '📺'}</span>
+                    <div className="show-info">
+                      <div className="show-name">{show.name}</div>
+                      <div className="show-meta">
+                        {show.episode_count || 0} episodes
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Recent Compositions */}
+          {recentCompositions.length > 0 && (
+            <section className="panel template-studio-preview">
+              <div className="panel-header">
+                <div>
+                  <h2 className="panel-title">🎨 Template Studio</h2>
+                  <p className="panel-subtitle">Recent compositions {recentCompositions.length > 5 && '(last 5)'}</p>
+                </div>
+                <Link to="/library" className="panel-link">
+                  Library →
+                </Link>
+              </div>
+              
+              <div className="compositions-list">
+                {recentCompositions.slice(0, 5).map((comp) => (
+                  <Link key={comp.id} to={`/compositions/${comp.id}`} className="composition-item">
+                    <div className="composition-icon">🎬</div>
+                    <div className="composition-info">
+                      <div className="composition-name">{comp.composition_name || 'Untitled'}</div>
+                      <div className="composition-meta">
+                        <span className={`status-dot status-${comp.approval_status}`}></span>
+                        {comp.version && <span>v{comp.version}</span>}
+                      </div>
+                    </div>
+                  </Link>
+                ))}
+              </div>
+              
+              {recentCompositions.length > 5 && (
+                <Link to="/library" className="view-all-cta">
+                  → View all in Library
+                </Link>
+              )}
+            </section>
+          )}
+
+          {/* Admin Section */}
+          {(user?.role === 'admin' || user?.groups?.includes('ADMIN')) && (
+            <section className="panel admin-panel">
+              <div className="panel-header">
+                <h2 className="panel-title">⚙️ Admin Dashboard</h2>
+                <p className="panel-subtitle">System management</p>
+              </div>
+              
+              <div className="admin-grid">
+                <Link to="/admin" className="admin-card">
+                  <div className="admin-icon">🔧</div>
+                  <div className="admin-label">Admin Panel</div>
+                </Link>
+                <Link to="/admin/templates" className="admin-card">
+                  <div className="admin-icon">📄</div>
+                  <div className="admin-label">Templates</div>
+                </Link>
+                <Link to="/audit-log" className="admin-card">
+                  <div className="admin-icon">📊</div>
+                  <div className="admin-label">Audit Log</div>
+                </Link>
+                <Link to="/assets" className="admin-card">
+                  <div className="admin-icon">✅</div>
+                  <div className="admin-label">Approvals</div>
+                </Link>
+              </div>
+            </section>
+          )}
+
+          {/* Getting started with progress tracking */}
           {stats.total === 0 && (
-            <section className="panel getting-started">
+            <section className="panel getting-started-enhanced">
               <div className="panel-header">
                 <h2 className="panel-title">🚀 Getting Started</h2>
                 <p className="panel-subtitle">A clean path to your first publish.</p>
               </div>
 
-              <ol className="steps">
-                <li>
-                  <strong>Create your first episode</strong>
-                  <span>Add metadata and details</span>
+              {/* Progress Indicator */}
+              <div className="onboarding-progress">
+                <div className="progress-label">
+                  Setup Progress: {Object.values(onboardingProgress).filter(Boolean).length} of 4 complete
+                </div>
+                <div className="progress-bar">
+                  <div 
+                    className="progress-fill" 
+                    style={{ width: `${(Object.values(onboardingProgress).filter(Boolean).length / 4) * 100}%` }}
+                  />
+                </div>
+              </div>
+
+              <ol className="steps-enhanced">
+                <li className={onboardingProgress.episodeCreated ? 'step-complete' : ''}>
+                  <span className="step-icon">{onboardingProgress.episodeCreated ? '✓' : '1'}</span>
+                  <div className="step-content">
+                    <strong>Create your first episode</strong>
+                    <span>Add metadata and details</span>
+                  </div>
                 </li>
-                <li>
-                  <strong>Upload assets</strong>
-                  <span>Thumbnails and promo images</span>
+                <li className={onboardingProgress.assetsUploaded ? 'step-complete' : ''}>
+                  <span className="step-icon">{onboardingProgress.assetsUploaded ? '✓' : '2'}</span>
+                  <div className="step-content">
+                    <strong>Upload assets</strong>
+                    <span>Thumbnails and promo images</span>
+                  </div>
                 </li>
-                <li>
-                  <strong>Design thumbnails</strong>
-                  <span>Use the Composer</span>
+                <li className={onboardingProgress.thumbnailDesigned ? 'step-complete' : ''}>
+                  <span className="step-icon">{onboardingProgress.thumbnailDesigned ? '✓' : '3'}</span>
+                  <div className="step-content">
+                    <strong>Design thumbnails</strong>
+                    <span>Use the Composer</span>
+                  </div>
                 </li>
-                <li>
-                  <strong>Track wardrobe</strong>
-                  <span>Outfits and styling history</span>
+                <li className={onboardingProgress.wardrobeAdded ? 'step-complete' : ''}>
+                  <span className="step-icon">{onboardingProgress.wardrobeAdded ? '✓' : '4'}</span>
+                  <div className="step-content">
+                    <strong>Track wardrobe</strong>
+                    <span>Outfits and styling history</span>
+                  </div>
                 </li>
               </ol>
 
-              <Link to="/episodes/create" className="btn btn-primary full">
-                ➕ Create First Episode
+              <Link 
+                to={!onboardingProgress.episodeCreated ? '/episodes/create' : !onboardingProgress.thumbnailDesigned ? '/composer' : '/episodes'} 
+                className="btn btn-primary full"
+              >
+                {!onboardingProgress.episodeCreated ? '➕ Create First Episode' : 
+                 !onboardingProgress.thumbnailDesigned ? '🎨 Design First Thumbnail' : 
+                 '📋 View All Episodes'}
               </Link>
             </section>
           )}

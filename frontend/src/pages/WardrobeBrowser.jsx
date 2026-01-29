@@ -365,83 +365,33 @@ const WardrobeBrowser = ({ mode = 'gallery' }) => {
               + Upload Item
             </button>
           )}
-          
-          {!isLibraryMode && (
-            <div className="header-actions">
-              <button 
-                className="btn-header-action analytics"
-                onClick={() => navigate('/wardrobe/analytics')}
-              >
-                📊 Analytics
-              </button>
-              <button 
-                className="btn-header-action outfits"
-                onClick={() => navigate('/wardrobe/outfits')}
-              >
-                👔 Outfit Sets
-              </button>
-            </div>
-          )}
         </div>
         
-        {/* Mode Switcher */}
-        <div className="mode-switcher">
+        {/* Mode Switcher - Quiet, Secondary */}
+        <div className="mode-switcher-quiet">
           <button
             className={mode === 'library' ? 'active' : ''}
             onClick={() => switchMode('library')}
           >
-            📚 Library (Reusable Items)
+            Library
           </button>
           <button
             className={mode === 'gallery' ? 'active' : ''}
             onClick={() => switchMode('gallery')}
           >
-            👗 Gallery (Episode Items)
+            Gallery
           </button>
         </div>
         
-        {/* Stats Bar */}
-        <div className="stats-bar">
-          {isLibraryMode ? (
-            <>
-              <div className="stat-card">
-                <span className="stat-value">{stats.total}</span>
-                <span className="stat-label">Total Items</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.items}</span>
-                <span className="stat-label">Individual Items</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.sets}</span>
-                <span className="stat-label">Outfit Sets</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{stats.recentUploads}</span>
-                <span className="stat-label">Recent Uploads</span>
-              </div>
-            </>
-          ) : (
-            <>
-              <div className="stat-card">
-                <span className="stat-value">{stats.total}</span>
-                <span className="stat-label">Total Items</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">${(stats.totalSpent || 0).toFixed(2)}</span>
-                <span className="stat-label">Total Spent</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{Object.keys(stats.characters || {}).length}</span>
-                <span className="stat-label">Characters</span>
-              </div>
-              <div className="stat-card">
-                <span className="stat-value">{Object.keys(stats.categories || {}).length}</span>
-                <span className="stat-label">Categories</span>
-              </div>
-            </>
-          )}
-        </div>
+        {/* Stats Summary - Inline */}
+        {!isLibraryMode && stats.total > 0 && (
+          <div className="stats-summary-inline">
+            {stats.total} item{stats.total !== 1 ? 's' : ''}
+            {Object.keys(stats.characters || {}).length > 0 && ` · ${Object.keys(stats.characters || {}).length} character${Object.keys(stats.characters || {}).length !== 1 ? 's' : ''}`}
+            {Object.keys(stats.categories || {}).length > 0 && ` · ${Object.keys(stats.categories || {}).length} categor${Object.keys(stats.categories || {}).length !== 1 ? 'ies' : 'y'}`}
+            {stats.totalSpent > 0 && ` · $${stats.totalSpent.toFixed(2)} spent`}
+          </div>
+        )}
         
         {/* Search and Controls */}
         <div className="header-controls">
@@ -509,76 +459,43 @@ const WardrobeBrowser = ({ mode = 'gallery' }) => {
       </div>
       
       <div className="browser-content">
-        {/* Filter Sidebar */}
-        <aside className="filter-sidebar">
-          <div className="filter-header">
-            <h3>Filters</h3>
-            <button 
-              className="btn-text"
-              onClick={handleClearFilters}
-            >
-              Clear All
-            </button>
-          </div>
+        {/* Filter Sidebar - Only show in Library mode */}
+        {isLibraryMode && (
+          <aside className="filter-sidebar">
+            <div className="filter-header">
+              <h3>Filters</h3>
+              <button 
+                className="btn-text"
+                onClick={handleClearFilters}
+              >
+                Clear All
+              </button>
+            </div>
           
-          {isLibraryMode && (
-            <>
-              <div className="filter-section">
-                <label>Type</label>
-                <select 
-                  value={filters.type} 
-                  onChange={(e) => handleFilterChange('type', e.target.value)}
-                >
-                  <option value="">All Types</option>
-                  <option value="item">Individual Item</option>
-                  <option value="set">Outfit Set</option>
-                </select>
-              </div>
-              
-              <div className="filter-section">
-                <label>Item Type</label>
-                <select 
-                  value={filters.item_type} 
-                  onChange={(e) => handleFilterChange('item_type', e.target.value)}
-                >
-                  <option value="">All Items</option>
-                  {itemTypes.map(type => (
-                    <option key={type} value={type}>{type}</option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
-          
-          {!isLibraryMode && (
-            <>
-              <div className="filter-section">
-                <label>Character</label>
-                <select 
-                  value={filters.character} 
-                  onChange={(e) => handleFilterChange('character', e.target.value)}
-                >
-                  <option value="">All Characters</option>
-                  {uniqueCharacters.map(char => (
-                    <option key={char} value={char}>{char}</option>
-                  ))}
-                </select>
-              </div>
-              
-              <div className="filter-section">
-                <label>Category</label>
-                <select 
-                  value={filters.category} 
-                  onChange={(e) => handleFilterChange('category', e.target.value)}
-                >
-                  <option value="">All Categories</option>
-                  {uniqueCategories.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
-              </div>
-            </>
-          )}
+            <div className="filter-section">
+              <label>Type</label>
+              <select 
+                value={filters.type} 
+                onChange={(e) => handleFilterChange('type', e.target.value)}
+              >
+                <option value="">All Types</option>
+                <option value="item">Individual Item</option>
+                <option value="set">Outfit Set</option>
+              </select>
+            </div>
+            
+            <div className="filter-section">
+              <label>Item Type</label>
+              <select 
+                value={filters.item_type} 
+                onChange={(e) => handleFilterChange('item_type', e.target.value)}
+              >
+                <option value="">All Items</option>
+                {itemTypes.map(type => (
+                  <option key={type} value={type}>{type}</option>
+                ))}
+              </select>
+            </div>
           
           <div className="filter-section">
             <label>Color</label>
@@ -619,7 +536,7 @@ const WardrobeBrowser = ({ mode = 'gallery' }) => {
             </select>
           </div>
           
-          {isLibraryMode && shows.length > 0 && (
+          {shows.length > 0 && (
             <div className="filter-section">
               <label>Show</label>
               <select 
@@ -634,20 +551,19 @@ const WardrobeBrowser = ({ mode = 'gallery' }) => {
             </div>
           )}
           
-          {isLibraryMode && (
-            <div className="filter-section">
-              <label>Status</label>
-              <select 
-                value={filters.status} 
-                onChange={(e) => handleFilterChange('status', e.target.value)}
-              >
-                <option value="">All Items</option>
-                <option value="used">Used</option>
-                <option value="unused">Unused</option>
-              </select>
-            </div>
-          )}
-        </aside>
+          <div className="filter-section">
+            <label>Status</label>
+            <select 
+              value={filters.status} 
+              onChange={(e) => handleFilterChange('status', e.target.value)}
+            >
+              <option value="">All Items</option>
+              <option value="used">Used</option>
+              <option value="unused">Unused</option>
+            </select>
+          </div>
+          </aside>
+        )}
         
         {/* Main Content */}
         <main className="browser-main">
@@ -690,7 +606,7 @@ const WardrobeBrowser = ({ mode = 'gallery' }) => {
               {items.map(item => (
                 <div 
                   key={item.id} 
-                  className={`item-card ${bulkMode ? 'bulk-mode' : ''} ${selectedItems.has(item.id) ? 'selected' : ''}`}
+                  className={`item-card ${bulkMode ? 'bulk-mode' : ''} ${selectedItems.has(item.id) ? 'selected' : ''} ${!getImageUrl(item) ? 'placeholder-card' : ''}`}
                   onClick={() => bulkMode ? toggleItemSelection(item.id) : handleItemClick(item)}
                 >
                   {bulkMode && (

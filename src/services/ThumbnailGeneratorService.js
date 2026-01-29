@@ -354,6 +354,240 @@ class ThumbnailGeneratorService {
   getMVPFormats() {
     return this.getAvailableFormats();
   }
+
+  /**
+   * Generate thumbnail using Template Studio template
+   * @param {Object} composition - Composition record with template_studio_id
+   * @param {Object} format - Format specification
+   * @returns {Promise<Buffer>} - Generated thumbnail buffer
+   */
+  async generateFromTemplateStudio(composition, format) {
+    try {
+      console.log(`🎨 Generating thumbnail using Template Studio (composition: ${composition.id})`);
+
+      if (!composition.template_studio_id) {
+        console.warn('⚠️  No template_studio_id, falling back to legacy generator');
+        return null;
+      }
+
+      // Fetch template from database
+      const { Sequelize } = require('sequelize');
+      const sequelize = new Sequelize(process.env.DATABASE_URL, {
+        dialect: 'postgres',
+        logging: false
+      });
+
+      const [templates] = await sequelize.query(`
+        SELECT * FROM template_studio WHERE id = $1
+      `, { bind: [composition.template_studio_id] });
+
+      if (templates.length === 0) {
+        console.error('❌ Template not found:', composition.template_studio_id);
+        return null;
+      }
+
+      const template = templates[0];
+      console.log(`✅ Using template: ${template.name} v${template.version}`);
+
+      // Fetch composition assets
+      const { CompositionAsset, Asset } = require('../models');
+      const compositionAssets = await CompositionAsset.findAll({
+        where: { composition_id: composition.id },
+        include: [{
+          model: Asset,
+          as: 'asset',
+          attributes: ['id', 'name', 's3_url_processed', 's3_url_raw', 'asset_role']
+        }]
+      });
+
+      console.log(`📦 Found ${compositionAssets.length} assets for composition`);
+
+      // Build asset map by role
+      const assetsByRole = {};
+      compositionAssets.forEach(ca => {
+        if (ca.asset) {
+          assetsByRole[ca.asset_role] = ca.asset;
+        }
+      });
+
+      // Get text fields from composition_config
+      const textFields = composition.composition_config?.text_fields || {};
+
+      // Start building composite with canvas
+      const canvasConfig = template.canvas_config;
+      const { width, height, background_color } = canvasConfig;
+
+      console.log(`📐 Canvas: ${width}×${height}, Background: ${background_color}`);
+
+      // Create base canvas
+      const canvas = sharp({
+        create: {
+          width,
+          height,
+          channels: 4,
+          background: background_color || '#000000'
+        }
+      });
+
+      // Sort role slots by z_index
+      const roleSlots = [...template.role_slots].sort((a, b) => (a.z_index || 0) - (b.z_index || 0));
+      console.log(`🎭 Processing ${roleSlots.length} role slots`);
+
+      const composites = [];
+
+      for (const slot of roleSlots) {
+        const { role, position, z_index, conditional_rules, visible_by_default, text_style } = slot;
+
+        // Check conditional visibility
+        if (conditional_rules?.show_if) {
+          const shouldShow = this.evaluateConditionalRule(conditional_rules.show_if, composition, assetsByRole);
+          if (!shouldShow) {
+            console.log(`⏭️  Skipping ${role} (conditional rule not met)`);
+            continue;
+          }
+        }
+
+        if (visible_by_default === false && !assetsByRole[role] && !textFields[role]) {
+          console.log(`⏭️  Skipping ${role} (not visible by default, no asset)`);
+          continue;
+        }
+
+        // Handle text fields
+        if (role.startsWith('TEXT.') && textFields[role]) {
+          const textValue = textFields[role];
+          const textBuffer = await this.createTextOverlayFromTemplate(textValue, text_style, position);
+          composites.push({
+            input: textBuffer,
+            top: position.y,
+            left: position.x
+          });
+          console.log(`✅ Added text: ${role} = "${textValue}"`);
+          continue;
+        }
+
+        // Handle image assets
+        const asset = assetsByRole[role];
+        if (!asset) {
+          console.log(`⏭️  Skipping ${role} (no asset assigned)`);
+          continue;
+        }
+
+        // Fetch and process asset image
+        const imageUrl = asset.s3_url_processed || asset.s3_url_raw;
+        if (!imageUrl) {
+          console.warn(`⚠️  No image URL for ${role}`);
+          continue;
+        }
+
+        try {
+          // Download image (in production, use S3 client)
+          const fetch = require('node-fetch');
+          const imageResponse = await fetch(imageUrl);
+          const imageBuffer = await imageResponse.buffer();
+
+          // Resize to slot dimensions
+          const resizedBuffer = await sharp(imageBuffer)
+            .resize(position.width, position.height, {
+              fit: 'cover',
+              position: 'center'
+            })
+            .toBuffer();
+
+          composites.push({
+            input: resizedBuffer,
+            top: position.y,
+            left: position.x
+          });
+
+          console.log(`✅ Added asset: ${role} at (${position.x}, ${position.y})`);
+        } catch (imageErr) {
+          console.error(`❌ Failed to process ${role}:`, imageErr.message);
+        }
+      }
+
+      // Composite all layers
+      console.log(`🎬 Compositing ${composites.length} layers`);
+      const thumbnail = await canvas
+        .composite(composites)
+        .png()
+        .toBuffer();
+
+      console.log(`✅ Generated thumbnail: ${thumbnail.length} bytes`);
+      return thumbnail;
+
+    } catch (error) {
+      console.error('❌ Failed to generate from Template Studio:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Evaluate conditional rule for slot visibility
+   * @private
+   */
+  evaluateConditionalRule(ruleFlag, composition, assetsByRole) {
+    switch (ruleFlag) {
+      case 'EPISODE.HAS_GUEST':
+        return assetsByRole['CHAR.GUEST.1'] !== undefined;
+      
+      case 'EPISODE.HAS_DUAL_GUESTS':
+        return assetsByRole['CHAR.GUEST.1'] !== undefined && assetsByRole['CHAR.GUEST.2'] !== undefined;
+      
+      case 'COMPOSITION.ICONS_ENABLED':
+        return Object.keys(assetsByRole).some(role => role.startsWith('UI.ICON.') && role !== 'UI.ICON.HOLDER.MAIN');
+      
+      case 'COMPOSITION.WARDROBE_ENABLED':
+        return Object.keys(assetsByRole).some(role => role.startsWith('WARDROBE.ITEM.'));
+      
+      default:
+        console.warn(`⚠️  Unknown conditional rule: ${ruleFlag}`);
+        return true; // Default to visible
+    }
+  }
+
+  /**
+   * Create text overlay from template style
+   * @private
+   */
+  async createTextOverlayFromTemplate(text, textStyle, position) {
+    const {
+      font_family = 'Arial',
+      font_weight = 400,
+      font_size = 48,
+      color = '#ffffff',
+      stroke,
+      shadow
+    } = textStyle || {};
+
+    const { width, height } = position;
+
+    // Build SVG with text styling
+    let textStyles = `
+      fill: ${color};
+      font-size: ${font_size}px;
+      font-family: '${font_family}', sans-serif;
+      font-weight: ${font_weight};
+    `;
+
+    if (stroke) {
+      textStyles += `
+        stroke: ${stroke.color};
+        stroke-width: ${stroke.width}px;
+        paint-order: stroke fill;
+      `;
+    }
+
+    // Note: SVG doesn't support text shadows directly, would need filter
+    const svg = `
+      <svg width="${width}" height="${height}">
+        <text x="10" y="${font_size + 10}" style="${textStyles}">
+          ${text}
+        </text>
+      </svg>
+    `;
+
+    return Buffer.from(svg);
+  }
 }
 
 module.exports = new ThumbnailGeneratorService();

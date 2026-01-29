@@ -96,7 +96,16 @@ const AdminPanel = () => {
   return (
     <div className="admin-panel-page">
       <div className="admin-container">
-        <h1>Admin Panel</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '0.5rem' }}>
+          <button 
+            onClick={() => navigate(-1)} 
+            className="btn-back"
+            style={{ padding: '0.5rem 0.75rem', fontSize: '0.875rem' }}
+          >
+            ← Back
+          </button>
+          <h1>Admin Panel</h1>
+        </div>
         <p className="admin-subtitle">Manage user roles and permissions</p>
 
         {error && (

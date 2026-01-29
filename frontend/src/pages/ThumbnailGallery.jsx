@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import './ThumbnailGallery.css';
 
 /**
@@ -9,6 +9,7 @@ import './ThumbnailGallery.css';
 
 function ThumbnailGallery() {
   const { episodeId } = useParams();
+  const navigate = useNavigate();
   const [episode, setEpisode] = useState(null);
   const [thumbnails, setThumbnails] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -259,8 +260,8 @@ function ThumbnailGallery() {
       )}
 
       <div className="gallery-footer">
-        <button onClick={() => window.location.href = '/composer'} className="btn-back">
-          ← Back to Composer
+        <button onClick={() => navigate(-1)} className="btn-back">
+          ← Back
         </button>
       </div>
     </div>

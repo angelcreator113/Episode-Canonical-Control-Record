@@ -92,6 +92,18 @@ module.exports = (sequelize) => {
         allowNull: true,
         defaultValue: DataTypes.NOW,
       },
+      is_primary: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+        comment: 'Whether this is the primary/canonical composition for the episode',
+      },
+      composition_config: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: {},
+        comment: 'Stores visibility toggles, text field values, and per-composition overrides',
+      },
     },
     {
       tableName: 'thumbnail_compositions',
@@ -99,6 +111,49 @@ module.exports = (sequelize) => {
       underscored: true,
     }
   );
+
+  /**
+   * Get visibility config for a role
+   */
+  ThumbnailComposition.prototype.getRoleVisibility = function(role) {
+    return this.composition_config?.visibility?.[role] ?? null;
+  };
+
+  /**
+   * Get text field value for a role
+   */
+  ThumbnailComposition.prototype.getTextField = function(role) {
+    return this.composition_config?.text_fields?.[role] ?? null;
+  };
+
+  /**
+   * Check if icon holder is required based on enabled icons
+   */
+  ThumbnailComposition.prototype.requiresIconHolder = function() {
+    const { shouldRequireIconHolder } = require('../constants/canonicalRoles');
+    return shouldRequireIconHolder(this.composition_config?.visibility || {});
+  };
+
+  /**
+   * Validate composition config structure
+   */
+  ThumbnailComposition.prototype.validateConfig = function() {
+    const config = this.composition_config || {};
+    const errors = [];
+
+    // Validate structure
+    if (config.visibility && typeof config.visibility !== 'object') {
+      errors.push('visibility must be an object');
+    }
+    if (config.text_fields && typeof config.text_fields !== 'object') {
+      errors.push('text_fields must be an object');
+    }
+    if (config.overrides && typeof config.overrides !== 'object') {
+      errors.push('overrides must be an object');
+    }
+
+    return errors.length > 0 ? errors : null;
+  };
 
   return ThumbnailComposition;
 };

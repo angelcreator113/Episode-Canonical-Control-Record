@@ -1,0 +1,264 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Template Studio Schema",
+  "description": "Schema for thumbnail composition templates",
+  "type": "object",
+  "required": ["id", "name", "version", "canvas_config", "role_slots"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid",
+      "description": "Unique template identifier"
+    },
+    "name": {
+      "type": "string",
+      "description": "Template display name (e.g., 'Single Guest - YouTube v1')",
+      "maxLength": 255
+    },
+    "version": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Template version number (increments on any change)"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["DRAFT", "PUBLISHED"],
+      "default": "DRAFT",
+      "description": "Template lifecycle status"
+    },
+    "locked": {
+      "type": "boolean",
+      "default": false,
+      "description": "If true, template is immutable and requires cloning to edit"
+    },
+    "canvas_config": {
+      "type": "object",
+      "required": ["width", "height"],
+      "properties": {
+        "width": {
+          "type": "integer",
+          "description": "Canvas width in pixels (e.g., 1280 for YouTube)"
+        },
+        "height": {
+          "type": "integer",
+          "description": "Canvas height in pixels (e.g., 720 for YouTube)"
+        },
+        "background_color": {
+          "type": "string",
+          "pattern": "^#[0-9A-Fa-f]{6}$",
+          "description": "Default background color (hex format)"
+        }
+      }
+    },
+    "role_slots": {
+      "type": "array",
+      "description": "Array of role slot configurations with positions and styling",
+      "items": {
+        "type": "object",
+        "required": ["role", "position", "z_index"],
+        "properties": {
+          "role": {
+            "type": "string",
+            "pattern": "^(CHAR|UI|TEXT|BRAND|BG|WARDROBE)\\.[A-Z_]+(\\.[A-Z0-9_]+)?$",
+            "description": "Canonical role identifier (e.g., CHAR.HOST.LALA)"
+          },
+          "visible_by_default": {
+            "type": "boolean",
+            "default": true,
+            "description": "Whether this slot is visible when template loads"
+          },
+          "conditional_rules": {
+            "type": "object",
+            "properties": {
+              "show_if": {
+                "type": "string",
+                "enum": [
+                  "EPISODE.HAS_GUEST",
+                  "EPISODE.HAS_DUAL_GUESTS",
+                  "COMPOSITION.ICONS_ENABLED",
+                  "COMPOSITION.WARDROBE_ENABLED",
+                  "SHOW.IS_FASHION"
+                ],
+                "description": "Boolean flag condition for visibility"
+              }
+            }
+          },
+          "position": {
+            "type": "object",
+            "required": ["x", "y", "width", "height"],
+            "properties": {
+              "x": {
+                "type": "integer",
+                "description": "X position in pixels from top-left"
+              },
+              "y": {
+                "type": "integer",
+                "description": "Y position in pixels from top-left"
+              },
+              "width": {
+                "type": "integer",
+                "description": "Width in pixels"
+              },
+              "height": {
+                "type": "integer",
+                "description": "Height in pixels"
+              }
+            }
+          },
+          "z_index": {
+            "type": "integer",
+            "description": "Layer order (higher = front, lower = back)"
+          },
+          "transform": {
+            "type": "object",
+            "properties": {
+              "scale": {
+                "type": "number",
+                "default": 1,
+                "description": "Scale factor (1 = 100%)"
+              },
+              "rotation": {
+                "type": "number",
+                "default": 0,
+                "description": "Rotation in degrees"
+              }
+            }
+          },
+          "filters": {
+            "type": "object",
+            "properties": {
+              "dropShadow": {
+                "type": "boolean",
+                "description": "Enable drop shadow effect"
+              },
+              "blur": {
+                "type": "number",
+                "description": "Blur radius in pixels"
+              },
+              "opacity": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 1,
+                "description": "Opacity (0 = transparent, 1 = opaque)"
+              }
+            }
+          },
+          "text_style": {
+            "type": "object",
+            "description": "Text styling (only for TEXT.* roles)",
+            "properties": {
+              "font_family": {
+                "type": "string",
+                "enum": ["Montserrat", "Inter", "Oswald", "Arial"],
+                "description": "Font family name"
+              },
+              "font_weight": {
+                "type": "integer",
+                "enum": [400, 600, 700, 800],
+                "description": "Font weight (400=Regular, 700=Bold)"
+              },
+              "font_size": {
+                "type": "integer",
+                "description": "Font size in pixels"
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$",
+                "description": "Text color (hex format)"
+              },
+              "stroke": {
+                "type": "object",
+                "properties": {
+                  "color": {
+                    "type": "string",
+                    "pattern": "^#[0-9A-Fa-f]{6}$"
+                  },
+                  "width": {
+                    "type": "integer",
+                    "description": "Stroke width in pixels"
+                  }
+                }
+              },
+              "shadow": {
+                "type": "object",
+                "properties": {
+                  "blur": {
+                    "type": "integer",
+                    "description": "Shadow blur radius"
+                  },
+                  "offset": {
+                    "type": "array",
+                    "items": {
+                      "type": "integer"
+                    },
+                    "minItems": 2,
+                    "maxItems": 2,
+                    "description": "Shadow offset [x, y]"
+                  },
+                  "color": {
+                    "type": "string",
+                    "pattern": "^#[0-9A-Fa-f]{6}$"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "safe_zones": {
+      "type": "object",
+      "description": "Safe zones for different platforms (title-safe areas)",
+      "properties": {
+        "youtube": {
+          "type": "object",
+          "properties": {
+            "x": {"type": "integer"},
+            "y": {"type": "integer"},
+            "width": {"type": "integer"},
+            "height": {"type": "integer"}
+          }
+        },
+        "instagram": {
+          "type": "object",
+          "properties": {
+            "x": {"type": "integer"},
+            "y": {"type": "integer"},
+            "width": {"type": "integer"},
+            "height": {"type": "integer"}
+          }
+        }
+      }
+    },
+    "required_roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of required role slots (composition must have these)"
+    },
+    "optional_roles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "List of optional role slots"
+    },
+    "formats_supported": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["YOUTUBE", "YOUTUBE_MOBILE", "INSTAGRAM_FEED", "INSTAGRAM_STORY", "TIKTOK", "FACEBOOK", "TWITTER", "PINTEREST"]
+      },
+      "description": "Output formats this template supports"
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

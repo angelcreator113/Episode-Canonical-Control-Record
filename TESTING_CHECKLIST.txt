@@ -1,0 +1,226 @@
+========================================
+🧪 ASSET SYSTEM - VISUAL TESTING CHECKLIST
+========================================
+
+ENVIRONMENT SETUP:
+✅ Backend: http://localhost:3002 (RUNNING)
+✅ Frontend: http://localhost:5175 (RUNNING)
+✅ Database: PostgreSQL (44 assets, 3 episodes, 1 show)
+
+========================================
+PART 1: BASIC ASSET MANAGER TESTING
+========================================
+
+1. Navigate to http://localhost:5175/assets/manager
+
+   CHECK:
+   [ ] Page loads (no white screen)
+   [ ] No console errors (F12 to check)
+   [ ] Header says "Asset Manager"
+   [ ] Upload button visible
+   [ ] Asset grid/list visible
+
+2. Verify Asset Display
+
+   CHECK:
+   [ ] Can see asset cards/thumbnails
+   [ ] Images load (not broken image icons)
+   [ ] Asset names display
+   [ ] Asset types shown (PROMO_LALA, etc.)
+   [ ] Approval status badges visible
+
+   IF BROKEN: Document what you see
+   - Empty boxes? ________________
+   - Error message? ______________
+   - Console errors? _____________
+
+3. Test Asset Click
+
+   ACTIONS:
+   [ ] Click on an asset card
+   [ ] Does modal/preview open?
+   [ ] Can see full image?
+   [ ] Can see metadata?
+
+   IF BROKEN: What happens?
+   - Nothing? ____________________
+   - Error? ______________________
+   - Wrong asset opens? __________
+
+========================================
+PART 2: ASSET UPLOAD TESTING
+========================================
+
+4. Test File Upload
+
+   ACTIONS:
+   [ ] Click "Upload" or "+" button
+   [ ] Upload form appears
+   [ ] Select test image file
+   [ ] Fill out required fields:
+       - Category: ____________
+       - Asset Type: __________
+       - Description: _________
+   [ ] Click Submit/Upload
+
+   RESULTS:
+   [ ] Progress bar shows
+   [ ] Success message appears
+   [ ] New asset appears in list
+   [ ] Can verify in API (check below)
+
+   Verify:
+   curl http://localhost:3002/api/v1/assets?limit=1&sortBy=created_at&sortOrder=DESC
+
+5. Test Invalid Upload
+
+   ACTIONS:
+   [ ] Try uploading huge file (>100MB)
+   [ ] Try uploading .exe file
+   [ ] Try uploading without required fields
+
+   RESULTS:
+   [ ] Proper error messages?
+   [ ] Prevents upload?
+   [ ] UI doesn't crash?
+
+========================================
+PART 3: FILTERING & SEARCH
+========================================
+
+6. Test Asset Type Filter
+
+   ACTIONS:
+   [ ] Find filter dropdown (Asset Type)
+   [ ] Select "PROMO_LALA"
+   [ ] Asset list updates
+   [ ] Only PROMO_LALA assets show
+
+   Verify count matches API:
+   curl "http://localhost:3002/api/v1/assets?assetType=PROMO_LALA"
+
+7. Test Search
+
+   ACTIONS:
+   [ ] Find search box
+   [ ] Type asset name (e.g., "lala")
+   [ ] Results filter
+   [ ] Clear search works
+
+========================================
+PART 4: ASSET OPERATIONS
+========================================
+
+8. Test Asset Approval
+
+   ACTIONS:
+   [ ] Find a PENDING asset
+   [ ] Click Approve button
+   [ ] Status changes to APPROVED
+   [ ] Visual feedback (toast/message)
+
+9. Test Asset Deletion
+
+   ACTIONS:
+   [ ] Select an asset
+   [ ] Click Delete button
+   [ ] Confirmation dialog appears
+   [ ] Confirm deletion
+   [ ] Asset removes from list
+
+   ⚠️ Check S3:
+   [ ] File should be deleted from S3
+   
+10. Test Bulk Operations
+
+    ACTIONS:
+    [ ] Select multiple assets (checkbox)
+    [ ] Bulk approve button available
+    [ ] Click bulk approve
+    [ ] All selected assets update
+
+========================================
+PART 5: INTEGRATION TESTING
+========================================
+
+11. Test Episode Asset Association
+
+    ACTIONS:
+    [ ] Go to /episodes/[episode-id]/edit
+    [ ] Find asset selector/library
+    [ ] Can select assets?
+    [ ] Assets display properly?
+
+12. Test Asset Gallery
+
+    ACTIONS:
+    [ ] Go to /assets (not /assets/manager)
+    [ ] Asset gallery displays
+    [ ] Thumbnails load
+    [ ] Can browse assets
+
+========================================
+BUG DOCUMENTATION TEMPLATE
+========================================
+
+For each bug found, document:
+
+BUG #_: [Short Description]
+--------------------------
+Priority: CRITICAL / HIGH / MEDIUM / LOW
+
+Steps to Reproduce:
+1. 
+2. 
+3. 
+
+Expected Result:
+
+
+Actual Result:
+
+
+Console Errors (if any):
+
+
+Screenshot: [Describe what you see]
+
+
+Related Files (if known):
+
+
+========================================
+TESTING SCHEDULE
+========================================
+
+Hour 1-2: Complete Parts 1-2 (Basic + Upload)
+Hour 3-4: Complete Parts 3-4 (Filtering + Operations)
+Hour 5-6: Fix highest priority bug
+Hour 7-8: Verify fix and document
+
+========================================
+QUICK API CHECKS
+========================================
+
+While testing, use these to verify backend:
+
+# Check total assets
+curl http://localhost:3002/api/v1/assets
+
+# Check specific asset type
+curl "http://localhost:3002/api/v1/assets?assetType=PROMO_LALA"
+
+# Check approved assets
+curl "http://localhost:3002/api/v1/assets?approvalStatus=APPROVED"
+
+# Check latest asset (after upload)
+curl "http://localhost:3002/api/v1/assets?limit=1&sortBy=created_at&sortOrder=DESC"
+
+========================================
+END OF CHECKLIST
+========================================
+
+Complete this checklist and update:
+ASSET_BUG_REPORT_DAY1.md
+
+Good luck! 🚀

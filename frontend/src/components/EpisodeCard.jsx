@@ -1,6 +1,6 @@
 /**
- * EpisodeCard Component
- * Card display for episodes with header, body, and action buttons
+ * EpisodeCard Component - ENHANCED VISUAL HIERARCHY
+ * Improved scanning, stronger hierarchy, clearer actions
  */
 
 import React from 'react';
@@ -8,96 +8,158 @@ import { formatters } from '../utils/formatters';
 import '../styles/EpisodeCard.css';
 
 /**
- * CardHeader - Displays title and status badge
+ * StatusBadge - Top-right status indicator
  */
-const CardHeader = ({ title, status }) => (
-  <div className="episode-card-header">
-    <div className="episode-card-header-top">
-      <h3>{title || 'Untitled'}</h3>
-      <span className={`status-badge status-${status}`}>
-        {formatters.formatStatus(status)}
-      </span>
-    </div>
-  </div>
-);
+const StatusBadge = ({ status }) => {
+  const getStatusDisplay = (status) => {
+    const displays = {
+      draft: { emoji: '🟡', label: 'Draft' },
+      published: { emoji: '🟢', label: 'Published' },
+      scheduled: { emoji: '🔵', label: 'Scheduled' },
+      archived: { emoji: '⚪', label: 'Archived' },
+      in_progress: { emoji: '🟠', label: 'In Progress' },
+    };
+    return displays[status] || { emoji: '⚪', label: formatters.formatStatus(status) };
+  };
 
-/**
- * CardBody - Displays episode details and categories
- */
-const CardBody = ({ episode }) => {
+  const { emoji, label } = getStatusDisplay(status);
 
   return (
-  <div className="episode-card-body">
-    {episode.show && (
-      <p className="episode-show" style={{ 
-        fontSize: '0.9rem', 
-        color: '#667eea', 
-        fontWeight: '600',
-        marginBottom: '0.5rem',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '0.25rem'
-      }}>
-        <span>{episode.show.icon || '📺'}</span>
-        <span>{episode.show.name}</span>
-      </p>
-    )}
-    {episode.episode_number && (
-      <p className="episode-number">
-        <strong>Episode:</strong> {episode.episode_number}
-      </p>
-    )}
-    {episode.air_date && (
-      <p className="air-date">
-        <strong>Air Date:</strong> {formatters.formatDate(episode.air_date)}
-      </p>
-    )}
-    {episode.description && (
-      <p className="description">{formatters.truncate(episode.description, 100)}</p>
-    )}
-    {episode.categories && episode.categories.length > 0 && (
-      <div className="episode-categories">
-        {episode.categories.map((category, index) => (
-          <span key={index} className="category-badge">
-            {category}
-          </span>
-        ))}
-      </div>
-    )}
-  </div>
-);
-}
+    <span className={`status-badge-new status-${status}`}>
+      <span className="status-emoji">{emoji}</span>
+      <span className="status-label">{label}</span>
+    </span>
+  );
+};
 
 /**
- * CardFooter - Displays action buttons
+ * MetaRow - Single inline row for episode metadata
  */
-const CardFooter = ({ episodeId, onView, onEdit, onDelete, handleEditClick }) => (
-  <div className="episode-card-footer">
+const MetaRow = ({ episodeNumber, airDate, show }) => {
+  const parts = [];
+  
+  if (episodeNumber) {
+    parts.push(`Episode ${episodeNumber}`);
+  }
+  
+  if (airDate) {
+    parts.push(formatters.formatDate(airDate));
+  }
+  
+  if (show?.name) {
+    parts.push(show.name);
+  }
+
+  return (
+    <div className="meta-row">
+      {parts.map((part, idx) => (
+        <React.Fragment key={idx}>
+          {idx > 0 && <span className="meta-separator">•</span>}
+          <span className="meta-text">{part}</span>
+        </React.Fragment>
+      ))}
+    </div>
+  );
+};
+
+/**
+ * CardHeader - Episode title (hero element)
+ */
+const CardHeader = ({ title }) => (
+  <div className="episode-card-header-new">
+    <h3 className="episode-title-hero">{title || 'Untitled Episode'}</h3>
+  </div>
+);
+
+/**
+ * CardBody - Metadata, description, and tags
+ */
+const CardBody = ({ episode }) => {
+  return (
+    <div className="episode-card-body-new">
+      {/* Meta Row */}
+      <MetaRow 
+        episodeNumber={episode.episode_number}
+        airDate={episode.air_date}
+        show={episode.show}
+      />
+      
+      {/* Description - 2 line clamp */}
+      {episode.description && (
+        <p className="episode-description-clamp">
+          {episode.description}
+        </p>
+      )}
+      
+      {/* Categories/Tags */}
+      {episode.categories && episode.categories.length > 0 && (
+        <div className="episode-tags-row">
+          {episode.categories.slice(0, 3).map((category, index) => (
+            <span key={index} className="tag-chip">
+              {category}
+            </span>
+          ))}
+          {episode.categories.length > 3 && (
+            <span className="tag-chip tag-more">
+              +{episode.categories.length - 3}
+            </span>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+/**
+ * CardFooter - Normalized actions (Primary, Secondary, Tertiary)
+ */
+const CardFooter = ({ episodeId, onView, onEdit, onDelete }) => (
+  <div className="episode-card-footer-new">
+    {/* Primary Action */}
     {onView && (
       <button 
-        className="btn btn-secondary" 
+        className="btn-action btn-primary-action" 
         onClick={() => onView(episodeId)}
-        aria-label="View episode details"
+        aria-label="Open episode"
       >
-        View Details
+        Open Episode
       </button>
     )}
+    
+    {/* Secondary Action */}
     {onEdit && (
       <button 
-        className="btn btn-primary" 
-        onClick={handleEditClick}
+        className="btn-action btn-secondary-action" 
+        onClick={() => onEdit(episodeId)}
         aria-label="Edit episode"
       >
         Edit
       </button>
     )}
+    
+    {/* Tertiary/Danger Action - Icon only */}
     {onDelete && (
       <button 
-        className="btn btn-danger" 
+        className="btn-action btn-danger-action" 
         onClick={() => onDelete(episodeId)}
         aria-label="Delete episode"
+        title="Delete"
       >
-        Delete
+        <svg 
+          width="18" 
+          height="18" 
+          viewBox="0 0 24 24" 
+          fill="none" 
+          stroke="currentColor" 
+          strokeWidth="2" 
+          strokeLinecap="round" 
+          strokeLinejoin="round"
+        >
+          <polyline points="3 6 5 6 21 6"></polyline>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+          <line x1="10" y1="11" x2="10" y2="17"></line>
+          <line x1="14" y1="11" x2="14" y2="17"></line>
+        </svg>
       </button>
     )}
   </div>
@@ -106,18 +168,15 @@ const CardFooter = ({ episodeId, onView, onEdit, onDelete, handleEditClick }) =>
 /**
  * EpisodeCard - Main card component
  */
-const EpisodeCard = ({ episode, onEdit, onDelete, onView, isSelected, onSelect }) => {
-  const handleEditClick = () => {
-    if (!episode.id) {
-      return;
-    }
-    onEdit(episode.id);
-  };
-
+const EpisodeCard = ({ episode, onEdit, onDelete, onView, isSelected, onSelect, viewMode = 'grid' }) => {
   return (
-    <div className={`episode-card ${isSelected ? 'selected' : ''}`}>
+    <div className={`episode-card-enhanced ${isSelected ? 'is-selected' : ''} view-${viewMode}`}>
+      {/* Status Badge - Top Right */}
+      <StatusBadge status={episode.status} />
+      
+      {/* Checkbox for bulk selection */}
       {onSelect && (
-        <div className="episode-card-checkbox">
+        <div className="episode-card-checkbox-new">
           <input
             type="checkbox"
             checked={isSelected || false}
@@ -127,14 +186,28 @@ const EpisodeCard = ({ episode, onEdit, onDelete, onView, isSelected, onSelect }
         </div>
       )}
       
-      <CardHeader title={episode.title} status={episode.status} />
-      <CardBody episode={episode} />
+      {/* Card Content - Wrapped for list view */}
+      {viewMode === 'list' ? (
+        <div className="episode-card-header-new">
+          <h3 className="episode-title-hero">{episode.title}</h3>
+          <MetaRow 
+            episodeNumber={episode.episode_number}
+            airDate={episode.air_date}
+            show={episode.show}
+          />
+        </div>
+      ) : (
+        <>
+          <CardHeader title={episode.title} />
+          <CardBody episode={episode} />
+        </>
+      )}
+      
       <CardFooter 
         episodeId={episode.id}
         onView={onView}
         onEdit={onEdit}
         onDelete={onDelete}
-        handleEditClick={handleEditClick}
       />
     </div>
   );

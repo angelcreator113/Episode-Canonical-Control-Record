@@ -56,6 +56,7 @@ const VALID_ASSET_TYPES = [
   'PROMO_GUEST',
   'BRAND_LOGO',
   'EPISODE_FRAME',
+  'BACKGROUND_IMAGE',
   'PROMO_VIDEO',
   'EPISODE_VIDEO',
   'BACKGROUND_VIDEO',
@@ -104,20 +105,29 @@ router.get('/', async (req, res) => {
         'id',
         'name',
         'asset_type',
+        'asset_role',
         'asset_group',
+        'asset_scope',
         'purpose',
+        'show_id',
+        'episode_id',
         's3_url_raw',
         's3_url_processed',
         'media_type',
         'approval_status',
         'is_global',
         'allowed_uses',
+        'width',
+        'height',
         'created_at',
         'updated_at',
       ],
+      // Paranoid mode is enabled on model, but being explicit
+      paranoid: true,
     });
 
     console.log(`✅ Found ${assets.length} assets`);
+    console.log(`   (Soft-deleted assets automatically excluded by paranoid mode)`);
 
     res.json({
       status: 'SUCCESS',
@@ -129,6 +139,221 @@ router.get('/', async (req, res) => {
     console.error('❌ Failed to list assets:', error);
     res.status(500).json({
       error: 'Failed to list assets',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/assets/eligible
+ * Get assets eligible for a specific role, filtered by scope and context
+ * Query params:
+ *  - role: Asset role (e.g., BG.MAIN, CHAR.HOST.PRIMARY)
+ *  - showId: Show UUID (required for show/episode-scoped assets)
+ *  - episodeId: Episode UUID (optional, includes episode-scoped assets)
+ *  - approvalStatus: Filter by approval status (default: APPROVED)
+ */
+router.get('/eligible', async (req, res) => {
+  try {
+    const { role, showId, episodeId, approvalStatus = 'APPROVED' } = req.query;
+
+    if (!role) {
+      return res.status(400).json({
+        error: 'Missing required parameter: role',
+        message: 'role query parameter is required',
+      });
+    }
+
+    console.log('📥 GET /assets/eligible - Fetching eligible assets:', {
+      role,
+      showId,
+      episodeId,
+      approvalStatus,
+    });
+
+    // Build where clause
+    const where = {
+      asset_role: role,
+      approval_status: approvalStatus,
+    };
+
+    // Build scope filter using OR conditions
+    const scopeConditions = [
+      { asset_scope: 'GLOBAL' }, // Always include global assets
+    ];
+
+    if (showId) {
+      scopeConditions.push({
+        asset_scope: 'SHOW',
+        show_id: showId,
+      });
+    }
+
+    if (episodeId) {
+      scopeConditions.push({
+        asset_scope: 'EPISODE',
+        episode_id: episodeId,
+      });
+    }
+
+    // Combine role/approval with scope conditions
+    const { Op } = require('sequelize');
+    const finalWhere = {
+      ...where,
+      [Op.or]: scopeConditions,
+    };
+
+    const assets = await models.Asset.findAll({
+      where: finalWhere,
+      order: [
+        ['asset_scope', 'ASC'], // EPISODE first, then SHOW, then GLOBAL
+        ['created_at', 'DESC'],
+      ],
+      attributes: [
+        'id',
+        'name',
+        'asset_role',
+        'asset_scope',
+        'show_id',
+        'episode_id',
+        's3_url_raw',
+        's3_url_processed',
+        'media_type',
+        'approval_status',
+        'width',
+        'height',
+        'created_at',
+        'updated_at',
+      ],
+      paranoid: true, // Explicitly exclude soft-deleted records
+    });
+
+    console.log(`✅ Found ${assets.length} eligible assets for role: ${role}`);
+
+    res.json({
+      status: 'SUCCESS',
+      data: assets,
+      count: assets.length,
+      filters: { role, showId, episodeId, approvalStatus },
+    });
+  } catch (error) {
+    console.error('❌ Failed to get eligible assets:', error);
+    res.status(500).json({
+      error: 'Failed to get eligible assets',
+      message: error.message,
+      stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/assets/by-folder
+ * Get assets organized by asset_group folders for flexible selection
+ * Query params:
+ *  - folders: Comma-separated list of asset_groups (e.g., "LALA,GUEST")
+ *  - showId: Show UUID (optional)
+ *  - episodeId: Episode UUID (optional)
+ *  - approvalStatus: Filter by approval status (default: APPROVED)
+ */
+router.get('/by-folder', async (req, res) => {
+  try {
+    const { folders, showId, episodeId, approvalStatus = 'APPROVED' } = req.query;
+
+    if (!folders) {
+      return res.status(400).json({
+        error: 'Missing required parameter: folders',
+        message: 'folders query parameter is required (e.g., "LALA,GUEST")',
+      });
+    }
+
+    console.log('📥 GET /assets/by-folder - Fetching assets by folders:', {
+      folders,
+      showId,
+      episodeId,
+      approvalStatus,
+    });
+
+    const folderList = folders.split(',').map(f => f.trim());
+
+    // Build where clause
+    const { Op } = require('sequelize');
+    const where = {
+      asset_group: { [Op.in]: folderList },
+      approval_status: approvalStatus,
+    };
+
+    // Build scope filter
+    const scopeConditions = [
+      { asset_scope: 'GLOBAL' }, // Always include global assets
+    ];
+
+    if (showId) {
+      console.log('✅ Adding SHOW scope filter with showId:', showId);
+      scopeConditions.push({
+        asset_scope: 'SHOW',
+        show_id: showId,
+      });
+    } else {
+      console.log('⚠️ No showId provided - SHOW assets will NOT be included');
+    }
+
+    if (episodeId) {
+      console.log('✅ Adding EPISODE scope filter with episodeId:', episodeId);
+      scopeConditions.push({
+        asset_scope: 'EPISODE',
+        episode_id: episodeId,
+      });
+    }
+
+    console.log('🔍 Scope conditions:', JSON.stringify(scopeConditions, null, 2));
+
+    const finalWhere = {
+      ...where,
+      [Op.or]: scopeConditions,
+    };
+
+    console.log('🔍 Final where clause:', JSON.stringify(finalWhere, null, 2));
+
+    const assets = await models.Asset.findAll({
+      where: finalWhere,
+      order: [
+        ['asset_group', 'ASC'],
+        ['asset_scope', 'ASC'],
+        ['created_at', 'DESC'],
+      ],
+      attributes: [
+        'id',
+        'name',
+        'asset_role',
+        'asset_group',
+        'asset_scope',
+        'show_id',
+        'episode_id',
+        's3_url_raw',
+        's3_url_processed',
+        'media_type',
+        'approval_status',
+        'width',
+        'height',
+        'created_at',
+        'updated_at',
+      ],
+      paranoid: true, // Explicitly exclude soft-deleted records
+    });
+
+    console.log(`✅ Found ${assets.length} assets for folders: ${folderList.join(', ')}`);
+
+    res.json({
+      status: 'SUCCESS',
+      data: assets,
+      count: assets.length,
+      filters: { folders: folderList, showId, episodeId, approvalStatus },
+    });
+  } catch (error) {
+    console.error('❌ Failed to get assets by folder:', error);
+    res.status(500).json({
+      error: 'Failed to get assets by folder',
       message: error.message,
       stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
     });
@@ -424,7 +649,14 @@ router.post('/', upload.single('file'), validateAssetUpload, async (req, res) =>
       });
     }
 
-    const { assetType, metadata } = req.body;
+    const { assetType, assetRole, metadata } = req.body;
+
+    console.log('📥 Asset upload request body:', {
+      assetType,
+      assetRole,
+      metadata,
+      allBodyFields: Object.keys(req.body)
+    });
 
     if (!assetType) {
       return res.status(400).json({
@@ -469,9 +701,18 @@ router.post('/', upload.single('file'), validateAssetUpload, async (req, res) =>
     const asset = await AssetService.uploadAsset(
       req.file,
       assetType,
+      assetRole,
       parsedMetadata,
       req.user?.id || 'system'
     );
+
+    console.log('✅ Asset created:', {
+      id: asset.id,
+      name: asset.name,
+      asset_type: asset.asset_type,
+      asset_role: asset.asset_role,
+      wasRoleProvided: !!assetRole
+    });
 
     res.status(201).json({
       status: 'SUCCESS',
@@ -766,6 +1007,110 @@ router.get('/:id/download/:type', validateUUIDParam('id'), async (req, res) => {
     console.error('Failed to generate download URL:', error);
     res.status(500).json({
       error: 'Failed to generate download URL',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/assets/process
+ * Process an asset with transformations (background removal, enhancement, etc.)
+ * Body: { asset_id, template_id, processing: { removeBackground, smoothSkin, autoEnhance }, provider }
+ */
+router.post('/process', async (req, res) => {
+  try {
+    const { asset_id, template_id, processing = {}, provider = 'runway' } = req.body;
+
+    console.log('🔧 Processing asset:', { asset_id, template_id, processing, provider });
+
+    // Validate input
+    if (!asset_id) {
+      return res.status(400).json({
+        status: 'ERROR',
+        error: 'asset_id is required',
+      });
+    }
+
+    if (!template_id) {
+      return res.status(400).json({
+        status: 'ERROR',
+        error: 'template_id is required',
+      });
+    }
+
+    // Get asset
+    const asset = await models.Asset.findByPk(asset_id);
+    if (!asset) {
+      return res.status(404).json({
+        status: 'ERROR',
+        error: 'Asset not found',
+      });
+    }
+
+    // Check cache first
+    const AssetProcessingService = require('../services/AssetProcessingService');
+    const processingType = Object.entries(processing)
+      .filter(([_, enabled]) => enabled)
+      .map(([key]) => key)
+      .join('-') || 'processed';
+    
+    const cached = await AssetProcessingService.checkCache(template_id, asset_id, processingType);
+    
+    if (cached) {
+      console.log('✅ Using cached processed asset:', cached);
+      return res.json({
+        status: 'SUCCESS',
+        message: 'Using cached processed asset',
+        data: {
+          processed_url: cached,
+          cached: true,
+        },
+      });
+    }
+
+    // Process the asset
+    const assetUrl = asset.s3_url_raw || asset.s3_bucket && asset.s3_key 
+      ? `https://${asset.s3_bucket}.s3.${process.env.AWS_REGION || 'us-east-1'}.amazonaws.com/${asset.s3_key}`
+      : null;
+
+    if (!assetUrl) {
+      return res.status(400).json({
+        status: 'ERROR',
+        error: 'Asset does not have a valid S3 URL',
+      });
+    }
+
+    const result = await AssetProcessingService.processAsset(assetUrl, {
+      ...processing,
+      provider,
+    });
+
+    // Save to cache
+    const savedUrl = await AssetProcessingService.saveProcessedAsset(
+      template_id,
+      asset_id,
+      result.processedUrl,
+      processingType
+    );
+
+    console.log('✅ Asset processed and cached:', savedUrl);
+
+    res.json({
+      status: 'SUCCESS',
+      message: 'Asset processed successfully',
+      data: {
+        processed_url: savedUrl,
+        original_url: assetUrl,
+        processing_steps: result.processingSteps,
+        provider: result.provider,
+        cached: false,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Asset processing failed:', error);
+    res.status(500).json({
+      status: 'ERROR',
+      error: 'Asset processing failed',
       message: error.message,
     });
   }

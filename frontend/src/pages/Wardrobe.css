@@ -1,0 +1,163 @@
+/* ==========================================================
+   Unified Wardrobe System - Calm, Cohesive Design
+   ========================================================== */
+
+.wardrobe-unified {
+  min-height: 100vh;
+  background: #f9fafb;
+  padding: 1.5rem;
+}
+
+/* Header */
+.wardrobe-header {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn-back {
+  padding: 0.5rem 0.75rem;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+  transition: border-color 0.2s;
+  white-space: nowrap;
+}
+
+.btn-back:hover {
+  border-color: #9ca3af;
+}
+
+.wardrobe-title-group {
+  min-width: 0;
+}
+
+.wardrobe-title {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.wardrobe-subtitle {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.9rem;
+  color: #6b7280;
+}
+
+.btn-primary-action {
+  padding: 0.65rem 1.25rem;
+  background: #6b9bd1;
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+.btn-primary-action:hover {
+  background: #5b8fc7;
+}
+
+/* Tab Navigation - Clean & Minimal */
+.wardrobe-tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  background: white;
+  border-radius: 10px;
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+}
+
+.wardrobe-tab {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: transparent;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wardrobe-tab:hover {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.wardrobe-tab.active {
+  background: #6b9bd1;
+  color: white;
+}
+
+.tab-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.tab-label {
+  line-height: 1;
+}
+
+/* Tab Content */
+.wardrobe-content {
+  /* Content has no extra container - tabs mount their components directly */
+}
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .wardrobe-unified {
+    padding: 1rem;
+  }
+
+  .wardrobe-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .wardrobe-header-left {
+    flex-direction: column;
+    align-items: flex-start;
+    width: 100%;
+  }
+
+  .btn-primary-action {
+    width: 100%;
+  }
+
+  .wardrobe-tabs {
+    flex-direction: column;
+    padding: 0.375rem;
+  }
+
+  .tab-label {
+    display: none;
+  }
+
+  .wardrobe-tab {
+    justify-content: center;
+  }
+
+  .tab-icon {
+    font-size: 1.5rem;
+  }
+}

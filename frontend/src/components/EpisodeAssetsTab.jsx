@@ -15,6 +15,7 @@ const EpisodeAssetsTab = ({ episodeId }) => {
   const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
   const [assetType, setAssetType] = useState('PROMO_LALA');
+  const [assetRole, setAssetRole] = useState('CHAR.HOST.LALA');
   const [previewAsset, setPreviewAsset] = useState(null);
   const [editingAsset, setEditingAsset] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -26,6 +27,24 @@ const EpisodeAssetsTab = ({ episodeId }) => {
   });
   const [processingAssets, setProcessingAssets] = useState(new Set());
   const [showProcessed, setShowProcessed] = useState(true);
+  const [openMenuAssetId, setOpenMenuAssetId] = useState(null);
+  const [showMobileActions, setShowMobileActions] = useState(false);
+
+  // Map asset role to appropriate asset type
+  const getAssetTypeFromRole = (role) => {
+    if (role.startsWith('CHAR.HOST.LALA')) return 'PROMO_LALA';
+    if (role.startsWith('CHAR.HOST.JUSTAWOMANINHERPRIME')) return 'PROMO_JUSTAWOMANINHERPRIME';
+    if (role.startsWith('CHAR.GUEST')) return 'PROMO_GUEST';
+    if (role.startsWith('GUEST')) return 'PROMO_GUEST';
+    if (role.startsWith('UI.ICON')) return 'BRAND_LOGO';
+    if (role.startsWith('BRAND.SHOW')) return 'PROMO_JUSTAWOMANINHERPRIME';
+    if (role.startsWith('BRAND.')) return 'BRAND_LOGO';
+    if (role.startsWith('BG.')) return 'BACKGROUND_IMAGE';
+    if (role.startsWith('UI.MOUSE')) return 'BACKGROUND_IMAGE';
+    if (role.startsWith('UI.BUTTON')) return 'BACKGROUND_IMAGE';
+    if (role.startsWith('TEXT.')) return 'BACKGROUND_IMAGE';
+    return 'PROMO_LALA'; // Default fallback
+  };
 
   useEffect(() => {
     loadAssets();
@@ -69,8 +88,18 @@ const EpisodeAssetsTab = ({ episodeId }) => {
       for (const file of selectedFiles) {
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('assetType', assetType);
+        
+        // Automatically derive asset type from selected role
+        const derivedAssetType = getAssetTypeFromRole(assetRole);
+        formData.append('assetType', derivedAssetType);
+        formData.append('assetRole', assetRole);
         formData.append('metadata', JSON.stringify({ episodeId }));
+
+        console.log('📤 Uploading with:', { 
+          role: assetRole, 
+          derivedType: derivedAssetType,
+          fileName: file.name 
+        });
 
         const uploadResponse = await api.post('/api/v1/assets', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
@@ -266,6 +295,17 @@ const EpisodeAssetsTab = ({ episodeId }) => {
               {assets.length} asset{assets.length !== 1 ? 's' : ''} linked to this episode
             </p>
           </div>
+          
+          {/* Mobile: Single Add Asset button */}
+          <button 
+            onClick={() => setShowMobileActions(true)} 
+            className="btn-add-asset-mobile"
+          >
+            <span className="btn-icon">➕</span>
+            <span className="btn-text">Add Asset</span>
+          </button>
+
+          {/* Desktop: Three action buttons */}
           <div className="header-actions">
             <button onClick={() => navigate('/assets')} className="btn-asset-manager">
               <span className="btn-icon">🗂️</span>
@@ -301,15 +341,19 @@ const EpisodeAssetsTab = ({ episodeId }) => {
           {assets.map((asset) => {
             const usageData = asset.EpisodeAsset || {};
             const quality = getQualityBadge(asset);
+            const showActionsMenu = openMenuAssetId === asset.id;
 
             return (
               <div
                 key={asset.id}
                 className="asset-card"
-                onClick={() => setPreviewAsset(asset)}
               >
-                {/* Image/Video Preview */}
-                <div className="asset-preview">{(() => {
+                {/* Image Preview - Tappable */}
+                <div
+                  className="asset-preview"
+                  onClick={() => setPreviewAsset(asset)}
+                  style={{ cursor: 'pointer', height: '180px', maxHeight: '180px', overflow: 'hidden' }}
+                >{(() => {
                     const url = asset.s3_url_processed || asset.s3_url_raw;
                     
                     // Check for invalid or mock URLs
@@ -339,7 +383,10 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                             e.target.currentTime = 0;
                           }}
                           onError={(e) => {
-                            console.error('❌ Video load failed for:', asset.name, url);
+                            // Only warn for unexpected video load failures
+                            if (!url.includes('_processed')) {
+                              console.warn('⚠️ Video load failed:', asset.name);
+                            }
                             const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="#6366f1"/><text x="50%" y="45%" font-family="Arial, sans-serif" font-size="16" fill="white" text-anchor="middle" dominant-baseline="middle">🎥 VIDEO</text><text x="50%" y="60%" font-family="Arial, sans-serif" font-size="12" fill="rgba(255,255,255,0.7)" text-anchor="middle" dominant-baseline="middle">Hover to play</text></svg>`;
                             // Create an img element to show placeholder
                             const img = document.createElement('img');
@@ -357,7 +404,10 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                         src={url}
                         alt={asset.name}
                         onError={(e) => {
-                          console.error('❌ Image load failed for:', asset.name, url);
+                          // Only log if it's not a known missing processed image
+                          if (!url.includes('_processed.png')) {
+                            console.warn('⚠️ Image load failed:', asset.name, url);
+                          }
                           const typeLabel = asset.asset_type?.replace(/_/g, ' ') || 'Asset';
                           const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300"><rect width="300" height="300" fill="#6366f1"/><text x="50%" y="45%" font-family="Arial, sans-serif" font-size="16" fill="white" text-anchor="middle" dominant-baseline="middle">${typeLabel}</text><text x="50%" y="60%" font-family="Arial, sans-serif" font-size="32" fill="rgba(255,255,255,0.7)" text-anchor="middle" dominant-baseline="middle">🖼️</text></svg>`;
                           e.target.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
@@ -366,74 +416,209 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                     );
                   })()}
 
-                  {/* Badges */}
+                  {/* Quality Badge */}
                   <div className="asset-badges">
                     <span className={`badge badge-quality-${quality.type || 'unknown'}`}>
                       {quality.label}
                     </span>
                   </div>
+
+                  {/* Overflow Menu Button */}
+                  <div className="asset-menu-trigger" style={{ position: 'absolute', top: '0.5rem', right: '0.5rem' }}>
+                    <button
+                      type="button"
+                      className="btn-asset-menu"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setOpenMenuAssetId(showActionsMenu ? null : asset.id);
+                      }}
+                      style={{
+                        background: 'rgba(0, 0, 0, 0.6)',
+                        border: 'none',
+                        borderRadius: '8px',
+                        padding: '0.5rem',
+                        color: 'white',
+                        fontSize: '1.25rem',
+                        cursor: 'pointer',
+                        fontWeight: 700,
+                        minWidth: '36px',
+                        minHeight: '36px',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                      title="More actions"
+                    >
+                      ⋯
+                    </button>
+                    
+                    {showActionsMenu && (
+                      <>
+                        <div
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuAssetId(null);
+                          }}
+                          style={{
+                            position: 'fixed',
+                            top: 0,
+                            left: 0,
+                            right: 0,
+                            bottom: 0,
+                            zIndex: 100,
+                          }}
+                        />
+                        <div
+                          className="asset-actions-menu"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            position: 'absolute',
+                            top: 'calc(100% + 0.5rem)',
+                            right: 0,
+                            background: '#ffffff',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '12px',
+                            boxShadow: '0 10px 26px rgba(0,0,0,0.12)',
+                            minWidth: '180px',
+                            zIndex: 101,
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuAssetId(null);
+                              window.open(asset.s3_url_processed || asset.s3_url_raw, '_blank');
+                            }}
+                            style={{
+                              width: '100%',
+                              background: 'transparent',
+                              border: 'none',
+                              padding: '0.875rem 1rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                              fontWeight: 600,
+                              color: '#1f2937',
+                              cursor: 'pointer',
+                              fontSize: '0.95rem',
+                              textAlign: 'left',
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            👁️ View Full Size
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuAssetId(null);
+                              setPreviewAsset(asset);
+                            }}
+                            style={{
+                              width: '100%',
+                              background: 'transparent',
+                              border: 'none',
+                              padding: '0.875rem 1rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                              fontWeight: 600,
+                              color: '#1f2937',
+                              cursor: 'pointer',
+                              fontSize: '0.95rem',
+                              textAlign: 'left',
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            ℹ️ View Details
+                          </button>
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOpenMenuAssetId(null);
+                              navigate(`/analytics/assets/${asset.id}`);
+                            }}
+                            style={{
+                              width: '100%',
+                              background: 'transparent',
+                              border: 'none',
+                              padding: '0.875rem 1rem',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '0.75rem',
+                              fontWeight: 600,
+                              color: '#1f2937',
+                              cursor: 'pointer',
+                              fontSize: '0.95rem',
+                              textAlign: 'left',
+                            }}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                          >
+                            📊 Analytics
+                          </button>
+                          <div style={{ borderTop: '1px solid #e5e7eb' }}>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setOpenMenuAssetId(null);
+                                handleRemoveAsset(asset.id);
+                              }}
+                              style={{
+                                width: '100%',
+                                background: 'transparent',
+                                border: 'none',
+                                padding: '0.875rem 1rem',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                fontWeight: 600,
+                                color: '#ef4444',
+                                cursor: 'pointer',
+                                fontSize: '0.95rem',
+                                textAlign: 'left',
+                              }}
+                              onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
+                              onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                            >
+                              🗑️ Remove from Episode
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                {/* Asset Info */}
+                {/* Asset Info - Simplified */}
                 <div className="asset-info">
                   <h3 className="asset-name">
                     {asset.name || 'Untitled'}
                   </h3>
 
                   <div className="asset-details">
-                    <span>{asset.media_type}</span>
-                    <span>{asset.width}x{asset.height}</span>
+                    <span>{asset.width}×{asset.height}</span>
+                    <span>·</span>
                     <span>{formatFileSize(asset.file_size_bytes)}</span>
                   </div>
 
-                  <div className="asset-type-badge">
-                    {asset.asset_type?.replace(/_/g, ' ') || 'Asset'}
-                  </div>
-
-                  <div className="asset-metadata">
-                    {asset.asset_group && (
-                      <div className="metadata-item">
-                        <span className="metadata-label">Group</span>
-                        <span className="metadata-value">{asset.asset_group}</span>
-                      </div>
-                    )}
-                    {asset.purpose && (
-                      <div className="metadata-item">
-                        <span className="metadata-label">Purpose</span>
-                        <span className="metadata-value">{asset.purpose}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="asset-actions">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        window.open(asset.s3_url_processed || asset.s3_url_raw, '_blank');
-                      }}
-                      className="btn-view"
-                    >
-                      👁️ View
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigate(`/analytics/assets/${asset.id}`);
-                      }}
-                      className="btn-analytics"
-                    >
-                      📊
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleRemoveAsset(asset.id);
-                      }}
-                      className="btn-unlink"
-                    >
-                      🗑️
-                    </button>
-                  </div>
+                  {/* Compact category chips - show max 2 */}
+                  {(asset.asset_group || asset.purpose) && (
+                    <div className="asset-chips">
+                      {asset.asset_group && (
+                        <span className="chip">{asset.asset_group}</span>
+                      )}
+                      {asset.purpose && (
+                        <span className="chip">{asset.purpose}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
               </div>
             );
@@ -484,40 +669,72 @@ const EpisodeAssetsTab = ({ episodeId }) => {
 
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
-                Asset Type
+                Asset Role
               </label>
               <select
-                value={assetType}
-                onChange={(e) => setAssetType(e.target.value)}
+                value={assetRole}
+                onChange={(e) => setAssetRole(e.target.value)}
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  border: '2px solid #e5e7eb',
+                  border: '2px solid #667eea',
                   borderRadius: '8px',
                   fontSize: '1rem',
+                  background: '#f8f9ff'
                 }}
               >
-                <optgroup label="LALA Platform">
-                  <option value="PROMO_LALA">📸 Lala Promo</option>
-                  <option value="BRAND_LOGO">🏷️ Brand Logo</option>
+                <optgroup label="🎭 CHARACTERS">
+                  <option value="CHAR.HOST.LALA">Lala (Host)</option>
+                  <option value="CHAR.HOST.JUSTAWOMANINHERPRIME">Just a Woman in Her Prime (Host)</option>
+                  <option value="CHAR.GUEST.1">Guest 1</option>
+                  <option value="CHAR.GUEST.2">Guest 2</option>
                 </optgroup>
-                <optgroup label="Show">
-                  <option value="PROMO_JUSTAWOMANINHERPRIME">💜 Show Promo</option>
-                  <option value="BRAND_BANNER">🎨 Brand Banner</option>
+                <optgroup label="🎯 ICONS">
+                  <option value="UI.ICON.CLOSET">Icon: Closet</option>
+                  <option value="UI.ICON.JEWELRY_BOX">Icon: Jewelry Box</option>
+                  <option value="UI.ICON.TODO_LIST">Icon: To-Do List</option>
+                  <option value="UI.ICON.SPEECH">Icon: Speech Bubble</option>
+                  <option value="UI.ICON.LOCATION">Icon: Location Pin</option>
+                  <option value="UI.ICON.PERFUME">Icon: Perfume</option>
+                  <option value="UI.ICON.POSE">Icon: Pose</option>
+                  <option value="UI.ICON.RESERVED">Icon: Reserved</option>
+                  <option value="UI.ICON.HOLDER.MAIN">Icon Holder</option>
                 </optgroup>
-                <optgroup label="Guest">
-                  <option value="PROMO_GUEST">👤 Guest Promo</option>
-                  <option value="GUEST_HEADSHOT">📷 Guest Headshot</option>
+                <optgroup label="🏷️ BRANDING">
+                  <option value="BRAND.SHOW.TITLE_GRAPHIC">Show Title Graphic</option>
                 </optgroup>
-                <optgroup label="Episode">
-                  <option value="EPISODE_FRAME">🖼️ Episode Frame</option>
-                  <option value="BACKGROUND_VIDEO">🎥 Background Video</option>
-                  <option value="BACKGROUND_IMAGE">🌄 Background Image</option>
+                <optgroup label="🖼️ BACKGROUNDS & CHROME">
+                  <option value="BG.MAIN">Background Image</option>
+                  <option value="UI.MOUSE.CURSOR">Mouse Cursor</option>
+                  <option value="UI.BUTTON.EXIT">Exit Button</option>
+                  <option value="UI.BUTTON.MINIMIZE">Minimize Button</option>
                 </optgroup>
               </select>
-              <p style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#6b7280' }}>
-                Auto-tagged with group, purpose & allowed uses
-              </p>
+              
+              {/* Show derived asset type */}
+              <div style={{ 
+                marginTop: '0.5rem', 
+                padding: '0.5rem 0.75rem',
+                background: '#f0f9ff',
+                border: '1px solid #bae6fd',
+                borderRadius: '6px',
+                fontSize: '0.875rem',
+                color: '#0369a1'
+              }}>
+                <span style={{ fontWeight: '600' }}>📦 Will be saved as:</span>{' '}
+                <span style={{ fontFamily: 'monospace' }}>{getAssetTypeFromRole(assetRole)}</span>
+                {' → '}
+                <span style={{ fontWeight: '600' }}>
+                  {assetRole.startsWith('CHAR.HOST.LALA') && '👩 LALA folder'}
+                  {assetRole.startsWith('CHAR.HOST.JUSTAWOMANINHERPRIME') && '💜 SHOW folder'}
+                  {(assetRole.startsWith('CHAR.GUEST') || assetRole.startsWith('GUEST')) && '👤 GUEST folder'}
+                  {assetRole.startsWith('UI.ICON') && '🎨 SHOW folder (icons)'}
+                  {assetRole.startsWith('BRAND.') && '💜 SHOW folder (branding)'}
+                  {assetRole.startsWith('BG.') && '🖼️ EPISODE folder (backgrounds)'}
+                  {assetRole.startsWith('UI.MOUSE') && '🖼️ EPISODE folder (UI)'}
+                  {assetRole.startsWith('UI.BUTTON') && '🖼️ EPISODE folder (UI)'}
+                </span>
+              </div>
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
@@ -864,6 +1081,59 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                 }}
               >
                 Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Mobile Action Sheet */}
+      {showMobileActions && (
+        <div className="mobile-action-sheet-overlay" onClick={() => setShowMobileActions(false)}>
+          <div className="mobile-action-sheet" onClick={(e) => e.stopPropagation()}>
+            <div className="action-sheet-header">
+              <h3>Add Asset</h3>
+              <button onClick={() => setShowMobileActions(false)} className="btn-close">✕</button>
+            </div>
+            <div className="action-sheet-options">
+              <button 
+                onClick={() => {
+                  setShowMobileActions(false);
+                  setShowUploadModal(true);
+                }}
+                className="action-option"
+              >
+                <span className="option-icon">📤</span>
+                <div className="option-content">
+                  <div className="option-title">Upload New Asset</div>
+                  <div className="option-subtitle">Upload files from your device</div>
+                </div>
+              </button>
+              <button 
+                onClick={() => {
+                  setShowMobileActions(false);
+                  setShowAssetPicker(true);
+                }}
+                className="action-option"
+              >
+                <span className="option-icon">🔗</span>
+                <div className="option-content">
+                  <div className="option-title">Link Existing Asset</div>
+                  <div className="option-subtitle">Choose from asset library</div>
+                </div>
+              </button>
+              <button 
+                onClick={() => {
+                  setShowMobileActions(false);
+                  navigate('/assets');
+                }}
+                className="action-option"
+              >
+                <span className="option-icon">🗂️</span>
+                <div className="option-content">
+                  <div className="option-title">Open Asset Manager</div>
+                  <div className="option-subtitle">Manage all assets</div>
+                </div>
               </button>
             </div>
           </div>

@@ -49,9 +49,22 @@ if (process.env.NODE_ENV !== 'test') {
       await db.authenticate();
       console.log('✅ Database connection authenticated');
 
-      // Skip model sync - database already exists
-      // Sync errors indicate schema mismatches that we don't want to auto-fix
-      console.log('⏭️  Skipping model sync (database already initialized)');
+      // Check if DB sync is enabled via environment variable
+      console.log('DEBUG: ENABLE_DB_SYNC =', process.env.ENABLE_DB_SYNC);
+      console.log('DEBUG: DB_SYNC_FORCE =', process.env.DB_SYNC_FORCE);
+      if (process.env.ENABLE_DB_SYNC === 'true') {
+        console.log('🔄 Syncing database models...');
+        const syncOptions = {
+          force: process.env.DB_SYNC_FORCE === 'true',
+          alter: process.env.DB_SYNC_ALTER === 'true'
+        };
+        await db.sequelize.sync(syncOptions);
+        console.log('✅ Database models synchronized');
+      } else {
+        // Skip model sync - database already exists
+        // Sync errors indicate schema mismatches that we don't want to auto-fix
+        console.log('⏭️  Skipping model sync (database already initialized)');
+      }
 
       isDbConnected = true;
     } catch (err) {
@@ -102,8 +115,12 @@ app.use(
         'http://localhost:3000',
         'http://localhost:5173',
         'http://localhost:5174',
+        'http://localhost:5175',
+        'http://localhost:5176',
         'http://127.0.0.1:5173',
         'http://127.0.0.1:5174',
+        'http://127.0.0.1:5175',
+        'http://127.0.0.1:5176',
         'http://127.0.0.1:3000',
         'http://primepisodes.com',
         'https://primepisodes.com',
@@ -315,6 +332,7 @@ try {
   console.log('✓ Compositions routes loaded');
 } catch (e) {
   console.error('✗ Failed to load compositions routes:', e.message);
+  console.error('Full error:', e);
   compositionRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
@@ -343,6 +361,16 @@ try {
 } catch (e) {
   console.error('✗ Failed to load scene templates routes:', e.message);
   sceneTemplateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Scene Library routes (new system)
+let sceneLibraryRoutes;
+try {
+  sceneLibraryRoutes = require('./routes/sceneLibrary');
+  console.log('✓ Scene Library routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load scene library routes:', e.message);
+  sceneLibraryRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
 // Wardrobe routes
@@ -439,6 +467,26 @@ try {
   seedRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// Template Studio routes
+let templateStudioRoutes;
+try {
+  templateStudioRoutes = require('./routes/templateStudio');
+  console.log('✓ Template Studio routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Template Studio routes:', e.message);
+  templateStudioRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Image Processing routes
+let imageProcessingRoutes;
+try {
+  imageProcessingRoutes = require('./routes/imageProcessing');
+  console.log('✓ Image Processing routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Image Processing routes:', e.message);
+  imageProcessingRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 app.use('/api/v1/episodes', episodeRoutes);
 app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
@@ -451,12 +499,16 @@ app.use('/api/v1/jobs', jobsRoutes);
 
 // Phase 2.5 routes (composite thumbnails)
 app.use('/api/v1/assets', assetRoutes);
+app.use('/api/v1/assets', imageProcessingRoutes); // Image processing endpoints
 app.use('/api/v1/compositions', compositionRoutes);
 app.use('/api/v1/templates', templateRoutes);
 
 // Scene routes
 app.use('/api/v1/scenes', sceneRoutes);
 app.use('/api/v1/scene-templates', sceneTemplateRoutes);
+
+// Scene Library routes (new system)
+app.use('/api/v1/scene-library', sceneLibraryRoutes);
 
 // Wardrobe routes
 app.use('/api/v1/wardrobe', wardrobeRoutes);
@@ -483,6 +535,13 @@ app.use('/api/v1/scripts', scriptsRoutes);
 // Phase 6 routes (Shows)
 const showRoutes = require('./routes/shows');
 app.use('/api/v1/shows', showRoutes);
+
+// Thumbnail template routes
+const thumbnailTemplateRoutes = require('./routes/thumbnailTemplates');
+app.use('/api/v1/thumbnail-templates', thumbnailTemplateRoutes);
+
+// Template Studio routes (new system)
+app.use('/api/v1/template-studio', templateStudioRoutes);
 
 // Phase 3A routes (real-time notifications)
 app.use('/api/v1/notifications', notificationController);

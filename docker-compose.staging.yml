@@ -18,6 +18,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - staging-network
 
   redis:
     image: redis:7-alpine
@@ -32,6 +34,8 @@ services:
       timeout: 5s
       retries: 5
     restart: unless-stopped
+    networks:
+      - staging-network
 
   app:
     build:
@@ -44,6 +48,8 @@ services:
       - DATABASE_URL=postgresql://${DB_USER_STAGING:-postgres}:${DB_PASSWORD_STAGING:-postgres}@postgres:5432/episode_metadata
       - DB_HOST=postgres
       - AWS_REGION=us-east-1
+      - ENABLE_DB_SYNC=true
+      - DB_SYNC_FORCE=true
       - REDIS_URL=redis://redis:6379
     ports:
       - '3002:3002'

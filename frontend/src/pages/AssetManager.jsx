@@ -1,15 +1,30 @@
 /**
- * AssetManager Component - Enhanced with Wardrobe Database
- * Organized by main categories: Background, Lala, JustAWoman, Guest, Wardrobe
+ * AssetManager Component - UPDATED for Canonical Roles Integration
+ * 
+ * KEY CHANGES:
+ * 1. Updated role suggestions to match canonical roles
+ * 2. Import CANONICAL_ROLES from constants
+ * 3. Better role validation and suggestions
  */
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import AssetCard from '../components/AssetCard';
 import AssetPreviewModal from '../components/AssetPreviewModal';
 import assetService from '../services/assetService';
+import { CANONICAL_ROLES } from '../constants/canonicalRoles';
 import './AssetManager.css';
 
 const AssetManager = () => {
+  const navigate = React.useRef(null);
+  
+  // Get navigate function from react-router-dom
+  React.useEffect(() => {
+    const { useNavigate } = require('react-router-dom');
+    const nav = useNavigate();
+    navigate.current = nav;
+  }, []);
+  
   // Asset state
   const [assets, setAssets] = useState([]);
   const [allLabels, setAllLabels] = useState([]);
@@ -22,6 +37,7 @@ const AssetManager = () => {
   const [mainCategory, setMainCategory] = useState('LALA');
   const [assetType, setAssetType] = useState('PROMO_LALA');
   const [description, setDescription] = useState('');
+  const [assetRole, setAssetRole] = useState('');
   const [dragActive, setDragActive] = useState(false);
   const [uploadProgress, setUploadProgress] = useState({});
 
@@ -97,6 +113,56 @@ const AssetManager = () => {
     WARDROBE: { label: 'Wardrobe', icon: '👗' }
   };
 
+  // ✅ UPDATED: Category to canonical role mapping
+  const suggestRoleFromCategory = (category) => {
+    const suggestions = {
+      'BACKGROUND': 'BG.MAIN',
+      'LALA': 'CHAR.HOST.LALA',                           // ✅ UPDATED
+      'JUSTAWOMAN': 'CHAR.HOST.JUSTAWOMANINHERPRIME',     // ✅ UPDATED
+      'GUEST': 'CHAR.GUEST.1',                            // ✅ UPDATED
+      'WARDROBE': 'WARDROBE.ITEM.1'
+    };
+    return suggestions[category] || '';
+  };
+
+  // ✅ NEW: Get suggested roles for current category
+  const getSuggestedRolesForCategory = (category) => {
+    switch(category) {
+      case 'LALA':
+        return [
+          'CHAR.HOST.LALA',
+          'BRAND.SHOW.TITLE_GRAPHIC',
+          'BG.MAIN'
+        ];
+      case 'JUSTAWOMAN':
+        return [
+          'CHAR.HOST.JUSTAWOMANINHERPRIME',
+          'BRAND.SHOW.TITLE_GRAPHIC'
+        ];
+      case 'GUEST':
+        return [
+          'CHAR.GUEST.1',
+          'CHAR.GUEST.2'
+        ];
+      case 'BACKGROUND':
+        return ['BG.MAIN'];
+      case 'WARDROBE':
+        return [
+          'WARDROBE.ITEM.1',
+          'WARDROBE.ITEM.2',
+          'WARDROBE.ITEM.3',
+          'WARDROBE.ITEM.4',
+          'WARDROBE.ITEM.5',
+          'WARDROBE.ITEM.6',
+          'WARDROBE.ITEM.7',
+          'WARDROBE.ITEM.8',
+          'WARDROBE.PANEL'
+        ];
+      default:
+        return [];
+    }
+  };
+
   // Asset types organized by main category
   const assetTypesByCategory = {
     BACKGROUND: [
@@ -161,6 +227,9 @@ const AssetManager = () => {
   // Get current asset types based on selected category
   const currentAssetTypes = assetTypesByCategory[mainCategory] || [];
 
+  // Get suggested roles for current category
+  const suggestedRoles = getSuggestedRolesForCategory(mainCategory);
+
   // Update useEffect to load episodes
   useEffect(() => {
     loadAssets();
@@ -173,6 +242,11 @@ const AssetManager = () => {
   useEffect(() => {
     if (currentAssetTypes.length > 0) {
       setAssetType(currentAssetTypes[0].value);
+    }
+    // Auto-suggest role based on category
+    const suggestedRole = suggestRoleFromCategory(mainCategory);
+    if (suggestedRole) {
+      setAssetRole(suggestedRole);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mainCategory]);
@@ -261,6 +335,19 @@ const AssetManager = () => {
       return;
     }
 
+    // ✅ NEW: Validate asset role
+    if (!assetRole) {
+      setError('Please select or enter an asset role');
+      return;
+    }
+
+    // ✅ NEW: Check if role is valid
+    if (!CANONICAL_ROLES[assetRole]) {
+      if (!window.confirm(`"${assetRole}" is not a standard canonical role. Upload anyway?`)) {
+        return;
+      }
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -278,6 +365,7 @@ const AssetManager = () => {
           const formData = new FormData();
           formData.append('file', file);
           formData.append('assetType', assetType);
+          formData.append('assetRole', assetRole);
 
           // Build enhanced metadata
           const meta = {
@@ -315,6 +403,7 @@ const AssetManager = () => {
       // Reset form
       setFiles([]);
       setDescription('');
+      setAssetRole('');
       setWardrobeData({
         clothingCategory: '',
         brand: '',
@@ -671,7 +760,17 @@ const AssetManager = () => {
 
         {/* Upload Section */}
         <div className="upload-section">
-          <h2>📤 Upload New Asset</h2>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+            <h2>📤 Upload New Asset</h2>
+            <button 
+              type="button" 
+              onClick={() => navigate(-1)} 
+              className="btn-secondary"
+              style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
+            >
+              ← Back
+            </button>
+          </div>
 
           <form id="assetForm" onSubmit={handleUpload} className="upload-form">
             {/* Main Category Selection */}
@@ -768,6 +867,91 @@ const AssetManager = () => {
                     </option>
                   ))}
                 </select>
+              </div>
+
+              {/* ✅ UPDATED: Asset Role field with suggestions */}
+              <div className="form-field">
+                <label>
+                  Asset Role * 
+                  <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>
+                    {' '}(Canonical role for thumbnail system)
+                  </span>
+                </label>
+                <div style={{ position: 'relative' }}>
+                  <input
+                    type="text"
+                    value={assetRole}
+                    onChange={(e) => setAssetRole(e.target.value)}
+                    placeholder="e.g., CHAR.HOST.LALA, BG.MAIN"
+                    title="Canonical role name (must match template roles)"
+                    list="role-suggestions"
+                    required
+                    style={{ 
+                      fontFamily: 'Monaco, monospace', 
+                      fontSize: '0.875rem',
+                      color: CANONICAL_ROLES[assetRole] ? '#065f46' : '#6b7280'
+                    }}
+                  />
+                  <datalist id="role-suggestions">
+                    {suggestedRoles.map(role => (
+                      <option key={role} value={role}>
+                        {CANONICAL_ROLES[role]?.label}
+                      </option>
+                    ))}
+                  </datalist>
+                  {assetRole && CANONICAL_ROLES[assetRole] && (
+                    <div style={{ 
+                      fontSize: '0.75rem', 
+                      color: '#065f46', 
+                      marginTop: '0.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}>
+                      ✓ Valid role: {CANONICAL_ROLES[assetRole].icon} {CANONICAL_ROLES[assetRole].label}
+                    </div>
+                  )}
+                  {assetRole && !CANONICAL_ROLES[assetRole] && (
+                    <div style={{ 
+                      fontSize: '0.75rem', 
+                      color: '#dc2626', 
+                      marginTop: '0.25rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.25rem'
+                    }}>
+                      ⚠️ Not a standard canonical role
+                    </div>
+                  )}
+                </div>
+                {suggestedRoles.length > 0 && (
+                  <div style={{ 
+                    marginTop: '0.5rem', 
+                    display: 'flex', 
+                    flexWrap: 'wrap', 
+                    gap: '0.5rem'
+                  }}>
+                    <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Suggested:</span>
+                    {suggestedRoles.slice(0, 3).map(role => (
+                      <button
+                        key={role}
+                        type="button"
+                        onClick={() => setAssetRole(role)}
+                        style={{
+                          padding: '0.25rem 0.5rem',
+                          fontSize: '0.75rem',
+                          background: assetRole === role ? '#dbeafe' : '#f3f4f6',
+                          border: '1px solid ' + (assetRole === role ? '#3b82f6' : '#e5e7eb'),
+                          borderRadius: '4px',
+                          cursor: 'pointer',
+                          fontFamily: 'Monaco, monospace'
+                        }}
+                      >
+                        {role}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
               <div className="form-field">

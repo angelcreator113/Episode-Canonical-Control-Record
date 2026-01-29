@@ -60,11 +60,13 @@ const Navigation = ({ isOpen, onClose }) => {
     { label: 'Shows', path: '/shows', icon: '🎬' },
     { label: 'Episodes', path: '/episodes', icon: '📺' },
     { label: 'Wardrobe', path: '/wardrobe', icon: '👗' },
+    { label: 'Composition Library', path: '/library', icon: '🎨' },
+    { label: 'Template Studio', path: '/template-studio', icon: '🎨' },
   ];
 
   if (user?.role === 'admin' || user?.groups?.includes('ADMIN')) {
     navItems.push({ label: 'Audit Log', path: '/audit-log', icon: '📋' });
-    navItems.push({ label: 'Templates', path: '/admin/templates', icon: '📄' });
+    navItems.push({ label: 'Episode Templates', path: '/admin/templates', icon: '📄' });
     navItems.push({ label: 'Admin Panel', path: '/admin', icon: '⚙️' });
   }
 
