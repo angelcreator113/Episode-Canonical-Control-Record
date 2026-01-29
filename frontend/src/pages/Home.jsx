@@ -277,18 +277,6 @@ const Home = () => {
     }
   };
 
-  const loadWardrobeStats = async () => {
-    try {
-      const data = await wardrobeLibraryService.getStats();
-      if (data) {
-        setWardrobeStats(data);
-      }
-    } catch (error) {
-      console.error('Failed to load wardrobe stats:', error);
-      setWardrobeStats({ total: 0, items: 0, sets: 0, recentUploads: 0 });
-    }
-  };
-
   const greetingName = user?.username || user?.name || '';
 
   const statusLabel = (status) => {
