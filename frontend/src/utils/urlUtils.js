@@ -3,8 +3,8 @@
  * Helpers for normalizing and formatting URLs
  */
 
-// Get API base URL from environment
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:3002';
+// Get API base URL from environment (empty string means relative URLs)
+const API_BASE = import.meta.env.VITE_API_BASE || '';
 
 /**
  * Normalize a URL to ensure it points to the correct server
