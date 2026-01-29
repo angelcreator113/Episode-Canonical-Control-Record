@@ -67,7 +67,7 @@ const isValidUUID = (uuid) => {
  */
 router.get('/', async (req, res) => {
   try {
-    const { episode_id } = req.query;
+    const { episode_id, limit } = req.query;
 
     const where = {};
     // Only filter by episode_id if it's a valid UUID (not 'default' or invalid)
@@ -75,17 +75,19 @@ router.get('/', async (req, res) => {
       where.episode_id = episode_id;
     }
 
-    const compositions = await models.ThumbnailComposition.findAll({
+    const queryOptions = {
       where,
       order: [['created_at', 'DESC']],
       include: [
         {
           model: models.CompositionAsset,
           as: 'compositionAssets',
+          required: false,
           include: [
             {
               model: models.Asset,
               as: 'asset',
+              required: false,
               attributes: ['id', 'name', 's3_url_processed', 's3_url_raw', 'asset_role'],
             },
           ],
@@ -93,22 +95,35 @@ router.get('/', async (req, res) => {
         {
           model: models.CompositionOutput,
           as: 'outputs',
+          required: false,
           attributes: ['id', 'format', 'status', 'image_url', 'created_at'],
         },
         {
           model: models.Episode,
           as: 'episode',
+          required: false,
           attributes: ['id', 'title', 'episode_number'],
           include: [
             {
               model: models.Show,
               as: 'show',
+              required: false,
               attributes: ['id', 'name'],
             },
           ],
         },
       ],
-    });
+    };
+
+    // Add limit if specified
+    if (limit) {
+      const parsedLimit = parseInt(limit, 10);
+      if (!isNaN(parsedLimit) && parsedLimit > 0) {
+        queryOptions.limit = parsedLimit;
+      }
+    }
+
+    const compositions = await models.ThumbnailComposition.findAll(queryOptions);
 
     res.json({
       status: 'SUCCESS',
@@ -117,6 +132,7 @@ router.get('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to get compositions:', error);
+    console.error('Error stack:', error.stack);
     res.status(500).json({
       error: 'Failed to get compositions',
       message: error.message,
