@@ -4,7 +4,7 @@
  */
 
 const scriptsService = require('../services/scriptsService');
-const { ValidationError, NotFoundError, asyncHandler } = require('../middleware/errorHandler');
+const { ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const Logger = require('../services/Logger');
 
 module.exports = {

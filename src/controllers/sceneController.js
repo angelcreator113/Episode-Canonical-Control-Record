@@ -953,6 +953,7 @@ exports.addSceneAsset = async (req, res) => {
 
     // Create scene asset links
     const sceneAssets = [];
+    let lastCreated = false;
     for (const id of idsToLink) {
       const [sceneAsset, created] = await SceneAsset.findOrCreate({
         where: {
@@ -970,6 +971,7 @@ exports.addSceneAsset = async (req, res) => {
         },
       });
 
+      lastCreated = created;
       if (!created) {
         // Update existing if not created
         await sceneAsset.update({
@@ -985,7 +987,7 @@ exports.addSceneAsset = async (req, res) => {
       sceneAssets.push(sceneAsset);
     }
 
-    res.status(created ? 201 : 200).json({
+    res.status(lastCreated ? 201 : 200).json({
       success: true,
       data: sceneAssets,
       message: `Successfully linked ${sceneAssets.length} asset(s) to scene`,

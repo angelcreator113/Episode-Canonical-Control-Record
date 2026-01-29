@@ -205,11 +205,6 @@ module.exports = {
         episodeTitle,
         airDate,
         plotSummary,
-        director,
-        writer,
-        durationMinutes,
-        rating,
-        genre,
       } = req.body;
 
       // Use new field names if provided, otherwise fall back to old ones

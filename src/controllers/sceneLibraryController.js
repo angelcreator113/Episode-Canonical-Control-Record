@@ -8,7 +8,6 @@ const { v4: uuidv4 } = require('uuid');
 const { models } = require('../models');
 const { SceneLibrary, Show } = models;
 const videoProcessingService = require('../services/VideoProcessingService');
-const S3Service = require('../services/S3Service');
 
 // Configure S3 Client
 let s3Client = null;
