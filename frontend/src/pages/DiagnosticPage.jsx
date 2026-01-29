@@ -65,34 +65,34 @@ const DiagnosticPage = () => {
       { name: '🏥 Health Check', url: `${API_BASE_URL}/health`, method: 'GET' },
       
       // Episodes
-      { name: '📺 List Episodes', url: `${API_URL}/api/v1/episodes?limit=5`, method: 'GET' },
-      { name: '🧪 Test Create Episode', url: `${API_URL}/api/v1/episodes/test-create`, method: 'GET' },
+      { name: '📺 List Episodes', url: `${API_URL}/episodes?limit=5`, method: 'GET' },
+      { name: '🧪 Test Create Episode', url: `${API_URL}/episodes/test-create`, method: 'GET' },
       
       // Shows
-      { name: '🎬 List Shows', url: `${API_URL}/api/v1/shows`, method: 'GET' },
+      { name: '🎬 List Shows', url: `${API_URL}/shows`, method: 'GET' },
       
       // Assets
-      { name: '📸 List Assets', url: `${API_URL}/api/v1/assets?limit=5`, method: 'GET' },
+      { name: '📸 List Assets', url: `${API_URL}/assets?limit=5`, method: 'GET' },
       
       // Wardrobe
-      { name: '👗 Wardrobe Library Stats', url: `${API_URL}/api/v1/wardrobe-library/stats`, method: 'GET' },
-      { name: '👔 List Wardrobe Library', url: `${API_URL}/api/v1/wardrobe-library?limit=5`, method: 'GET' },
+      { name: '👗 Wardrobe Library Stats', url: `${API_URL}/wardrobe-library/stats`, method: 'GET' },
+      { name: '👔 List Wardrobe Library', url: `${API_URL}/wardrobe-library?limit=5`, method: 'GET' },
       
       // Scene Library
-      { name: '🎬 Scene Library Stats', url: `${API_URL}/api/v1/scene-library/stats`, method: 'GET' },
-      { name: '🎥 List Scene Library', url: `${API_URL}/api/v1/scene-library?limit=5`, method: 'GET' },
+      { name: '🎬 Scene Library Stats', url: `${API_URL}/scene-library/stats`, method: 'GET' },
+      { name: '🎥 List Scene Library', url: `${API_URL}/scene-library?limit=5`, method: 'GET' },
       
       // Templates
-      { name: '🎨 List Templates', url: `${API_URL}/api/v1/templates?limit=5`, method: 'GET' },
+      { name: '🎨 List Templates', url: `${API_URL}/templates?limit=5`, method: 'GET' },
     ];
 
     // If episodeId provided, test episode-specific endpoints
     if (episodeId) {
       tests.push(
-        { name: `📺 Get Episode ${episodeId}`, url: `${API_URL}/api/v1/episodes/${episodeId}`, method: 'GET' },
-        { name: `🎬 Episode Scenes`, url: `${API_URL}/api/v1/episodes/${episodeId}/library-scenes`, method: 'GET' },
-        { name: `📸 Episode Assets`, url: `${API_URL}/api/v1/episodes/${episodeId}/assets`, method: 'GET' },
-        { name: `👗 Episode Wardrobe`, url: `${API_URL}/api/v1/episodes/${episodeId}/wardrobe`, method: 'GET' },
+        { name: `📺 Get Episode ${episodeId}`, url: `${API_URL}/episodes/${episodeId}`, method: 'GET' },
+        { name: `🎬 Episode Scenes`, url: `${API_URL}/episodes/${episodeId}/library-scenes`, method: 'GET' },
+        { name: `📸 Episode Assets`, url: `${API_URL}/episodes/${episodeId}/assets`, method: 'GET' },
+        { name: `👗 Episode Wardrobe`, url: `${API_URL}/episodes/${episodeId}/wardrobe`, method: 'GET' },
       );
     }
 
