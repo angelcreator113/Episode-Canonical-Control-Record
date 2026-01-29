@@ -200,7 +200,6 @@ module.exports = {
         categories,
         // Old field names (for backward compatibility)
         showName,
-        seasonNumber,
         episodeNumber,
         episodeTitle,
         airDate,

@@ -133,7 +133,7 @@ router.post('/', async (req, res) => {
   try {
     console.log('📥 POST /compositions request body:', JSON.stringify(req.body, null, 2));
 
-    let {
+    const {
       episode_id,
       template_id,
       template_studio_id,

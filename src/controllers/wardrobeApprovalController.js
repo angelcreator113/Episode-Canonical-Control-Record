@@ -1,7 +1,6 @@
 const { models } = require('../models');
 const { EpisodeWardrobe, Wardrobe, WardrobeLibrary, WardrobeUsageHistory, Episode } = models;
 const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
-const { Op } = require('sequelize');
 
 /**
  * Wardrobe Approval Controller

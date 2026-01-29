@@ -1,9 +1,7 @@
 const db = require('../models');
 const { models, sequelize, Sequelize } = db;
 const { Wardrobe, EpisodeWardrobe, Episode } = models;
-const { NotFoundError, ValidationError, asyncHandler } = require('../middleware/errorHandler');
 const { Op } = require('sequelize');
-const multer = require('multer');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const { v4: uuidv4 } = require('uuid');
 

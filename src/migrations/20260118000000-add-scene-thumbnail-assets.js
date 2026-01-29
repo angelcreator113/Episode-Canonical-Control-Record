@@ -26,7 +26,7 @@ module.exports = {
     });
   },
 
-  down: async (queryInterface, Sequelize) => {
+  down: async (queryInterface) => {
     await queryInterface.removeIndex('scenes', 'idx_scenes_thumbnail_id');
     await queryInterface.removeColumn('scenes', 'assets');
     await queryInterface.removeColumn('scenes', 'thumbnail_id');

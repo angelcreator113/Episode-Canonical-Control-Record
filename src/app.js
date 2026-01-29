@@ -162,7 +162,6 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // ============================================================================
 // AUTHENTICATION & AUTHORIZATION MIDDLEWARE
 // ============================================================================
-const { optionalAuth } = require('./middleware/auth');
 const { attachRBAC } = require('./middleware/rbac');
 const { captureResponseData } = require('./middleware/auditLog');
 
