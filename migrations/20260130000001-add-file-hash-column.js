@@ -3,81 +3,50 @@
  * Adds SHA-256 hash column with unique index to prevent duplicate uploads
  */
 
-'use strict';
-
-module.exports = {
-  up: async (queryInterface, Sequelize) => {
-    const transaction = await queryInterface.sequelize.transaction();
-    
-    try {
-      console.log('📝 Adding file_hash column to assets table...');
-      
-      // Add file_hash column
-      await queryInterface.addColumn(
-        'assets',
-        'file_hash',
-        {
-          type: Sequelize.STRING(64), // SHA-256 produces 64 hex characters
-          allowNull: true,
-          comment: 'SHA-256 hash of file content for duplicate detection',
-        },
-        { transaction }
-      );
-      
-      // Add index for fast duplicate lookups
-      await queryInterface.addIndex(
-        'assets',
-        ['file_hash'],
-        {
-          name: 'idx_assets_file_hash',
-          where: {
-            file_hash: { [Sequelize.Op.ne]: null },
-            deleted_at: null,
-          },
-          transaction,
-        }
-      );
-      
-      // Add composite index for hash + deleted_at for even faster queries
-      await queryInterface.addIndex(
-        'assets',
-        ['file_hash', 'deleted_at'],
-        {
-          name: 'idx_assets_file_hash_deleted',
-          transaction,
-        }
-      );
-      
-      console.log('✅ file_hash column added successfully');
-      
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      console.error('❌ Migration failed:', error);
-      throw error;
+exports.up = (pgm) => {
+  console.log('📝 Adding file_hash column to assets table...');
+  
+  // Add file_hash column
+  pgm.addColumn('assets', {
+    file_hash: {
+      type: 'varchar(64)', // SHA-256 produces 64 hex characters
+      notNull: false,
+      comment: 'SHA-256 hash of file content for duplicate detection',
     }
-  },
+  });
+  
+  // Add index for fast duplicate lookups  
+  pgm.createIndex('assets', 'file_hash', {
+    name: 'idx_assets_file_hash',
+    where: 'file_hash IS NOT NULL AND deleted_at IS NULL',
+  });
+  
+  // Add composite index for hash + deleted_at for even faster queries
+  pgm.createIndex('assets', ['file_hash', 'deleted_at'], {
+    name: 'idx_assets_file_hash_deleted',
+  });
+  
+  console.log('✅ file_hash column and indexes added successfully');
+};
 
-  down: async (queryInterface, Sequelize) => {
-    const transaction = await queryInterface.sequelize.transaction();
-    
-    try {
-      console.log('🔄 Rolling back file_hash column...');
-      
-      // Remove indexes
-      await queryInterface.removeIndex('assets', 'idx_assets_file_hash_deleted', { transaction });
-      await queryInterface.removeIndex('assets', 'idx_assets_file_hash', { transaction });
-      
-      // Remove column
-      await queryInterface.removeColumn('assets', 'file_hash', { transaction });
-      
-      console.log('✅ Rollback complete');
-      
-      await transaction.commit();
-    } catch (error) {
-      await transaction.rollback();
-      console.error('❌ Rollback failed:', error);
-      throw error;
-    }
-  },
+exports.down = (pgm) => {
+  console.log('📝 Removing file_hash column and indexes...');
+  
+  // Remove indexes first
+  pgm.dropIndex('assets', 'file_hash', {
+    name: 'idx_assets_file_hash',
+    ifExists: true,
+  });
+  
+  pgm.dropIndex('assets', ['file_hash', 'deleted_at'], {
+    name: 'idx_assets_file_hash_deleted',
+    ifExists: true,
+  });
+  
+  // Remove column
+  pgm.dropColumn('assets', 'file_hash', {
+    ifExists: true,
+  });
+  
+  console.log('✅ file_hash column and indexes removed');
 };
