@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import assetService from '../../services/assetService';
+import MissingAssetPlaceholder from './MissingAssetPlaceholder';
 import './EnhancedAssetPicker.css';
 
 /**
@@ -219,14 +220,20 @@ const EnhancedAssetPicker = ({
             <div className="asset-grid">
               {filteredAssets.map((asset) => {
                 const isSelected = selectedAssets.find(a => a.id === asset.id);
+                const isMissing = asset.metadata?.file_status === 'missing' || 
+                                  asset.metadata?.needs_real_upload === true ||
+                                  (!asset.s3_url_raw && !asset.url);
+                
                 return (
                   <div
                     key={asset.id}
-                    className={`asset-card ${isSelected ? 'selected' : ''}`}
+                    className={`asset-card ${isSelected ? 'selected' : ''} ${isMissing ? 'missing-file' : ''}`}
                     onClick={() => handleSelectAsset(asset)}
                   >
                     <div className="asset-thumbnail">
-                      {asset.media_type === 'video' ? (
+                      {isMissing ? (
+                        <MissingAssetPlaceholder asset={asset} compact={false} />
+                      ) : asset.media_type === 'video' ? (
                         <div className="video-placeholder">
                           <span>🎬</span>
                         </div>

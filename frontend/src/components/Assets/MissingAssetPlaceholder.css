@@ -1,0 +1,125 @@
+/* MissingAssetPlaceholder.css */
+
+.missing-asset-placeholder {
+  position: relative;
+  width: 100%;
+  height: 200px;
+  background: linear-gradient(135deg, #f5f5f5 0%, #e8e8e8 100%);
+  border: 2px dashed #ccc;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  overflow: hidden;
+}
+
+.missing-asset-placeholder:hover {
+  background: linear-gradient(135deg, #e8e8e8 0%, #ddd 100%);
+  border-color: #999;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.missing-content {
+  text-align: center;
+  padding: 20px;
+}
+
+.missing-icon-large {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+
+.missing-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: #666;
+  margin: 0 0 8px 0;
+}
+
+.missing-description {
+  font-size: 14px;
+  color: #888;
+  margin: 0 0 8px 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.missing-hint {
+  font-size: 12px;
+  color: #aaa;
+  font-style: italic;
+  margin: 0;
+}
+
+.placeholder-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: #ff9800;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+/* Compact version for inline display */
+.missing-asset-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  background: #f5f5f5;
+  border: 1px dashed #ccc;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.missing-asset-compact:hover {
+  background: #e8e8e8;
+  border-color: #999;
+}
+
+.missing-icon {
+  font-size: 16px;
+  opacity: 0.7;
+}
+
+.missing-label {
+  font-size: 13px;
+  color: #666;
+  font-weight: 500;
+}
+
+/* Grid integration */
+.asset-card .missing-asset-placeholder {
+  height: 100%;
+  min-height: 150px;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .missing-asset-placeholder {
+    height: 150px;
+  }
+
+  .missing-icon-large {
+    font-size: 36px;
+  }
+
+  .missing-title {
+    font-size: 16px;
+  }
+
+  .missing-description {
+    font-size: 13px;
+  }
+}

@@ -119,6 +119,8 @@ router.get('/', async (req, res) => {
         'allowed_uses',
         'width',
         'height',
+        'file_size_bytes',
+        'metadata', // CRITICAL: Include metadata for thumbnail_url
         'created_at',
         'updated_at',
       ],
@@ -223,6 +225,8 @@ router.get('/eligible', async (req, res) => {
         'approval_status',
         'width',
         'height',
+        'file_size_bytes',
+        'metadata', // Include for thumbnail_url
         'created_at',
         'updated_at',
       ],
@@ -336,6 +340,8 @@ router.get('/by-folder', async (req, res) => {
         'approval_status',
         'width',
         'height',
+        'file_size_bytes',
+        'metadata', // Include for thumbnail_url
         'created_at',
         'updated_at',
       ],
@@ -572,6 +578,44 @@ router.post('/bulk/add-labels', async (req, res) => {
     console.error('Bulk label addition failed:', error);
     res.status(500).json({
       error: 'Bulk label addition failed',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/assets/bulk/change-type
+ * Bulk change asset type
+ */
+router.post('/bulk/change-type', async (req, res) => {
+  try {
+    const { assetIds, assetType } = req.body;
+
+    if (!Array.isArray(assetIds) || assetIds.length === 0) {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'assetIds array is required',
+      });
+    }
+
+    if (!assetType || typeof assetType !== 'string') {
+      return res.status(400).json({
+        error: 'Validation failed',
+        message: 'assetType string is required',
+      });
+    }
+
+    const result = await AssetService.bulkChangeAssetType(assetIds, assetType);
+
+    res.json({
+      status: 'SUCCESS',
+      message: `Changed type for ${result.succeeded} assets, ${result.failed} failed`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('Bulk type change failed:', error);
+    res.status(500).json({
+      error: 'Bulk type change failed',
       message: error.message,
     });
   }

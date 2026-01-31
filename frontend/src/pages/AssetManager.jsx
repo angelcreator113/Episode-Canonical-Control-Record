@@ -1,29 +1,20 @@
 /**
- * AssetManager Component - UPDATED for Canonical Roles Integration
+ * AssetManager Component - BROWSE ONLY VERSION
  * 
- * KEY CHANGES:
- * 1. Updated role suggestions to match canonical roles
- * 2. Import CANONICAL_ROLES from constants
- * 3. Better role validation and suggestions
+ * Upload functionality removed - users must upload via Episode Assets tab
+ * This enforces that all assets are linked to episodes
  */
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import AssetCard from '../components/AssetCard';
 import AssetPreviewModal from '../components/AssetPreviewModal';
 import assetService from '../services/assetService';
-import { CANONICAL_ROLES } from '../constants/canonicalRoles';
 import './AssetManager.css';
 
 const AssetManager = () => {
-  const navigate = React.useRef(null);
-  
-  // Get navigate function from react-router-dom
-  React.useEffect(() => {
-    const { useNavigate } = require('react-router-dom');
-    const nav = useNavigate();
-    navigate.current = nav;
-  }, []);
+  const navigate = useNavigate();
+  const location = useLocation();
   
   // Asset state
   const [assets, setAssets] = useState([]);
@@ -31,60 +22,6 @@ const AssetManager = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
-
-  // Upload state
-  const [files, setFiles] = useState([]);
-  const [mainCategory, setMainCategory] = useState('LALA');
-  const [assetType, setAssetType] = useState('PROMO_LALA');
-  const [description, setDescription] = useState('');
-  const [assetRole, setAssetRole] = useState('');
-  const [dragActive, setDragActive] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState({});
-
-  // Add these new state variables at the top with other useState declarations
-  const [episodes, setEpisodes] = useState([]);
-  const [selectedEpisode, setSelectedEpisode] = useState(null);
-
-  // Add this function to load episodes
-  const loadEpisodes = async () => {
-    try {
-      const response = await fetch('/api/v1/episodes?limit=100&sortBy=episode_number&sortOrder=DESC');
-      const data = await response.json();
-      setEpisodes(data.data || []);
-    } catch (err) {
-      console.error('Error loading episodes:', err);
-    }
-  };
-
-  // Update the wardrobe data state to include episode tracking and advanced features
-  const [wardrobeData, setWardrobeData] = useState({
-    // Basic Info
-    clothingCategory: '',
-    brand: '',
-    website: '',
-    purchaseLink: '',
-    price: '',
-    color: '',
-    size: '',
-    occasion: '',
-    season: '',
-    character: 'lala', // lala, justawoman, guest
-    // Episode tracking
-    episodeId: '',
-    episodeNumber: '',
-    episodeTitle: '',
-    scene: '',
-    timesWorn: 0,
-    lastWorn: null,
-    // Advanced Features
-    outfitNotes: '', // Styling notes and special instructions
-    isFavorite: false, // Mark favorite/frequently worn items
-    outfitSetId: '', // Group items that go together
-    outfitSetName: '', // Name of the outfit set
-    previousEpisodes: [], // Array of episode IDs where this was worn
-    plannedForEpisodes: [], // Array of future episode IDs
-    tags: [] // Additional tags for organization
-  });
 
   // Filter state
   const [searchQuery, setSearchQuery] = useState('');
@@ -96,160 +33,66 @@ const AssetManager = () => {
   // Bulk operation state
   const [selectedAssets, setSelectedAssets] = useState([]);
   const [bulkProcessing, setBulkProcessing] = useState(false);
+  const [selectedAssetTypes, setSelectedAssetTypes] = useState([]);
+  const [batchChangeType, setBatchChangeType] = useState('');
+  const [showTypeChangeModal, setShowTypeChangeModal] = useState(false);
 
   // View state
   const [viewMode, setViewMode] = useState('grid');
   const [previewAsset, setPreviewAsset] = useState(null);
 
-  const fileInputRef = useRef(null);
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(20);
 
-  // Main categories structure (FIXED: icon separated from label to prevent duplicates)
+  // Get referrer episode ID from location state
+  const referrerEpisodeId = location.state?.episodeId;
+
+  // Main categories structure - based on asset_group
   const mainCategories = {
-    ALL: { label: 'All Assets', icon: '🗂️' },
-    BACKGROUND: { label: 'Backgrounds', icon: '🌄' },
-    LALA: { label: 'Lala', icon: '👩' },
-    JUSTAWOMAN: { label: 'JustAWoman', icon: '💜' },
-    GUEST: { label: 'Guest', icon: '👤' },
-    WARDROBE: { label: 'Wardrobe', icon: '👗' }
+    ALL: { label: 'All Assets', icon: '📦' },
+    CHARACTERS: { label: 'Characters', icon: '👥' },
+    ICONS: { label: 'Icons', icon: '🎨' },
+    BRANDING: { label: 'Branding', icon: '🏷️' },
+    BACKGROUNDS: { label: 'Backgrounds', icon: '🖼️' }
   };
 
-  // ✅ UPDATED: Category to canonical role mapping
-  const suggestRoleFromCategory = (category) => {
-    const suggestions = {
-      'BACKGROUND': 'BG.MAIN',
-      'LALA': 'CHAR.HOST.LALA',                           // ✅ UPDATED
-      'JUSTAWOMAN': 'CHAR.HOST.JUSTAWOMANINHERPRIME',     // ✅ UPDATED
-      'GUEST': 'CHAR.GUEST.1',                            // ✅ UPDATED
-      'WARDROBE': 'WARDROBE.ITEM.1'
-    };
-    return suggestions[category] || '';
-  };
-
-  // ✅ NEW: Get suggested roles for current category
-  const getSuggestedRolesForCategory = (category) => {
-    switch(category) {
-      case 'LALA':
-        return [
-          'CHAR.HOST.LALA',
-          'BRAND.SHOW.TITLE_GRAPHIC',
-          'BG.MAIN'
-        ];
-      case 'JUSTAWOMAN':
-        return [
-          'CHAR.HOST.JUSTAWOMANINHERPRIME',
-          'BRAND.SHOW.TITLE_GRAPHIC'
-        ];
-      case 'GUEST':
-        return [
-          'CHAR.GUEST.1',
-          'CHAR.GUEST.2'
-        ];
-      case 'BACKGROUND':
-        return ['BG.MAIN'];
-      case 'WARDROBE':
-        return [
-          'WARDROBE.ITEM.1',
-          'WARDROBE.ITEM.2',
-          'WARDROBE.ITEM.3',
-          'WARDROBE.ITEM.4',
-          'WARDROBE.ITEM.5',
-          'WARDROBE.ITEM.6',
-          'WARDROBE.ITEM.7',
-          'WARDROBE.ITEM.8',
-          'WARDROBE.PANEL'
-        ];
-      default:
-        return [];
-    }
-  };
-
-  // Asset types organized by main category
+  // Asset types organized by main category (for type change modal) - using asset_role
   const assetTypesByCategory = {
-    BACKGROUND: [
-      { value: 'BACKGROUND_VIDEO', label: '🎥 Background Video' },
-      { value: 'BACKGROUND_IMAGE', label: '🖼️ Background Image' }
+    CHARACTERS: [
+      { value: 'CHAR.HOST.LALA', label: '👩 Lala (Host)' },
+      { value: 'CHAR.HOST.JUSTAWOMANINHERPRIME', label: '👩 Just a Woman in Her Prime (Host)' },
+      { value: 'CHAR.GUEST.1', label: '👤 Guest 1' },
+      { value: 'CHAR.GUEST.2', label: '👤 Guest 2' }
     ],
-    LALA: [
-      { value: 'PROMO_LALA', label: '📸 Lala Promo' },
-      { value: 'LALA_VIDEO', label: '🎬 Lala Video' },
-      { value: 'LALA_HEADSHOT', label: '👤 Lala Headshot' },
-      { value: 'LALA_FULLBODY', label: '🧍 Lala Full Body' }
+    ICONS: [
+      { value: 'UI.ICON.CLOSET', label: '🗂️ Closet Icon' },
+      { value: 'UI.ICON.JEWELRY_BOX', label: '💍 Jewelry Box Icon' },
+      { value: 'UI.ICON.TODO_LIST', label: '📋 To-Do List Icon' },
+      { value: 'UI.ICON.SPEECH', label: '💬 Speech Bubble Icon' },
+      { value: 'UI.ICON.LOCATION', label: '📍 Location Pin Icon' },
+      { value: 'UI.ICON.PERFUME', label: '🌸 Perfume Icon' },
+      { value: 'UI.ICON.POSE', label: '🧍 Pose Icon' },
+      { value: 'UI.ICON.RESERVED', label: '🔒 Reserved Icon' },
+      { value: 'UI.ICON.HOLDER.MAIN', label: '📦 Icon Holder' }
     ],
-    JUSTAWOMAN: [
-      { value: 'PROMO_JUSTAWOMANINHERPRIME', label: '💜 JustAWoman Promo' },
-      { value: 'BRAND_LOGO', label: '🏷️ Brand Logo' },
-      { value: 'BRAND_BANNER', label: '🎨 Brand Banner' },
-      { value: 'BRAND_SOCIAL', label: '📱 Social Media Asset' }
+    BRANDING: [
+      { value: 'BRAND.SHOW.TITLE_GRAPHIC', label: '🏷️ Show Title Graphic' }
     ],
-    GUEST: [
-      { value: 'PROMO_GUEST', label: '📸 Guest Promo' },
-      { value: 'GUEST_VIDEO', label: '🎬 Guest Video' },
-      { value: 'GUEST_HEADSHOT', label: '👤 Guest Headshot' }
-    ],
-    WARDROBE: [
-      { value: 'CLOTHING_DRESS', label: '👗 Dress' },
-      { value: 'CLOTHING_TOP', label: '👚 Top' },
-      { value: 'CLOTHING_BOTTOM', label: '👖 Bottom' },
-      { value: 'CLOTHING_SHOES', label: '👠 Shoes' },
-      { value: 'CLOTHING_ACCESSORIES', label: '👜 Accessories' },
-      { value: 'CLOTHING_JEWELRY', label: '💍 Jewelry' },
-      { value: 'CLOTHING_PERFUME', label: '🌸 Perfume' }
+    BACKGROUNDS: [
+      { value: 'BG.MAIN', label: '🖼️ Background Image' },
+      { value: 'UI.MOUSE.CURSOR', label: '🖱️ Mouse Cursor' },
+      { value: 'UI.BUTTON.EXIT', label: '❌ Exit Button' },
+      { value: 'UI.BUTTON.MINIMIZE', label: '➖ Minimize Button' }
     ]
   };
 
-  // Clothing categories for wardrobe items
-  const clothingCategories = [
-    { value: 'dress', label: '👗 Dress' },
-    { value: 'top', label: '👚 Top/Blouse' },
-    { value: 'bottom', label: '👖 Pants/Skirt' },
-    { value: 'shoes', label: '👠 Shoes' },
-    { value: 'accessories', label: '👜 Accessories' },
-    { value: 'jewelry', label: '💍 Jewelry' },
-    { value: 'perfume', label: '🌸 Perfume' }
-  ];
-
-  const occasions = [
-    { value: 'casual', label: 'Casual' },
-    { value: 'formal', label: 'Formal' },
-    { value: 'business', label: 'Business' },
-    { value: 'evening', label: 'Evening' },
-    { value: 'athletic', label: 'Athletic' }
-  ];
-
-  const seasons = [
-    { value: 'spring', label: 'Spring' },
-    { value: 'summer', label: 'Summer' },
-    { value: 'fall', label: 'Fall' },
-    { value: 'winter', label: 'Winter' },
-    { value: 'all-season', label: 'All Season' }
-  ];
-
-  // Get current asset types based on selected category
-  const currentAssetTypes = assetTypesByCategory[mainCategory] || [];
-
-  // Get suggested roles for current category
-  const suggestedRoles = getSuggestedRolesForCategory(mainCategory);
-
-  // Update useEffect to load episodes
+  // Load data on mount
   useEffect(() => {
     loadAssets();
     loadLabels();
-    loadEpisodes();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Update asset type when upload category changes
-  useEffect(() => {
-    if (currentAssetTypes.length > 0) {
-      setAssetType(currentAssetTypes[0].value);
-    }
-    // Auto-suggest role based on category
-    const suggestedRole = suggestRoleFromCategory(mainCategory);
-    if (suggestedRole) {
-      setAssetRole(suggestedRole);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mainCategory]);
 
   // Debounced reload for filters/search
   useEffect(() => {
@@ -263,8 +106,8 @@ const AssetManager = () => {
   const loadAssets = async () => {
     try {
       setLoading(true);
+      setError(null);
 
-      // NOTE: category tabs are handled client-side via getCategoryBadge.
       const response = await assetService.searchAssets({
         query: searchQuery || null,
         assetType: null,
@@ -277,6 +120,7 @@ const AssetManager = () => {
       setAssets(response.data.data || []);
     } catch (err) {
       console.error('Error loading assets:', err);
+      setError('Failed to load assets');
       setAssets([]);
     } finally {
       setLoading(false);
@@ -289,149 +133,6 @@ const AssetManager = () => {
       setAllLabels(response.data.data || []);
     } catch (err) {
       console.error('Error loading labels:', err);
-    }
-  };
-
-  // Upload handlers
-  const handleFileChange = (e) => {
-    const selectedFiles = Array.from(e.target.files);
-    setFiles(selectedFiles);
-    setError(null);
-  };
-
-  const handleDragEnter = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(true);
-  };
-
-  const handleDragLeave = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-  };
-
-  const handleDragOver = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-  };
-
-  const handleDrop = (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    const droppedFiles = Array.from(e.dataTransfer.files);
-    if (droppedFiles.length > 0) {
-      setFiles(droppedFiles);
-      setError(null);
-    }
-  };
-
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    if (files.length === 0) {
-      setError('Please select at least one file');
-      return;
-    }
-
-    // ✅ NEW: Validate asset role
-    if (!assetRole) {
-      setError('Please select or enter an asset role');
-      return;
-    }
-
-    // ✅ NEW: Check if role is valid
-    if (!CANONICAL_ROLES[assetRole]) {
-      if (!window.confirm(`"${assetRole}" is not a standard canonical role. Upload anyway?`)) {
-        return;
-      }
-    }
-
-    try {
-      setLoading(true);
-      setError(null);
-      setSuccess(null);
-      setUploadProgress({});
-
-      let successCount = 0;
-      let failCount = 0;
-
-      for (let i = 0; i < files.length; i++) {
-        const file = files[i];
-        setUploadProgress(prev => ({ ...prev, [file.name]: 'uploading' }));
-
-        try {
-          const formData = new FormData();
-          formData.append('file', file);
-          formData.append('assetType', assetType);
-          formData.append('assetRole', assetRole);
-
-          // Build enhanced metadata
-          const meta = {
-            description,
-            mainCategory,
-            ...wardrobeData
-          };
-
-          // Clean empty values
-          Object.keys(meta).forEach(key => {
-            if (!meta[key]) delete meta[key];
-          });
-
-          formData.append('metadata', JSON.stringify(meta));
-
-          await assetService.uploadAsset(formData);
-          setUploadProgress(prev => ({ ...prev, [file.name]: 'success' }));
-          successCount++;
-        } catch (err) {
-          console.error(`Upload error for ${file.name}:`, err);
-          setUploadProgress(prev => ({ ...prev, [file.name]: 'error' }));
-          failCount++;
-        }
-      }
-
-      if (successCount > 0) {
-        setSuccess(
-          `✅ Uploaded ${successCount} asset${successCount > 1 ? 's' : ''} successfully!` +
-          (failCount > 0 ? ` (${failCount} failed)` : '')
-        );
-      } else {
-        setError(`❌ All ${failCount} uploads failed`);
-      }
-
-      // Reset form
-      setFiles([]);
-      setDescription('');
-      setAssetRole('');
-      setWardrobeData({
-        clothingCategory: '',
-        brand: '',
-        website: '',
-        purchaseLink: '',
-        price: '',
-        color: '',
-        size: '',
-        occasion: '',
-        season: '',
-        // NEW: Episode tracking
-        episodeId: '',
-        episodeNumber: '',
-        episodeTitle: '',
-        scene: '',
-        timesWorn: 0,
-        lastWorn: null
-      });
-      setSelectedEpisode(null);
-      setUploadProgress({});
-      document.getElementById('assetForm')?.reset();
-
-      setTimeout(() => loadAssets(), 600);
-    } catch (err) {
-      console.error('Upload error:', err);
-      setError(err.message || 'Failed to upload assets');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -451,7 +152,7 @@ const AssetManager = () => {
   };
 
   const handleBulkDelete = async () => {
-    if (!confirm(`Delete ${selectedAssets.length} assets? This cannot be undone.`)) return;
+    if (!window.confirm(`Delete ${selectedAssets.length} assets? This cannot be undone.`)) return;
 
     setBulkProcessing(true);
     try {
@@ -461,22 +162,6 @@ const AssetManager = () => {
       loadAssets();
     } catch (err) {
       setError('Bulk delete failed');
-    } finally {
-      setBulkProcessing(false);
-    }
-  };
-
-  const handleBulkProcessBackground = async () => {
-    if (!confirm(`Process background removal for ${selectedAssets.length} assets? This will use API credits.`)) return;
-
-    setBulkProcessing(true);
-    try {
-      const result = await assetService.bulkProcessBackground(selectedAssets);
-      setSuccess(`✅ Processed ${result.data.succeeded} assets successfully`);
-      setSelectedAssets([]);
-      loadAssets();
-    } catch (err) {
-      setError('Bulk processing failed');
     } finally {
       setBulkProcessing(false);
     }
@@ -534,6 +219,31 @@ const AssetManager = () => {
     }
   };
 
+  const handleBulkChangeType = async () => {
+    if (!batchChangeType) {
+      setError('Please select a new asset type');
+      return;
+    }
+
+    if (!window.confirm(`Change asset type for ${selectedAssets.length} assets to ${batchChangeType}?`)) {
+      return;
+    }
+
+    setBulkProcessing(true);
+    try {
+      await assetService.bulkChangeType(selectedAssets, batchChangeType);
+      setSuccess(`✅ Changed type for ${selectedAssets.length} assets`);
+      setSelectedAssets([]);
+      setBatchChangeType('');
+      setShowTypeChangeModal(false);
+      loadAssets();
+    } catch (err) {
+      setError('Bulk type change failed');
+    } finally {
+      setBulkProcessing(false);
+    }
+  };
+
   const clearFilters = () => {
     setSearchQuery('');
     setFilterMediaType('all');
@@ -543,35 +253,80 @@ const AssetManager = () => {
 
   // Get category badge for asset
   const getCategoryBadge = (asset) => {
-    const type = asset.asset_type || '';
-    if (type.includes('BACKGROUND')) return { icon: '🌄', label: 'Background' };
-    if (type.includes('LALA')) return { icon: '👩', label: 'Lala' };
-    if (type.includes('JUSTAWOMAN') || type.includes('BRAND')) return { icon: '💜', label: 'JustAWoman' };
-    if (type.includes('GUEST')) return { icon: '👤', label: 'Guest' };
-    if (type.includes('CLOTHING')) return { icon: '👗', label: 'Wardrobe' };
+    let group = '';
+    
+    // Check asset_group only if it matches our expected categories
+    const assetGroup = (asset.asset_group || '').toUpperCase();
+    if (['CHARACTERS', 'ICONS', 'BRANDING', 'BACKGROUNDS'].includes(assetGroup)) {
+      group = assetGroup;
+    }
+    
+    // If no valid group, derive from asset_role or asset_type
+    if (!group) {
+      // asset_role might be the string "undefined", check for that
+      const role = asset.asset_role && asset.asset_role !== 'undefined' ? asset.asset_role : '';
+      const type = asset.asset_type || '';
+      const roleOrType = (role || type).toUpperCase();
+      
+      if (roleOrType.includes('BG.') || roleOrType.includes('BACKGROUND')) {
+        group = 'BACKGROUNDS';
+      } else if (roleOrType.includes('CHAR.') || roleOrType.includes('PROMO_') || roleOrType.includes('LALA') || roleOrType.includes('JUSTAWOMAN') || roleOrType.includes('GUEST') || roleOrType.includes('CHARACTER')) {
+        group = 'CHARACTERS';
+      } else if (roleOrType.includes('UI.') || roleOrType.includes('ICON') || roleOrType.includes('BRAND_LOGO')) {
+        group = 'ICONS';
+      } else if (roleOrType.includes('BRAND') || roleOrType.includes('BANNER') || roleOrType.includes('SOCIAL')) {
+        group = 'BRANDING';
+      }
+    }
+    
+    if (group === 'CHARACTERS') return { icon: '👥', label: 'Characters' };
+    if (group === 'ICONS') return { icon: '🎨', label: 'Icons' };
+    if (group === 'BRANDING') return { icon: '🏷️', label: 'Branding' };
+    if (group === 'BACKGROUNDS') return { icon: '🖼️', label: 'Backgrounds' };
     return { icon: '📦', label: 'Other' };
   };
 
   const categoryCounts = useMemo(() => {
-    const counts = { ALL: assets.length, BACKGROUND: 0, LALA: 0, JUSTAWOMAN: 0, GUEST: 0, WARDROBE: 0 };
+    const counts = { ALL: assets.length, CHARACTERS: 0, ICONS: 0, BRANDING: 0, BACKGROUNDS: 0, OTHER: 0 };
     for (const a of assets) {
-      const badge = getCategoryBadge(a).label.toUpperCase();
-      if (counts[badge] !== undefined) counts[badge] += 1;
+      const badge = getCategoryBadge(a);
+      const category = badge.label.toUpperCase();
+      console.log(`"${a.name}": type="${a.asset_type}" -> ${category}`);
+      if (counts[category] !== undefined) {
+        counts[category] += 1;
+      }
     }
+    console.log('📊 Final counts:', counts);
     return counts;
   }, [assets]);
 
   // Filter assets by selected category (tabs)
   const filteredAssets = useMemo(() => {
-    if (filterCategory === 'ALL') return assets;
-    return assets.filter(asset => getCategoryBadge(asset).label.toUpperCase() === filterCategory);
-  }, [assets, filterCategory]);
+    let filtered = filterCategory === 'ALL' ? assets : assets.filter(asset => getCategoryBadge(asset).label.toUpperCase() === filterCategory);
+    
+    // Filter by search query
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      filtered = filtered.filter(asset => 
+        asset.name?.toLowerCase().includes(query) ||
+        asset.description?.toLowerCase().includes(query) ||
+        asset.asset_group?.toLowerCase().includes(query) ||
+        asset.purpose?.toLowerCase().includes(query) ||
+        (asset.labels && asset.labels.some(label => label.name?.toLowerCase().includes(query)))
+      );
+    }
 
-  const isWardrobeCategory = mainCategory === 'WARDROBE';
+    // Filter by selected asset types
+    if (selectedAssetTypes.length > 0) {
+      filtered = filtered.filter(asset => 
+        selectedAssetTypes.includes(asset.asset_type)
+      );
+    }
 
-  const hasActiveFilters =
-    !!searchQuery || filterMediaType !== 'all' || filterLabels.length > 0 || sortBy !== 'created_at';
+    return filtered;
+  }, [assets, filterCategory, searchQuery, selectedAssetTypes]);
 
+  const hasActiveFilters = !!searchQuery || filterMediaType !== 'all' || filterLabels.length > 0 || sortBy !== 'created_at';
   const currentCategoryTitle = mainCategories[filterCategory]
     ? `${mainCategories[filterCategory].icon} ${mainCategories[filterCategory].label}`
     : 'Assets';
@@ -582,8 +337,8 @@ const AssetManager = () => {
         {/* Header */}
         <div className="asset-manager-header">
           <div>
-            <h1>📸 Asset Manager</h1>
-            <p>Organized asset library with wardrobe database and shopping links</p>
+            <h1>📸 Asset Library</h1>
+            <p>Browse and manage all your uploaded assets</p>
           </div>
 
           <div className="header-stats">
@@ -598,6 +353,26 @@ const AssetManager = () => {
               </div>
             )}
           </div>
+        </div>
+
+        {/* Info Banner - How to Upload */}
+        <div className="info-banner">
+          <div className="info-banner-icon">💡</div>
+          <div className="info-banner-content">
+            <strong>Want to upload assets?</strong> Go to an episode's Assets tab to upload files. All assets must be linked to episodes.
+          </div>
+          <button 
+            className="info-banner-btn"
+            onClick={() => {
+              if (referrerEpisodeId) {
+                navigate(`/episodes/${referrerEpisodeId}`, { state: { tab: 'assets' } });
+              } else {
+                navigate('/episodes');
+              }
+            }}
+          >
+            {referrerEpisodeId ? '← Back to Assets Tab' : 'Go to Assets →'}
+          </button>
         </div>
 
         {/* Category Tabs */}
@@ -615,14 +390,14 @@ const AssetManager = () => {
           ))}
         </div>
 
-        {/* Unified Command Bar */}
+        {/* Command Bar */}
         <div className="commandbar">
           <div className="commandbar-row">
             <div className="commandbar-search">
               <span className="search-icon">🔎</span>
               <input
                 type="text"
-                placeholder="Search by name, description, brand, etc…"
+                placeholder="Search by name, tags, description, or folder..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="search-input unified"
@@ -640,6 +415,34 @@ const AssetManager = () => {
             </div>
 
             <div className="commandbar-controls">
+              <details className="labels-dropdown">
+                <summary className="control labels-summary">
+                  🎨 Asset Types {selectedAssetTypes.length > 0 ? `(${selectedAssetTypes.length})` : ''}
+                </summary>
+                <div className="labels-panel" style={{ maxHeight: '400px', overflowY: 'auto' }}>
+                  {Object.values(assetTypesByCategory).flatMap(types => types).map(type => {
+                    const active = selectedAssetTypes.includes(type.value);
+                    return (
+                      <button
+                        type="button"
+                        key={type.value}
+                        className={`label-option ${active ? 'active' : ''}`}
+                        onClick={() => {
+                          setSelectedAssetTypes(prev =>
+                            prev.includes(type.value)
+                              ? prev.filter(t => t !== type.value)
+                              : [...prev, type.value]
+                          );
+                        }}
+                      >
+                        <span className="label-name">{type.label}</span>
+                        {active && <span className="label-check">✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              </details>
+
               <select
                 value={filterMediaType}
                 onChange={(e) => setFilterMediaType(e.target.value)}
@@ -725,7 +528,7 @@ const AssetManager = () => {
             <div className="commandbar-chips">
               {searchQuery && (
                 <button type="button" className="chip" onClick={() => setSearchQuery('')}>
-                  Search: “{searchQuery}” <span className="chip-x">✕</span>
+                  Search: "{searchQuery}" <span className="chip-x">✕</span>
                 </button>
               )}
               {filterMediaType !== 'all' && (
@@ -758,523 +561,21 @@ const AssetManager = () => {
           )}
         </div>
 
-        {/* Upload Section */}
-        <div className="upload-section">
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
-            <h2>📤 Upload New Asset</h2>
-            <button 
-              type="button" 
-              onClick={() => navigate(-1)} 
-              className="btn-secondary"
-              style={{ padding: '0.5rem 1rem', fontSize: '0.875rem' }}
-            >
-              ← Back
-            </button>
+        {/* Alerts */}
+        {error && (
+          <div className="alert alert-error">
+            <span>❌</span>
+            <span>{error}</span>
+            <button className="alert-close" onClick={() => setError(null)}>✕</button>
           </div>
-
-          <form id="assetForm" onSubmit={handleUpload} className="upload-form">
-            {/* Main Category Selection */}
-            <div className="form-field">
-              <label>Main Category *</label>
-              <select
-                value={mainCategory}
-                onChange={(e) => setMainCategory(e.target.value)}
-                required
-                className="category-select"
-              >
-                {Object.entries(mainCategories)
-                  .filter(([key]) => key !== 'ALL')
-                  .map(([key, cat]) => (
-                    <option key={key} value={key}>
-                      {cat.icon} {cat.label}
-                    </option>
-                  ))}
-              </select>
-            </div>
-
-            {/* Drag & Drop Zone */}
-            <div
-              className={`dropzone ${dragActive ? 'active' : ''}`}
-              onDragEnter={handleDragEnter}
-              onDragLeave={handleDragLeave}
-              onDragOver={handleDragOver}
-              onDrop={handleDrop}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <input
-                ref={fileInputRef}
-                type="file"
-                id="file"
-                onChange={handleFileChange}
-                accept="image/*,video/*"
-                multiple
-                hidden
-              />
-
-              {files.length > 0 ? (
-                <div className="dropzone-files">
-                  <div className="files-header">
-                    <strong>{files.length} file{files.length > 1 ? 's' : ''} selected</strong>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setFiles([]);
-                      }}
-                      className="btn-clear-files"
-                    >
-                      ✕ Clear
-                    </button>
-                  </div>
-                  <div className="files-list">
-                    {files.map((file, idx) => {
-                      const isVideo = file.type.startsWith('video/');
-                      const status = uploadProgress[file.name];
-                      return (
-                        <div key={idx} className={`file-item ${status || ''}`}>
-                          <span className="file-icon">{isVideo ? '🎥' : '🖼️'}</span>
-                          <div className="file-info">
-                            <div className="file-name">{file.name}</div>
-                            <div className="file-size">{(file.size / 1024 / 1024).toFixed(2)} MB</div>
-                          </div>
-                          {status === 'uploading' && <span className="spinner-sm"></span>}
-                          {status === 'success' && <span>✅</span>}
-                          {status === 'error' && <span>❌</span>}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <div className="dropzone-icon">📁</div>
-                  <div className="dropzone-text">
-                    <strong>Click to browse</strong> or drag and drop
-                  </div>
-                  <div className="dropzone-hint">Images (JPG, PNG, GIF, WebP) or Videos (MP4, MOV, WebM)</div>
-                </>
-              )}
-            </div>
-
-            {/* Form Fields */}
-            <div className="form-grid">
-              <div className="form-field">
-                <label>Asset Type *</label>
-                <select value={assetType} onChange={(e) => setAssetType(e.target.value)} required>
-                  {currentAssetTypes.map(type => (
-                    <option key={type.value} value={type.value}>
-                      {type.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* ✅ UPDATED: Asset Role field with suggestions */}
-              <div className="form-field">
-                <label>
-                  Asset Role * 
-                  <span style={{ fontSize: '0.75rem', color: '#6b7280', fontWeight: 'normal' }}>
-                    {' '}(Canonical role for thumbnail system)
-                  </span>
-                </label>
-                <div style={{ position: 'relative' }}>
-                  <input
-                    type="text"
-                    value={assetRole}
-                    onChange={(e) => setAssetRole(e.target.value)}
-                    placeholder="e.g., CHAR.HOST.LALA, BG.MAIN"
-                    title="Canonical role name (must match template roles)"
-                    list="role-suggestions"
-                    required
-                    style={{ 
-                      fontFamily: 'Monaco, monospace', 
-                      fontSize: '0.875rem',
-                      color: CANONICAL_ROLES[assetRole] ? '#065f46' : '#6b7280'
-                    }}
-                  />
-                  <datalist id="role-suggestions">
-                    {suggestedRoles.map(role => (
-                      <option key={role} value={role}>
-                        {CANONICAL_ROLES[role]?.label}
-                      </option>
-                    ))}
-                  </datalist>
-                  {assetRole && CANONICAL_ROLES[assetRole] && (
-                    <div style={{ 
-                      fontSize: '0.75rem', 
-                      color: '#065f46', 
-                      marginTop: '0.25rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.25rem'
-                    }}>
-                      ✓ Valid role: {CANONICAL_ROLES[assetRole].icon} {CANONICAL_ROLES[assetRole].label}
-                    </div>
-                  )}
-                  {assetRole && !CANONICAL_ROLES[assetRole] && (
-                    <div style={{ 
-                      fontSize: '0.75rem', 
-                      color: '#dc2626', 
-                      marginTop: '0.25rem',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.25rem'
-                    }}>
-                      ⚠️ Not a standard canonical role
-                    </div>
-                  )}
-                </div>
-                {suggestedRoles.length > 0 && (
-                  <div style={{ 
-                    marginTop: '0.5rem', 
-                    display: 'flex', 
-                    flexWrap: 'wrap', 
-                    gap: '0.5rem'
-                  }}>
-                    <span style={{ fontSize: '0.75rem', color: '#6b7280' }}>Suggested:</span>
-                    {suggestedRoles.slice(0, 3).map(role => (
-                      <button
-                        key={role}
-                        type="button"
-                        onClick={() => setAssetRole(role)}
-                        style={{
-                          padding: '0.25rem 0.5rem',
-                          fontSize: '0.75rem',
-                          background: assetRole === role ? '#dbeafe' : '#f3f4f6',
-                          border: '1px solid ' + (assetRole === role ? '#3b82f6' : '#e5e7eb'),
-                          borderRadius: '4px',
-                          cursor: 'pointer',
-                          fontFamily: 'Monaco, monospace'
-                        }}
-                      >
-                        {role}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              <div className="form-field">
-                <label>Description</label>
-                <input
-                  type="text"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  placeholder="Brief description of the asset"
-                />
-              </div>
-            </div>
-
-            {/* Wardrobe/Clothing Details (only for WARDROBE category) */}
-            {isWardrobeCategory && (
-              <details className="wardrobe-details" open>
-                <summary>👗 Wardrobe Details & Shopping Info</summary>
-
-                <div className="form-grid wardrobe-grid">
-                  <div className="form-field">
-                    <label>Clothing Category</label>
-                    <select
-                      value={wardrobeData.clothingCategory}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, clothingCategory: e.target.value })}
-                    >
-                      <option value="">Select category...</option>
-                      {clothingCategories.map(cat => (
-                        <option key={cat.value} value={cat.value}>
-                          {cat.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-field">
-                    <label>Brand</label>
-                    <input
-                      type="text"
-                      value={wardrobeData.brand}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, brand: e.target.value })}
-                      placeholder="e.g., Zara, H&M, Gucci"
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label>Website/Store</label>
-                    <input
-                      type="text"
-                      value={wardrobeData.website}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, website: e.target.value })}
-                      placeholder="e.g., www.zara.com"
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label>Purchase/Affiliate Link</label>
-                    <input
-                      type="url"
-                      value={wardrobeData.purchaseLink}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, purchaseLink: e.target.value })}
-                      placeholder="https://..."
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label>Price</label>
-                    <input
-                      type="text"
-                      value={wardrobeData.price}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, price: e.target.value })}
-                      placeholder="$99.99"
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label>Color</label>
-                    <input
-                      type="text"
-                      value={wardrobeData.color}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, color: e.target.value })}
-                      placeholder="e.g., Black, Red, Floral"
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label>Size</label>
-                    <input
-                      type="text"
-                      value={wardrobeData.size}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, size: e.target.value })}
-                      placeholder="e.g., S, M, L, 8"
-                    />
-                  </div>
-
-                  <div className="form-field">
-                    <label>Occasion</label>
-                    <select
-                      value={wardrobeData.occasion}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, occasion: e.target.value })}
-                    >
-                      <option value="">Select occasion...</option>
-                      {occasions.map(occ => (
-                        <option key={occ.value} value={occ.value}>
-                          {occ.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="form-field">
-                    <label>Season</label>
-                    <select
-                      value={wardrobeData.season}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, season: e.target.value })}
-                    >
-                      <option value="">Select season...</option>
-                      {seasons.map(season => (
-                        <option key={season.value} value={season.value}>
-                          {season.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-
-                {/* NEW: Episode Tracking Section */}
-                <div className="episode-tracking-section">
-                  <h4 className="section-title">📺 Episode Tracking</h4>
-                  <div className="form-grid wardrobe-grid">
-                    <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-                      <label>Worn in Episode (Optional)</label>
-                      <select
-                        value={wardrobeData.episodeId}
-                        onChange={(e) => {
-                          const ep = episodes.find(episode => episode.id === e.target.value);
-                          setSelectedEpisode(ep || null);
-                          setWardrobeData({
-                            ...wardrobeData,
-                            episodeId: e.target.value,
-                            episodeNumber: ep?.episode_number || '',
-                            episodeTitle: ep?.title || ''
-                          });
-                        }}
-                      >
-                        <option value="">Not worn yet / Select episode...</option>
-                        {episodes.map(ep => (
-                          <option key={ep.id} value={ep.id}>
-                            Episode {ep.episode_number}: {ep.title}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    {wardrobeData.episodeId && (
-                      <div className="form-field" style={{ gridColumn: '1 / -1' }}>
-                        <label>Scene/Context (Optional)</label>
-                        <input
-                          type="text"
-                          value={wardrobeData.scene}
-                          onChange={(e) => setWardrobeData({ ...wardrobeData, scene: e.target.value })}
-                          placeholder="e.g., Opening segment, Interview with guest, Closing"
-                        />
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="episode-tracking-info">
-                    <div className="info-item">
-                      <span className="info-icon">👕</span>
-                      <span className="info-text">Track which episodes this item appears in</span>
-                    </div>
-                    <div className="info-item">
-                      <span className="info-icon">📊</span>
-                      <span className="info-text">Prevent outfit repetition and plan future looks</span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* NEW: Advanced Features Section */}
-                <div className="advanced-features-section">
-                  <h4 className="section-title">✨ Advanced Features</h4>
-                  
-                  {/* Character Assignment */}
-                  <div className="form-field" style={{ marginBottom: '1.5rem' }}>
-                    <label>👤 Character/Person</label>
-                    <select
-                      value={wardrobeData.character}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, character: e.target.value })}
-                      style={{ width: '100%' }}
-                    >
-                      <option value="lala">💜 Lala</option>
-                      <option value="justawoman">👩 Just a Woman in Her Prime</option>
-                      <option value="guest">🎭 Guest</option>
-                    </select>
-                  </div>
-
-                  {/* Outfit Notes */}
-                  <div className="form-field" style={{ marginBottom: '1.5rem' }}>
-                    <label>📝 Outfit Notes & Styling Tips</label>
-                    <textarea
-                      value={wardrobeData.outfitNotes}
-                      onChange={(e) => setWardrobeData({ ...wardrobeData, outfitNotes: e.target.value })}
-                      placeholder="Add styling notes, special instructions, or outfit context..."
-                      rows="3"
-                      style={{ width: '100%', padding: '0.75rem', borderRadius: '8px', border: '1px solid #e5e7eb' }}
-                    />
-                  </div>
-
-                  {/* Favorite Item */}
-                  <div className="form-field" style={{ marginBottom: '1.5rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                      <input
-                        type="checkbox"
-                        checked={wardrobeData.isFavorite}
-                        onChange={(e) => setWardrobeData({ ...wardrobeData, isFavorite: e.target.checked })}
-                        style={{ width: 'auto' }}
-                      />
-                      <span>⭐ Mark as Favorite/Frequently Worn</span>
-                    </label>
-                  </div>
-
-                  {/* Outfit Set */}
-                  <div className="form-grid wardrobe-grid" style={{ marginBottom: '1.5rem' }}>
-                    <div className="form-field">
-                      <label>👔 Outfit Set ID</label>
-                      <input
-                        type="text"
-                        value={wardrobeData.outfitSetId}
-                        onChange={(e) => setWardrobeData({ ...wardrobeData, outfitSetId: e.target.value })}
-                        placeholder="e.g., outfit-001"
-                      />
-                      <small style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
-                        Group items that go together (same ID for all pieces)
-                      </small>
-                    </div>
-                    <div className="form-field">
-                      <label>Outfit Set Name</label>
-                      <input
-                        type="text"
-                        value={wardrobeData.outfitSetName}
-                        onChange={(e) => setWardrobeData({ ...wardrobeData, outfitSetName: e.target.value })}
-                        placeholder="e.g., Spring Business Look"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Tags Input */}
-                  <div className="form-field" style={{ marginBottom: '1.5rem' }}>
-                    <label>🏷️ Tags (comma-separated)</label>
-                    <input
-                      type="text"
-                      value={wardrobeData.tags.join(', ')}
-                      onChange={(e) => setWardrobeData({ 
-                        ...wardrobeData, 
-                        tags: e.target.value.split(',').map(tag => tag.trim()).filter(tag => tag) 
-                      })}
-                      placeholder="e.g., sparkly, vintage, designer, casual-chic"
-                    />
-                    <small style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>
-                      Add custom tags to organize and search wardrobe items
-                    </small>
-                  </div>
-
-                  {/* Feature Cards */}
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginTop: '1.5rem' }}>
-                    <div style={{ padding: '1rem', background: '#fef3c7', borderRadius: '8px', border: '1px solid #fbbf24' }}>
-                      <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>🔁</div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#92400e' }}>Repeat Prevention</div>
-                      <div style={{ fontSize: '0.75rem', color: '#78350f', marginTop: '0.25rem' }}>
-                        Automatically tracks previous episodes
-                      </div>
-                    </div>
-                    <div style={{ padding: '1rem', background: '#dbeafe', borderRadius: '8px', border: '1px solid #3b82f6' }}>
-                      <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>📅</div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#1e40af' }}>Outfit Planning</div>
-                      <div style={{ fontSize: '0.75rem', color: '#1e3a8a', marginTop: '0.25rem' }}>
-                        Plan outfits for upcoming episodes
-                      </div>
-                    </div>
-                    <div style={{ padding: '1rem', background: '#d1fae5', borderRadius: '8px', border: '1px solid #10b981' }}>
-                      <div style={{ fontSize: '1.5rem', marginBottom: '0.5rem' }}>💰</div>
-                      <div style={{ fontSize: '0.875rem', fontWeight: '600', color: '#065f46' }}>Budget Tracking</div>
-                      <div style={{ fontSize: '0.75rem', color: '#047857', marginTop: '0.25rem' }}>
-                        Track spending per episode/character
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </details>
-            )}
-
-            {/* Submit Button */}
-            <button type="submit" disabled={loading || files.length === 0} className="btn-upload">
-              {loading ? (
-                <>
-                  <span className="spinner-sm"></span>
-                  <span>Uploading {files.length} file{files.length > 1 ? 's' : ''}...</span>
-                </>
-              ) : (
-                <>
-                  <span>🚀</span>
-                  <span>
-                    Upload {files.length > 0 ? `${files.length} ` : ''}Asset{files.length > 1 ? 's' : ''}
-                  </span>
-                </>
-              )}
-            </button>
-          </form>
-
-          {/* Alerts */}
-          {error && (
-            <div className="alert alert-error">
-              <span>❌</span>
-              <span>{error}</span>
-            </div>
-          )}
-          {success && (
-            <div className="alert alert-success">
-              <span>✅</span>
-              <span>{success}</span>
-            </div>
-          )}
-        </div>
+        )}
+        {success && (
+          <div className="alert alert-success">
+            <span>✅</span>
+            <span>{success}</span>
+            <button className="alert-close" onClick={() => setSuccess(null)}>✕</button>
+          </div>
+        )}
 
         {/* Bulk Actions Toolbar */}
         {selectedAssets.length > 0 && (
@@ -1293,8 +594,8 @@ const AssetManager = () => {
                 📥 Download
               </button>
 
-              <button onClick={handleBulkProcessBackground} disabled={bulkProcessing} className="btn-bulk">
-                🎨 Remove BG
+              <button onClick={() => setShowTypeChangeModal(true)} disabled={bulkProcessing} className="btn-bulk">
+                🏷️ Change Type
               </button>
 
               <select
@@ -1348,32 +649,125 @@ const AssetManager = () => {
             <div className="empty-state">
               <div className="empty-icon">📦</div>
               <h3>No Assets Found</h3>
-              <p>Try adjusting filters or upload your first asset.</p>
+              {assets.length === 0 ? (
+                <div>
+                  <p>You haven't uploaded any assets yet.</p>
+                  <button 
+                    className="btn-primary"
+                    onClick={() => navigate('/episodes')}
+                    style={{ marginTop: '1rem' }}
+                  >
+                    Go to Episodes to Upload
+                  </button>
+                </div>
+              ) : (
+                <p>Try adjusting your filters.</p>
+              )}
             </div>
           ) : (
-            <div className={`assets-grid ${viewMode}`}>
-              {filteredAssets.map(asset => {
-                const badge = getCategoryBadge(asset);
-                return (
-                  <div key={asset.id} className="asset-wrapper">
-                    {filterCategory === 'ALL' && (
-                      <div className="asset-category-badge" title={badge.label}>
-                        {badge.icon}
-                      </div>
-                    )}
-                    <AssetCard
-                      asset={asset}
-                      onRefresh={() => loadAssets()}
-                      onSelect={handleSelectAsset}
-                      isSelected={selectedAssets.includes(asset.id)}
-                      showSelection={true}
-                      showActions={true}
-                      onPreview={setPreviewAsset}
-                    />
+            <>
+              <div className={`assets-grid ${viewMode}`}>
+                {filteredAssets.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map(asset => {
+                  const badge = getCategoryBadge(asset);
+                  return (
+                    <div key={asset.id} className="asset-wrapper">
+                      {filterCategory === 'ALL' && (
+                        <div className="asset-category-badge" title={badge.label}>
+                          {badge.icon}
+                        </div>
+                      )}
+                      <AssetCard
+                        asset={asset}
+                        onRefresh={() => loadAssets()}
+                        onSelect={handleSelectAsset}
+                        isSelected={selectedAssets.includes(asset.id)}
+                        showSelection={true}
+                        showActions={true}
+                        onPreview={setPreviewAsset}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Pagination Controls */}
+              {filteredAssets.length > itemsPerPage && (
+                <div className="pagination-controls">
+                  <div className="pagination-info">
+                    Showing {((currentPage - 1) * itemsPerPage) + 1} - {Math.min(currentPage * itemsPerPage, filteredAssets.length)} of {filteredAssets.length} assets
                   </div>
-                );
-              })}
-            </div>
+                  
+                  <div className="pagination-buttons">
+                    <button
+                      onClick={() => setCurrentPage(1)}
+                      disabled={currentPage === 1}
+                      className="pagination-btn"
+                    >
+                      ⟨⟨
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(currentPage - 1)}
+                      disabled={currentPage === 1}
+                      className="pagination-btn"
+                    >
+                      ⟨ Prev
+                    </button>
+                    
+                    <div className="pagination-pages">
+                      {Array.from({ length: Math.ceil(filteredAssets.length / itemsPerPage) }, (_, i) => i + 1)
+                        .filter(page => {
+                          // Show first, last, current, and 2 on each side of current
+                          const totalPages = Math.ceil(filteredAssets.length / itemsPerPage);
+                          return page === 1 || page === totalPages || (page >= currentPage - 2 && page <= currentPage + 2);
+                        })
+                        .map((page, idx, arr) => (
+                          <React.Fragment key={page}>
+                            {idx > 0 && arr[idx - 1] !== page - 1 && <span className="pagination-ellipsis">...</span>}
+                            <button
+                              onClick={() => setCurrentPage(page)}
+                              className={`pagination-btn ${currentPage === page ? 'active' : ''}`}
+                            >
+                              {page}
+                            </button>
+                          </React.Fragment>
+                        ))}
+                    </div>
+
+                    <button
+                      onClick={() => setCurrentPage(currentPage + 1)}
+                      disabled={currentPage >= Math.ceil(filteredAssets.length / itemsPerPage)}
+                      className="pagination-btn"
+                    >
+                      Next ⟩
+                    </button>
+                    <button
+                      onClick={() => setCurrentPage(Math.ceil(filteredAssets.length / itemsPerPage))}
+                      disabled={currentPage >= Math.ceil(filteredAssets.length / itemsPerPage)}
+                      className="pagination-btn"
+                    >
+                      ⟩⟩
+                    </button>
+                  </div>
+
+                  <div className="pagination-per-page">
+                    <label>Per page:</label>
+                    <select 
+                      value={itemsPerPage} 
+                      onChange={(e) => {
+                        setItemsPerPage(Number(e.target.value));
+                        setCurrentPage(1);
+                      }}
+                      className="per-page-select"
+                    >
+                      <option value={10}>10</option>
+                      <option value={20}>20</option>
+                      <option value={50}>50</option>
+                      <option value={100}>100</option>
+                    </select>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>
@@ -1387,6 +781,54 @@ const AssetManager = () => {
           onRefresh={() => loadAssets()}
           onNavigate={(asset) => setPreviewAsset(asset)}
         />
+      )}
+
+      {/* Bulk Change Type Modal */}
+      {showTypeChangeModal && (
+        <div className="modal-backdrop" onClick={() => setShowTypeChangeModal(false)}>
+          <div className="modal-container" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>Change Asset Type</h3>
+              <button className="modal-close" onClick={() => setShowTypeChangeModal(false)}>×</button>
+            </div>
+            <div className="modal-body">
+              <p>Select a new type for {selectedAssets.length} asset{selectedAssets.length > 1 ? 's' : ''}:</p>
+              
+              <div className="form-group">
+                <label>New Asset Type</label>
+                <select 
+                  value={batchChangeType} 
+                  onChange={(e) => setBatchChangeType(e.target.value)}
+                  className="form-control"
+                >
+                  <option value="">Select type...</option>
+                  {Object.entries(assetTypesByCategory).map(([category, types]) => (
+                    <optgroup key={category} label={category}>
+                      {types.map(type => (
+                        <option key={type.value} value={type.value}>{type.label}</option>
+                      ))}
+                    </optgroup>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="modal-footer">
+              <button 
+                className="btn-secondary" 
+                onClick={() => setShowTypeChangeModal(false)}
+              >
+                Cancel
+              </button>
+              <button 
+                className="btn-primary" 
+                onClick={handleBulkChangeType}
+                disabled={!batchChangeType || bulkProcessing}
+              >
+                {bulkProcessing ? 'Changing...' : 'Change Type'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

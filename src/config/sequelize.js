@@ -52,6 +52,8 @@ const baseConfig = {
         : false,
     // Connection timeout
     connectTimeout: 60000,
+    // Force UTF-8 encoding for emoji support
+    client_encoding: 'UTF8',
   },
   define: {
     // Use snake_case for database columns
@@ -99,10 +101,13 @@ const development = {
   // Enable SSL for AWS RDS in development
   dialectOptions: {
     ...baseConfig.dialectOptions,
-    ssl: process.env.DB_SSL === 'true' ? {
-      require: true,
-      rejectUnauthorized: false,
-    } : false,
+    ssl:
+      process.env.DB_SSL === 'true'
+        ? {
+            require: true,
+            rejectUnauthorized: false,
+          }
+        : false,
   },
 };
 

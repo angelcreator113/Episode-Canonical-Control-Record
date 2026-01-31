@@ -20,10 +20,9 @@ const EpisodeAssetsTab = ({ episodeId }) => {
   const [editingAsset, setEditingAsset] = useState(null);
   const [editForm, setEditForm] = useState({
     name: '',
-    asset_group: '',
-    purpose: '',
-    is_global: false,
-    allowed_uses: []
+    asset_role: '',
+    description: '',
+    tags: ''
   });
   const [processingAssets, setProcessingAssets] = useState(new Set());
   const [showProcessed, setShowProcessed] = useState(true);
@@ -44,6 +43,29 @@ const EpisodeAssetsTab = ({ episodeId }) => {
     if (role.startsWith('UI.BUTTON')) return 'BACKGROUND_IMAGE';
     if (role.startsWith('TEXT.')) return 'BACKGROUND_IMAGE';
     return 'PROMO_LALA'; // Default fallback
+  };
+
+  const getDisplayLabelFromRole = (role) => {
+    const roleLabels = {
+      'CHAR.HOST.LALA': 'Lala (Host)',
+      'CHAR.HOST.JUSTAWOMANINHERPRIME': 'Just a Woman in Her Prime (Host)',
+      'CHAR.GUEST.1': 'Guest 1',
+      'CHAR.GUEST.2': 'Guest 2',
+      'UI.ICON.CLOSET': 'Closet',
+      'UI.ICON.JEWELRY_BOX': 'Jewelry Box',
+      'UI.ICON.TODO_LIST': 'To-Do List',
+      'UI.ICON.SPEECH': 'Speech Bubble',
+      'UI.ICON.LOCATION': 'Location Pin',
+      'UI.ICON.PERFUME': 'Perfume',
+      'UI.ICON.POSE': 'Pose',
+      'UI.ICON.RESERVED': 'Reserved',
+      'UI.ICON.HOLDER.MAIN': 'Icon Holder',
+      'BRAND.SHOW.TITLE_GRAPHIC': 'Show Title Graphic',
+      'BG.MAIN': 'Background Image',
+      'UI.MOUSE.CURSOR': 'Mouse Cursor',
+      'UI.BUTTON.EXIT': 'Exit Button',
+    };
+    return roleLabels[role] || role;
   };
 
   useEffect(() => {
@@ -174,16 +196,19 @@ const EpisodeAssetsTab = ({ episodeId }) => {
     setEditingAsset(asset.id);
     setEditForm({
       name: asset.name || '',
-      asset_group: asset.asset_group || '',
-      purpose: asset.purpose || '',
-      is_global: asset.is_global || false,
-      allowed_uses: asset.allowed_uses || []
+      asset_role: asset.asset_role || '',
+      description: asset.description || '',
+      tags: Array.isArray(asset.tags) ? asset.tags.join(', ') : (asset.tags || '')
     });
   };
 
   const handleSaveEdit = async () => {
     try {
-      await api.put(`/api/v1/assets/${editingAsset}`, editForm);
+      const payload = {
+        ...editForm,
+        tags: editForm.tags ? editForm.tags.split(',').map(t => t.trim()).filter(Boolean) : []
+      };
+      await api.put(`/api/v1/assets/${editingAsset}`, payload);
       setSuccess('✅ Asset updated!');
       setEditingAsset(null);
       loadAssets();
@@ -195,16 +220,7 @@ const EpisodeAssetsTab = ({ episodeId }) => {
 
   const handleCancelEdit = () => {
     setEditingAsset(null);
-    setEditForm({ name: '', asset_group: '', purpose: '', is_global: false, allowed_uses: [] });
-  };
-
-  const toggleAllowedUse = (use) => {
-    setEditForm(prev => ({
-      ...prev,
-      allowed_uses: prev.allowed_uses.includes(use)
-        ? prev.allowed_uses.filter(u => u !== use)
-        : [...prev.allowed_uses, use]
-    }));
+    setEditForm({ name: '', asset_role: '', description: '', tags: '' });
   };
 
   const handleLinkExistingAsset = async (selectedAsset) => {
@@ -307,7 +323,7 @@ const EpisodeAssetsTab = ({ episodeId }) => {
 
           {/* Desktop: Three action buttons */}
           <div className="header-actions">
-            <button onClick={() => navigate('/assets')} className="btn-asset-manager">
+            <button onClick={() => navigate('/assets', { state: { episodeId } })} className="btn-asset-manager">
               <span className="btn-icon">🗂️</span>
               <span className="btn-text">Asset Manager</span>
             </button>
@@ -422,74 +438,133 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                       {quality.label}
                     </span>
                   </div>
+                </div>
 
-                  {/* Overflow Menu Button */}
-                  <div className="asset-menu-trigger" style={{ position: 'absolute', top: '0.5rem', right: '0.5rem' }}>
-                    <button
-                      type="button"
-                      className="btn-asset-menu"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuAssetId(showActionsMenu ? null : asset.id);
-                      }}
-                      style={{
-                        background: 'rgba(0, 0, 0, 0.6)',
-                        border: 'none',
-                        borderRadius: '8px',
-                        padding: '0.5rem',
-                        color: 'white',
-                        fontSize: '1.25rem',
-                        cursor: 'pointer',
-                        fontWeight: 700,
-                        minWidth: '36px',
-                        minHeight: '36px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                      title="More actions"
-                    >
-                      ⋯
-                    </button>
-                    
-                    {showActionsMenu && (
-                      <>
-                        <div
+                {/* Overflow Menu Button - Moved outside asset-preview */}
+                <div 
+                  className="asset-menu-trigger" 
+                  style={{ position: 'absolute', top: '0.5rem', right: '0.5rem', zIndex: 10 }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <button
+                    type="button"
+                    className="btn-asset-menu"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setOpenMenuAssetId(showActionsMenu ? null : asset.id);
+                    }}
+                    style={{
+                      background: 'rgba(0, 0, 0, 0.6)',
+                      border: 'none',
+                      borderRadius: '8px',
+                      padding: '0.5rem',
+                      color: 'white',
+                      fontSize: '1.25rem',
+                      cursor: 'pointer',
+                      fontWeight: 700,
+                      minWidth: '36px',
+                      minHeight: '36px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    title="More actions"
+                  >
+                    ⋯
+                  </button>
+                  
+                  {showActionsMenu && (
+                    <>
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setOpenMenuAssetId(null);
+                        }}
+                        style={{
+                          position: 'fixed',
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          bottom: 0,
+                          zIndex: 100,
+                        }}
+                      />
+                      <div
+                        className="asset-actions-menu"
+                        onClick={(e) => e.stopPropagation()}
+                        style={{
+                          position: 'absolute',
+                          top: 'calc(100% + 0.5rem)',
+                          right: 0,
+                          background: '#ffffff',
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '12px',
+                          boxShadow: '0 10px 26px rgba(0,0,0,0.12)',
+                          minWidth: '180px',
+                          zIndex: 101,
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <button
+                          type="button"
                           onClick={(e) => {
                             e.stopPropagation();
                             setOpenMenuAssetId(null);
+                            window.open(asset.s3_url_processed || asset.s3_url_raw, '_blank');
                           }}
                           style={{
-                            position: 'fixed',
-                            top: 0,
-                            left: 0,
-                            right: 0,
-                            bottom: 0,
-                            zIndex: 100,
+                            width: '100%',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: '0.875rem 1rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            fontWeight: 600,
+                            color: '#1f2937',
+                            cursor: 'pointer',
+                            fontSize: '0.95rem',
+                            textAlign: 'left',
                           }}
-                        />
-                        <div
-                          className="asset-actions-menu"
-                          onClick={(e) => e.stopPropagation()}
-                          style={{
-                            position: 'absolute',
-                            top: 'calc(100% + 0.5rem)',
-                            right: 0,
-                            background: '#ffffff',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '12px',
-                            boxShadow: '0 10px 26px rgba(0,0,0,0.12)',
-                            minWidth: '180px',
-                            zIndex: 101,
-                            overflow: 'hidden',
-                          }}
+                          onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                          onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
                         >
+                          👁️ View Full Size
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setOpenMenuAssetId(null);
+                            handleEditAsset(asset);
+                          }}
+                          style={{
+                            width: '100%',
+                            background: 'transparent',
+                            border: 'none',
+                            padding: '0.875rem 1rem',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            fontWeight: 600,
+                            color: '#1f2937',
+                            cursor: 'pointer',
+                            fontSize: '0.95rem',
+                            textAlign: 'left',
+                          }}
+                          onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                          onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
+                        >
+                          ✏️ Edit Asset
+                        </button>
+                        <div style={{ borderTop: '1px solid #e5e7eb' }}>
                           <button
                             type="button"
                             onClick={(e) => {
                               e.stopPropagation();
                               setOpenMenuAssetId(null);
-                              window.open(asset.s3_url_processed || asset.s3_url_raw, '_blank');
+                              handleRemoveAsset(asset.id);
                             }}
                             style={{
                               width: '100%',
@@ -500,100 +575,20 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                               alignItems: 'center',
                               gap: '0.75rem',
                               fontWeight: 600,
-                              color: '#1f2937',
+                              color: '#ef4444',
                               cursor: 'pointer',
                               fontSize: '0.95rem',
                               textAlign: 'left',
                             }}
-                            onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
+                            onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
                             onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
                           >
-                            👁️ View Full Size
+                            🗑️ Remove from Episode
                           </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenMenuAssetId(null);
-                              setPreviewAsset(asset);
-                            }}
-                            style={{
-                              width: '100%',
-                              background: 'transparent',
-                              border: 'none',
-                              padding: '0.875rem 1rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.75rem',
-                              fontWeight: 600,
-                              color: '#1f2937',
-                              cursor: 'pointer',
-                              fontSize: '0.95rem',
-                              textAlign: 'left',
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
-                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-                          >
-                            ℹ️ View Details
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setOpenMenuAssetId(null);
-                              navigate(`/analytics/assets/${asset.id}`);
-                            }}
-                            style={{
-                              width: '100%',
-                              background: 'transparent',
-                              border: 'none',
-                              padding: '0.875rem 1rem',
-                              display: 'flex',
-                              alignItems: 'center',
-                              gap: '0.75rem',
-                              fontWeight: 600,
-                              color: '#1f2937',
-                              cursor: 'pointer',
-                              fontSize: '0.95rem',
-                              textAlign: 'left',
-                            }}
-                            onMouseOver={(e) => e.currentTarget.style.background = '#f9fafb'}
-                            onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-                          >
-                            📊 Analytics
-                          </button>
-                          <div style={{ borderTop: '1px solid #e5e7eb' }}>
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setOpenMenuAssetId(null);
-                                handleRemoveAsset(asset.id);
-                              }}
-                              style={{
-                                width: '100%',
-                                background: 'transparent',
-                                border: 'none',
-                                padding: '0.875rem 1rem',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.75rem',
-                                fontWeight: 600,
-                                color: '#ef4444',
-                                cursor: 'pointer',
-                                fontSize: '0.95rem',
-                                textAlign: 'left',
-                              }}
-                              onMouseOver={(e) => e.currentTarget.style.background = '#fef2f2'}
-                              onMouseOut={(e) => e.currentTarget.style.background = 'transparent'}
-                            >
-                              🗑️ Remove from Episode
-                            </button>
-                          </div>
                         </div>
-                      </>
-                    )}
-                  </div>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Asset Info - Simplified */}
@@ -663,6 +658,7 @@ const EpisodeAssetsTab = ({ episodeId }) => {
               maxHeight: '90vh',
               overflow: 'auto',
             }}
+            className="upload-modal-content"
             onClick={(e) => e.stopPropagation()}
           >
             <h2 style={{ margin: '0 0 1.5rem 0', fontSize: '1.5rem', fontWeight: '700' }}>Upload Assets</h2>
@@ -722,17 +718,17 @@ const EpisodeAssetsTab = ({ episodeId }) => {
                 color: '#0369a1'
               }}>
                 <span style={{ fontWeight: '600' }}>📦 Will be saved as:</span>{' '}
-                <span style={{ fontFamily: 'monospace' }}>{getAssetTypeFromRole(assetRole)}</span>
+                <span style={{ fontFamily: 'monospace' }}>{getDisplayLabelFromRole(assetRole)}</span>
                 {' → '}
                 <span style={{ fontWeight: '600' }}>
-                  {assetRole.startsWith('CHAR.HOST.LALA') && '👩 LALA folder'}
-                  {assetRole.startsWith('CHAR.HOST.JUSTAWOMANINHERPRIME') && '💜 SHOW folder'}
-                  {(assetRole.startsWith('CHAR.GUEST') || assetRole.startsWith('GUEST')) && '👤 GUEST folder'}
-                  {assetRole.startsWith('UI.ICON') && '🎨 SHOW folder (icons)'}
-                  {assetRole.startsWith('BRAND.') && '💜 SHOW folder (branding)'}
-                  {assetRole.startsWith('BG.') && '🖼️ EPISODE folder (backgrounds)'}
-                  {assetRole.startsWith('UI.MOUSE') && '🖼️ EPISODE folder (UI)'}
-                  {assetRole.startsWith('UI.BUTTON') && '🖼️ EPISODE folder (UI)'}
+                  {assetRole.startsWith('CHAR.HOST.LALA') && '👩 characters'}
+                  {assetRole.startsWith('CHAR.HOST.JUSTAWOMANINHERPRIME') && '👩 characters'}
+                  {(assetRole.startsWith('CHAR.GUEST') || assetRole.startsWith('GUEST')) && '👩 characters'}
+                  {assetRole.startsWith('UI.ICON') && '🎨 icons'}
+                  {assetRole.startsWith('BRAND.') && '💜 branding'}
+                  {assetRole.startsWith('BG.') && '🖼️ backgrounds'}
+                  {assetRole.startsWith('UI.MOUSE') && '🎨 icons'}
+                  {assetRole.startsWith('UI.BUTTON') && '🎨 icons'}
                 </span>
               </div>
             </div>
@@ -963,93 +959,92 @@ const EpisodeAssetsTab = ({ episodeId }) => {
 
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
-                Asset Group
+                Asset Role
               </label>
               <select
-                value={editForm.asset_group}
-                onChange={(e) => setEditForm({ ...editForm, asset_group: e.target.value })}
+                value={editForm.asset_role}
+                onChange={(e) => setEditForm({ ...editForm, asset_role: e.target.value })}
+                style={{
+                  width: '100%',
+                  padding: '0.75rem',
+                  border: '2px solid #667eea',
+                  borderRadius: '8px',
+                  fontSize: '1rem',
+                  background: '#f8f9ff'
+                }}
+              >
+                <option value="">Select Asset Role</option>
+                <optgroup label="🎭 CHARACTERS">
+                  <option value="CHAR.HOST.LALA">Lala (Host)</option>
+                  <option value="CHAR.HOST.JUSTAWOMANINHERPRIME">Just a Woman in Her Prime (Host)</option>
+                  <option value="CHAR.GUEST.1">Guest 1</option>
+                  <option value="CHAR.GUEST.2">Guest 2</option>
+                </optgroup>
+                <optgroup label="🎯 ICONS">
+                  <option value="UI.ICON.CLOSET">Icon: Closet</option>
+                  <option value="UI.ICON.JEWELRY_BOX">Icon: Jewelry Box</option>
+                  <option value="UI.ICON.TODO_LIST">Icon: To-Do List</option>
+                  <option value="UI.ICON.SPEECH">Icon: Speech Bubble</option>
+                  <option value="UI.ICON.LOCATION">Icon: Location Pin</option>
+                  <option value="UI.ICON.PERFUME">Icon: Perfume</option>
+                  <option value="UI.ICON.POSE">Icon: Pose</option>
+                  <option value="UI.ICON.RESERVED">Icon: Reserved</option>
+                  <option value="UI.ICON.HOLDER.MAIN">Icon Holder</option>
+                </optgroup>
+                <optgroup label="🏷️ BRANDING">
+                  <option value="BRAND.SHOW.TITLE_GRAPHIC">Show Title Graphic</option>
+                </optgroup>
+                <optgroup label="🖼️ BACKGROUNDS & CHROME">
+                  <option value="BG.MAIN">Background Image</option>
+                  <option value="UI.MOUSE.CURSOR">Mouse Cursor</option>
+                  <option value="UI.BUTTON.EXIT">Exit Button</option>
+                  <option value="UI.BUTTON.MINIMIZE">Minimize Button</option>
+                </optgroup>
+              </select>
+            </div>
+
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
+                Description
+              </label>
+              <textarea
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="Enter asset description"
+                rows={3}
                 style={{
                   width: '100%',
                   padding: '0.75rem',
                   border: '2px solid #e5e7eb',
                   borderRadius: '8px',
                   fontSize: '1rem',
+                  boxSizing: 'border-box',
+                  resize: 'vertical',
+                  fontFamily: 'inherit'
                 }}
-              >
-                <option value="">Select Group</option>
-                <option value="LALA">LALA</option>
-                <option value="SHOW">SHOW</option>
-                <option value="GUEST">GUEST</option>
-                <option value="EPISODE">EPISODE</option>
-                <option value="WARDROBE">WARDROBE</option>
-              </select>
+              />
             </div>
 
             <div style={{ marginBottom: '1.5rem' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
-                Purpose
+                Tags
               </label>
-              <select
-                value={editForm.purpose}
-                onChange={(e) => setEditForm({ ...editForm, purpose: e.target.value })}
+              <input
+                type="text"
+                value={editForm.tags}
+                onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })}
+                placeholder="Enter tags separated by commas (e.g., wardrobe, closet, main)"
                 style={{
                   width: '100%',
                   padding: '0.75rem',
                   border: '2px solid #e5e7eb',
                   borderRadius: '8px',
                   fontSize: '1rem',
+                  boxSizing: 'border-box',
                 }}
-              >
-                <option value="">Select Purpose</option>
-                <option value="MAIN">MAIN</option>
-                <option value="TITLE">TITLE</option>
-                <option value="ICON">ICON</option>
-                <option value="BACKGROUND">BACKGROUND</option>
-              </select>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={editForm.is_global}
-                  onChange={(e) => setEditForm({ ...editForm, is_global: e.target.checked })}
-                  style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
-                />
-                <span style={{ fontWeight: '600', color: '#374151' }}>Global Asset (Available everywhere)</span>
-              </label>
-            </div>
-
-            <div style={{ marginBottom: '1.5rem' }}>
-              <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: '600', color: '#374151' }}>
-                Allowed Uses
-              </label>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
-                {['THUMBNAIL', 'SCENE', 'UI', 'SOCIAL', 'BACKGROUND_PLATE'].map(use => (
-                  <label
-                    key={use}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                      padding: '0.5rem 0.75rem',
-                      background: editForm.allowed_uses.includes(use) ? '#dbeafe' : '#f3f4f6',
-                      border: `2px solid ${editForm.allowed_uses.includes(use) ? '#3b82f6' : '#e5e7eb'}`,
-                      borderRadius: '8px',
-                      cursor: 'pointer',
-                      fontSize: '0.875rem',
-                      fontWeight: '600',
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={editForm.allowed_uses.includes(use)}
-                      onChange={() => toggleAllowedUse(use)}
-                      style={{ cursor: 'pointer' }}
-                    />
-                    {use}
-                  </label>
-                ))}
+              />
+              <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', color: '#6b7280' }}>
+                Separate multiple tags with commas
               </div>
             </div>
 
@@ -1125,7 +1120,7 @@ const EpisodeAssetsTab = ({ episodeId }) => {
               <button 
                 onClick={() => {
                   setShowMobileActions(false);
-                  navigate('/assets');
+                  navigate('/assets', { state: { episodeId } });
                 }}
                 className="action-option"
               >

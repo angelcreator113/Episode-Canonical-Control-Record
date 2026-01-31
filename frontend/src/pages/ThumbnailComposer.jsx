@@ -729,6 +729,97 @@ const ThumbnailComposer = () => {
   const getRequiredMappedCount = () => template ? template.role_slots.filter(s => s.required && assetMap[s.role]).length : 0;
   const getUnmappedRoles = () => template ? template.role_slots.filter(s => !assetMap[s.role]).map(s => ({ role: s.role, required: s.required })) : [];
   
+  // ===== FOLDER-BASED ASSET FILTERING =====
+  // Maps template slot roles → database asset_group ENUM values
+  // NOT the UI folder tabs (those are based on asset_type)
+  const getRoleFolderMapping = (role) => {
+    if (!role) return ['LALA']; // Safe default
+    
+    const mappings = {
+      // ===== CHARACTERS =====
+      // Characters use LALA or GUEST asset_group
+      'CHAR.HOST.LALA': ['LALA'],
+      'CHAR.HOST.JUSTAWOMANINHERPRIME': ['LALA', 'GUEST'],  // Co-host could be either
+      'CHAR.HOST': ['LALA'],  // Other hosts
+      'CHAR.GUEST': ['GUEST', 'LALA'],  // Guests can use either
+      
+      // ===== TEXT ELEMENTS =====
+      // Show titles/graphics use SHOW asset_group
+      'TEXT.SHOW.TITLE': ['SHOW'],
+      'TEXT.SHOW': ['SHOW'],
+      'TEXT.EPISODE': ['EPISODE'],
+      'TEXT': ['SHOW'],  // Default to show-level
+      
+      // ===== UI ELEMENTS =====
+      // Icons, graphics use SHOW asset_group
+      'UI.ICON.HOLDER': ['SHOW'],
+      'UI.ICON': ['SHOW'],
+      'UI.ELEMENT': ['SHOW'],
+      'UI': ['SHOW'],
+      
+      // ===== BACKGROUNDS =====
+      // Backgrounds use EPISODE asset_group
+      'BG.MAIN': ['EPISODE'],
+      'BG': ['EPISODE'],
+      
+      // ===== BRAND =====
+      // Brand assets use SHOW asset_group
+      'BRAND.SHOW': ['SHOW'],
+      'BRAND': ['SHOW'],
+      
+      // ===== WARDROBE =====
+      'WARDROBE': ['WARDROBE']
+    };
+    
+    // Try exact match first
+    if (mappings[role]) {
+      return mappings[role];
+    }
+    
+    // Try prefix match
+    for (const [prefix, folders] of Object.entries(mappings)) {
+      if (role.startsWith(prefix)) {
+        return folders;
+      }
+    }
+    
+    // Fallback: show all asset_group values
+    console.warn('⚠️ Unknown role:', role, '- showing all asset groups');
+    return ['LALA', 'SHOW', 'EPISODE', 'GUEST', 'WARDROBE'];
+  };
+
+  const getAssetsForSlot = (slotRole) => {
+    console.log('🔍 Finding assets for slot:', slotRole);
+    
+    // Step 1: Try exact asset_role match first (most specific)
+    const exactMatches = assets.filter(asset => 
+      asset.asset_role === slotRole
+    );
+    
+    if (exactMatches.length > 0) {
+      console.log('✅ Found', exactMatches.length, 'exact role matches');
+      return exactMatches;
+    }
+    
+    // Step 2: Fall back to asset_group matching
+    console.log('⚠️ No exact matches, using asset_group fallback');
+    const assetGroups = getRoleFolderMapping(slotRole);
+    console.log('📁 Looking in asset_groups:', assetGroups);
+    
+    const groupMatches = assets.filter(asset => 
+      assetGroups.includes(asset.asset_group)  // Filter by asset_group ENUM
+    );
+    
+    if (groupMatches.length > 0) {
+      console.log('✅ Found', groupMatches.length, 'assets in groups:', assetGroups);
+      return groupMatches;
+    }
+    
+    // Step 3: Last resort - show all assets
+    console.warn('⚠️ No group matches either, showing all', assets.length, 'assets');
+    return assets;
+  };
+  
   // ===== ZOOM CONTROLS =====
   const handleZoomIn = () => setZoomLevel(prev => Math.min(prev + 0.25, 1.5));
   const handleZoomOut = () => setZoomLevel(prev => Math.max(prev - 0.25, 0.5));
@@ -1558,7 +1649,7 @@ const ThumbnailComposer = () => {
             ) : (
               <>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
-                  {assets.map(asset => {
+                  {getAssetsForSlot(selectedSlotId).map(asset => {
                     const thumbnailUrl = asset.metadata?.thumbnail_url || asset.s3_url_raw || asset.s3_url;
                     return (
                       <div key={asset.id} style={{ border: '2px solid #e5e7eb', borderRadius: '8px', padding: '0.5rem', cursor: 'pointer', transition: 'all 0.2s' }} onClick={() => handleAssetAssignment(asset.id)} onMouseEnter={e => e.currentTarget.style.borderColor = '#6366f1'} onMouseLeave={e => e.currentTarget.style.borderColor = '#e5e7eb'}>
