@@ -633,7 +633,7 @@ if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
       lastModified: true,
       setHeaders: (res, filePath) => {
         console.log('📦 Serving static file:', filePath);
-        
+
         // Set correct MIME types for JavaScript and CSS files
         if (filePath.endsWith('.js')) {
           res.set('Content-Type', 'application/javascript; charset=utf-8');
@@ -642,7 +642,7 @@ if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
         } else if (filePath.endsWith('.html')) {
           res.set('Content-Type', 'text/html; charset=utf-8');
         }
-        
+
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
       },
     })

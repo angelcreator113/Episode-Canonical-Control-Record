@@ -14,10 +14,12 @@ const { Asset } = models;
 // Configure S3 client
 const s3Client = new S3Client({
   region: process.env.AWS_REGION || 'us-east-1',
-  credentials: process.env.AWS_ACCESS_KEY_ID ? {
-    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
-  } : undefined,
+  credentials: process.env.AWS_ACCESS_KEY_ID
+    ? {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      }
+    : undefined,
 });
 
 const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'episode-metadata-storage-dev';
@@ -40,7 +42,7 @@ const THUMBNAIL_SIZES = {
  */
 async function processImage(assetId, imageBuffer, originalKey) {
   console.log(`🖼️ Processing image for asset ${assetId}`);
-  
+
   const results = {
     thumbnails: {},
     webp: {},
@@ -55,27 +57,27 @@ async function processImage(assetId, imageBuffer, originalKey) {
     // Generate thumbnails in multiple sizes
     for (const [size, config] of Object.entries(THUMBNAIL_SIZES)) {
       const { width, height, fit } = config;
-      
+
       // Generate JPEG thumbnail
       const jpegBuffer = await sharp(imageBuffer)
         .resize(width, height, { fit, withoutEnlargement: true })
         .jpeg({ quality: 85, progressive: true })
         .toBuffer();
-      
+
       const jpegKey = `thumbnails/${size}/${assetId}.jpg`;
       await uploadToS3(jpegKey, jpegBuffer, 'image/jpeg');
       results.thumbnails[size] = getS3Url(jpegKey);
-      
+
       // Generate WebP version (better compression)
       const webpBuffer = await sharp(imageBuffer)
         .resize(width, height, { fit, withoutEnlargement: true })
         .webp({ quality: 80, effort: 4 })
         .toBuffer();
-      
+
       const webpKey = `thumbnails/${size}/${assetId}.webp`;
       await uploadToS3(webpKey, webpBuffer, 'image/webp');
       results.webp[size] = getS3Url(webpKey);
-      
+
       console.log(`  ✅ Generated ${size} (${width}${height ? 'x' + height : 'w'}): JPEG + WebP`);
     }
 
@@ -84,11 +86,11 @@ async function processImage(assetId, imageBuffer, originalKey) {
       .resize(800, null, { fit: 'inside', withoutEnlargement: true })
       .jpeg({ quality: 85, progressive: true })
       .toBuffer();
-    
+
     const processedKey = `processed/${path.dirname(originalKey)}/${assetId}.jpg`;
     await uploadToS3(processedKey, processedBuffer, 'image/jpeg');
     results.processedUrl = getS3Url(processedKey);
-    
+
     console.log(`  ✅ Generated processed version: ${results.processedUrl}`);
 
     // Update asset in database
@@ -108,12 +110,11 @@ async function processImage(assetId, imageBuffer, originalKey) {
     );
 
     console.log(`✅ Image processing complete for ${assetId}`);
-    
+
     return results;
-    
   } catch (error) {
     console.error(`❌ Image processing failed for ${assetId}:`, error);
-    
+
     // Update asset with error status
     await Asset.update(
       {
@@ -127,7 +128,7 @@ async function processImage(assetId, imageBuffer, originalKey) {
       },
       { where: { id: assetId } }
     );
-    
+
     throw error;
   }
 }
@@ -143,7 +144,7 @@ async function uploadToS3(key, buffer, contentType) {
     ContentType: contentType,
     CacheControl: 'public, max-age=31536000', // 1 year cache
   });
-  
+
   await s3Client.send(command);
 }
 
@@ -171,7 +172,7 @@ async function processVideoThumbnail(assetId, videoBuffer) {
 async function queueImageProcessing(assetId) {
   // For now, process immediately
   // TODO: Implement proper job queue (Bull, pg-boss, etc.)
-  
+
   try {
     const asset = await Asset.findByPk(assetId);
     if (!asset) {
@@ -191,7 +192,7 @@ async function queueImageProcessing(assetId) {
     }
 
     console.log(`📋 Queued image processing for ${assetId}`);
-    
+
     // Mark as processing
     await Asset.update(
       {
@@ -216,7 +217,6 @@ async function queueImageProcessing(assetId) {
         console.error(`Error processing ${assetId}:`, error);
       }
     });
-    
   } catch (error) {
     console.error('Error queuing image processing:', error);
     throw error;

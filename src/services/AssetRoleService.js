@@ -12,7 +12,10 @@ class AssetRoleService {
   async getRolesForShow(showId) {
     const roles = await models.AssetRole.findAll({
       where: { show_id: showId },
-      order: [['sort_order', 'ASC'], ['role_label', 'ASC']],
+      order: [
+        ['sort_order', 'ASC'],
+        ['role_label', 'ASC'],
+      ],
     });
     return roles;
   }
@@ -34,16 +37,8 @@ class AssetRoleService {
    * Create custom role (adds to show's registry)
    */
   async createRole(showId, roleData) {
-    const {
-      role_key,
-      role_label,
-      category,
-      icon,
-      color,
-      is_required,
-      sort_order,
-      description,
-    } = roleData;
+    const { role_key, role_label, category, icon, color, is_required, sort_order, description } =
+      roleData;
 
     // Check for duplicate key
     const existing = await this.getRoleByKey(showId, role_key);
@@ -88,7 +83,7 @@ class AssetRoleService {
     };
 
     // Filter out undefined values
-    Object.keys(allowedUpdates).forEach(key => {
+    Object.keys(allowedUpdates).forEach((key) => {
       if (allowedUpdates[key] === undefined) {
         delete allowedUpdates[key];
       }
@@ -115,9 +110,7 @@ class AssetRoleService {
     });
 
     if (assetsUsingRole > 0) {
-      throw new Error(
-        `Cannot delete role ${roleKey}: ${assetsUsingRole} asset(s) are using it`
-      );
+      throw new Error(`Cannot delete role ${roleKey}: ${assetsUsingRole} asset(s) are using it`);
     }
 
     await role.destroy();
@@ -130,7 +123,7 @@ class AssetRoleService {
    */
   async getRoleUsageStats(showId) {
     const roles = await this.getRolesForshow(showId);
-    
+
     const stats = await Promise.all(
       roles.map(async (role) => {
         const assetCount = await models.Asset.count({
@@ -186,7 +179,9 @@ class AssetRoleService {
       }
     }
 
-    console.log(`✅ Bulk role assignment: ${results.succeeded} succeeded, ${results.failed} failed`);
+    console.log(
+      `✅ Bulk role assignment: ${results.succeeded} succeeded, ${results.failed} failed`
+    );
     return results;
   }
 
@@ -195,7 +190,7 @@ class AssetRoleService {
    */
   async getAssetsByRole(roleKey, options = {}) {
     const where = { role_key: roleKey };
-    
+
     // Filter by show if provided
     if (options.showId) {
       where.show_id = options.showId;
@@ -277,7 +272,7 @@ class AssetRoleService {
    * Initialize default roles for show (called on show creation)
    */
   async initializeDefaultRoles(showId) {
-    const roles = models.AssetRole.DEFAULT_ROLES.map(role => ({
+    const roles = models.AssetRole.DEFAULT_ROLES.map((role) => ({
       ...role,
       show_id: showId,
     }));
@@ -292,5 +287,3 @@ class AssetRoleService {
 }
 
 module.exports = new AssetRoleService();
-
-
