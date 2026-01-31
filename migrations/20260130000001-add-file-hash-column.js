@@ -18,12 +18,7 @@ exports.up = (pgm) => {
   // Add index for fast duplicate lookups  
   pgm.createIndex('assets', 'file_hash', {
     name: 'idx_assets_file_hash',
-    where: 'file_hash IS NOT NULL AND deleted_at IS NULL',
-  });
-  
-  // Add composite index for hash + deleted_at for even faster queries
-  pgm.createIndex('assets', ['file_hash', 'deleted_at'], {
-    name: 'idx_assets_file_hash_deleted',
+    where: 'file_hash IS NOT NULL',
   });
   
   console.log('✅ file_hash column and indexes added successfully');
@@ -32,14 +27,9 @@ exports.up = (pgm) => {
 exports.down = (pgm) => {
   console.log('📝 Removing file_hash column and indexes...');
   
-  // Remove indexes first
+  // Remove index
   pgm.dropIndex('assets', 'file_hash', {
     name: 'idx_assets_file_hash',
-    ifExists: true,
-  });
-  
-  pgm.dropIndex('assets', ['file_hash', 'deleted_at'], {
-    name: 'idx_assets_file_hash_deleted',
     ifExists: true,
   });
   
