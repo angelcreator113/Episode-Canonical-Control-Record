@@ -16,10 +16,17 @@ const getPool = () => {
       min: parseInt(process.env.DATABASE_POOL_MIN || 2),
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
+      // Force UTF-8 encoding for all connections
+      client_encoding: 'UTF8',
     });
 
     pool.on('error', (err) => {
       console.error('Unexpected error on idle client', err);
+    });
+    
+    // Set encoding on every new client connection
+    pool.on('connect', (client) => {
+      client.query('SET CLIENT_ENCODING TO UTF8;');
     });
   }
 

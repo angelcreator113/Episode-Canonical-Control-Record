@@ -239,7 +239,7 @@ export const generateOutfitCard = async (items, episodeTitle) => {
     itemDiv.style.borderRadius = '12px';
     
     const img = document.createElement('img');
-    img.src = item.s3_url_processed || item.s3_url;
+    img.src = item.metadata?.thumbnail_url || item.s3_url_processed || item.s3_url;
     img.style.width = '100%';
     img.style.borderRadius = '8px';
     itemDiv.appendChild(img);

@@ -159,6 +159,12 @@ app.use(helmet());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 
+// Set UTF-8 response headers for ALL routes
+app.use((req, res, next) => {
+  res.setHeader('Content-Type', 'application/json; charset=utf-8');
+  next();
+});
+
 // ============================================================================
 // AUTHENTICATION & AUTHORIZATION MIDDLEWARE
 // ============================================================================
@@ -324,6 +330,16 @@ try {
 } catch (e) {
   console.error('✗ Failed to load assets routes:', e.message);
   assetRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Asset roles routes
+let rolesRoutes;
+try {
+  rolesRoutes = require('./routes/roles');
+  console.log('✓ Asset roles routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load asset roles routes:', e.message);
+  rolesRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
 try {
@@ -499,6 +515,7 @@ app.use('/api/v1/jobs', jobsRoutes);
 // Phase 2.5 routes (composite thumbnails)
 app.use('/api/v1/assets', assetRoutes);
 app.use('/api/v1/assets', imageProcessingRoutes); // Image processing endpoints
+app.use('/api/v1/roles', rolesRoutes); // Asset roles registry
 app.use('/api/v1/compositions', compositionRoutes);
 app.use('/api/v1/templates', templateRoutes);
 

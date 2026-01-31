@@ -138,7 +138,32 @@ app.use(
 // Handle preflight requests for all routes
 app.options('*', cors());
 
-app.use(helmet());
+app.use(helmet({
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      baseUri: ["'self'"],
+      fontSrc: ["'self'", "https:", "data:"],
+      formAction: ["'self'"],
+      frameAncestors: ["'self'"],
+      imgSrc: [
+        "'self'", 
+        "data:", 
+        "blob:",
+        "https://*.s3.amazonaws.com",
+        "https://*.s3.us-east-1.amazonaws.com",
+        "https://episode-metadata-storage-dev.s3.amazonaws.com",
+        "https://episode-metadata-thumbnails-dev.s3.amazonaws.com",
+        "https://mock-s3.dev"
+      ],
+      objectSrc: ["'none'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      scriptSrcAttr: ["'none'"],
+      styleSrc: ["'self'", "https:", "'unsafe-inline'"],
+      upgradeInsecureRequests: [],
+    },
+  },
+}));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
 

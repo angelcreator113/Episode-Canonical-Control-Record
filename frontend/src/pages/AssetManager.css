@@ -1,4 +1,4 @@
-/* AssetManager.css - Enhanced (FULL UPDATED) */
+/* AssetManager.css - FULLY UPDATED */
 
 .asset-manager {
   min-height: 100vh;
@@ -126,7 +126,7 @@
   background: rgba(255, 255, 255, 0.28);
 }
 
-/* ==================== COMMAND BAR (UNIFIED) ==================== */
+/* ==================== COMMAND BAR ==================== */
 .commandbar {
   background: white;
   border-radius: 16px;
@@ -134,7 +134,7 @@
   margin-bottom: 2rem;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   position: relative;
-  z-index: 5; /* prevents labels dropdown clipping */
+  z-index: 5;
 }
 
 .commandbar-row {
@@ -570,7 +570,7 @@
   box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
 }
 
-/* Category Select in Upload Form */
+/* Category Select */
 .category-select {
   font-size: 16px;
   font-weight: 700;
@@ -580,7 +580,106 @@
   background: white;
 }
 
-/* Wardrobe Details Section */
+/* ✅ NEW: Role Preview Styles */
+.role-preview {
+  margin-top: 0.75rem;
+  padding: 1rem;
+  border-radius: 10px;
+  border: 2px solid;
+  animation: slideIn 0.2s ease;
+}
+
+.role-preview.valid {
+  background: linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%);
+  border-color: #10b981;
+}
+
+.role-preview.invalid {
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-color: #f59e0b;
+}
+
+.role-preview-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.role-icon {
+  font-size: 1.5rem;
+}
+
+.role-label {
+  flex: 1;
+  font-size: 1rem;
+  font-weight: 800;
+  color: #111827;
+}
+
+.role-badge {
+  padding: 0.25rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 800;
+  background: rgba(255, 255, 255, 0.6);
+}
+
+.role-preview.valid .role-badge {
+  color: #065f46;
+}
+
+.role-preview.invalid .role-badge {
+  color: #92400e;
+}
+
+.role-preview-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.role-detail {
+  display: flex;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.detail-label {
+  font-weight: 700;
+  color: #6b7280;
+  min-width: 80px;
+}
+
+.detail-value {
+  font-family: 'Monaco', 'Courier New', monospace;
+  color: #111827;
+  font-weight: 600;
+}
+
+/* Role Suggestion Buttons */
+.role-suggestion-btn {
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  background: white;
+  border: 2px solid #e5e7eb;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-family: 'Monaco', 'Courier New', monospace;
+  font-weight: 600;
+  color: #374151;
+}
+
+.role-suggestion-btn:hover {
+  border-color: #6366f1;
+  background: #eef2ff;
+  color: #4f46e5;
+}
+
+/* Wardrobe Details */
 .wardrobe-details {
   margin-top: 20px;
   padding: 20px;
@@ -614,6 +713,59 @@
   gap: 16px;
 }
 
+/* Episode Tracking Section */
+.episode-tracking-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 2px solid #e5e7eb;
+}
+
+.section-title {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.125rem;
+  font-weight: 800;
+  color: #1f2937;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.episode-tracking-info {
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background: #eef2ff;
+  border-radius: 10px;
+  border: 2px solid #c7d2fe;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: #4338ca;
+}
+
+.info-item:last-child {
+  margin-bottom: 0;
+}
+
+.info-icon {
+  font-size: 1.25rem;
+}
+
+.info-text {
+  font-weight: 600;
+}
+
+/* Advanced Features Section */
+.advanced-features-section {
+  margin-top: 2rem;
+  padding-top: 2rem;
+  border-top: 2px solid #e5e7eb;
+}
+
 /* Upload Button */
 .btn-upload {
   padding: 1rem 2rem;
@@ -644,6 +796,25 @@
   box-shadow: none;
 }
 
+/* Secondary Button (Back button) */
+.btn-secondary {
+  padding: 0.5rem 1rem;
+  background: white;
+  color: #374151;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-secondary:hover {
+  border-color: #6366f1;
+  color: #4f46e5;
+  background: #f9fafb;
+}
+
 /* Alerts */
 .alert {
   margin-top: 1rem;
@@ -670,7 +841,7 @@
 
 /* ==================== BULK ACTIONS ==================== */
 .bulk-actions-bar {
-  background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, #4338ca 100%);
   color: white;
   padding: 1rem 1.5rem;
   border-radius: 12px;
@@ -680,20 +851,29 @@
   align-items: center;
   gap: 1rem;
   flex-wrap: wrap;
-  box-shadow: 0 4px 16px rgba(99, 102, 241, 0.3);
+  box-shadow: 0 4px 20px rgba(79, 70, 229, 0.4);
+  border: 2px solid #3730a3;
 }
 
 .bulk-info {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
+  font-size: 1.1rem;
+  color: #1e1b4b;
+  background: white;
+  padding: 0.5rem 1rem;
+  border-radius: 8px;
+  border: 2px solid #e2e8f0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .bulk-info input[type="checkbox"] {
   width: 20px;
   height: 20px;
   cursor: pointer;
+  accent-color: white;
 }
 
 .bulk-buttons {
@@ -704,35 +884,59 @@
 
 .btn-bulk {
   padding: 0.625rem 1.25rem;
-  border: none;
-  border-radius: 10px;
-  font-weight: 800;
+  border: 2px solid white;
+  border-radius: 8px;
+  font-weight: 700;
   cursor: pointer;
   transition: all 0.2s;
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: white;
+  color: #4338ca;
+  font-size: 0.95rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
 }
 
 .btn-bulk:hover {
-  background: rgba(255, 255, 255, 0.3);
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
 }
 
 .btn-bulk.btn-danger {
-  background: #ef4444;
+  background: #dc2626;
+  border-color: #b91c1c;
+  color: white;
+  font-weight: 700;
 }
 
 .btn-bulk.btn-danger:hover {
-  background: #dc2626;
+  background: #b91c1c;
+  border-color: #991b1b;
+  transform: translateY(-1px);
 }
 
 .bulk-label-select {
   padding: 0.625rem 1rem;
-  border: none;
-  border-radius: 10px;
-  font-weight: 800;
+  border: 2px solid white;
+  border-radius: 8px;
+  font-weight: 700;
   cursor: pointer;
-  background: rgba(255, 255, 255, 0.2);
-  color: white;
+  background: white;
+  color: #4338ca;
+  font-size: 0.95rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.bulk-label-select:hover {
+  background: #f8fafc;
+  border-color: #e2e8f0;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+}
+
+.bulk-label-select option {
+  background: white;
+  color: #1e1b4b;
+  font-weight: 600;
 }
 
 /* ==================== ASSETS SECTION ==================== */
@@ -798,11 +1002,13 @@
 /* Assets Grid */
 .assets-grid {
   display: grid;
-  gap: 1.5rem;
+  gap: 1.25rem;
+  align-items: stretch;
 }
 
 .assets-grid.grid {
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  grid-auto-rows: 320px;
 }
 
 .assets-grid.list {
@@ -812,20 +1018,12 @@
 /* Category Badge on Assets */
 .asset-wrapper {
   position: relative;
+  height: 100%;
 }
 
+/* Status Badge - Hidden, shown in menu instead */
 .asset-category-badge {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 10;
-  background: rgba(255, 255, 255, 0.95);
-  backdrop-filter: blur(10px);
-  padding: 6px 10px;
-  border-radius: 20px;
-  font-size: 16px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  cursor: help;
+  display: none;
 }
 
 /* Loading & Empty States */
@@ -883,6 +1081,119 @@
   }
 }
 
+/* ==================== MODAL STYLES ==================== */
+.modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modal-container {
+  background: white;
+  border-radius: 16px;
+  max-width: 500px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+}
+
+.modal-header {
+  padding: 1.5rem;
+  border-bottom: 2px solid #e5e7eb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.modal-header h3 {
+  margin: 0;
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #1f2937;
+}
+
+.modal-close {
+  width: 32px;
+  height: 32px;
+  border: none;
+  background: #f3f4f6;
+  border-radius: 8px;
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.modal-close:hover {
+  background: #e5e7eb;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-footer {
+  padding: 1.5rem;
+  border-top: 2px solid #e5e7eb;
+  display: flex;
+  gap: 1rem;
+  justify-content: flex-end;
+}
+
+.form-group {
+  margin-bottom: 1.5rem;
+}
+
+.form-group label {
+  display: block;
+  font-size: 0.875rem;
+  font-weight: 800;
+  color: #374151;
+  margin-bottom: 0.5rem;
+}
+
+.form-control {
+  width: 100%;
+  padding: 0.75rem;
+  border: 2px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 1rem;
+}
+
+.form-control:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.15);
+}
+
+.btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-primary:hover {
+  background: #4f46e5;
+}
+
+.btn-primary:disabled {
+  background: #d1d5db;
+  cursor: not-allowed;
+}
+
 /* ==================== RESPONSIVE ==================== */
 @media (max-width: 900px) {
   .commandbar-row {
@@ -935,70 +1246,228 @@
     grid-template-columns: 1fr;
   }
 }
-/* Episode Tracking Section */
-.episode-tracking-section {
-  margin-top: 2rem;
-  padding-top: 2rem;
-  border-top: 2px solid #e5e7eb;
+/* AssetManager.css - BROWSE ONLY VERSION */
+/* Same as before, plus info banner styles */
+
+/* ... (all previous CSS stays the same) ... */
+
+/* ==================== INFO BANNER ==================== */
+.info-banner {
+  background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
+  border: 2px solid #3b82f6;
+  border-radius: 16px;
+  padding: 1.5rem;
+  margin-bottom: 2rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
 }
 
-.section-title {
-  margin: 0 0 1.5rem 0;
-  font-size: 1.125rem;
+.info-banner-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.info-banner-content {
+  flex: 1;
+  color: #1e3a8a;
+  font-size: 1rem;
+  line-height: 1.5;
+}
+
+.info-banner-content strong {
   font-weight: 800;
-  color: #1f2937;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  color: #1e40af;
 }
 
-.episode-tracking-info {
-  margin-top: 1.5rem;
-  padding: 1rem;
-  background: #eef2ff;
+.info-banner-btn {
+  padding: 0.75rem 1.5rem;
+  background: #3b82f6;
+  color: white;
+  border: none;
   border-radius: 10px;
-  border: 2px solid #c7d2fe;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.info-item {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 0.5rem;
-  font-size: 0.875rem;
-  color: #4338ca;
+.info-banner-btn:hover {
+  background: #2563eb;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
 }
 
-.info-item:last-child {
-  margin-bottom: 0;
+/* Alert Close Button */
+.alert {
+  position: relative;
+  padding-right: 3rem;
 }
 
-.info-icon {
+.alert-close {
+  position: absolute;
+  right: 1rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
   font-size: 1.25rem;
+  cursor: pointer;
+  color: inherit;
+  opacity: 0.7;
+  transition: opacity 0.2s;
 }
 
-.info-text {
+.alert-close:hover {
+  opacity: 1;
+}
+
+/* Empty State Button */
+.empty-state .btn-primary {
+  padding: 0.75rem 1.5rem;
+  background: #6366f1;
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.empty-state .btn-primary:hover {
+  background: #4f46e5;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* ==================== PAGINATION ==================== */
+.pagination-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 2rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.pagination-info {
+  font-size: 0.875rem;
+  color: #6b7280;
+  font-weight: 500;
+}
+
+.pagination-buttons {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.pagination-btn {
+  padding: 0.5rem 0.75rem;
+  background: white;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  color: #374151;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-weight: 500;
+  min-width: 36px;
+}
+
+.pagination-btn:hover:not(:disabled) {
+  background: #f9fafb;
+  border-color: #667eea;
+  color: #667eea;
+}
+
+.pagination-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.pagination-btn.active {
+  background: #667eea;
+  border-color: #667eea;
+  color: white;
   font-weight: 600;
 }
 
-/* Episode Badge on Asset Cards */
-.episode-badge {
-  display: inline-flex;
+.pagination-pages {
+  display: flex;
+  gap: 0.25rem;
   align-items: center;
-  gap: 0.375rem;
-  padding: 0.25rem 0.75rem;
-  background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-  color: white;
-  border-radius: 999px;
-  font-size: 0.75rem;
-  font-weight: 800;
-  margin-left: 0.5rem;
 }
 
-.badge-icon {
+.pagination-ellipsis {
+  padding: 0 0.5rem;
+  color: #9ca3af;
+}
+
+.pagination-per-page {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   font-size: 0.875rem;
+  color: #6b7280;
 }
 
-.badge-text {
-  font-weight: 800;
+.per-page-select {
+  padding: 0.5rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 6px;
+  background: white;
+  color: #374151;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/* Asset Card Usage List */
+.usage-list {
+  margin-top: 0.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.usage-item {
+  padding: 0.5rem;
+  background: #f9fafb;
+  border-radius: 6px;
+  margin-bottom: 0.5rem;
+  font-size: 0.875rem;
+  color: #374151;
+}
+
+/* ==================== RESPONSIVE ==================== */
+@media (max-width: 768px) {
+  .info-banner {
+    flex-direction: column;
+    text-align: center;
+  }
+
+  .info-banner-btn {
+    width: 100%;
+  }
+
+  .pagination-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pagination-buttons {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .pagination-per-page {
+    justify-content: center;
+  }
 }

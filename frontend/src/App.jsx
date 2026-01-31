@@ -15,7 +15,6 @@ import EpisodeDetail from './pages/EpisodeDetail';
 import CreateEpisode from './pages/CreateEpisode';
 import EditEpisode from './pages/EditEpisode';
 import SearchResults from './pages/SearchResults';
-import AssetGallery from './pages/AssetGallery';
 import AssetManager from './pages/AssetManager';
 // import CompositionManagement from './pages/CompositionManagement'; // Not needed for episode creation
 import ThumbnailComposer from './pages/ThumbnailComposer';
@@ -156,8 +155,7 @@ function AppContent() {
           <Route path="/episodes/:episodeId/edit" element={<EditEpisode />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
           <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
-          <Route path="/assets" element={<AssetGallery />} />
-          <Route path="/assets/manager" element={<AssetManager />} />
+          <Route path="/assets" element={<AssetManager />} />
 
           {/* Additional Pages */}
           <Route path="/search" element={<SearchResults />} />

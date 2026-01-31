@@ -6,9 +6,11 @@
 const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
 const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 const { v4: uuidv4 } = require('uuid');
+const crypto = require('crypto');
 const sharp = require('sharp');
 const { models } = require('../models');
 const { Asset, AssetLabel } = models;
+const { processImage, queueImageProcessing } = require('./ImageProcessingService');
 
 // Configure AWS SDK v3 with credential chain
 let s3Client = null;
@@ -125,6 +127,93 @@ const getAssetOrganizationDefaults = (assetType) => {
   );
 };
 
+/**
+ * Generate S3 folder path based on asset_role (modern) or asset_type (legacy fallback)
+ * Role-based paths are more semantic and future-proof
+ * 
+ * Examples:
+ * - CHAR.HOST.LALA → characters/host/raw
+ * - UI.ICON.CLOSET → ui/icons/raw
+ * - BG.MAIN → backgrounds/main/raw
+ * - BRAND.SHOW.TITLE_GRAPHIC → branding/show/raw
+ */
+const getRoleBasedS3Folder = (assetRole, assetType, isProcessed = false) => {
+  const suffix = isProcessed ? 'processed' : 'raw';
+
+  // If role is provided, use it for semantic paths
+  if (assetRole) {
+    const parts = assetRole.split('.');
+    const category = parts[0]?.toLowerCase(); // CHAR, UI, BG, BRAND, TEXT, WARDROBE
+    const subcategory = parts[1]?.toLowerCase(); // HOST, ICON, etc.
+
+    switch (category) {
+      case 'char':
+        // CHAR.HOST.LALA → characters/host/raw
+        // CHAR.GUEST.1 → characters/guest/raw
+        return `characters/${subcategory || 'other'}/${suffix}`;
+
+      case 'ui':
+        // UI.ICON.CLOSET → ui/icons/raw (pluralized)
+        // UI.BUTTON.EXIT → ui/buttons/raw (pluralized)
+        // UI.MOUSE.CURSOR → ui/mouse/raw (already plural-like)
+        const pluralMap = {
+          icon: 'icons',
+          button: 'buttons',
+          mouse: 'mouse',
+        };
+        const uiFolder = pluralMap[subcategory] || subcategory || 'other';
+        return `ui/${uiFolder}/${suffix}`;
+
+      case 'bg':
+        // BG.MAIN → backgrounds/main/raw
+        // BG.PATTERN → backgrounds/pattern/raw
+        return `backgrounds/${subcategory || 'main'}/${suffix}`;
+
+      case 'brand':
+        // BRAND.SHOW.TITLE_GRAPHIC → branding/show/raw
+        // BRAND.LOGO.PRIMARY → branding/logo/raw
+        return `branding/${subcategory || 'logo'}/${suffix}`;
+
+      case 'text':
+        // TEXT.SHOW.TITLE → text/show/raw
+        // TEXT.EPISODE.SUBTITLE → text/episode/raw
+        return `text/${subcategory || 'other'}/${suffix}`;
+
+      case 'wardrobe':
+        // WARDROBE.ITEM.1 → wardrobe/items/raw (pluralized)
+        // WARDROBE.OUTFIT.CASUAL → wardrobe/outfits/raw (pluralized)
+        const wardrobeFolder = subcategory === 'item' ? 'items' : 
+                               subcategory === 'outfit' ? 'outfits' : 
+                               subcategory || 'items';
+        return `wardrobe/${wardrobeFolder}/${suffix}`;
+
+      case 'guest':
+        // GUEST.REACTION.1 → characters/guest/raw (legacy role format)
+        return `characters/guest/${suffix}`;
+
+      default:
+        // Unknown role format, use generic path with category
+        return `assets/${category}/${suffix}`;
+    }
+  }
+
+  // Fallback to legacy assetType-based paths
+  const folderMap = {
+    PROMO_LALA: 'promotional/lala',
+    PROMO_JUSTAWOMANINHERPRIME: 'promotional/justawomaninherprime',
+    PROMO_GUEST: 'promotional/guests',
+    BRAND_LOGO: 'promotional/brands',
+    EPISODE_FRAME: 'thumbnails/auto',
+    BACKGROUND_IMAGE: 'backgrounds/images',
+    PROMO_VIDEO: 'promotional/videos',
+    EPISODE_VIDEO: 'episodes/videos',
+    BACKGROUND_VIDEO: 'backgrounds/videos',
+  };
+
+  const baseFolder = folderMap[assetType] || 'assets/other';
+  return `${baseFolder}/${suffix}`;
+};
+
 class AssetService {
   /**
    * Upload asset to S3 and create database record
@@ -137,6 +226,47 @@ class AssetService {
    */
   async uploadAsset(file, assetType, assetRole, metadata, uploadedBy) {
     try {
+      // Calculate file hash for duplicate detection
+      const fileHash = crypto.createHash('sha256').update(file.buffer).digest('hex');
+      console.log(`🔢 File hash: ${fileHash}`);
+
+      // Check for existing asset with same hash
+      const existingAsset = await Asset.findOne({
+        where: {
+          file_hash: fileHash,
+          deleted_at: null,
+        },
+      });
+
+      if (existingAsset) {
+        console.log(`⚠️ Duplicate file detected! Reusing existing asset ${existingAsset.id}`);
+        
+        // Update episode linkage if provided
+        if (metadata?.episodeId && existingAsset.episode_id !== metadata.episodeId) {
+          await existingAsset.update({
+            episode_id: metadata.episodeId,
+            metadata: {
+              ...existingAsset.metadata,
+              linked_episodes: [
+                ...(existingAsset.metadata?.linked_episodes || [existingAsset.episode_id]).filter(Boolean),
+                metadata.episodeId,
+              ],
+              last_reused: new Date().toISOString(),
+              reused_by: uploadedBy,
+            },
+          });
+        }
+
+        return {
+          ...existingAsset.toJSON(),
+          s3_url: existingAsset.s3_url_raw || existingAsset.url,
+          thumbnail: existingAsset.metadata?.thumbnail_url || existingAsset.s3_url_raw,
+          isDuplicate: true,
+          warning: `This file already exists in the system. The existing asset has been linked to this episode.`,
+          originalAssetId: existingAsset.id,
+        };
+      }
+
       // Validate asset type
       const validTypes = [
         'PROMO_LALA',
@@ -157,22 +287,17 @@ class AssetService {
       const assetId = uuidv4();
       const timestamp = Date.now();
 
-      // Determine S3 path based on asset type
-      const folderMap = {
-        PROMO_LALA: 'promotional/lala/raw',
-        PROMO_JUSTAWOMANINHERPRIME: 'promotional/justawomaninherprime/raw',
-        PROMO_GUEST: 'promotional/guests/raw',
-        BRAND_LOGO: 'promotional/brands',
-        EPISODE_FRAME: 'thumbnails/auto',
-        BACKGROUND_IMAGE: 'backgrounds/images',
-        PROMO_VIDEO: 'promotional/videos',
-        EPISODE_VIDEO: 'episodes/videos',
-        BACKGROUND_VIDEO: 'backgrounds/videos',
-      };
-
-      const folder = folderMap[assetType];
+      // ✅ NEW: Use role-based S3 folder path (falls back to type-based if no role)
+      const folder = getRoleBasedS3Folder(assetRole, assetType, false);
       const fileExtension = this._getFileExtension(file.mimetype);
       const s3Key = `${folder}/${timestamp}-${assetId}${fileExtension}`;
+
+      console.log('📂 S3 folder path:', {
+        assetRole: assetRole || '(none)',
+        assetType,
+        resolvedFolder: folder,
+        fullKey: s3Key,
+      });
 
       // Determine if this is a video file
       const isVideo = file.mimetype.startsWith('video/');
@@ -296,6 +421,9 @@ class AssetService {
         // Media type field
         media_type: mediaType,
 
+        // Duplicate detection
+        file_hash: fileHash,
+
         // Raw image fields - CRITICAL: both must be set!
         s3_key_raw: s3Key,
         s3_url_raw: s3Url,
@@ -327,6 +455,23 @@ class AssetService {
       });
 
       console.log(`✅ Asset created in database: ${assetId}`);
+
+      // Queue async image processing for thumbnails
+      if (!isVideo && file.buffer) {
+        try {
+          console.log(`📋 Queueing image processing for ${assetId}`);
+          // Process immediately with buffer (async, don't wait)
+          setImmediate(async () => {
+            try {
+              await processImage(assetId, file.buffer, s3Key);
+            } catch (procError) {
+              console.error(`Image processing failed for ${assetId}:`, procError);
+            }
+          });
+        } catch (queueError) {
+          console.warn(`⚠️ Failed to queue image processing: ${queueError.message}`);
+        }
+      }
 
       return {
         ...asset.toJSON(),
@@ -885,18 +1030,39 @@ class AssetService {
   //  * @param {String} assetId - Asset UUID
   //  * @returns {Array} List of usage records
   //  */
-  // async getAssetUsage(assetId) {
-  //   try {
-  //     const usages = await AssetUsage.findAll({
-  //       where: { asset_id: assetId },
-  //       order: [['created_at', 'DESC']],
-  //     });
-  //     return usages.map(u => u.toJSON());
-  //   } catch (error) {
-  //     console.error('Failed to get asset usage:', error);
-  //     throw error;
-  //   }
-  // }
+  /**
+   * Get asset usage information - which episodes use this asset
+   * @param {String} assetId - Asset UUID
+   * @returns {Array} List of episodes using this asset
+   */
+  async getAssetUsage(assetId) {
+    try {
+      const { EpisodeAsset, Episode } = require('../models');
+      
+      const usages = await EpisodeAsset.findAll({
+        where: { asset_id: assetId },
+        include: [
+          {
+            model: Episode,
+            as: 'episode',
+            attributes: ['id', 'episode_number', 'title'],
+          },
+        ],
+        order: [['created_at', 'DESC']],
+      });
+
+      return usages.map(u => ({
+        episode_id: u.episode_id,
+        episode_number: u.episode?.episode_number,
+        episode_title: u.episode?.title,
+        usage_type: u.usage_type,
+        created_at: u.created_at,
+      }));
+    } catch (error) {
+      console.error('Failed to get asset usage:', error);
+      throw error;
+    }
+  }
 
   // ==================== BULK OPERATIONS ====================
 
@@ -983,6 +1149,31 @@ class AssetService {
       return { succeeded, failed, total: assetIds.length };
     } catch (error) {
       console.error('Bulk label failed:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Bulk change asset type
+   * @param {Array} assetIds - Array of asset UUIDs
+   * @param {String} assetType - New asset type
+   * @returns {Object} Result summary
+   */
+  async bulkChangeAssetType(assetIds, assetType) {
+    try {
+      const results = await Promise.allSettled(
+        assetIds.map((assetId) => 
+          this.updateAsset(assetId, { asset_type: assetType })
+        )
+      );
+
+      const succeeded = results.filter((r) => r.status === 'fulfilled').length;
+      const failed = results.filter((r) => r.status === 'rejected').length;
+
+      console.log(`✅ Bulk type change: ${succeeded} succeeded, ${failed} failed`);
+      return { succeeded, failed, total: assetIds.length };
+    } catch (error) {
+      console.error('Bulk type change failed:', error);
       throw error;
     }
   }

@@ -54,21 +54,7 @@ export const assetService = {
     return api.delete(`/api/v1/assets/${assetId}`);
   },
 
-  // ==================== BACKGROUND REMOVAL ====================
-
-  /**
-   * Process background removal for asset
-   */
-  processBackground: async (assetId) => {
-    return api.post(`/api/v1/assets/${assetId}/process-background`);
-  },
-
-  /**
-   * Legacy endpoint (PUT)
-   */
-  processAsset: async (assetId) => {
-    return api.put(`/api/v1/assets/${assetId}/process`);
-  },
+  // REMOVED: Background removal (available in composer)
 
   // ==================== LABELS ====================
 
@@ -119,17 +105,17 @@ export const assetService = {
   },
 
   /**
-   * Bulk process background removal
-   */
-  bulkProcessBackground: async (assetIds) => {
-    return api.post('/api/v1/assets/bulk/process-background', { assetIds });
-  },
-
-  /**
    * Bulk add labels
    */
   bulkAddLabels: async (assetIds, labelIds) => {
     return api.post('/api/v1/assets/bulk/add-labels', { assetIds, labelIds });
+  },
+
+  /**
+   * Bulk change asset type
+   */
+  bulkChangeType: async (assetIds, newType) => {
+    return api.post('/api/v1/assets/bulk/change-type', { assetIds, assetType: newType });
   },
 
   // ==================== SEARCH ====================

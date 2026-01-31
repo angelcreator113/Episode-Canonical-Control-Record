@@ -52,6 +52,8 @@ const baseConfig = {
         : false,
     // Connection timeout
     connectTimeout: 60000,
+    // Force UTF-8 encoding for emoji support
+    client_encoding: 'UTF8',
   },
   define: {
     // Use snake_case for database columns

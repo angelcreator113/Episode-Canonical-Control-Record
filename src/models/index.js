@@ -32,9 +32,18 @@ const sequelize = new Sequelize(dbConfig.database, dbConfig.username, dbConfig.p
   dialect: dbConfig.dialect,
   logging: dbConfig.logging,
   pool: dbConfig.pool,
-  dialectOptions: dbConfig.dialectOptions,
+  dialectOptions: {
+    ...dbConfig.dialectOptions,
+    // Force UTF-8 encoding
+    client_encoding: 'UTF8',
+  },
   define: dbConfig.define,
   retry: dbConfig.retry,
+});
+
+// Set UTF-8 encoding on connection
+sequelize.afterConnect((connection, config) => {
+  return connection.query('SET CLIENT_ENCODING TO UTF8;');
 });
 
 /**

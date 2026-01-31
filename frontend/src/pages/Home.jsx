@@ -583,7 +583,7 @@ const Home = () => {
                               <div className="asset-preview-compact">
                                 {asset.s3_url_processed || asset.s3_url_raw ? (
                                   <img 
-                                    src={asset.s3_url_processed || asset.s3_url_raw} 
+                                    src={asset.metadata?.thumbnail_url || asset.s3_url_processed || asset.s3_url_raw} 
                                     alt={asset.name || 'Asset'} 
                                   />
                                 ) : (
