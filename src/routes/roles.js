@@ -9,7 +9,7 @@ const AssetRoleService = require('../services/AssetRoleService');
 router.get('/', async (req, res) => {
   try {
     const showId = req.query.show_id || req.user?.show_id;
-    
+
     if (!showId) {
       return res.status(400).json({
         error: 'show ID required',
@@ -39,7 +39,7 @@ router.get('/', async (req, res) => {
 router.get('/stats', async (req, res) => {
   try {
     const showId = req.query.show_id || req.user?.show_id;
-    
+
     if (!showId) {
       return res.status(400).json({
         error: 'show ID required',
@@ -69,9 +69,9 @@ router.get('/:roleKey', async (req, res) => {
   try {
     const { roleKey } = req.params;
     const showId = req.query.show_id || req.user?.show_id;
-    
+
     const role = await AssetRoleService.getRoleByKey(showId, roleKey);
-    
+
     if (!role) {
       return res.status(404).json({
         error: 'Role not found',
@@ -98,7 +98,7 @@ router.get('/:roleKey', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const showId = req.body.show_id || req.user?.show_id;
-    
+
     if (!showId) {
       return res.status(400).json({
         error: 'show ID required',
@@ -241,10 +241,7 @@ router.post('/validate-required', async (req, res) => {
     const { providedRoles } = req.body; // { HOST: assetId, ... }
     const showId = req.body.show_id || req.user?.show_id;
 
-    const validation = await AssetRoleService.validateRequiredRoles(
-      showId,
-      providedRoles
-    );
+    const validation = await AssetRoleService.validateRequiredRoles(showId, providedRoles);
 
     res.json({
       status: 'SUCCESS',
@@ -260,4 +257,3 @@ router.post('/validate-required', async (req, res) => {
 });
 
 module.exports = router;
-

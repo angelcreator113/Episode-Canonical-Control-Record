@@ -23,7 +23,7 @@ const getPool = () => {
     pool.on('error', (err) => {
       console.error('Unexpected error on idle client', err);
     });
-    
+
     // Set encoding on every new client connection
     pool.on('connect', (client) => {
       client.query('SET CLIENT_ENCODING TO UTF8;');
