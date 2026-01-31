@@ -130,7 +130,7 @@ const getAssetOrganizationDefaults = (assetType) => {
 /**
  * Generate S3 folder path based on asset_role (modern) or asset_type (legacy fallback)
  * Role-based paths are more semantic and future-proof
- * 
+ *
  * Examples:
  * - CHAR.HOST.LALA → characters/host/raw
  * - UI.ICON.CLOSET → ui/icons/raw
@@ -182,9 +182,12 @@ const getRoleBasedS3Folder = (assetRole, assetType, isProcessed = false) => {
       case 'wardrobe':
         // WARDROBE.ITEM.1 → wardrobe/items/raw (pluralized)
         // WARDROBE.OUTFIT.CASUAL → wardrobe/outfits/raw (pluralized)
-        const wardrobeFolder = subcategory === 'item' ? 'items' : 
-                               subcategory === 'outfit' ? 'outfits' : 
-                               subcategory || 'items';
+        const wardrobeFolder =
+          subcategory === 'item'
+            ? 'items'
+            : subcategory === 'outfit'
+              ? 'outfits'
+              : subcategory || 'items';
         return `wardrobe/${wardrobeFolder}/${suffix}`;
 
       case 'guest':
@@ -240,7 +243,7 @@ class AssetService {
 
       if (existingAsset) {
         console.log(`⚠️ Duplicate file detected! Reusing existing asset ${existingAsset.id}`);
-        
+
         // Update episode linkage if provided
         if (metadata?.episodeId && existingAsset.episode_id !== metadata.episodeId) {
           await existingAsset.update({
@@ -248,7 +251,9 @@ class AssetService {
             metadata: {
               ...existingAsset.metadata,
               linked_episodes: [
-                ...(existingAsset.metadata?.linked_episodes || [existingAsset.episode_id]).filter(Boolean),
+                ...(existingAsset.metadata?.linked_episodes || [existingAsset.episode_id]).filter(
+                  Boolean
+                ),
                 metadata.episodeId,
               ],
               last_reused: new Date().toISOString(),
@@ -1038,7 +1043,7 @@ class AssetService {
   async getAssetUsage(assetId) {
     try {
       const { EpisodeAsset, Episode } = require('../models');
-      
+
       const usages = await EpisodeAsset.findAll({
         where: { asset_id: assetId },
         include: [
@@ -1051,7 +1056,7 @@ class AssetService {
         order: [['created_at', 'DESC']],
       });
 
-      return usages.map(u => ({
+      return usages.map((u) => ({
         episode_id: u.episode_id,
         episode_number: u.episode?.episode_number,
         episode_title: u.episode?.title,
@@ -1162,9 +1167,7 @@ class AssetService {
   async bulkChangeAssetType(assetIds, assetType) {
     try {
       const results = await Promise.allSettled(
-        assetIds.map((assetId) => 
-          this.updateAsset(assetId, { asset_type: assetType })
-        )
+        assetIds.map((assetId) => this.updateAsset(assetId, { asset_type: assetType }))
       );
 
       const succeeded = results.filter((r) => r.status === 'fulfilled').length;
