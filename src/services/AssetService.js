@@ -10,7 +10,7 @@ const crypto = require('crypto');
 const sharp = require('sharp');
 const { models } = require('../models');
 const { Asset, AssetLabel } = models;
-const { processImage, queueImageProcessing } = require('./ImageProcessingService');
+const { processImage } = require('./ImageProcessingService');
 
 // Configure AWS SDK v3 with credential chain
 let s3Client = null;
@@ -152,7 +152,7 @@ const getRoleBasedS3Folder = (assetRole, assetType, isProcessed = false) => {
         // CHAR.GUEST.1 → characters/guest/raw
         return `characters/${subcategory || 'other'}/${suffix}`;
 
-      case 'ui':
+      case 'ui': {
         // UI.ICON.CLOSET → ui/icons/raw (pluralized)
         // UI.BUTTON.EXIT → ui/buttons/raw (pluralized)
         // UI.MOUSE.CURSOR → ui/mouse/raw (already plural-like)
@@ -163,6 +163,7 @@ const getRoleBasedS3Folder = (assetRole, assetType, isProcessed = false) => {
         };
         const uiFolder = pluralMap[subcategory] || subcategory || 'other';
         return `ui/${uiFolder}/${suffix}`;
+      }
 
       case 'bg':
         // BG.MAIN → backgrounds/main/raw
@@ -179,7 +180,7 @@ const getRoleBasedS3Folder = (assetRole, assetType, isProcessed = false) => {
         // TEXT.EPISODE.SUBTITLE → text/episode/raw
         return `text/${subcategory || 'other'}/${suffix}`;
 
-      case 'wardrobe':
+      case 'wardrobe': {
         // WARDROBE.ITEM.1 → wardrobe/items/raw (pluralized)
         // WARDROBE.OUTFIT.CASUAL → wardrobe/outfits/raw (pluralized)
         const wardrobeFolder =
@@ -189,6 +190,7 @@ const getRoleBasedS3Folder = (assetRole, assetType, isProcessed = false) => {
               ? 'outfits'
               : subcategory || 'items';
         return `wardrobe/${wardrobeFolder}/${suffix}`;
+      }
 
       case 'guest':
         // GUEST.REACTION.1 → characters/guest/raw (legacy role format)

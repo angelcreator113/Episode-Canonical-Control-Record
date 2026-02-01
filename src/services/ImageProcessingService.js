@@ -6,7 +6,6 @@
 
 const sharp = require('sharp');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
-const { v4: uuidv4 } = require('uuid');
 const path = require('path');
 const { models } = require('../models');
 const { Asset } = models;
@@ -158,7 +157,7 @@ function getS3Url(key) {
 /**
  * Process video thumbnail (extract frame)
  */
-async function processVideoThumbnail(assetId, videoBuffer) {
+async function processVideoThumbnail(assetId, _videoBuffer) {
   // For now, return a placeholder
   // TODO: Implement ffmpeg video frame extraction
   console.log(`⚠️ Video thumbnail generation not yet implemented for ${assetId}`);
