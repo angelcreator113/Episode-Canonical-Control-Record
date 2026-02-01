@@ -4,6 +4,8 @@
 
 This guide explains how to set up build tools on an EC2 Ubuntu instance and properly configure Sharp (a high-performance Node.js image processing library) to work correctly on the server.
 
+> **Note:** Replace `<EC2_IP_ADDRESS>` with your actual EC2 instance IP and `<PATH_TO_KEY>/<KEY_NAME>.pem` with your SSH key path. For example, if your actual credentials are `ssh -i ~/episode-prod-key.pem ubuntu@54.163.229.144`, use those values.
+
 ## Problem Statement
 
 Sharp is a native Node.js module that requires compilation. When deployed to EC2, it may fail with errors like:
@@ -30,7 +32,7 @@ The easiest way to set everything up is to use our all-in-one script:
 
 ```bash
 # SSH into your EC2 instance
-ssh -i ~/episode-prod-key.pem ubuntu@54.163.229.144
+ssh -i <PATH_TO_KEY>/<KEY_NAME>.pem ubuntu@<EC2_IP_ADDRESS>
 
 # Navigate to the project (or clone it if needed)
 cd ~/episode-metadata
@@ -55,7 +57,7 @@ If you prefer to run each step manually:
 
 ```bash
 # SSH into your EC2 instance
-ssh -i ~/episode-prod-key.pem ubuntu@54.163.229.144
+ssh -i <PATH_TO_KEY>/<KEY_NAME>.pem ubuntu@<EC2_IP_ADDRESS>
 
 # Install build-essential (requires sudo)
 sudo apt-get update

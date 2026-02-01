@@ -5,14 +5,14 @@
 ## TL;DR - One Command Setup
 
 ```bash
-ssh -i ~/episode-prod-key.pem ubuntu@54.163.229.144 "cd ~/episode-metadata && bash scripts/ec2-setup-complete.sh"
+ssh -i <PATH_TO_KEY>/<KEY_NAME>.pem ubuntu@<EC2_IP_ADDRESS> "cd ~/episode-metadata && bash scripts/ec2-setup-complete.sh"
 ```
 
 ## Individual Commands (Original Issue)
 
 ```bash
 # 1. SSH into EC2
-ssh -i ~/episode-prod-key.pem ubuntu@54.163.229.144
+ssh -i <PATH_TO_KEY>/<KEY_NAME>.pem ubuntu@<EC2_IP_ADDRESS>
 
 # 2. Install build tools
 sudo apt-get install -y build-essential
