@@ -171,6 +171,41 @@ echo "Checking index.html:"
 cat dist/index.html
 echo "Verifying index.html has script tags:"
 grep -o '<script[^>]*src="[^"]*"' dist/index.html || echo "⚠️ No script tags found in index.html!"
+
+# CRITICAL: Verify JS files referenced in index.html actually exist
+echo "🔍 CRITICAL: Verifying dist/assets files match index.html references..."
+if [ -f "dist/index.html" ]; then
+  HTML_JS_REFS=$(grep -o 'src="/assets/[^"]*\.js"' dist/index.html | sed 's|src="||' | sed 's|"||' | sed 's|/assets/||')
+  
+  echo "JS files referenced in index.html:"
+  echo "$HTML_JS_REFS"
+  echo ""
+  
+  if [ -n "$HTML_JS_REFS" ]; then
+    MISSING_FILES=0
+    for ref in $HTML_JS_REFS; do
+      if [ -f "dist/assets/$ref" ]; then
+        echo "  ✓ Found: dist/assets/$ref"
+      else
+        echo "  ❌ MISSING: dist/assets/$ref"
+        MISSING_FILES=$((MISSING_FILES + 1))
+      fi
+    done
+    
+    if [ $MISSING_FILES -gt 0 ]; then
+      echo "❌ CRITICAL: $MISSING_FILES JS file(s) referenced in index.html are missing from dist/assets!"
+      echo "Build is corrupted. Aborting deployment."
+      exit 1
+    fi
+    echo "✅ All JS references verified - files exist in dist/assets!"
+  else
+    echo "⚠️ No JS file references found in index.html (might be inline or build issue)"
+  fi
+else
+  echo "❌ index.html not found!"
+  exit 1
+fi
+
 cd ..
 
 echo "🗄️ Running migrations..."
