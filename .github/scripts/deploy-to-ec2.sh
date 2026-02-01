@@ -117,24 +117,29 @@ npm install
 echo "🎨 Building frontend..."
 cd frontend
 
-echo "🗑️ NUCLEAR OPTION: Completely removing all cached artifacts..."
-# Remove EVERYTHING that could cache build artifacts
+echo "🗑️ Aggressively clearing all Vite/build caches..."
+# Remove dist and ALL possible Vite cache locations
 rm -rf dist
-rm -rf node_modules
 rm -rf .vite
+rm -rf node_modules/.vite
+rm -rf node_modules/.cache
+rm -rf .cache
 rm -rf .env.local .env.production.local .env.development.local
-rm -rf ~/.npm/_cacache 2>/dev/null || true
 rm -rf ~/.cache/vite 2>/dev/null || true
 rm -rf ~/.pm2/logs/* ~/.pm2/.pm2 2>/dev/null || true
 
-echo "✓ All caches cleared"
+# Also clear any Vite temp files
+find . -name ".vite" -type d -exec rm -rf {} + 2>/dev/null || true
+find node_modules -name ".cache" -type d -exec rm -rf {} + 2>/dev/null || true
+
+echo "✓ All Vite caches cleared"
 echo "Verifying dist was deleted:"
 ls -la dist/ 2>&1 || echo "✓ dist not found (good)"
 
 echo "Using .env.production for build (VITE_API_BASE should be empty):"
 cat .env.production || echo "No .env.production found"
 
-echo "📦 Fresh install of frontend dependencies..."
+echo "📦 Installing/updating frontend dependencies..."
 npm ci 2>&1 | tee npm-install.log
 NPM_EXIT_CODE=${PIPESTATUS[0]}
 if [ $NPM_EXIT_CODE -ne 0 ]; then
@@ -143,7 +148,7 @@ if [ $NPM_EXIT_CODE -ne 0 ]; then
   npm install 2>&1 | tail -30
 fi
 
-echo "🔨 Running FRESH Vite build..."
+echo "🔨 Running FRESH Vite build with --force flag..."
 # Limit Node memory to prevent OOM on small EC2 instances
 NODE_OPTIONS="--max-old-space-size=1536" NODE_ENV=production npm run build -- --force 2>&1 | tee build.log
 BUILD_EXIT_CODE=${PIPESTATUS[0]}
