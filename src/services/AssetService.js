@@ -165,20 +165,23 @@ const getRoleBasedS3Folder = (assetRole, assetType, isProcessed = false) => {
         return `ui/${uiFolder}/${suffix}`;
       }
 
-      case 'bg':
+      case 'bg': {
         // BG.MAIN → backgrounds/main/raw
         // BG.PATTERN → backgrounds/pattern/raw
         return `backgrounds/${subcategory || 'main'}/${suffix}`;
+      }
 
-      case 'brand':
+      case 'brand': {
         // BRAND.SHOW.TITLE_GRAPHIC → branding/show/raw
         // BRAND.LOGO.PRIMARY → branding/logo/raw
         return `branding/${subcategory || 'logo'}/${suffix}`;
+      }
 
-      case 'text':
+      case 'text': {
         // TEXT.SHOW.TITLE → text/show/raw
         // TEXT.EPISODE.SUBTITLE → text/episode/raw
         return `text/${subcategory || 'other'}/${suffix}`;
+      }
 
       case 'wardrobe': {
         // WARDROBE.ITEM.1 → wardrobe/items/raw (pluralized)
