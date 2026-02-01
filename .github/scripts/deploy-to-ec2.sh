@@ -114,6 +114,16 @@ rm -rf ~/.pm2/dump.pm2
 echo "📦 Installing backend dependencies (fresh install)..."
 npm install
 
+echo "🔧 Rebuilding Sharp from source for this system..."
+# Ensure Sharp is built specifically for this EC2 instance architecture
+# This prevents "invalid ELF header" and other architecture mismatch errors
+npm rebuild sharp --build-from-source || {
+  echo "⚠️ Sharp rebuild failed, trying clean reinstall..."
+  npm uninstall sharp
+  npm install --build-from-source=sharp sharp
+}
+echo "✅ Sharp rebuilt successfully"
+
 echo "🎨 Building frontend..."
 cd frontend
 
