@@ -155,9 +155,11 @@ app.use(
 // Handle preflight requests for all routes
 app.options('*', cors());
 
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable CSP for development to avoid content type issues
-}));
+app.use(
+  helmet({
+    contentSecurityPolicy: false, // Disable CSP for development to avoid content type issues
+  })
+);
 // Important: express.json() should only parse request bodies, not affect response content-type
 app.use(express.json({ limit: '10mb', type: 'application/json' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
@@ -623,35 +625,38 @@ if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
   }
 
   // Explicitly serve /assets folder FIRST with correct MIME types
-  app.use('/assets', express.static(path.join(frontendDistPath, 'assets'), {
-    maxAge: 0,
-    etag: true,
-    lastModified: true,
-    fallthrough: false, // Don't continue if assets route is matched
-    setHeaders: (res, filePath) => {
-      console.log('📦 Serving asset file:', filePath);
+  app.use(
+    '/assets',
+    express.static(path.join(frontendDistPath, 'assets'), {
+      maxAge: 0,
+      etag: true,
+      lastModified: true,
+      fallthrough: false, // Don't continue if assets route is matched
+      setHeaders: (res, filePath) => {
+        console.log('📦 Serving asset file:', filePath);
 
-      // Set correct MIME types
-      if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
-        res.set('Content-Type', 'application/javascript; charset=utf-8');
-      } else if (filePath.endsWith('.css')) {
-        res.set('Content-Type', 'text/css; charset=utf-8');
-      } else if (filePath.endsWith('.json')) {
-        res.set('Content-Type', 'application/json; charset=utf-8');
-      } else if (filePath.endsWith('.svg')) {
-        res.set('Content-Type', 'image/svg+xml');
-      } else if (filePath.endsWith('.png')) {
-        res.set('Content-Type', 'image/png');
-      } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
-        res.set('Content-Type', 'image/jpeg');
-      } else if (filePath.endsWith('.woff') || filePath.endsWith('.woff2')) {
-        res.set('Content-Type', 'font/woff2');
-      }
+        // Set correct MIME types
+        if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
+          res.set('Content-Type', 'application/javascript; charset=utf-8');
+        } else if (filePath.endsWith('.css')) {
+          res.set('Content-Type', 'text/css; charset=utf-8');
+        } else if (filePath.endsWith('.json')) {
+          res.set('Content-Type', 'application/json; charset=utf-8');
+        } else if (filePath.endsWith('.svg')) {
+          res.set('Content-Type', 'image/svg+xml');
+        } else if (filePath.endsWith('.png')) {
+          res.set('Content-Type', 'image/png');
+        } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+          res.set('Content-Type', 'image/jpeg');
+        } else if (filePath.endsWith('.woff') || filePath.endsWith('.woff2')) {
+          res.set('Content-Type', 'font/woff2');
+        }
 
-      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
-      res.set('X-Content-Type-Options', 'nosniff');
-    },
-  }));
+        res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('X-Content-Type-Options', 'nosniff');
+      },
+    })
+  );
 
   // Serve other static files from root dist (like index.html)
   app.use(

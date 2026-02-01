@@ -192,26 +192,26 @@ Start-Sleep -Seconds 2
 try {
     $response = Invoke-WebRequest -Uri "http://dev.primepisodes.com/" -Method Get -UseBasicParsing -TimeoutSec 10
     $contentType = $response.Headers["Content-Type"][0]
-    $hasHtml = $response.Content -match '<!doctype html>'
+    $hasHtml = $response.Content -match "<!doctype html>"
     
     Write-Host "`n  Response Details:" -ForegroundColor Gray
     Write-Host "    Status Code: $($response.StatusCode)" -ForegroundColor Gray
     Write-Host "    Content-Type: $contentType" -ForegroundColor Gray
     Write-Host "    Has HTML: $hasHtml" -ForegroundColor Gray
     
-    if ($contentType -match 'text/html' -and $hasHtml) {
-        Write-Host "`n  ✓ FIXED! Site is now serving HTML correctly!" -ForegroundColor Green
+    if ($contentType -match "text/html" -and $hasHtml) {
+        Write-Host "`n  Successfully deployed! Site is now serving HTML correctly!" -ForegroundColor Green
     }
-    elseif ($contentType -match 'application/json') {
-        Write-Host "`n  ⚠ Still returning application/json - may need cache clear" -ForegroundColor Yellow
+    elseif ($contentType -match "application/json") {
+        Write-Host "`n  Still returning application/json - may need cache clear" -ForegroundColor Yellow
         Write-Host "    Try: Ctrl+Shift+R in browser or wait for CDN cache to expire" -ForegroundColor Yellow
     }
     else {
-        Write-Host "`n  ⚠ Unexpected Content-Type: $contentType" -ForegroundColor Yellow
+        Write-Host "`n  Unexpected Content-Type: $contentType" -ForegroundColor Yellow
     }
 }
 catch {
-    Write-Host "  ✗ Verification failed: $_" -ForegroundColor Red
+    Write-Host "  Verification failed: $_" -ForegroundColor Red
 }
 
 Write-Host "`n========================================" -ForegroundColor Cyan
