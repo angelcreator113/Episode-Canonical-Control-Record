@@ -155,15 +155,12 @@ app.use(
 // Handle preflight requests for all routes
 app.options('*', cors());
 
-app.use(helmet());
-app.use(express.json({ limit: '10mb' }));
+app.use(helmet({
+  contentSecurityPolicy: false, // Disable CSP for development to avoid content type issues
+}));
+// Important: express.json() should only parse request bodies, not affect response content-type
+app.use(express.json({ limit: '10mb', type: 'application/json' }));
 app.use(express.urlencoded({ limit: '10mb', extended: true }));
-
-// Set UTF-8 response headers for ALL routes
-app.use((req, res, next) => {
-  res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  next();
-});
 
 // ============================================================================
 // AUTHENTICATION & AUTHORIZATION MIDDLEWARE
@@ -605,7 +602,7 @@ app.get('/api/v1', (req, res) => {
 const path = require('path');
 const fs = require('fs');
 
-const frontendDistPath = path.join(__dirname, '../frontend/dist');
+const frontendDistPath = path.join(__dirname, '../dist');
 const indexHtmlPath = path.join(frontendDistPath, 'index.html');
 
 console.log('🔍 Frontend serving check:');
@@ -631,19 +628,24 @@ if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
       maxAge: 0, // No caching for dev
       etag: true,
       lastModified: true,
+      index: false, // Prevent directory listings
+      fallthrough: true, // Let other routes handle if file not found
       setHeaders: (res, filePath) => {
         console.log('📦 Serving static file:', filePath);
 
         // Set correct MIME types for JavaScript and CSS files
-        if (filePath.endsWith('.js')) {
+        if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
           res.set('Content-Type', 'application/javascript; charset=utf-8');
         } else if (filePath.endsWith('.css')) {
           res.set('Content-Type', 'text/css; charset=utf-8');
         } else if (filePath.endsWith('.html')) {
           res.set('Content-Type', 'text/html; charset=utf-8');
+        } else if (filePath.endsWith('.json')) {
+          res.set('Content-Type', 'application/json; charset=utf-8');
         }
 
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.set('X-Content-Type-Options', 'nosniff');
       },
     })
   );
@@ -651,7 +653,7 @@ if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
   // Handle React Router - serve index.html for all non-API/file routes (MUST be last)
   app.get('*', (req, res, next) => {
     try {
-      console.log(`📄 Serving route: ${req.path}`);
+      console.log(`📄 Catch-all route: ${req.path}`);
 
       // Skip API routes
       if (
@@ -660,26 +662,36 @@ if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
         req.path === '/ping' ||
         req.path === '/debug'
       ) {
+        console.log('  → Skipping (API route)');
+        return next();
+      }
+
+      // CRITICAL: Skip requests for static assets folder
+      if (req.path.startsWith('/assets/')) {
+        console.log('  → Skipping (assets folder)');
         return next();
       }
 
       // If file has extension and doesn't exist, 404 instead of serving index.html
       if (path.extname(req.path)) {
+        console.log('  → Skipping (has extension)');
         return next();
       }
 
+      // Serve index.html for SPA routes
       const indexPath = path.join(frontendDistPath, 'index.html');
-      console.log(`📄 Index path: ${indexPath}, exists: ${fs.existsSync(indexPath)}`);
+      console.log(`  → Serving index.html from: ${indexPath}`);
 
       if (fs.existsSync(indexPath)) {
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
         res.sendFile(indexPath);
       } else {
-        console.log('⚠️ index.html not found!');
+        console.log('  ⚠️ index.html not found!');
         next();
       }
     } catch (error) {
-      console.error('❌ Error serving static file:', error);
+      console.error('❌ Error in catch-all route:', error);
       next(error);
     }
   });
