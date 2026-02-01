@@ -148,9 +148,9 @@ if [ $NPM_EXIT_CODE -ne 0 ]; then
   npm install 2>&1 | tail -30
 fi
 
-echo "🔨 Running FRESH Vite build with --force flag..."
+echo "🔨 Running FRESH Vite build (caches already cleared)..."
 # Limit Node memory to prevent OOM on small EC2 instances
-NODE_OPTIONS="--max-old-space-size=1536" NODE_ENV=production npm run build -- --force 2>&1 | tee build.log
+NODE_OPTIONS="--max-old-space-size=1536" NODE_ENV=production npm run build 2>&1 | tee build.log
 BUILD_EXIT_CODE=${PIPESTATUS[0]}
 
 if [ $BUILD_EXIT_CODE -ne 0 ]; then
