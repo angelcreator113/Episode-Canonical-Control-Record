@@ -118,6 +118,7 @@ echo "🎨 Building frontend..."
 cd frontend
 echo "Removing old build artifacts and clearing all caches..."
 rm -rf dist node_modules .vite .env.local .env.production.local .env.development.local
+rm -rf node_modules/.vite node_modules/.cache
 rm -rf ~/.pm2/logs/* ~/.pm2/.pm2 2>/dev/null || true
 echo "Verifying dist was deleted:"
 ls -la dist/ 2>&1 || echo "dist not found (good)"
