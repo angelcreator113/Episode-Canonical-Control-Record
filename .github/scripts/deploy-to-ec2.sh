@@ -116,14 +116,30 @@ npm install
 
 echo "🎨 Building frontend..."
 cd frontend
-echo "Removing old build artifacts and clearing all caches..."
-rm -rf dist node_modules .vite .env.local .env.production.local .env.development.local
+
+echo "🗑️ Aggressively clearing all Vite/build caches..."
+# Remove dist and ALL possible Vite cache locations
+rm -rf dist
+rm -rf .vite
+rm -rf node_modules/.vite
+rm -rf node_modules/.cache
+rm -rf .cache
+rm -rf .env.local .env.production.local .env.development.local
+rm -rf ~/.cache/vite 2>/dev/null || true
 rm -rf ~/.pm2/logs/* ~/.pm2/.pm2 2>/dev/null || true
+
+# Also clear any Vite temp files
+find . -name ".vite" -type d -exec rm -rf {} + 2>/dev/null || true
+find node_modules -name ".cache" -type d -exec rm -rf {} + 2>/dev/null || true
+
+echo "✓ All Vite caches cleared"
 echo "Verifying dist was deleted:"
-ls -la dist/ 2>&1 || echo "dist not found (good)"
+ls -la dist/ 2>&1 || echo "✓ dist not found (good)"
+
 echo "Using .env.production for build (VITE_API_BASE should be empty):"
 cat .env.production || echo "No .env.production found"
-echo "Installing frontend dependencies..."
+
+echo "📦 Installing/updating frontend dependencies..."
 npm ci 2>&1 | tee npm-install.log
 NPM_EXIT_CODE=${PIPESTATUS[0]}
 if [ $NPM_EXIT_CODE -ne 0 ]; then
@@ -131,9 +147,9 @@ if [ $NPM_EXIT_CODE -ne 0 ]; then
   cat npm-install.log | tail -50
   npm install 2>&1 | tail -30
 fi
-echo "Running Vite build..."
+
+echo "🔨 Running FRESH Vite build (caches already cleared)..."
 # Limit Node memory to prevent OOM on small EC2 instances
-# Use 1.5GB max old space size and 512MB max for Vite
 NODE_OPTIONS="--max-old-space-size=1536" NODE_ENV=production npm run build 2>&1 | tee build.log
 BUILD_EXIT_CODE=${PIPESTATUS[0]}
 
@@ -206,7 +222,14 @@ else
   exit 1
 fi
 
+# 📦 Copy frontend build to root dist/ for Express to serve
+echo "📦 Copying frontend build to root dist directory..."
 cd ..
+rm -rf dist/
+cp -r frontend/dist dist/
+echo "✅ Frontend copied to: $(pwd)/dist/"
+
+cd .
 
 echo "🗄️ Running migrations..."
 source "$NVM_DIR/nvm.sh" 2>/dev/null || true

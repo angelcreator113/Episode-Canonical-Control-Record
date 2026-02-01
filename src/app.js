@@ -622,26 +622,50 @@ if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
     console.warn('⚠️ No assets directory found in dist');
   }
 
-  // Serve static assets with proper caching
+  // Explicitly serve /assets folder FIRST with correct MIME types
+  app.use('/assets', express.static(path.join(frontendDistPath, 'assets'), {
+    maxAge: 0,
+    etag: true,
+    lastModified: true,
+    fallthrough: false, // Don't continue if assets route is matched
+    setHeaders: (res, filePath) => {
+      console.log('📦 Serving asset file:', filePath);
+
+      // Set correct MIME types
+      if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
+        res.set('Content-Type', 'application/javascript; charset=utf-8');
+      } else if (filePath.endsWith('.css')) {
+        res.set('Content-Type', 'text/css; charset=utf-8');
+      } else if (filePath.endsWith('.json')) {
+        res.set('Content-Type', 'application/json; charset=utf-8');
+      } else if (filePath.endsWith('.svg')) {
+        res.set('Content-Type', 'image/svg+xml');
+      } else if (filePath.endsWith('.png')) {
+        res.set('Content-Type', 'image/png');
+      } else if (filePath.endsWith('.jpg') || filePath.endsWith('.jpeg')) {
+        res.set('Content-Type', 'image/jpeg');
+      } else if (filePath.endsWith('.woff') || filePath.endsWith('.woff2')) {
+        res.set('Content-Type', 'font/woff2');
+      }
+
+      res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.set('X-Content-Type-Options', 'nosniff');
+    },
+  }));
+
+  // Serve other static files from root dist (like index.html)
   app.use(
     express.static(frontendDistPath, {
-      maxAge: 0, // No caching for dev
+      maxAge: 0,
       etag: true,
       lastModified: true,
-      index: false, // Prevent directory listings
-      fallthrough: true, // Let other routes handle if file not found
+      index: false,
+      fallthrough: true,
       setHeaders: (res, filePath) => {
         console.log('📦 Serving static file:', filePath);
 
-        // Set correct MIME types for JavaScript and CSS files
-        if (filePath.endsWith('.js') || filePath.endsWith('.mjs')) {
-          res.set('Content-Type', 'application/javascript; charset=utf-8');
-        } else if (filePath.endsWith('.css')) {
-          res.set('Content-Type', 'text/css; charset=utf-8');
-        } else if (filePath.endsWith('.html')) {
+        if (filePath.endsWith('.html')) {
           res.set('Content-Type', 'text/html; charset=utf-8');
-        } else if (filePath.endsWith('.json')) {
-          res.set('Content-Type', 'application/json; charset=utf-8');
         }
 
         res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
