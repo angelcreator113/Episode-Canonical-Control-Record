@@ -113,7 +113,8 @@ rm -rf ~/.pm2/dump.pm2
 
 echo "📦 Installing backend dependencies (fresh install)..."
 npm install
-
+echo "🖼️ Ensuring Sharp is installed..."
+npm install sharp
 echo "🎨 Building frontend..."
 cd frontend
 
