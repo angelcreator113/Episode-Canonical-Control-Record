@@ -222,7 +222,14 @@ else
   exit 1
 fi
 
+# 📦 Copy frontend build to root dist/ for Express to serve
+echo "📦 Copying frontend build to root dist directory..."
 cd ..
+rm -rf dist/
+cp -r frontend/dist dist/
+echo "✅ Frontend copied to: $(pwd)/dist/"
+
+cd .
 
 echo "🗄️ Running migrations..."
 source "$NVM_DIR/nvm.sh" 2>/dev/null || true
