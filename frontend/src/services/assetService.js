@@ -54,7 +54,18 @@ export const assetService = {
     return api.delete(`/api/v1/assets/${assetId}`);
   },
 
-  // REMOVED: Background removal (available in composer)
+  /**
+   * Remove background from asset (for composer)
+   */
+  removeBackground: async (assetId) => {
+    const res = await fetch(`/api/v1/assets/${assetId}/remove-background`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" }
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data?.message || "Background removal failed");
+    return data;
+  },
 
   // ==================== LABELS ====================
 

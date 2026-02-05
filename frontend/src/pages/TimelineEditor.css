@@ -1,141 +1,23 @@
-.timeline-editor-page {
-  min-height: 100vh;
-  background: #1f2937;
-  color: white;
-  padding: 1rem;
+﻿/* =========================
+   Timeline Editor - Page Specific Styles
+   Base layout comes from editor-layout.css
+   ========================= */
+
+/* Timeline content area */
+.timeline-editor-content {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  min-height: 0;
 }
 
-.timeline-header {
+/* Loading state */
+.timeline-loading {
+  flex: 1;
   display: flex;
-  justify-content: space-between;
+  justify-content: center;
   align-items: center;
-  padding: 1rem;
-  background: #374151;
-  border-radius: 8px;
-  margin-bottom: 2rem;
-}
-
-.timeline-header h1 {
-  margin: 0;
-  font-size: 1.5rem;
-}
-
-.timeline-actions {
-  display: flex;
-  gap: 0.75rem;
-}
-
-.btn-back,
-.btn-secondary,
-.btn-primary {
-  padding: 0.625rem 1.25rem;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s;
-  border: none;
-}
-
-.btn-back {
-  background: #f3f4f6;
-  color: #111827;
-  border: 2px solid #d1d5db;
-}
-
-.btn-back:hover {
-  background: #e5e7eb;
-  border-color: #9ca3af;
-}
-
-.btn-secondary {
-  background: #6b7280;
-  color: white;
-}
-
-.btn-secondary:hover {
-  background: #9ca3af;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.btn-primary:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.timeline-placeholder {
-  background: #374151;
-  border-radius: 12px;
-  padding: 4rem 2rem;
-  text-align: center;
-  max-width: 600px;
-  margin: 0 auto;
-}
-
-.placeholder-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
-}
-
-.timeline-placeholder h2 {
-  margin: 0 0 1rem 0;
-  font-size: 2rem;
-}
-
-.timeline-placeholder p {
-  margin: 0 0 2rem 0;
-  color: #9ca3af;
-  font-size: 1.125rem;
-}
-
-.feature-list {
-  list-style: none;
-  padding: 0;
-  margin: 0 0 2rem 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  text-align: left;
-  max-width: 300px;
-  margin-left: auto;
-  margin-right: auto;
-}
-
-.feature-list li {
-  font-size: 1rem;
-  color: #d1d5db;
-}
-
-.btn-back-large {
-  padding: 0.875rem 2rem;
-  background: #3b82f6;
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 1rem;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.btn-back-large:hover {
-  background: #2563eb;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
-}
-
-@media (max-width: 768px) {
-  .timeline-header {
-    flex-direction: column;
-    gap: 1rem;
-    align-items: stretch;
-  }
-
-  .timeline-actions {
-    justify-content: center;
-  }
+  min-height: 400px;
+  color: var(--muted);
+  font-size: 14px;
 }

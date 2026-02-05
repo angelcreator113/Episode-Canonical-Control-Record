@@ -1,0 +1,161 @@
+/* Timeline Context Panel - Switches based on mode */
+
+.timeline-context-panel {
+  width: 0;
+  height: 100%;
+  background: #1f2937;
+  border-right: 1px solid #374151;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transition: width 0.3s ease;
+}
+
+.timeline-context-panel.visible {
+  width: 320px;
+}
+
+.context-panel-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Header */
+.context-panel-header {
+  position: relative;
+  padding: 1rem;
+  background: #111827;
+  border-bottom: 1px solid #374151;
+}
+
+.context-panel-header h3 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #e5e7eb;
+  padding-right: 2rem;
+}
+
+.context-subtitle {
+  margin: 0;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+/* Close button */
+.panel-close-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: 1.125rem;
+  color: #6b7280;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.panel-close-btn:hover {
+  background: #374151;
+  border-color: #4b5563;
+  color: #e5e7eb;
+}
+
+/* Placeholder for unimplemented modes */
+.context-placeholder {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #6b7280;
+}
+
+.placeholder-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  opacity: 0.5;
+}
+
+.context-placeholder p {
+  margin: 0 0 0.5rem 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.placeholder-hint {
+  font-size: 0.75rem;
+  color: #6b7280;
+}
+
+/* Embedded panels shouldn't have their own borders/headers */
+.context-panel-content .timeline-library-panel,
+.context-panel-content .timeline-inspector-panel {
+  border: none;
+  background: transparent;
+}
+
+.context-panel-content .timeline-library-panel .library-panel-header,
+.context-panel-content .timeline-inspector-panel .inspector-panel-header {
+  display: none;
+}
+
+/* Responsive: Tablet & Mobile */
+@media (max-width: 1024px) {
+  .timeline-context-panel {
+    position: fixed;
+    width: 100% !important;
+    border-right: none;
+    z-index: 200;
+  }
+}
+
+/* Tablet: Bottom drawer */
+@media (min-width: 768px) and (max-width: 1024px) {
+  .timeline-context-panel {
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 0;
+    max-height: 60vh;
+    border-top: 2px solid #374151;
+    transition: height 0.3s ease;
+  }
+  
+  .timeline-context-panel.visible {
+    height: 60vh;
+  }
+}
+
+/* Mobile: Full-screen modal */
+@media (max-width: 767px) {
+  .timeline-context-panel {
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 100vh;
+    width: 0 !important;
+    transition: width 0.3s ease;
+  }
+  
+  .timeline-context-panel.visible {
+    width: 100vw !important;
+  }
+}
+
+.context-panel-content .library-content,
+.context-panel-content .inspector-content {
+  padding: 0;
+}

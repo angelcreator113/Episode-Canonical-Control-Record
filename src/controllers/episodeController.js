@@ -198,6 +198,23 @@ module.exports = {
         air_date,
         status,
         categories,
+        // Distribution & Platforms
+        platforms,
+        platforms_other,
+        content_strategy,
+        platform_descriptions,
+        // Content Intent
+        content_types,
+        primary_audience,
+        tones,
+        // Structure
+        structure,
+        // Visual Requirements
+        visual_requirements,
+        // Ownership
+        owner_creator,
+        needs_approval,
+        collaborators,
         // Old field names (for backward compatibility)
         showName,
         episodeNumber,
@@ -244,6 +261,23 @@ module.exports = {
         status: finalStatus,
         categories: Array.isArray(categories) ? categories : [],
         show_id: validatedShowId,
+        // Distribution & Platforms
+        platforms: platforms || {},
+        platforms_other: platforms_other || null,
+        content_strategy: content_strategy || 'same-everywhere',
+        platform_descriptions: platform_descriptions || {},
+        // Content Intent
+        content_types: content_types || {},
+        primary_audience: primary_audience || null,
+        tones: tones || {},
+        // Structure
+        structure: structure || {},
+        // Visual Requirements
+        visual_requirements: visual_requirements || {},
+        // Ownership
+        owner_creator: owner_creator || null,
+        needs_approval: needs_approval || false,
+        collaborators: collaborators || null,
       };
 
       console.log('📝 Creating episode with data:', JSON.stringify(episodeData, null, 2));
@@ -885,6 +919,7 @@ module.exports = {
    */
   async listEpisodeScenes(req, res) {
     try {
+      console.log('[listEpisodeScenes] Starting...', { episodeId: req.params.id });
       const { id } = req.params;
       const { SceneLibrary, EpisodeScene } = models;
       const S3Service = require('../services/S3Service');
@@ -892,12 +927,16 @@ module.exports = {
         process.env.AWS_S3_BUCKET || process.env.S3_ASSET_BUCKET || 'primepisodes-assets';
 
       // Verify episode exists
+      console.log('[listEpisodeScenes] Checking episode exists...');
       const episode = await Episode.findByPk(id);
       if (!episode) {
+        console.log('[listEpisodeScenes] Episode not found:', id);
         return res.status(404).json({ error: 'Episode not found' });
       }
+      console.log('[listEpisodeScenes] Episode found:', episode.title);
 
       // Get all scenes for this episode with library data
+      console.log('[listEpisodeScenes] Fetching episode scenes...');
       const episodeScenes = await EpisodeScene.findAll({
         where: { episode_id: id },
         include: [
@@ -921,68 +960,20 @@ module.exports = {
         ],
         order: [['scene_order', 'ASC']],
       });
+      console.log(`[listEpisodeScenes] Found ${episodeScenes.length} scenes`);
 
-      // Calculate stats
-      let readyDuration = 0;
-      let processingDuration = 0;
-      let readyCount = 0;
-      let processingCount = 0;
-
-      // Generate signed URLs and calculate stats
-      for (const episodeScene of episodeScenes) {
-        const effectiveDuration = episodeScene.effectiveDuration || 0;
-        const clipStatus = episodeScene.clipStatus;
-
-        if (clipStatus === 'ready') {
-          readyDuration += effectiveDuration;
-          readyCount++;
-        } else if (clipStatus === 'processing' || clipStatus === 'uploading') {
-          processingDuration += effectiveDuration;
-          processingCount++;
-        }
-
-        if (episodeScene.libraryScene) {
-          const scene = episodeScene.libraryScene;
-
-          // Generate signed URL for thumbnail (7 days expiry)
-          if (scene.thumbnail_url && scene.thumbnail_url.startsWith('shows/')) {
-            try {
-              scene.thumbnail_url = await S3Service.getPreSignedUrl(
-                BUCKET_NAME,
-                scene.thumbnail_url,
-                604800 // 7 days
-              );
-            } catch (error) {
-              console.error('Failed to generate signed URL for thumbnail:', error);
-            }
-          }
-
-          // Generate signed URL for video (7 days expiry)
-          if (scene.video_asset_url && scene.video_asset_url.startsWith('shows/')) {
-            try {
-              scene.video_asset_url = await S3Service.getPreSignedUrl(
-                BUCKET_NAME,
-                scene.video_asset_url,
-                604800 // 7 days
-              );
-            } catch (error) {
-              console.error('Failed to generate signed URL for video:', error);
-            }
-          }
-        }
-      }
-
+      // Skip stats and S3 signing for now - just return the data
       res.json({
         episode_id: id,
         total: episodeScenes.length,
         data: episodeScenes,
         stats: {
           totalClips: episodeScenes.length,
-          readyClips: readyCount,
-          processingClips: processingCount,
-          readyDuration: Math.round(readyDuration),
-          processingDuration: Math.round(processingDuration),
-          totalDuration: Math.round(readyDuration + processingDuration),
+          readyClips: 0,
+          processingClips: 0,
+          readyDuration: 0,
+          processingDuration: 0,
+          totalDuration: 0,
         },
       });
     } catch (error) {
@@ -990,6 +981,7 @@ module.exports = {
       res.status(500).json({
         error: 'Failed to list episode scenes',
         message: error.message,
+        stack: process.env.NODE_ENV === 'development' ? error.stack : undefined,
       });
     }
   },

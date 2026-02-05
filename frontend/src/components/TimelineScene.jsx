@@ -9,9 +9,12 @@ const TimelineScene = ({
   startTime, 
   widthPercent,
   isEditing,
+  placements = [],
+  selectedPlacementId,
   onEdit,
   onSave,
-  onCancel
+  onCancel,
+  onPlacementClick
 }) => {
   const [durationInput, setDurationInput] = useState('');
 
@@ -54,13 +57,14 @@ const TimelineScene = ({
   const getSceneColor = () => {
     const colors = {
       intro: '#3b82f6',      // Blue
-      main: '#10b981',       // Green
+      standard: '#10b981',   // Green
+      main: '#10b981',       // Green (alias)
       transition: '#f59e0b', // Orange
       outro: '#8b5cf6',      // Purple
       montage: '#ec4899',    // Pink
       broll: '#6b7280'       // Gray
     };
-    return colors[scene.scene_type] || colors.main;
+    return colors[scene.type] || colors.standard;
   };
 
   const formatDuration = (seconds) => {
@@ -80,14 +84,16 @@ const TimelineScene = ({
       className="timeline-scene"
       style={{ 
         width: `${widthPercent}%`,
-        background: getSceneColor()
+        background: scene.libraryScene?.thumbnail_url 
+          ? `linear-gradient(rgba(0,0,0,0.4), rgba(0,0,0,0.4)), url(${scene.libraryScene.thumbnail_url}) center/cover`
+          : getSceneColor()
       }}
       onClick={!isEditing ? handleEditClick : undefined}
-      title={`${scene.title} - Click to edit duration`}
+      title={`${scene.title_override || 'Untitled'} - Click to edit duration`}
     >
       <div className="scene-content">
-        <span className="scene-number">#{scene.scene_number}</span>
-        <span className="scene-title">{scene.title}</span>
+        <span className="scene-number">#{scene.scene_order}</span>
+        <span className="scene-title">{scene.title_override || 'Untitled'}</span>
         
         {isEditing ? (
           <div className="scene-duration-edit" onClick={(e) => e.stopPropagation()}>
@@ -110,11 +116,49 @@ const TimelineScene = ({
         )}
       </div>
 
+      {/* Placement badges - render at bottom of scene */}
+      {placements.length > 0 && (
+        <div className="scene-placements" onClick={(e) => e.stopPropagation()}>
+          {placements.map(placement => {
+            const isWardrobe = placement.placement_type === 'wardrobe';
+            const icon = isWardrobe ? '👗' : '📎';
+            const label = isWardrobe 
+              ? placement.wardrobeItem?.name || 'Wardrobe'
+              : placement.asset?.name || 'Asset';
+            const isSelected = placement.id === selectedPlacementId;
+            
+            // Get thumbnail
+            const thumbnail = isWardrobe
+              ? (placement.wardrobeItem?.thumbnail_url || placement.wardrobeItem?.s3_url_processed || placement.wardrobeItem?.s3_url)
+              : (placement.asset?.s3_url_processed || placement.asset?.s3_url_raw);
+
+            return (
+              <div
+                key={placement.id}
+                className={`scene-placement-badge ${isSelected ? 'selected' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPlacementClick?.(placement);
+                }}
+                title={label}
+              >
+                {thumbnail ? (
+                  <img src={thumbnail} alt={label} className="scene-badge-thumbnail" />
+                ) : (
+                  icon
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <div className="scene-tooltip">
-        <strong>{scene.title}</strong><br />
-        Type: {scene.scene_type}<br />
+        <strong>{scene.title_override || 'Untitled'}</strong><br />
+        Type: {scene.type}<br />
         Start: {formatStartTime(startTime)}<br />
-        Duration: {formatDuration(scene.duration_seconds || 0)}
+        Duration: {formatDuration(scene.duration_seconds || 0)}<br />
+        {placements.length > 0 && <>Placements: {placements.length}</>}
       </div>
     </div>
   );

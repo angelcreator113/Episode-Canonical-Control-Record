@@ -21,7 +21,6 @@ import ThumbnailComposer from './pages/ThumbnailComposer';
 import ThumbnailGallery from './pages/ThumbnailGallery';
 import CompositionLibrary from './pages/CompositionLibrary';
 import CompositionDetail from './pages/CompositionDetail';
-import SceneComposer from './pages/Scenes/SceneComposer';
 import ScenesList from './pages/Scenes/ScenesList';
 import SceneLibrary from './pages/SceneLibrary';
 import SceneDetail from './pages/SceneDetail';
@@ -41,6 +40,11 @@ import WardrobeLibraryDetail from './pages/WardrobeLibraryDetail';
 import TemplateStudio from './pages/TemplateStudio';
 import TemplateDesigner from './pages/TemplateDesigner';
 import DiagnosticPage from './pages/DiagnosticPage';
+import SceneComposer from './components/SceneComposer/SceneComposer';
+import SceneComposerV1 from './components/SceneComposerV1/SceneComposer';
+import ClipSequenceManager from './components/Episodes/ClipSequenceManager';
+import ScenesPage from './pages/ScenesPage';
+import SceneComposePage from './pages/SceneComposePage';
 
 // Components
 import Navigation from './components/Navigation';
@@ -153,8 +157,17 @@ function AppContent() {
           <Route path="/episodes" element={<Episodes />} />
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<EditEpisode />} />
-          <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
-          <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
+          
+          {/* NEW ROUTE STRUCTURE - Each page has ONE job */}
+          <Route path="/episodes/:episodeId" element={<EpisodeDetail />} /> {/* Dashboard */}
+          <Route path="/episodes/:episodeId/scenes" element={<ScenesPage />} /> {/* Scene Management */}
+          <Route path="/episodes/:episodeId/scene/:sceneId/compose" element={<SceneComposePage />} /> {/* Canvas Editor */}
+          <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} /> {/* Timeline Editor */}
+          
+          {/* Scene Template Routes (Scene Composer v1 - standalone editor) */}
+          <Route path="/episodes/:episodeId/scene-templates/new" element={<SceneComposerV1 />} />
+          <Route path="/episodes/:episodeId/scene-templates/:templateId/edit" element={<SceneComposerV1 />} />
+          
           <Route path="/assets" element={<AssetManager />} />
 
           {/* Additional Pages */}
@@ -166,7 +179,6 @@ function AppContent() {
           <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
           <Route path="/scene-library" element={<SceneLibrary />} />
           <Route path="/scene-library/:sceneId" element={<SceneDetail />} />
-          <Route path="/episodes/:episodeId/scenes" element={<SceneComposer />} />
           <Route path="/episodes/:episodeId/scenes/list" element={<ScenesList />} />
           <Route path="/shows" element={<ShowManagement />} />
           <Route path="/shows/create" element={<ShowForm />} />

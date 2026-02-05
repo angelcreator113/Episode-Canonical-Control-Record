@@ -282,13 +282,6 @@ const ClipSequenceManager = ({ episodeId, episode }) => {
             >
               👁️ <span className="btn-label">Preview</span>
             </button>
-            <button
-              onClick={() => navigate(`/episodes/${episodeId}/timeline`)}
-              className="btn-icon-action"
-              title="Open Timeline Editor"
-            >
-              ✨ <span className="btn-label">Timeline</span>
-            </button>
             <button onClick={handleAddNote} className="btn-icon-action" title="Add Note">
               📝 <span className="btn-label">Note</span>
             </button>

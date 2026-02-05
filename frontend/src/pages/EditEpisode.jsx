@@ -37,6 +37,81 @@ const EditEpisode = () => {
     showId: '',
   });
 
+  // Distribution & Platforms
+  const [platforms, setPlatforms] = useState({
+    youtube: false,
+    youtubeShorts: false,
+    tiktok: false,
+    instagramReels: false,
+    instagramFeed: false,
+    instagramStories: false,
+    facebook: false,
+    twitter: false,
+    linkedin: false,
+    other: false,
+  });
+  const [platformsOther, setPlatformsOther] = useState('');
+  const [contentStrategy, setContentStrategy] = useState('same-everywhere');
+  const [platformDescriptions, setPlatformDescriptions] = useState({});
+
+  // Content Intent
+  const [contentTypes, setContentTypes] = useState({
+    trailer: false,
+    behindTheScenes: false,
+    announcement: false,
+    mainShow: false,
+    credits: false,
+  });
+  const [primaryAudience, setPrimaryAudience] = useState('');
+  const [tones, setTones] = useState({
+    playful: false,
+    educational: false,
+    inspirational: false,
+    dramatic: false,
+    calm: false,
+    highEnergy: false,
+    professional: false,
+  });
+
+  // Episode Structure
+  const [structure, setStructure] = useState({
+    hasIntro: false,
+    hasOutro: false,
+    hasCTA: false,
+    hasRecurringSegment: false,
+    hasSponsor: false,
+  });
+
+  // Visual Requirements
+  const [visualReqs, setVisualReqs] = useState({
+    brandSafeColors: false,
+    mustIncludeLogo: false,
+    avoidTextNearEdges: false,
+  });
+
+  // Ownership & Collaboration
+  const [ownerCreator, setOwnerCreator] = useState('');
+  const [needsApproval, setNeedsApproval] = useState(false);
+  const [collaborators, setCollaborators] = useState('');
+
+  // Sponsorship & Brand Deals
+  const [hasBrandDeal, setHasBrandDeal] = useState(false);
+  const [sponsorName, setSponsorName] = useState('');
+  const [dealValue, setDealValue] = useState('');
+  const [deliverables, setDeliverables] = useState('');
+  const [integrationRequirements, setIntegrationRequirements] = useState('');
+  const [dealDeadline, setDealDeadline] = useState('');
+  const [sponsorExpectations, setSponsorExpectations] = useState('');
+
+  // Social Media Collaborations
+  const [hasSocialCollab, setHasSocialCollab] = useState(false);
+  const [collabPartners, setCollabPartners] = useState('');
+  const [collabPlatforms, setCollabPlatforms] = useState('');
+  const [collabType, setCollabType] = useState('');
+  const [collabDeliverables, setCollabDeliverables] = useState('');
+  const [collabTimeline, setCollabTimeline] = useState('');
+  const [collabNotes, setCollabNotes] = useState('');
+
   const [shows, setShows] = useState([]);
   const [loadingShows, setLoadingShows] = useState(false);
   const [thumbnailFile, setThumbnailFile] = useState(null);
@@ -48,6 +123,9 @@ const EditEpisode = () => {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState('essentials');
 
   // Redirect if not authed
   useEffect(() => {
@@ -103,6 +181,71 @@ const EditEpisode = () => {
           showId: episode.show_id || '',
         });
 
+        // Load distribution & platforms
+        if (episode.platforms) {
+          setPlatforms(episode.platforms);
+        }
+        if (episode.content_strategy) {
+          setContentStrategy(episode.content_strategy);
+        }
+        if (episode.platform_descriptions) {
+          setPlatformDescriptions(episode.platform_descriptions);
+        }
+
+        // Load content intent
+        if (episode.content_types) {
+          setContentTypes(episode.content_types);
+        }
+        if (episode.primary_audience) {
+          setPrimaryAudience(episode.primary_audience);
+        }
+        if (episode.tones) {
+          setTones(episode.tones);
+        }
+
+        // Load structure
+        if (episode.structure) {
+          setStructure(episode.structure);
+        }
+
+        // Load visual requirements
+        if (episode.visual_requirements) {
+          setVisualReqs(episode.visual_requirements);
+        }
+
+        // Load team & ownership
+        if (episode.owner_creator) {
+          setOwnerCreator(episode.owner_creator);
+        }
+        if (episode.collaborators) {
+          setCollaborators(episode.collaborators);
+        }
+        if (typeof episode.needs_approval === 'boolean') {
+          setNeedsApproval(episode.needs_approval);
+        }
+
+        // Load sponsorship data
+        if (typeof episode.has_brand_deal === 'boolean') {
+          setHasBrandDeal(episode.has_brand_deal);
+        }
+        if (episode.sponsor_name) setSponsorName(episode.sponsor_name);
+        if (episode.deal_value) setDealValue(episode.deal_value);
+        if (episode.deliverables) setDeliverables(episode.deliverables);
+        if (episode.integration_requirements) setIntegrationRequirements(episode.integration_requirements);
+        if (episode.deal_deadline) setDealDeadline(episode.deal_deadline.split('T')[0]);
+        if (episode.sponsor_expectations) setSponsorExpectations(episode.sponsor_expectations);
+
+        // Load social collab data
+        if (typeof episode.has_social_collab === 'boolean') {
+          setHasSocialCollab(episode.has_social_collab);
+        }
+        if (episode.collab_partners) setCollabPartners(episode.collab_partners);
+        if (episode.collab_platforms) setCollabPlatforms(episode.collab_platforms);
+        if (episode.collab_type) setCollabType(episode.collab_type);
+        if (episode.collab_deliverables) setCollabDeliverables(episode.collab_deliverables);
+        if (episode.collab_timeline) setCollabTimeline(episode.collab_timeline);
+        if (episode.collab_notes) setCollabNotes(episode.collab_notes);
+
         // Set existing thumbnail
         if (episode.thumbnail_url) {
           setThumbnailPreview(episode.thumbnail_url);
@@ -127,15 +270,20 @@ const EditEpisode = () => {
         show: Boolean(formData.showId),
       },
       scheduling: {
-        status: Boolean(formData.status),
+        status: Boolean(formData.status && formData.status !== 'draft'),
         airDate: Boolean(formData.airDate),
+      },
+      distribution: {
+        platforms: Object.values(platforms).some(Boolean),
+        strategy: Boolean(contentStrategy && contentStrategy !== 'same-everywhere'),
       },
       discovery: {
         description: Boolean(formData.description?.trim()),
         tags: (formData.categories?.length || 0) > 0,
       },
-      creative: {
-        thumbnail: Boolean(thumbnailPreview || thumbnailId || thumbnailFile),
+      contentIntent: {
+        type: Object.values(contentTypes).some(Boolean),
+        tone: Object.values(tones).some(Boolean),
       },
     };
 
@@ -163,12 +311,46 @@ const EditEpisode = () => {
       totalComplete,
       totalFields,
     };
-  }, [formData, thumbnailPreview, thumbnailId, thumbnailFile]);
+  }, [formData, thumbnailPreview, thumbnailId, thumbnailFile, platforms, contentStrategy, contentTypes, tones]);
 
   const clearFieldError = (name) => {
     if (!errors[name]) return;
     setErrors((prev) => ({ ...prev, [name]: null }));
   };
+
+  // Platform checkbox handlers
+  const handlePlatformChange = (platform) => {
+    setPlatforms(prev => ({ ...prev, [platform]: !prev[platform] }));
+  };
+
+  const handleContentTypeChange = (type) => {
+    setContentTypes(prev => ({ ...prev, [type]: !prev[type] }));
+  };
+
+  const handleToneChange = (tone) => {
+    setTones(prev => ({ ...prev, [tone]: !prev[tone] }));
+  };
+
+  const handleStructureChange = (item) => {
+    setStructure(prev => ({ ...prev, [item]: !prev[item] }));
+  };
+
+  const handleVisualReqChange = (req) => {
+    setVisualReqs(prev => ({ ...prev, [req]: !prev[req] }));
+  };
+
+  const handlePlatformDescriptionChange = (platform, field, value) => {
+    setPlatformDescriptions(prev => ({
+      ...prev,
+      [platform]: {
+        ...(prev[platform] || {}),
+        [field]: value,
+      },
+    }));
+  };
+
+  const selectedPlatforms = Object.keys(platforms).filter(p => platforms[p]);
+  const showPlatformDescriptions = contentStrategy !== 'same-everywhere' && selectedPlatforms.length > 0;
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -253,6 +435,38 @@ const EditEpisode = () => {
         categories: formData.categories,
         thumbnail_id: thumbnailId || null,
         show_id: formData.showId || null,
+        // Distribution & Platforms
+        platforms,
+        content_strategy: contentStrategy,
+        platform_descriptions: platformDescriptions,
+        // Content Intent
+        content_types: contentTypes,
+        primary_audience: primaryAudience,
+        tones,
+        // Structure
+        structure,
+        // Visual Requirements
+        visual_requirements: visualReqs,
+        // Team & Ownership
+        owner_creator: ownerCreator,
+        collaborators,
+        needs_approval: needsApproval,
+        // Sponsorship
+        has_brand_deal: hasBrandDeal,
+        sponsor_name: sponsorName,
+        deal_value: dealValue,
+        deliverables,
+        integration_requirements: integrationRequirements,
+        deal_deadline: dealDeadline || null,
+        sponsor_expectations: sponsorExpectations,
+        // Social Collab
+        has_social_collab: hasSocialCollab,
+        collab_partners: collabPartners,
+        collab_platforms: collabPlatforms,
+        collab_type: collabType,
+        collab_deliverables: collabDeliverables,
+        collab_timeline: collabTimeline,
+        collab_notes: collabNotes,
       });
 
       await uploadThumbnailIfNeeded();
@@ -343,6 +557,68 @@ const EditEpisode = () => {
         </div>
       </div>
 
+      {/* TABS */}
+      <div className="ce-tabs">
+        <div className="ce-tabs__inner">
+          <button
+            type="button"
+            className={`ce-tab ${activeTab === 'essentials' ? 'active' : ''}`}
+            onClick={() => setActiveTab('essentials')}
+          >
+            ✨ Essentials
+          </button>
+          <button
+            type="button"
+            className={`ce-tab ${activeTab === 'publishing' ? 'active' : ''}`}
+            onClick={() => setActiveTab('publishing')}
+          >
+            📅 Publishing
+          </button>
+          <button
+            type="button"
+            className={`ce-tab ${activeTab === 'distribution' ? 'active' : ''}`}
+            onClick={() => setActiveTab('distribution')}
+          >
+            🌐 Distribution
+          </button>
+          <button
+            type="button"
+            className={`ce-tab ${activeTab === 'metadata' ? 'active' : ''}`}
+            onClick={() => setActiveTab('metadata')}
+          >
+            🔍 Metadata
+          </button>
+          <button
+            type="button"
+            className={`ce-tab ${activeTab === 'content' ? 'active' : ''}`}
+            onClick={() => setActiveTab('content')}
+          >
+            🎬 Content
+          </button>
+          <button
+            type="button"
+            className={`ce-tab ${activeTab === 'team' ? 'active' : ''}`}
+            onClick={() => setActiveTab('team')}
+          >
+            👥 Team
+          </button>
+          <button
+            type="button"
+            className={`ce-tab ${activeTab === 'sponsorship' ? 'active' : ''}`}
+            onClick={() => setActiveTab('sponsorship')}
+          >
+            🤝 Sponsorship
+          </button>
+          <button
+            type="button"
+            className={`ce-tab ${activeTab === 'social' ? 'active' : ''}`}
+            onClick={() => setActiveTab('social')}
+          >
+            📱 Social Collab
+          </button>
+        </div>
+      </div>
+
       {/* BODY */}
       <div className="ce-body ce-body--single">
         <div className="ce-card ce-alert">
@@ -356,18 +632,19 @@ const EditEpisode = () => {
 
         <form id="edit-episode-form" onSubmit={handleSubmit} className="ce-formWrapper">
           
-          {/* ===== SECTION: Essential Information ===== */}
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">✨</span>
-                <h2>Essential Information</h2>
-                {progress.sections.essential.isComplete && (
-                  <span className="ce-checkmark">✓</span>
-                )}
+          {/* ===== TAB: Essential Information ===== */}
+          {activeTab === 'essentials' && (
+            <div className="ce-card ce-section">
+              <div className="ce-sectionHeader">
+                <div className="ce-sectionTitle">
+                  <span className="ce-sectionIcon">✨</span>
+                  <h2>Essential Information</h2>
+                  {progress.sections.essential.isComplete && (
+                    <span className="ce-checkmark">✓</span>
+                  )}
+                </div>
+                <div className="ce-sectionDesc">Required to get started</div>
               </div>
-              <div className="ce-sectionDesc">Core episode details</div>
-            </div>
 
             <div className="ce-grid">
               {/* Title */}
@@ -416,8 +693,10 @@ const EditEpisode = () => {
               </div>
             </div>
           </div>
+          )}
 
-          {/* ===== SECTION: Scheduling & Publishing ===== */}
+          {/* ===== TAB: Scheduling & Publishing ===== */}
+          {activeTab === 'publishing' && (
           <div className="ce-card ce-section">
             <div className="ce-sectionHeader">
               <div className="ce-sectionTitle">
@@ -496,8 +775,10 @@ const EditEpisode = () => {
               <div className="ce-hint">When will this episode be released?</div>
             </div>
           </div>
+          )}
 
-          {/* ===== SECTION: Discovery & Metadata ===== */}
+          {/* ===== TAB: Discovery & Metadata ===== */}
+          {activeTab === 'metadata' && (
           <div className="ce-card ce-section">
             <div className="ce-sectionHeader">
               <div className="ce-sectionTitle">
@@ -541,91 +822,770 @@ const EditEpisode = () => {
               </div>
             </div>
           </div>
+          )}
 
-          {/* ===== SECTION: Creative Workflow (Thumbnail) ===== */}
-          <div className="ce-card ce-section ce-section--creative">
+          {/* ===== TAB: Distribution & Platforms ===== */}
+          {activeTab === 'distribution' && (
+          <div className="ce-card ce-section">
             <div className="ce-sectionHeader">
               <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">🎨</span>
-                <h2>Thumbnail</h2>
-                {progress.sections.creative.isComplete && (
+                <span className="ce-sectionIcon">🌐</span>
+                <h2>Distribution & Platforms</h2>
+                {progress.sections.distribution.isComplete && (
                   <span className="ce-checkmark">✓</span>
                 )}
               </div>
-              <div className="ce-sectionDesc">Create an eye-catching cover</div>
+              <div className="ce-sectionDesc">Where will this episode be published?</div>
             </div>
 
-            {thumbnailPreview ? (
-              <div className="ce-thumbnailPreviewCard">
-                <img src={thumbnailPreview} alt="Thumbnail preview" className="ce-thumbnailPreviewImage" />
-                <div className="ce-thumbnailActions">
-                  <button
-                    type="button"
-                    className="ce-btn ce-btn--secondary"
-                    onClick={() => navigate(`/composer/default?episodeId=${episodeId}`)}
+            {/* Platform Selection */}
+            <div className="ce-field">
+              <label>Target Platforms</label>
+              <div className="ce-checkboxGrid">
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.youtube}
+                    onChange={() => handlePlatformChange('youtube')}
                     disabled={submitting}
-                  >
-                    🎨 Edit in Composer
-                  </button>
-                  <button
-                    type="button"
-                    className="ce-btn ce-btn--ghost"
-                    onClick={handleRemoveThumbnail}
+                  />
+                  <span>YouTube (Long-form)</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.youtubeShorts}
+                    onChange={() => handlePlatformChange('youtubeShorts')}
                     disabled={submitting}
-                  >
-                    Remove
-                  </button>
-                </div>
+                  />
+                  <span>YouTube Shorts</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.tiktok}
+                    onChange={() => handlePlatformChange('tiktok')}
+                    disabled={submitting}
+                  />
+                  <span>TikTok</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.instagramReels}
+                    onChange={() => handlePlatformChange('instagramReels')}
+                    disabled={submitting}
+                  />
+                  <span>Instagram Reels</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.instagramFeed}
+                    onChange={() => handlePlatformChange('instagramFeed')}
+                    disabled={submitting}
+                  />
+                  <span>Instagram Feed</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.instagramStories}
+                    onChange={() => handlePlatformChange('instagramStories')}
+                    disabled={submitting}
+                  />
+                  <span>Instagram Stories</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.facebook}
+                    onChange={() => handlePlatformChange('facebook')}
+                    disabled={submitting}
+                  />
+                  <span>Facebook</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.twitter}
+                    onChange={() => handlePlatformChange('twitter')}
+                    disabled={submitting}
+                  />
+                  <span>X / Twitter</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.linkedin}
+                    onChange={() => handlePlatformChange('linkedin')}
+                    disabled={submitting}
+                  />
+                  <span>LinkedIn</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={platforms.other}
+                    onChange={() => handlePlatformChange('other')}
+                    disabled={submitting}
+                  />
+                  <span>Other</span>
+                </label>
               </div>
-            ) : (
-              <div className="ce-thumbnailEmpty">
-                <div className="ce-thumbnailEmptyIcon">🖼️</div>
-                <div className="ce-thumbnailEmptyText">No thumbnail yet</div>
-                <div className="ce-thumbnailEmptyHint">
-                  Create a professional thumbnail using our template-based composer
-                </div>
-                <div className="ce-thumbnailEmptyActions">
-                  <button
-                    type="button"
-                    className="ce-btn ce-btn--primary ce-btn--large"
-                    onClick={() => navigate(`/composer/default?episodeId=${episodeId}`)}
-                    disabled={submitting}
-                  >
-                    🎨 Create with Thumbnail Composer
-                  </button>
-                  <div className="ce-orDivider">
-                    <span>or</span>
-                  </div>
-                  <div className="ce-quickOptions">
-                    <button
-                      type="button"
-                      className="ce-btn ce-btn--ghost"
-                      onClick={() => setShowAssetPicker(true)}
-                      disabled={submitting}
-                    >
-                      📁 Choose from Gallery
-                    </button>
-                    <label className="ce-btn ce-btn--ghost" htmlFor="thumbnailFile">
-                      ⬆️ Upload Image
-                    </label>
+              {platforms.other && (
+                <input
+                  type="text"
+                  className="ce-input"
+                  value={platformsOther}
+                  onChange={(e) => setPlatformsOther(e.target.value)}
+                  placeholder="Specify other platforms..."
+                  disabled={submitting}
+                  style={{ marginTop: '0.5rem' }}
+                />
+              )}
+              <div className="ce-hint" style={{ marginTop: '0.75rem' }}>
+                💡 This determines aspect ratios, safe areas, templates, and export presets
+              </div>
+            </div>
+
+            {/* Content Strategy */}
+            {selectedPlatforms.length > 0 && (
+              <div className="ce-field">
+                <label>Content Strategy</label>
+                <div className="ce-radioGroup">
+                  <label className="ce-radio">
                     <input
-                      type="file"
-                      id="thumbnailFile"
-                      accept="image/*"
-                      onChange={handleThumbnailChange}
+                      type="radio"
+                      name="contentStrategy"
+                      value="same-everywhere"
+                      checked={contentStrategy === 'same-everywhere'}
+                      onChange={(e) => setContentStrategy(e.target.value)}
                       disabled={submitting}
-                      className="ce-thumbFileInput"
                     />
-                  </div>
+                    <span>Same visuals & copy everywhere</span>
+                  </label>
+                  <label className="ce-radio">
+                    <input
+                      type="radio"
+                      name="contentStrategy"
+                      value="same-visuals-diff-captions"
+                      checked={contentStrategy === 'same-visuals-diff-captions'}
+                      onChange={(e) => setContentStrategy(e.target.value)}
+                      disabled={submitting}
+                    />
+                    <span>Same visuals, different captions</span>
+                  </label>
+                  <label className="ce-radio">
+                    <input
+                      type="radio"
+                      name="contentStrategy"
+                      value="fully-customized"
+                      checked={contentStrategy === 'fully-customized'}
+                      onChange={(e) => setContentStrategy(e.target.value)}
+                      disabled={submitting}
+                    />
+                    <span>Different visuals and captions per platform</span>
+                  </label>
+                </div>
+                <div className="ce-hint">
+                  Choosing customized options enables platform-specific overrides in the composer
                 </div>
               </div>
             )}
 
-            {errors.thumbnail && <div className="ce-error">{errors.thumbnail}</div>}
-            <div className="ce-hint" style={{ marginTop: '1rem' }}>
-              Recommended: 1920x1080px (16:9) — Max {MAX_THUMB_MB}MB
+            {/* Platform-Specific Descriptions */}
+            {showPlatformDescriptions && (
+              <div className="ce-field">
+                <label>Platform-Specific Descriptions (Optional)</label>
+                <div className="ce-platformDescriptions">
+                  {selectedPlatforms.map((platformKey) => {
+                    const platformLabels = {
+                      youtube: 'YouTube',
+                      youtubeShorts: 'YouTube Shorts',
+                      tiktok: 'TikTok',
+                      instagramReels: 'Instagram Reels',
+                      instagramFeed: 'Instagram Feed',
+                      instagramStories: 'Instagram Stories',
+                      facebook: 'Facebook',
+                      twitter: 'X / Twitter',
+                      linkedin: 'LinkedIn',
+                      other: platformsOther || 'Other',
+                    };
+                    return (
+                      <div key={platformKey} className="ce-platformDesc">
+                        <h4 className="ce-platformDescTitle">{platformLabels[platformKey]}</h4>
+                        <textarea
+                          className="ce-input ce-textarea"
+                          placeholder="Description / caption"
+                          value={platformDescriptions[platformKey]?.description || ''}
+                          onChange={(e) => handlePlatformDescriptionChange(platformKey, 'description', e.target.value)}
+                          disabled={submitting}
+                          rows={2}
+                        />
+                        <input
+                          type="text"
+                          className="ce-input"
+                          placeholder="Hashtags (e.g., #fashion #style)"
+                          value={platformDescriptions[platformKey]?.hashtags || ''}
+                          onChange={(e) => handlePlatformDescriptionChange(platformKey, 'hashtags', e.target.value)}
+                          disabled={submitting}
+                          style={{ marginTop: '0.5rem' }}
+                        />
+                        <input
+                          type="text"
+                          className="ce-input"
+                          placeholder="Mentions / CTAs"
+                          value={platformDescriptions[platformKey]?.cta || ''}
+                          onChange={(e) => handlePlatformDescriptionChange(platformKey, 'cta', e.target.value)}
+                          disabled={submitting}
+                          style={{ marginTop: '0.5rem' }}
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+          )}
+
+          {/* ===== TAB: Content Intent & Format ===== */}
+          {activeTab === 'content' && (
+          <>
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">🎬</span>
+                <h2>Content Intent & Format</h2>
+                {progress.sections.contentIntent.isComplete && (
+                  <span className="ce-checkmark">✓</span>
+                )}
+              </div>
+              <div className="ce-sectionDesc">Help us understand the nature of this content</div>
+            </div>
+
+            {/* Content Type */}
+            <div className="ce-field">
+              <label>Content Type (Optional)</label>
+              <div className="ce-checkboxGrid">
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={contentTypes.trailer}
+                    onChange={() => handleContentTypeChange('trailer')}
+                    disabled={submitting}
+                  />
+                  <span>Trailer</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={contentTypes.behindTheScenes}
+                    onChange={() => handleContentTypeChange('behindTheScenes')}
+                    disabled={submitting}
+                  />
+                  <span>Behind the Scenes</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={contentTypes.announcement}
+                    onChange={() => handleContentTypeChange('announcement')}
+                    disabled={submitting}
+                  />
+                  <span>Announcement</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={contentTypes.mainShow}
+                    onChange={() => handleContentTypeChange('mainShow')}
+                    disabled={submitting}
+                  />
+                  <span>Main Show</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={contentTypes.credits}
+                    onChange={() => handleContentTypeChange('credits')}
+                    disabled={submitting}
+                  />
+                  <span>Credits</span>
+                </label>
+              </div>
+              <div className="ce-hint">Informs default pacing and scene templates</div>
+            </div>
+
+            {/* Tone */}
+            <div className="ce-field">
+              <label>Tone (Optional)</label>
+              <div className="ce-checkboxGrid">
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={tones.playful}
+                    onChange={() => handleToneChange('playful')}
+                    disabled={submitting}
+                  />
+                  <span>Playful</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={tones.educational}
+                    onChange={() => handleToneChange('educational')}
+                    disabled={submitting}
+                  />
+                  <span>Educational</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={tones.inspirational}
+                    onChange={() => handleToneChange('inspirational')}
+                    disabled={submitting}
+                  />
+                  <span>Inspirational</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={tones.dramatic}
+                    onChange={() => handleToneChange('dramatic')}
+                    disabled={submitting}
+                  />
+                  <span>Dramatic</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={tones.calm}
+                    onChange={() => handleToneChange('calm')}
+                    disabled={submitting}
+                  />
+                  <span>Calm</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={tones.highEnergy}
+                    onChange={() => handleToneChange('highEnergy')}
+                    disabled={submitting}
+                  />
+                  <span>High-energy</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={tones.professional}
+                    onChange={() => handleToneChange('professional')}
+                    disabled={submitting}
+                  />
+                  <span>Professional</span>
+                </label>
+              </div>
+              <div className="ce-hint">Can influence music, caption tone, and pacing</div>
+            </div>
+
+            {/* Audience */}
+            <div className="ce-field">
+              <label htmlFor="primaryAudience">Primary Audience (Optional)</label>
+              <input
+                id="primaryAudience"
+                type="text"
+                className="ce-input"
+                value={primaryAudience}
+                onChange={(e) => setPrimaryAudience(e.target.value)}
+                placeholder="e.g., Fashion enthusiasts, Young professionals"
+                disabled={submitting}
+              />
+              <div className="ce-hint">Who is this content for?</div>
             </div>
           </div>
+
+          {/* ===== Episode Structure (Optional) ===== */}
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">🏗️</span>
+                <h2>Episode Structure (Optional)</h2>
+              </div>
+              <div className="ce-sectionDesc">Helps pre-create scene slots and suggest templates</div>
+            </div>
+
+            <div className="ce-field">
+              <div className="ce-checkboxGrid">
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={structure.hasIntro}
+                    onChange={() => handleStructureChange('hasIntro')}
+                    disabled={submitting}
+                  />
+                  <span>Has intro</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={structure.hasOutro}
+                    onChange={() => handleStructureChange('hasOutro')}
+                    disabled={submitting}
+                  />
+                  <span>Has outro</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={structure.hasCTA}
+                    onChange={() => handleStructureChange('hasCTA')}
+                    disabled={submitting}
+                  />
+                  <span>Has CTA</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={structure.hasRecurringSegment}
+                    onChange={() => handleStructureChange('hasRecurringSegment')}
+                    disabled={submitting}
+                  />
+                  <span>Has recurring segment</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={structure.hasSponsor}
+                    onChange={() => handleStructureChange('hasSponsor')}
+                    disabled={submitting}
+                  />
+                  <span>Has sponsor / brand moment</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* ===== Visual Requirements & Constraints ===== */}
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">🎨</span>
+                <h2>Visual Requirements (Optional)</h2>
+              </div>
+              <div className="ce-sectionDesc">Constraints for the Scene Composer</div>
+            </div>
+
+            <div className="ce-field">
+              <div className="ce-checkboxGrid">
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={visualReqs.brandSafeColors}
+                    onChange={() => handleVisualReqChange('brandSafeColors')}
+                    disabled={submitting}
+                  />
+                  <span>Brand safe colors only</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={visualReqs.mustIncludeLogo}
+                    onChange={() => handleVisualReqChange('mustIncludeLogo')}
+                    disabled={submitting}
+                  />
+                  <span>Must include logo</span>
+                </label>
+                <label className="ce-checkbox">
+                  <input
+                    type="checkbox"
+                    checked={visualReqs.avoidTextNearEdges}
+                    onChange={() => handleVisualReqChange('avoidTextNearEdges')}
+                    disabled={submitting}
+                  />
+                  <span>Avoid text near edges (safe areas)</span>
+                </label>
+              </div>
+              <div className="ce-hint">These constraints will show warnings in the composer</div>
+            </div>
+          </div>
+          </>
+          )}
+
+          {/* ===== TAB: Team & Approvals (Optional) ===== */}
+          {activeTab === 'team' && (
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">👥</span>
+                <h2>Team & Approvals (Optional)</h2>
+              </div>
+              <div className="ce-sectionDesc">Ownership and collaboration</div>
+            </div>
+
+            <div className="ce-grid">
+              <div className="ce-field">
+                <label htmlFor="ownerCreator">Owner / Creator</label>
+                <input
+                  id="ownerCreator"
+                  type="text"
+                  className="ce-input"
+                  value={ownerCreator}
+                  onChange={(e) => setOwnerCreator(e.target.value)}
+                  placeholder="e.g., John Doe"
+                  disabled={submitting}
+                />
+              </div>
+
+              <div className="ce-field">
+                <label htmlFor="collaborators">Collaborators</label>
+                <input
+                  id="collaborators"
+                  type="text"
+                  className="ce-input"
+                  value={collaborators}
+                  onChange={(e) => setCollaborators(e.target.value)}
+                  placeholder="e.g., Jane Smith, Alice Johnson"
+                  disabled={submitting}
+                />
+              </div>
+            </div>
+
+            <div className="ce-field">
+              <label className="ce-checkbox">
+                <input
+                  type="checkbox"
+                  checked={needsApproval}
+                  onChange={(e) => setNeedsApproval(e.target.checked)}
+                  disabled={submitting}
+                />
+                <span>Needs approval before publish</span>
+              </label>
+            </div>
+          </div>
+          )}
+
+          {/* ===== TAB: Sponsorship & Brand Deals ===== */}
+          {activeTab === 'sponsorship' && (
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">🤝</span>
+                <h2>Sponsorship & Brand Deals</h2>
+              </div>
+              <div className="ce-sectionDesc">Track partnerships and brand integrations</div>
+            </div>
+
+            <div className="ce-field">
+              <label className="ce-checkbox">
+                <input
+                  type="checkbox"
+                  checked={hasBrandDeal}
+                  onChange={(e) => setHasBrandDeal(e.target.checked)}
+                  disabled={submitting}
+                />
+                <span>This episode has a brand deal or sponsorship</span>
+              </label>
+            </div>
+
+            {hasBrandDeal && (
+              <>
+                <div className="ce-grid ce-grid--2">
+                  <div className="ce-field">
+                    <label htmlFor="sponsorName">Sponsor / Brand Name *</label>
+                    <input
+                      id="sponsorName"
+                      type="text"
+                      className="ce-input"
+                      value={sponsorName}
+                      onChange={(e) => setSponsorName(e.target.value)}
+                      placeholder="e.g., Nike, Spotify"
+                      disabled={submitting}
+                    />
+                  </div>
+
+                  <div className="ce-field">
+                    <label htmlFor="dealValue">Deal Value / Compensation</label>
+                    <input
+                      id="dealValue"
+                      type="text"
+                      className="ce-input"
+                      value={dealValue}
+                      onChange={(e) => setDealValue(e.target.value)}
+                      placeholder="e.g., $5,000, Product exchange"
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="ce-field">
+                  <label htmlFor="deliverables">Deliverables *</label>
+                  <textarea
+                    id="deliverables"
+                    className="ce-input ce-textarea"
+                    value={deliverables}
+                    onChange={(e) => setDeliverables(e.target.value)}
+                    placeholder="What needs to be delivered? (e.g., 60-second product feature, 2 Instagram stories, brand logo in intro)"
+                    disabled={submitting}
+                    rows={3}
+                  />
+                  <div className="ce-hint">Specify what content you're contractually obligated to create</div>
+                </div>
+
+                <div className="ce-field">
+                  <label htmlFor="integrationRequirements">Integration Requirements</label>
+                  <textarea
+                    id="integrationRequirements"
+                    className="ce-input ce-textarea"
+                    value={integrationRequirements}
+                    onChange={(e) => setIntegrationRequirements(e.target.value)}
+                    placeholder="How should the brand be featured? (e.g., Seamless product integration in scene 2, verbal mention in intro, logo placement requirements)"
+                    disabled={submitting}
+                    rows={3}
+                  />
+                  <div className="ce-hint">Details about how to integrate the brand into the episode</div>
+                </div>
+
+                <div className="ce-grid ce-grid--2">
+                  <div className="ce-field">
+                    <label htmlFor="dealDeadline">Deadline / Due Date</label>
+                    <input
+                      id="dealDeadline"
+                      type="date"
+                      className="ce-input"
+                      value={dealDeadline}
+                      onChange={(e) => setDealDeadline(e.target.value)}
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="ce-field">
+                  <label htmlFor="sponsorExpectations">Special Expectations / Notes</label>
+                  <textarea
+                    id="sponsorExpectations"
+                    className="ce-input ce-textarea"
+                    value={sponsorExpectations}
+                    onChange={(e) => setSponsorExpectations(e.target.value)}
+                    placeholder="Any special requirements, approval processes, do's and don'ts, or other notes"
+                    disabled={submitting}
+                    rows={3}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          )}
+
+          {/* ===== TAB: Social Media Collaborations ===== */}
+          {activeTab === 'social' && (
+          <div className="ce-card ce-section">
+            <div className="ce-sectionHeader">
+              <div className="ce-sectionTitle">
+                <span className="ce-sectionIcon">📱</span>
+                <h2>Social Media Collaborations</h2>
+              </div>
+              <div className="ce-sectionDesc">Coordinate with influencers and partners</div>
+            </div>
+
+            <div className="ce-field">
+              <label className="ce-checkbox">
+                <input
+                  type="checkbox"
+                  checked={hasSocialCollab}
+                  onChange={(e) => setHasSocialCollab(e.target.checked)}
+                  disabled={submitting}
+                />
+                <span>This episode involves social media collaboration</span>
+              </label>
+            </div>
+
+            {hasSocialCollab && (
+              <>
+                <div className="ce-grid ce-grid--2">
+                  <div className="ce-field">
+                    <label htmlFor="collabPartners">Collaboration Partners *</label>
+                    <input
+                      id="collabPartners"
+                      type="text"
+                      className="ce-input"
+                      value={collabPartners}
+                      onChange={(e) => setCollabPartners(e.target.value)}
+                      placeholder="e.g., @fashioninfluencer, @brandname"
+                      disabled={submitting}
+                    />
+                    <div className="ce-hint">Names or handles of collaborators</div>
+                  </div>
+
+                  <div className="ce-field">
+                    <label htmlFor="collabPlatforms">Platforms</label>
+                    <input
+                      id="collabPlatforms"
+                      type="text"
+                      className="ce-input"
+                      value={collabPlatforms}
+                      onChange={(e) => setCollabPlatforms(e.target.value)}
+                      placeholder="e.g., Instagram, TikTok, YouTube"
+                      disabled={submitting}
+                    />
+                  </div>
+                </div>
+
+                <div className="ce-field">
+                  <label htmlFor="collabType">Collaboration Type</label>
+                  <input
+                    id="collabType"
+                    type="text"
+                    className="ce-input"
+                    value={collabType}
+                    onChange={(e) => setCollabType(e.target.value)}
+                    placeholder="e.g., Duet, Shoutout, Guest appearance, Cross-promotion"
+                    disabled={submitting}
+                  />
+                </div>
+
+                <div className="ce-field">
+                  <label htmlFor="collabDeliverables">Deliverables & Expectations</label>
+                  <textarea
+                    id="collabDeliverables"
+                    className="ce-input ce-textarea"
+                    value={collabDeliverables}
+                    onChange={(e) => setCollabDeliverables(e.target.value)}
+                    placeholder="What content will each party create? (e.g., Partner will share our video on their story, we'll tag them in 2 posts)"
+                    disabled={submitting}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="ce-field">
+                  <label htmlFor="collabTimeline">Timeline / Post Schedule</label>
+                  <textarea
+                    id="collabTimeline"
+                    className="ce-input ce-textarea"
+                    value={collabTimeline}
+                    onChange={(e) => setCollabTimeline(e.target.value)}
+                    placeholder="When will content be posted? (e.g., Day 1: Our video goes live, Day 2: Partner shares story, Day 3: Follow-up post)"
+                    disabled={submitting}
+                    rows={3}
+                  />
+                </div>
+
+                <div className="ce-field">
+                  <label htmlFor="collabNotes">Additional Notes</label>
+                  <textarea
+                    id="collabNotes"
+                    className="ce-input ce-textarea"
+                    value={collabNotes}
+                    onChange={(e) => setCollabNotes(e.target.value)}
+                    placeholder="Contact info, agreements, special arrangements, etc."
+                    disabled={submitting}
+                    rows={3}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+          )}
 
         </form>
 

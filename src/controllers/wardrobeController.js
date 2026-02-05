@@ -51,13 +51,15 @@ module.exports = {
         outfitNotes,
         isFavorite,
         tags,
+        showId, // NEW: Primary show ownership
       } = req.body;
 
-      // Validation
+      // Validation - character is REQUIRED
       if (!name || !character || !clothingCategory) {
         return res.status(400).json({
           error: 'Missing required fields',
           required: ['name', 'character', 'clothingCategory'],
+          message: 'Character is required for all wardrobe items',
         });
       }
 
@@ -92,8 +94,9 @@ module.exports = {
       // Create wardrobe item
       const wardrobeItem = await Wardrobe.create({
         name,
-        character,
+        character, // Required field
         clothing_category: clothingCategory,
+        show_id: showId || null, // Primary show ownership
         s3_key: s3Key,
         s3_url: s3Url,
         brand: brand || null,
@@ -337,6 +340,7 @@ module.exports = {
   async deleteWardrobeItem(req, res) {
     try {
       const { id } = req.params;
+      const { force } = req.query; // Allow force delete with ?force=true
 
       const wardrobeItem = await Wardrobe.findOne({
         where: { id, deleted_at: null },
@@ -348,6 +352,28 @@ module.exports = {
         });
       }
 
+      // SAFEGUARD: Check if item is used in any episodes
+      const usageCount = await EpisodeWardrobe.count({
+        where: { wardrobe_id: id },
+      });
+
+      if (usageCount > 0 && force !== 'true') {
+        return res.status(400).json({
+          error: 'Cannot delete item',
+          message: `This item is used in ${usageCount} episode${usageCount > 1 ? 's' : ''}. Remove it from all episodes first, or use ?force=true to delete anyway.`,
+          usageCount,
+          canForceDelete: true,
+        });
+      }
+
+      // If forcing delete, remove all episode links first
+      if (force === 'true' && usageCount > 0) {
+        await EpisodeWardrobe.destroy({
+          where: { wardrobe_id: id },
+        });
+        console.log(`⚠️ Force deleted ${usageCount} episode links for wardrobe item ${id}`);
+      }
+
       // Soft delete
       await wardrobeItem.update({
         deleted_at: new Date(),
@@ -356,6 +382,7 @@ module.exports = {
       res.json({
         success: true,
         message: 'Wardrobe item deleted successfully',
+        unlinkedEpisodes: force === 'true' ? usageCount : 0,
       });
     } catch (error) {
       console.error('❌ Error deleting wardrobe item:', error);
@@ -644,6 +671,173 @@ module.exports = {
       }
       res.status(500).json({
         error: 'Failed to remove background',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * GET /api/v1/wardrobe/staging - Get unassigned wardrobe items (staging area)
+   */
+  async getStagingItems(req, res) {
+    try {
+      const { showId } = req.query;
+
+      // Get all wardrobe items that have ZERO episode usages
+      const stagingQuery = `
+        SELECT w.*, 
+               COALESCE(usage.usage_count, 0) as usage_count
+        FROM wardrobe w
+        LEFT JOIN (
+          SELECT wardrobe_id, COUNT(*) as usage_count
+          FROM episode_wardrobe
+          GROUP BY wardrobe_id
+        ) usage ON usage.wardrobe_id = w.id
+        WHERE w.deleted_at IS NULL
+        ${showId ? 'AND w.show_id = :showId' : ''}
+        AND COALESCE(usage.usage_count, 0) = 0
+        ORDER BY w.created_at DESC
+      `;
+
+      const stagingItems = await sequelize.query(stagingQuery, {
+        replacements: { showId },
+        type: Sequelize.QueryTypes.SELECT,
+      });
+
+      res.json({
+        success: true,
+        data: stagingItems,
+        count: stagingItems.length,
+      });
+    } catch (error) {
+      console.error('❌ Error fetching staging items:', error);
+      res.status(500).json({
+        error: 'Failed to fetch staging items',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * PATCH /api/v1/episodes/:id/wardrobe/:wardrobeId/favorite - Toggle episode favorite
+   */
+  async toggleEpisodeFavorite(req, res) {
+    try {
+      const { id: episodeId, wardrobeId } = req.params;
+      const { isFavorite } = req.body;
+
+      const link = await EpisodeWardrobe.findOne({
+        where: { episode_id: episodeId, wardrobe_id: wardrobeId },
+      });
+
+      if (!link) {
+        return res.status(404).json({
+          error: 'Wardrobe item not linked to this episode',
+        });
+      }
+
+      await link.update({
+        is_episode_favorite: isFavorite !== undefined ? isFavorite : !link.is_episode_favorite,
+      });
+
+      res.json({
+        success: true,
+        data: link,
+        message: `Episode favorite ${link.is_episode_favorite ? 'added' : 'removed'}`,
+      });
+    } catch (error) {
+      console.error('❌ Error toggling episode favorite:', error);
+      res.status(500).json({
+        error: 'Failed to toggle episode favorite',
+        message: error.message,
+      });
+    }
+  },
+
+  /**
+   * GET /api/v1/wardrobe/:id/usage - Get item usage across shows/episodes
+   */
+  async getItemUsage(req, res) {
+    try {
+      const { id } = req.params;
+
+      const wardrobeItem = await Wardrobe.findOne({
+        where: { id, deleted_at: null },
+      });
+
+      if (!wardrobeItem) {
+        return res.status(404).json({
+          error: 'Wardrobe item not found',
+        });
+      }
+
+      // Get all episodes and shows where this item appears
+      const usageQuery = `
+        SELECT 
+          e.id as episode_id,
+          e.title as episode_title,
+          e.episode_number,
+          e.show_id,
+          s.name as show_title,
+          ew.scene,
+          ew.worn_at,
+          ew.notes,
+          ew.is_episode_favorite,
+          ew.created_at as linked_at
+        FROM episode_wardrobe ew
+        JOIN episodes e ON e.id = ew.episode_id
+        LEFT JOIN shows s ON s.id = e.show_id
+        WHERE ew.wardrobe_id = :itemId
+        AND e.deleted_at IS NULL
+        ORDER BY e.episode_number DESC
+      `;
+
+      const usage = await sequelize.query(usageQuery, {
+        replacements: { itemId: id },
+        type: Sequelize.QueryTypes.SELECT,
+      });
+
+      // Group by show
+      const byShow = usage.reduce((acc, item) => {
+        const showId = item.show_id || 'unknown';
+        if (!acc[showId]) {
+          acc[showId] = {
+            showId: item.show_id,
+            showName: item.show_title || 'Unknown Show',
+            episodes: [],
+          };
+        }
+        acc[showId].episodes.push({
+          episodeId: item.episode_id,
+          title: item.episode_title,
+          episodeNumber: item.episode_number,
+          scene: item.scene,
+          wornAt: item.worn_at,
+          notes: item.notes,
+          isFavorite: item.is_episode_favorite,
+          linkedAt: item.linked_at,
+        });
+        return acc;
+      }, {});
+
+      // Calculate summary stats
+      const uniqueShows = new Set(usage.map(u => u.show_id).filter(Boolean));
+      const episodeFavoriteCount = usage.filter(u => u.is_episode_favorite).length;
+
+      res.json({
+        success: true,
+        data: {
+          item: wardrobeItem,
+          totalEpisodes: usage.length,
+          totalShows: uniqueShows.size,
+          episodeFavoriteCount,
+          shows: Object.values(byShow),
+        },
+      });
+    } catch (error) {
+      console.error('❌ Error fetching item usage:', error);
+      res.status(500).json({
+        error: 'Failed to fetch item usage',
         message: error.message,
       });
     }

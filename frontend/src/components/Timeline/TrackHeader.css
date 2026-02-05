@@ -1,0 +1,95 @@
+/* Track Header - Professional NLE Style */
+.track-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid transparent;
+  min-height: 56px;
+  transition: all 0.2s ease;
+}
+
+.track-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.track-header-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: 1;
+}
+
+.track-icon {
+  font-size: 1.25rem;
+  opacity: 0.8;
+}
+
+.track-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #e5e7eb;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.track-header-controls {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.track-control-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #e5e7eb;
+  padding: 0.375rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.875rem;
+  transition: all 0.15s ease;
+  min-width: 28px;
+  min-height: 28px;
+}
+
+.track-control-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  transform: scale(1.05);
+}
+
+.track-control-btn.active {
+  background: linear-gradient(135deg, #ef4444, #dc2626);
+  border-color: #ef4444;
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+/* Track heights variants */
+.track-header.compact {
+  min-height: 40px;
+  padding: 0.375rem 0.75rem;
+}
+
+.track-header.compact .track-icon {
+  font-size: 1rem;
+}
+
+.track-header.compact .track-name {
+  font-size: 0.75rem;
+}
+
+.track-header.expanded {
+  min-height: 80px;
+  padding: 0.75rem;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.track-header.expanded .track-header-controls {
+  width: 100%;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}

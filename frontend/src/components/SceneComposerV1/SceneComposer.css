@@ -1,0 +1,8 @@
+/**
+ * Scene Composer v1 - Styles Import
+ * 
+ * Imports all necessary styles for the standalone Scene Composer editor.
+ */
+
+/* Main minimal CSS with vw-* classes */
+@import '../SceneComposer/SceneComposer.css';

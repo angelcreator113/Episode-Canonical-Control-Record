@@ -8,6 +8,7 @@ import EpisodeScripts from '../components/EpisodeScripts';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import VideoPlayer from '../components/VideoPlayer';
 import ClipSequenceManager from '../components/Episodes/ClipSequenceManager';
+import SceneComposer from '../components/SceneComposer/SceneComposer';
 import './EpisodeDetail.css';
 
 
@@ -22,6 +23,8 @@ const EpisodeDetail = () => {
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [episodeScenes, setEpisodeScenes] = useState([]);
   const [loadingScenes, setLoadingScenes] = useState(false);
+  const [episodeAssets, setEpisodeAssets] = useState([]);
+  const [episodeWardrobes, setEpisodeWardrobes] = useState([]);
   const [selectedSceneId, setSelectedSceneId] = useState(null);
   const [editingTrim, setEditingTrim] = useState({});
   const [savingScenes, setSavingScenes] = useState({});
@@ -58,7 +61,7 @@ const EpisodeDetail = () => {
   // Load episode scenes
   useEffect(() => {
     const fetchEpisodeScenes = async () => {
-      if (!episodeId || activeTab !== 'scenes') return;
+      if (!episodeId || (activeTab !== 'scenes' && activeTab !== 'composer')) return;
       
       try {
         setLoadingScenes(true);
@@ -73,6 +76,40 @@ const EpisodeDetail = () => {
     };
 
     fetchEpisodeScenes();
+  }, [episodeId, activeTab]);
+
+  // Load episode assets
+  useEffect(() => {
+    const fetchEpisodeAssets = async () => {
+      if (!episodeId || (activeTab !== 'assets' && activeTab !== 'composer')) return;
+      
+      try {
+        const response = await fetch(`/api/v1/episodes/${episodeId}/assets`);
+        const data = await response.json();
+        setEpisodeAssets(data.data || data.assets || []);
+      } catch (err) {
+        console.error('Failed to load episode assets:', err);
+      }
+    };
+
+    fetchEpisodeAssets();
+  }, [episodeId, activeTab]);
+
+  // Load episode wardrobe
+  useEffect(() => {
+    const fetchEpisodeWardrobe = async () => {
+      if (!episodeId || (activeTab !== 'wardrobe' && activeTab !== 'composer')) return;
+      
+      try {
+        const response = await fetch(`/api/v1/episodes/${episodeId}/wardrobe`);
+        const data = await response.json();
+        setEpisodeWardrobes(data.data || data.items || []);
+      } catch (err) {
+        console.error('Failed to load episode wardrobe:', err);
+      }
+    };
+
+    fetchEpisodeWardrobe();
   }, [episodeId, activeTab]);
 
   // Handle scene selection from library
@@ -250,7 +287,7 @@ const EpisodeDetail = () => {
       return {
         title: 'Create a thumbnail',
         description: 'Design a compelling thumbnail to represent this episode',
-        action: () => navigate(`/composer/${episode.id}`),
+        action: () => navigate(`/episodes/${episode.id}/timeline`),
         buttonText: 'Create Thumbnail'
       };
     }
@@ -285,7 +322,7 @@ const EpisodeDetail = () => {
     }
     
     if (!episode.thumbnailUrl && !episode.thumbnail_url && primaryAction?.title !== 'Create a thumbnail') {
-      steps.push({ title: 'Create Thumbnail', status: 'pending', action: () => navigate(`/composer/${episode.id}`) });
+      steps.push({ title: 'Create Thumbnail', status: 'pending', action: () => navigate(`/episodes/${episode.id}/timeline`) });
     } else if (episode.thumbnailUrl || episode.thumbnail_url) {
       steps.push({ title: 'Create Thumbnail', status: 'complete' });
     }
@@ -372,7 +409,7 @@ const EpisodeDetail = () => {
               <div className="ed-dropdown">
                 <button
                   onClick={() => {
-                    navigate(`/composer/${episode.id}`);
+                    navigate(`/episodes/${episode.id}/timeline`);
                     setShowMoreActions(false);
                   }}
                   className="ed-dropdown-item"
@@ -419,6 +456,14 @@ const EpisodeDetail = () => {
           >
             <span className="ed-tab-icon">🎬</span>
             <span className="ed-tab-label">Scenes</span>
+          </button>
+          <button
+            className={`ed-tab ${activeTab === 'composer' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('composer')}
+            title="Scene Composer"
+          >
+            <span className="ed-tab-icon">🎬</span>
+            <span className="ed-tab-label">Composer</span>
           </button>
           <button
             className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
@@ -541,6 +586,19 @@ const EpisodeDetail = () => {
         {/* Scenes Tab */}
         {activeTab === 'scenes' && (
           <ClipSequenceManager episodeId={episodeId} episode={episode} />
+        )}
+
+        {/* Composer Tab - Render SceneComposer */}
+        {activeTab === 'composer' && (
+          <div className="ed-fullbleed">
+            <SceneComposer
+              episodeId={episodeId}
+              episode={episode}
+              episodeScenes={episodeScenes}
+              episodeAssets={episodeAssets}
+              episodeWardrobes={episodeWardrobes}
+            />
+          </div>
         )}
 
         {/* Wardrobe Tab */}

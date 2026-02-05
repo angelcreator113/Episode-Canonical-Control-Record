@@ -1,0 +1,230 @@
+/**
+ * Asset Drawer - On-Demand Collapsible Panel
+ * 
+ * 🗂️ Left panel for browsing scenes, assets, wardrobe
+ * Collapsible to give canvas more space
+ */
+
+/* ========================================
+   DRAWER CONTAINER
+   ======================================== */
+
+.sc-source-panel,
+.sc-asset-drawer {
+  width: 280px;
+  background: white;
+  border-right: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+  transition: width 0.3s ease;
+}
+
+.sc-source-panel-collapsed {
+  width: 48px;
+}
+
+/* ========================================
+   DRAWER HEADER
+   ======================================== */
+
+.sc-source-header {
+  padding: 1rem;
+  border-bottom: 1px solid #e5e7eb;
+  background: #f9fafb;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sc-source-title {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #111827;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 0;
+}
+
+.sc-collapse-btn {
+  padding: 0.25rem;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  color: #6b7280;
+  font-size: 1.25rem;
+  transition: color 0.15s ease;
+}
+
+.sc-collapse-btn:hover {
+  color: #111827;
+}
+
+/* ========================================
+   TABS
+   ======================================== */
+
+.sc-source-tabs {
+  display: flex;
+  border-bottom: 1px solid #e5e7eb;
+  background: white;
+}
+
+.sc-source-tab {
+  flex: 1;
+  padding: 0.75rem 0.5rem;
+  border: none;
+  background: transparent;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #6b7280;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.sc-source-tab:hover {
+  color: #374151;
+  background: #f9fafb;
+}
+
+.sc-source-tab-active {
+  color: #3b82f6;
+  border-bottom-color: #3b82f6;
+  background: white;
+}
+
+/* ========================================
+   SOURCE LIST
+   ======================================== */
+
+.sc-source-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.sc-source-list {
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+/* ========================================
+   SOURCE ITEMS (Draggable)
+   ======================================== */
+
+.sc-source-item {
+  padding: 0.75rem;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: white;
+  cursor: grab;
+  transition: all 0.15s ease;
+  display: flex;
+  gap: 0.75rem;
+  align-items: start;
+}
+
+.sc-source-item:hover {
+  border-color: #3b82f6;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transform: translateY(-1px);
+}
+
+.sc-source-item:active {
+  cursor: grabbing;
+  transform: scale(0.98);
+}
+
+.sc-source-item-selected {
+  background: #eff6ff;
+  border-color: #3b82f6;
+}
+
+/* ========================================
+   THUMBNAILS
+   ======================================== */
+
+.sc-source-thumbnail {
+  width: 60px;
+  height: 60px;
+  flex-shrink: 0;
+  border-radius: 6px;
+  overflow: hidden;
+  background: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sc-source-thumbnail img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.sc-source-placeholder {
+  font-size: 1.5rem;
+  opacity: 0.5;
+}
+
+/* ========================================
+   SOURCE INFO
+   ======================================== */
+
+.sc-source-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sc-source-name {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #111827;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sc-source-meta {
+  font-size: 0.625rem;
+  color: #6b7280;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ========================================
+   SEARCH/FILTER
+   ======================================== */
+
+.sc-source-search {
+  padding: 0.5rem 1rem;
+  border-bottom: 1px solid #e5e7eb;
+}
+
+.sc-search-input {
+  width: 100%;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #d1d5db;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  color: #111827;
+}
+
+.sc-search-input:focus {
+  outline: 2px solid #3b82f6;
+  outline-offset: 1px;
+  border-color: #3b82f6;
+}
+
+.sc-search-input::placeholder {
+  color: #9ca3af;
+}

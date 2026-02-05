@@ -25,7 +25,7 @@ const Wardrobe = () => {
   const getPrimaryAction = () => {
     switch (activeTab) {
       case 'items':
-        return { label: '+ Add Item', onClick: () => navigate('/wardrobe-library/upload') };
+        return null; // Removed - functionality now in WardrobeBrowser
       case 'outfits':
         return { label: '+ Create Outfit', onClick: () => {} }; // Handled by OutfitSets
       default:

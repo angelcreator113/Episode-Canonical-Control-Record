@@ -57,6 +57,7 @@ let Wardrobe, EpisodeWardrobe, OutfitSet;
 let WardrobeLibrary, OutfitSetItems, WardrobeUsageHistory, WardrobeLibraryReferences;
 let SceneLibrary, EpisodeScene;
 let CompositionAsset, CompositionOutput;
+let TimelinePlacement;
 
 try {
   // Core models
@@ -106,6 +107,9 @@ try {
   SceneLibrary = require('./SceneLibrary')(sequelize);
   EpisodeScene = require('./EpisodeScene')(sequelize);
 
+  // Timeline system models
+  TimelinePlacement = require('./TimelinePlacement')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -143,6 +147,7 @@ const requiredModels = {
   WardrobeLibraryReferences,
   SceneLibrary,
   EpisodeScene,
+  TimelinePlacement,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -589,6 +594,54 @@ Episode.hasMany(EpisodeScene, {
   as: 'episodeScenes',
 });
 
+// ==================== TIMELINE PLACEMENT ASSOCIATIONS ====================
+
+// TimelinePlacement → Episode (N:1)
+TimelinePlacement.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+Episode.hasMany(TimelinePlacement, {
+  foreignKey: 'episode_id',
+  as: 'timelinePlacements',
+});
+
+// TimelinePlacement → EpisodeScene (N:1) - scene-attached placements
+TimelinePlacement.belongsTo(EpisodeScene, {
+  foreignKey: 'scene_id',
+  as: 'scene',
+});
+
+EpisodeScene.hasMany(TimelinePlacement, {
+  foreignKey: 'scene_id',
+  as: 'placements',
+});
+
+// TimelinePlacement → Asset (N:1) - asset placements
+TimelinePlacement.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+});
+
+Asset.hasMany(TimelinePlacement, {
+  foreignKey: 'asset_id',
+  as: 'timelinePlacements',
+});
+
+// TimelinePlacement → Wardrobe (N:1) - wardrobe placements
+TimelinePlacement.belongsTo(Wardrobe, {
+  foreignKey: 'wardrobe_item_id',
+  as: 'wardrobeItem',
+});
+
+Wardrobe.hasMany(TimelinePlacement, {
+  foreignKey: 'wardrobe_item_id',
+  as: 'timelinePlacements',
+});
+
+// ==================== EXISTING ASSOCIATIONS ====================
+
 WardrobeLibrary.belongsToMany(WardrobeLibrary, {
   through: OutfitSetItems,
   foreignKey: 'wardrobe_item_id',
@@ -730,6 +783,7 @@ const db = {
     WardrobeLibraryReferences,
     SceneLibrary,
     EpisodeScene,
+    TimelinePlacement,
   },
 
   /**

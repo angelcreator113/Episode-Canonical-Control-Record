@@ -30,6 +30,85 @@ const validateSearch = (req, res, next) => {
 };
 
 /**
+ * GET /api/v1/search
+ * Global search across all resources (episodes, scripts, assets, etc.)
+ * Query params:
+ *   - q: search query (required)
+ *   - type: resource type filter (optional: episode, script, asset, wardrobe, scene)
+ *   - limit: results per page (default 20, max 100)
+ */
+exports.globalSearch = async (req, res) => {
+  try {
+    const { q, type, limit = '20' } = req.query;
+
+    if (!q) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing query parameter',
+        message: 'Search query "q" is required',
+      });
+    }
+
+    const searchLimit = Math.min(parseInt(limit) || 20, 100);
+    const searchQuery = `%${q}%`;
+    const results = { episodes: [], assets: [], total: 0 };
+
+    // Search episodes if no type filter or type=episode
+    if (!type || type === 'episode') {
+      const episodeQuery = `
+        SELECT id, title, description, episode_number, status, created_at
+        FROM episodes 
+        WHERE (title ILIKE $1 OR description ILIKE $1)
+          AND deleted_at IS NULL
+        LIMIT $2
+      `;
+      const episodeResult = await db.query(episodeQuery, [searchQuery, searchLimit]);
+      results.episodes = episodeResult.rows;
+    }
+
+    // Search assets if no type filter or type=asset
+    if (!type || type === 'asset') {
+      const assetQuery = `
+        SELECT id, name, asset_type, s3_key, created_at
+        FROM assets
+        WHERE (name ILIKE $1 OR asset_type ILIKE $1)
+          AND deleted_at IS NULL
+        LIMIT $2
+      `;
+      const assetResult = await db.query(assetQuery, [searchQuery, searchLimit]);
+      results.assets = assetResult.rows;
+    }
+
+    results.total = results.episodes.length + results.assets.length;
+
+    logger.info('Global search completed', {
+      query: q.substring(0, 30),
+      type,
+      total: results.total,
+    });
+
+    return res.json({
+      success: true,
+      query: q,
+      type: type || 'all',
+      data: results,
+      total: results.total,
+    });
+  } catch (error) {
+    logger.error('Global search failed', {
+      error: error.message,
+      query: req.query.q,
+    });
+
+    return res.status(500).json({
+      success: false,
+      error: 'Search failed',
+      message: error.message,
+    });
+  }
+};
+
+/**
  * GET /api/v1/search/activities
  * Search activity logs with advanced filtering
  * Query params:

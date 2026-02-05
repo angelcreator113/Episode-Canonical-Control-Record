@@ -4,26 +4,34 @@
 ========================================================= */
 
 .episode-form-page {
-  --bg: #f6f7fb;
+  --bg: #f8fafc;
+  --bg-gradient: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   --card: #ffffff;
   --text: #0f172a;
   --muted: #64748b;
-  --border: #e5e7eb;
+  --border: #e2e8f0;
   --border2: #eef2f7;
-  --primary: #2563eb;
-  --primary2: #1d4ed8;
-  --danger: #dc2626;
+  --primary: #3b82f6;
+  --primary2: #2563eb;
+  --primary-light: #dbeafe;
+  --danger: #ef4444;
+  --success: #10b981;
+  --warning: #f59e0b;
 
-  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.06);
-  --shadow-md: 0 10px 18px rgba(15, 23, 42, 0.08);
-  --radius: 14px;
+  --shadow-sm: 0 1px 3px rgba(15, 23, 42, 0.08);
+  --shadow-md: 0 4px 16px rgba(15, 23, 42, 0.1);
+  --shadow-lg: 0 10px 40px rgba(15, 23, 42, 0.12);
+  --radius: 16px;
+  --radius-sm: 12px;
+  --radius-lg: 20px;
 
   color: var(--text);
 }
 
 .episode-form-page.ce-page {
   min-height: 100vh;
-  background: var(--bg);
+  background: var(--bg-gradient);
+  position: relative;
 }
 
 /* Hard override for global styles */
@@ -43,17 +51,19 @@
   position: sticky;
   top: 0;
   z-index: 20;
-  background: var(--card);
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
 }
 
 .episode-form-page .ce-header__inner {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 14px 16px;
+  padding: 18px 24px;
   display: grid;
-  grid-template-columns: 120px 1fr auto;
-  gap: 12px;
+  grid-template-columns: auto 1fr auto;
+  gap: 24px;
   align-items: center;
 }
 
@@ -77,8 +87,12 @@
 
 .episode-form-page .ce-header__title h1 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 950;
+  font-size: 22px;
+  font-weight: 700;
+  background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
 .episode-form-page .ce-subline {
@@ -218,12 +232,13 @@
 ========================================================= */
 
 .episode-form-page .ce-body {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 32px 24px;
   display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 14px;
+  grid-template-columns: 1fr 360px;
+  gap: 24px;
+  align-items: start;
 }
 
 .episode-form-page .ce-body--single {
@@ -234,13 +249,18 @@
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  box-shadow: var(--shadow-sm);
-  padding: 16px;
+  box-shadow: var(--shadow-md);
+  padding: 24px;
+  transition: all 0.3s ease;
+}
+
+.episode-form-page .ce-card:hover {
+  box-shadow: var(--shadow-lg);
 }
 
 .episode-form-page .ce-grid {
   display: grid;
-  gap: 12px;
+  gap: 20px;
 }
 
 .episode-form-page .ce-grid--2 { grid-template-columns: 1fr 1fr; }
@@ -252,10 +272,11 @@
 
 .episode-form-page .ce-field label {
   display: block;
-  margin-bottom: 8px;
-  color: #334155;
-  font-weight: 900;
-  font-size: 13px;
+  margin-bottom: 10px;
+  color: #1e293b;
+  font-weight: 600;
+  font-size: 14px;
+  letter-spacing: -0.01em;
 }
 
 .episode-form-page .ce-required {
@@ -265,20 +286,27 @@
 
 .episode-form-page .ce-input {
   width: 100%;
-  padding: 12px !important;
-  border-radius: 12px !important;
-  border: 1px solid var(--border) !important;
+  padding: 14px 16px !important;
+  border-radius: var(--radius-sm) !important;
+  border: 2px solid var(--border) !important;
   background: #fff !important;
   color: var(--text) !important;
-  font-weight: 700 !important;
-  font-size: 14px !important;
+  font-weight: 600 !important;
+  font-size: 15px !important;
   outline: none !important;
+  transition: all 0.2s ease !important;
+}
+
+.episode-form-page .ce-input::placeholder {
+  color: #94a3b8;
+  font-weight: 500;
 }
 
 .episode-form-page .ce-input:focus {
-  border-color: #93c5fd !important;
-  box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12) !important;
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
   background: #fbfdff !important;
+  transform: translateY(-1px);
 }
 
 .episode-form-page .ce-input--error {
@@ -369,7 +397,18 @@
 }
 
 .episode-form-page .ce-alert {
-  margin-bottom: 12px;
+  margin-bottom: 24px;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border: 2px solid #fbbf24;
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  box-shadow: 0 4px 12px rgba(251, 191, 36, 0.15);
+}
+
+.episode-form-page .ce-alert .ce-mutedSm {
+  color: #78350f;
+  font-weight: 600;
+  line-height: 1.5;
 }
 
 /* =========================================================
@@ -377,49 +416,80 @@
 ========================================================= */
 
 .episode-form-page .ce-section {
-  padding: 20px;
+  padding: 28px;
+  position: relative;
+  overflow: hidden;
+}
+
+.episode-form-page .ce-section::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--primary) 0%, #60a5fa 100%);
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.episode-form-page .ce-section:hover::before {
+  opacity: 1;
 }
 
 .episode-form-page .ce-sectionHeader {
-  margin-bottom: 20px;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #f1f5f9;
 }
 
 .episode-form-page .ce-sectionTitle {
   display: flex;
   align-items: center;
   gap: 12px;
-  margin-bottom: 6px;
+  margin-bottom: 8px;
 }
 
 .episode-form-page .ce-sectionTitle h2 {
   margin: 0;
-  font-size: 17px;
-  font-weight: 950;
+  font-size: 18px;
+  font-weight: 700;
   color: #0f172a;
+  letter-spacing: -0.02em;
 }
 
 .episode-form-page .ce-sectionIcon {
-  font-size: 20px;
+  font-size: 24px;
   line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.1));
 }
 
 .episode-form-page .ce-checkmark {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 24px;
-  height: 24px;
+  width: 26px;
+  height: 26px;
   border-radius: 50%;
-  background: #10b981;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: #fff;
-  font-weight: 950;
+  font-weight: 700;
   font-size: 14px;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+  animation: checkmarkPop 0.3s ease;
+}
+
+@keyframes checkmarkPop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .episode-form-page .ce-sectionDesc {
   color: var(--muted);
-  font-size: 13px;
-  font-weight: 650;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 /* ===== Creative Section (Thumbnail) - Elevated Style ===== */
@@ -431,29 +501,40 @@
 
 .episode-form-page .ce-thumbnailEmpty {
   text-align: center;
-  padding: 36px 20px;
+  padding: 48px 32px;
   background: #ffffff;
-  border-radius: 12px;
-  border: 2px dashed #cbd5e1;
+  border-radius: var(--radius);
+  border: 3px dashed #cbd5e1;
+  transition: all 0.3s ease;
+}
+
+.episode-form-page .ce-thumbnailEmpty:hover {
+  border-color: var(--primary);
+  background: #f8fafc;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(59, 130, 246, 0.15);
 }
 
 .episode-form-page .ce-thumbnailEmptyIcon {
-  font-size: 48px;
-  margin-bottom: 12px;
+  font-size: 64px;
+  margin-bottom: 16px;
+  opacity: 0.7;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.1));
 }
 
 .episode-form-page .ce-thumbnailEmptyText {
-  font-size: 15px;
-  font-weight: 900;
-  color: #334155;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e293b;
   margin-bottom: 8px;
 }
 
 .episode-form-page .ce-thumbnailEmptyHint {
-  font-size: 13px;
+  font-size: 14px;
   color: var(--muted);
-  margin-bottom: 20px;
-  font-weight: 650;
+  margin-bottom: 24px;
+  font-weight: 500;
+  line-height: 1.5;
 }
 
 .episode-form-page .ce-thumbnailEmptyActions {
@@ -507,20 +588,32 @@
 .episode-form-page .ce-thumbnailPreviewCard {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   background: #fff;
-  border-radius: 12px;
-  padding: 14px;
-  border: 1px solid #e5e7eb;
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 2px solid #e5e7eb;
+  box-shadow: var(--shadow-md);
+  transition: all 0.3s ease;
+}
+
+.episode-form-page .ce-thumbnailPreviewCard:hover {
+  border-color: var(--primary);
+  box-shadow: var(--shadow-lg);
 }
 
 .episode-form-page .ce-thumbnailPreviewImage {
   width: 100%;
-  max-width: 520px;
+  max-width: 100%;
   margin: 0 auto;
-  border-radius: 10px;
+  border-radius: var(--radius-sm);
   display: block;
-  box-shadow: var(--shadow-sm);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  transition: transform 0.3s ease;
+}
+
+.episode-form-page .ce-thumbnailPreviewImage:hover {
+  transform: scale(1.02);
 }
 
 .episode-form-page .ce-thumbnailActions {
@@ -546,20 +639,21 @@
   left: 0;
   right: 0;
   z-index: 15;
-  background: var(--card);
-  border-top: 1px solid var(--border);
-  box-shadow: 0 -4px 12px rgba(15, 23, 42, 0.06);
-  margin-top: 24px;
+  background: rgba(255, 255, 255, 0.98);
+  backdrop-filter: blur(12px);
+  border-top: 2px solid var(--border);
+  box-shadow: 0 -8px 24px rgba(15, 23, 42, 0.08);
+  margin-top: 32px;
 }
 
 .episode-form-page .ce-stickyFooterContent {
-  max-width: 1200px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 16px;
+  padding: 20px 24px;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 24px;
 }
 
 .episode-form-page .ce-footerProgress {
@@ -569,15 +663,21 @@
 .episode-form-page .ce-footerProgressText {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-weight: 950;
-  font-size: 14px;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 15px;
   color: #0f172a;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 
 .episode-form-page .ce-footerProgressIcon {
-  font-size: 18px;
+  font-size: 20px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.1); }
 }
 
 .episode-form-page .ce-footerHint {
@@ -659,4 +759,193 @@
   .episode-form-page .ce-quickOptions .ce-btn {
     width: 100%;
   }
+}
+
+/* =========================================================
+   CHECKBOXES & RADIO BUTTONS
+========================================================= */
+
+.episode-form-page .ce-checkboxGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
+}
+
+.episode-form-page .ce-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  user-select: none;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition: all 0.2s ease;
+}
+
+.episode-form-page .ce-checkbox:hover {
+  background: #f9fafb;
+  border-color: var(--primary);
+}
+
+.episode-form-page .ce-checkbox input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+}
+
+.episode-form-page .ce-checkbox span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Radio Groups */
+.episode-form-page .ce-radioGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.episode-form-page .ce-radio {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  padding: 12px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  transition: all 0.2s ease;
+}
+
+.episode-form-page .ce-radio:hover {
+  background: #f9fafb;
+  border-color: var(--primary);
+}
+
+.episode-form-page .ce-radio input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  accent-color: var(--primary);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.episode-form-page .ce-radio span {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* Platform Descriptions */
+.episode-form-page .ce-platformDescriptions {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  margin-top: 16px;
+  padding: 20px;
+  background: #f9fafb;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+}
+
+.episode-form-page .ce-platformDesc {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.episode-form-page .ce-platformDescTitle {
+  margin: 0 0 8px 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+/* Responsive adjustments for new components */
+@media (max-width: 768px) {
+  .episode-form-page .ce-checkboxGrid {
+    grid-template-columns: 1fr;
+  }
+  
+  .episode-form-page .ce-body {
+    padding: 20px 16px;
+  }
+  
+  .episode-form-page .ce-section {
+    padding: 20px;
+  }
+}
+
+/* =========================================================
+   MODERN UI POLISH & ENHANCEMENTS
+========================================================= */
+
+/* Progress Bar Visual */
+.episode-form-page .ce-progress-bar {
+  height: 6px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+
+.episode-form-page .ce-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--primary) 0%, #60a5fa 100%);
+  border-radius: 999px;
+  transition: width 0.5s ease;
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+/* Enhanced Pill Badges */
+.episode-form-page .ce-pill {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.2s ease;
+}
+
+.episode-form-page .ce-pill:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+/* Better disabled state */
+.episode-form-page .ce-input:disabled {
+  background: #f1f5f9 !important;
+  color: #94a3b8 !important;
+  cursor: not-allowed;
+  border-color: #e2e8f0 !important;
+}
+
+/* Selection highlight */
+.episode-form-page .ce-input::selection,
+.episode-form-page .ce-textarea::selection {
+  background: rgba(59, 130, 246, 0.25);
+  color: inherit;
+}
+
+/* Smooth scrolling */
+.episode-form-page {
+  scroll-behavior: smooth;
+}
+
+/* Micro-interactions for fields */
+.episode-form-page .ce-field {
+  transition: all 0.2s ease;
+}
+
+.episode-form-page .ce-field:focus-within label {
+  color: var(--primary);
+}
+
+/* Success animation */
+@keyframes successPulse {
+  0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+  70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
 }

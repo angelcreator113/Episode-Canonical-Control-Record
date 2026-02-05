@@ -169,14 +169,17 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // ============================================================================
 const { attachRBAC } = require('./middleware/rbac');
 const { captureResponseData } = require('./middleware/auditLog');
+const { optionalAuth } = require('./middleware/auth');
 
 // Optional auth for all routes (user info attached if valid token provided)
-// DISABLED for development debugging
-// app.use(optionalAuth);
-app.use((req, res, next) => {
-  req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' };
-  next();
-});
+// Real Cognito authentication enabled
+app.use(optionalAuth);
+
+// DEV MODE (uncomment to bypass authentication for testing)
+// app.use((req, res, next) => {
+//   req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' };
+//   next();
+// });
 
 // Attach RBAC info to request
 app.use(attachRBAC);
@@ -505,6 +508,10 @@ app.use('/api/v1/episodes', episodeRoutes);
 app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
 app.use('/api/v1/processing-queue', processingRoutes);
+
+// Admin routes for migrations/setup
+const adminRoutes = require('./routes/admin');
+app.use('/api/v1/admin', adminRoutes);
 
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);

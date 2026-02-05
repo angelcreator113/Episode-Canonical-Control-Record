@@ -1,0 +1,249 @@
+/* Timeline Preview Panel - Framed Output Display */
+
+.timeline-preview {
+  width: 100%;
+  height: 100%;
+  background: #111827;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.timeline-preview.empty {
+  justify-content: center;
+  align-items: center;
+}
+
+/* Preview Header - Scene Context */
+.preview-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1.5rem;
+  background: #0f172a;
+  border-bottom: 1px solid #1e293b;
+  min-height: 48px;
+}
+
+.preview-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+}
+
+.preview-label {
+  color: #64748b;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-size: 0.75rem;
+}
+
+.preview-separator {
+  color: #334155;
+  font-weight: 300;
+}
+
+.scene-context {
+  color: #e2e8f0;
+  font-weight: 600;
+}
+
+.preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.scene-duration {
+  font-size: 0.8125rem;
+  color: #94a3b8;
+  font-weight: 500;
+}
+
+.preview-mode-toggle {
+  display: flex;
+  gap: 0.25rem;
+  background: #1e293b;
+  padding: 0.25rem;
+  border-radius: 6px;
+}
+
+.mode-btn {
+  padding: 0.375rem 0.75rem;
+  background: transparent;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.mode-btn.active {
+  background: #334155;
+  color: #e2e8f0;
+}
+
+.mode-btn:hover:not(.active) {
+  color: #94a3b8;
+}
+
+/* Content - 16:9 Canvas Centered with Letterbox */
+.preview-content {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  position: relative;
+  width: 100%;
+  min-height: 300px;
+}
+
+.preview-canvas-container {
+  position: relative;
+  width: 90%;
+  max-width: 1200px;
+  aspect-ratio: 16 / 9;
+  min-height: 300px;
+  background: #000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.8);
+  border: 2px solid #1e293b;
+}
+
+/* Playback Controls - Below Preview */
+.preview-playback-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, #1e293b 0%, #0f172a 100%);
+  border-top: 1px solid #334155;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.2);
+}
+
+.preview-playback-controls .playback-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: #334155;
+  border: 1px solid #475569;
+  border-radius: 6px;
+  color: #e2e8f0;
+  font-size: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.preview-playback-controls .playback-btn:hover {
+  background: #475569;
+  border-color: #64748b;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+}
+
+.preview-playback-controls .playback-btn:active {
+  transform: translateY(0);
+}
+
+.preview-playback-controls .play-pause-btn {
+  width: 44px;
+  height: 44px;
+  background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  border-color: #1d4ed8;
+  font-size: 18px;
+}
+
+.preview-playback-controls .play-pause-btn:hover {
+  background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+  border-color: #1e40af;
+}
+
+.preview-playback-controls .timecode-display {
+  font-family: 'Courier New', monospace;
+  font-size: 14px;
+  font-weight: 600;
+  color: #60a5fa;
+  background: #0f172a;
+  padding: 8px 16px;
+  border-radius: 6px;
+  border: 1px solid #1e3a8a;
+  margin-left: 8px;
+  user-select: none;
+  letter-spacing: 0.5px;
+}
+
+.preview-video {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.preview-image-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+}
+
+.preview-image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+.preview-placeholder {
+  text-align: center;
+  color: #6b7280;
+}
+
+.placeholder-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Controls */
+.preview-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem 1rem;
+  background: #111827;
+  border-top: 1px solid #374151;
+  font-size: 0.75rem;
+  color: #9ca3af;
+}
+
+/* Empty State */
+.preview-empty-state {
+  text-align: center;
+  color: #6b7280;
+  padding: 2rem;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.preview-empty-state p {
+  font-size: 1rem;
+  font-weight: 600;
+  margin: 0.5rem 0;
+  color: #9ca3af;
+}
+
+.empty-hint {
+  font-size: 0.875rem;
+  color: #6b7280;
+}

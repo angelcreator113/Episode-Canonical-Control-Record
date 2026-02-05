@@ -1,42 +1,81 @@
-import React from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import React, { useState, useEffect } from 'react';
+import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import Timeline from '../components/Timeline';
+import episodeService from '../services/episodeService';
+import '../styles/editor-layout.css';
 import './TimelineEditor.css';
 
 const TimelineEditor = () => {
   const { episodeId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [episode, setEpisode] = useState(null);
+  const [composition, setComposition] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        
+        // Load episode
+        const episodeResponse = await episodeService.getEpisode(episodeId);
+        setEpisode(episodeResponse.data);
+        
+        // Check if composition ID is in URL
+        const params = new URLSearchParams(location.search);
+        const compositionId = params.get('composition');
+        
+        if (compositionId) {
+          // Load composition data
+          const compositionResponse = await fetch(`/api/v1/episodes/${episodeId}/video-compositions/${compositionId}`);
+          const compositionData = await compositionResponse.json();
+          
+          if (compositionData.success) {
+            setComposition(compositionData.data);
+            console.log('✅ Loaded composition for timeline:', compositionData.data);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+    loadData();
+  }, [episodeId, location.search]);
 
   return (
-    <div className="timeline-editor-page">
-      <div className="timeline-header">
-        <button onClick={() => navigate(`/episodes/${episodeId}`)} style={{ background: '#f3f4f6', color: '#111827', border: '2px solid #d1d5db', padding: '0.625rem 1.25rem', borderRadius: '6px', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}>
-          ← Back to Episode
-        </button>
-        <h1>Timeline Editor</h1>
-        <div className="timeline-actions">
-          <button className="btn-secondary">Save Draft</button>
-          <button className="btn-primary">Export Video</button>
+    <div className="edRoot">
+      <div className="edTopbar">
+        <div className="edTopLeft">
+          <button 
+            onClick={() => navigate(`/episodes/${episodeId}`)} 
+            className="edBack"
+          >
+            ← Back
+          </button>
+          <div>
+            <div className="edTitle">
+              {loading ? 'Loading...' : (episode?.title || 'Untitled Episode')}
+            </div>
+            <div className="edSub">
+              {composition ? (
+                <>🎬 {composition.name} • Video Editor</>
+              ) : (
+                <>Video Editor • {episode?.status || 'Draft'}</>
+              )}
+            </div>
+          </div>
+        </div>
+        <div className="edTopRight">
+          <button className="edGhost">Save</button>
+          <button className="edPrimary">Export</button>
         </div>
       </div>
 
-      <div className="timeline-placeholder">
-        <div className="placeholder-icon">🎬</div>
-        <h2>Advanced Timeline Editor</h2>
-        <p>Coming Soon: CapCut-style timeline with advanced editing features</p>
-        <ul className="feature-list">
-          <li>✨ Multi-track editing</li>
-          <li>🎵 Audio waveforms</li>
-          <li>✂️ Precision trimming</li>
-          <li>🎨 Transitions & effects</li>
-          <li>📝 Text overlays</li>
-          <li>🎥 Real-time preview</li>
-        </ul>
-        <button 
-          onClick={() => navigate(`/episodes/${episodeId}`)}
-          className="btn-back-large"
-        >
-          Return to Episode
-        </button>
+      <div className="timeline-editor-content">
+        <Timeline episodeId={episodeId} composition={composition} />
       </div>
     </div>
   );
