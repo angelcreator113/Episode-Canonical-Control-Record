@@ -1,9 +1,10 @@
 /**
- * Migration: Create Base Wardrobe Table
- * This table should have been created earlier but was missing
+ * Migration: Create Base Wardrobe Tables
+ * Creates the foundational wardrobe tables that were missing from base schema
  */
 
 exports.up = (pgm) => {
+  // 1. Create wardrobe table
   pgm.createTable('wardrobe', {
     id: {
       type: 'uuid',
@@ -96,8 +97,83 @@ exports.up = (pgm) => {
   pgm.createIndex('wardrobe', 'outfit_set_id');
   pgm.createIndex('wardrobe', 'deleted_at');
   pgm.createIndex('wardrobe', 'created_at');
+
+  // 2. Create outfit_sets table
+  pgm.createTable('outfit_sets', {
+    id: {
+      type: 'uuid',
+      primaryKey: true,
+      default: pgm.func('gen_random_uuid()'),
+    },
+    name: {
+      type: 'varchar(255)',
+      notNull: true,
+    },
+    description: {
+      type: 'text',
+    },
+    character: {
+      type: 'varchar(255)',
+    },
+    created_at: {
+      type: 'timestamp',
+      notNull: true,
+      default: pgm.func('current_timestamp'),
+    },
+    updated_at: {
+      type: 'timestamp',
+      notNull: true,
+      default: pgm.func('current_timestamp'),
+    },
+    deleted_at: {
+      type: 'timestamp',
+    },
+  });
+
+  pgm.createIndex('outfit_sets', 'deleted_at');
+
+  // 3. Create episode_wardrobe junction table
+  pgm.createTable('episode_wardrobe', {
+    id: {
+      type: 'uuid',
+      primaryKey: true,
+      default: pgm.func('gen_random_uuid()'),
+    },
+    episode_id: {
+      type: 'uuid',
+      notNull: true,
+      references: 'episodes',
+      onDelete: 'CASCADE',
+    },
+    wardrobe_id: {
+      type: 'uuid',
+      notNull: true,
+      references: 'wardrobe',
+      onDelete: 'CASCADE',
+    },
+    scene_id: {
+      type: 'uuid',
+    },
+    worn_at: {
+      type: 'timestamp',
+    },
+    notes: {
+      type: 'text',
+    },
+    created_at: {
+      type: 'timestamp',
+      notNull: true,
+      default: pgm.func('current_timestamp'),
+    },
+  });
+
+  pgm.createIndex('episode_wardrobe', 'episode_id');
+  pgm.createIndex('episode_wardrobe', 'wardrobe_id');
+  pgm.createIndex('episode_wardrobe', ['episode_id', 'wardrobe_id'], { unique: true });
 };
 
 exports.down = (pgm) => {
+  pgm.dropTable('episode_wardrobe');
+  pgm.dropTable('outfit_sets');
   pgm.dropTable('wardrobe');
 };
