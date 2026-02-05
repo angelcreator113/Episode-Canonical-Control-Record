@@ -293,11 +293,11 @@ jobs:
           for i in $(seq 1 $MAX_RETRIES); do
             echo "🔄 Frontend deployment attempt $i of $MAX_RETRIES..."
             
-            # Create backup of current frontend
+            # Ensure directories exist and create backup
             if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 ubuntu@52.91.217.230 \
-              "sudo mkdir -p /var/www/episode-frontend-backup && \
+              "sudo mkdir -p /var/www/episode-frontend /var/www/episode-frontend-backup /tmp/frontend-dist && \
                sudo cp -r /var/www/episode-frontend/* /var/www/episode-frontend-backup/ 2>/dev/null || true"; then
-              echo "✓ Backup created"
+              echo "✓ Directories created and backup done"
             fi
             
             # Upload new frontend files
@@ -305,7 +305,8 @@ jobs:
               # Move files to web root
               if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 ubuntu@52.91.217.230 \
                 "sudo rm -rf /var/www/episode-frontend/* && \
-                 sudo mv /tmp/frontend-dist/* /var/www/episode-frontend/ && \
+                 sudo cp -r /tmp/frontend-dist/* /var/www/episode-frontend/ && \
+                 sudo rm -rf /tmp/frontend-dist && \
                  sudo chown -R www-data:www-data /var/www/episode-frontend && \
                  sudo chmod -R 755 /var/www/episode-frontend"; then
                 echo "✅ Frontend deployment successful on attempt $i"
