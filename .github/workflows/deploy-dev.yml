@@ -251,9 +251,12 @@ jobs:
           echo "Commit: ${{ github.sha }}"
           echo "Branch: ${{ github.ref_name }}"
 
-  deploy-frontend:
+  # DISABLED: Frontend deployment no longer needed
+  # Backend server now serves both API and frontend static files from dist/
+  # ALB routes all traffic to backend server
+  deploy-frontend-disabled:
     needs: build
-    if: always()
+    if: false  # Disabled - backend serves frontend
     runs-on: ubuntu-latest
     environment:
       name: development-frontend
@@ -364,3 +367,74 @@ jobs:
           echo "Commit: ${{ github.sha }}"
           echo "Branch: ${{ github.ref_name }}"
           echo "URL: http://52.91.217.230"
+
+  update-alb-routing:
+    needs: [deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v2
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+      
+      - name: Update ALB to route everything to backend
+        run: |
+          echo "🔄 Updating ALB routing to use backend for frontend..."
+          
+          # Get the ALB and listener
+          ALB_ARN=$(aws elbv2 describe-load-balancers \
+            --names primepisodes-alb \
+            --query 'LoadBalancers[0].LoadBalancerArn' \
+            --output text)
+          
+          LISTENER_ARN=$(aws elbv2 describe-listeners \
+            --load-balancer-arn $ALB_ARN \
+            --query 'Listeners[?Port==`443`].ListenerArn' \
+            --output text)
+          
+          BACKEND_TG_ARN=$(aws elbv2 describe-target-groups \
+            --names primepisodes-backend \
+            --query 'TargetGroups[0].TargetGroupArn' \
+            --output text)
+          
+          echo "ALB: $ALB_ARN"
+          echo "Listener: $LISTENER_ARN"
+          echo "Backend Target Group: $BACKEND_TG_ARN"
+          
+          # Get current rules
+          echo "Current rules:"
+          aws elbv2 describe-rules --listener-arn $LISTENER_ARN \
+            --query 'Rules[?Priority!=`default`].[Priority,Conditions[0].Values[0]]' \
+            --output table
+          
+          # Find and update the /assets/* rule to point to backend
+          ASSETS_RULE_ARN=$(aws elbv2 describe-rules \
+            --listener-arn $LISTENER_ARN \
+            --query 'Rules[?Conditions[0].Values[0]==`/assets/*`].RuleArn' \
+            --output text)
+          
+          if [ -n "$ASSETS_RULE_ARN" ]; then
+            echo "Updating /assets/* rule to route to backend..."
+            aws elbv2 modify-rule \
+              --rule-arn $ASSETS_RULE_ARN \
+              --actions Type=forward,TargetGroupArn=$BACKEND_TG_ARN
+            echo "✅ Updated /assets/* → backend"
+          fi
+          
+          # Update default rule to point to backend
+          DEFAULT_RULE_ARN=$(aws elbv2 describe-rules \
+            --listener-arn $LISTENER_ARN \
+            --query 'Rules[?Priority==`default`].RuleArn' \
+            --output text)
+          
+          echo "Updating default rule to route to backend..."
+          aws elbv2 modify-rule \
+            --rule-arn $DEFAULT_RULE_ARN \
+            --actions Type=forward,TargetGroupArn=$BACKEND_TG_ARN
+          echo "✅ Updated default → backend"
+          
+          echo "✅ ALB now routes all traffic to backend (which serves both API and frontend)"
