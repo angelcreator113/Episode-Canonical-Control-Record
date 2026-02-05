@@ -183,45 +183,23 @@ jobs:
           for i in $(seq 1 $MAX_RETRIES); do
             echo "🔄 Deployment attempt $i of $MAX_RETRIES to ${{ secrets.EC2_HOST }}..."
             
-            # Create a deployment script that exports all environment variables
-            cat > /tmp/deploy-with-env.sh << 'DEPLOY_SCRIPT'
-#!/bin/bash
-export DATABASE_URL="${DATABASE_URL}"
-export AWS_REGION="${AWS_REGION}"
-export AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID}"
-export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
-export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
-export S3_PRIMARY_BUCKET="${S3_PRIMARY_BUCKET}"
-export S3_THUMBNAILS_BUCKET="${S3_THUMBNAILS_BUCKET}"
-export SQS_THUMBNAIL_QUEUE_URL="${SQS_THUMBNAIL_QUEUE_URL}"
-export COGNITO_USER_POOL_ID="${COGNITO_USER_POOL_ID}"
-export COGNITO_CLIENT_ID="${COGNITO_CLIENT_ID}"
-export COGNITO_REGION="${COGNITO_REGION}"
-export JWT_SECRET="${JWT_SECRET}"
-/tmp/deploy.sh
-DEPLOY_SCRIPT
-            
-            chmod +x /tmp/deploy-with-env.sh
-            
             if scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=120 -o ConnectTimeout=10 .github/scripts/deploy-to-ec2.sh ubuntu@${{ secrets.EC2_HOST }}:/tmp/deploy.sh; then
-              if scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=120 /tmp/deploy-with-env.sh ubuntu@${{ secrets.EC2_HOST }}:/tmp/deploy-with-env.sh; then
-                if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=120 -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST }} \
-                  "DATABASE_URL='$DATABASE_URL' \
-                   AWS_REGION='$AWS_REGION' \
-                   AWS_ACCOUNT_ID='$AWS_ACCOUNT_ID' \
-                   AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
-                   AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
-                   S3_PRIMARY_BUCKET='$S3_PRIMARY_BUCKET' \
-                   S3_THUMBNAILS_BUCKET='$S3_THUMBNAILS_BUCKET' \
-                   SQS_THUMBNAIL_QUEUE_URL='$SQS_THUMBNAIL_QUEUE_URL' \
-                   COGNITO_USER_POOL_ID='$COGNITO_USER_POOL_ID' \
-                   COGNITO_CLIENT_ID='$COGNITO_CLIENT_ID' \
-                   COGNITO_REGION='$COGNITO_REGION' \
-                   JWT_SECRET='$JWT_SECRET' \
-                   bash /tmp/deploy-with-env.sh"; then
-                  echo "✅ Deployment successful on attempt $i"
-                  break
-                fi
+              if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=120 -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST }} \
+                "DATABASE_URL='$DATABASE_URL' \
+                 AWS_REGION='$AWS_REGION' \
+                 AWS_ACCOUNT_ID='$AWS_ACCOUNT_ID' \
+                 AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
+                 AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
+                 S3_PRIMARY_BUCKET='$S3_PRIMARY_BUCKET' \
+                 S3_THUMBNAILS_BUCKET='$S3_THUMBNAILS_BUCKET' \
+                 SQS_THUMBNAIL_QUEUE_URL='$SQS_THUMBNAIL_QUEUE_URL' \
+                 COGNITO_USER_POOL_ID='$COGNITO_USER_POOL_ID' \
+                 COGNITO_CLIENT_ID='$COGNITO_CLIENT_ID' \
+                 COGNITO_REGION='$COGNITO_REGION' \
+                 JWT_SECRET='$JWT_SECRET' \
+                 bash /tmp/deploy.sh"; then
+                echo "✅ Deployment successful on attempt $i"
+                break
               fi
             fi
             
