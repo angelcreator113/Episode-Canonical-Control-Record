@@ -85,8 +85,11 @@ jobs:
       - name: Build frontend
         run: |
           cd frontend
+          rm -rf dist node_modules/.vite
           npm ci
           npm run build
+          echo "Build complete - listing assets:"
+          ls -lh dist/assets/
 
       - name: Create artifact
         run: |
