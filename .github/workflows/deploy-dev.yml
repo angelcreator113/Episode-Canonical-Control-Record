@@ -267,7 +267,9 @@ jobs:
       - name: Extract frontend build
         run: |
           tar -xzf episode-metadata-${{ github.sha }}.tar.gz
-          ls -la deploy/frontend/dist/
+          echo "Checking artifact contents..."
+          ls -la deploy/
+          ls -la deploy/dist/ || echo "No dist folder found"
 
       - name: Deploy Frontend to EC2
         run: |
@@ -299,7 +301,7 @@ jobs:
             fi
             
             # Upload new frontend files
-            if scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 -r deploy/frontend/dist/* ubuntu@52.91.217.230:/tmp/frontend-dist/; then
+            if scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 -r deploy/dist/* ubuntu@52.91.217.230:/tmp/frontend-dist/; then
               # Move files to web root
               if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 ubuntu@52.91.217.230 \
                 "sudo rm -rf /var/www/episode-frontend/* && \
