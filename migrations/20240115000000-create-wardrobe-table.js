@@ -23,58 +23,34 @@ exports.up = (pgm) => {
       type: 'varchar(100)',
       notNull: true,
     },
-    brand: {
-      type: 'varchar(255)',
-    },
-    price: {
-      type: 'decimal(10,2)',
-    },
-    purchase_link: {
+    description: {
       type: 'text',
     },
-    website: {
+    s3_url: {
+      type: 'text',
+    },
+    s3_url_processed: {
+      type: 'text',
+    },
+    thumbnail_url: {
       type: 'text',
     },
     color: {
       type: 'varchar(100)',
     },
-    size: {
+    season: {
       type: 'varchar(50)',
     },
-    season: {
-      type: 'varchar(100)',
+    tags: {
+      type: 'text[]',
+      default: '{}',
     },
-    occasion: {
-      type: 'varchar(255)',
-    },
-    outfit_set_id: {
-      type: 'uuid',
-    },
-    outfit_set_name: {
-      type: 'varchar(255)',
-    },
-    scene_description: {
-      type: 'text',
-    },
-    outfit_notes: {
+    notes: {
       type: 'text',
     },
     is_favorite: {
       type: 'boolean',
       default: false,
-    },
-    tags: {
-      type: 'jsonb',
-      default: '[]',
-    },
-    image_url: {
-      type: 'text',
-    },
-    s3_key: {
-      type: 'varchar(500)',
-    },
-    thumbnail_url: {
-      type: 'text',
     },
     created_at: {
       type: 'timestamp',
@@ -94,7 +70,6 @@ exports.up = (pgm) => {
   // Create indexes
   pgm.createIndex('wardrobe', 'character');
   pgm.createIndex('wardrobe', 'clothing_category');
-  pgm.createIndex('wardrobe', 'outfit_set_id');
   pgm.createIndex('wardrobe', 'deleted_at');
   pgm.createIndex('wardrobe', 'created_at');
 
