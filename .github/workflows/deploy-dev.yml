@@ -247,3 +247,108 @@ jobs:
           echo "Environment: development"
           echo "Commit: ${{ github.sha }}"
           echo "Branch: ${{ github.ref_name }}"
+
+  deploy-frontend:
+    needs: build
+    if: always()
+    runs-on: ubuntu-latest
+    environment:
+      name: development-frontend
+      url: http://52.91.217.230
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: episode-metadata-build-dev
+
+      - name: Extract frontend build
+        run: |
+          tar -xzf episode-metadata-${{ github.sha }}.tar.gz
+          ls -la deploy/frontend/dist/
+
+      - name: Deploy Frontend to EC2
+        run: |
+          echo "🚀 Deploying frontend to EC2..."
+          echo "Target: 52.91.217.230"
+          echo "Commit: ${{ github.sha }}"
+          
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          
+          # Test connectivity
+          echo "Testing connection to 52.91.217.230:22..."
+          nc -zv -w5 52.91.217.230 22 || echo "⚠️  Port 22 not immediately reachable"
+          
+          # Deploy frontend with retries
+          MAX_RETRIES=3
+          RETRY_DELAY=30
+          
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "🔄 Frontend deployment attempt $i of $MAX_RETRIES..."
+            
+            # Create backup of current frontend
+            if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 ubuntu@52.91.217.230 \
+              "sudo mkdir -p /var/www/episode-frontend-backup && \
+               sudo cp -r /var/www/episode-frontend/* /var/www/episode-frontend-backup/ 2>/dev/null || true"; then
+              echo "✓ Backup created"
+            fi
+            
+            # Upload new frontend files
+            if scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 -r deploy/frontend/dist/* ubuntu@52.91.217.230:/tmp/frontend-dist/; then
+              # Move files to web root
+              if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 ubuntu@52.91.217.230 \
+                "sudo rm -rf /var/www/episode-frontend/* && \
+                 sudo mv /tmp/frontend-dist/* /var/www/episode-frontend/ && \
+                 sudo chown -R www-data:www-data /var/www/episode-frontend && \
+                 sudo chmod -R 755 /var/www/episode-frontend"; then
+                echo "✅ Frontend deployment successful on attempt $i"
+                break
+              fi
+            fi
+            
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⚠️  Frontend deployment attempt $i failed, waiting ${RETRY_DELAY}s before retry..."
+              sleep $RETRY_DELAY
+            else
+              echo "❌ All frontend deployment attempts failed"
+              exit 1
+            fi
+          done
+          
+          echo "✅ Frontend deployment to EC2 complete"
+
+      - name: Test frontend deployment
+        run: |
+          echo "🧪 Testing frontend deployment..."
+          sleep 5
+          
+          # Test if frontend is accessible
+          MAX_RETRIES=3
+          for i in $(seq 1 $MAX_RETRIES); do
+            echo "Frontend test attempt $i/$MAX_RETRIES..."
+            if curl -f -m 10 http://52.91.217.230/; then
+              echo "✅ Frontend is accessible!"
+              echo "🌐 Frontend URL: http://52.91.217.230"
+              exit 0
+            fi
+            if [ $i -lt $MAX_RETRIES ]; then
+              echo "⚠️  Frontend test failed, waiting 5 seconds before retry..."
+              sleep 5
+            fi
+          done
+          
+          echo "❌ Frontend accessibility test failed after $MAX_RETRIES attempts"
+          exit 1
+
+      - name: Frontend deployment summary
+        run: |
+          echo "✅ Frontend deployment completed"
+          echo "Environment: development-frontend"
+          echo "Commit: ${{ github.sha }}"
+          echo "Branch: ${{ github.ref_name }}"
+          echo "URL: http://52.91.217.230"
