@@ -82,6 +82,7 @@ module.exports = (sequelize) => {
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
+      paranoid: false, // Disable soft deletes (no deleted_at column)
     }
   );
 

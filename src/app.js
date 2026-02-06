@@ -428,6 +428,15 @@ try {
   scriptsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+let scriptAnalysisRoutes;
+try {
+  scriptAnalysisRoutes = require('./routes/scriptAnalysis');
+  console.log('✓ Script analysis routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load script analysis routes:', e.message);
+  scriptAnalysisRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 // Phase 3A controllers (real-time notifications)
 let notificationController, activityController, presenceController, socketController;
 
@@ -553,6 +562,9 @@ app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 
 // Scripts routes
 app.use('/api/v1/scripts', scriptsRoutes);
+
+// Script analysis routes (AI)
+app.use('/api/scripts', scriptAnalysisRoutes);
 
 // Phase 6 routes (Shows)
 const showRoutes = require('./routes/shows');

@@ -16,6 +16,7 @@ import {
   FiCheck
 } from 'react-icons/fi';
 import scriptsService from '../services/scriptsService';
+import ScriptAIAnalysis from './ScriptAIAnalysis';
 
 const SCRIPT_TYPES = [
   { id: 'main', label: 'Main Script', icon: FiFileText },
@@ -424,6 +425,7 @@ export default function EpisodeScripts({ episodeId }) {
               <ScriptCard
                 key={script.id}
                 script={script}
+                episodeId={episodeId}
                 onEdit={handleEditScript}
                 onUpdate={loadScripts}
                 onDelete={loadScripts}
@@ -437,7 +439,7 @@ export default function EpisodeScripts({ episodeId }) {
 }
 
 // Temporary inline ScriptCard component (will be extracted later)
-function ScriptCard({ script, onEdit, onUpdate, onDelete }) {
+function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
 
@@ -707,6 +709,13 @@ function ScriptCard({ script, onEdit, onUpdate, onDelete }) {
               </div>
             </div>
           )}
+
+          {/* AI Analysis Section */}
+          <ScriptAIAnalysis 
+            episodeId={episodeId}
+            scriptId={script.id}
+            script={script}
+          />
         </>
       )}
     </div>
