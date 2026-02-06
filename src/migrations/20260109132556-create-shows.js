@@ -89,6 +89,32 @@ module.exports = {
           comment: 'Whether the show is active',
         },
 
+        cover_image_url: {
+          type: Sequelize.TEXT,
+          allowNull: true,
+          comment: 'Public URL for show cover image (portrait 2:3 ratio)',
+        },
+
+        cover_s3_key: {
+          type: Sequelize.STRING(512),
+          allowNull: true,
+          comment: 'S3 key for show cover image',
+        },
+
+        icon: {
+          type: Sequelize.STRING(10),
+          defaultValue: '📺',
+          allowNull: true,
+          comment: 'Emoji icon for show',
+        },
+
+        color: {
+          type: Sequelize.STRING(7),
+          defaultValue: '#667eea',
+          allowNull: true,
+          comment: 'Brand color for show (hex)',
+        },
+
         created_at: {
           type: Sequelize.DATE,
           defaultValue: Sequelize.NOW,

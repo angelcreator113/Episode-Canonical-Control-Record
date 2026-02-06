@@ -9,27 +9,40 @@ module.exports = {
         defaultValue: Sequelize.UUIDV4,
         allowNull: false,
       },
-      showName: {
+      show_name: {
         type: Sequelize.STRING(255),
         allowNull: false,
       },
-      seasonNumber: {
+      season_number: {
         type: Sequelize.INTEGER,
         allowNull: false,
       },
-      episodeNumber: {
+      episode_number: {
         type: Sequelize.INTEGER,
         allowNull: false,
       },
-      episodeTitle: {
+      title: {
         type: Sequelize.STRING(255),
         allowNull: false,
       },
-      airDate: {
+      description: {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      },
+      status: {
+        type: Sequelize.STRING(50),
+        allowNull: true,
+        defaultValue: 'draft',
+      },
+      episode_title: {
+        type: Sequelize.STRING(255),
+        allowNull: true,
+      },
+      air_date: {
         type: Sequelize.DATE,
         allowNull: true,
       },
-      plotSummary: {
+      plot_summary: {
         type: Sequelize.TEXT,
         allowNull: true,
       },
@@ -41,7 +54,7 @@ module.exports = {
         type: Sequelize.STRING(255),
         allowNull: true,
       },
-      durationMinutes: {
+      duration_minutes: {
         type: Sequelize.INTEGER,
         allowNull: true,
       },
@@ -53,46 +66,50 @@ module.exports = {
         type: Sequelize.STRING(255),
         allowNull: true,
       },
-      thumbnailUrl: {
+      thumbnail_url: {
         type: Sequelize.STRING(512),
         allowNull: true,
       },
-      posterUrl: {
+      poster_url: {
         type: Sequelize.STRING(512),
         allowNull: true,
       },
-      videoUrl: {
+      video_url: {
         type: Sequelize.STRING(512),
         allowNull: true,
       },
-      rawVideoS3Key: {
+      raw_video_s3_key: {
         type: Sequelize.STRING(512),
         allowNull: true,
       },
-      processedVideoS3Key: {
+      processed_video_s3_key: {
         type: Sequelize.STRING(512),
         allowNull: true,
       },
-      metadataJsonS3Key: {
+      metadata_json_s3_key: {
         type: Sequelize.STRING(512),
         allowNull: true,
       },
-      processingStatus: {
+      processing_status: {
         type: Sequelize.ENUM('pending', 'processing', 'completed', 'failed'),
         defaultValue: 'pending',
         allowNull: false,
       },
-      uploadDate: {
+      show_id: {
+        type: Sequelize.UUID,
+        allowNull: true,
+      },
+      upload_date: {
         type: Sequelize.DATE,
         defaultValue: Sequelize.NOW,
         allowNull: false,
       },
-      lastModified: {
+      last_modified: {
         type: Sequelize.DATE,
         defaultValue: Sequelize.NOW,
         allowNull: false,
       },
-      deletedAt: {
+      deleted_at: {
         type: Sequelize.DATE,
         allowNull: true,
       },
@@ -100,24 +117,29 @@ module.exports = {
 
     // Create indexes
     await queryInterface.addIndex('episodes', {
-      fields: ['showName', 'seasonNumber', 'episodeNumber'],
+      fields: ['show_name', 'season_number', 'episode_number'],
       unique: true,
       name: 'idx_show_season_episode',
     });
 
     await queryInterface.addIndex('episodes', {
-      fields: ['airDate'],
+      fields: ['air_date'],
       name: 'idx_air_date',
     });
 
     await queryInterface.addIndex('episodes', {
-      fields: ['processingStatus'],
+      fields: ['processing_status'],
       name: 'idx_processing_status',
     });
 
     await queryInterface.addIndex('episodes', {
-      fields: ['deletedAt'],
+      fields: ['deleted_at'],
       name: 'idx_deleted_at',
+    });
+
+    await queryInterface.addIndex('episodes', {
+      fields: ['show_id'],
+      name: 'idx_show_id',
     });
   },
 

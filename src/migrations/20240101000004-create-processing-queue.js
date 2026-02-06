@@ -10,7 +10,7 @@ module.exports = {
         allowNull: false,
       },
       episodeId: {
-        type: Sequelize.INTEGER,
+        type: Sequelize.UUID,
         allowNull: false,
         references: {
           model: 'episodes',
