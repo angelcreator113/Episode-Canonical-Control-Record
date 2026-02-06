@@ -100,7 +100,7 @@ jobs:
           tar -czf episode-metadata-production-${{ github.sha }}.tar.gz deploy/
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: episode-metadata-build-production
           path: episode-metadata-production-${{ github.sha }}.tar.gz
