@@ -26,7 +26,7 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           clean: true
           
@@ -58,8 +58,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run tests
-        run: npm test -- --coverage || exit 0
-        continue-on-error: true
+        run: npm test -- --coverage
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
           JWT_SECRET: test-secret-key-minimum-32-characters-long
@@ -71,10 +70,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -123,12 +122,12 @@ jobs:
           name: episode-metadata-build-dev
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -250,129 +249,3 @@ jobs:
           echo "Environment: development"
           echo "Commit: ${{ github.sha }}"
           echo "Branch: ${{ github.ref_name }}"
-
-  # DISABLED: Frontend deployment no longer needed
-  # Backend server now serves both API and frontend static files from dist/
-  # ALB routes all traffic to backend server
-  deploy-frontend-disabled:
-    needs: build
-    if: false  # Disabled - backend serves frontend
-    runs-on: ubuntu-latest
-    environment:
-      name: development-frontend
-      url: http://52.91.217.230
-
-    steps:
-      - uses: actions/checkout@v3
-
-      - name: Download artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: episode-metadata-build-dev
-
-      - name: Extract frontend build
-        run: |
-          tar -xzf episode-metadata-${{ github.sha }}.tar.gz
-          echo "Checking artifact contents..."
-          ls -la deploy/
-          ls -la deploy/dist/ || echo "No dist folder found"
-
-      - name: Deploy Frontend to EC2
-        run: |
-          echo "🚀 Deploying frontend to EC2..."
-          echo "Target: 52.91.217.230"
-          echo "Commit: ${{ github.sha }}"
-          
-          # Setup SSH key
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          
-          # Test connectivity
-          echo "Testing connection to 52.91.217.230:22..."
-          nc -zv -w5 52.91.217.230 22 || echo "⚠️  Port 22 not immediately reachable"
-          
-          # Deploy frontend with retries
-          MAX_RETRIES=3
-          RETRY_DELAY=30
-          
-          for i in $(seq 1 $MAX_RETRIES); do
-            echo "🔄 Frontend deployment attempt $i of $MAX_RETRIES..."
-            
-            # Ensure directories exist and create backup
-            if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 ubuntu@52.91.217.230 \
-              "sudo mkdir -p /var/www/episode-frontend /var/www/episode-frontend-backup /tmp/frontend-dist && \
-               sudo cp -r /var/www/episode-frontend/* /var/www/episode-frontend-backup/ 2>/dev/null || true"; then
-              echo "✓ Directories created and backup done"
-            fi
-            
-            # Upload new frontend files (preserve directory structure with trailing slash)
-            if scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 -r deploy/dist/. ubuntu@52.91.217.230:/tmp/frontend-dist-new/; then
-              # Atomic deployment: deploy to temp, then swap
-              if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ConnectTimeout=10 ubuntu@52.91.217.230 \
-                "sudo rm -rf /var/www/episode-frontend-old && \
-                 sudo mv /var/www/episode-frontend /var/www/episode-frontend-old 2>/dev/null || true && \
-                 sudo mkdir -p /var/www/episode-frontend && \
-                 sudo cp -r /tmp/frontend-dist-new/. /var/www/episode-frontend/ && \
-                 sudo chown -R www-data:www-data /var/www/episode-frontend && \
-                 sudo chmod -R 755 /var/www/episode-frontend && \
-                 sudo rm -rf /tmp/frontend-dist-new /var/www/episode-frontend-old && \
-                 echo 'Verifying deployment:' && \
-                 ls -la /var/www/episode-frontend/ && \
-                 echo '---' && \
-                 ls -la /var/www/episode-frontend/assets/ 2>/dev/null || echo 'Warning: No assets folder'"; then
-                echo "✅ Frontend deployment successful on attempt $i"
-                break
-              fi
-            fi
-            
-            if [ $i -lt $MAX_RETRIES ]; then
-              echo "⚠️  Frontend deployment attempt $i failed, waiting ${RETRY_DELAY}s before retry..."
-              sleep $RETRY_DELAY
-            else
-              echo "❌ All frontend deployment attempts failed"
-              exit 1
-            fi
-          done
-          
-          echo "✅ Frontend deployment to EC2 complete"
-
-      - name: Test frontend deployment
-        run: |
-          echo "🧪 Testing frontend deployment..."
-          sleep 5
-          
-          # Test if frontend is accessible
-          MAX_RETRIES=3
-          for i in $(seq 1 $MAX_RETRIES); do
-            echo "Frontend test attempt $i/$MAX_RETRIES..."
-            if curl -f -m 10 http://52.91.217.230/; then
-              echo "✅ Frontend is accessible!"
-              echo "🌐 Frontend URL: http://52.91.217.230"
-              exit 0
-            fi
-            if [ $i -lt $MAX_RETRIES ]; then
-              echo "⚠️  Frontend test failed, waiting 5 seconds before retry..."
-              sleep 5
-            fi
-          done
-          
-          echo "❌ Frontend accessibility test failed after $MAX_RETRIES attempts"
-          exit 1
-
-      - name: Frontend deployment summary
-        run: |
-          echo "✅ Frontend deployment completed"
-          echo "Environment: development-frontend"
-          echo "Commit: ${{ github.sha }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo "URL: http://52.91.217.230"
-
-  # NOTE: ALB routing update removed - CI/CD user lacks elasticloadbalancing:ModifyRule permission
-  # 
-  # ALB routing must be manually configured ONCE to route all traffic to backend:
-  # 1. Run the script: ./fix-alb-routing.ps1
-  # 2. This updates /assets/* and default routes to point to primepisodes-backend target group
-  # 3. Backend server serves both API and frontend from dist/ folder
-  #
-  # After manual setup, deployments will work without this job.

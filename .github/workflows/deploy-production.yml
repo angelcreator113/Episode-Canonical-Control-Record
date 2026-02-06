@@ -58,7 +58,7 @@ jobs:
         run: npm ci
 
       - name: Run tests
-        run: npm test -- --coverage || true
+        run: npm test -- --coverage
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata
           JWT_SECRET: test-secret-key-minimum-32-characters-long
@@ -69,12 +69,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: main
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -92,7 +92,7 @@ jobs:
         run: |
           mkdir -p deploy
           cp -r src deploy/
-          cp -r migrations deploy/
+          cp -r src/migrations deploy/
           cp -r frontend/dist deploy/frontend-dist
           cp package.json deploy/
           cp package-lock.json deploy/
@@ -113,7 +113,7 @@ jobs:
       url: https://primepisodes.com
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           ref: main
 
@@ -123,12 +123,12 @@ jobs:
           name: episode-metadata-build-production
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -146,9 +146,10 @@ jobs:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
           NODE_ENV: production
         run: |
-          echo "Running production database migrations..."
+          echo "🔄 Running production database migrations..."
           npm ci
-          npm run migrate || echo "Migration skipped or failed"
+          npm run migrate:up
+          echo "✅ Migrations completed successfully"
 
       - name: Deploy to Production
         run: |

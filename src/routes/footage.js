@@ -5,6 +5,7 @@ const router = express.Router();
 const multer = require('multer');
 const { Scene, Episode } = require('../models');
 const s3AIService = require('../services/s3AIService');
+const logger = require('../utils/logger');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
@@ -95,7 +96,7 @@ router.post('/upload', upload.single('video'), async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Footage upload error:', error);
+    logger.error('Footage upload error', { error: error.message, stack: error.stack });
     res.status(500).json({ 
       error: 'Upload failed', 
       message: error.message 
@@ -143,7 +144,7 @@ router.get('/scenes/:episodeId', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Get scenes error:', error);
+    logger.error('Get scenes error', { error: error.message });
     res.status(500).json({ error: 'Failed to get scenes' });
   }
 });
