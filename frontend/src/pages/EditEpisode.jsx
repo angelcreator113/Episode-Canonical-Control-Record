@@ -10,7 +10,6 @@ import { useToast } from '../components/ToastContainer';
 import { API_URL } from '../config/api';
 import episodeService from '../services/episodeService';
 import thumbnailService from '../services/thumbnailService';
-import AssetPicker from '../components/Scenes/AssetPicker';
 import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
 import TagInput from '../components/TagInput';
@@ -118,7 +117,6 @@ const EditEpisode = () => {
   const [thumbnailPreview, setThumbnailPreview] = useState(null);
   const [thumbnailId, setThumbnailId] = useState(null);
 
-  const [showAssetPicker, setShowAssetPicker] = useState(false);
   const [errors, setErrors] = useState({});
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -375,14 +373,6 @@ const EditEpisode = () => {
     const reader = new FileReader();
     reader.onload = () => setThumbnailPreview(reader.result);
     reader.readAsDataURL(file);
-    clearFieldError('thumbnail');
-  };
-
-  const handleThumbnailSelect = async (asset) => {
-    if (!asset?.id) return;
-    setThumbnailId(asset.id);
-    setThumbnailPreview(asset.thumbnail_url || asset.url || null);
-    setShowAssetPicker(false);
     clearFieldError('thumbnail');
   };
 
@@ -1629,16 +1619,6 @@ const EditEpisode = () => {
           </div>
         </div>
       </div>
-
-      {/* Asset Picker Modal */}
-      <AssetPicker
-        isOpen={showAssetPicker}
-        onClose={() => setShowAssetPicker(false)}
-        onSelect={handleThumbnailSelect}
-        multiSelect={false}
-        selectedIds={[]}
-        allowUpload={true}
-      />
     </div>
   );
 };

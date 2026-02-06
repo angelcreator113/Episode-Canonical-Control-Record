@@ -27,6 +27,15 @@ export const assetService = {
   },
 
   /**
+   * Get all assets with optional filters
+   */
+  getAssets: async (params = {}) => {
+    const queryString = new URLSearchParams(params).toString();
+    const url = `/api/v1/assets${queryString ? `?${queryString}` : ''}`;
+    return api.get(url);
+  },
+
+  /**
    * Get pending assets
    */
   getPendingAssets: async () => {

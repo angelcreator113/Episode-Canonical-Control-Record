@@ -28,17 +28,15 @@ class S3AIService {
    * @param {string} sceneId - Scene identifier
    * @returns {Promise<{s3Key: string, bucket: string}>}
    */
-  async uploadRawFootage(fileBuffer, filename, episodeId, sceneId) {
-    const s3Key = `episodes/${episodeId}/scenes/${sceneId}/raw/${filename}`;
-    
+  async uploadRawFootage(fileBuffer, s3Key, contentType) {
     await this.s3Client.send(new PutObjectCommand({
       Bucket: this.buckets.rawFootage,
       Key: s3Key,
       Body: fileBuffer,
-      ContentType: this._getContentType(filename),
+      ContentType: contentType || this._getContentType(s3Key),
     }));
     
-    return { s3Key, bucket: this.buckets.rawFootage };
+    return { key: s3Key, bucket: this.buckets.rawFootage };
   }
 
   /**

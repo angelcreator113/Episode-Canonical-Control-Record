@@ -448,14 +448,6 @@ const EpisodeDetail = () => {
             <span className="ed-tab-label">Overview</span>
           </button>
           <button
-            className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('scenes')}
-            title="Scenes"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Scenes</span>
-          </button>
-          <button
             className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('wardrobe')}
             title="Wardrobe"

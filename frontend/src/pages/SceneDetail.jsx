@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import sceneLibraryService from '../services/sceneLibraryService';
-import VideoPlayer from '../components/VideoPlayer';
 import './SceneDetail.css';
 
 const SceneDetail = () => {
@@ -211,12 +210,14 @@ const SceneDetail = () => {
         {/* Left Column - Video Player */}
         <div className="detail-left">
           <div className="video-section">
-            <VideoPlayer
-              videoUrl={scene.videoAssetUrl || scene.video_asset_url}
-              thumbnailUrl={scene.thumbnailUrl || scene.thumbnail_url}
-              showTrimControls={false}
-              autoPlay={false}
-            />
+            <video
+              controls
+              poster={scene.thumbnailUrl || scene.thumbnail_url}
+              style={{ width: '100%', borderRadius: '8px' }}
+            >
+              <source src={scene.videoAssetUrl || scene.video_asset_url} type="video/mp4" />
+              Your browser does not support the video tag.
+            </video>
           </div>
 
           {/* Technical Details */}

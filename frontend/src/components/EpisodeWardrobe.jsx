@@ -7,7 +7,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
 import WardrobeCalendarView from './WardrobeCalendarView';
-import WardrobeTimelineView from './WardrobeTimelineView';
 import wardrobeEnhancements from '../utils/wardrobeEnhancements';
 import './EpisodeWardrobe.css';
 
@@ -30,7 +29,7 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
   const [sortBy, setSortBy] = useState('name'); // name, price-asc, price-desc, recent
 
   // View mode states
-  const [viewMode, setViewMode] = useState('grid'); // grid, calendar, timeline
+  const [viewMode, setViewMode] = useState('grid'); // grid, calendar
   
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
@@ -484,13 +483,6 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
                 >
                   📅
                 </button>
-                <button
-                  className={`view-btn-mini ${viewMode === 'timeline' ? 'active' : ''}`}
-                  onClick={() => setViewMode('timeline')}
-                  title="Timeline"
-                >
-                  📊
-                </button>
               </div>
             </div>
           </div>
@@ -581,9 +573,6 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
 
           {/* Calendar View */}
           {viewMode === 'calendar' && <WardrobeCalendarView items={filteredItems} onEditItem={openEditForm} />}
-
-          {/* Timeline View */}
-          {viewMode === 'timeline' && <WardrobeTimelineView items={filteredItems} onEditItem={openEditForm} />}
 
           {/* Grid View (default) */}
           {viewMode === 'grid' && (
