@@ -213,6 +213,54 @@ export const scriptsService = {
     };
     return colors[status] || 'neutral';
   },
+
+  // ============================================================================
+  // AI Analysis Methods
+  // ============================================================================
+
+  /**
+   * Enable/disable AI analysis for a script
+   * @param {number} scriptId - Script ID
+   * @param {boolean} enabled - Enable or disable
+   */
+  toggleAIAnalysis: async (scriptId, enabled) => {
+    try {
+      const response = await api.put(`/api/scripts/${scriptId}/ai-analysis`, { enabled });
+      return response.data;
+    } catch (error) {
+      console.error('Failed to toggle AI analysis:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Run AI analysis on a script
+   * @param {number} scriptId - Script ID
+   * @param {object} options - Analysis options (targetDuration, pacing)
+   */
+  analyzeScript: async (scriptId, options = {}) => {
+    try {
+      const response = await api.post(`/api/scripts/${scriptId}/analyze`, options);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to analyze script:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * Get script metadata (AI analysis results)
+   * @param {number} scriptId - Script ID
+   */
+  getScriptMetadata: async (scriptId) => {
+    try {
+      const response = await api.get(`/api/scripts/${scriptId}/metadata`);
+      return response.data;
+    } catch (error) {
+      console.error('Failed to get script metadata:', error);
+      throw error;
+    }
+  },
 };
 
 export default scriptsService;

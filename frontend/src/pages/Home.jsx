@@ -652,6 +652,15 @@ const Home = () => {
                 <span className="quick-action-label">Create Episode</span>
               </Link>
 
+              <button 
+                onClick={() => navigate('/wardrobe?upload=true')} 
+                className="quick-action-item"
+                style={{ border: 'none', background: 'transparent', cursor: 'pointer', textAlign: 'left', width: '100%' }}
+              >
+                <span className="quick-action-icon">👗</span>
+                <span className="quick-action-label">Upload to Wardrobe</span>
+              </button>
+
               <Link to="/composer/default" className="quick-action-item">
                 <span className="quick-action-icon">🎨</span>
                 <span className="quick-action-label">Thumbnail Composer</span>

@@ -5,9 +5,9 @@ import episodeService from '../services/episodeService';
 import EpisodeWardrobe from '../components/EpisodeWardrobe';
 import EpisodeAssetsTab from '../components/EpisodeAssetsTab';
 import EpisodeScripts from '../components/EpisodeScripts';
+import RawFootageUpload from '../components/RawFootageUpload';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
-import VideoPlayer from '../components/VideoPlayer';
-import ClipSequenceManager from '../components/Episodes/ClipSequenceManager';
+import SceneLinking from '../components/SceneLinking';
 import './EpisodeDetail.css';
 
 
@@ -22,11 +22,14 @@ const EpisodeDetail = () => {
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [episodeScenes, setEpisodeScenes] = useState([]);
   const [loadingScenes, setLoadingScenes] = useState(false);
+  const [episodeAssets, setEpisodeAssets] = useState([]);
+  const [episodeWardrobes, setEpisodeWardrobes] = useState([]);
   const [selectedSceneId, setSelectedSceneId] = useState(null);
   const [editingTrim, setEditingTrim] = useState({});
   const [savingScenes, setSavingScenes] = useState({});
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showOtherSteps, setShowOtherSteps] = useState(false);
+  const [primaryScript, setPrimaryScript] = useState(null);
 
   // Auth check
   useEffect(() => {
@@ -55,6 +58,25 @@ const EpisodeDetail = () => {
     }
   }, [episodeId]);
 
+  // Load primary script for scene linking
+  useEffect(() => {
+    const fetchPrimaryScript = async () => {
+      if (!episodeId) return;
+      
+      try {
+        const response = await fetch(`/api/v1/episodes/${episodeId}/scripts?includeAllVersions=false`);
+        const data = await response.json();
+        const scripts = data.data || data.scripts || [];
+        const primary = scripts.find(s => s.is_primary === true);
+        setPrimaryScript(primary || scripts[0]); // Use first script if no primary
+      } catch (err) {
+        console.error('Failed to load primary script:', err);
+      }
+    };
+
+    fetchPrimaryScript();
+  }, [episodeId]);
+
   // Load episode scenes
   useEffect(() => {
     const fetchEpisodeScenes = async () => {
@@ -73,6 +95,40 @@ const EpisodeDetail = () => {
     };
 
     fetchEpisodeScenes();
+  }, [episodeId, activeTab]);
+
+  // Load episode assets
+  useEffect(() => {
+    const fetchEpisodeAssets = async () => {
+      if (!episodeId || activeTab !== 'assets') return;
+      
+      try {
+        const response = await fetch(`/api/v1/episodes/${episodeId}/assets`);
+        const data = await response.json();
+        setEpisodeAssets(data.data || data.assets || []);
+      } catch (err) {
+        console.error('Failed to load episode assets:', err);
+      }
+    };
+
+    fetchEpisodeAssets();
+  }, [episodeId, activeTab]);
+
+  // Load episode wardrobe
+  useEffect(() => {
+    const fetchEpisodeWardrobe = async () => {
+      if (!episodeId || activeTab !== 'wardrobe') return;
+      
+      try {
+        const response = await fetch(`/api/v1/episodes/${episodeId}/wardrobe`);
+        const data = await response.json();
+        setEpisodeWardrobes(data.data || data.items || []);
+      } catch (err) {
+        console.error('Failed to load episode wardrobe:', err);
+      }
+    };
+
+    fetchEpisodeWardrobe();
   }, [episodeId, activeTab]);
 
   // Handle scene selection from library
@@ -250,7 +306,7 @@ const EpisodeDetail = () => {
       return {
         title: 'Create a thumbnail',
         description: 'Design a compelling thumbnail to represent this episode',
-        action: () => navigate(`/composer/${episode.id}`),
+        action: () => navigate(`/episodes/${episode.id}/timeline`),
         buttonText: 'Create Thumbnail'
       };
     }
@@ -285,7 +341,7 @@ const EpisodeDetail = () => {
     }
     
     if (!episode.thumbnailUrl && !episode.thumbnail_url && primaryAction?.title !== 'Create a thumbnail') {
-      steps.push({ title: 'Create Thumbnail', status: 'pending', action: () => navigate(`/composer/${episode.id}`) });
+      steps.push({ title: 'Create Thumbnail', status: 'pending', action: () => navigate(`/episodes/${episode.id}/timeline`) });
     } else if (episode.thumbnailUrl || episode.thumbnail_url) {
       steps.push({ title: 'Create Thumbnail', status: 'complete' });
     }
@@ -372,7 +428,7 @@ const EpisodeDetail = () => {
               <div className="ed-dropdown">
                 <button
                   onClick={() => {
-                    navigate(`/composer/${episode.id}`);
+                    navigate(`/episodes/${episode.id}/timeline`);
                     setShowMoreActions(false);
                   }}
                   className="ed-dropdown-item"
@@ -413,14 +469,6 @@ const EpisodeDetail = () => {
             <span className="ed-tab-label">Overview</span>
           </button>
           <button
-            className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('scenes')}
-            title="Scenes"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Scenes</span>
-          </button>
-          <button
             className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('wardrobe')}
             title="Wardrobe"
@@ -435,6 +483,22 @@ const EpisodeDetail = () => {
           >
             <span className="ed-tab-icon">📝</span>
             <span className="ed-tab-label">Scripts</span>
+          </button>
+          <button
+            className={`ed-tab ${activeTab === 'footage' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('footage')}
+            title="Raw Footage"
+          >
+            <span className="ed-tab-icon">🎬</span>
+            <span className="ed-tab-label">Raw Footage</span>
+          </button>
+          <button
+            className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('scenes')}
+            title="Scene Linking"
+          >
+            <span className="ed-tab-icon">🔗</span>
+            <span className="ed-tab-label">Scene Linking</span>
           </button>
           <button
             className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
@@ -538,11 +602,6 @@ const EpisodeDetail = () => {
           </div>
         )}
 
-        {/* Scenes Tab */}
-        {activeTab === 'scenes' && (
-          <ClipSequenceManager episodeId={episodeId} episode={episode} />
-        )}
-
         {/* Wardrobe Tab */}
         {activeTab === 'wardrobe' && (
           <div className="ed-fullbleed">
@@ -556,6 +615,44 @@ const EpisodeDetail = () => {
         {/* Scripts Tab */}
         {activeTab === 'scripts' && (
           <EpisodeScripts episodeId={episode.id} />
+        )}
+
+        {/* Raw Footage Tab */}
+        {activeTab === 'footage' && (
+          <div className="ed-card">
+            <div className="ed-cardhead">
+              <h2 className="ed-cardtitle">🎬 Raw Footage Upload</h2>
+              <p className="text-sm text-gray-600 mt-2">
+                Upload raw video clips for this episode. Files will be stored in S3 and metadata extracted automatically.
+              </p>
+            </div>
+            <div className="ed-cardbody">
+              <RawFootageUpload 
+                episodeId={episode.id} 
+                onUploadComplete={() => {
+                  console.log('Upload complete');
+                }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Scene Linking Tab */}
+        {activeTab === 'scenes' && (
+          <div className="ed-card">
+            <div className="ed-cardhead">
+              <h2 className="ed-cardtitle">🔗 Scene Linking</h2>
+              <p className="text-sm text-gray-600 mt-2">
+                Link uploaded footage clips to AI-detected scenes from your script.
+              </p>
+            </div>
+            <div className="ed-cardbody">
+              <SceneLinking 
+                episodeId={episode.id} 
+                scriptId={primaryScript?.id}
+              />
+            </div>
+          </div>
         )}
 
         {/* Assets Tab */}

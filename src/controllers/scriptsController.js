@@ -225,6 +225,29 @@ module.exports = {
   }),
 
   /**
+   * GET /api/v1/scripts
+   * Get all scripts (with optional filtering)
+   */
+  getAllScripts: asyncHandler(async (req, res) => {
+    const filters = {
+      showId: req.query.showId,
+      episodeId: req.query.episodeId,
+      scriptType: req.query.scriptType,
+      status: req.query.status,
+      page: parseInt(req.query.page) || 1,
+      limit: parseInt(req.query.limit) || 50,
+    };
+
+    const scripts = await scriptsService.searchScripts(filters);
+
+    res.json({
+      success: true,
+      data: scripts,
+      count: scripts.length,
+    });
+  }),
+
+  /**
    * GET /api/v1/scripts/search
    * Search/filter scripts (for library page)
    */

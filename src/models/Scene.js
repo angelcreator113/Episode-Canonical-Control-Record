@@ -30,7 +30,7 @@ module.exports = (sequelize) => {
       },
       scene_number: {
         type: DataTypes.INTEGER,
-        allowNull: false,
+        allowNull: true,
         field: 'scene_number',
         validate: {
           min: 1,
@@ -277,6 +277,36 @@ module.exports = (sequelize) => {
           },
         },
       },
+      raw_footage_s3_key: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        field: 'raw_footage_s3_key',
+      },
+      // CamelCase alias for raw_footage_s3_key
+      rawFootageS3Key: {
+        type: DataTypes.VIRTUAL,
+        get() {
+          return this.getDataValue('raw_footage_s3_key');
+        },
+        set(value) {
+          this.setDataValue('raw_footage_s3_key', value);
+        },
+      },
+      ai_scene_detected: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: false,
+        field: 'ai_scene_detected',
+      },
+      ai_confidence_score: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+        field: 'ai_confidence_score',
+        validate: {
+          min: 0,
+          max: 1,
+        },
+      },
     },
     {
       sequelize,
@@ -413,6 +443,9 @@ module.exports = (sequelize) => {
       thumbnailId: this.thumbnail_id,
       thumbnail: this.thumbnail,
       assets: this.assets,
+      rawFootageS3Key: this.raw_footage_s3_key,
+      aiSceneDetected: this.ai_scene_detected,
+      aiConfidenceScore: this.ai_confidence_score,
       createdAt: this.created_at,
       updatedAt: this.updated_at,
       createdBy: this.created_by,

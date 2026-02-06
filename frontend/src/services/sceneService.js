@@ -6,7 +6,7 @@
 import api from './api';
 
 const sceneService = {
-  // List scenes for an episode
+  // List scenes for an episode (from episode_scenes table)
   async getScenes(episodeId, params = {}) {
     const { data } = await api.get(`/api/v1/episodes/${episodeId}/scenes`, { 
       params: {
@@ -15,6 +15,11 @@ const sceneService = {
       }
     });
     return data;
+  },
+
+  // Alias for getScenes (used by Timeline component)
+  async getEpisodeScenes(episodeId, params = {}) {
+    return this.getScenes(episodeId, params);
   },
 
   // Get single scene

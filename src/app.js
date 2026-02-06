@@ -169,14 +169,17 @@ app.use(express.urlencoded({ limit: '10mb', extended: true }));
 // ============================================================================
 const { attachRBAC } = require('./middleware/rbac');
 const { captureResponseData } = require('./middleware/auditLog');
+const { optionalAuth } = require('./middleware/auth');
 
 // Optional auth for all routes (user info attached if valid token provided)
-// DISABLED for development debugging
-// app.use(optionalAuth);
-app.use((req, res, next) => {
-  req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' };
-  next();
-});
+// Real Cognito authentication enabled
+app.use(optionalAuth);
+
+// DEV MODE (uncomment to bypass authentication for testing)
+// app.use((req, res, next) => {
+//   req.user = { id: 'dev-user', email: 'dev@example.com', name: 'Dev User' };
+//   next();
+// });
 
 // Attach RBAC info to request
 app.use(attachRBAC);
@@ -425,6 +428,33 @@ try {
   scriptsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+let footageRoutes;
+try {
+  footageRoutes = require('./routes/footage');
+  console.log('✓ Footage routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load footage routes:', e.message);
+  footageRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+let sceneLinksRoutes;
+try {
+  sceneLinksRoutes = require('./routes/sceneLinks');
+  console.log('✓ Scene links routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load scene links routes:', e.message);
+  sceneLinksRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+let scriptAnalysisRoutes;
+try {
+  scriptAnalysisRoutes = require('./routes/scriptAnalysis');
+  console.log('✓ Script analysis routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load script analysis routes:', e.message);
+  scriptAnalysisRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 // Phase 3A controllers (real-time notifications)
 let notificationController, activityController, presenceController, socketController;
 
@@ -506,6 +536,10 @@ app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
 app.use('/api/v1/processing-queue', processingRoutes);
 
+// Admin routes for migrations/setup
+const adminRoutes = require('./routes/admin');
+app.use('/api/v1/admin', adminRoutes);
+
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
 app.use('/api/v1/search', searchRoutes);
@@ -546,6 +580,15 @@ app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 
 // Scripts routes
 app.use('/api/v1/scripts', scriptsRoutes);
+
+// Script analysis routes (AI)
+app.use('/api/scripts', scriptAnalysisRoutes);
+
+// Footage upload routes
+app.use('/api/footage', footageRoutes);
+
+// Scene linking routes
+app.use('/api/scene-links', sceneLinksRoutes);
 
 // Phase 6 routes (Shows)
 const showRoutes = require('./routes/shows');

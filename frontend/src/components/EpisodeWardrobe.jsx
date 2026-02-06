@@ -7,7 +7,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
 import WardrobeCalendarView from './WardrobeCalendarView';
-import WardrobeTimelineView from './WardrobeTimelineView';
 import wardrobeEnhancements from '../utils/wardrobeEnhancements';
 import './EpisodeWardrobe.css';
 
@@ -16,31 +15,12 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
   const [wardrobeItems, setWardrobeItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeCharacter, setActiveCharacter] = useState('all');
-  const [showForm, setShowForm] = useState(false);
-  const [editingItem, setEditingItem] = useState(null);
-  const [formData, setFormData] = useState({
-    name: '',
-    clothingCategory: '',
-    brand: '',
-    website: '',
-    purchaseLink: '',
-    price: '',
-    color: '',
-    size: '',
-    occasion: '',
-    season: '',
-    character: '',
-    scene: '',
-    outfitNotes: '',
-    isFavorite: false,
-    outfitSetId: '',
-    outfitSetName: '',
-    tags: [],
-    additionalEpisodes: [] // For linking to multiple episodes
-  });
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [imagePreview, setImagePreview] = useState(null);
-  const [saving, setSaving] = useState(false);
+  
+  // Select existing items modal
+  const [showSelectModal, setShowSelectModal] = useState(false);
+  const [availableItems, setAvailableItems] = useState([]);
+  const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [selectedItemId, setSelectedItemId] = useState(null);
 
   // Search & Filter states
   const [searchQuery, setSearchQuery] = useState('');
@@ -49,12 +29,14 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
   const [sortBy, setSortBy] = useState('name'); // name, price-asc, price-desc, recent
 
   // View mode states
-  const [viewMode, setViewMode] = useState('grid'); // grid, calendar, timeline
+  const [viewMode, setViewMode] = useState('grid'); // grid, calendar
   
-  // Background processing state
-  const [processingBg, setProcessingBg] = useState(null);
-  const [processingStatus, setProcessingStatus] = useState(''); // Track processing stage
-  const [showProcessed, setShowProcessed] = useState({}); // Track which items show processed version
+  // Pagination
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 8;
+  
+  // 3-dot menu state
+  const [openMenuItemId, setOpenMenuItemId] = useState(null);
 
   const loadEpisodeWardrobe = useCallback(async () => {
     try {
@@ -94,182 +76,95 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
     loadEpisodeWardrobe();
   }, [loadEpisodeWardrobe]);
 
-  const openAddForm = () => {
-    setEditingItem(null);
-    setSelectedFile(null);
-    setImagePreview(null);
-    setFormData({
-      name: '',
-      clothingCategory: '',
-      brand: '',
-      website: '',
-      purchaseLink: '',
-      price: '',
-      color: '',
-      size: '',
-      occasion: '',
-      season: '',
-      character: '',
-      scene: '',
-      outfitNotes: '',
-      isFavorite: false,
-      outfitSetId: '',
-      outfitSetName: '',
-      tags: [],
-      additionalEpisodes: []
-    });
-    setShowForm(true);
-  };
+  // Reload data when window regains focus (for cross-tab/page sync)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadEpisodeWardrobe();
+      }
+    };
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [loadEpisodeWardrobe]);
+  
+  // Close dropdown menu when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (openMenuItemId && !e.target.closest('.item-menu-container')) {
+        setOpenMenuItemId(null);
+      }
+    };
+    
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
+  }, [openMenuItemId]);
 
-  const openEditForm = (item) => {
-    setEditingItem(item);
-    setSelectedFile(null);
-    setImagePreview(item.s3_url || null);
-    setFormData({
-      name: item.name || '',
-      clothingCategory: item.clothing_category || '',
-      brand: item.brand || '',
-      website: item.website || '',
-      purchaseLink: item.purchase_link || '',
-      price: item.price || '',
-      color: item.color || '',
-      size: item.size || '',
-      occasion: item.occasion || '',
-      season: item.season || '',
-      character: item.character || '',
-      scene: item.episodeLinks?.[0]?.scene || '',
-      outfitNotes: item.outfit_notes || '',
-      isFavorite: item.is_favorite || false,
-      outfitSetId: item.outfit_set_id || '',
-      outfitSetName: item.outfit_set_name || '',
-      tags: item.tags || [],
-      additionalEpisodes: []
-    });
-    setShowForm(true);
-  };
-
-  const handleFileSelect = (e) => {
-    const file = e.target.files[0];
-    if (file) {
-      setSelectedFile(file);
-      // Create preview
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const closeForm = () => {
-    setShowForm(false);
-    setEditingItem(null);
-  };
-
-  const handleSave = async () => {
+  const openSelectModal = async () => {
     try {
-      setSaving(true);
-
-      // Prepare form data for multipart upload
-      const uploadData = new FormData();
-
-      // Add file if selected
-      if (selectedFile) {
-        uploadData.append('file', selectedFile);
-      }
-
-      // Add wardrobe item data (matching new schema)
-      uploadData.append('name', formData.name);
-      uploadData.append('character', formData.character);
-      uploadData.append('clothingCategory', formData.clothingCategory);
-      uploadData.append('brand', formData.brand || '');
-      uploadData.append('price', formData.price || '');
-      uploadData.append('purchaseLink', formData.purchaseLink || '');
-      uploadData.append('website', formData.website || '');
-      uploadData.append('color', formData.color || '');
-      uploadData.append('size', formData.size || '');
-      uploadData.append('season', formData.season || '');
-      uploadData.append('occasion', formData.occasion || '');
-      uploadData.append('outfitSetId', formData.outfitSetId || '');
-      uploadData.append('outfitSetName', formData.outfitSetName || '');
-      uploadData.append('sceneDescription', formData.scene || '');
-      uploadData.append('outfitNotes', formData.outfitNotes || '');
-      uploadData.append('isFavorite', formData.isFavorite || false);
-      uploadData.append('tags', JSON.stringify(formData.tags || []));
-
-      if (editingItem) {
-        // Update existing wardrobe item
-        const response = await fetch(`${API_URL}/wardrobe/${editingItem.id}`, {
-          method: 'PUT',
-          body: uploadData
-        });
-
-        if (!response.ok) throw new Error('Failed to update item');
-      } else {
-        // Create new wardrobe item
-        console.log('Creating wardrobe item with data:', {
-          name: formData.name,
-          character: formData.character,
-          clothingCategory: formData.clothingCategory
-        });
-        
-        const createResponse = await fetch(`${API_URL}/wardrobe`, {
-          method: 'POST',
-          body: uploadData
-        });
-
-        if (!createResponse.ok) {
-          const errorText = await createResponse.text();
-          console.error('Server response:', createResponse.status, errorText);
-          throw new Error(`Failed to create wardrobe item: ${createResponse.status} - ${errorText}`);
-        }
-
-        const { data: newItem } = await createResponse.json();
-
-        // Link the new wardrobe item to this episode
-        const linkResponse = await fetch(`${API_URL}/episodes/${episodeId}/wardrobe/${newItem.id}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            scene: formData.scene || null,
-            notes: formData.outfitNotes || null
-          })
-        });
-
-        if (!linkResponse.ok) {
-          console.warn('Failed to link wardrobe to episode, but item was created');
-        }
-
-        // Link to additional episodes if specified
-        if (formData.additionalEpisodes && formData.additionalEpisodes.length > 0) {
-          for (const additionalEpisodeId of formData.additionalEpisodes) {
-            try {
-              await fetch(`${API_URL}/episodes/${additionalEpisodeId}/wardrobe/${newItem.id}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ scene: null, notes: null })
-              });
-            } catch (err) {
-              console.warn(`Failed to link to episode ${additionalEpisodeId}:`, err);
-            }
-          }
-        }
-      }
-
-      // Reload wardrobe items
-      await loadEpisodeWardrobe();
-      closeForm();
+      setLoadingAvailable(true);
+      setShowSelectModal(true);
+      
+      // Load staging items (unassigned items)
+      const response = await fetch(`${API_URL}/wardrobe/staging`);
+      if (!response.ok) throw new Error('Failed to load available items');
+      const data = await response.json();
+      setAvailableItems(data.data || []);
     } catch (err) {
-      console.error('Error saving wardrobe item:', err);
-      console.error('Form data at time of error:', formData);
-      alert(`Failed to save wardrobe item: ${err.message}\n\nCheck console for details.`);
+      console.error('Error loading available items:', err);
+      setAvailableItems([]);
     } finally {
-      setSaving(false);
+      setLoadingAvailable(false);
     }
   };
 
+  // Link existing item to this episode
+  const linkExistingItem = async (wardrobeId) => {
+    try {
+      const response = await fetch(`${API_URL}/episodes/${episodeId}/wardrobe/${wardrobeId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scene: null, notes: null })
+      });
+
+      if (!response.ok) throw new Error('Failed to link item');
+
+      // Reload wardrobe
+      await loadEpisodeWardrobe();
+      setShowSelectModal(false);
+      setSelectedItemId(null);
+    } catch (err) {
+      console.error('Error linking item:', err);
+      alert(`Failed to link item: ${err.message}`);
+    }
+  };
+
+  // Toggle episode-level favorite
+  const toggleFavorite = async (item) => {
+    try {
+      const newFavoriteState = !item.is_episode_favorite;
+      
+      const response = await fetch(`${API_URL}/episodes/${episodeId}/wardrobe/${item.id}/favorite`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ isFavorite: newFavoriteState })
+      });
+
+      if (!response.ok) throw new Error('Failed to toggle favorite');
+
+      // Update local state
+      setWardrobeItems(prev => prev.map(w => 
+        w.id === item.id ? { ...w, is_episode_favorite: newFavoriteState } : w
+      ));
+    } catch (err) {
+      console.error('Error toggling favorite:', err);
+      alert(`Failed to toggle favorite: ${err.message}`);
+    }
+  };
+
+  // Unlink item from episode (not global delete)
   const handleDelete = async (item) => {
-    if (!window.confirm(`Remove "${item.name}" from this episode? This will unlink it but not delete the wardrobe item.`)) {
+    if (!window.confirm(`Unlink "${item.name}" from this episode?\n\nThis will NOT delete the item globally - it will only remove it from this episode. The item will remain available for other episodes.`)) {
       return;
     }
 
@@ -360,66 +255,9 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
     setTimeout(() => printWindow.print(), 500);
   };
 
-  const handleRemoveBackground = async (item) => {
-    if (!item.s3_url) {
-      alert('This item has no image to process.');
-      return;
-    }
-
-    if (!window.confirm(`Remove background from "${item.name}"? This may take 30-60 seconds.`)) {
-      return;
-    }
-
-    setProcessingBg(item.id);
-    setProcessingStatus('Downloading image from S3...');
-
-    try {
-      // Call the background removal API with extended timeout
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 90000); // 90 second timeout
-
-      setTimeout(() => setProcessingStatus('Sending to AI background remover...'), 1000);
-      setTimeout(() => setProcessingStatus('AI processing your image...'), 3000);
-      setTimeout(() => setProcessingStatus('Almost done, uploading result...'), 25000);
-
-      const response = await fetch(`${API_URL}/wardrobe/${item.id}/process-background`, {
-        method: 'POST',
-        signal: controller.signal
-      });
-
-      clearTimeout(timeoutId);
-      setProcessingStatus('Finalizing...');
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ message: 'Failed to process' }));
-        throw new Error(errorData.message || 'Failed to remove background');
-      }
-
-      const result = await response.json();
-      console.log('Background removal result:', result);
-      
-      if (result.success && result.data?.s3_url_processed) {
-        console.log('✅ Processed image URL:', result.data.s3_url_processed);
-      }
-
-      // Reload wardrobe items to show updated version
-      await loadEpisodeWardrobe();
-      
-      // Automatically show the processed version
-      setShowProcessed(prev => ({ ...prev, [item.id]: true }));
-      
-      alert('✅ Background removed successfully! Toggle the "✨ No BG" button to compare.');
-    } catch (err) {
-      console.error('Error removing background:', err);
-      if (err.name === 'AbortError') {
-        alert('⏱️ Background removal timed out. The image may be too large or the service is busy. Please try again.');
-      } else {
-        alert(`❌ Failed to remove background: ${err.message}`);
-      }
-    } finally {
-      setProcessingBg(null);
-      setProcessingStatus('');
-    }
+  // Navigate to wardrobe page to edit item
+  const openEditForm = (item) => {
+    navigate('/wardrobe');
   };
 
   // Group by character first
@@ -484,8 +322,14 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
   });
 
   filteredItems = sortedItems;
+  
+  // Apply pagination
+  const totalPages = Math.ceil(filteredItems.length / itemsPerPage);
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const endIndex = startIndex + itemsPerPage;
+  const paginatedItems = filteredItems.slice(startIndex, endIndex);
 
-  const groupedByCategory = filteredItems.reduce((acc, item) => {
+  const groupedByCategory = paginatedItems.reduce((acc, item) => {
     const category = item.clothing_category || 'other';
     if (!acc[category]) acc[category] = [];
     acc[category].push(item);
@@ -554,127 +398,166 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
           <div className="empty-icon">👗</div>
           <h3>No Wardrobe Items</h3>
           <p>No clothing items have been linked to this episode yet</p>
-          <button className="btn-add-wardrobe" onClick={openAddForm}>
-            ➕ Add Wardrobe Item
+          <button className="btn-add-wardrobe" onClick={openSelectModal}>
+            ➕ Select Existing Items
+          </button>
+          <button 
+            className="btn-upload-redirect" 
+            onClick={() => navigate('/wardrobe/manager')}
+            style={{ marginTop: '1rem' }}
+          >
+            📦 Upload New Items (Wardrobe Manager)
           </button>
         </div>
       ) : (
         <div className="episode-wardrobe">
-          <div className="wardrobe-header">
-            <div className="header-title">
-              <h2>👗 Episode {episodeNumber} Wardrobe</h2>
+          {/* Compact Toolbar 1: Title + Stats + Actions */}
+          <div className="wardrobe-toolbar-main">
+            <div className="toolbar-left">
+              <h2 className="wardrobe-title">👗 Episode {episodeNumber} Wardrobe</h2>
+              <div className="stats-inline">
+                <span className="stat-inline">{wardrobeItems.length} items</span>
+                <span className="stat-divider">·</span>
+                <span className="stat-inline">{Object.keys(groupedByCharacter).length} characters</span>
+                <span className="stat-divider">·</span>
+                <span className="stat-inline">${totalBudget.toFixed(2)}</span>
+                {favoriteItems.length > 0 && (
+                  <>
+                    <span className="stat-divider">·</span>
+                    <span className="stat-inline">⭐ {favoriteItems.length}</span>
+                  </>
+                )}
+              </div>
             </div>
-            <div className="header-actions">
+            <div className="toolbar-right">
               <button
-                className="btn-view-gallery"
+                className="btn-compact btn-secondary"
                 onClick={() => navigate('/wardrobe')}
-                title="View all wardrobe items across episodes"
+                title="Gallery"
               >
-                <span className="btn-icon">🖼️</span>
-                <span className="btn-text">Gallery</span>
+                🖼️
               </button>
               <button
-                className="btn-view-gallery"
+                className="btn-compact btn-secondary"
                 onClick={() => navigate('/wardrobe/analytics')}
-                title="View analytics and insights"
+                title="Analytics"
               >
-                <span className="btn-icon">📊</span>
-                <span className="btn-text">Analytics</span>
+                📊
               </button>
               <button
-                className="btn-add-wardrobe"
-                onClick={openAddForm}
-                title="Add wardrobe items for this episode"
-              >
-                <span className="btn-icon">➕</span>
-                <span className="btn-text">Add Item</span>
-              </button>
-              <button
-                className="btn-add-wardrobe btn-export"
+                className="btn-compact btn-secondary"
                 onClick={() => wardrobeEnhancements.exportToPDF(wardrobeItems, {
                   title: `Episode ${episodeNumber} Wardrobe`,
                   character: activeCharacter === 'all' ? 'All' : activeCharacter,
                   includeDetails: true
                 })}
-                title="Export to PDF lookbook"
+                title="Export PDF"
               >
-                <span className="btn-icon">📄</span>
-                <span className="btn-text">Export</span>
+                📄
+              </button>
+              <button
+                className="btn-compact btn-primary"
+                onClick={openSelectModal}
+              >
+                ➕ Select Items
+              </button>
+              <button
+                className="btn-compact"
+                onClick={() => navigate('/wardrobe')}
+                style={{ background: '#9b59b6', color: 'white', border: 'none' }}
+              >
+                📦 Upload New
+              </button>
+              <div className="view-mode-compact">
+                <button
+                  className={`view-btn-mini ${viewMode === 'grid' ? 'active' : ''}`}
+                  onClick={() => setViewMode('grid')}
+                  title="Grid"
+                >
+                  ⊞
+                </button>
+                <button
+                  className={`view-btn-mini ${viewMode === 'calendar' ? 'active' : ''}`}
+                  onClick={() => setViewMode('calendar')}
+                  title="Calendar"
+                >
+                  📅
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* Compact Toolbar 2: Character Tabs + Search + Filters */}
+          <div className="wardrobe-toolbar-controls">
+            <div className="character-tabs-compact">
+              <button
+                className={`char-tab ${activeCharacter === 'all' ? 'active' : ''}`}
+                onClick={() => setActiveCharacter('all')}
+              >
+                All
+              </button>
+              <button
+                className={`char-tab ${activeCharacter === 'lala' ? 'active' : ''}`}
+                onClick={() => setActiveCharacter('lala')}
+              >
+                💜 Lala {groupedByCharacter.lala && `(${groupedByCharacter.lala.length})`}
+              </button>
+              <button
+                className={`char-tab ${activeCharacter === 'justawoman' ? 'active' : ''}`}
+                onClick={() => setActiveCharacter('justawoman')}
+              >
+                👩 Just a Woman {groupedByCharacter.justawoman && `(${groupedByCharacter.justawoman.length})`}
+              </button>
+              <button
+                className={`char-tab ${activeCharacter === 'guest' ? 'active' : ''}`}
+                onClick={() => setActiveCharacter('guest')}
+              >
+                🎭 Guest {groupedByCharacter.guest && `(${groupedByCharacter.guest.length})`}
               </button>
             </div>
-          </div>
 
-          {/* Stats Row */}
-          <div className="wardrobe-stats-row">
-            <div className="stat">
-              <span className="stat-value">{wardrobeItems.length}</span>
-              <span className="stat-label">Total Items</span>
-            </div>
-            <div className="stat">
-              <span className="stat-value">{Object.keys(groupedByCharacter).length}</span>
-              <span className="stat-label">Characters</span>
-            </div>
-            <div className="stat budget-stat">
-              <span className="stat-value">${totalBudget.toFixed(2)}</span>
-              <span className="stat-label">Total Budget</span>
-            </div>
-            <div className="stat">
-              <span className="stat-value">{favoriteItems.length}</span>
-              <span className="stat-label">⭐ Favorites</span>
-            </div>
-          </div>
-
-          {/* Search & Filter Bar */}
-          <div className="search-filter-bar">
-            <div className="search-box">
+            <div className="search-compact">
               <span className="search-icon">🔍</span>
               <input
                 type="text"
-                placeholder="Search by name, brand, color, or tags..."
+                placeholder="Search wardrobe..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="search-input"
               />
               {searchQuery && (
-                <button className="clear-search" onClick={() => setSearchQuery('')} title="Clear search">
-                  ✕
-                </button>
+                <button className="clear-search" onClick={() => setSearchQuery('')}>✕</button>
               )}
             </div>
 
-            <div className="filter-controls">
-              <div className="filter-group">
-                <label className="filter-label">Category</label>
-                <select
-                  value={filterCategory}
-                  onChange={(e) => setFilterCategory(e.target.value)}
-                  className="filter-select"
-                >
-                  <option value="all">All Categories</option>
-                  <option value="dress">👗 Dresses</option>
-                  <option value="top">👚 Tops</option>
-                  <option value="bottom">👖 Bottoms</option>
-                  <option value="shoes">👠 Shoes</option>
-                  <option value="accessories">👜 Accessories</option>
-                  <option value="jewelry">💎 Jewelry</option>
-                  <option value="perfume">🌸 Perfume</option>
-                </select>
-              </div>
+            <div className="filters-compact">
+              <select
+                value={filterCategory}
+                onChange={(e) => setFilterCategory(e.target.value)}
+                className="filter-compact"
+              >
+                <option value="all">All Categories</option>
+                <option value="dress">Dresses</option>
+                <option value="top">Tops</option>
+                <option value="bottom">Bottoms</option>
+                <option value="shoes">Shoes</option>
+                <option value="accessories">Accessories</option>
+                <option value="jewelry">Jewelry</option>
+                <option value="perfume">Perfume</option>
+              </select>
 
-              <div className="filter-group">
-                <label className="filter-label">Sort By</label>
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)} className="filter-select">
-                  <option value="name">A-Z</option>
-                  <option value="price-asc">Price ↑</option>
-                  <option value="price-desc">Price ↓</option>
-                  <option value="recent">Recent</option>
-                </select>
-              </div>
+              <select 
+                value={sortBy} 
+                onChange={(e) => setSortBy(e.target.value)} 
+                className="filter-compact"
+              >
+                <option value="name">A-Z</option>
+                <option value="price-asc">Price ↑</option>
+                <option value="price-desc">Price ↓</option>
+                <option value="recent">Recent</option>
+              </select>
 
-              <div className="price-filter">
-                <label>
-                  💰 ${priceRange.min} - ${priceRange.max}
-                </label>
+              <div className="price-range-compact" title={`$${priceRange.min} - $${priceRange.max}`}>
+                <span>💰</span>
                 <input
                   type="range"
                   min="0"
@@ -682,108 +565,14 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
                   step="100"
                   value={priceRange.max}
                   onChange={(e) => setPriceRange({ ...priceRange, max: parseInt(e.target.value) })}
-                  className="price-slider"
                 />
+                <span className="price-label">${priceRange.max}</span>
               </div>
             </div>
-
-            {/* View Mode Toggle (moved here for better mobile UX) */}
-            <div className="view-mode-toggle">
-              <button
-                className={`view-btn ${viewMode === 'grid' ? 'active' : ''}`}
-                onClick={() => setViewMode('grid')}
-                title="Grid View"
-              >
-                🔲 Grid
-              </button>
-              <button
-                className={`view-btn ${viewMode === 'calendar' ? 'active' : ''}`}
-                onClick={() => setViewMode('calendar')}
-                title="Calendar View"
-              >
-                📅 Calendar
-              </button>
-              <button
-                className={`view-btn ${viewMode === 'timeline' ? 'active' : ''}`}
-                onClick={() => setViewMode('timeline')}
-                title="Timeline View"
-              >
-                📊 Timeline
-              </button>
-            </div>
-          </div>
-
-          {/* Budget Breakdown by Character */}
-          {Object.keys(budgetByCharacter).length > 0 && (
-            <div className="budget-breakdown">
-              <h3 className="breakdown-title">💰 Budget by Character</h3>
-              <div className="budget-bars">
-                {Object.entries(budgetByCharacter).map(([character, amount]) => {
-                  const percentage = totalBudget > 0 ? (amount / totalBudget) * 100 : 0;
-                  return (
-                    <div key={character} className="budget-bar-item">
-                      <div className="budget-bar-label">
-                        <span className="character-name">
-                          {character === 'lala' && '💜 Lala'}
-                          {character === 'justawoman' && '👩 Just a Woman'}
-                          {character === 'guest' && '🎭 Guest'}
-                          {!['lala', 'justawoman', 'guest'].includes(character) && `👤 ${character}`}
-                        </span>
-                        <span className="budget-amount">${amount.toFixed(2)}</span>
-                      </div>
-                      <div className="budget-bar-container">
-                        <div
-                          className="budget-bar-fill"
-                          style={{ width: `${percentage}%` }}
-                          data-character={character}
-                        ></div>
-                      </div>
-                      <div className="budget-percentage">{percentage.toFixed(1)}%</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-
-          {/* Character Filter Tabs */}
-          <div className="character-tabs">
-            <button
-              className={`character-tab ${activeCharacter === 'all' ? 'active' : ''}`}
-              onClick={() => setActiveCharacter('all')}
-            >
-              🌟 All
-            </button>
-            <button
-              className={`character-tab ${activeCharacter === 'lala' ? 'active' : ''}`}
-              onClick={() => setActiveCharacter('lala')}
-            >
-              💜 Lala
-              {groupedByCharacter.lala && <span className="tab-count">{groupedByCharacter.lala.length}</span>}
-            </button>
-            <button
-              className={`character-tab ${activeCharacter === 'justawoman' ? 'active' : ''}`}
-              onClick={() => setActiveCharacter('justawoman')}
-            >
-              👩 Just a Woman
-              {groupedByCharacter.justawoman && (
-                <span className="tab-count">{groupedByCharacter.justawoman.length}</span>
-              )}
-            </button>
-            <button
-              className={`character-tab ${activeCharacter === 'guest' ? 'active' : ''}`}
-              onClick={() => setActiveCharacter('guest')}
-            >
-              🎭 Guest
-              {groupedByCharacter.guest && <span className="tab-count">{groupedByCharacter.guest.length}</span>}
-            </button>
           </div>
 
           {/* Calendar View */}
           {viewMode === 'calendar' && <WardrobeCalendarView items={filteredItems} onEditItem={openEditForm} />}
-
-          {/* Timeline View */}
-          {viewMode === 'timeline' && <WardrobeTimelineView items={filteredItems} onEditItem={openEditForm} />}
 
           {/* Grid View (default) */}
           {viewMode === 'grid' && (
@@ -909,29 +698,77 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
 
                           <div className="item-image">
                             {item.s3_url ? (
-                              <>
-                                <img
-                                  src={showProcessed[item.id] === false ? item.s3_url : (item.s3_url_processed || item.s3_url)}
-                                  alt={item.name}
-                                  className={item.s3_url_processed && showProcessed[item.id] !== false ? 'has-transparent-bg' : ''}
-                                  onError={(e) => {
-                                    e.target.src =
-                                      'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150"><rect fill="%23e0e0e0" width="150" height="150"/><text x="75" y="75" text-anchor="middle" fill="%23999" font-size="14" dy=".3em" dominant-baseline="middle">👗</text></svg>';
-                                  }}
-                                />
-                                {item.s3_url_processed && (
-                                  <button 
-                                    className="btn-toggle-processed"
-                                    onClick={() => setShowProcessed(prev => ({ ...prev, [item.id]: prev[item.id] === false ? undefined : false }))}
-                                    title={showProcessed[item.id] === false ? "Show processed" : "Show original"}
-                                  >
-                                    {showProcessed[item.id] === false ? '✨ No BG' : '🖼️ Original'}
-                                  </button>
-                                )}
-                              </>
+                              <img
+                                src={item.s3_url_processed || item.s3_url}
+                                alt={item.name}
+                                className={item.s3_url_processed ? 'has-transparent-bg' : ''}
+                                onError={(e) => {
+                                  e.target.src =
+                                    'data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="150" height="150"><rect fill="%23e0e0e0" width="150" height="150"/><text x="75" y="75" text-anchor="middle" fill="%23999" font-size="14" dy=".3em" dominant-baseline="middle">👗</text></svg>';
+                                }}
+                              />
                             ) : (
                               <div className="placeholder-image">👗</div>
                             )}
+                            {/* 3-dot menu */}
+                            <div className="item-menu-container">
+                              <button 
+                                className="item-menu-btn"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuItemId(openMenuItemId === item.id ? null : item.id);
+                                }}
+                                title="More options"
+                              >
+                                ⋮
+                              </button>
+                              {openMenuItemId === item.id && (
+                                <div className="item-dropdown-menu">
+                                  <button
+                                    className="menu-option"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleFavorite(item);
+                                      setOpenMenuItemId(null);
+                                    }}
+                                  >
+                                    {item.is_episode_favorite ? '⭐ Unfavorite' : '☆ Favorite'}
+                                  </button>
+                                  {item.s3_url && (
+                                    <button
+                                      className="menu-option"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleDownloadImage(item, false);
+                                        setOpenMenuItemId(null);
+                                      }}
+                                    >
+                                      💾 Download
+                                    </button>
+                                  )}
+                                  <button
+                                    className="menu-option"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handlePrintItem(item);
+                                      setOpenMenuItemId(null);
+                                    }}
+                                  >
+                                    🖨️ Print
+                                  </button>
+                                  <button
+                                    className="menu-option delete"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleDelete(item);
+                                      setOpenMenuItemId(null);
+                                    }}
+                                  >
+                                    🔗 Unlink
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
 
                           <div className="item-details">
@@ -1019,370 +856,159 @@ const EpisodeWardrobe = ({ episodeId, episodeNumber }) => {
                                 🛍️ Shop Item
                               </a>
                             )}
-
-                            {/* Edit/Delete Actions */}
-                            <div className="item-actions">
-                              <button className="btn-edit-item" onClick={() => openEditForm(item)} title="Edit item">
-                                ✏️ Edit
-                              </button>
-                              {item.s3_url && (
-                                <>
-                                  <button 
-                                    className="btn-remove-bg" 
-                                    onClick={() => handleRemoveBackground(item)} 
-                                    title="Remove background"
-                                    disabled={processingBg === item.id}
-                                  >
-                                    {processingBg === item.id ? (
-                                      <>⏳ Processing...</>
-                                    ) : (
-                                      <>🪄 Remove BG</>
-                                    )}
-                                  </button>
-                                  <button 
-                                    className="btn-download" 
-                                    onClick={() => handleDownloadImage(item, false)}
-                                    title="Download original image"
-                                  >
-                                    💾 Download
-                                  </button>
-                                  {item.s3_url_processed && (
-                                    <button 
-                                      className="btn-download-processed" 
-                                      onClick={() => handleDownloadImage(item, true)}
-                                      title="Download without background"
-                                    >
-                                      💾 No BG
-                                    </button>
-                                  )}
-                                </>
-                              )}
-                              <button className="btn-print" onClick={() => handlePrintItem(item)} title="Print item details">
-                                🖨️ Print
-                              </button>
-                              <button className="btn-delete-item" onClick={() => handleDelete(item)} title="Delete item">
-                                🗑️ Delete
-                              </button>
-                            </div>
-                            
-                            {/* Processing Progress Bar */}
-                            {processingBg === item.id && (
-                              <div className="bg-processing-overlay">
-                                <div className="processing-spinner"></div>
-                                <div className="processing-text">{processingStatus || 'Removing background...'}</div>
-                                <div className="progress-bar">
-                                  <div className="progress-bar-fill"></div>
-                                </div>
-                                <div className="processing-hint">This may take 30-60 seconds</div>
-                              </div>
-                            )}
                           </div>
                         </div>
-                        );
+                      );
                       })}
                     </div>
                   </div>
                 ))}
               </div>
+              
+              {/* Pagination Controls */}
+              {totalPages > 1 && (
+                <div className="pagination-controls">
+                  <button 
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                  >
+                    «
+                  </button>
+                  <button 
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                    disabled={currentPage === 1}
+                  >
+                    ‹ Previous
+                  </button>
+                  
+                  <div className="pagination-numbers">
+                    {[...Array(totalPages)].map((_, index) => {
+                      const pageNum = index + 1;
+                      if (
+                        pageNum === 1 ||
+                        pageNum === totalPages ||
+                        (pageNum >= currentPage - 1 && pageNum <= currentPage + 1)
+                      ) {
+                        return (
+                          <button
+                            key={pageNum}
+                            className={`pagination-number ${currentPage === pageNum ? 'active' : ''}`}
+                            onClick={() => setCurrentPage(pageNum)}
+                          >
+                            {pageNum}
+                          </button>
+                        );
+                      } else if (
+                        pageNum === currentPage - 2 ||
+                        pageNum === currentPage + 2
+                      ) {
+                        return <span key={pageNum} className="pagination-ellipsis">...</span>;
+                      }
+                      return null;
+                    })}
+                  </div>
+                  
+                  <button 
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next ›
+                  </button>
+                  <button 
+                    className="pagination-btn"
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                  >
+                    »
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
       )}
 
       {/* ✅ Modal Form - Always available when showForm is true (outside all conditionals) */}
-      {showForm && (
-        <div className="modal-overlay" onClick={closeForm}>
-          <div className="modal-content wardrobe-form-modal" onClick={(e) => e.stopPropagation()}>
+      {/* Select Existing Items Modal */}
+      {showSelectModal && (
+        <div className="modal-overlay" onClick={() => setShowSelectModal(false)}>
+          <div className="modal-content" onClick={(e) => e.stopPropagation()} style={{ maxWidth: '800px' }}>
             <div className="modal-header">
-              <h2>{editingItem ? '✏️ Edit Wardrobe Item' : '➕ Add Wardrobe Item'}</h2>
-              <button className="modal-close" onClick={closeForm}>
-                ✕
-              </button>
+              <h2>➕ Select Existing Wardrobe Items</h2>
+              <button className="modal-close" onClick={() => setShowSelectModal(false)}>✕</button>
             </div>
 
             <div className="modal-body">
-              <div className="form-grid">
-                {/* Image Upload */}
-                <div className="form-field full-width">
-                  <label>Item Image</label>
-                  <div className="image-upload-area">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={handleFileSelect}
-                      id="wardrobe-image-upload"
-                      style={{ display: 'none' }}
-                    />
-                    <label htmlFor="wardrobe-image-upload" className="upload-label">
-                      {imagePreview ? (
-                        <div className="image-preview-container">
-                          <img src={imagePreview} alt="Preview" className="image-preview" />
-                          <div className="change-image-overlay">
-                            <span>📷 Change Image</span>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="upload-placeholder">
-                          <span className="upload-icon">📷</span>
-                          <span>Click to upload image</span>
-                          <small>PNG, JPG up to 10MB</small>
-                        </div>
-                      )}
-                    </label>
-                  </div>
-                </div>
+              <p style={{ marginBottom: '1rem', color: '#666' }}>
+                Select items from your wardrobe to add to this episode. 
+                Need to upload new items? Go to <button 
+                  onClick={() => navigate('/wardrobe/manager')}
+                  style={{ color: '#4a90e2', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                >Wardrobe Manager</button>.
+              </p>
 
-                {/* Item Name */}
-                <div className="form-field full-width">
-                  <label>Item Name *</label>
-                  <input
-                    type="text"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="e.g., Purple Sequin Blazer"
-                    required
-                  />
+              {loadingAvailable ? (
+                <div className="loading" style={{ padding: '3rem', textAlign: 'center' }}>
+                  Loading available items...
                 </div>
-
-                {/* Character */}
-                <div className="form-field">
-                  <label>Character *</label>
-                  <select
-                    value={formData.character}
-                    onChange={(e) => setFormData({ ...formData, character: e.target.value })}
-                    required
+              ) : availableItems.length === 0 ? (
+                <div className="empty-state" style={{ padding: '2rem', textAlign: 'center', background: '#f8f9fa', borderRadius: '8px' }}>
+                  <p>📦 No items available in staging.</p>
+                  <p>All items may already be assigned to episodes.</p>
+                  <button 
+                    onClick={() => navigate('/wardrobe/manager')}
+                    style={{ marginTop: '1rem', padding: '0.75rem 1.5rem', background: '#4a90e2', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
                   >
-                    <option value="">Select character...</option>
-                    <option value="lala">💜 Lala</option>
-                    <option value="justawoman">👩 Just a Woman</option>
-                    <option value="guest">🎭 Guest</option>
-                  </select>
+                    Go to Wardrobe Manager
+                  </button>
                 </div>
-
-                {/* Clothing Category */}
-                <div className="form-field">
-                  <label>Category *</label>
-                  <select
-                    value={formData.clothingCategory}
-                    onChange={(e) => setFormData({ ...formData, clothingCategory: e.target.value })}
-                    required
-                  >
-                    <option value="">Select category...</option>
-                    <option value="dress">👗 Dress</option>
-                    <option value="top">👚 Top</option>
-                    <option value="bottom">👖 Bottom</option>
-                    <option value="shoes">👠 Shoes</option>
-                    <option value="accessories">👜 Accessories</option>
-                    <option value="jewelry">💎 Jewelry</option>
-                    <option value="perfume">🌸 Perfume</option>
-                  </select>
+              ) : (
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: '1rem', maxHeight: '500px', overflowY: 'auto' }}>
+                  {availableItems.map(item => (
+                    <div 
+                      key={item.id}
+                      onClick={() => setSelectedItemId(item.id)}
+                      style={{
+                        border: selectedItemId === item.id ? '3px solid #4a90e2' : '1px solid #ddd',
+                        borderRadius: '8px',
+                        overflow: 'hidden',
+                        cursor: 'pointer',
+                        transition: 'all 0.2s',
+                        background: 'white'
+                      }}
+                    >
+                      <div style={{ height: '150px', background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        {item.s3_url ? (
+                          <img src={item.s3_url} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        ) : (
+                          <span>No Image</span>
+                        )}
+                      </div>
+                      <div style={{ padding: '0.75rem' }}>
+                        <div style={{ fontWeight: '600', fontSize: '0.9rem', marginBottom: '0.25rem' }}>{item.name}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#4a90e2' }}>👤 {item.character}</div>
+                        <div style={{ fontSize: '0.8rem', color: '#888' }}>{item.clothing_category}</div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-
-                {/* Brand */}
-                <div className="form-field">
-                  <label>Brand</label>
-                  <input
-                    type="text"
-                    value={formData.brand}
-                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                    placeholder="e.g., Balmain"
-                  />
-                </div>
-
-                {/* Price */}
-                <div className="form-field">
-                  <label>Price</label>
-                  <input
-                    type="text"
-                    value={formData.price}
-                    onChange={(e) => setFormData({ ...formData, price: e.target.value })}
-                    placeholder="e.g., 2450.00"
-                  />
-                </div>
-
-                {/* Color */}
-                <div className="form-field">
-                  <label>Color</label>
-                  <input
-                    type="text"
-                    value={formData.color}
-                    onChange={(e) => setFormData({ ...formData, color: e.target.value })}
-                    placeholder="e.g., Purple"
-                  />
-                </div>
-
-                {/* Size */}
-                <div className="form-field">
-                  <label>Size</label>
-                  <input
-                    type="text"
-                    value={formData.size}
-                    onChange={(e) => setFormData({ ...formData, size: e.target.value })}
-                    placeholder="e.g., S, M, L, 8"
-                  />
-                </div>
-
-                {/* Season */}
-                <div className="form-field">
-                  <label>Season</label>
-                  <select value={formData.season} onChange={(e) => setFormData({ ...formData, season: e.target.value })}>
-                    <option value="">Select season...</option>
-                    <option value="spring">🌸 Spring</option>
-                    <option value="summer">☀️ Summer</option>
-                    <option value="fall">🍂 Fall</option>
-                    <option value="winter">❄️ Winter</option>
-                    <option value="all-season">🌍 All Season</option>
-                  </select>
-                </div>
-
-                {/* Occasion */}
-                <div className="form-field">
-                  <label>Occasion</label>
-                  <select
-                    value={formData.occasion}
-                    onChange={(e) => setFormData({ ...formData, occasion: e.target.value })}
-                  >
-                    <option value="">Select occasion...</option>
-                    <option value="casual">👕 Casual</option>
-                    <option value="formal">🎩 Formal</option>
-                    <option value="party">🎉 Party</option>
-                    <option value="red-carpet">⭐ Red Carpet</option>
-                    <option value="everyday">📅 Everyday</option>
-                  </select>
-                </div>
-
-                {/* Scene */}
-                <div className="form-field">
-                  <label>Scene</label>
-                  <input
-                    type="text"
-                    value={formData.scene}
-                    onChange={(e) => setFormData({ ...formData, scene: e.target.value })}
-                    placeholder="e.g., Opening Interview"
-                  />
-                </div>
-
-                {/* Purchase Link */}
-                <div className="form-field full-width">
-                  <label>Purchase Link</label>
-                  <input
-                    type="url"
-                    value={formData.purchaseLink}
-                    onChange={(e) => setFormData({ ...formData, purchaseLink: e.target.value })}
-                    placeholder="https://..."
-                  />
-                </div>
-
-                {/* Outfit Set ID */}
-                <div className="form-field">
-                  <label>Outfit Set ID</label>
-                  <input
-                    type="text"
-                    value={formData.outfitSetId}
-                    onChange={(e) => setFormData({ ...formData, outfitSetId: e.target.value })}
-                    placeholder="e.g., set-001"
-                  />
-                </div>
-
-                {/* Outfit Set Name */}
-                <div className="form-field">
-                  <label>Outfit Set Name</label>
-                  <input
-                    type="text"
-                    value={formData.outfitSetName}
-                    onChange={(e) => setFormData({ ...formData, outfitSetName: e.target.value })}
-                    placeholder="e.g., Purple Power Look"
-                  />
-                </div>
-
-                {/* Outfit Notes */}
-                <div className="form-field full-width">
-                  <label>Outfit Notes</label>
-                  <textarea
-                    value={formData.outfitNotes}
-                    onChange={(e) => setFormData({ ...formData, outfitNotes: e.target.value })}
-                    placeholder="Add styling notes, care instructions, etc."
-                    rows="3"
-                  />
-                </div>
-
-                {/* Tags */}
-                <div className="form-field full-width">
-                  <label>Tags (comma-separated)</label>
-                  <input
-                    type="text"
-                    value={formData.tags.join(', ')}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        tags: e.target.value
-                          .split(',')
-                          .map((tag) => tag.trim())
-                          .filter((tag) => tag)
-                      })
-                    }
-                    placeholder="e.g., sparkly, vintage, designer"
-                  />
-                </div>
-
-                {/* Favorite Checkbox */}
-                <div className="form-field full-width">
-                  <label className="checkbox-label">
-                    <input
-                      type="checkbox"
-                      checked={formData.isFavorite}
-                      onChange={(e) => setFormData({ ...formData, isFavorite: e.target.checked })}
-                    />
-                    <span>⭐ Mark as Favorite</span>
-                  </label>
-                </div>
-
-                {/* Additional Episodes */}
-                <div className="form-field full-width">
-                  <label>
-                    Link to Additional Episodes
-                    <small style={{ fontWeight: 'normal', color: '#6b7280', marginLeft: '0.5rem' }}>
-                      (Automatically linked to Episode {episodeNumber})
-                    </small>
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.additionalEpisodes.join(', ')}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        additionalEpisodes: e.target.value
-                          .split(',')
-                          .map((id) => id.trim())
-                          .filter((id) => id)
-                      })
-                    }
-                    placeholder="Enter episode IDs separated by commas (e.g., ep-002, ep-005)"
-                  />
-                  <small
-                    style={{
-                      fontSize: '0.75rem',
-                      color: '#6b7280',
-                      marginTop: '0.25rem',
-                      display: 'block'
-                    }}
-                  >
-                    Use this to link the same item to multiple episodes for tracking
-                  </small>
-                </div>
-              </div>
+              )}
             </div>
 
             <div className="modal-footer">
-              <button className="btn-cancel" onClick={closeForm} disabled={saving}>
+              <button className="btn-cancel" onClick={() => setShowSelectModal(false)}>
                 Cancel
               </button>
               <button
                 className="btn-save"
-                onClick={handleSave}
-                disabled={saving || !formData.name || !formData.character || !formData.clothingCategory}
+                onClick={() => selectedItemId && linkExistingItem(selectedItemId)}
+                disabled={!selectedItemId}
+                style={{ opacity: selectedItemId ? 1 : 0.5 }}
               >
-                {saving ? '💾 Saving...' : editingItem ? '💾 Update Item' : '➕ Add Item'}
+                ➕ Add Selected Item
               </button>
             </div>
           </div>

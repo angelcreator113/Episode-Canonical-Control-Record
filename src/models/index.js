@@ -57,6 +57,10 @@ let Wardrobe, EpisodeWardrobe, OutfitSet;
 let WardrobeLibrary, OutfitSetItems, WardrobeUsageHistory, WardrobeLibraryReferences;
 let SceneLibrary, EpisodeScene;
 let CompositionAsset, CompositionOutput;
+let TimelinePlacement;
+let AIEditPlan, EditingDecision, AIRevision, VideoProcessingJob;
+let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset;
+let SceneFootageLink;
 
 try {
   // Core models
@@ -106,6 +110,20 @@ try {
   SceneLibrary = require('./SceneLibrary')(sequelize);
   EpisodeScene = require('./EpisodeScene')(sequelize);
 
+  // Timeline system models
+  TimelinePlacement = require('./TimelinePlacement')(sequelize);
+
+  // AI Editing Models
+  AIEditPlan = require('./AIEditPlan')(sequelize);
+  EditingDecision = require('./EditingDecision')(sequelize);
+  AIRevision = require('./AIRevision')(sequelize);
+  VideoProcessingJob = require('./VideoProcessingJob')(sequelize);
+  AITrainingData = require('./AITrainingData')(sequelize);
+  ScriptMetadata = require('./ScriptMetadata')(sequelize);
+  SceneLayerConfiguration = require('./SceneLayerConfiguration')(sequelize);
+  LayerPreset = require('./LayerPreset')(sequelize);
+  SceneFootageLink = require('./SceneFootageLink')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -143,6 +161,15 @@ const requiredModels = {
   WardrobeLibraryReferences,
   SceneLibrary,
   EpisodeScene,
+  TimelinePlacement,
+  AIEditPlan,
+  EditingDecision,
+  AIRevision,
+  VideoProcessingJob,
+  AITrainingData,
+  ScriptMetadata,
+  SceneLayerConfiguration,
+  LayerPreset,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -589,6 +616,54 @@ Episode.hasMany(EpisodeScene, {
   as: 'episodeScenes',
 });
 
+// ==================== TIMELINE PLACEMENT ASSOCIATIONS ====================
+
+// TimelinePlacement → Episode (N:1)
+TimelinePlacement.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+Episode.hasMany(TimelinePlacement, {
+  foreignKey: 'episode_id',
+  as: 'timelinePlacements',
+});
+
+// TimelinePlacement → EpisodeScene (N:1) - scene-attached placements
+TimelinePlacement.belongsTo(EpisodeScene, {
+  foreignKey: 'scene_id',
+  as: 'scene',
+});
+
+EpisodeScene.hasMany(TimelinePlacement, {
+  foreignKey: 'scene_id',
+  as: 'placements',
+});
+
+// TimelinePlacement → Asset (N:1) - asset placements
+TimelinePlacement.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+});
+
+Asset.hasMany(TimelinePlacement, {
+  foreignKey: 'asset_id',
+  as: 'timelinePlacements',
+});
+
+// TimelinePlacement → Wardrobe (N:1) - wardrobe placements
+TimelinePlacement.belongsTo(Wardrobe, {
+  foreignKey: 'wardrobe_item_id',
+  as: 'wardrobeItem',
+});
+
+Wardrobe.hasMany(TimelinePlacement, {
+  foreignKey: 'wardrobe_item_id',
+  as: 'timelinePlacements',
+});
+
+// ==================== EXISTING ASSOCIATIONS ====================
+
 WardrobeLibrary.belongsToMany(WardrobeLibrary, {
   through: OutfitSetItems,
   foreignKey: 'wardrobe_item_id',
@@ -689,6 +764,99 @@ ShowAsset.belongsTo(Asset, {
   as: 'asset',
 });
 
+// ==================== AI EDITING ASSOCIATIONS ====================
+
+// Episode → AIEditPlan (1:N)
+Episode.hasMany(AIEditPlan, {
+  foreignKey: 'episode_id',
+  as: 'aiEditPlans',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+AIEditPlan.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Episode → Current AI Edit Plan (1:1)
+Episode.belongsTo(AIEditPlan, {
+  foreignKey: 'current_ai_edit_plan_id',
+  as: 'currentAIEditPlan',
+  onDelete: 'SET NULL',
+});
+
+// Episode → EditingDecision (1:N)
+Episode.hasMany(EditingDecision, {
+  foreignKey: 'episode_id',
+  as: 'editingDecisions',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+EditingDecision.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Scene → EditingDecision (1:N)
+Scene.hasMany(EditingDecision, {
+  foreignKey: 'scene_id',
+  as: 'editingDecisions',
+  onDelete: 'SET NULL',
+  onUpdate: 'CASCADE',
+});
+EditingDecision.belongsTo(Scene, {
+  foreignKey: 'scene_id',
+  as: 'scene',
+});
+
+// AIEditPlan → AIRevision (1:N)
+AIEditPlan.hasMany(AIRevision, {
+  foreignKey: 'original_plan_id',
+  as: 'revisions',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+AIRevision.belongsTo(AIEditPlan, {
+  foreignKey: 'original_plan_id',
+  as: 'originalPlan',
+});
+
+// Episode → VideoProcessingJob (1:N)
+Episode.hasMany(VideoProcessingJob, {
+  foreignKey: 'episode_id',
+  as: 'videoProcessingJobs',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+VideoProcessingJob.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// AIEditPlan → VideoProcessingJob (1:N)
+AIEditPlan.hasMany(VideoProcessingJob, {
+  foreignKey: 'edit_plan_id',
+  as: 'processingJobs',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+VideoProcessingJob.belongsTo(AIEditPlan, {
+  foreignKey: 'edit_plan_id',
+  as: 'editPlan',
+});
+
+// Scene → SceneLayerConfiguration (1:1)
+Scene.hasOne(SceneLayerConfiguration, {
+  foreignKey: 'scene_id',
+  as: 'layerConfiguration',
+  onDelete: 'CASCADE',
+  onUpdate: 'CASCADE',
+});
+SceneLayerConfiguration.belongsTo(Scene, {
+  foreignKey: 'scene_id',
+  as: 'scene',
+});
+
 console.log('✅ Model associations defined');
 
 /**
@@ -730,6 +898,15 @@ const db = {
     WardrobeLibraryReferences,
     SceneLibrary,
     EpisodeScene,
+    TimelinePlacement,
+    AIEditPlan,
+    EditingDecision,
+    AIRevision,
+    VideoProcessingJob,
+    AITrainingData,
+    ScriptMetadata,
+    SceneLayerConfiguration,
+    LayerPreset,
   },
 
   /**
@@ -926,3 +1103,12 @@ module.exports.AssetLabel = AssetLabel;
 // module.exports.AssetUsage = AssetUsage; // Table doesn't exist
 module.exports.EpisodeAsset = EpisodeAsset;
 module.exports.SceneAsset = SceneAsset;
+module.exports.TimelinePlacement = TimelinePlacement;
+module.exports.AIEditPlan = AIEditPlan;
+module.exports.EditingDecision = EditingDecision;
+module.exports.AIRevision = AIRevision;
+module.exports.VideoProcessingJob = VideoProcessingJob;
+module.exports.AITrainingData = AITrainingData;
+module.exports.ScriptMetadata = ScriptMetadata;
+module.exports.SceneLayerConfiguration = SceneLayerConfiguration;
+module.exports.LayerPreset = LayerPreset;

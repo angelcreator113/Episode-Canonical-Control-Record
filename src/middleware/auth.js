@@ -1,17 +1,29 @@
-const { CognitoIdentityServiceProvider } = require('aws-sdk');
-
-const _cognito = new CognitoIdentityServiceProvider({
-  region: process.env.COGNITO_REGION || 'us-east-1',
-});
+const { CognitoJwtVerifier } = require('aws-jwt-verify');
 
 /**
  * Authentication Middleware
  * Validates AWS Cognito JWT tokens and extracts user information
+ * Uses aws-jwt-verify for proper signature verification
  */
+
+// Create verifier for ID tokens
+const idTokenVerifier = CognitoJwtVerifier.create({
+  userPoolId: process.env.COGNITO_USER_POOL_ID || 'us-east-1_XXXXXXXXX',
+  tokenUse: 'id',
+  clientId: process.env.COGNITO_CLIENT_ID || 'xxxxxxxxxxxxxxxxxxxxxxxxxx',
+});
+
+// Create verifier for access tokens
+const accessTokenVerifier = CognitoJwtVerifier.create({
+  userPoolId: process.env.COGNITO_USER_POOL_ID || 'us-east-1_XXXXXXXXX',
+  tokenUse: 'access',
+  clientId: process.env.COGNITO_CLIENT_ID || 'xxxxxxxxxxxxxxxxxxxxxxxxxx',
+});
 
 /**
  * Verify Cognito JWT token
- * Extracts and validates the token from Authorization header
+ * Uses AWS JWT Verify library for proper signature verification
+ * Automatically fetches and caches JWKS keys from Cognito
  */
 const verifyToken = async (token) => {
   try {
@@ -21,34 +33,20 @@ const verifyToken = async (token) => {
       throw new Error('COGNITO_USER_POOL_ID not configured');
     }
 
-    // Get the Cognito public keys for verification
-    // In production, these should be cached and refreshed periodically
-    const _keyUrl = `https://cognito-idp.${process.env.COGNITO_REGION || 'us-east-1'}.amazonaws.com/${userPoolId}/.well-known/jwks.json`;
-
-    // Note: In a production implementation, you would:
-    // 1. Fetch and cache JWKS from Cognito
-    // 2. Use jwt library to verify signature
-    // 3. Validate claims (aud, iss, exp, etc.)
-
-    // For now, we'll use a simplified verification approach
-    // that can be enhanced with proper JWT verification
-
-    // Decode token (without verification for now - see note above)
-    const parts = token.split('.');
-    if (parts.length !== 3) {
-      throw new Error('Invalid token format');
+    // Try to verify as ID token first (contains user info)
+    try {
+      const payload = await idTokenVerifier.verify(token);
+      return payload;
+    } catch (idError) {
+      // If ID token verification fails, try as access token
+      try {
+        const payload = await accessTokenVerifier.verify(token);
+        return payload;
+      } catch (accessError) {
+        // If both fail, throw the original ID token error
+        throw idError;
+      }
     }
-
-    // Decode payload
-    const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf-8'));
-
-    // Verify token expiration
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-      throw new Error('Token expired');
-    }
-
-    return payload;
   } catch (error) {
     throw new Error(`Token verification failed: ${error.message}`);
   }

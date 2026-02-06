@@ -26,14 +26,14 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           clean: true
           
       - name: Debug - List migration files
         run: |
           echo "=== Migrations in repo ==="
-          ls -la migrations/
+          ls -la src/migrations/
           echo "=== Current commit ==="
           git log -1 --oneline
 
@@ -58,8 +58,7 @@ jobs:
           NODE_ENV: test
 
       - name: Run tests
-        run: npm test -- --coverage || exit 0
-        continue-on-error: true
+        run: npm test -- --coverage
         env:
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/episode_metadata_test
           JWT_SECRET: test-secret-key-minimum-32-characters-long
@@ -71,10 +70,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
@@ -85,8 +84,11 @@ jobs:
       - name: Build frontend
         run: |
           cd frontend
+          rm -rf dist node_modules/.vite
           npm ci
           npm run build
+          echo "Build complete - listing assets:"
+          ls -lh dist/assets/
 
       - name: Create artifact
         run: |
@@ -120,38 +122,84 @@ jobs:
           name: episode-metadata-build-dev
 
       - name: Setup Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
           node-version: '20'
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v2
+        uses: aws-actions/configure-aws-credentials@v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
       - name: Deploy to Development
+        env:
+          # Database Configuration
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          
+          # AWS Configuration
+          AWS_REGION: us-east-1
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          
+          # S3 Buckets
+          S3_PRIMARY_BUCKET: episode-metadata-storage-dev
+          S3_THUMBNAILS_BUCKET: episode-metadata-thumbnails-dev
+          
+          # SQS Queue
+          SQS_THUMBNAIL_QUEUE_URL: ${{ secrets.SQS_THUMBNAIL_QUEUE_URL }}
+          
+          # Cognito Authentication
+          COGNITO_USER_POOL_ID: ${{ secrets.COGNITO_USER_POOL_ID }}
+          COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
+          COGNITO_REGION: us-east-1
+          
+          # JWT Secret
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
         run: |
           echo "🚀 Deploying to development environment..."
           echo "Database: episode-control-dev"
           echo "Commit: ${{ github.sha }}"
-          echo "Target: primepisodes-alb-1912818060.us-east-1.elb.amazonaws.com"
+          echo "Target: ${{ secrets.EC2_HOST }}"
           
           # Setup SSH key
           mkdir -p ~/.ssh
           echo "${{ secrets.EC2_SSH_KEY }}" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
           
+          # Verify SSH key was created
+          if [ ! -f ~/.ssh/deploy_key ]; then
+            echo "❌ Failed to create SSH key file"
+            exit 1
+          fi
+          echo "✓ SSH key created successfully"
+          
+          # Test connectivity
+          echo "Testing connection to ${{ secrets.EC2_HOST }}:22..."
+          nc -zv -w5 ${{ secrets.EC2_HOST }} 22 || echo "⚠️  Port 22 not immediately reachable"
+          
           # Copy and run deployment script with SSH keep-alive and retry logic
           MAX_RETRIES=3
           RETRY_DELAY=30
           
           for i in $(seq 1 $MAX_RETRIES); do
-            echo "🔄 Deployment attempt $i of $MAX_RETRIES..."
+            echo "🔄 Deployment attempt $i of $MAX_RETRIES to ${{ secrets.EC2_HOST }}..."
             
             if scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=120 -o ConnectTimeout=10 .github/scripts/deploy-to-ec2.sh ubuntu@${{ secrets.EC2_HOST }}:/tmp/deploy.sh; then
-              if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=120 -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST }} "chmod +x /tmp/deploy.sh && /tmp/deploy.sh"; then
+              if ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no -o ServerAliveInterval=60 -o ServerAliveCountMax=120 -o ConnectTimeout=10 ubuntu@${{ secrets.EC2_HOST }} \
+                "DATABASE_URL='$DATABASE_URL' \
+                 AWS_REGION='$AWS_REGION' \
+                 AWS_ACCOUNT_ID='$AWS_ACCOUNT_ID' \
+                 AWS_ACCESS_KEY_ID='$AWS_ACCESS_KEY_ID' \
+                 AWS_SECRET_ACCESS_KEY='$AWS_SECRET_ACCESS_KEY' \
+                 S3_PRIMARY_BUCKET='$S3_PRIMARY_BUCKET' \
+                 S3_THUMBNAILS_BUCKET='$S3_THUMBNAILS_BUCKET' \
+                 SQS_THUMBNAIL_QUEUE_URL='$SQS_THUMBNAIL_QUEUE_URL' \
+                 COGNITO_USER_POOL_ID='$COGNITO_USER_POOL_ID' \
+                 COGNITO_CLIENT_ID='$COGNITO_CLIENT_ID' \
+                 COGNITO_REGION='$COGNITO_REGION' \
+                 JWT_SECRET='$JWT_SECRET' \
+                 bash /tmp/deploy.sh"; then
                 echo "✅ Deployment successful on attempt $i"
                 break
               fi
@@ -178,7 +226,7 @@ jobs:
           MAX_RETRIES=5
           for i in $(seq 1 $MAX_RETRIES); do
             echo "Health check attempt $i/$MAX_RETRIES..."
-            if curl -f -m 10 http://3.94.166.174/health; then
+            if curl -f -m 10 http://${{ secrets.EC2_HOST }}/health; then
               echo "✅ Health check passed!"
               echo "✅ Deployment workflow completed"
               echo "🌐 Site: https://dev.primepisodes.com"

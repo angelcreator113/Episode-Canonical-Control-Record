@@ -1,0 +1,236 @@
+/* =========================
+   Shared Editor Layout Theme
+   CapCut-inspired design system for editor pages
+   ========================= */
+
+:root{
+  --bg:#070b12;
+  --panel:rgba(255,255,255,0.03);
+  --stroke:rgba(255,255,255,0.08);
+  --stroke2:rgba(255,255,255,0.12);
+  --text:rgba(255,255,255,0.92);
+  --muted:rgba(255,255,255,0.60);
+}
+
+.edRoot{
+  min-height: 100vh;
+  background:
+    radial-gradient(1100px 600px at 40% -10%, rgba(59,130,246,0.14), transparent 60%),
+    radial-gradient(900px 540px at 90% 10%, rgba(236,72,153,0.12), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  display:flex;
+  flex-direction:column;
+}
+
+/* Topbar */
+.edTopbar{
+  position: sticky;
+  top: 0;
+  z-index: 80;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:14px;
+  padding: 12px 14px;
+  background: rgba(7,11,18,0.70);
+  border-bottom: 1px solid var(--stroke);
+  backdrop-filter: blur(12px);
+}
+.edTopLeft{display:flex;align-items:center;gap:12px;min-width:0;}
+.edTopRight{display:flex;align-items:center;gap:10px;flex-wrap:wrap;}
+
+.edBack{
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--stroke2);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 12px;
+  cursor:pointer;
+  transition:.15s ease;
+  white-space:nowrap;
+}
+.edBack:hover{background: rgba(255,255,255,0.10);}
+
+.edTitle{font-size:16px;font-weight:900;}
+.edSub{margin-top:2px;font-size:12px;color:var(--muted);max-width: 60vw;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.edMono{font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;}
+
+.edPrimary{
+  background: linear-gradient(135deg,#3b82f6,#2563eb);
+  border: 1px solid rgba(255,255,255,0.14);
+  color:white;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-weight: 900;
+  cursor:pointer;
+  transition:.15s ease;
+  box-shadow: 0 14px 28px rgba(37,99,235,0.25);
+}
+.edPrimary:hover{transform: translateY(-1px);box-shadow: 0 18px 34px rgba(37,99,235,0.30);}
+
+.edGhost{
+  background: transparent;
+  border: 1px solid rgba(255,255,255,0.14);
+  color: var(--text);
+  padding: 10px 12px;
+  border-radius: 14px;
+  cursor:pointer;
+  transition:.15s ease;
+}
+.edGhost:hover{background: rgba(255,255,255,0.06);}
+
+/* Stats */
+.edStats{
+  padding: 12px 14px 0 14px;
+  display:grid;
+  gap:10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+.edStat{
+  border:1px solid var(--stroke);
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 12px 12px;
+}
+.edStatLabel{
+  font-size: 11px;
+  letter-spacing: .6px;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.55);
+}
+.edStatValue{
+  margin-top: 6px;
+  font-size: 20px;
+  font-weight: 950;
+}
+.edStatValue.dim{color: rgba(255,255,255,0.55);}
+.edStatValue.warn{color: #fbbf24;}
+.edStatValue.good{color: #34d399;}
+
+/* Error */
+.edError{
+  margin: 12px 14px 0 14px;
+  border: 1px solid rgba(239,68,68,0.35);
+  background: rgba(239,68,68,0.10);
+  border-radius: 16px;
+  padding: 12px 12px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+}
+.edErrorLeft{display:flex;align-items:center;gap:10px;}
+.edX{
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: transparent;
+  color: rgba(255,255,255,0.85);
+  cursor:pointer;
+}
+
+/* Main layout */
+.edMain{
+  flex: 1;
+  min-height: 0;
+  padding: 12px 14px 16px 14px;
+  display:grid;
+  gap:12px;
+}
+.edMain.withSide{grid-template-columns: minmax(0, 1fr) 420px;}
+.edMain.noSide{grid-template-columns: minmax(0, 1fr);}
+
+.edPane, .edSide{
+  border:1px solid var(--stroke);
+  background: var(--panel);
+  border-radius: 18px;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+  min-height:0;
+}
+
+.edPaneHeader{
+  padding: 12px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+}
+.edPaneTitle{
+  font-size: 12px;
+  font-weight: 950;
+  letter-spacing: .7px;
+  text-transform: uppercase;
+}
+.edPaneHint{
+  margin-top: 3px;
+  font-size: 12px;
+  color: rgba(255,255,255,0.55);
+}
+
+.edPaneBody{
+  flex: 1;
+  min-height: 0;
+  padding: 12px;
+  overflow: auto;
+}
+
+.edSide.closed{display:none;}
+.edSideBody{
+  flex:1;
+  min-height:0;
+  padding: 10px;
+  overflow:auto;
+}
+
+/* Mobile sheet */
+.edSheetOverlay{
+  position: fixed;
+  inset: 0;
+  z-index: 90;
+  background: rgba(0,0,0,0.55);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .18s ease;
+}
+.edSheetOverlay.open{opacity:1;pointer-events:auto;}
+
+.edSheet{
+  position:absolute;
+  left:0;right:0;bottom:0;
+  max-height: 78vh;
+  background: rgba(7,11,18,0.92);
+  border-top: 1px solid rgba(255,255,255,0.12);
+  border-radius: 18px 18px 0 0;
+  overflow:hidden;
+  display:flex;
+  flex-direction:column;
+}
+.edSheetHeader{
+  padding: 12px 14px;
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+.edSheetBody{
+  padding: 10px;
+  overflow:auto;
+  min-height:0;
+}
+
+/* Breakpoints */
+.edMobileOnly{display:none;}
+.edDesktopOnly{display:inline-flex;}
+
+@media (max-width: 1024px){
+  .edMain.withSide{grid-template-columns: minmax(0, 1fr) 360px;}
+}
+
+@media (max-width: 768px){
+  .edStats{grid-template-columns: repeat(2, minmax(0, 1fr));}
+  .edDesktopOnly{display:none;}
+  .edMobileOnly{display:inline-flex;}
+  .edMain, .edMain.withSide, .edMain.noSide{grid-template-columns: 1fr;}
+  .edSide{display:none;}
+}

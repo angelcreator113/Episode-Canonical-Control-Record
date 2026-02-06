@@ -25,11 +25,17 @@ const upload = multer({
  * Base path: /api/v1/wardrobe
  */
 
+// Get staging items (unassigned wardrobe items)
+router.get('/staging', asyncHandler(wardrobeController.getStagingItems));
+
 // List all wardrobe items
 router.get('/', asyncHandler(wardrobeController.listWardrobeItems));
 
 // Create new wardrobe item
 router.post('/', upload.single('file'), asyncHandler(wardrobeController.createWardrobeItem));
+
+// Get item usage across shows/episodes
+router.get('/:id/usage', asyncHandler(wardrobeController.getItemUsage));
 
 // Get single wardrobe item
 router.get('/:id', asyncHandler(wardrobeController.getWardrobeItem));
@@ -40,7 +46,7 @@ router.put('/:id', upload.single('file'), asyncHandler(wardrobeController.update
 // Process background removal for wardrobe item
 router.post('/:id/process-background', asyncHandler(wardrobeController.processBackgroundRemoval));
 
-// Delete wardrobe item
+// Delete wardrobe item (with safeguards)
 router.delete('/:id', asyncHandler(wardrobeController.deleteWardrobeItem));
 
 module.exports = router;

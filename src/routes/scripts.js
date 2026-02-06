@@ -11,6 +11,9 @@ const { asyncHandler } = require('../middleware/errorHandler');
  * TODO: Enable admin-only permissions when auth is enabled
  */
 
+// GET /api/v1/scripts - List all scripts
+router.get('/', asyncHandler(scriptsController.getAllScripts));
+
 // GET /api/v1/scripts/search - Search/filter scripts (library page)
 router.get('/search', asyncHandler(scriptsController.searchScripts));
 

@@ -44,6 +44,14 @@ export const THUMBNAIL_FORMATS = {
     aspectRatio: '9:16',
     description: 'Instagram Stories format'
   },
+  tiktok: {
+    id: 'tiktok',
+    name: 'TikTok',
+    width: 1080,
+    height: 1920,
+    aspectRatio: '9:16',
+    description: 'TikTok vertical video format'
+  },
   facebook_post: {
     id: 'facebook_post',
     name: 'Facebook Post',

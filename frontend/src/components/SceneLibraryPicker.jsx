@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import sceneLibraryService from '../services/sceneLibraryService';
-import VideoPlayer from './VideoPlayer';
 import { normalizeSceneThumbnail, normalizeSceneVideo } from '../utils/urlUtils';
 import './SceneLibraryPicker.css';
 
@@ -607,12 +606,15 @@ const SceneLibraryPicker = ({ isOpen, onClose, onSelect, showId, episodeId }) =>
               </button>
             </div>
             <div className="modal-body preview-body">
-              <VideoPlayer
-                videoUrl={normalizeSceneVideo(previewScene)}
-                thumbnailUrl={normalizeSceneThumbnail(previewScene)}
-                showTrimControls={false}
-                autoPlay={true}
-              />
+              <video
+                controls
+                autoPlay
+                poster={normalizeSceneThumbnail(previewScene)}
+                style={{ width: '100%', maxHeight: '500px' }}
+              >
+                <source src={normalizeSceneVideo(previewScene)} type="video/mp4" />
+                Your browser does not support the video tag.
+              </video>
               {previewScene.description && (
                 <div className="preview-description">
                   <p>{previewScene.description}</p>

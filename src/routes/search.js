@@ -10,6 +10,13 @@ const searchController = require('../controllers/searchController');
 const router = express.Router();
 
 /**
+ * GET /api/v1/search
+ * Global search across all resources
+ * Query params: q (search query), type (resource type filter)
+ */
+router.get('/', searchController.globalSearch);
+
+/**
  * GET /api/v1/search/activities
  * Search activity logs with advanced filtering
  * Requires authentication
