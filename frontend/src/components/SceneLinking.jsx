@@ -127,6 +127,15 @@ export default function SceneLinking({ episodeId, scriptId }) {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
+  const getVideoUrl = (footage) => {
+    // Get S3 URL from raw_footage_s3_key
+    if (footage.raw_footage_s3_key) {
+      const bucketUrl = 'https://episode-metadata-raw-footage-dev.s3.us-east-1.amazonaws.com';
+      return `${bucketUrl}/${footage.raw_footage_s3_key}`;
+    }
+    return null;
+  };
+
   const getEnergyColor = (level) => {
     switch (level) {
       case 'high': return '#ef4444 #fef2f2';
@@ -360,7 +369,23 @@ export default function SceneLinking({ episodeId, scriptId }) {
                               gap: '0.75rem'
                             }}
                           >
-                            <FiVideo style={{ color: '#16a34a', fontSize: '1.25rem', flexShrink: 0 }} />
+                            {getVideoUrl(linkedFootage) ? (
+                              <video
+                                src={getVideoUrl(linkedFootage)}
+                                style={{
+                                  width: '80px',
+                                  height: '60px',
+                                  objectFit: 'cover',
+                                  borderRadius: '4px',
+                                  flexShrink: 0,
+                                  backgroundColor: '#000'
+                                }}
+                                muted
+                                playsInline
+                              />
+                            ) : (
+                              <FiVideo style={{ color: '#16a34a', fontSize: '1.25rem', flexShrink: 0 }} />
+                            )}
                             <div style={{ flex: 1, minWidth: 0 }}>
                               <p style={{ 
                                 fontSize: '0.875rem', 
@@ -418,7 +443,23 @@ export default function SceneLinking({ episodeId, scriptId }) {
                                     gap: '0.75rem'
                                   }}
                                 >
-                                  <FiVideo style={{ color: '#9b59b6', fontSize: '1.25rem', flexShrink: 0 }} />
+                                  {getVideoUrl(clip) ? (
+                                    <video
+                                      src={getVideoUrl(clip)}
+                                      style={{
+                                        width: '80px',
+                                        height: '60px',
+                                        objectFit: 'cover',
+                                        borderRadius: '4px',
+                                        flexShrink: 0,
+                                        backgroundColor: '#000'
+                                      }}
+                                      muted
+                                      playsInline
+                                    />
+                                  ) : (
+                                    <FiVideo style={{ color: '#9b59b6', fontSize: '1.25rem', flexShrink: 0 }} />
+                                  )}
                                   <div style={{ flex: 1, minWidth: 0 }}>
                                     <p style={{ 
                                       fontSize: '0.875rem', 
