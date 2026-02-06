@@ -129,6 +129,7 @@ module.exports = (sequelize) => {
       tableName: 'video_processing_jobs',
       underscored: true,
       timestamps: true,
+      paranoid: false,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
     }
