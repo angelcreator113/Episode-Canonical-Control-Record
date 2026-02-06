@@ -133,14 +133,15 @@ export default function SceneLinking({ episodeId, scriptId }) {
 
   const getVideoUrl = (footage) => {
     console.log('🔍 Getting video URL for footage:', footage.title, footage);
-    // Get S3 URL from raw_footage_s3_key
-    if (footage.raw_footage_s3_key) {
+    // Get S3 URL from raw_footage_s3_key (snake_case) or rawFootageS3Key (camelCase)
+    const s3Key = footage.raw_footage_s3_key || footage.rawFootageS3Key;
+    if (s3Key) {
       const bucketUrl = 'https://episode-metadata-raw-footage-dev.s3.us-east-1.amazonaws.com';
-      const url = `${bucketUrl}/${footage.raw_footage_s3_key}`;
+      const url = `${bucketUrl}/${s3Key}`;
       console.log('✅ Video URL constructed:', url);
       return url;
     }
-    console.log('❌ No raw_footage_s3_key found for footage');
+    console.log('❌ No raw_footage_s3_key or rawFootageS3Key found for footage');
     return null;
   };
 
@@ -379,7 +380,7 @@ export default function SceneLinking({ episodeId, scriptId }) {
                           >
                             {getVideoUrl(linkedFootage) ? (
                               <video
-                                src={getVideoUrl(linkedFootage)}
+                                src={`${getVideoUrl(linkedFootage)}#t=0.1`}
                                 style={{
                                   width: '80px',
                                   height: '60px',
