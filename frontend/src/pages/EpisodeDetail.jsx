@@ -7,6 +7,7 @@ import EpisodeAssetsTab from '../components/EpisodeAssetsTab';
 import EpisodeScripts from '../components/EpisodeScripts';
 import RawFootageUpload from '../components/RawFootageUpload';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
+import SceneLinking from '../components/SceneLinking';
 import './EpisodeDetail.css';
 
 
@@ -28,6 +29,7 @@ const EpisodeDetail = () => {
   const [savingScenes, setSavingScenes] = useState({});
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showOtherSteps, setShowOtherSteps] = useState(false);
+  const [primaryScript, setPrimaryScript] = useState(null);
 
   // Auth check
   useEffect(() => {
@@ -54,6 +56,25 @@ const EpisodeDetail = () => {
     if (episodeId) {
       fetchEpisode();
     }
+  }, [episodeId]);
+
+  // Load primary script for scene linking
+  useEffect(() => {
+    const fetchPrimaryScript = async () => {
+      if (!episodeId) return;
+      
+      try {
+        const response = await fetch(`/api/v1/episodes/${episodeId}/scripts?includeAllVersions=false`);
+        const data = await response.json();
+        const scripts = data.data || data.scripts || [];
+        const primary = scripts.find(s => s.is_primary === true);
+        setPrimaryScript(primary || scripts[0]); // Use first script if no primary
+      } catch (err) {
+        console.error('Failed to load primary script:', err);
+      }
+    };
+
+    fetchPrimaryScript();
   }, [episodeId]);
 
   // Load episode scenes
@@ -472,6 +493,14 @@ const EpisodeDetail = () => {
             <span className="ed-tab-label">Raw Footage</span>
           </button>
           <button
+            className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('scenes')}
+            title="Scene Linking"
+          >
+            <span className="ed-tab-icon">🔗</span>
+            <span className="ed-tab-label">Scene Linking</span>
+          </button>
+          <button
             className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('assets')}
             title="Assets"
@@ -603,6 +632,24 @@ const EpisodeDetail = () => {
                 onUploadComplete={() => {
                   console.log('Upload complete');
                 }}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Scene Linking Tab */}
+        {activeTab === 'scenes' && (
+          <div className="ed-card">
+            <div className="ed-cardhead">
+              <h2 className="ed-cardtitle">🔗 Scene Linking</h2>
+              <p className="text-sm text-gray-600 mt-2">
+                Link uploaded footage clips to AI-detected scenes from your script.
+              </p>
+            </div>
+            <div className="ed-cardbody">
+              <SceneLinking 
+                episodeId={episode.id} 
+                scriptId={primaryScript?.id}
               />
             </div>
           </div>

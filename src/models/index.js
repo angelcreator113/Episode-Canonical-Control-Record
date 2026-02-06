@@ -60,6 +60,7 @@ let CompositionAsset, CompositionOutput;
 let TimelinePlacement;
 let AIEditPlan, EditingDecision, AIRevision, VideoProcessingJob;
 let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset;
+let SceneFootageLink;
 
 try {
   // Core models
@@ -121,6 +122,7 @@ try {
   ScriptMetadata = require('./ScriptMetadata')(sequelize);
   SceneLayerConfiguration = require('./SceneLayerConfiguration')(sequelize);
   LayerPreset = require('./LayerPreset')(sequelize);
+  SceneFootageLink = require('./SceneFootageLink')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
