@@ -5,7 +5,7 @@ const { SceneFootageLink, Scene, ScriptMetadata } = require('../models');
 // Create scene-footage link
 router.post('/', async (req, res) => {
   try {
-    const { sceneId, footageId, matchType = 'manual', confidenceScore } = req.body;
+    const { sceneId, footageId, matchType = 'manual', confidenceScore, notes, createdBy } = req.body;
 
     if (!sceneId || !footageId) {
       return res.status(400).json({ error: 'sceneId and footageId are required' });
@@ -24,7 +24,9 @@ router.post('/', async (req, res) => {
       scene_id: sceneId,
       footage_id: footageId,
       match_type: matchType,
-      confidence_score: confidenceScore
+      confidence_score: confidenceScore,
+      notes: notes || null,
+      created_by: createdBy || 'system'
     });
 
     const linkWithDetails = await SceneFootageLink.findByPk(link.id, {
@@ -155,7 +157,9 @@ router.post('/auto-match', async (req, res) => {
             scene_id: aiScene.id,
             footage_id: footageItem.id,
             match_type: 'auto',
-            confidence_score: confidenceScore
+            confidence_score: confidenceScore,
+            notes: 'Auto-matched by filename pattern',
+            created_by: 'auto-match-system'
           });
 
           matches.push({

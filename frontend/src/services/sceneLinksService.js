@@ -9,13 +9,17 @@ const sceneLinksService = {
    * Create a manual link between footage and scene
    * @param {string} sceneId - AI scene ID
    * @param {string} footageId - Footage ID
+   * @param {string} notes - Optional notes about the link
+   * @param {string} createdBy - Optional user identifier
    * @returns {Promise<Object>}
    */
-  async createLink(sceneId, footageId) {
+  async createLink(sceneId, footageId, notes = null, createdBy = null) {
     const response = await api.post('/api/scene-links', {
       sceneId,
       footageId,
-      matchType: 'manual'
+      matchType: 'manual',
+      notes,
+      createdBy
     });
     return response.data;
   },
