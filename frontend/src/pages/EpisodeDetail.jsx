@@ -5,10 +5,8 @@ import episodeService from '../services/episodeService';
 import EpisodeWardrobe from '../components/EpisodeWardrobe';
 import EpisodeAssetsTab from '../components/EpisodeAssetsTab';
 import EpisodeScripts from '../components/EpisodeScripts';
+import RawFootageUpload from '../components/RawFootageUpload';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
-import VideoPlayer from '../components/VideoPlayer';
-import ClipSequenceManager from '../components/Episodes/ClipSequenceManager';
-import SceneComposer from '../components/SceneComposer/SceneComposer';
 import './EpisodeDetail.css';
 
 
@@ -61,7 +59,7 @@ const EpisodeDetail = () => {
   // Load episode scenes
   useEffect(() => {
     const fetchEpisodeScenes = async () => {
-      if (!episodeId || (activeTab !== 'scenes' && activeTab !== 'composer')) return;
+      if (!episodeId || activeTab !== 'scenes') return;
       
       try {
         setLoadingScenes(true);
@@ -81,7 +79,7 @@ const EpisodeDetail = () => {
   // Load episode assets
   useEffect(() => {
     const fetchEpisodeAssets = async () => {
-      if (!episodeId || (activeTab !== 'assets' && activeTab !== 'composer')) return;
+      if (!episodeId || activeTab !== 'assets') return;
       
       try {
         const response = await fetch(`/api/v1/episodes/${episodeId}/assets`);
@@ -98,7 +96,7 @@ const EpisodeDetail = () => {
   // Load episode wardrobe
   useEffect(() => {
     const fetchEpisodeWardrobe = async () => {
-      if (!episodeId || (activeTab !== 'wardrobe' && activeTab !== 'composer')) return;
+      if (!episodeId || activeTab !== 'wardrobe') return;
       
       try {
         const response = await fetch(`/api/v1/episodes/${episodeId}/wardrobe`);
@@ -458,14 +456,6 @@ const EpisodeDetail = () => {
             <span className="ed-tab-label">Scenes</span>
           </button>
           <button
-            className={`ed-tab ${activeTab === 'composer' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('composer')}
-            title="Scene Composer"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Composer</span>
-          </button>
-          <button
             className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('wardrobe')}
             title="Wardrobe"
@@ -480,6 +470,14 @@ const EpisodeDetail = () => {
           >
             <span className="ed-tab-icon">📝</span>
             <span className="ed-tab-label">Scripts</span>
+          </button>
+          <button
+            className={`ed-tab ${activeTab === 'footage' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('footage')}
+            title="Raw Footage"
+          >
+            <span className="ed-tab-icon">🎬</span>
+            <span className="ed-tab-label">Raw Footage</span>
           </button>
           <button
             className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
@@ -583,24 +581,6 @@ const EpisodeDetail = () => {
           </div>
         )}
 
-        {/* Scenes Tab */}
-        {activeTab === 'scenes' && (
-          <ClipSequenceManager episodeId={episodeId} episode={episode} />
-        )}
-
-        {/* Composer Tab - Render SceneComposer */}
-        {activeTab === 'composer' && (
-          <div className="ed-fullbleed">
-            <SceneComposer
-              episodeId={episodeId}
-              episode={episode}
-              episodeScenes={episodeScenes}
-              episodeAssets={episodeAssets}
-              episodeWardrobes={episodeWardrobes}
-            />
-          </div>
-        )}
-
         {/* Wardrobe Tab */}
         {activeTab === 'wardrobe' && (
           <div className="ed-fullbleed">
@@ -614,6 +594,26 @@ const EpisodeDetail = () => {
         {/* Scripts Tab */}
         {activeTab === 'scripts' && (
           <EpisodeScripts episodeId={episode.id} />
+        )}
+
+        {/* Raw Footage Tab */}
+        {activeTab === 'footage' && (
+          <div className="ed-card">
+            <div className="ed-cardhead">
+              <h2 className="ed-cardtitle">🎬 Raw Footage Upload</h2>
+              <p className="text-sm text-gray-600 mt-2">
+                Upload raw video clips for this episode. Files will be stored in S3 and metadata extracted automatically.
+              </p>
+            </div>
+            <div className="ed-cardbody">
+              <RawFootageUpload 
+                episodeId={episode.id} 
+                onUploadComplete={() => {
+                  console.log('Upload complete');
+                }}
+              />
+            </div>
+          </div>
         )}
 
         {/* Assets Tab */}

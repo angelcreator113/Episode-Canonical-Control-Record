@@ -428,6 +428,15 @@ try {
   scriptsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+let footageRoutes;
+try {
+  footageRoutes = require('./routes/footage');
+  console.log('✓ Footage routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load footage routes:', e.message);
+  footageRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 let scriptAnalysisRoutes;
 try {
   scriptAnalysisRoutes = require('./routes/scriptAnalysis');
@@ -565,6 +574,9 @@ app.use('/api/v1/scripts', scriptsRoutes);
 
 // Script analysis routes (AI)
 app.use('/api/scripts', scriptAnalysisRoutes);
+
+// Footage upload routes
+app.use('/api/footage', footageRoutes);
 
 // Phase 6 routes (Shows)
 const showRoutes = require('./routes/shows');
