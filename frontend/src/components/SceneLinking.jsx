@@ -46,6 +46,10 @@ export default function SceneLinking({ episodeId, scriptId }) {
 
       // Load uploaded footage scenes
       const footageScenes = await footageService.getScenes(episodeId);
+      console.log('🎬 Footage scenes loaded:', footageScenes.scenes);
+      if (footageScenes.scenes?.length > 0) {
+        console.log('📹 First footage item:', footageScenes.scenes[0]);
+      }
       setUploadedScenes(footageScenes.scenes || []);
 
       // Load existing links
@@ -128,11 +132,15 @@ export default function SceneLinking({ episodeId, scriptId }) {
   };
 
   const getVideoUrl = (footage) => {
+    console.log('🔍 Getting video URL for footage:', footage.title, footage);
     // Get S3 URL from raw_footage_s3_key
     if (footage.raw_footage_s3_key) {
       const bucketUrl = 'https://episode-metadata-raw-footage-dev.s3.us-east-1.amazonaws.com';
-      return `${bucketUrl}/${footage.raw_footage_s3_key}`;
+      const url = `${bucketUrl}/${footage.raw_footage_s3_key}`;
+      console.log('✅ Video URL constructed:', url);
+      return url;
     }
+    console.log('❌ No raw_footage_s3_key found for footage');
     return null;
   };
 
@@ -380,8 +388,12 @@ export default function SceneLinking({ episodeId, scriptId }) {
                                   flexShrink: 0,
                                   backgroundColor: '#000'
                                 }}
+                                crossOrigin="anonymous"
+                                preload="metadata"
                                 muted
                                 playsInline
+                                onError={(e) => console.error('❌ Video load error:', linkedFootage.title, e.target.src)}
+                                onLoadedMetadata={(e) => console.log('✅ Video loaded:', linkedFootage.title, e.target.src)}
                               />
                             ) : (
                               <FiVideo style={{ color: '#16a34a', fontSize: '1.25rem', flexShrink: 0 }} />
@@ -454,8 +466,12 @@ export default function SceneLinking({ episodeId, scriptId }) {
                                         flexShrink: 0,
                                         backgroundColor: '#000'
                                       }}
+                                      crossOrigin="anonymous"
+                                      preload="metadata"
                                       muted
                                       playsInline
+                                      onError={(e) => console.error('❌ Video load error:', clip.title, e.target.src)}
+                                      onLoadedMetadata={(e) => console.log('✅ Video loaded:', clip.title, e.target.src)}
                                     />
                                   ) : (
                                     <FiVideo style={{ color: '#9b59b6', fontSize: '1.25rem', flexShrink: 0 }} />
