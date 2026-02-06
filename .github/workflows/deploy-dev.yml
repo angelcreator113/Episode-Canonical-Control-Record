@@ -33,7 +33,7 @@ jobs:
       - name: Debug - List migration files
         run: |
           echo "=== Migrations in repo ==="
-          ls -la migrations/
+          ls -la src/migrations/
           echo "=== Current commit ==="
           git log -1 --oneline
 
