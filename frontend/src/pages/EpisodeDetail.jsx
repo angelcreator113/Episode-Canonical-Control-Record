@@ -8,6 +8,8 @@ import EpisodeScripts from '../components/EpisodeScripts';
 import RawFootageUpload from '../components/RawFootageUpload';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
+import DecisionHistory from '../components/DecisionHistory';
+import DecisionStats from '../components/DecisionStats';
 import './EpisodeDetail.css';
 
 
@@ -524,6 +526,14 @@ const EpisodeDetail = () => {
             <span className="ed-tab-icon">📜</span>
             <span className="ed-tab-label">History</span>
           </button>
+          <button
+            className={`ed-tab ${activeTab === 'decisions' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('decisions')}
+            title="Decisions"
+          >
+            <span className="ed-tab-icon">📊</span>
+            <span className="ed-tab-label">Decisions</span>
+          </button>
         </div>
 
         {/* Content Area */}
@@ -775,6 +785,18 @@ const EpisodeDetail = () => {
                   <p>Custom metadata fields will appear here</p>
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {/* Decisions Tab */}
+        {activeTab === 'decisions' && (
+          <div className="ed-stack">
+            <div className="ed-card">
+              <DecisionStats episodeId={episodeId} />
+            </div>
+            <div className="ed-card">
+              <DecisionHistory episodeId={episodeId} />
             </div>
           </div>
         )}

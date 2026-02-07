@@ -609,6 +609,12 @@ app.use('/api/v1/socket', socketController);
 
 // Audit logging routes
 app.use('/api/v1/audit-logs', auditLogsRoutes);
+console.log('✓ Audit logs routes loaded');
+
+// Decision logging routes
+const decisionsRoutes = require('./routes/decisions');
+app.use('/api/v1/decisions', decisionsRoutes);
+console.log('✓ Decisions routes loaded');
 
 // Development seed routes
 app.use('/api/v1/seed', seedRoutes);

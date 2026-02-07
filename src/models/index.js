@@ -61,6 +61,7 @@ let TimelinePlacement;
 let AIEditPlan, EditingDecision, AIRevision, VideoProcessingJob;
 let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset;
 let SceneFootageLink;
+let UserDecision, DecisionPattern;
 
 try {
   // Core models
@@ -124,6 +125,10 @@ try {
   LayerPreset = require('./LayerPreset')(sequelize);
   SceneFootageLink = require('./SceneFootageLink')(sequelize);
 
+  // Decision Logging models
+  UserDecision = require('./UserDecision')(sequelize);
+  DecisionPattern = require('./DecisionPattern')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -170,6 +175,9 @@ const requiredModels = {
   ScriptMetadata,
   SceneLayerConfiguration,
   LayerPreset,
+  UserDecision,
+  DecisionPattern,
+  SceneFootageLink,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -177,6 +185,17 @@ Object.entries(requiredModels).forEach(([name, model]) => {
     throw new Error(`Required model not loaded: ${name}`);
   }
 });
+
+// Call associate methods for models
+if (SceneFootageLink && SceneFootageLink.associate) {
+  SceneFootageLink.associate(requiredModels);
+}
+if (UserDecision && UserDecision.associate) {
+  UserDecision.associate(requiredModels);
+}
+if (DecisionPattern && DecisionPattern.associate) {
+  DecisionPattern.associate(requiredModels);
+}
 
 /**
  * Define Model Associations
@@ -857,6 +876,30 @@ SceneLayerConfiguration.belongsTo(Scene, {
   as: 'scene',
 });
 
+// ==================== DECISION LOGGING ASSOCIATIONS ====================
+
+// UserDecision → Episode (N:1)
+UserDecision.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+Episode.hasMany(UserDecision, {
+  foreignKey: 'episode_id',
+  as: 'decisions',
+});
+
+// UserDecision → Scene (N:1)
+UserDecision.belongsTo(Scene, {
+  foreignKey: 'scene_id',
+  as: 'scene',
+});
+
+Scene.hasMany(UserDecision, {
+  foreignKey: 'scene_id',
+  as: 'decisions',
+});
+
 console.log('✅ Model associations defined');
 
 /**
@@ -907,6 +950,8 @@ const db = {
     ScriptMetadata,
     SceneLayerConfiguration,
     LayerPreset,
+    UserDecision,
+    DecisionPattern,
   },
 
   /**
@@ -1112,3 +1157,6 @@ module.exports.AITrainingData = AITrainingData;
 module.exports.ScriptMetadata = ScriptMetadata;
 module.exports.SceneLayerConfiguration = SceneLayerConfiguration;
 module.exports.LayerPreset = LayerPreset;
+module.exports.UserDecision = UserDecision;
+module.exports.DecisionPattern = DecisionPattern;
+module.exports.SceneFootageLink = SceneFootageLink;

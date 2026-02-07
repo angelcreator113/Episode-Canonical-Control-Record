@@ -60,6 +60,7 @@ module.exports = (sequelize) => {
       underscored: true,
       createdAt: 'created_at',
       updatedAt: false, // No updated_at needed
+      paranoid: false, // No soft deletes
     }
   );
 
