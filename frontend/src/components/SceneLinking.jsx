@@ -3,6 +3,7 @@ import { FiCheckCircle, FiAlertCircle, FiVideo, FiClock, FiZap, FiChevronDown, F
 import scriptsService from '../services/scriptsService';
 import footageService from '../services/footageService';
 import sceneLinksService from '../services/sceneLinksService';
+import { useDecisionLogger } from '../hooks/useDecisionLogger';
 
 // Add spinner animation
 const spinnerStyle = `
@@ -30,6 +31,7 @@ export default function SceneLinking({ episodeId, scriptId }) {
   const [links, setLinks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [expandedScenes, setExpandedScenes] = useState({});
+  const { logSceneLink } = useDecisionLogger();
 
   useEffect(() => {
     if (episodeId && scriptId) {
@@ -75,15 +77,24 @@ export default function SceneLinking({ episodeId, scriptId }) {
   };
 
   const getLinkedFootage = (aiSceneId) => {
-    const link = links.find(l => l.scene_id === aiSceneId);
+    const link = links.find(l => l.script_metadata_id === aiSceneId);
     if (!link) return null;
-    return uploadedScenes.find(s => s.id === link.footage_id);
+    return uploadedScenes.find(s => s.id === link.scene_id);
   };
 
   const handleLinkFootage = async (aiSceneId, footageId) => {
     try {
       const newLink = await sceneLinksService.createLink(aiSceneId, footageId);
       setLinks([...links, newLink]);
+      
+      // 🎯 LOG THE DECISION
+      await logSceneLink(
+        episodeId,
+        aiSceneId,
+        footageId,
+        'manual', // match_type
+        null // confidence (manual links have no AI confidence)
+      );
     } catch (error) {
       console.error('Failed to link footage:', error);
       alert('Failed to link footage. This scene may already be linked.');
@@ -92,7 +103,7 @@ export default function SceneLinking({ episodeId, scriptId }) {
 
   const handleUnlinkFootage = async (aiSceneId) => {
     try {
-      const link = links.find(l => l.scene_id === aiSceneId);
+      const link = links.find(l => l.script_metadata_id === aiSceneId);
       if (link) {
         await sceneLinksService.deleteLink(link.id);
         setLinks(links.filter(l => l.id !== link.id));
@@ -107,6 +118,20 @@ export default function SceneLinking({ episodeId, scriptId }) {
     
     try {
       const result = await sceneLinksService.autoMatch(episodeId, scriptId);
+      
+      // 🎯 LOG EACH AUTO-MATCHED DECISION
+      if (result.links && result.links.length > 0) {
+        for (const link of result.links) {
+          await logSceneLink(
+            episodeId,
+            link.scene_id,
+            link.footage_id,
+            'auto', // match_type
+            link.confidence || 0.85 // AI confidence score
+          );
+        }
+      }
+      
       alert(`Auto-matched ${result.matched} scenes!\n${result.suggested} additional suggestions available.`);
       // Reload data to show new links
       await loadData();

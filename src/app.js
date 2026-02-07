@@ -613,7 +613,7 @@ console.log('✓ Audit logs routes loaded');
 
 // Decision logging routes
 const decisionsRoutes = require('./routes/decisions');
-app.use('/api/decisions', decisionsRoutes);
+app.use('/api/v1/decisions', decisionsRoutes);
 console.log('✓ Decisions routes loaded');
 
 // Development seed routes

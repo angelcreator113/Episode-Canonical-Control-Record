@@ -177,6 +177,7 @@ const requiredModels = {
   LayerPreset,
   UserDecision,
   DecisionPattern,
+  SceneFootageLink,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -184,6 +185,17 @@ Object.entries(requiredModels).forEach(([name, model]) => {
     throw new Error(`Required model not loaded: ${name}`);
   }
 });
+
+// Call associate methods for models
+if (SceneFootageLink && SceneFootageLink.associate) {
+  SceneFootageLink.associate(requiredModels);
+}
+if (UserDecision && UserDecision.associate) {
+  UserDecision.associate(requiredModels);
+}
+if (DecisionPattern && DecisionPattern.associate) {
+  DecisionPattern.associate(requiredModels);
+}
 
 /**
  * Define Model Associations
@@ -1147,3 +1159,4 @@ module.exports.SceneLayerConfiguration = SceneLayerConfiguration;
 module.exports.LayerPreset = LayerPreset;
 module.exports.UserDecision = UserDecision;
 module.exports.DecisionPattern = DecisionPattern;
+module.exports.SceneFootageLink = SceneFootageLink;

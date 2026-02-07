@@ -13,7 +13,7 @@ router.post('/', async (req, res) => {
 
     // Check if link already exists
     const existing = await SceneFootageLink.findOne({
-      where: { scene_id: sceneId }
+      where: { script_metadata_id: sceneId }
     });
 
     if (existing) {
@@ -21,8 +21,8 @@ router.post('/', async (req, res) => {
     }
 
     const link = await SceneFootageLink.create({
-      scene_id: sceneId,
-      footage_id: footageId,
+      script_metadata_id: sceneId,
+      scene_id: footageId,
       match_type: matchType,
       confidence_score: confidenceScore,
       notes: notes || null,
@@ -59,7 +59,6 @@ router.get('/episode/:episodeId', async (req, res) => {
         {
           model: Scene,
           as: 'footage',
-          where: { deleted_at: null },
           required: true
         }
       ]
