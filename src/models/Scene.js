@@ -425,6 +425,7 @@ module.exports = (sequelize) => {
     return {
       id: this.id,
       episodeId: this.episode_id,
+      episode: this.episode,
       sceneNumber: this.scene_number,
       title: this.title,
       description: this.description,

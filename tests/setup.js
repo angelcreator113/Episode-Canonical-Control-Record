@@ -5,7 +5,7 @@
 
 // Setup test environment
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = 'postgresql://postgres:password@localhost:5432/episode_metadata_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://postgres:Ayanna123@localhost:5432/episode_metadata_test';
 process.env.LOG_LEVEL = 'error';
 process.env.AWS_REGION = 'us-east-1';
 process.env.COGNITO_USER_POOL_ID = 'us-east-1_test123';
@@ -72,23 +72,34 @@ expect.extend({
   },
 });
 
+// Import tokenService for proper token generation
+const { generateToken } = require('../src/services/tokenService');
+
 // Global test utilities
 global.testUtils = {
   /**
    * Generate mock JWT token with custom claims
+   * Now uses real tokenService to create properly signed tokens
    */
-  generateMockToken: (userId = 'test-user', groups = ['viewer']) => {
-    const header = Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64');
-    const payload = Buffer.from(
-      JSON.stringify({
-        sub: userId,
-        email: `${userId}@test.com`,
-        'cognito:groups': groups,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 3600,
-      })
-    ).toString('base64');
-    return `${header}.${payload}.test-signature`;
+  generateMockToken: (userId = 'test-user', groups = ['viewer'], expiry = null) => {
+    const user = {
+      id: userId,
+      email: `${userId}@test.com`,
+      groups: groups,
+      role: groups.includes('admin') ? 'ADMIN' : groups.includes('editor') ? 'EDITOR' : 'USER',
+    };
+    
+    // If expiry is provided and it's in the past, create an expired token
+    if (expiry && expiry < Date.now()) {
+      // Create a token with very short expiry
+      const oldEnv = process.env.JWT_EXPIRY;
+      process.env.JWT_EXPIRY = '1ms';
+      const token = generateToken(user);
+      process.env.JWT_EXPIRY = oldEnv;
+      return token;
+    }
+    
+    return generateToken(user);
   },
 
   /**

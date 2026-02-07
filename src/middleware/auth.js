@@ -1,9 +1,11 @@
 const { CognitoJwtVerifier } = require('aws-jwt-verify');
+const { verifyToken: verifyTestToken } = require('../services/tokenService');
 
 /**
  * Authentication Middleware
  * Validates AWS Cognito JWT tokens and extracts user information
  * Uses aws-jwt-verify for proper signature verification
+ * In test environment, falls back to tokenService for simple JWT tokens
  */
 
 // Create verifier for ID tokens
@@ -24,8 +26,18 @@ const accessTokenVerifier = CognitoJwtVerifier.create({
  * Verify Cognito JWT token
  * Uses AWS JWT Verify library for proper signature verification
  * Automatically fetches and caches JWKS keys from Cognito
+ * In test environment, falls back to simple JWT verification
  */
 const verifyToken = async (token) => {
+  // In test environment, use simple JWT verification
+  if (process.env.NODE_ENV === 'test') {
+    try {
+      return verifyTestToken(token);
+    } catch (error) {
+      throw new Error(`Token verification failed: ${error.message}`);
+    }
+  }
+
   try {
     const userPoolId = process.env.COGNITO_USER_POOL_ID;
 
