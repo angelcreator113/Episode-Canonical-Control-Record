@@ -165,6 +165,7 @@ module.exports = (sequelize) => {
       sequelize,
       modelName: 'Thumbnail',
       tableName: 'thumbnails',
+      underscored: false, // Table uses camelCase columns
       timestamps: false,
       indexes: [
         {

@@ -205,3 +205,12 @@ class TokenService {
 }
 
 module.exports = TokenService;
+
+// Export individual methods for easier importing
+module.exports.generateToken = TokenService.generateToken.bind(TokenService);
+module.exports.verifyToken = TokenService.verifyToken.bind(TokenService);
+module.exports.generateTokenPair = TokenService.generateTokenPair.bind(TokenService);
+module.exports.refreshAccessToken = TokenService.refreshAccessToken.bind(TokenService);
+module.exports.revokeToken = TokenService.revokeToken.bind(TokenService);
+module.exports.generateTestToken = TokenService.generateTestToken.bind(TokenService);
+

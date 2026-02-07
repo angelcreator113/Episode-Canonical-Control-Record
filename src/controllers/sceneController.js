@@ -83,7 +83,7 @@ exports.getScene = async (req, res) => {
         {
           model: Thumbnail,
           as: 'thumbnail',
-          attributes: ['id', 'url', 's3_key', 'metadata'],
+          attributes: ['id', 'url', 's3Key', 'metadata'],
         },
       ],
     });

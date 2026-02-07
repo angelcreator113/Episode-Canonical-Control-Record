@@ -7,12 +7,26 @@ jest.mock('../../../src/models');
 jest.mock('../../../src/middleware/errorHandler');
 jest.mock('../../../src/middleware/auditLog', () => ({
   logger: {
-    logAction: jest.fn(),
+    logAction: jest.fn().mockResolvedValue({}),
   },
   auditLog: jest.fn(),
   captureResponseData: jest.fn(),
   getActionType: jest.fn(),
   getResourceInfo: jest.fn(),
+}));
+
+// Mock all services that are dynamically required
+jest.mock('../../../src/services/ActivityService', () => ({
+  logActivity: jest.fn().mockResolvedValue({}),
+}));
+jest.mock('../../../src/services/SocketService', () => ({
+  broadcastMessage: jest.fn().mockResolvedValue({}),
+}));
+jest.mock('../../../src/services/NotificationService', () => ({
+  create: jest.fn().mockResolvedValue({}),
+}));
+jest.mock('../../../src/services/AuditLogger', () => ({
+  log: jest.fn().mockResolvedValue({}),
 }));
 
 const episodeController = require('../../../src/controllers/episodeController');
@@ -26,10 +40,16 @@ describe('Episode Controller - Real Tests', () => {
   beforeEach(() => {
     jest.clearAllMocks();
 
+    // Mock ActivityLog.create to return a promise
+    models.ActivityLog = {
+      create: jest.fn().mockResolvedValue({ id: 1 }),
+    };
+
     mockReq = {
       query: {},
       body: {},
       params: {},
+      headers: {},
       user: { id: 'user-123', 'cognito:groups': ['admin'] },
       ip: '127.0.0.1',
       get: jest.fn().mockReturnValue('Mozilla/5.0'),
@@ -117,7 +137,12 @@ describe('Episode Controller - Real Tests', () => {
       await episodeController.listEpisodes(mockReq, mockRes);
 
       // Verify the endpoint succeeded
-      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: [],
+          pagination: expect.any(Object),
+        })
+      );
     });
   });
 
@@ -155,14 +180,19 @@ describe('Episode Controller - Real Tests', () => {
     });
 
     test('should return episode successfully', async () => {
-      models.Episode.findByPk = jest.fn().mockResolvedValue({ id: 1 });
+      const mockEpisode = { id: 1, title: 'Test' };
+      models.Episode.findByPk = jest.fn().mockResolvedValue(mockEpisode);
 
       mockReq.params = { id: '1' };
 
       await episodeController.getEpisode(mockReq, mockRes);
 
       // Verify the endpoint succeeded
-      expect(mockRes.status).toHaveBeenCalledWith(200);
+      expect(mockRes.json).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: mockEpisode,
+        })
+      );
     });
   });
 
