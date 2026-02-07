@@ -10,7 +10,8 @@ const app = require('./app');
 const db = require('./models');
 const sequelize = db.sequelize;
 
-const PORT = process.env.PORT || 3002;
+// Default to 3000 to match .env.example and production nginx config
+const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || '0.0.0.0';
 
 let server;
