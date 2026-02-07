@@ -84,7 +84,8 @@
     "sqlite3": "^5.1.7",
     "uuid": "^9.0.1",
     "winston": "^3.11.0",
-    "winston-cloudwatch": "^6.2.0"
+    "winston-cloudwatch": "^6.2.0",
+    "ytdl-core": "^4.11.5"
   },
   "devDependencies": {
     "cross-env": "^10.1.0",

@@ -10,6 +10,7 @@ import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
 import DecisionHistory from '../components/DecisionHistory';
 import DecisionStats from '../components/DecisionStats';
+import YouTubeAnalyzer from '../components/YouTubeAnalyzer';
 import './EpisodeDetail.css';
 
 
@@ -534,6 +535,14 @@ const EpisodeDetail = () => {
             <span className="ed-tab-icon">📊</span>
             <span className="ed-tab-label">Decisions</span>
           </button>
+          <button
+            className={`ed-tab ${activeTab === 'youtube' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('youtube')}
+            title="YouTube Training"
+          >
+            <span className="ed-tab-icon">🎬</span>
+            <span className="ed-tab-label">YouTube Training</span>
+          </button>
         </div>
 
         {/* Content Area */}
@@ -799,6 +808,11 @@ const EpisodeDetail = () => {
               <DecisionHistory episodeId={episodeId} />
             </div>
           </div>
+        )}
+
+        {/* YouTube Training Tab */}
+        {activeTab === 'youtube' && (
+          <YouTubeAnalyzer episodeId={episodeId} />
         )}
 
         {/* History Tab */}

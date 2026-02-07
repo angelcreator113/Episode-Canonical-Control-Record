@@ -616,6 +616,11 @@ const decisionsRoutes = require('./routes/decisions');
 app.use('/api/v1/decisions', decisionsRoutes);
 console.log('✓ Decisions routes loaded');
 
+// YouTube Training routes
+const youtubeRoutes = require('./routes/youtube');
+app.use('/api/youtube', youtubeRoutes);
+console.log('✓ YouTube training routes loaded');
+
 // Development seed routes
 app.use('/api/v1/seed', seedRoutes);
 
