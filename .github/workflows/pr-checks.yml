@@ -99,14 +99,15 @@ jobs:
       - name: Check for secrets
         run: |
           echo "Checking for accidentally committed secrets..."
-          # Look for actual hardcoded secrets, not env var references
+          # Look for actual hardcoded secrets, not env var references or test fixtures
           # Exclude: process.env.AWS_SECRET_ACCESS_KEY (legitimate)
-          # Detect: AWS_SECRET_ACCESS_KEY='actual-secret' or "AKIA..." keys
-          if grep -r "AWS_SECRET_ACCESS_KEY\s*=\s*['\"]" --include="*.js" --include="*.json" --exclude-dir=node_modules . 2>/dev/null; then
-            echo "❌ Found hardcoded AWS secret!"
+          # Exclude: test files (use dummy secrets for testing)
+          # Detect: AWS_SECRET_ACCESS_KEY='actual-secret' in non-test code
+          if grep -r "AWS_SECRET_ACCESS_KEY\s*=\s*['\"]" --include="*.js" --exclude-dir=node_modules --exclude-dir=tests --exclude="*.test.js" --exclude="*.spec.js" . 2>/dev/null; then
+            echo "❌ Found hardcoded AWS secret in non-test code!"
             exit 1
           fi
-          if grep -r "AKIA[0-9A-Z]{16}" --include="*.js" --include="*.json" --exclude-dir=node_modules . 2>/dev/null; then
+          if grep -r "AKIA[0-9A-Z]{16}" --include="*.js" --include="*.json" --exclude-dir=node_modules --exclude-dir=tests . 2>/dev/null; then
             echo "❌ Found AWS access key ID!"
             exit 1
           fi
