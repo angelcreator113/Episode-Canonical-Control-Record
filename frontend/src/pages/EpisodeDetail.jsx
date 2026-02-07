@@ -535,6 +535,7 @@ const EpisodeDetail = () => {
             <span className="ed-tab-icon">📊</span>
             <span className="ed-tab-label">Decisions</span>
           </button>
+          {/* TEMPORARILY DISABLED - YouTube Training feature in development
           <button
             className={`ed-tab ${activeTab === 'youtube' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('youtube')}
@@ -543,6 +544,7 @@ const EpisodeDetail = () => {
             <span className="ed-tab-icon">🎬</span>
             <span className="ed-tab-label">YouTube Training</span>
           </button>
+          */}
         </div>
 
         {/* Content Area */}
@@ -810,10 +812,11 @@ const EpisodeDetail = () => {
           </div>
         )}
 
-        {/* YouTube Training Tab */}
+        {/* YouTube Training Tab - TEMPORARILY DISABLED
         {activeTab === 'youtube' && (
           <YouTubeAnalyzer episodeId={episodeId} />
         )}
+        */}
 
         {/* History Tab */}
         {activeTab === 'history' && (

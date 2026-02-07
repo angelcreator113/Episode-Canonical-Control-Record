@@ -1,625 +1,522 @@
-import React, { useState, useEffect } from 'react';
-import { FaYoutube, FaPlay, FaSpinner, FaCheck, FaTrash, FaEye, FaDownload } from 'react-icons/fa';
+﻿import { useState } from 'react';
 import axios from 'axios';
 
-const YouTubeAnalyzer = ({ episodeId }) => {
+export default function YouTubeAnalyzer({ episodeId }) {
   const [url, setUrl] = useState('');
+  const [step, setStep] = useState('input');
   const [metadata, setMetadata] = useState(null);
-  const [analyzing, setAnalyzing] = useState(false);
-  const [progress, setProgress] = useState('');
-  const [result, setResult] = useState(null);
+  const [analysis, setAnalysis] = useState(null);
   const [error, setError] = useState(null);
-  const [library, setLibrary] = useState([]);
-  const [loadingLibrary, setLoadingLibrary] = useState(true);
-  const [viewingVideo, setViewingVideo] = useState(null);
-
-  // Load existing training videos
-  useEffect(() => {
-    loadLibrary();
-  }, []);
-
-  const loadLibrary = async () => {
-    try {
-      setLoadingLibrary(true);
-      const response = await axios.get('/api/youtube/library');
-      setLibrary(response.data?.data || []);
-    } catch (err) {
-      console.error('Failed to load training library:', err);
-      setLibrary([]); // Set empty array on error
-    } finally {
-      setLoadingLibrary(false);
-    }
-  };
+  const [detectScenes, setDetectScenes] = useState(false);
 
   const handlePreview = async () => {
-    if (!url.trim()) {
-      setError('Please enter a YouTube URL');
-      return;
-    }
-
     try {
       setError(null);
-      setMetadata(null);
-      setProgress('Fetching video metadata...');
-
+      console.log('Fetching metadata for URL:', url);
+      
       const response = await axios.get('/api/youtube/metadata', {
-        params: { url: url.trim() }
+        params: { url }
       });
-
-      setMetadata(response.data);
-      setProgress('');
+      
+      console.log('Metadata received:', response.data);
+      setMetadata(response.data.data);
+      setStep('preview');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to fetch video metadata');
-      setProgress('');
+      console.error('Preview error:', err);
+      setError(err.response?.data?.error || err.message || 'Failed to fetch metadata');
     }
   };
 
   const handleAnalyze = async () => {
-    if (!url.trim()) {
-      setError('Please enter a YouTube URL');
-      return;
-    }
-
     try {
       setError(null);
-      setResult(null);
-      setAnalyzing(true);
-      setProgress('Starting analysis...');
-
-      const response = await axios.post('/api/youtube/analyze', {
-        url: url.trim()
-      });
-
-      setResult(response.data);
-      setProgress('');
-      setUrl('');
-      setMetadata(null);
+      setStep('processing');
       
-      // Reload library to show new video
-      await loadLibrary();
+      console.log('Starting analysis:', { url, episodeId, detectScenes });
+      
+      const response = await axios.post('/api/youtube/analyze', {
+        url,
+        episode_id: episodeId,
+        detect_scenes: detectScenes
+      });
+      
+      console.log('Analysis complete:', response.data);
+      setAnalysis(response.data.data);
+      setStep('complete');
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to analyze video');
-      setProgress('');
-    } finally {
-      setAnalyzing(false);
+      console.error('Analysis error:', err);
+      setError(err.response?.data?.error || err.message || 'Analysis failed');
+      setStep('preview');
     }
   };
 
-  const handleDelete = async (videoId) => {
-    if (!confirm('Are you sure you want to delete this training video?')) {
-      return;
-    }
-
-    try {
-      await axios.delete(`/api/youtube/${videoId}`);
-      await loadLibrary();
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to delete video');
-    }
+  const resetForm = () => {
+    setUrl('');
+    setStep('input');
+    setMetadata(null);
+    setAnalysis(null);
+    setError(null);
+    setDetectScenes(false);
   };
 
-  const handleView = async (videoId) => {
-    try {
-      const response = await axios.get(`/api/youtube/${videoId}`);
-      setViewingVideo(response.data.data || response.data);
-    } catch (err) {
-      setError(err.response?.data?.error || 'Failed to load video details');
-    }
-  };
-
-  const formatDuration = (seconds) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      month: 'short', 
-      day: 'numeric', 
-      year: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
-  };
-
-  const formatJsonField = (field) => {
-    if (!field) return null;
-    if (typeof field === 'string') return field;
-    if (typeof field === 'object') {
-      // Try to create a readable string from object
-      return JSON.stringify(field).substring(0, 50);
-    }
-    return String(field);
-  };
-
-  const displayJsonField = (field) => {
-    if (!field) return 'N/A';
-    if (typeof field === 'string') return field;
-    if (typeof field === 'boolean') return field ? 'Yes' : 'No';
-    if (typeof field === 'object') {
-      return JSON.stringify(field, null, 2);
-    }
-    return String(field);
-  };
-
-  return (
-    <div className="ed-stack">
-      {/* Analyze New Video */}
-      <div className="ed-card">
-        <div className="ed-cardhead">
-          <h2 className="ed-cardtitle">
-            <FaYoutube style={{ marginRight: '8px', color: '#FF0000' }} />
+  // INPUT STEP
+  if (step === 'input') {
+    return (
+      <div style={{ 
+        maxWidth: '900px', 
+        margin: '0 auto', 
+        background: 'linear-gradient(135deg, #f3e7ff 0%, #e0f2fe 50%, #dbeafe 100%)',
+        borderRadius: '16px',
+        padding: '32px',
+        boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+        border: '1px solid #e9d5ff'
+      }}>
+        <div style={{ marginBottom: '32px' }}>
+          <h3 style={{ 
+            fontSize: '28px', 
+            fontWeight: 'bold', 
+            color: '#1f2937',
+            marginBottom: '12px',
+            display: 'flex',
+            alignItems: 'center'
+          }}>
+            <span style={{ fontSize: '36px', marginRight: '12px' }}>📺</span>
             Analyze YouTube Video
-          </h2>
+          </h3>
+          <p style={{ fontSize: '16px', color: '#6b7280' }}>
+            Train the AI to match your preferred editing style by analyzing reference videos
+          </p>
         </div>
-        <div className="ed-cardbody">
-          <div style={{ marginBottom: '16px' }}>
-            <p style={{ marginBottom: '12px', color: '#6b7280' }}>
-              Paste a YouTube URL to analyze the video's content style, pacing, and tone.
-              This will help train the AI to match your preferred editing style.
-            </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <input
-                type="text"
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                placeholder="https://www.youtube.com/watch?v=..."
-                style={{
-                  flex: 1,
-                  padding: '10px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  fontSize: '14px'
-                }}
-                disabled={analyzing}
-              />
-              <button
-                onClick={handlePreview}
-                disabled={analyzing || !url.trim()}
-                style={{
-                  padding: '10px 20px',
-                  background: analyzing ? '#9ca3af' : '#3b82f6',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: analyzing ? 'not-allowed' : 'pointer',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                <FaEye /> Preview
-              </button>
-              <button
-                onClick={handleAnalyze}
-                disabled={analyzing || !url.trim()}
-                style={{
-                  padding: '10px 20px',
-                  background: analyzing ? '#9ca3af' : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  cursor: analyzing ? 'not-allowed' : 'pointer',
-                  fontWeight: '500',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-              >
-                {analyzing ? <FaSpinner className="fa-spin" /> : <FaPlay />}
-                Analyze
-              </button>
-            </div>
-          </div>
 
-          {/* Metadata Preview */}
-          {metadata && (
-            <div style={{
-              padding: '16px',
-              background: 'linear-gradient(135deg, #667eea15 0%, #764ba215 100%)',
+        <div style={{ marginBottom: '24px' }}>
+          <label style={{ 
+            display: 'block', 
+            fontSize: '14px', 
+            fontWeight: '600', 
+            color: '#374151',
+            marginBottom: '8px'
+          }}>
+            YouTube URL
+          </label>
+          <input
+            type="text"
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder="https://www.youtube.com/watch?v=..."
+            style={{
+              width: '100%',
+              padding: '14px 16px',
+              fontSize: '16px',
+              border: '2px solid #d1d5db',
               borderRadius: '12px',
-              marginTop: '16px'
-            }}>
-              <div style={{ display: 'flex', gap: '16px' }}>
-                {metadata.thumbnail && (
-                  <img
-                    src={metadata.thumbnail}
-                    alt="Video thumbnail"
-                    style={{
-                      width: '160px',
-                      height: '90px',
-                      objectFit: 'cover',
-                      borderRadius: '8px',
-                      border: '2px solid rgba(255,255,255,0.3)'
-                    }}
-                  />
-                )}
-                <div style={{ flex: 1 }}>
-                  <h3 style={{ marginBottom: '8px', fontSize: '16px', fontWeight: '600' }}>
-                    {metadata.title}
-                  </h3>
-                  <p style={{ color: '#6b7280', fontSize: '14px', marginBottom: '8px' }}>
-                    {metadata.author} • {formatDuration(metadata.length)} • {metadata.views?.toLocaleString()} views
-                  </p>
-                  <div style={{ display: 'flex', gap: '12px', fontSize: '13px', color: '#9ca3af' }}>
-                    <span>📊 Quality: {metadata.quality}</span>
-                    <span>🎬 Format: {metadata.container}</span>
-                  </div>
-                </div>
+              outline: 'none',
+              transition: 'all 0.2s'
+            }}
+            onFocus={(e) => {
+              e.target.style.borderColor = '#a855f7';
+              e.target.style.boxShadow = '0 0 0 3px rgba(168, 85, 247, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.target.style.borderColor = '#d1d5db';
+              e.target.style.boxShadow = 'none';
+            }}
+          />
+        </div>
+
+        <div style={{
+          background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)',
+          border: '2px solid #bfdbfe',
+          borderRadius: '12px',
+          padding: '20px',
+          marginBottom: '24px',
+          cursor: 'pointer'
+        }}
+        onClick={() => setDetectScenes(!detectScenes)}>
+          <label style={{ display: 'flex', alignItems: 'start', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={detectScenes}
+              onChange={(e) => setDetectScenes(e.target.checked)}
+              style={{ 
+                width: '20px', 
+                height: '20px', 
+                marginRight: '16px',
+                marginTop: '4px',
+                cursor: 'pointer'
+              }}
+            />
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                fontSize: '18px', 
+                fontWeight: 'bold', 
+                color: '#1f2937',
+                marginBottom: '8px',
+                display: 'flex',
+                alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '24px', marginRight: '8px' }}>🎬</span>
+                Enable Scene Detection
+                <span style={{
+                  marginLeft: '12px',
+                  padding: '4px 10px',
+                  background: '#f3e8ff',
+                  color: '#7c3aed',
+                  fontSize: '12px',
+                  fontWeight: '600',
+                  borderRadius: '12px'
+                }}>Advanced</span>
+              </div>
+              <p style={{ fontSize: '14px', color: '#4b5563', lineHeight: '1.6' }}>
+                Automatically detect scene changes, extract thumbnails, and classify scene types using FFmpeg. 
+                This will take longer (2-5 minutes) as it requires downloading the full video.
+              </p>
+              <div style={{ marginTop: '12px', fontSize: '13px', color: '#6b7280' }}>
+                <span style={{ marginRight: '16px' }}>⏱️ ~2-5 min</span>
+                <span style={{ marginRight: '16px' }}>📦 Full Download</span>
+                <span>🤖 AI Classification</span>
               </div>
             </div>
-          )}
+          </label>
+        </div>
 
-          {/* Progress */}
-          {progress && (
-            <div style={{
-              padding: '12px',
-              background: '#eff6ff',
-              border: '1px solid #bfdbfe',
-              borderRadius: '8px',
-              marginTop: '16px',
+        {error && (
+          <div style={{
+            padding: '20px',
+            background: '#fef2f2',
+            border: '2px solid #fecaca',
+            borderRadius: '12px',
+            marginBottom: '24px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'start' }}>
+              <span style={{ fontSize: '24px', marginRight: '12px' }}>⚠️</span>
+              <div>
+                <p style={{ fontSize: '16px', fontWeight: 'bold', color: '#7f1d1d' }}>Error</p>
+                <p style={{ fontSize: '14px', color: '#991b1b', marginTop: '4px' }}>{error}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '24px' }}>
+          <button
+            onClick={handlePreview}
+            disabled={!url}
+            style={{
+              flex: 1,
+              padding: '16px 24px',
+              background: url ? '#2563eb' : '#d1d5db',
+              color: 'white',
+              fontSize: '16px',
+              fontWeight: '600',
+              borderRadius: '12px',
+              border: 'none',
+              cursor: url ? 'pointer' : 'not-allowed',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px'
-            }}>
-              <FaSpinner className="fa-spin" style={{ color: '#3b82f6' }} />
-              <span style={{ color: '#1e40af' }}>{progress}</span>
-            </div>
-          )}
-
-          {/* Error */}
-          {error && (
-            <div style={{
-              padding: '12px',
-              background: '#fef2f2',
-              border: '1px solid #fecaca',
-              borderRadius: '8px',
-              color: '#991b1b',
-              marginTop: '16px'
-            }}>
-              {error}
-            </div>
-          )}
-
-          {/* Success Result */}
-          {result && (
-            <div style={{
-              padding: '16px',
-              background: 'linear-gradient(135deg, #10b98115 0%, #059669 15 100%)',
-              border: '2px solid #10b981',
-              borderRadius: '12px',
-              marginTop: '16px'
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '12px' }}>
-                <FaCheck style={{ color: '#10b981', fontSize: '24px' }} />
-                <div>
-                  <h3 style={{ fontSize: '16px', fontWeight: '600', color: '#065f46' }}>
-                    Analysis Complete!
-                  </h3>
-                  <p style={{ fontSize: '14px', color: '#047857', marginTop: '4px' }}>
-                    Video analyzed and saved to training library
-                  </p>
-                </div>
-              </div>
-              <div style={{ fontSize: '13px', color: '#065f46', marginTop: '12px' }}>
-                <div><strong>Video ID:</strong> {result?.video_id || result?.video?.video_id || 'N/A'}</div>
-                <div><strong>Duration:</strong> {formatDuration(result?.duration_seconds || result?.video?.duration_seconds || 0)}</div>
-                <div><strong>Analyzed:</strong> {formatDate(result?.analyzed_at || result?.video?.analyzed_at || new Date())}</div>
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Training Library */}
-      <div className="ed-card">
-        <div className="ed-cardhead">
-          <h2 className="ed-cardtitle">
-            📚 Training Library ({library.length})
-          </h2>
-        </div>
-        <div className="ed-cardbody">
-          {loadingLibrary ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
-              <FaSpinner className="fa-spin" style={{ fontSize: '24px', marginBottom: '12px' }} />
-              <p>Loading training videos...</p>
-            </div>
-          ) : library.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
-              <FaYoutube style={{ fontSize: '48px', marginBottom: '12px', opacity: 0.3 }} />
-              <p>No training videos yet. Analyze your first video above!</p>
-            </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: '16px' }}>
-              {library.map(video => {
-                const thumbnailUrl = `https://img.youtube.com/vi/${video.video_id}/mqdefault.jpg`;
-                
-                return (
-                <div
-                  key={video.id}
-                  style={{
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '12px',
-                    background: 'white',
-                    transition: 'all 0.2s',
-                    cursor: 'pointer',
-                    overflow: 'hidden'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.1)';
-                    e.currentTarget.style.borderColor = '#667eea';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.boxShadow = 'none';
-                    e.currentTarget.style.borderColor = '#e5e7eb';
-                  }}
-                  onClick={() => handleView(video.id)}
-                >
-                  {/* Thumbnail */}
-                  <div style={{ position: 'relative', width: '100%', paddingBottom: '56.25%', background: '#000' }}>
-                    <img
-                      src={thumbnailUrl}
-                      alt={video.video_title || 'Video thumbnail'}
-                      style={{
-                        position: 'absolute',
-                        top: 0,
-                        left: 0,
-                        width: '100%',
-                        height: '100%',
-                        objectFit: 'cover'
-                      }}
-                      onError={(e) => {
-                        e.target.style.display = 'none';
-                      }}
-                    />
-                    <FaYoutube style={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      color: 'white',
-                      fontSize: '48px',
-                      opacity: 0.8,
-                      pointerEvents: 'none'
-                    }} />
-                  </div>
-                  
-                  <div style={{ padding: '16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'start', gap: '12px', marginBottom: '12px' }}>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <h3 style={{
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        marginBottom: '4px',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap'
-                      }}>
-                        {video.video_title || 'Untitled Video'}
-                      </h3>
-                      <p style={{ fontSize: '12px', color: '#9ca3af' }}>
-                        {formatDuration(video.duration_seconds || 0)}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Analysis Tags */}
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '12px' }}>
-                    {video.pacing_rhythm && (
-                      <span style={{
-                        padding: '4px 8px',
-                        background: '#ede9fe',
-                        color: '#7c3aed',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        fontWeight: '500'
-                      }}>
-                        ⚡ {video.pacing_rhythm}
-                      </span>
-                    )}
-                    {video.text_style && (
-                      <span style={{
-                        padding: '4px 8px',
-                        background: '#dbeafe',
-                        color: '#2563eb',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        fontWeight: '500'
-                      }}>
-                        📝 {typeof video.text_style === 'object' ? `${video.text_style.font || 'text'}` : video.text_style}
-                      </span>
-                    )}
-                    {video.music_presence && (
-                      <span style={{
-                        padding: '4px 8px',
-                        background: '#fef3c7',
-                        color: '#d97706',
-                        borderRadius: '6px',
-                        fontSize: '11px',
-                        fontWeight: '500'
-                      }}>
-                        🎵 Music
-                      </span>
-                    )}
-                  </div>
-
-                  <div style={{
-                    fontSize: '11px',
-                    color: '#9ca3af',
-                    marginTop: '8px',
-                    paddingTop: '8px',
-                    borderTop: '1px solid #f3f4f6'
-                  }}>
-                    Added {formatDate(video.created_at)}
-                  </div>
-
-                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleView(video.id);
-                      }}
-                      style={{
-                        flex: 1,
-                        padding: '6px',
-                        background: '#f3f4f6',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        fontWeight: '500',
-                        color: '#374151',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <FaEye /> View
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(video.id);
-                      }}
-                      style={{
-                        padding: '6px 12px',
-                        background: '#fee2e2',
-                        border: 'none',
-                        borderRadius: '6px',
-                        cursor: 'pointer',
-                        fontSize: '12px',
-                        color: '#dc2626',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '4px'
-                      }}
-                    >
-                      <FaTrash />
-                    </button>
-                  </div>
-                  </div>
-                </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Video Details Modal */}
-      {viewingVideo && (
-        <div
-          style={{
-            position: 'fixed',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: 'rgba(0,0,0,0.7)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 1000,
-            padding: '20px'
-          }}
-          onClick={() => setViewingVideo(null)}
-        >
-          <div
-            style={{
-              background: 'white',
-              borderRadius: '16px',
-              maxWidth: '800px',
-              maxHeight: '90vh',
-              overflow: 'auto',
-              padding: '24px',
-              width: '100%'
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.2s',
+              boxShadow: url ? '0 4px 6px rgba(0,0,0,0.1)' : 'none'
             }}
-            onClick={(e) => e.stopPropagation()}
+            onMouseOver={(e) => {
+              if (url) e.target.style.background = '#1d4ed8';
+            }}
+            onMouseOut={(e) => {
+              if (url) e.target.style.background = '#2563eb';
+            }}
           >
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: '20px' }}>
-              <div>
-                <h2 style={{ fontSize: '20px', fontWeight: '600', marginBottom: '8px' }}>
-                  {viewingVideo.video_title}
-                </h2>
-                <div style={{ display: 'flex', gap: '12px', fontSize: '14px', color: '#6b7280' }}>
-                  <span>📊 {formatDuration(viewingVideo.duration_seconds)}</span>
-                  <span>🔗 Video ID: {viewingVideo.video_id}</span>
-                </div>
-              </div>
-              <button
-                onClick={() => setViewingVideo(null)}
-                style={{
-                  background: '#f3f4f6',
-                  border: 'none',
-                  borderRadius: '8px',
-                  padding: '8px 16px',
-                  cursor: 'pointer',
-                  fontWeight: '500'
-                }}
-              >
-                Close
-              </button>
-            </div>
+            <span style={{ fontSize: '20px' }}>👁️</span>
+            <span>Preview</span>
+          </button>
+          <button
+            onClick={handleAnalyze}
+            disabled={!url}
+            style={{
+              flex: 1,
+              padding: '16px 24px',
+              background: url ? 'linear-gradient(135deg, #9333ea 0%, #ec4899 100%)' : '#d1d5db',
+              color: 'white',
+              fontSize: '16px',
+              fontWeight: '600',
+              borderRadius: '12px',
+              border: 'none',
+              cursor: url ? 'pointer' : 'not-allowed',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '8px',
+              transition: 'all 0.2s',
+              boxShadow: url ? '0 4px 6px rgba(0,0,0,0.1)' : 'none'
+            }}
+            onMouseOver={(e) => {
+              if (url) e.target.style.background = 'linear-gradient(135deg, #7e22ce 0%, #db2777 100%)';
+            }}
+            onMouseOut={(e) => {
+              if (url) e.target.style.background = 'linear-gradient(135deg, #9333ea 0%, #ec4899 100%)';
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>🤖</span>
+            <span>Analyze with AI</span>
+          </button>
+        </div>
 
-            <div style={{ display: 'grid', gap: '16px' }}>
-              {/* Analysis Results */}
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>
-                  📊 Analysis Results
-                </h3>
-                <div style={{ display: 'grid', gap: '12px' }}>
-                  <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Pacing Rhythm</div>
-                    <div style={{ fontSize: '14px', fontWeight: '500' }}>{viewingVideo.pacing_rhythm || 'N/A'}</div>
-                  </div>
-                  <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Transition Patterns</div>
-                    <div style={{ fontSize: '14px', fontWeight: '500', whiteSpace: 'pre-wrap' }}>{displayJsonField(viewingVideo.transition_patterns)}</div>
-                  </div>
-                  <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Overlay Usage</div>
-                    <div style={{ fontSize: '14px', fontWeight: '500', whiteSpace: 'pre-wrap' }}>{displayJsonField(viewingVideo.overlay_usage)}</div>
-                  </div>
-                  <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Text Style</div>
-                    <div style={{ fontSize: '14px', fontWeight: '500', whiteSpace: 'pre-wrap' }}>{displayJsonField(viewingVideo.text_style)}</div>
-                  </div>
-                  <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px' }}>
-                    <div style={{ fontSize: '12px', color: '#9ca3af', marginBottom: '4px' }}>Music Presence</div>
-                    <div style={{ fontSize: '14px', fontWeight: '500' }}>{displayJsonField(viewingVideo.music_presence)}</div>
-                  </div>
-                </div>
-              </div>
+        <div style={{
+          background: '#f9fafb',
+          borderRadius: '12px',
+          padding: '16px',
+          border: '1px solid #e5e7eb'
+        }}>
+          <p style={{ fontSize: '14px', color: '#6b7280', display: 'flex', alignItems: 'start' }}>
+            <span style={{ fontSize: '18px', marginRight: '8px' }}>💡</span>
+            <span>
+              <strong style={{ color: '#374151' }}>Pro Tip:</strong> Choose videos that match your desired editing style. 
+              The AI will learn from pacing, transitions, and storytelling techniques.
+            </span>
+          </p>
+        </div>
+      </div>
+    );
+  }
 
-              {/* Storage Info */}
-              <div>
-                <h3 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px' }}>
-                  💾 Storage Info
-                </h3>
-                <div style={{ padding: '12px', background: '#f9fafb', borderRadius: '8px', fontSize: '13px' }}>
-                  <div><strong>S3 Key:</strong> {viewingVideo.s3_key}</div>
-                  <div><strong>Analyzed:</strong> {formatDate(viewingVideo.analyzed_at)}</div>
-                  <div><strong>Created:</strong> {formatDate(viewingVideo.created_at)}</div>
-                  {viewingVideo.video_url && (
-                    <div>
-                      <strong>Original URL:</strong>{' '}
-                      <a href={viewingVideo.video_url} target="_blank" rel="noopener noreferrer" style={{ color: '#3b82f6' }}>
-                        Open in YouTube
-                      </a>
-                    </div>
-                  )}
-                </div>
+  // PREVIEW STEP
+  if (step === 'preview' && metadata) {
+    return (
+      <div style={{ maxWidth: '900px', margin: '0 auto', padding: '32px' }}>
+        <div style={{
+          background: 'linear-gradient(135deg, #f3e7ff 0%, #e0f2fe 50%, #dbeafe 100%)',
+          borderRadius: '16px',
+          padding: '32px',
+          boxShadow: '0 10px 25px rgba(0,0,0,0.1)',
+          border: '1px solid #e9d5ff'
+        }}>
+          <h3 style={{ fontSize: '24px', fontWeight: 'bold', color: '#1f2937', marginBottom: '24px' }}>Video Preview</h3>
+          
+          <div style={{ display: 'flex', gap: '24px', marginBottom: '24px' }}>
+            {metadata.thumbnails?.[0]?.url && (
+              <img
+                src={metadata.thumbnails[0].url}
+                alt={metadata.title}
+                style={{ width: '192px', height: '144px', objectFit: 'cover', borderRadius: '12px', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' }}
+              />
+            )}
+            
+            <div style={{ flex: 1 }}>
+              <h4 style={{ fontSize: '20px', fontWeight: 'bold', color: '#1f2937', marginBottom: '12px' }}>{metadata.title}</h4>
+              <div style={{ fontSize: '14px', color: '#6b7280', lineHeight: '1.8' }}>
+                <p><strong>Channel:</strong> {metadata.author}</p>
+                <p><strong>Views:</strong> {metadata.viewCount?.toLocaleString()}</p>
+                <p><strong>Duration:</strong> {Math.floor(metadata.lengthSeconds / 60)}:{(metadata.lengthSeconds % 60).toString().padStart(2, '0')}</p>
+                {metadata.category && <p><strong>Category:</strong> {metadata.category}</p>}
               </div>
             </div>
           </div>
-        </div>
-      )}
-    </div>
-  );
-};
 
-export default YouTubeAnalyzer;
+          {detectScenes && (
+            <div style={{
+              marginTop: '16px',
+              padding: '16px',
+              background: '#f5f3ff',
+              border: '2px solid #e9d5ff',
+              borderRadius: '12px'
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', color: '#6b21a8', marginBottom: '8px' }}>
+                <span style={{ fontSize: '20px', marginRight: '8px' }}>🎬</span>
+                <span style={{ fontWeight: '600' }}>Scene detection enabled</span>
+              </div>
+              <p style={{ fontSize: '14px', color: '#7c3aed' }}>
+                Processing will take approximately 2-5 minutes to download, analyze, and detect scenes.
+              </p>
+            </div>
+          )}
+
+          {error && (
+            <div style={{
+              marginTop: '16px',
+              padding: '16px',
+              background: '#fef2f2',
+              border: '2px solid #fecaca',
+              borderRadius: '12px'
+            }}>
+              <p style={{ color: '#991b1b' }}>{error}</p>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '16px', marginTop: '24px' }}>
+            <button
+              onClick={() => setStep('input')}
+              style={{
+                padding: '14px 24px',
+                background: '#4b5563',
+                color: 'white',
+                fontSize: '16px',
+                fontWeight: '600',
+                borderRadius: '12px',
+                border: 'none',
+                cursor: 'pointer',
+                transition: 'all 0.2s'
+              }}
+              onMouseOver={(e) => e.target.style.background = '#374151'}
+              onMouseOut={(e) => e.target.style.background = '#4b5563'}
+            >
+              Back
+            </button>
+            <button
+              onClick={handleAnalyze}
+              style={{
+                flex: 1,
+                padding: '14px 24px',
+                background: 'linear-gradient(135deg, #9333ea 0%, #ec4899 100%)',
+                color: 'white',
+                fontSize: '16px',
+                fontWeight: '600',
+                borderRadius: '12px',
+                border: 'none',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                transition: 'all 0.2s',
+                boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+              }}
+              onMouseOver={(e) => e.target.style.background = 'linear-gradient(135deg, #7e22ce 0%, #db2777 100%)'}
+              onMouseOut={(e) => e.target.style.background = 'linear-gradient(135deg, #9333ea 0%, #ec4899 100%)'}
+            >
+              <span style={{ fontSize: '20px' }}>🤖</span>
+              <span>Analyze with AI</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // PROCESSING STEP
+  if (step === 'processing') {
+    return (
+      <div className="p-6">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mb-4"></div>
+          <h3 className="text-xl font-bold text-gray-900 mb-2">
+            {detectScenes ? '🎬 Processing Video & Detecting Scenes...' : '🤖 Analyzing Video...'}
+          </h3>
+          <p className="text-gray-600 mb-6">
+            {detectScenes 
+              ? 'This may take 2-5 minutes. Downloading video, analyzing content, and detecting scene changes...'
+              : 'This may take 30-60 seconds...'}
+          </p>
+          
+          <div className="max-w-md mx-auto space-y-3">
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-700">⬇️ Downloading video</span>
+              <div className="animate-pulse text-purple-600">●</div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-700">☁️ Uploading to S3</span>
+              <div className="animate-pulse text-purple-600">●</div>
+            </div>
+            <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+              <span className="text-sm text-gray-700">🤖 Analyzing with Claude AI</span>
+              <div className="animate-pulse text-purple-600">●</div>
+            </div>
+            {detectScenes && (
+              <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                <span className="text-sm text-gray-700">🎬 Detecting scenes</span>
+                <div className="animate-pulse text-purple-600">●</div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // COMPLETE STEP
+  if (step === 'complete' && analysis) {
+    return (
+      <div className="p-6">
+        <div className="mb-6 p-6 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-center mb-2">
+            <span className="text-2xl mr-3">✅</span>
+            <h3 className="text-xl font-bold text-green-900">Analysis Complete!</h3>
+          </div>
+          <p className="text-green-800">Video analyzed and saved to training library</p>
+          
+          <div className="mt-3 space-y-1 text-sm">
+            <p><strong>Video ID:</strong> {analysis.metadata?.videoId || 'N/A'}</p>
+            <p><strong>Duration:</strong> {analysis.metadata?.lengthSeconds ? 
+              `${Math.floor(analysis.metadata.lengthSeconds / 60)}:${(analysis.metadata.lengthSeconds % 60).toString().padStart(2, '0')}` 
+              : '0:00'}</p>
+            <p><strong>Analyzed:</strong> {new Date(analysis.created_at).toLocaleString()}</p>
+            {analysis.scenes_count > 0 && (
+              <p className="text-purple-700 font-semibold">
+                <span className="mr-2">🎬</span>
+                {analysis.scenes_count} scenes detected
+              </p>
+            )}
+          </div>
+        </div>
+
+        {analysis.analysis_result && !analysis.analysis_result.error && (
+          <div className="mb-6">
+            <h4 className="text-lg font-bold mb-4 flex items-center">
+              <span className="mr-2">📊</span>
+              Analysis Results
+            </h4>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.keys(analysis.analysis_result)
+                .filter(key => !['error', 'raw_analysis', 'raw_metadata'].includes(key))
+                .map(key => {
+                  const value = analysis.analysis_result[key];
+                  const displayValue = typeof value === 'object' 
+                    ? JSON.stringify(value, null, 2)
+                    : String(value);
+                  
+                  return (
+                    <div key={key} className="p-4 bg-gray-50 rounded-lg">
+                      <div className="text-sm font-semibold text-gray-600 mb-1 capitalize">
+                        {key.replace(/_/g, ' ')}
+                      </div>
+                      <div className="text-gray-900">
+                        {typeof value === 'object' ? (
+                          <pre className="text-xs overflow-auto">{displayValue}</pre>
+                        ) : (
+                          displayValue
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
+        {analysis.analysis_result?.error && (
+          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p className="text-yellow-800">⚠️ Analysis incomplete: {analysis.analysis_result.error}</p>
+            {analysis.analysis_result.raw_analysis && (
+              <details className="mt-3">
+                <summary className="cursor-pointer text-sm text-yellow-700 hover:text-yellow-900">
+                  View Raw Analysis
+                </summary>
+                <pre className="mt-2 text-xs bg-white p-3 rounded border overflow-auto max-h-48">
+                  {analysis.analysis_result.raw_analysis}
+                </pre>
+              </details>
+            )}
+          </div>
+        )}
+
+        <button
+          onClick={resetForm}
+          className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition"
+        >
+          Analyze Another Video
+        </button>
+      </div>
+    );
+  }
+
+  return null;
+}
