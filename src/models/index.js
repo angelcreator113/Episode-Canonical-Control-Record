@@ -59,7 +59,7 @@ let SceneLibrary, EpisodeScene;
 let CompositionAsset, CompositionOutput;
 let TimelinePlacement;
 let AIEditPlan, EditingDecision, AIRevision, VideoProcessingJob;
-let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset;
+let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset, Layer, LayerAsset;
 let SceneFootageLink;
 let UserDecision, DecisionPattern;
 
@@ -123,6 +123,8 @@ try {
   ScriptMetadata = require('./ScriptMetadata')(sequelize);
   SceneLayerConfiguration = require('./SceneLayerConfiguration')(sequelize);
   LayerPreset = require('./LayerPreset')(sequelize);
+  Layer = require('./Layer')(sequelize);
+  LayerAsset = require('./LayerAsset')(sequelize);
   SceneFootageLink = require('./SceneFootageLink')(sequelize);
 
   // Decision Logging models
@@ -175,6 +177,8 @@ const requiredModels = {
   ScriptMetadata,
   SceneLayerConfiguration,
   LayerPreset,
+  Layer,
+  LayerAsset,
   UserDecision,
   DecisionPattern,
   SceneFootageLink,
@@ -900,6 +904,49 @@ Scene.hasMany(UserDecision, {
   as: 'decisions',
 });
 
+// ============================================================================
+// LAYER MANAGEMENT ASSOCIATIONS
+// ============================================================================
+
+// Episode → Layers (1:Many)
+Episode.hasMany(Layer, {
+  foreignKey: 'episode_id',
+  as: 'layers',
+  onDelete: 'CASCADE',
+});
+
+Layer.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+  onDelete: 'CASCADE',
+});
+
+// Layer → LayerAssets (1:Many)
+Layer.hasMany(LayerAsset, {
+  foreignKey: 'layer_id',
+  as: 'assets',
+  onDelete: 'CASCADE',
+});
+
+LayerAsset.belongsTo(Layer, {
+  foreignKey: 'layer_id',
+  as: 'layer',
+  onDelete: 'CASCADE',
+});
+
+// Asset → LayerAssets (1:Many)
+Asset.hasMany(LayerAsset, {
+  foreignKey: 'asset_id',
+  as: 'layerPlacements',
+  onDelete: 'CASCADE',
+});
+
+LayerAsset.belongsTo(Asset, {
+  foreignKey: 'asset_id',
+  as: 'asset',
+  onDelete: 'CASCADE',
+});
+
 console.log('✅ Model associations defined');
 
 /**
@@ -1157,6 +1204,8 @@ module.exports.AITrainingData = AITrainingData;
 module.exports.ScriptMetadata = ScriptMetadata;
 module.exports.SceneLayerConfiguration = SceneLayerConfiguration;
 module.exports.LayerPreset = LayerPreset;
+module.exports.Layer = Layer;
+module.exports.LayerAsset = LayerAsset;
 module.exports.UserDecision = UserDecision;
 module.exports.DecisionPattern = DecisionPattern;
 module.exports.SceneFootageLink = SceneFootageLink;

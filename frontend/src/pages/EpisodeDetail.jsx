@@ -11,6 +11,7 @@ import SceneLinking from '../components/SceneLinking';
 import DecisionHistory from '../components/DecisionHistory';
 import DecisionStats from '../components/DecisionStats';
 import YouTubeAnalyzer from '../components/YouTubeAnalyzer';
+import DecisionHistoryWithAnalytics from '../components/DecisionHistoryWithAnalytics';
 import './EpisodeDetail.css';
 
 
@@ -522,15 +523,7 @@ const EpisodeDetail = () => {
           <button
             className={`ed-tab ${activeTab === 'history' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('history')}
-            title="History"
-          >
-            <span className="ed-tab-icon">📜</span>
-            <span className="ed-tab-label">History</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'decisions' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('decisions')}
-            title="Decisions"
+            title="Decisions & Analytics"
           >
             <span className="ed-tab-icon">📊</span>
             <span className="ed-tab-label">Decisions</span>
@@ -800,55 +793,16 @@ const EpisodeDetail = () => {
           </div>
         )}
 
-        {/* Decisions Tab */}
-        {activeTab === 'decisions' && (
-          <div className="ed-stack">
-            <div className="ed-card">
-              <DecisionStats episodeId={episodeId} />
-            </div>
-            <div className="ed-card">
-              <DecisionHistory episodeId={episodeId} />
-            </div>
-          </div>
-        )}
-
         {/* YouTube Training Tab - TEMPORARILY DISABLED
         {activeTab === 'youtube' && (
           <YouTubeAnalyzer episodeId={episodeId} />
         )}
         */}
 
-        {/* History Tab */}
+        {/* Decisions Tab - Analytics + History */}
         {activeTab === 'history' && (
           <div className="ed-stack">
-            <div className="ed-card">
-              <div className="ed-cardhead">
-                <h2 className="ed-cardtitle">📜 Edit History</h2>
-              </div>
-              <div className="ed-timeline">
-                <div className="ed-timeitem">
-                  <div className="dot"></div>
-                  <div className="body">
-                    <div className="t">
-                      {formatDateTime(episode.created_at || episode.createdAt)}
-                    </div>
-                    <div className="d">Episode created</div>
-                  </div>
-                </div>
-                {(episode.updated_at || episode.updatedAt) && 
-                 (episode.updated_at !== episode.created_at) && (
-                  <div className="ed-timeitem">
-                    <div className="dot"></div>
-                    <div className="body">
-                      <div className="t">
-                        {formatDateTime(episode.updated_at || episode.updatedAt)}
-                      </div>
-                      <div className="d">Episode updated</div>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
+            <DecisionHistoryWithAnalytics episodeId={episodeId} />
           </div>
         )}
       </div>

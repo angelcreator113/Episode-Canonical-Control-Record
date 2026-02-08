@@ -37,6 +37,7 @@ import WardrobeLibraryDetail from './pages/WardrobeLibraryDetail';
 import TemplateStudio from './pages/TemplateStudio';
 import TemplateDesigner from './pages/TemplateDesigner';
 import DiagnosticPage from './pages/DiagnosticPage';
+import DecisionAnalyticsDashboard from './pages/DecisionAnalyticsDashboard';
 
 // Components
 import Navigation from './components/Navigation';
@@ -180,6 +181,7 @@ function AppContent() {
           <Route path="/admin/audit" element={<AuditLog />} />
           <Route path="/audit-log" element={<AuditLogViewer />} />
           <Route path="/diagnostics" element={<DiagnosticPage />} />
+          <Route path="/analytics/decisions" element={<DecisionAnalyticsDashboard />} />
           
           {/* Test Routes */}
           {/* <Route path="/test/assets" element={<AssetLibraryTest />} /> */}
