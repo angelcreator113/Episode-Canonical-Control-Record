@@ -598,6 +598,11 @@ app.use('/api/v1/shows', showRoutes);
 const thumbnailTemplateRoutes = require('./routes/thumbnailTemplates');
 app.use('/api/v1/thumbnail-templates', thumbnailTemplateRoutes);
 
+// Decision Analytics routes
+const decisionAnalyticsRoutes = require('./routes/decisionAnalytics');
+app.use('/api/decision-analytics', decisionAnalyticsRoutes);
+console.log('✓ Decision Analytics routes loaded');
+
 // Template Studio routes (new system)
 app.use('/api/v1/template-studio', templateStudioRoutes);
 
@@ -615,6 +620,16 @@ console.log('✓ Audit logs routes loaded');
 const decisionsRoutes = require('./routes/decisions');
 app.use('/api/v1/decisions', decisionsRoutes);
 console.log('✓ Decisions routes loaded');
+
+// Layer Management routes (Week 4 Day 1)
+const layersRoutes = require('./routes/layers');
+app.use('/api/v1/layers', layersRoutes);
+console.log('✓ Layer Management routes loaded');
+
+// YouTube Training routes
+const youtubeRoutes = require('./routes/youtube');
+app.use('/api/youtube', youtubeRoutes);
+console.log('✓ YouTube training routes loaded');
 
 // Development seed routes
 app.use('/api/v1/seed', seedRoutes);

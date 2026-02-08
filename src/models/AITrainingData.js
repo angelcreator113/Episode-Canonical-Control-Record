@@ -118,6 +118,7 @@ module.exports = (sequelize) => {
       timestamps: true,
       createdAt: 'created_at',
       updatedAt: false,
+      paranoid: false,
     }
   );
 

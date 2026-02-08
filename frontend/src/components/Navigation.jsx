@@ -60,6 +60,7 @@ const Navigation = ({ isOpen, onClose }) => {
     { label: 'Shows', path: '/shows', icon: '🎬' },
     { label: 'Episodes', path: '/episodes', icon: '📺' },
     { label: 'Wardrobe', path: '/wardrobe', icon: '👗' },
+    { label: 'Decision Analytics', path: '/analytics/decisions', icon: '📊' },
   ];
 
   if (user?.role === 'admin' || user?.groups?.includes('ADMIN')) {

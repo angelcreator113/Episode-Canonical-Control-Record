@@ -97,6 +97,60 @@ class S3Service {
   }
 
   /**
+   * Download file from S3 to local temp directory
+   * @param {string} s3Key - S3 object key
+   * @param {string} bucketName - S3 bucket name (optional)
+   * @returns {Promise<string>} Local file path
+   */
+  async downloadFromS3(s3Key, bucketName = null) {
+    const fs = require('fs');
+    const path = require('path');
+    const { pipeline } = require('stream/promises');
+
+    try {
+      const bucket = bucketName || process.env.S3_TRAINING_BUCKET || 'episode-metadata-training';
+      
+      console.log(`📥 Downloading from S3: ${bucket}/${s3Key}`);
+
+      const params = {
+        Bucket: bucket,
+        Key: s3Key
+      };
+
+      const response = await this.s3.getObject(params).promise();
+      
+      // Create temp directory if it doesn't exist
+      const tempDir = '/tmp';
+      if (!fs.existsSync(tempDir)) {
+        fs.mkdirSync(tempDir, { recursive: true });
+      }
+
+      // Extract filename from S3 key
+      const filename = path.basename(s3Key);
+      const localPath = path.join(tempDir, filename);
+
+      // Write to local file
+      fs.writeFileSync(localPath, response.Body);
+
+      const stats = fs.statSync(localPath);
+      console.log(`✅ Downloaded: ${(stats.size / 1024 / 1024).toFixed(2)} MB`);
+      
+      logger.info('File downloaded from S3', {
+        bucket,
+        key: s3Key,
+        localPath,
+        size: stats.size
+      });
+
+      return localPath;
+
+    } catch (error) {
+      logger.error('S3 download failed', { s3Key, error: error.message });
+      throw new Error(`Failed to download from S3: ${error.message}`);
+    }
+  }
+
+  /**
    * Get file metadata from S3
    * @param {string} bucket - S3 bucket name
    * @param {string} key - S3 object key
