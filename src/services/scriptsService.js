@@ -619,6 +619,68 @@ class ScriptsService {
       // Don't throw - logging failure shouldn't break the main operation
     }
   }
+
+  /**
+   * Parse script and auto-create scenes
+   */
+  async parseScriptAndCreateScenes(scriptId) {
+    const { parseScriptScenes, estimateSceneDuration, extractSceneContent } = require('../utils/scriptParser');
+    
+    try {
+      // Get script
+      const scriptResult = await this.pool.query(
+        'SELECT id, episode_id, content FROM episode_scripts WHERE id = $1 AND deleted_at IS NULL',
+        [scriptId]
+      );
+
+      if (scriptResult.rows.length === 0) {
+        throw new Error('Script not found');
+      }
+
+      const script = scriptResult.rows[0];
+
+      // Parse scenes
+      const parsedScenes = parseScriptScenes(script.content);
+
+      if (parsedScenes.length === 0) {
+        return {
+          script_id: scriptId,
+          scenes_detected: 0,
+          scenes_created: [],
+          message: 'No scenes detected in script. Use format: SCENE 1: Title or INT. LOCATION - DAY'
+        };
+      }
+
+      // Create scene records
+      const createdScenes = [];
+      for (const parsedScene of parsedScenes) {
+        const sceneContent = extractSceneContent(script.content, parsedScene.scene_number);
+        const duration = estimateSceneDuration(sceneContent);
+
+        const result = await this.pool.query(
+          `INSERT INTO scenes (episode_id, name, description, scene_number, duration_seconds, type, created_at, updated_at)
+           VALUES ($1, $2, $3, $4, $5, $6, NOW(), NOW())
+           RETURNING id, episode_id, name, description, scene_number, duration_seconds, type`,
+          [script.episode_id, parsedScene.name, `Auto-generated from script (Line ${parsedScene.line_number})`, parsedScene.scene_number, duration, 'main']
+        );
+
+        createdScenes.push(result.rows[0]);
+      }
+
+      Logger.info(`Created ${createdScenes.length} scenes from script ${scriptId}`);
+
+      return {
+        script_id: scriptId,
+        scenes_detected: parsedScenes.length,
+        scenes_created: createdScenes,
+        patterns_matched: parsedScenes.map(s => s.raw_line)
+      };
+
+    } catch (error) {
+      Logger.error('Error parsing script scenes:', error);
+      throw error;
+    }
+  }
 }
 
 module.exports = new ScriptsService();

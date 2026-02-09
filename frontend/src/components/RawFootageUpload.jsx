@@ -1,8 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { FiUploadCloud, FiVideo, FiCheckCircle, FiX, FiLoader, FiAlertCircle, FiFolder, FiMoreVertical, FiTrash2 } from 'react-icons/fi';
+import axios from 'axios';
 import footageService from '../services/footageService';
 import AssetLibraryModal from './AssetLibraryModal';
+import AnalysisDashboard from './AnalysisDashboard';
 
 // Add spinner animation
 const spinnerStyle = `
@@ -33,6 +35,9 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
   const [showLibraryModal, setShowLibraryModal] = useState(false);
   const [importedAssets, setImportedAssets] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [selectedFootage, setSelectedFootage] = useState(null);
+  const [editMap, setEditMap] = useState(null);
+  const [analyzing, setAnalyzing] = useState(false);
 
   // Load existing footage on mount
   useEffect(() => {
@@ -114,6 +119,42 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
         filename: 'Asset Import',
         message: 'Failed to link assets to episode'
       }]);
+    }
+  };
+
+  const handleAnalyze = async (footageId) => {
+    try {
+      setAnalyzing(true);
+      setSelectedFootage(uploadedFiles.find(f => f.id === footageId));
+      
+      // Trigger analysis
+      await axios.post(`/api/v1/raw-footage/${footageId}/analyze`);
+      console.log('✅ Analysis started for:', footageId);
+      
+      // Poll for results every 10 seconds
+      const interval = setInterval(async () => {
+        try {
+          const res = await axios.get(`/api/v1/raw-footage/${footageId}/edit-map`);
+          const map = res.data.data;
+          
+          if (map) {
+            setEditMap(map);
+            
+            if (map.processing_status === 'completed') {
+              clearInterval(interval);
+              console.log('✅ Analysis complete!');
+            }
+          }
+        } catch (err) {
+          console.log('Waiting for analysis results...', err.message);
+        }
+      }, 10000); // Poll every 10 seconds
+      
+    } catch (error) {
+      console.error('Failed to start analysis:', error);
+      alert('Failed to start analysis: ' + error.message);
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -587,9 +628,44 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
                     }}>
                       {file.filename}
                     </p>
-                    <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>
+                    <p style={{ fontSize: '0.75rem', color: '#6b7280', marginBottom: '0.75rem' }}>
                       {formatFileSize(file.size)} • {formatDuration(file.duration)}
                     </p>
+                    <button
+                      onClick={() => handleAnalyze(file.id)}
+                      disabled={analyzing}
+                      style={{
+                        width: '100%',
+                        padding: '0.5rem',
+                        backgroundColor: analyzing ? '#d1d5db' : '#9b59b6',
+                        color: '#fff',
+                        border: 'none',
+                        borderRadius: '6px',
+                        cursor: analyzing ? 'not-allowed' : 'pointer',
+                        fontSize: '0.75rem',
+                        fontWeight: '600',
+                        transition: 'background-color 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '0.5rem'
+                      }}
+                      onMouseEnter={(e) => {
+                        if (!analyzing) e.currentTarget.style.backgroundColor = '#8b4ba8';
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!analyzing) e.currentTarget.style.backgroundColor = '#9b59b6';
+                      }}
+                    >
+                      {analyzing ? (
+                        <>
+                          <FiLoader style={{ animation: 'spin 1s linear infinite' }} />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>🤖 Analyze</>
+                      )}
+                    </button>
                   </div>
                 </div>
               );
@@ -617,6 +693,78 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
         onImport={handleImportAssets}
         episodeId={episodeId}
       />
+
+      {/* Analysis Dashboard Modal */}
+      {selectedFootage && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 1000,
+          padding: '1rem'
+        }}
+        onClick={() => {
+          setSelectedFootage(null);
+          setEditMap(null);
+        }}
+        >
+          <div 
+            style={{
+              backgroundColor: '#fff',
+              borderRadius: '12px',
+              boxShadow: '0 20px 25px rgba(0, 0, 0, 0.3)',
+              maxWidth: '900px',
+              width: '100%',
+              maxHeight: '90vh',
+              overflow: 'auto',
+              position: 'relative'
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{
+              position: 'sticky',
+              top: 0,
+              backgroundColor: '#fff',
+              borderBottom: '1px solid #e5e7eb',
+              padding: '1rem',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              zIndex: 10
+            }}>
+              <h2 style={{ margin: 0, color: '#111827' }}>Analysis Results</h2>
+              <button
+                onClick={() => {
+                  setSelectedFootage(null);
+                  setEditMap(null);
+                }}
+                style={{
+                  backgroundColor: 'transparent',
+                  border: 'none',
+                  fontSize: '1.5rem',
+                  cursor: 'pointer',
+                  color: '#6b7280'
+                }}
+              >
+                ✕
+              </button>
+            </div>
+            <div style={{ padding: '1rem' }}>
+              <AnalysisDashboard
+                rawFootageId={selectedFootage.id}
+                editMap={editMap}
+                onRefresh={() => handleAnalyze(selectedFootage.id)}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Imported Assets */}
       {importedAssets.length > 0 && (

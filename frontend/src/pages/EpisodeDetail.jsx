@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import episodeService from '../services/episodeService';
 import EpisodeWardrobe from '../components/EpisodeWardrobe';
@@ -12,19 +12,71 @@ import DecisionHistory from '../components/DecisionHistory';
 import DecisionStats from '../components/DecisionStats';
 import YouTubeAnalyzer from '../components/YouTubeAnalyzer';
 import DecisionHistoryWithAnalytics from '../components/DecisionHistoryWithAnalytics';
+import LayerStudioFinal from '../components/LayerStudio/LayerStudioFinal';
 import './EpisodeDetail.css';
 
 
 const EpisodeDetail = () => {
   const { episodeId } = useParams();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [episode, setEpisode] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTabState] = useState(searchParams.get('tab') || 'overview');
+  const [sceneView, setSceneView] = useState('composer');
+  const [tabLoading, setTabLoading] = useState(false);
   const [showScenePicker, setShowScenePicker] = useState(false);
   const [episodeScenes, setEpisodeScenes] = useState([]);
+
+  // Tab management with URL persistence
+  const setActiveTab = (tab) => {
+    setTabLoading(true);
+    setActiveTabState(tab);
+    setSearchParams({ tab });
+    setTimeout(() => setTabLoading(false), 300);
+  };
+
+  // Keyboard shortcuts for tab navigation
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.metaKey || e.ctrlKey) {
+        switch(e.key) {
+          case '1':
+            e.preventDefault();
+            setActiveTab('overview');
+            break;
+          case '2':
+            e.preventDefault();
+            setActiveTab('wardrobe');
+            break;
+          case '3':
+            e.preventDefault();
+            setActiveTab('scripts');
+            break;
+          case 's':
+            e.preventDefault();
+            setActiveTab('scenes');
+            break;
+          default:
+            break;
+        }
+      }
+    };
+    
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
+  // Sync with URL params
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) {
+      setActiveTabState(tab);
+    }
+  }, [searchParams]);
+
   const [loadingScenes, setLoadingScenes] = useState(false);
   const [episodeAssets, setEpisodeAssets] = useState([]);
   const [episodeWardrobes, setEpisodeWardrobes] = useState([]);
@@ -499,10 +551,10 @@ const EpisodeDetail = () => {
           <button
             className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('scenes')}
-            title="Scene Linking"
+            title="Scenes"
           >
-            <span className="ed-tab-icon">🔗</span>
-            <span className="ed-tab-label">Scene Linking</span>
+            <span className="ed-tab-icon">🎬</span>
+            <span className="ed-tab-label">Scenes</span>
           </button>
           <button
             className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
@@ -525,7 +577,7 @@ const EpisodeDetail = () => {
             onClick={() => setActiveTab('history')}
             title="Decisions & Analytics"
           >
-            <span className="ed-tab-icon">📊</span>
+            <span className="ed-tab-icon">🎯</span>
             <span className="ed-tab-label">Decisions</span>
           </button>
           {/* TEMPORARILY DISABLED - YouTube Training feature in development
@@ -628,7 +680,7 @@ const EpisodeDetail = () => {
 
         {/* Scripts Tab */}
         {activeTab === 'scripts' && (
-          <EpisodeScripts episodeId={episode.id} />
+          <EpisodeScripts episodeId={episode.id} showId={episode.show_id} />
         )}
 
         {/* Raw Footage Tab */}
@@ -651,21 +703,75 @@ const EpisodeDetail = () => {
           </div>
         )}
 
-        {/* Scene Linking Tab */}
+        {/* Scenes Tab - Consolidated (Composer + Linking) */}
         {activeTab === 'scenes' && (
-          <div className="ed-card">
-            <div className="ed-cardhead">
-              <h2 className="ed-cardtitle">🔗 Scene Linking</h2>
-              <p className="text-sm text-gray-600 mt-2">
-                Link uploaded footage clips to AI-detected scenes from your script.
-              </p>
+          <div className="ed-fullbleed">
+            {/* Scene Subtabs */}
+            <div style={{
+              display: 'flex',
+              gap: '1px',
+              borderBottom: '1px solid #1f2937',
+              backgroundColor: '#111827',
+              padding: '0 1.5rem'
+            }}>
+              <button
+                onClick={() => setSceneView('composer')}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '0.875rem',
+                  fontWeight: sceneView === 'composer' ? '600' : '500',
+                  color: sceneView === 'composer' ? '#ec4899' : '#9ca3af',
+                  borderBottom: sceneView === 'composer' ? '2px solid #ec4899' : 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  border: 'none',
+                  transition: 'all 0.2s'
+                }}
+              >
+                🎬 Scene Composer
+              </button>
+              <button
+                onClick={() => setSceneView('linking')}
+                style={{
+                  padding: '0.75rem 1.5rem',
+                  fontSize: '0.875rem',
+                  fontWeight: sceneView === 'linking' ? '600' : '500',
+                  color: sceneView === 'linking' ? '#ec4899' : '#9ca3af',
+                  borderBottom: sceneView === 'linking' ? '2px solid #ec4899' : 'none',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  border: 'none',
+                  transition: 'all 0.2s'
+                }}
+              >
+                🔗 Scene Linking
+              </button>
             </div>
-            <div className="ed-cardbody">
-              <SceneLinking 
-                episodeId={episode.id} 
-                scriptId={primaryScript?.id}
-              />
-            </div>
+
+            {/* Composer View */}
+            {sceneView === 'composer' && (
+              <div className="ed-layers-tab-container">
+                <LayerStudioFinal episodeId={episodeId} />
+              </div>
+            )}
+
+            {/* Linking View */}
+            {sceneView === 'linking' && (
+              <div className="ed-card">
+                <div className="ed-cardhead">
+                  <h2 className="ed-cardtitle">🔗 Scene Linking</h2>
+                  <p className="text-sm text-gray-600 mt-2">
+                    Link uploaded footage clips to AI-detected scenes from your script.
+                  </p>
+                </div>
+                <div className="ed-cardbody">
+                  <SceneLinking 
+                    episodeId={episode.id} 
+                    scriptId={primaryScript?.id}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         )}
 

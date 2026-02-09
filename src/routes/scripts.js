@@ -63,4 +63,7 @@ router.post(
 // GET /api/v1/scripts/:scriptId/history - Get edit history
 router.get('/:scriptId/history', asyncHandler(scriptsController.getEditHistory));
 
+// POST /api/v1/scripts/:scriptId/parse-scenes - Parse scenes from script
+router.post('/:scriptId/parse-scenes', asyncHandler(scriptsController.parseScenes));
+
 module.exports = router;
