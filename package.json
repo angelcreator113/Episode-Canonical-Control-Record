@@ -25,6 +25,8 @@
     "migrate:status": "cross-env NODE_ENV=development sequelize db:migrate:status",
     "seed": "node scripts/seed.js",
     "db:verify": "node scripts/verify-db.js",
+    "db:verify-schema": "node scripts/verify-schema.js",
+    "verify-schema": "node scripts/verify-schema.js",
     "db:test": "node db-test-connection.js",
     "db:setup:dev": "cross-env NODE_ENV=development sequelize db:migrate",
     "db:setup:staging": "cross-env NODE_ENV=staging sequelize db:migrate",
