@@ -1,4 +1,23 @@
 exports.up = async (queryInterface, Sequelize) => {
+  console.log('Checking if layer_assets table exists...');
+  
+  // Check if table exists
+  const tableExists = await queryInterface.showAllTables()
+    .then(tables => tables.includes('layer_assets'));
+  
+  if (!tableExists) {
+    console.log('⚠️  layer_assets table does not exist, skipping migration');
+    return;
+  }
+  
+  // Check if columns already exist
+  const tableInfo = await queryInterface.describeTable('layer_assets');
+  
+  if (tableInfo.in_point_seconds) {
+    console.log('⚠️  Clip timing columns already exist, skipping migration');
+    return;
+  }
+  
   console.log('Adding clip timing fields to layer_assets...');
   
   await queryInterface.addColumn('layer_assets', 'in_point_seconds', {
@@ -32,10 +51,17 @@ exports.up = async (queryInterface, Sequelize) => {
   });
 
   console.log('Creating index on timing fields...');
-  await queryInterface.addIndex('layer_assets', 
-    ['in_point_seconds', 'out_point_seconds'],
-    { name: 'idx_layer_assets_timing' }
-  );
+  
+  // Check if index already exists
+  const indexes = await queryInterface.showIndex('layer_assets');
+  const indexExists = indexes.some(idx => idx.name === 'idx_layer_assets_timing');
+  
+  if (!indexExists) {
+    await queryInterface.addIndex('layer_assets', 
+      ['in_point_seconds', 'out_point_seconds'],
+      { name: 'idx_layer_assets_timing' }
+    );
+  }
 
   console.log('✅ Clip timing fields added successfully!');
 };
