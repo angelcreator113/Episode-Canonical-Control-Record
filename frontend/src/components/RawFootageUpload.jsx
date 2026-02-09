@@ -181,6 +181,12 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
       
+      // Add timeout to prevent hanging on slow devices
+      const timeout = setTimeout(() => {
+        URL.revokeObjectURL(video.src);
+        resolve(null);
+      }, 5000); // 5 second timeout
+      
       video.preload = 'metadata';
       video.muted = true;
       video.playsInline = true;
@@ -192,26 +198,43 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
       
       video.onseeked = () => {
         try {
-          // Set canvas size
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
+          clearTimeout(timeout);
           
-          // Draw frame
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          // Limit canvas size for better mobile performance
+          const maxWidth = 400;
+          const maxHeight = 300;
+          let width = video.videoWidth;
+          let height = video.videoHeight;
           
-          // Convert to data URL
-          const thumbnail = canvas.toDataURL('image/jpeg', 0.8);
+          // Scale down if needed
+          if (width > maxWidth || height > maxHeight) {
+            const ratio = Math.min(maxWidth / width, maxHeight / height);
+            width = width * ratio;
+            height = height * ratio;
+          }
+          
+          canvas.width = width;
+          canvas.height = height;
+          
+          // Draw scaled frame
+          ctx.drawImage(video, 0, 0, width, height);
+          
+          // Convert to data URL with lower quality for mobile
+          const thumbnail = canvas.toDataURL('image/jpeg', 0.6);
           
           // Clean up
           URL.revokeObjectURL(video.src);
           resolve(thumbnail);
         } catch (error) {
+          clearTimeout(timeout);
           console.error('Error generating thumbnail:', error);
+          URL.revokeObjectURL(video.src);
           resolve(null);
         }
       };
       
       video.onerror = () => {
+        clearTimeout(timeout);
         console.error('Error loading video for thumbnail');
         URL.revokeObjectURL(video.src);
         resolve(null);
@@ -249,9 +272,9 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
       setUploading(true);
       setErrors([]);
 
-      for (const file of acceptedFiles) {
-        await uploadFile(file);
-      }
+      // Upload all files in parallel for better performance
+      const uploadPromises = acceptedFiles.map(file => uploadFile(file));
+      await Promise.allSettled(uploadPromises);
 
       setUploading(false);
       if (onUploadComplete) onUploadComplete();
@@ -266,17 +289,25 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
   });
 
   const uploadFile = async (file) => {
-    const fileId = `${Date.now()}-${file.name}`;
+    const fileId = `${Date.now()}-${Math.random()}-${file.name}`;
     
     try {
-      // Generate local thumbnail preview from the file
-      const localThumbnail = await generateVideoThumbnail(file);
-      
-      // Initialize progress
+      // Initialize progress immediately
       setUploadProgress(prev => ({
         ...prev,
         [fileId]: { progress: 0, status: 'uploading' }
       }));
+
+      // Generate thumbnail asynchronously without blocking upload
+      let localThumbnail = null;
+      generateVideoThumbnail(file).then(thumb => {
+        // Update with thumbnail when ready
+        setUploadedFiles(prev => 
+          prev.map(f => f.id === fileId ? { ...f, localThumbnail: thumb } : f)
+        );
+      }).catch(err => {
+        console.warn('Thumbnail generation failed:', err);
+      });
 
       // Upload using service
       const result = await footageService.uploadFootage(file, episodeId);
@@ -287,7 +318,7 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
         [fileId]: { progress: 100, status: 'complete' }
       }));
 
-      // Add to uploaded files with local thumbnail
+      // Add to uploaded files (thumbnail will be added asynchronously)
       setUploadedFiles(prev => [...prev, {
         id: result.scene?.id || fileId,
         filename: file.name,
@@ -295,7 +326,7 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
         s3_key: result.scene?.raw_footage_s3_key,
         duration: result.scene?.duration_seconds,
         status: 'complete',
-        localThumbnail: localThumbnail // Local preview thumbnail
+        localThumbnail: localThumbnail // Will be updated when generation completes
       }]);
 
       // Clear upload progress after 1 second to show success state
