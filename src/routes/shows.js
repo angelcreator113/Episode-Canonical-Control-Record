@@ -3,7 +3,16 @@ const router = express.Router();
 const multer = require('multer');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const sharp = require('sharp');
-const { Show } = require('../models');
+
+// Lazy load Show model to avoid circular dependencies
+let Show = null;
+const getShow = () => {
+  if (!Show) {
+    const models = require('../models');
+    Show = models.Show;
+  }
+  return Show;
+};
 
 // Configure multer for image uploads
 const upload = multer({
@@ -47,6 +56,7 @@ const BUCKET_NAME = process.env.AWS_S3_BUCKET || 'episode-metadata-assets-dev';
  */
 router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
   try {
+    const Show = getShow();
     const { id } = req.params;
     const file = req.file;
 
@@ -116,6 +126,7 @@ router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
  */
 router.get('/', async (req, res) => {
   try {
+    const Show = getShow();
     const shows = await Show.findAll({
       order: [['name', 'ASC']],
     });
@@ -140,6 +151,7 @@ router.get('/', async (req, res) => {
  */
 router.post('/', async (req, res) => {
   try {
+    const Show = getShow();
     const { name, description, icon, color, status, coverImageUrl } = req.body;
 
     const slug = name
@@ -176,6 +188,7 @@ router.post('/', async (req, res) => {
  */
 router.put('/:id', async (req, res) => {
   try {
+    const Show = getShow();
     const { id } = req.params;
     const updates = req.body;
 
@@ -205,6 +218,7 @@ router.put('/:id', async (req, res) => {
  */
 router.delete('/:id', async (req, res) => {
   try {
+    const Show = getShow();
     const { id } = req.params;
 
     const show = await Show.findByPk(id);
@@ -222,6 +236,133 @@ router.delete('/:id', async (req, res) => {
     console.error('Failed to delete show:', error);
     res.status(500).json({
       error: 'Failed to delete show',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/shows/:id/config
+ * Get show configuration (for script generator)
+ */
+router.get('/:id/config', async (req, res) => {
+  try {
+    const Show = getShow();
+    const { id } = req.params;
+
+    const show = await Show.findByPk(id);
+    if (!show) {
+      return res.status(404).json({ error: 'Show not found' });
+    }
+
+    // Return show configuration for script generator
+    res.json({
+      status: 'SUCCESS',
+      data: {
+        showId: show.id,
+        showName: show.name,
+        description: show.description,
+        icon: show.icon,
+        color: show.color,
+        status: show.status,
+        // Configuration fields for script generation
+        format: show.format || 'interview',
+        targetDuration: show.targetDuration || 300, // 5 minutes default
+        niche_category: show.niche_category || 'general',
+        toneOfVoice: show.toneOfVoice || 'professional',
+        createdAt: show.createdAt,
+        updatedAt: show.updatedAt,
+      },
+    });
+  } catch (error) {
+    console.error('Failed to get show config:', error);
+    res.status(500).json({
+      error: 'Failed to get show config',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/shows/:id/template
+ * Get default script template for a show
+ */
+router.get('/:id/template', async (req, res) => {
+  try {
+    const Show = getShow();
+    const { id } = req.params;
+
+    const show = await Show.findByPk(id);
+    if (!show) {
+      return res.status(404).json({ error: 'Show not found' });
+    }
+
+    // Return default template with variables
+    const template = {
+      id: 'default-interview',
+      name: 'Default Interview Template',
+      description: 'Flexible interview template with customizable variables',
+      structure: ['intro', 'questions', 'outro'],
+      variables: [
+        {
+          key: 'opening_line',
+          label: 'Opening Line',
+          description: 'How to start the episode',
+          type: 'text',
+          required: true,
+          examples: [
+            'Welcome to Styling Adventures!',
+            'Hey fashion lovers, let\'s style together!',
+            'Today we\'re creating the perfect outfit!'
+          ]
+        },
+        {
+          key: 'main_topic',
+          label: 'Main Topic',
+          description: 'What is this episode about?',
+          type: 'text',
+          required: true,
+          examples: [
+            'Building a professional wardrobe',
+            'Casual weekend styling',
+            'Fashion on a budget'
+          ]
+        },
+        {
+          key: 'key_points',
+          label: 'Key Points to Cover',
+          description: 'Main points to discuss (comma-separated)',
+          type: 'text',
+          required: true,
+          examples: [
+            'Color theory, fabric quality, seasonal trends',
+            'Comfort, practicality, personal style',
+            'Smart shopping, timeless pieces'
+          ]
+        },
+        {
+          key: 'closing_message',
+          label: 'Closing Message',
+          description: 'How to wrap up the episode',
+          type: 'text',
+          required: true,
+          examples: [
+            'Remember, fashion is about expressing yourself!',
+            'Keep styling and stay fabulous!',
+            'Thanks for joining Styling Adventures!'
+          ]
+        }
+      ]
+    };
+
+    res.json({
+      status: 'SUCCESS',
+      data: template
+    });
+  } catch (error) {
+    console.error('Failed to get template:', error);
+    res.status(500).json({
+      error: 'Failed to get template',
       message: error.message,
     });
   }

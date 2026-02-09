@@ -401,7 +401,7 @@ const SceneLibraryPicker = ({ isOpen, onClose, onSelect, showId, episodeId }) =>
                         Browse Files
                         <input
                           type="file"
-                          accept="video/*"
+                          accept="video/mp4,video/quicktime,video/x-m4v,video/3gpp,video/3gpp2,video/*"
                           onChange={handleFileSelect}
                           style={{ display: 'none' }}
                         />

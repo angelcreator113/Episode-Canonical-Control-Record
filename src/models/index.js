@@ -10,7 +10,7 @@
  * 4. Exports models and helper functions
  */
 
-const { Sequelize } = require('sequelize');
+const { Sequelize, DataTypes } = require('sequelize');
 // const _path = require('path'); // Removed: unused import
 require('dotenv').config();
 
@@ -61,7 +61,9 @@ let TimelinePlacement;
 let AIEditPlan, EditingDecision, AIRevision, VideoProcessingJob;
 let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset, Layer, LayerAsset;
 let SceneFootageLink;
-let UserDecision, DecisionPattern;
+let UserDecision, DecisionPattern, DecisionLog;
+let ShowConfig, ScriptTemplate, ScriptLearningProfile, ScriptEditHistory, ScriptSuggestion;
+let EditMap, CharacterProfile, RawFootage;
 
 try {
   // Core models
@@ -130,6 +132,38 @@ try {
   // Decision Logging models
   UserDecision = require('./UserDecision')(sequelize);
   DecisionPattern = require('./DecisionPattern')(sequelize);
+  DecisionLog = require('./DecisionLog')(sequelize);
+
+  // Script Generator models
+  ShowConfig = require('./ShowConfig')(sequelize);
+  ScriptTemplate = require('./ScriptTemplate')(sequelize);
+  ScriptLearningProfile = require('./ScriptLearningProfile')(sequelize);
+  ScriptEditHistory = require('./ScriptEditHistory')(sequelize);
+  ScriptSuggestion = require('./ScriptSuggestion')(sequelize);
+  
+  // Try to load optional models (may not exist yet)
+  let RawFootage;
+  try {
+    RawFootage = require('./RawFootage')(sequelize);
+  } catch (e) {
+    console.log('⚠️  RawFootage model not found, creating minimal stub');
+    RawFootage = sequelize.define('RawFootage', {
+      id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
+      episode_id: DataTypes.UUID,
+      s3_key: DataTypes.STRING,
+      file_size: DataTypes.BIGINT,
+      upload_purpose: DataTypes.STRING,
+      character_visible: DataTypes.JSON,
+      intended_scene_id: DataTypes.UUID,
+      recording_context: DataTypes.JSON,
+      created_at: { type: DataTypes.DATE, defaultValue: sequelize.literal('CURRENT_TIMESTAMP') },
+      updated_at: { type: DataTypes.DATE, defaultValue: sequelize.literal('CURRENT_TIMESTAMP') },
+    }, { tableName: 'raw_footage', timestamps: false });
+  }
+
+  // Video Analysis Models
+  EditMap = require('./EditMap')(sequelize, DataTypes);
+  CharacterProfile = require('./CharacterProfile')(sequelize, DataTypes);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -182,6 +216,8 @@ const requiredModels = {
   UserDecision,
   DecisionPattern,
   SceneFootageLink,
+  EditMap,
+  CharacterProfile,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -999,6 +1035,7 @@ const db = {
     LayerPreset,
     UserDecision,
     DecisionPattern,
+    DecisionLog,
   },
 
   /**
@@ -1208,4 +1245,10 @@ module.exports.Layer = Layer;
 module.exports.LayerAsset = LayerAsset;
 module.exports.UserDecision = UserDecision;
 module.exports.DecisionPattern = DecisionPattern;
+module.exports.DecisionLog = DecisionLog;
 module.exports.SceneFootageLink = SceneFootageLink;
+module.exports.ShowConfig = ShowConfig;
+module.exports.ScriptTemplate = ScriptTemplate;
+module.exports.ScriptLearningProfile = ScriptLearningProfile;
+module.exports.ScriptEditHistory = ScriptEditHistory;
+module.exports.ScriptSuggestion = ScriptSuggestion;

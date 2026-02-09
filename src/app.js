@@ -135,8 +135,8 @@ app.use(
         'http://3.94.166.174',
       ];
 
-      console.log('🔍 CORS Check - Origin:', origin, 'Allowed:', allowedOrigins.includes(origin));
-
+      // Allow requests without origin (like from curl or development environments)
+      // or if origin is in the allowed list
       if (!origin || allowedOrigins.includes(origin)) {
         callback(null, true);
       } else {
@@ -531,6 +531,26 @@ try {
   imageProcessingRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// Script Generator routes
+let scriptGeneratorRoutes;
+try {
+  scriptGeneratorRoutes = require('./routes/scriptGenerator');
+  console.log('✓ Script Generator routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Script Generator routes:', e.message);
+  scriptGeneratorRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Edit Maps / AI Analysis routes
+let editMapsRoutes;
+try {
+  editMapsRoutes = require('./routes/editMaps');
+  console.log('✓ Edit Maps routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Edit Maps routes:', e.message);
+  editMapsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 app.use('/api/v1/episodes', episodeRoutes);
 app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
@@ -581,6 +601,18 @@ app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 // Scripts routes
 app.use('/api/v1/scripts', scriptsRoutes);
 
+// Script Generator routes
+app.use('/api/v1/episodes', scriptGeneratorRoutes);
+app.use('/api/v1/templates', scriptGeneratorRoutes);
+
+// Lala Script Generation routes
+const lalaScriptRoutes = require('./routes/lalaScripts');
+app.use('/api/v1/episodes', lalaScriptRoutes);
+
+// Edit Maps / AI Analysis routes
+app.use('/api/v1/raw-footage', editMapsRoutes);
+app.use('/api/v1/edit-maps', editMapsRoutes);
+
 // Script analysis routes (AI)
 app.use('/api/scripts', scriptAnalysisRoutes);
 
@@ -591,8 +623,29 @@ app.use('/api/footage', footageRoutes);
 app.use('/api/scene-links', sceneLinksRoutes);
 
 // Phase 6 routes (Shows)
-const showRoutes = require('./routes/shows');
+let showRoutes;
+try {
+  showRoutes = require('./routes/shows');
+  console.log('✓ Shows routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Shows routes:', e.message);
+  console.error('Stack:', e.stack);
+  showRoutes = (req, res) => res.status(500).json({ error: 'Routes not available', details: e.message });
+}
 app.use('/api/v1/shows', showRoutes);
+
+// Game Show routes (phases, layouts, interactive elements)
+let gameShowRoutes;
+try {
+  gameShowRoutes = require('./routes/gameShows');
+  console.log('✓ Game Show routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Game Show routes:', e.message);
+}
+if (gameShowRoutes) {
+  app.use('/api/v1/episodes', gameShowRoutes);
+  app.use('/api/v1/shows', gameShowRoutes);
+}
 
 // Thumbnail template routes
 const thumbnailTemplateRoutes = require('./routes/thumbnailTemplates');
@@ -620,6 +673,11 @@ console.log('✓ Audit logs routes loaded');
 const decisionsRoutes = require('./routes/decisions');
 app.use('/api/v1/decisions', decisionsRoutes);
 console.log('✓ Decisions routes loaded');
+
+// Decision Logs routes (for AI training)
+const decisionLogsRoutes = require('./routes/decisionLogs');
+app.use('/api/v1/decision-logs', decisionLogsRoutes);
+console.log('✓ Decision Logs routes loaded');
 
 // Layer Management routes (Week 4 Day 1)
 const layersRoutes = require('./routes/layers');

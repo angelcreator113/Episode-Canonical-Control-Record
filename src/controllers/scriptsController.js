@@ -287,4 +287,19 @@ module.exports = {
       count: history.length,
     });
   }),
+
+  /**
+   * POST /api/v1/scripts/:scriptId/parse-scenes
+   * Parse script content and auto-create scenes
+   */
+  parseScenes: asyncHandler(async (req, res) => {
+    const { scriptId } = req.params;
+
+    const result = await scriptsService.parseScriptAndCreateScenes(scriptId);
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  }),
 };

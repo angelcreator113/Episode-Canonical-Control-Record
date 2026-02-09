@@ -12,19 +12,27 @@ const upload = multer({
     fileSize: 500 * 1024 * 1024, // 500MB max file size
   },
   fileFilter: (req, file, cb) => {
-    // Accept video files only
+    // Accept common video formats including mobile-specific ones
     const allowedMimes = [
       'video/mp4',
-      'video/quicktime',
-      'video/x-msvideo',
-      'video/x-matroska',
-      'video/webm',
+      'video/quicktime',        // iOS .mov files
+      'video/x-m4v',           // iOS .m4v files
+      'video/3gpp',            // Android .3gp files
+      'video/3gpp2',           // Android .3g2 files
+      'video/x-msvideo',       // .avi files
+      'video/x-matroska',      // .mkv files
+      'video/webm',            // .webm files
+      'application/octet-stream' // Fallback for some mobile browsers
     ];
-
-    if (allowedMimes.includes(file.mimetype)) {
+    
+    // Also check file extension as fallback (some mobile browsers send wrong MIME types)
+    const fileExt = file.originalname.toLowerCase().split('.').pop();
+    const allowedExts = ['mp4', 'mov', 'm4v', '3gp', '3g2', 'avi', 'mkv', 'webm'];
+    
+    if (allowedMimes.includes(file.mimetype) || allowedExts.includes(fileExt)) {
       cb(null, true);
     } else {
-      cb(new Error('Invalid file type. Only video files are allowed.'), false);
+      cb(new Error(`Invalid file type. Received: ${file.mimetype}, Extension: ${fileExt}. Only video files are allowed.`), false);
     }
   },
 });

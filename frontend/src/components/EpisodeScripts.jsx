@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FiFileText, 
   FiPlus, 
@@ -15,8 +15,9 @@ import {
   FiClock,
   FiCheck
 } from 'react-icons/fi';
-import scriptsService from '../services/scriptsService';
-import ScriptAIAnalysis from './ScriptAIAnalysis';
+import axios from 'axios';
+import ScriptGeneratorSmart from './ScriptGeneratorSmart';
+import LalaScriptGenerator from './LalaScriptGenerator';
 
 const SCRIPT_TYPES = [
   { id: 'main', label: 'Main Script', icon: FiFileText },
@@ -27,12 +28,14 @@ const SCRIPT_TYPES = [
   { id: 'bonus-content', label: 'Bonus Content', icon: FiGift },
 ];
 
-export default function EpisodeScripts({ episodeId }) {
+export default function EpisodeScripts({ episodeId, showId }) {
   const [scripts, setScripts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeType, setActiveType] = useState('main');
   const [showNewScriptForm, setShowNewScriptForm] = useState(false);
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [generatorTab, setGeneratorTab] = useState('smart'); // 'smart' or 'lala'
   const [editingScript, setEditingScript] = useState(null);
   const [formData, setFormData] = useState({
     content: '',
@@ -54,11 +57,10 @@ export default function EpisodeScripts({ episodeId }) {
     try {
       setLoading(true);
       setError(null);
-      const response = await scriptsService.getScriptsByEpisode(episodeId, {
-        includeAllVersions: true,
-        includeContent: true
+      const response = await axios.get(`/api/v1/episodes/${episodeId}/scripts`, {
+        params: { includeAllVersions: true, includeContent: true }
       });
-      setScripts(response.data || []);
+      setScripts(response.data.data || response.data.scripts || []);
     } catch (err) {
       console.error('Failed to load scripts:', err);
       setError(err.message || 'Failed to load scripts');
@@ -86,7 +88,6 @@ export default function EpisodeScripts({ episodeId }) {
 
   const handlePasteScript = (e) => {
     e?.preventDefault();
-    // Open form with empty content - user can paste manually with Ctrl+V
     setFormData({
       content: '',
       versionLabel: '',
@@ -114,8 +115,6 @@ export default function EpisodeScripts({ episodeId }) {
   const handleSaveScript = async (e) => {
     e.preventDefault();
     
-    console.log('Saving script with formData:', formData);
-    
     if (!formData.content.trim()) {
       alert('Please enter script content');
       return;
@@ -133,19 +132,12 @@ export default function EpisodeScripts({ episodeId }) {
         sceneCount: formData.sceneCount ? parseInt(formData.sceneCount) : undefined,
       };
 
-      console.log('Sending to API:', { episodeId, scriptData });
-
       if (editingScript) {
-        // Update creates a new version
-        await scriptsService.updateScript(editingScript.id, scriptData);
+        await axios.put(`/api/v1/scripts/${editingScript.id}`, scriptData);
       } else {
-        // Create new script
-        await scriptsService.createScript(episodeId, scriptData);
+        await axios.post('/api/v1/scripts', { episode_id: episodeId, ...scriptData });
       }
       
-      console.log('Script saved successfully');
-      
-      // Reload scripts and close form
       await loadScripts();
       setShowNewScriptForm(false);
       setEditingScript(null);
@@ -176,6 +168,17 @@ export default function EpisodeScripts({ episodeId }) {
       duration: '',
       sceneCount: '',
     });
+  };
+
+  const handleScriptGenerated = (generatedScript, metadata) => {
+    setFormData({
+      ...formData,
+      content: generatedScript,
+      duration: metadata?.estimated_duration || '',
+      sceneCount: metadata?.scene_count || ''
+    });
+    setShowGenerator(false);
+    setShowNewScriptForm(true);
   };
 
   if (loading) {
@@ -240,6 +243,19 @@ export default function EpisodeScripts({ episodeId }) {
           </div>
           {!showNewScriptForm && (
             <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button 
+                type="button" 
+                className="ed-btn ed-btn-ghost"
+                onClick={() => setShowGenerator(true)}
+                style={{ 
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  fontWeight: '600'
+                }}
+              >
+                <span>🤖</span>
+                <span>Generate with AI</span>
+              </button>
               <button type="button" className="ed-btn ed-btn-primary" onClick={handleCreateScript}>
                 <FiPlus size={16} />
                 <span>New Script</span>
@@ -434,11 +450,117 @@ export default function EpisodeScripts({ episodeId }) {
           </div>
         )}
       </div>
+
+      {/* AI Generator Modal */}
+      {showGenerator && (
+        <div style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: 'rgba(0,0,0,0.7)',
+          zIndex: 1000,
+          overflowY: 'auto',
+          padding: '24px'
+        }}>
+          <div style={{
+            maxWidth: '1200px',
+            margin: '0 auto',
+            backgroundColor: 'white',
+            borderRadius: '16px',
+            padding: '24px'
+          }}>
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '24px'
+            }}>
+              <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '700' }}>AI Script Generator</h2>
+              <button
+                onClick={() => setShowGenerator(false)}
+                style={{
+                  padding: '8px 16px',
+                  backgroundColor: '#f3f4f6',
+                  color: '#111827',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontWeight: '600'
+                }}
+              >
+                ✕ Close
+              </button>
+            </div>
+
+            {/* Generator Tabs */}
+            <div style={{
+              display: 'flex',
+              gap: '0',
+              borderBottom: '1px solid #e5e7eb',
+              marginBottom: '24px'
+            }}>
+              <button
+                onClick={() => setGeneratorTab('smart')}
+                style={{
+                  padding: '12px 24px',
+                  fontSize: '14px',
+                  fontWeight: generatorTab === 'smart' ? '600' : '500',
+                  color: generatorTab === 'smart' ? '#ec4899' : '#6b7280',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  borderBottom: generatorTab === 'smart' ? '2px solid #ec4899' : '1px solid transparent',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                📝 Smart Script Generator
+              </button>
+              <button
+                onClick={() => setGeneratorTab('lala')}
+                style={{
+                  padding: '12px 24px',
+                  fontSize: '14px',
+                  fontWeight: generatorTab === 'lala' ? '600' : '500',
+                  color: generatorTab === 'lala' ? '#ec4899' : '#6b7280',
+                  borderTop: 'none',
+                  borderLeft: 'none',
+                  borderRight: 'none',
+                  borderBottom: generatorTab === 'lala' ? '2px solid #ec4899' : '1px solid transparent',
+                  background: 'transparent',
+                  cursor: 'pointer',
+                  transition: 'all 0.2s'
+                }}
+              >
+                ✨ Lala Formula Generator
+              </button>
+            </div>
+            
+            {generatorTab === 'smart' && (
+              <ScriptGeneratorSmart
+                episodeId={episodeId}
+                showId={showId}
+                onScriptGenerated={handleScriptGenerated}
+              />
+            )}
+
+            {generatorTab === 'lala' && (
+              <LalaScriptGenerator
+                episodeId={episodeId}
+                onGenerated={handleScriptGenerated}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// Temporary inline ScriptCard component (will be extracted later)
+// Script Card Component
 function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
   const [expanded, setExpanded] = useState(false);
   const [showActionsMenu, setShowActionsMenu] = useState(false);
@@ -453,9 +575,9 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
 
   const handleSetPrimary = async () => {
     setShowActionsMenu(false);
-    if (confirm(`Set "${script.version_label || `Version ${script.version_number}`}" as the primary ${script.script_type}?`)) {
+    if (confirm(`Set "${script.version_label || `Version ${script.version_number}`}" as the primary?`)) {
       try {
-        await scriptsService.setPrimary(script.id);
+        await axios.put(`/api/v1/scripts/${script.id}/primary`);
         onUpdate();
       } catch (error) {
         alert('Failed to set as primary: ' + error.message);
@@ -467,7 +589,7 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
     setShowActionsMenu(false);
     if (confirm(`Delete "${script.version_label || `Version ${script.version_number}`}"? This cannot be undone.`)) {
       try {
-        await scriptsService.deleteScript(script.id);
+        await axios.delete(`/api/v1/scripts/${script.id}`);
         onDelete();
       } catch (error) {
         alert('Failed to delete script: ' + error.message);
@@ -477,7 +599,6 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
 
   const handleExport = () => {
     setShowActionsMenu(false);
-    // Create a text file download
     const blob = new Blob([script.content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -496,7 +617,6 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
 
   return (
     <div className="ed-card script-card" style={{ padding: '1rem', position: 'relative' }}>
-      {/* Tappable card header */}
       <div
         onClick={() => setExpanded(!expanded)}
         style={{ cursor: 'pointer' }}
@@ -513,7 +633,7 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
               {script.is_latest && (
                 <span className="ed-badge ed-badge-neutral">Latest</span>
               )}
-              <span className={`ed-badge ed-badge-${scriptsService.getStatusColor(script.status)}`}>
+              <span className={`ed-badge ed-badge-${script.status === 'approved' ? 'success' : script.status === 'final' ? 'warning' : 'neutral'}`}>
                 {script.status}
               </span>
             </div>
@@ -522,7 +642,6 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
             </div>
           </div>
 
-          {/* Actions menu button */}
           <div style={{ position: 'relative', marginLeft: '1rem' }}>
             <button
               type="button"
@@ -671,14 +790,12 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
           </div>
         </div>
 
-        {/* Expansion chevron */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '0.5rem', color: '#6b7280', fontSize: '0.875rem' }}>
           <span>{expanded ? '⌄' : '›'}</span>
           <span>{expanded ? 'Hide details' : 'Show details'}</span>
         </div>
       </div>
 
-      {/* Collapsed metadata - only shows when expanded */}
       {expanded && (
         <>
           <div className="ed-infogrid" style={{ marginTop: '1rem' }}>
@@ -691,7 +808,7 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
             {script.duration && (
               <div className="ed-info">
                 <div className="k">Duration</div>
-                <div className="v">{scriptsService.formatDuration(script.duration)}</div>
+                <div className="v">{Math.floor(script.duration / 60)}:{(script.duration % 60).toString().padStart(2, '0')}</div>
               </div>
             )}
             {script.scene_count > 0 && (
@@ -709,13 +826,6 @@ function ScriptCard({ script, episodeId, onEdit, onUpdate, onDelete }) {
               </div>
             </div>
           )}
-
-          {/* AI Analysis Section */}
-          <ScriptAIAnalysis 
-            episodeId={episodeId}
-            scriptId={script.id}
-            script={script}
-          />
         </>
       )}
     </div>

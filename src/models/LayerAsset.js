@@ -96,6 +96,31 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'Order within layer for rendering sequence'
     },
+    in_point_seconds: {
+      type: DataTypes.DECIMAL(10, 2),
+      defaultValue: 0,
+      comment: 'When asset appears in timeline (seconds)'
+    },
+    out_point_seconds: {
+      type: DataTypes.DECIMAL(10, 2),
+      allowNull: true,
+      comment: 'When asset disappears from timeline (seconds)'
+    },
+    transition_in: {
+      type: DataTypes.STRING(50),
+      defaultValue: 'none',
+      comment: 'Fade-in, slide-in, zoom-in, none'
+    },
+    transition_out: {
+      type: DataTypes.STRING(50),
+      defaultValue: 'none',
+      comment: 'Fade-out, slide-out, zoom-out, none'
+    },
+    animation_type: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      comment: 'Pan, zoom, rotate, none'
+    },
     metadata: {
       type: DataTypes.JSONB,
       defaultValue: {},
