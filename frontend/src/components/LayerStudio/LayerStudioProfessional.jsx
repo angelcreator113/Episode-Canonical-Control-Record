@@ -6,7 +6,7 @@ import KeyboardShortcutsPanel from './KeyboardShortcutsPanel';
 import CanvasPresetSelector from './CanvasPresetSelector';
 import SceneSelector from './SceneSelector';
 import FirstTimeOverlay from './FirstTimeOverlay';
-import { CANVAS_PRESETS } from './canvasPresets';
+import { CANVAS_PRESETS } from './CanvasPresets';
 import decisionLogger from '../../utils/decisionLogger';
 
 const LayerStudioProfessional = ({ episodeId }) => {

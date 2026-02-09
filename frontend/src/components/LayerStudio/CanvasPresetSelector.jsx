@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { CANVAS_PRESETS } from './canvasPresets';
+import { CANVAS_PRESETS } from './CanvasPresets';
 
 const CanvasPresetSelector = ({ currentPreset, onPresetChange }) => {
   const [isOpen, setIsOpen] = useState(false);

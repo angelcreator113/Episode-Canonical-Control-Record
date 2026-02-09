@@ -5,7 +5,7 @@ import useSnapToGrid from './useSnapToGrid';
 import KeyboardShortcutsPanel from './KeyboardShortcutsPanel';
 import SceneSelector from './SceneSelector';
 import FirstTimeOverlay from './FirstTimeOverlay';
-import { CANVAS_PRESETS } from './canvasPresets';
+import { CANVAS_PRESETS } from './CanvasPresets';
 import decisionLogger from '../../utils/decisionLogger';
 
 const LayerStudioFinal = ({ episodeId }) => {

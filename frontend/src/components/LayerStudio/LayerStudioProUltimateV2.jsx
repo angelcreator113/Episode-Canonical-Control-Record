@@ -11,7 +11,7 @@ import SceneSelector from './SceneSelector';
 import ClipTimeline from './ClipTimeline';
 import SceneInfoPanel from './SceneInfoPanel';
 import AssetSizeGuide from './AssetSizeGuide';
-import { CANVAS_PRESETS } from './canvasPresets';
+import { CANVAS_PRESETS } from './CanvasPresets';
 import decisionLogger from '../../utils/decisionLogger';
 
 const LayerStudioProUltimateV2 = ({ episodeId }) => {

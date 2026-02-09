@@ -7,7 +7,7 @@ import CanvasPresetSelector from './CanvasPresetSelector';
 import SceneSelector from './SceneSelector';
 import FirstTimeOverlay from './FirstTimeOverlay';
 import BigCanvasEnhanced from './BigCanvasEnhanced';
-import { CANVAS_PRESETS } from './canvasPresets';
+import { CANVAS_PRESETS } from './CanvasPresets';
 import decisionLogger from '../../utils/decisionLogger';
 
 const LayerStudioCanvasFirst = ({ episodeId }) => {

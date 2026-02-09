@@ -9,7 +9,7 @@ import FirstTimeOverlay from './FirstTimeOverlay';
 import BigCanvasEnhanced from './BigCanvasEnhanced';
 import AssetSizeGuide from './AssetSizeGuide';
 import SceneInfoPanel from './SceneInfoPanel';
-import { CANVAS_PRESETS } from './canvasPresets';
+import { CANVAS_PRESETS } from './CanvasPresets';
 import { ASSET_CATEGORIES } from './assetCategories';
 
 const LayerStudioProUltimate = ({ episodeId }) => {
