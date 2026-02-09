@@ -174,12 +174,64 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
     }
   };
 
-  // Video file validation
+  // Generate video thumbnail from file
+  const generateVideoThumbnail = (file) => {
+    return new Promise((resolve, reject) => {
+      const video = document.createElement('video');
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      
+      video.preload = 'metadata';
+      video.muted = true;
+      video.playsInline = true;
+      
+      video.onloadedmetadata = () => {
+        // Seek to 1 second or 10% of duration
+        video.currentTime = Math.min(1, video.duration * 0.1);
+      };
+      
+      video.onseeked = () => {
+        try {
+          // Set canvas size
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          
+          // Draw frame
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          
+          // Convert to data URL
+          const thumbnail = canvas.toDataURL('image/jpeg', 0.8);
+          
+          // Clean up
+          URL.revokeObjectURL(video.src);
+          resolve(thumbnail);
+        } catch (error) {
+          console.error('Error generating thumbnail:', error);
+          resolve(null);
+        }
+      };
+      
+      video.onerror = () => {
+        console.error('Error loading video for thumbnail');
+        URL.revokeObjectURL(video.src);
+        resolve(null);
+      };
+      
+      // Create object URL from file
+      video.src = URL.createObjectURL(file);
+    });
+  };
+
+  // Video file validation - includes mobile formats
   const acceptedFormats = {
     'video/mp4': ['.mp4'],
-    'video/quicktime': ['.mov'],
-    'video/x-msvideo': ['.avi'],
-    'video/webm': ['.webm']
+    'video/quicktime': ['.mov'],           // iOS MOV files
+    'video/x-m4v': ['.m4v'],              // iOS M4V files
+    'video/3gpp': ['.3gp'],               // Android 3GP files
+    'video/3gpp2': ['.3g2'],              // Android 3G2 files
+    'video/x-msvideo': ['.avi'],          // Desktop AVI
+    'video/webm': ['.webm'],              // Desktop WebM
+    'video/x-matroska': ['.mkv']          // Desktop MKV
   };
 
   const onDrop = useCallback(async (acceptedFiles, rejectedFiles) => {
@@ -217,6 +269,9 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
     const fileId = `${Date.now()}-${file.name}`;
     
     try {
+      // Generate local thumbnail preview from the file
+      const localThumbnail = await generateVideoThumbnail(file);
+      
       // Initialize progress
       setUploadProgress(prev => ({
         ...prev,
@@ -232,14 +287,15 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
         [fileId]: { progress: 100, status: 'complete' }
       }));
 
-      // Add to uploaded files
+      // Add to uploaded files with local thumbnail
       setUploadedFiles(prev => [...prev, {
         id: result.scene?.id || fileId,
         filename: file.name,
         size: file.size,
         s3_key: result.scene?.raw_footage_s3_key,
         duration: result.scene?.duration_seconds,
-        status: 'complete'
+        status: 'complete',
+        localThumbnail: localThumbnail // Local preview thumbnail
       }]);
 
       // Clear upload progress after 1 second to show success state
@@ -553,7 +609,38 @@ export default function RawFootageUpload({ episodeId, onUploadComplete }) {
                     overflow: 'hidden',
                     position: 'relative'
                   }}>
-                    {videoUrl ? (
+                    {file.localThumbnail ? (
+                      <>
+                        {/* Display local thumbnail */}
+                        <img 
+                          src={file.localThumbnail}
+                          alt={file.filename}
+                          style={{ 
+                            width: '100%', 
+                            height: '100%', 
+                            objectFit: 'cover'
+                          }}
+                        />
+                        {/* Play icon overlay */}
+                        <div style={{
+                          position: 'absolute',
+                          top: '50%',
+                          left: '50%',
+                          transform: 'translate(-50%, -50%)',
+                          backgroundColor: 'rgba(155, 89, 182, 0.9)',
+                          borderRadius: '50%',
+                          width: '56px',
+                          height: '56px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          pointerEvents: 'none',
+                          boxShadow: '0 4px 12px rgba(0,0,0,0.3)'
+                        }}>
+                          <FiVideo style={{ color: '#fff', fontSize: '28px' }} />
+                        </div>
+                      </>
+                    ) : videoUrl ? (
                       <>
                         {/* Hidden video element for thumbnail generation */}
                         <video 
