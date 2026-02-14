@@ -658,10 +658,10 @@ app.use('/api/v1/roles', rolesRoutes); // Asset roles registry
 app.use('/api/v1/compositions', compositionRoutes);
 app.use('/api/v1/templates', templateRoutes);
 
-// DEBUG: Direct DB test route
-const testDbDirectRoutes = require('./routes/test-db-direct');
-app.use('/api/v1/debug', testDbDirectRoutes);
-console.log('🧪 DEBUG: Test DB direct route mounted at /api/v1/debug');
+// DEBUG: Direct DB test route (disabled)
+// Uncomment if you need to debug database directly
+// const testDbDirectRoutes = require('./routes/test-db-direct');
+// app.use('/api/v1/debug', testDbDirectRoutes);
 
 // 🚨 DEBUG MIDDLEWARE - Log ALL requests to /api/v1/scenes*
 app.use('/api/v1/scenes', (req, res, next) => {
