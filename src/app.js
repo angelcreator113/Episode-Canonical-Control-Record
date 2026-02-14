@@ -643,8 +643,13 @@ app.use('/api/v1/metadata', metadataRoutes);
 app.use('/api/v1/processing-queue', processingRoutes);
 
 // Admin routes for migrations/setup
-const adminRoutes = require('./routes/admin');
-app.use('/api/v1/admin', adminRoutes);
+try {
+  const adminRoutes = require('./routes/admin');
+  app.use('/api/v1/admin', adminRoutes);
+  console.log('✓ Admin routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load admin routes:', e.message);
+}
 
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
@@ -663,64 +668,72 @@ app.use('/api/v1/templates', templateRoutes);
 // const testDbDirectRoutes = require('./routes/test-db-direct');
 // app.use('/api/v1/debug', testDbDirectRoutes);
 
-// 🚨 DEBUG MIDDLEWARE - Log ALL requests to /api/v1/scenes*
-app.use('/api/v1/scenes', (req, res, next) => {
-  console.log('\n🚨🚨🚨 REQUEST TO /api/v1/scenes*:');
-  console.log('  Method:', req.method);
-  console.log('  Path:', req.path);
-  console.log('  Full URL:', req.originalUrl);
-  console.log('  Query:', req.query);
-  console.log('  Params:', req.params);
-  next();
-});
+// 🚨 DEBUG MIDDLEWARE - Log ALL requests to /api/v1/scenes* (disabled)
+// app.use('/api/v1/scenes', (req, res, next) => {
+//   console.log('\n🚨🚨🚨 REQUEST TO /api/v1/scenes*:');
+//   console.log('  Method:', req.method);
+//   console.log('  Path:', req.path);
+//   console.log('  Full URL:', req.originalUrl);
+//   console.log('  Query:', req.query);
+//   console.log('  Params:', req.params);
+//   next();
+// });
 
 // Scene routes
-console.log('📌 Mounting scenes routes at /api/v1/scenes...');
-console.log('   scenesFixedRoutes type:', typeof scenesFixedRoutes);
 app.use('/api/v1/scenes-fixed', scenesFixedRoutes); // TEMPORARY WORKAROUND
 app.use('/api/v1/scenes', sceneRoutes);
-console.log('✅ Scenes routes mounted successfully');
 app.use('/api/v1/scene-templates', sceneTemplateRoutes);
 
 // Scene Library routes (new system)
 app.use('/api/v1/scene-library', sceneLibraryRoutes);
 
 // Marker routes (Phase 2 Timeline)
-const markerRoutes = require('./routes/markers');
-app.use('/api/v1', markerRoutes); // Handles both /episodes/:id/markers and /markers/:id
-console.log('✅ Marker routes mounted (Phase 2)');
+try {
+  const markerRoutes = require('./routes/markers');
+  app.use('/api/v1', markerRoutes);
+  console.log('✓ Marker routes mounted (Phase 2)');
+} catch (e) {
+  console.error('✗ Failed to load marker routes:', e.message);
+}
 
 // Export routes (Phase 3 - Video Export System)
-const exportRoutes = require('./routes/export');
-app.use('/api/v1', exportRoutes);
-console.log('✅ Export routes mounted (Phase 3)');
+try {
+  const exportRoutes = require('./routes/export');
+  app.use('/api/v1', exportRoutes);
+  console.log('✓ Export routes mounted (Phase 3)');
+} catch (e) {
+  console.error('✗ Failed to load export routes:', e.message);
+}
 
 // Phase 2.5 Animatic System routes
-const beatRoutes = require('./routes/beats');
-const characterClipRoutes = require('./routes/character-clips');
-const audioClipRoutes = require('./routes/audio-clips');
-const animaticRoutes = require('./routes/animatic'); // Extended routes with beat generation
-app.use('/api/v1', beatRoutes);
-app.use('/api/v1', characterClipRoutes);
-app.use('/api/v1', audioClipRoutes);
-app.use('/api/v1', animaticRoutes); // Beat generation and composition endpoints
-console.log('✅ Phase 2.5 Animatic System routes mounted (beats, character-clips, audio-clips, generation)');
+try {
+  const beatRoutes = require('./routes/beats');
+  const characterClipRoutes = require('./routes/character-clips');
+  const audioClipRoutes = require('./routes/audio-clips');
+  const animaticRoutes = require('./routes/animatic');
+  app.use('/api/v1', beatRoutes);
+  app.use('/api/v1', characterClipRoutes);
+  app.use('/api/v1', audioClipRoutes);
+  app.use('/api/v1', animaticRoutes);
+  console.log('✓ Phase 2.5 Animatic System routes mounted');
+} catch (e) {
+  console.error('✗ Failed to load Animatic System routes:', e.message);
+}
 
 // Wardrobe routes
 app.use('/api/v1/wardrobe', wardrobeRoutes);
-
-// Debug middleware BEFORE wardrobe-library
-app.use('/api/v1/wardrobe-library', (req, res, next) => {
-  console.log(`🚨 APP.JS: Request to /api/v1/wardrobe-library${req.path}`);
-  next();
-});
 
 // Wardrobe Library routes
 app.use('/api/v1/wardrobe-library', wardrobeLibraryRoutes);
 
 // Wardrobe Approval routes
-const wardrobeApprovalRoutes = require('./routes/wardrobeApproval');
-app.use('/api/v1/episodes', wardrobeApprovalRoutes);
+try {
+  const wardrobeApprovalRoutes = require('./routes/wardrobeApproval');
+  app.use('/api/v1/episodes', wardrobeApprovalRoutes);
+  console.log('✓ Wardrobe Approval routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load wardrobe approval routes:', e.message);
+}
 
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
@@ -733,8 +746,13 @@ app.use('/api/v1/episodes', scriptGeneratorRoutes);
 app.use('/api/v1/templates', scriptGeneratorRoutes);
 
 // Lala Script Generation routes
-const lalaScriptRoutes = require('./routes/lalaScripts');
-app.use('/api/v1/episodes', lalaScriptRoutes);
+try {
+  const lalaScriptRoutes = require('./routes/lalaScripts');
+  app.use('/api/v1/episodes', lalaScriptRoutes);
+  console.log('✓ Lala Script routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load lala script routes:', e.message);
+}
 
 // Edit Maps / AI Analysis routes
 app.use('/api/v1/raw-footage', editMapsRoutes);
@@ -776,13 +794,22 @@ if (gameShowRoutes) {
 }
 
 // Thumbnail template routes
-const thumbnailTemplateRoutes = require('./routes/thumbnailTemplates');
-app.use('/api/v1/thumbnail-templates', thumbnailTemplateRoutes);
+try {
+  const thumbnailTemplateRoutes = require('./routes/thumbnailTemplates');
+  app.use('/api/v1/thumbnail-templates', thumbnailTemplateRoutes);
+  console.log('✓ Thumbnail Template routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load thumbnail template routes:', e.message);
+}
 
 // Decision Analytics routes
-const decisionAnalyticsRoutes = require('./routes/decisionAnalytics');
-app.use('/api/decision-analytics', decisionAnalyticsRoutes);
-console.log('✓ Decision Analytics routes loaded');
+try {
+  const decisionAnalyticsRoutes = require('./routes/decisionAnalytics');
+  app.use('/api/decision-analytics', decisionAnalyticsRoutes);
+  console.log('✓ Decision Analytics routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load decision analytics routes:', e.message);
+}
 
 // Template Studio routes (new system)
 app.use('/api/v1/template-studio', templateStudioRoutes);
@@ -798,24 +825,40 @@ app.use('/api/v1/audit-logs', auditLogsRoutes);
 console.log('✓ Audit logs routes loaded');
 
 // Decision logging routes
-const decisionsRoutes = require('./routes/decisions');
-app.use('/api/v1/decisions', decisionsRoutes);
-console.log('✓ Decisions routes loaded');
+try {
+  const decisionsRoutes = require('./routes/decisions');
+  app.use('/api/v1/decisions', decisionsRoutes);
+  console.log('✓ Decisions routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load decisions routes:', e.message);
+}
 
 // Decision Logs routes (for AI training)
-const decisionLogsRoutes = require('./routes/decisionLogs');
-app.use('/api/v1/decision-logs', decisionLogsRoutes);
-console.log('✓ Decision Logs routes loaded');
+try {
+  const decisionLogsRoutes = require('./routes/decisionLogs');
+  app.use('/api/v1/decision-logs', decisionLogsRoutes);
+  console.log('✓ Decision Logs routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load decision logs routes:', e.message);
+}
 
 // Layer Management routes (Week 4 Day 1)
-const layersRoutes = require('./routes/layers');
-app.use('/api/v1/layers', layersRoutes);
-console.log('✓ Layer Management routes loaded');
+try {
+  const layersRoutes = require('./routes/layers');
+  app.use('/api/v1/layers', layersRoutes);
+  console.log('✓ Layer Management routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load layers routes:', e.message);
+}
 
 // YouTube Training routes
-const youtubeRoutes = require('./routes/youtube');
-app.use('/api/youtube', youtubeRoutes);
-console.log('✓ YouTube training routes loaded');
+try {
+  const youtubeRoutes = require('./routes/youtube');
+  app.use('/api/youtube', youtubeRoutes);
+  console.log('✓ YouTube training routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load youtube routes:', e.message);
+}
 
 // Development seed routes
 app.use('/api/v1/seed', seedRoutes);
