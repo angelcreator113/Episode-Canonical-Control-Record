@@ -1,0 +1,519 @@
+/* ═══════════════════════════════════════════
+   Preview Monitor — Professional Editing Canvas
+   ═══════════════════════════════════════════ */
+.preview-monitor {
+  width: 100%;
+  height: 100%;
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  background: #0a0a0a;
+  overflow: hidden;
+}
+
+/* ── Top bar: platform selector, resolution, safe-zone, zoom ── */
+.canvas-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  background: #151518;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+  flex-shrink: 0;
+  min-height: 34px;
+}
+
+.canvas-bar-left,
+.canvas-bar-right,
+.canvas-bar-center {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.platform-select {
+  background: rgba(255,255,255,0.07);
+  color: #ccc;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 5px;
+  padding: 3px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  outline: none;
+  min-width: 130px;
+}
+.platform-select option {
+  background: #1a1a1f;
+  color: #ccc;
+}
+.platform-select:hover {
+  border-color: rgba(102,126,234,0.5);
+}
+
+.canvas-resolution {
+  font-size: 11px;
+  color: rgba(255,255,255,0.35);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  letter-spacing: 0.5px;
+}
+
+.canvas-bar-btn {
+  height: 26px;
+  padding: 0 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: 4px;
+  color: rgba(255,255,255,0.7);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.canvas-bar-btn:hover {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+}
+.canvas-bar-btn.active {
+  background: rgba(102,126,234,0.25);
+  border-color: rgba(102,126,234,0.5);
+  color: #a4b4f5;
+}
+.canvas-bar-btn.fit {
+  font-size: 11px;
+  padding: 0 10px;
+}
+
+.canvas-zoom-controls {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.canvas-zoom-pct {
+  font-size: 11px;
+  color: rgba(255,255,255,0.45);
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+  min-width: 34px;
+  text-align: center;
+}
+
+/* ── Viewport — the canvas lives here ── */
+.preview-viewport {
+  flex: 1;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  min-height: 0;
+  background: #0c0c0f;
+}
+
+.preview-canvas-scroll {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  overflow: auto;
+  box-sizing: border-box;
+}
+
+.preview-canvas-scroll::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.preview-canvas-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+.preview-canvas-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.12);
+  border-radius: 3px;
+}
+
+/* ── Canvas Frame — the actual video frame ── */
+.canvas-frame {
+  position: relative;
+  overflow: hidden;
+  background: #111;
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.5);
+  /* aspect-ratio is set via inline style from the platform prop */
+  /* Use container-query approach: try full height, clamp width via max-width */
+  height: 100%;
+  max-width: 100%;
+  transform-origin: center center;
+}
+
+/* ── Safe Zone overlays ── */
+.safe-zone {
+  position: absolute;
+  z-index: 15;
+  pointer-events: none;
+  border: 1px solid;
+}
+
+.safe-zone.action-safe {
+  top: 5%;
+  left: 5%;
+  width: 90%;
+  height: 90%;
+  border-color: rgba(255, 200, 50, 0.5);
+  border-style: dashed;
+}
+
+.safe-zone.title-safe {
+  top: 10%;
+  left: 10%;
+  width: 80%;
+  height: 80%;
+  border-color: rgba(100, 200, 255, 0.5);
+  border-style: dashed;
+}
+
+.safe-label {
+  position: absolute;
+  top: -1px;
+  left: 8px;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  padding: 1px 5px;
+  border-radius: 0 0 3px 3px;
+}
+
+.action-safe .safe-label {
+  color: rgba(255, 200, 50, 0.7);
+  background: rgba(255, 200, 50, 0.08);
+}
+
+.title-safe .safe-label {
+  color: rgba(100, 200, 255, 0.7);
+  background: rgba(100, 200, 255, 0.08);
+}
+
+/* Center crosshairs */
+.canvas-crosshair {
+  position: absolute;
+  z-index: 14;
+  pointer-events: none;
+}
+
+.canvas-crosshair.horizontal {
+  top: 50%;
+  left: 10%;
+  width: 80%;
+  height: 0;
+  border-top: 1px dashed rgba(255,255,255,0.12);
+}
+
+.canvas-crosshair.vertical {
+  left: 50%;
+  top: 10%;
+  height: 80%;
+  width: 0;
+  border-left: 1px dashed rgba(255,255,255,0.12);
+}
+
+/* ── Scene content ── */
+.scene-content {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scene-background {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+
+.scene-background img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.scene-character {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  transform: translate(-50%, -50%);
+  max-width: 150px;
+}
+
+.scene-character img {
+  width: 100%;
+  height: auto;
+  max-height: 200px;
+  object-fit: contain;
+}
+
+.character-label {
+  margin-top: 6px;
+  padding: 2px 6px;
+  background: rgba(0,0,0,0.65);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 600;
+  border-radius: 3px;
+  white-space: nowrap;
+}
+
+.scene-ui-element {
+  position: absolute;
+  z-index: 10;
+  border: 1px solid rgba(102,126,234,0.3);
+  color: #fff;
+  font-size: 12px;
+  max-width: 200px;
+}
+
+/* Empty scene placeholder — shows a film-frame grid */
+.scene-empty-placeholder {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background:
+    linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+.empty-scene-label {
+  padding: 8px 18px;
+  background: rgba(0,0,0,0.5);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 6px;
+  color: rgba(255,255,255,0.35);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+/* No scene at all */
+.no-scene {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255,255,255,0.25);
+}
+
+.no-scene-icon {
+  font-size: 48px;
+  margin-bottom: 12px;
+  opacity: 0.25;
+}
+
+.no-scene p {
+  margin: 0;
+  font-size: 14px;
+}
+
+/* ── Scene badge — minimal bottom-left ── */
+.scene-badge {
+  position: absolute;
+  bottom: 8px;
+  left: 8px;
+  z-index: 18;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 10px;
+  background: rgba(0,0,0,0.65);
+  backdrop-filter: blur(6px);
+  border-radius: 4px;
+  pointer-events: none;
+}
+
+.scene-badge-name {
+  color: rgba(255,255,255,0.85);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.scene-badge-time {
+  color: rgba(255,255,255,0.4);
+  font-size: 10px;
+  font-family: 'JetBrains Mono', 'Consolas', monospace;
+}
+
+/* ── Character placeholder (no image) ── */
+.character-placeholder-preview {
+  width: 80px;
+  height: 120px;
+  background: linear-gradient(135deg, rgba(102,126,234,0.3), rgba(118,75,162,0.3));
+  border: 1px solid rgba(102,126,234,0.4);
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  color: rgba(255,255,255,0.7);
+  text-align: center;
+  padding: 4px;
+}
+
+/* ── Selection info in top bar ── */
+.selection-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: rgba(102,160,255,0.9);
+  font-weight: 600;
+  padding: 2px 8px;
+  background: rgba(102,126,234,0.12);
+  border: 1px solid rgba(102,126,234,0.25);
+  border-radius: 4px;
+}
+
+.deselect-btn {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.08);
+  border: none;
+  border-radius: 3px;
+  color: rgba(255,255,255,0.5);
+  font-size: 10px;
+  cursor: pointer;
+  padding: 0;
+}
+.deselect-btn:hover {
+  background: rgba(255,80,80,0.3);
+  color: #fff;
+}
+
+/* ── Canvas tools — floating on left edge of viewport ── */
+.canvas-tools {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 25;
+  width: 44px;
+  background: rgba(20,20,24,0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px;
+  gap: 2px;
+}
+
+.canvas-tool-btn {
+  width: 36px;
+  height: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: rgba(255,255,255,0.5);
+  cursor: pointer;
+  transition: all 0.15s;
+  padding: 2px 0;
+}
+
+.canvas-tool-btn:hover:not(:disabled) {
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.8);
+}
+
+.canvas-tool-btn.active {
+  background: rgba(102,126,234,0.2);
+  border-color: rgba(102,126,234,0.4);
+  color: #a4b4f5;
+}
+
+.canvas-tool-btn:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.tool-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.tool-name {
+  font-size: 8px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  line-height: 1;
+}
+
+.tool-separator {
+  width: 28px;
+  height: 1px;
+  background: rgba(255,255,255,0.08);
+  margin: 4px 0;
+}
+
+/* ── Canvas cursor modes ── */
+.canvas-frame.tool-select { cursor: default; }
+.canvas-frame.tool-move { cursor: move; }
+.canvas-frame.tool-text { cursor: text; }
+
+/* ── Selectable scene elements ── */
+.scene-element {
+  transition: outline 0.1s, box-shadow 0.1s;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+.scene-element.hovered {
+  outline-color: rgba(102,160,255,0.35);
+}
+
+.scene-element.selected {
+  outline-color: rgba(102,160,255,0.8);
+  box-shadow: 0 0 0 1px rgba(102,160,255,0.3);
+}
+
+/* ── Selection handles (corner resize dots) ── */
+.selection-handles {
+  position: absolute;
+  inset: -4px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.sel-handle {
+  position: absolute;
+  width: 8px;
+  height: 8px;
+  background: #fff;
+  border: 1.5px solid rgba(102,126,234,0.9);
+  border-radius: 2px;
+  pointer-events: auto;
+}
+
+.sel-handle.nw { top: 0; left: 0; cursor: nwse-resize; }
+.sel-handle.ne { top: 0; right: 0; cursor: nesw-resize; }
+.sel-handle.sw { bottom: 0; left: 0; cursor: nesw-resize; }
+.sel-handle.se { bottom: 0; right: 0; cursor: nwse-resize; }
+
+/* end of file */

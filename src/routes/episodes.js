@@ -142,6 +142,132 @@ router.patch(
   asyncHandler(episodeController.updateEpisodeAsset)
 );
 
+// ==================== PLATFORM CONFIGURATION ROUTES ====================
+
+// GET /api/v1/episodes/:id/platform - Get platform configuration
+router.get(
+  '/:id/platform',
+  validateUUIDParam('id'),
+  asyncHandler(async (req, res) => {
+    const { Episode } = require('../models');
+    const episode = await Episode.findByPk(req.params.id, {
+      attributes: ['id', 'platform', 'width', 'height', 'aspect_ratio']
+    });
+    if (!episode) return res.status(404).json({ error: 'Episode not found' });
+    res.json({
+      platform: episode.platform || 'youtube',
+      width: episode.width || 1920,
+      height: episode.height || 1080,
+      aspect_ratio: episode.aspect_ratio || '16:9'
+    });
+  })
+);
+
+// PUT /api/v1/episodes/:id/platform - Update platform configuration
+router.put(
+  '/:id/platform',
+  validateUUIDParam('id'),
+  asyncHandler(async (req, res) => {
+    const { Episode } = require('../models');
+    const episode = await Episode.findByPk(req.params.id);
+    if (!episode) return res.status(404).json({ error: 'Episode not found' });
+    const { platform, width, height, aspect_ratio } = req.body;
+    await episode.update({
+      platform: platform || episode.platform,
+      width: width || episode.width,
+      height: height || episode.height,
+      aspect_ratio: aspect_ratio || episode.aspect_ratio
+    });
+    res.json({
+      platform: episode.platform,
+      width: episode.width,
+      height: episode.height,
+      aspect_ratio: episode.aspect_ratio
+    });
+  })
+);
+
+// ==================== UNIFIED SAVE ENDPOINT ====================
+
+// POST /api/v1/episodes/:id/save - Atomic save for Scene Composer & Timeline Editor
+router.post(
+  '/:id/save',
+  validateUUIDParam('id'),
+  asyncHandler(async (req, res) => {
+    const { Episode, Scene, TimelineData } = require('../models');
+    const { id } = req.params;
+    const { episode: episodeData, platform: platformData, scenes, timeline } = req.body;
+
+    const result = await Episode.sequelize.transaction(async (t) => {
+      // 1. Update episode metadata + platform
+      const episodeRecord = await Episode.findByPk(id, { transaction: t });
+      if (!episodeRecord) throw new Error('Episode not found');
+
+      const episodeUpdate = {};
+      if (episodeData?.title) episodeUpdate.title = episodeData.title;
+      if (platformData?.platform) episodeUpdate.platform = platformData.platform;
+      if (platformData?.width) episodeUpdate.width = platformData.width;
+      if (platformData?.height) episodeUpdate.height = platformData.height;
+      if (platformData?.aspect_ratio) episodeUpdate.aspect_ratio = platformData.aspect_ratio;
+
+      if (Object.keys(episodeUpdate).length > 0) {
+        await episodeRecord.update(episodeUpdate, { transaction: t });
+      }
+
+      // 2. Upsert scenes
+      if (scenes && Array.isArray(scenes)) {
+        // Delete existing scenes for this episode, then bulk create
+        await Scene.destroy({ where: { episode_id: id }, transaction: t, force: true });
+
+        if (scenes.length > 0) {
+          await Scene.bulkCreate(
+            scenes.map((scene, idx) => ({
+              episode_id: id,
+              scene_number: scene.scene_number || idx + 1,
+              title: scene.title || `Scene ${idx + 1}`,
+              duration_seconds: scene.duration_seconds || 5.0,
+              background_url: scene.background_url || null,
+              characters: scene.characters || [],
+              ui_elements: scene.ui_elements || [],
+              dialogue_clips: scene.dialogue_clips || [],
+            })),
+            { transaction: t }
+          );
+        }
+      }
+
+      // 3. Upsert timeline data
+      if (timeline) {
+        let timelineRecord = await TimelineData.findOne({
+          where: { episode_id: id },
+          transaction: t
+        });
+
+        const tlUpdate = {
+          beats: timeline.beats ?? (timelineRecord ? timelineRecord.beats : []),
+          markers: timeline.markers ?? (timelineRecord ? timelineRecord.markers : []),
+          audio_clips: (timeline.audioClips || timeline.audio_clips) ?? (timelineRecord ? timelineRecord.audio_clips : []),
+          character_clips: (timeline.characterClips || timeline.character_clips) ?? (timelineRecord ? timelineRecord.character_clips : []),
+        };
+
+        if (timelineRecord) {
+          await timelineRecord.update(tlUpdate, { transaction: t });
+        } else {
+          await TimelineData.create({ episode_id: id, ...tlUpdate }, { transaction: t });
+        }
+      }
+
+      return { success: true };
+    });
+
+    res.json({
+      success: true,
+      message: 'Saved successfully',
+      timestamp: new Date().toISOString()
+    });
+  })
+);
+
 // ==================== STANDARD EPISODE ROUTES ====================
 router.get('/:id/status', asyncHandler(episodeController.getEpisodeStatus));
 
@@ -204,6 +330,53 @@ router.get(
   '/:episodeId/scenes/stats',
   validateUUIDParam('episodeId'),
   asyncHandler(sceneController.getSceneStats)
+);
+
+// ==========================================
+// SCENE COMPOSER ENDPOINTS
+// ==========================================
+
+// POST /api/v1/episodes/:episodeId/scenes - Create new scene
+router.post(
+  '/:episodeId/scenes',
+  validateUUIDParam('episodeId'),
+  asyncHandler(sceneController.createScene)
+);
+
+// POST /api/v1/scenes/:scene_id/calculate-duration - Auto-calculate scene duration
+router.post(
+  '/scenes/:scene_id/calculate-duration',
+  asyncHandler(sceneController.calculateDuration)
+);
+
+// GET /api/v1/scenes/:scene_id/completeness - Check scene completeness
+router.get(
+  '/scenes/:scene_id/completeness',
+  asyncHandler(sceneController.checkCompleteness)
+);
+
+// POST /api/v1/scenes/:scene_id/assets - Add asset to scene
+router.post(
+  '/scenes/:scene_id/assets',
+  asyncHandler(sceneController.addAssetToScene)
+);
+
+// GET /api/v1/scenes/:scene_id/assets - List scene assets
+router.get(
+  '/scenes/:scene_id/assets',
+  asyncHandler(sceneController.listSceneAssets)
+);
+
+// PUT /api/v1/scenes/:scene_id/assets/:scene_asset_id - Update scene asset
+router.put(
+  '/scenes/:scene_id/assets/:scene_asset_id',
+  asyncHandler(sceneController.updateSceneAsset)
+);
+
+// DELETE /api/v1/scenes/:scene_id/assets/:scene_asset_id - Remove asset from scene
+router.delete(
+  '/scenes/:scene_id/assets/:scene_asset_id',
+  asyncHandler(sceneController.removeAssetFromScene)
 );
 
 /**

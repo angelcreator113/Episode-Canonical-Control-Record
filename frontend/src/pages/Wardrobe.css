@@ -161,3 +161,17 @@
     font-size: 1.5rem;
   }
 }
+
+@media (max-width: 480px) {
+  .wardrobe-unified {
+    padding: 0.75rem;
+  }
+
+  .wardrobe-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .wardrobe-tabs {
+    gap: 0.25rem;
+  }
+}

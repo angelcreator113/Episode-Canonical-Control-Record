@@ -7,7 +7,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { API_URL } from '../config/api';
-import '../styles/ShowManagement.css';
+import './Shows.css';
 
 const ShowManagement = () => {
   const navigate = useNavigate();
@@ -214,110 +214,174 @@ const ShowManagement = () => {
 
   if (authLoading || loading) {
     return (
-      <div style={{ minHeight: '100vh', background: '#f3f4f6', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <div style={{ textAlign: 'center' }}>
-          <div className="spinner" style={{ margin: '0 auto 1rem' }}></div>
-          <p style={{ fontSize: '1.1rem', color: '#6b7280' }}>Loading shows...</p>
+      <div className="shows-page">
+        <div className="shows-container">
+          <div className="loading-state">
+            <div className="loading-spinner"></div>
+            <p className="loading-text">Loading shows...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={{ minHeight: '100vh', background: '#f3f4f6' }}>
-      <div style={{ maxWidth: '1400px', margin: '0 auto', padding: '1.5rem' }}>
+    <div className="shows-page">
+      <div className="shows-container">
         {/* Header */}
-        <div style={{ marginBottom: '1.5rem' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.75rem' }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.25rem' }}>
-                <button 
-                  onClick={() => navigate(-1)} 
-                  style={{ background: '#f3f4f6', border: '1px solid #d1d5db', borderRadius: '6px', padding: '0.5rem 0.75rem', fontSize: '0.875rem', cursor: 'pointer', color: '#374151' }}
-                >
-                  ← Back
-                </button>
-                <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  🎬 Show Management
-                </h1>
-              </div>
-              <p style={{ margin: 0, fontSize: '0.95rem', color: '#6b7280' }}>
-                Create and manage your content shows
-              </p>
-            </div>
-            <button
-              onClick={() => {
-                if (showForm) {
-                  resetForm();
-                } else {
-                  setShowForm(true);
-                }
-              }}
-              style={{
-                padding: '0.75rem 1.5rem',
-                background: '#6b9bd1',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '1rem',
-                fontWeight: '600',
-                cursor: 'pointer',
-                transition: 'all 0.2s'
-              }}
-            >
-              {showForm ? '✕ Cancel' : '+ Create Show'}
-            </button>
-          </div>
-
-          {/* Stats - Subtle text */}
-          {shows.length > 0 && (
-            <div style={{ marginTop: '0.75rem', fontSize: '0.9rem', color: '#6b7280' }}>
-              {shows.filter(s => s.status === 'active').length} active show{shows.filter(s => s.status === 'active').length !== 1 ? 's' : ''}
-              {shows.filter(s => s.status === 'coming_soon').length > 0 && ` · ${shows.filter(s => s.status === 'coming_soon').length} coming soon`}
-            </div>
-          )}
+        <div className="shows-header">
+          <h1 className="shows-title">All Shows</h1>
+          <button
+            onClick={() => navigate('/shows/create')}
+            className="btn-create-show"
+          >
+            + Create Show
+          </button>
         </div>
 
         {/* Error Message */}
         {error && (
-          <div style={{
-            marginBottom: '1.5rem',
-            padding: '0.875rem 1rem',
-            background: 'linear-gradient(135deg, #fee2e2 0%, #fecaca 100%)',
-            border: '2px solid #ef4444',
-            borderRadius: '8px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            color: '#991b1b',
-            fontSize: '0.95rem',
-            fontWeight: '600'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.25rem' }}>⚠️</span>
+          <div className="error-banner">
+            <div className="error-content">
+              <span className="error-icon">⚠️</span>
               <span>{error}</span>
             </div>
             <button 
               onClick={() => setError(null)}
-              style={{
-                background: 'none',
-                border: 'none',
-                color: '#991b1b',
-                fontSize: '1.25rem',
-                cursor: 'pointer',
-                padding: '0.25rem',
-                lineHeight: 1
-              }}
+              className="error-close"
             >
               ✕
             </button>
           </div>
         )}
 
+        {/* Summary Stats */}
+        {shows.length > 0 && (
+          <div className="shows-stats">
+            <div className="stat-card">
+              <div className="stat-label">Total Shows</div>
+              <div className="stat-value">{shows.length}</div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Active</div>
+              <div className="stat-value">
+                {shows.filter(s => s.status === 'active').length}
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-label">Coming Soon</div>
+              <div className="stat-value">
+                {shows.filter(s => s.status === 'coming_soon').length}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Shows Grid */}
+        {!loading && shows.length === 0 && (
+          <div className="empty-shows">
+            <div className="empty-icon">📺</div>
+            <h3 className="empty-title">No shows yet</h3>
+            <p className="empty-message">
+              Create your first show to get started
+            </p>
+            <button
+              onClick={() => navigate('/shows/create')}
+              className="btn-create-show"
+            >
+              + Create First Show
+            </button>
+          </div>
+        )}
+
+        {!loading && shows.length > 0 && (
+          <div className="shows-grid">
+            {shows.map((show) => (
+              <div key={show.id} className="show-card">
+                {/* Poster (3:4 ratio) */}
+                <div className="show-poster">
+                  {show.coverImageUrl ? (
+                    <img
+                      src={show.coverImageUrl}
+                      alt={show.name}
+                      className="poster-image"
+                    />
+                  ) : (
+                    <div 
+                      className="poster-placeholder"
+                      style={{ background: show.color || '#6366f1' }}
+                    >
+                      <span className="poster-icon">
+                        {show.icon || '📺'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="show-content">
+                  {/* Top Section */}
+                  <div className="show-header-section">
+                    <div className="show-info">
+                      <h3 className="show-name">{show.name}</h3>
+                      
+                      <span className={`status-badge status-${show.status || 'active'}`}>
+                        {show.status === 'coming_soon' ? 'Coming Soon' : 
+                         show.status === 'active' ? 'Active' : 
+                         show.status || 'Active'}
+                      </span>
+                    </div>
+
+                    {show.description && (
+                      <p className="show-description">{show.description}</p>
+                    )}
+
+                    <div className="show-meta">
+                      <span className="meta-item">
+                        {show.episode_count || 0} Episodes
+                      </span>
+                      <span className="meta-separator">·</span>
+                      <span className="meta-item">
+                        Last updated 3d ago
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="show-actions">
+                    <button
+                      onClick={() => navigate(`/shows/${show.id}`)}
+                      className="action-btn action-primary"
+                    >
+                      Open
+                    </button>
+                    <button
+                      onClick={() => navigate(`/shows/${show.id}/edit`)}
+                      className="action-btn action-secondary"
+                    >
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (window.confirm(`Delete "${show.name}"? This cannot be undone.`)) {
+                          handleDelete(show.id);
+                        }
+                      }}
+                      className="action-btn action-danger"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Show Form */}
         {showForm && (
-          <div ref={formRef} style={{ background: 'white', padding: '1.5rem', borderRadius: '12px', boxShadow: '0 2px 8px rgba(0,0,0,0.08)', marginBottom: '1.5rem' }}>
-            <h2 style={{ margin: '0 0 1.25rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937' }}>
+          <div ref={formRef} className="show-form-container">
+            <h2 className="form-title">
               {editingShow ? '✏️ Edit Show' : '🆕 Create New Show'}
             </h2>
             <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
@@ -531,248 +595,6 @@ const ShowManagement = () => {
             </form>
           </div>
         )}
-
-        {/* Shows List */}
-        <div>
-          <h2 style={{ margin: '0 0 1rem 0', fontSize: '1.25rem', fontWeight: '700', color: '#1f2937', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            📚 All Shows
-            <span style={{ fontSize: '0.875rem', fontWeight: '500', color: '#6b7280', marginLeft: '0.5rem' }}>
-              ({shows.length})
-            </span>
-          </h2>
-          
-          {!loading && shows.length === 0 && (
-            <div style={{
-              background: 'white',
-              borderRadius: '12px',
-              padding: '3rem',
-              textAlign: 'center',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.08)'
-            }}>
-              <div style={{ fontSize: '5rem', marginBottom: '1rem' }}>📺</div>
-              <h3 style={{ margin: '0 0 0.5rem 0', fontSize: '1.25rem', fontWeight: '600', color: '#1f2937' }}>
-                No shows yet
-              </h3>
-              <p style={{ margin: '0 0 1.5rem 0', fontSize: '1rem', color: '#6b7280' }}>
-                Create your first show to get started
-              </p>
-              <button
-                onClick={() => setShowForm(true)}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  background: '#6b9bd1',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '8px',
-                  fontSize: '1rem',
-                  fontWeight: '600',
-                  cursor: 'pointer'
-                }}
-              >
-                + Create First Show
-              </button>
-            </div>
-          )}
-
-          {!loading && shows.length > 0 && (
-            <div style={{ 
-              display: 'grid', 
-              gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', 
-              gap: '1.5rem',
-              maxWidth: '1000px',
-              margin: '0 auto',
-              justifyContent: 'center'
-            }}>
-              {shows.map((show) => (
-                <div
-                  key={show.id}
-                  style={{
-                    background: 'white',
-                    borderRadius: '12px',
-                    border: '1px solid #e5e7eb',
-                    boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-                    transition: 'all 0.2s',
-                    overflow: 'hidden',
-                    position: 'relative',
-                    display: 'flex',
-                    flexDirection: 'column'
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)';
-                    e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.15)';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)';
-                    e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.08)';
-                  }}
-                >
-                  {/* Cover Image - Hub style */}
-                  <div style={{ 
-                    width: '100%', 
-                    height: '160px',
-                    position: 'relative',
-                    background: show.coverImageUrl 
-                      ? `url(${show.coverImageUrl}) center/cover` 
-                      : show.color || '#e5e7eb',
-                    overflow: 'hidden'
-                  }}>
-                    {!show.coverImageUrl && (
-                      <div style={{ 
-                        position: 'absolute', 
-                        top: '50%', 
-                        left: '50%', 
-                        transform: 'translate(-50%, -50%)',
-                        fontSize: '4rem',
-                        opacity: 0.4
-                      }}>
-                        {show.icon || '📺'}
-                      </div>
-                    )}
-                    
-                    {/* Status Badge */}
-                    <div style={{
-                      position: 'absolute',
-                      top: '0.75rem',
-                      right: '0.75rem',
-                      padding: '0.375rem 0.75rem',
-                      borderRadius: '6px',
-                      fontSize: '0.7rem',
-                      fontWeight: '700',
-                      background: show.status === 'active' ? 'rgba(127, 176, 105, 0.9)' :
-                                 show.status === 'coming_soon' ? 'rgba(230, 176, 118, 0.9)' :
-                                 'rgba(139, 156, 181, 0.9)',
-                      color: 'white',
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      backdropFilter: 'blur(4px)',
-                      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}>
-                      {show.status === 'coming_soon' ? 'Coming Soon' : show.status}
-                    </div>
-                  </div>
-
-                  {/* Show Info - Hub layout */}
-                  <div style={{ padding: '1.25rem', flex: 1, display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {/* Title */}
-                    <h3 style={{ 
-                      margin: 0, 
-                      fontSize: '1.1rem', 
-                      fontWeight: '700', 
-                      color: '#1f2937',
-                      lineHeight: '1.3'
-                    }}>
-                      {show.name}
-                    </h3>
-                    
-                    {/* Description */}
-                    {show.description && (
-                      <p style={{
-                        margin: 0,
-                        fontSize: '0.85rem',
-                        color: '#6b7280',
-                        lineHeight: '1.5',
-                        display: '-webkit-box',
-                        WebkitLineClamp: 2,
-                        WebkitBoxOrient: 'vertical',
-                        overflow: 'hidden',
-                        flex: 1
-                      }}>
-                        {show.description}
-                      </p>
-                    )}
-                    
-                    {/* Action Hierarchy - One primary, two secondary */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: 'auto' }}>
-                      {/* Primary Action */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          navigate(`/episodes?show=${show.id}`);
-                        }}
-                        style={{
-                          width: '100%',
-                          padding: '0.65rem 1rem',
-                          background: '#6b9bd1',
-                          color: 'white',
-                          border: 'none',
-                          borderRadius: '8px',
-                          fontSize: '0.9rem',
-                          fontWeight: '600',
-                          cursor: 'pointer',
-                          transition: 'background 0.2s'
-                        }}
-                        onMouseEnter={(e) => e.currentTarget.style.background = '#5b8fc7'}
-                        onMouseLeave={(e) => e.currentTarget.style.background = '#6b9bd1'}
-                      >
-                        Open Show
-                      </button>
-                      {/* Secondary Actions */}
-                      <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setEditingShow(show);
-                            setFormData(show);
-                            setCoverImage(null);
-                            setShowForm(true);
-                            setTimeout(() => {
-                              formRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-                            }, 100);
-                          }}
-                          style={{
-                            flex: 1,
-                            padding: '0.5rem',
-                            background: 'white',
-                            color: '#374151',
-                            border: '2px solid #e5e7eb',
-                            borderRadius: '6px',
-                            fontSize: '0.85rem',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            transition: 'border-color 0.2s'
-                          }}
-                          onMouseEnter={(e) => e.currentTarget.style.borderColor = '#9ca3af'}
-                          onMouseLeave={(e) => e.currentTarget.style.borderColor = '#e5e7eb'}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (window.confirm(`Delete "${show.name}"? This cannot be undone.`)) {
-                              handleDelete(show.id);
-                            }
-                          }}
-                          style={{
-                            padding: '0.5rem 0.75rem',
-                            background: 'white',
-                            color: '#d97b7b',
-                            border: '2px solid #f5dada',
-                            borderRadius: '6px',
-                            fontSize: '0.85rem',
-                            fontWeight: '600',
-                            cursor: 'pointer',
-                            transition: 'all 0.2s'
-                          }}
-                          onMouseEnter={(e) => {
-                            e.currentTarget.style.background = '#fef5f5';
-                            e.currentTarget.style.borderColor = '#ead5d5';
-                          }}
-                          onMouseLeave={(e) => {
-                            e.currentTarget.style.background = 'white';
-                            e.currentTarget.style.borderColor = '#f5dada';
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
       </div>
     </div>
   );

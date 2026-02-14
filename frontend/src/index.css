@@ -4,6 +4,9 @@
 /* Import Design Tokens */
 @import './styles/design-tokens.css';
 
+/* Import Responsive Overrides */
+@import './styles/responsive.css';
+
 /* Custom CSS */
 
 :root {

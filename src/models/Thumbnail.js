@@ -16,7 +16,7 @@ module.exports = (sequelize) => {
         allowNull: false,
       },
       episodeId: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.UUID,
         allowNull: false,
         references: {
           model: 'episodes',

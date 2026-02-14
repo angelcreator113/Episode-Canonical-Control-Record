@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import authService from './services/authService';
@@ -10,13 +10,10 @@ import { SearchFiltersProvider } from './contexts/SearchFiltersContext';
 // Pages
 import Login from './pages/Login';
 import Home from './pages/Home';
-import Episodes from './pages/Episodes';
 import EpisodeDetail from './pages/EpisodeDetail';
 import CreateEpisode from './pages/CreateEpisode';
-import EditEpisode from './pages/EditEpisode';
+import IconCueTimeline from './pages/IconCueTimeline';
 import SearchResults from './pages/SearchResults';
-import AssetManager from './pages/AssetManager';
-// import CompositionManagement from './pages/CompositionManagement'; // Not needed for episode creation
 import ThumbnailGallery from './pages/ThumbnailGallery';
 import CompositionLibrary from './pages/CompositionLibrary';
 import CompositionDetail from './pages/CompositionDetail';
@@ -27,7 +24,10 @@ import TemplateManagement from './pages/TemplateManagement';
 import AuditLogViewer from './pages/AuditLogViewer';
 import AuditLog from './pages/AuditLog';
 import ShowManagement from './pages/ShowManagement';
+import ShowDetail from './pages/ShowDetail';
 import ShowForm from './components/ShowForm';
+import CreateShow from './pages/CreateShow';
+import EditShow from './pages/EditShow';
 import Wardrobe from './pages/Wardrobe';
 import WardrobeBrowser from './pages/WardrobeBrowser';
 import WardrobeAnalytics from './pages/WardrobeAnalytics';
@@ -38,13 +38,16 @@ import TemplateStudio from './pages/TemplateStudio';
 import TemplateDesigner from './pages/TemplateDesigner';
 import DiagnosticPage from './pages/DiagnosticPage';
 import DecisionAnalyticsDashboard from './pages/DecisionAnalyticsDashboard';
+import TimelineEditor from './pages/TimelineEditor';
+import ExportPage from './pages/ExportPage';
 
 // Components
-import Navigation from './components/Navigation';
+import Sidebar from './components/layout/Sidebar';
 import Header from './components/Header';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastProvider from './components/ToastContainer';
-// import AssetLibraryTest from './components/AssetLibraryTest'; // Removed - using AssetLibrary
+import SceneComposerFull from './components/SceneComposer/SceneComposerFull';
+import AnimaticPreview from './components/Episodes/SceneComposer/AnimaticPreview';
 
 import './App.css';
 
@@ -68,10 +71,26 @@ function ProtectedRoute({ children }) {
  */
 function AppContent() {
   const { isAuthenticated, loading } = useAuth();
-  const [navOpen, setNavOpen] = React.useState(false);
+  const [currentEpisodeId, setCurrentEpisodeId] = React.useState(null);
   const navigate = useNavigate();
   const location = useLocation();
   const isNavigatingRef = React.useRef(false);
+
+  // Extract episode ID from URL if present
+  React.useEffect(() => {
+    const match = location.pathname.match(/\/episodes\/([^/]+)/);
+    if (match && match[1]) {
+      setCurrentEpisodeId(match[1]);
+    }
+  }, [location.pathname]);
+
+  // Mobile sidebar drawer state
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  // Close sidebar on route change (mobile)
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
 
   // Debug logging - disabled to reduce console noise
   // React.useEffect(() => {
@@ -99,17 +118,7 @@ function AppContent() {
     }
   }, [isAuthenticated, loading, location.pathname, navigate]);
 
-  // Close nav when window resizes to desktop
-  React.useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth > 768) {
-        setNavOpen(false);
-      }
-    };
 
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   if (loading) {
     return (
@@ -137,54 +146,131 @@ function AppContent() {
     );
   }
 
+  // Check if current route is Timeline Editor, Scene Composer, or Export (full-screen modes)
+  const isTimelineEditor = location.pathname.includes('/timeline');
+  const isSceneComposer = location.pathname.includes('/scene-composer');
+  const isExportPage = location.pathname.includes('/export');
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage;
+
   return (
     <div className="app-layout">
-      <Navigation isOpen={navOpen} onClose={() => setNavOpen(false)} />
+      {/* Sidebar Navigation (hidden on full-screen modes) */}
+      {!isFullScreen && (
+        <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
+      )}
       
-      <Header onMenuClick={() => setNavOpen(!navOpen)} />
-      
-      <main className="app-content">
-        <Routes>
-          {/* Core Pages */}
+      <div className={`app-main-wrapper ${isFullScreen ? 'full-screen' : ''}`}>
+        {!isFullScreen && (
+          <Header
+            navOpen={sidebarOpen}
+            onNavToggle={() => setSidebarOpen(prev => !prev)}
+          />
+        )}
+        
+        <main className="app-content">
+          <Routes>
+          {/* ===== DASHBOARD ===== */}
           <Route path="/" element={<Home />} />
-          <Route path="/episodes" element={<Episodes />} />
-          <Route path="/episodes/create" element={<CreateEpisode />} />
-          <Route path="/episodes/:episodeId/edit" element={<EditEpisode />} />
           
-          {/* NEW ROUTE STRUCTURE - Each page has ONE job */}
-          <Route path="/episodes/:episodeId" element={<EpisodeDetail />} /> {/* Dashboard */}
+          {/* ===== PRE-PRODUCTION ROUTES ===== */}
           
-          <Route path="/assets" element={<AssetManager />} />
+          {/* Episodes */}
 
-          {/* Additional Pages */}
-          <Route path="/search" element={<SearchResults />} />
-          {/* <Route path="/compositions/:compositionId" element={<CompositionManagement />} /> */}
-          <Route path="/library" element={<CompositionLibrary />} />
-          <Route path="/compositions/:id" element={<CompositionDetail />} />
-          <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
+          <Route path="/episodes/create" element={<CreateEpisode />} />
+          <Route path="/episodes/:episodeId/edit" element={<CreateEpisode />} />
+          <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
+          
+          {/* Shows */}
+          <Route path="/shows" element={<ShowManagement />} />
+          <Route path="/shows/create" element={<CreateShow />} />
+          <Route path="/shows/:id" element={<ShowDetail />} />
+          <Route path="/shows/:id/edit" element={<EditShow />} />
+          {/* Scene Composer */}
+          <Route path="/episodes/:episodeId/scene-composer" element={<SceneComposerFull />} />
+          
+          {/* Scene Library */}
           <Route path="/scene-library" element={<SceneLibrary />} />
           <Route path="/scene-library/:sceneId" element={<SceneDetail />} />
-          <Route path="/shows" element={<ShowManagement />} />
-          <Route path="/shows/create" element={<ShowForm />} />
-          <Route path="/shows/:id/edit" element={<ShowForm />} />
+          
+          {/* ===== ANIMATIC SYSTEM ROUTES ===== */}
+          
+          {/* Beat Generation (Coming Soon) */}
+          <Route path="/episodes/:episodeId/beats" element={
+            <div className="page-wrapper">
+              <h1>Beat Generation</h1>
+              <p>Coming soon - Beat auto-generation interface</p>
+            </div>
+          } />
+          
+          {/* Timeline Editor */}
+          <Route path="/episodes/:episodeId/timeline" element={<TimelineEditor />} />
+          <Route path="/episodes/:episodeId/icon-cues" element={<IconCueTimeline />} />
+          
+          {/* Animatic Preview */}
+          <Route path="/episodes/:episodeId/animatic-preview" element={<AnimaticPreview />} />
+          
+          {/* ===== PRODUCTION ROUTES ===== */}
+          
+          {/* Wardrobe */}
           <Route path="/wardrobe" element={<Wardrobe />} />
           <Route path="/wardrobe/analytics" element={<WardrobeAnalytics />} />
           <Route path="/wardrobe/outfits" element={<OutfitSets />} />
           <Route path="/wardrobe-library" element={<WardrobeBrowser mode="library" />} />
           <Route path="/wardrobe-library/upload" element={<WardrobeLibraryUpload />} />
           <Route path="/wardrobe-library/:id" element={<WardrobeLibraryDetail />} />
+          
+          {/* Thumbnail Composer / Template Studio */}
+          <Route path="/episodes/:episodeId/composer" element={<TemplateStudio />} />
           <Route path="/template-studio" element={<TemplateStudio />} />
           <Route path="/template-studio/designer" element={<TemplateDesigner />} />
           <Route path="/template-studio/designer/:templateId" element={<TemplateDesigner />} />
-          <Route path="/admin" element={<AdminPanel />} />
+          
+          {/* Compositions */}
+          <Route path="/library" element={<CompositionLibrary />} />
+          <Route path="/compositions/:id" element={<CompositionDetail />} />
+          
+          {/* Templates */}
           <Route path="/admin/templates" element={<TemplateManagement />} />
-          <Route path="/admin/audit" element={<AuditLog />} />
-          <Route path="/audit-log" element={<AuditLogViewer />} />
-          <Route path="/diagnostics" element={<DiagnosticPage />} />
+          
+          {/* ===== POST-PRODUCTION ROUTES ===== */}
+          
+          {/* Thumbnail Gallery */}
+          <Route path="/thumbnails/:episodeId" element={<ThumbnailGallery />} />
+          
+          {/* Export */}
+          <Route path="/episodes/:episodeId/export" element={<ExportPage />} />
+          
+          {/* Review (Coming Soon) */}
+          <Route path="/episodes/:episodeId/review" element={
+            <div className="page-wrapper">
+              <h1>Review & Approve</h1>
+              <p>Coming soon - Review workflow</p>
+            </div>
+          } />
+          
+          {/* ===== MANAGEMENT ROUTES ===== */}
+          
+          {/* Search */}
+          <Route path="/search" element={<SearchResults />} />
+          
+          {/* Analytics */}
           <Route path="/analytics/decisions" element={<DecisionAnalyticsDashboard />} />
           
-          {/* Test Routes */}
-          {/* <Route path="/test/assets" element={<AssetLibraryTest />} /> */}
+          {/* Admin */}
+          <Route path="/admin" element={<AdminPanel />} />
+          <Route path="/admin/audit" element={<AuditLog />} />
+          <Route path="/audit-log" element={<AuditLogViewer />} />
+          
+          {/* Diagnostics */}
+          <Route path="/diagnostics" element={<DiagnosticPage />} />
+          
+          {/* Settings (Coming Soon) */}
+          <Route path="/settings" element={
+            <div className="page-wrapper">
+              <h1>Settings</h1>
+              <p>Coming soon - App settings</p>
+            </div>
+          } />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />
@@ -194,9 +280,13 @@ function AppContent() {
         </Routes>
       </main>
 
-      <footer className="app-footer">
-        <p>&copy; 2026 Episode Control System. Built with React + Vite</p>
-      </footer>
+      {/* Hide footer on editor routes for immersive experience */}
+      {!isFullScreen && (
+        <footer className="app-footer">
+          <p>&copy; 2026 Episode Control System. Built with React + Vite</p>
+        </footer>
+      )}
+      </div>
     </div>
   );
 }

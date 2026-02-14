@@ -6,9 +6,13 @@
 
 require('dotenv').config();
 
+const http = require('http');
 const app = require('./app');
 const db = require('./models');
 const sequelize = db.sequelize;
+const { initializeSocket } = require('./sockets');
+const { testRedisConnection, closeRedis } = require('./config/redis');
+const { closeQueue } = require('./queues/videoQueue');
 
 const PORT = process.env.PORT || 3002;
 const HOST = process.env.HOST || '0.0.0.0';
@@ -39,6 +43,16 @@ async function gracefulShutdown(signal) {
       }
 
       try {
+        // Close export queue
+        console.log('🔌 Closing export queue...');
+        await closeQueue();
+        console.log('✓ Export queue closed');
+
+        // Close Redis connection
+        console.log('🔌 Closing Redis connection...');
+        await closeRedis();
+        console.log('✓ Redis connection closed');
+
         // Close database connections
         console.log('🔌 Closing database connections...');
         if (sequelize && typeof sequelize.close === 'function') {
@@ -83,6 +97,16 @@ process.on('uncaughtException', (error) => {
 });
 
 process.on('unhandledRejection', (reason, promise) => {
+  // Suppress Redis ECONNREFUSED rejections — expected when Redis is unavailable
+  const msg = reason?.message || String(reason);
+  if (msg.includes('ECONNREFUSED') && msg.includes('6379')) {
+    // Silently ignore — Redis unavailability is already logged by redis.js / videoQueue.js
+    return;
+  }
+  if (msg.includes('stopped reconnecting')) {
+    return;
+  }
+
   console.error('❌ UNHANDLED REJECTION:');
   console.error('Reason:', reason);
   console.error('Promise:', promise);
@@ -123,13 +147,32 @@ async function startServer() {
       );
     }
 
+    // Test Redis connection (non-blocking)
+    console.log('🔌 Testing Redis connection...');
+    const redisAvailable = await testRedisConnection();
+    if (!redisAvailable) {
+      console.warn('⚠️  Redis not available - export queue will not function');
+      console.warn('   Install Redis or start Docker: docker run -d -p 6379:6379 redis:alpine');
+    }
+
+    // Create HTTP server (needed for Socket.io)
+    const httpServer = http.createServer(app);
+
+    // Initialize Socket.io
+    console.log('🔌 Initializing Socket.io...');
+    initializeSocket(httpServer);
+
     // Start HTTP server
-    server = app.listen(PORT, HOST, () => {
+    server = httpServer;
+    server.listen(PORT, HOST, () => {
       console.log('\n🚀 Episode Metadata API Server Started');
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log(`✓ Server:      http://${HOST}:${PORT}`);
       console.log(`✓ Environment: ${process.env.NODE_ENV || 'development'}`);
       console.log(`✓ API Version: ${process.env.API_VERSION || 'v1'}`);
+      console.log(`✓ Socket.io:   enabled`);
+      console.log(`✓ Redis:       ${redisAvailable ? 'connected' : '⚠️  unavailable'}`);
+      console.log(`✓ Export Queue: ${redisAvailable ? 'ready' : '⚠️  degraded'}`);
       console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
       console.log('🔗 Ready to accept requests\n');
     });

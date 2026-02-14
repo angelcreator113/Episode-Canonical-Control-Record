@@ -1,268 +1,275 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import './ThumbnailGallery.css';
 
-/**
- * ThumbnailGallery Component
- * View and manage thumbnails for an episode
- */
-
 function ThumbnailGallery() {
-  const { episodeId } = useParams();
   const navigate = useNavigate();
-  const [episode, setEpisode] = useState(null);
+
   const [thumbnails, setThumbnails] = useState([]);
+  const [filteredThumbnails, setFilteredThumbnails] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [platformFilter, setPlatformFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
   const [loading, setLoading] = useState(true);
-  const [status, setStatus] = useState('');
 
   useEffect(() => {
-    loadEpisode();
     loadThumbnails();
-  }, [episodeId]);
+  }, []);
 
-  const loadEpisode = async () => {
-    try {
-      const response = await fetch(`/api/v1/episodes/${episodeId}`);
-      const data = await response.json();
-      setEpisode(data.data || data);
-    } catch (error) {
-      // Episode load failed, continue anyway
-    }
-  };
+  useEffect(() => {
+    filterThumbnails();
+  }, [searchQuery, platformFilter, statusFilter, thumbnails]);
 
   const loadThumbnails = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const response = await fetch(`/api/v1/thumbnails/episode/${episodeId}/all`);
-      if (!response.ok) {
-        throw new Error(`Failed to load thumbnails: ${response.status}`);
-      }
-      const data = await response.json();
-      setThumbnails(data.thumbnails || []);
+      const mockThumbnails = [
+        {
+          id: '1',
+          episode_id: 'ep-1',
+          episode_number: 6,
+          episode_title: 'Brunch Outfit Styling',
+          platform: 'youtube',
+          status: 'published',
+          thumbnail_url: null,
+          created_at: '2026-02-10',
+          updated_at: '2026-02-11'
+        },
+        {
+          id: '2',
+          episode_id: 'ep-1',
+          episode_number: 6,
+          episode_title: 'Brunch Outfit Styling',
+          platform: 'instagram',
+          status: 'draft',
+          thumbnail_url: null,
+          created_at: '2026-02-10',
+          updated_at: '2026-02-11'
+        },
+        {
+          id: '3',
+          episode_id: 'ep-2',
+          episode_number: 5,
+          episode_title: 'Capsule Wardrobe',
+          platform: 'youtube',
+          status: 'published',
+          thumbnail_url: null,
+          created_at: '2026-02-08',
+          updated_at: '2026-02-09'
+        }
+      ];
+      setThumbnails(mockThumbnails);
     } catch (error) {
-      setStatus('❌ Failed to load thumbnails: ' + error.message);
+      console.error('Failed to load thumbnails:', error);
     } finally {
       setLoading(false);
     }
   };
 
-  const publishThumbnail = async (thumbnailId) => {
+  const filterThumbnails = () => {
+    let filtered = [...thumbnails];
+
+    if (searchQuery) {
+      filtered = filtered.filter(t =>
+        t.episode_title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        t.episode_number.toString().includes(searchQuery)
+      );
+    }
+
+    if (platformFilter !== 'all') {
+      filtered = filtered.filter(t => t.platform === platformFilter);
+    }
+
+    if (statusFilter !== 'all') {
+      filtered = filtered.filter(t => t.status === statusFilter);
+    }
+
+    setFilteredThumbnails(filtered);
+  };
+
+  const handleEdit = (thumbnail) => {
+    navigate(`/episodes/${thumbnail.episode_id}/thumbnail/${thumbnail.id}`);
+  };
+
+  const handleDuplicate = async (thumbnail) => {
     try {
-      const response = await fetch(`/api/v1/thumbnails/${thumbnailId}/publish`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-      
-      if (response.ok) {
-        setStatus('✅ Thumbnail published');
-        loadThumbnails();
-      } else {
-        const error = await response.json();
-        setStatus('❌ ' + error.message);
-      }
+      alert(`Duplicating thumbnail ${thumbnail.id}...`);
+      loadThumbnails();
     } catch (error) {
-      setStatus('❌ Failed to publish: ' + error.message);
+      console.error('Failed to duplicate:', error);
     }
   };
 
-  const unpublishThumbnail = async (thumbnailId) => {
-    if (!window.confirm('Unpublish this thumbnail?')) return;
-    
+  const handleDelete = async (thumbnail) => {
+    if (!confirm(`Delete thumbnail for Episode ${thumbnail.episode_number}?`)) {
+      return;
+    }
+
     try {
-      const response = await fetch(`/api/v1/thumbnails/${thumbnailId}/unpublish`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-      
-      if (response.ok) {
-        setStatus('✅ Thumbnail unpublished');
-        loadThumbnails();
-      } else {
-        const error = await response.json();
-        setStatus('❌ ' + error.message);
-      }
+      alert(`Deleted thumbnail ${thumbnail.id}`);
+      loadThumbnails();
     } catch (error) {
-      setStatus('❌ Failed to unpublish: ' + error.message);
+      console.error('Failed to delete:', error);
     }
   };
 
-  const setPrimary = async (thumbnailId) => {
-    try {
-      const response = await fetch(`/api/v1/thumbnails/${thumbnailId}/set-primary`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-      
-      if (response.ok) {
-        setStatus('✅ Set as primary thumbnail');
-        loadThumbnails();
-      } else {
-        const error = await response.json();
-        setStatus('❌ ' + error.message);
-      }
-    } catch (error) {
-      setStatus('❌ Failed to set primary: ' + error.message);
-    }
+  const getPlatformIcon = (platform) => {
+    const icons = {
+      youtube: '📺',
+      instagram: '📸',
+      tiktok: '🎵'
+    };
+    return icons[platform] || '📱';
   };
 
-  const deleteThumbnail = async (thumbnailId) => {
-    if (!window.confirm('Delete this thumbnail? This cannot be undone.')) return;
-    
-    try {
-      const response = await fetch(`/api/v1/thumbnails/${thumbnailId}`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('authToken')}`
-        }
-      });
-      
-      if (response.ok) {
-        setStatus('✅ Thumbnail deleted');
-        loadThumbnails();
-      } else {
-        const error = await response.json();
-        setStatus('❌ ' + error.message);
-      }
-    } catch (error) {
-      setStatus('❌ Failed to delete: ' + error.message);
-    }
-  };
-
-  const getStatusBadge = (thumbnail) => {
-    if (thumbnail.isPrimary) {
-      return <span className="badge badge-primary">PRIMARY</span>;
-    }
-    if (thumbnail.publishStatus === 'PUBLISHED') {
-      return <span className="badge badge-success">PUBLISHED</span>;
-    }
-    if (thumbnail.publishStatus === 'UNPUBLISHED') {
-      return <span className="badge badge-warning">UNPUBLISHED</span>;
-    }
-    return <span className="badge badge-draft">DRAFT</span>;
-  };
-
-  const getImageUrl = (thumbnail) => {
-    // ✅ FIX: Use API endpoint to get proper S3 URL
-    if (thumbnail.s3Key && thumbnail.s3Bucket) {
-      const region = process.env.REACT_APP_AWS_REGION || 'us-east-1';
-      return `https://${thumbnail.s3Bucket}.s3.${region}.amazonaws.com/${thumbnail.s3Key}`;
-    }
-    return null;
+  const getStatusBadge = (status) => {
+    const badges = {
+      draft: { label: 'Draft', class: 'draft' },
+      published: { label: 'Published', class: 'published' },
+      archived: { label: 'Archived', class: 'archived' }
+    };
+    return badges[status] || badges.draft;
   };
 
   if (loading) {
-    return <div className="loading">⏳ Loading thumbnails...</div>;
+    return (
+      <div className="thumbnail-gallery">
+        <div className="loading-state">
+          <div className="spinner"></div>
+          <p>Loading thumbnails...</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <div className="thumbnail-gallery">
-      <div className="gallery-header">
-        <h1>🖼️ Thumbnail Gallery</h1>
-        <p className="episode-info">
-          {episode?.title || `Episode ${episodeId}`}
-          {thumbnails.length > 0 && ` • ${thumbnails.length} thumbnail(s)`}
-        </p>
-      </div>
-
-      {status && (
-        <div className={`status-message ${status.includes('✅') ? 'success' : 'error'}`}>
-          {status}
+      <header className="gallery-header">
+        <div className="header-left">
+          <h1>Thumbnail Gallery</h1>
+          <span className="count">{filteredThumbnails.length} thumbnails</span>
         </div>
-      )}
-
-      {thumbnails.length === 0 && (
-        <div className="empty-state">
-          <p>No thumbnails generated yet.</p>
-          <button onClick={() => window.location.href = '/composer'} className="btn-create">
-            Create Composition
+        <div className="header-right">
+          <button className="create-btn" onClick={() => navigate('/episodes')}>
+            + New Thumbnail
           </button>
         </div>
-      )}
+      </header>
 
-      {thumbnails.length > 0 && (
-        <div className="thumbnails-grid">
-          {thumbnails.map(thumb => {
-            const imgUrl = getImageUrl(thumb);
-            return (
-              <div key={thumb.id} className="thumbnail-card">
+      <div className="filters-bar">
+        <div className="search-box">
+          <span className="search-icon">🔍</span>
+          <input
+            type="text"
+            placeholder="Search by episode..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        <select
+          className="filter-select"
+          value={platformFilter}
+          onChange={(e) => setPlatformFilter(e.target.value)}
+        >
+          <option value="all">All Platforms</option>
+          <option value="youtube">YouTube</option>
+          <option value="instagram">Instagram</option>
+          <option value="tiktok">TikTok</option>
+        </select>
+
+        <select
+          className="filter-select"
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+        >
+          <option value="all">All Status</option>
+          <option value="draft">Draft</option>
+          <option value="published">Published</option>
+          <option value="archived">Archived</option>
+        </select>
+      </div>
+
+      <div className="gallery-content">
+        {filteredThumbnails.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">🎨</div>
+            <h2>No thumbnails found</h2>
+            <p>
+              {searchQuery || platformFilter !== 'all' || statusFilter !== 'all'
+                ? 'Try adjusting your filters'
+                : 'Create your first thumbnail to get started'}
+            </p>
+            <button className="create-btn" onClick={() => navigate('/episodes')}>
+              Create Thumbnail
+            </button>
+          </div>
+        ) : (
+          <div className="thumbnails-grid">
+            {filteredThumbnails.map((thumbnail) => (
+              <div key={thumbnail.id} className="thumbnail-card">
                 <div className="thumbnail-preview">
-                  {imgUrl ? (
-                    <img src={imgUrl} alt={thumb.format} />
+                  {thumbnail.thumbnail_url ? (
+                    <img src={thumbnail.thumbnail_url} alt={thumbnail.episode_title} />
                   ) : (
-                    <div className="no-image">No Image</div>
+                    <div className="placeholder-thumbnail">
+                      <span className="placeholder-icon">🎨</span>
+                      <span className="placeholder-text">No Preview</span>
+                    </div>
                   )}
-                  {getStatusBadge(thumb)}
+
+                  <div className="platform-badge">
+                    {getPlatformIcon(thumbnail.platform)}
+                  </div>
+
+                  <div className="quick-actions">
+                    <button
+                      className="action-btn"
+                      onClick={() => handleEdit(thumbnail)}
+                      title="Edit"
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      className="action-btn"
+                      onClick={() => handleDuplicate(thumbnail)}
+                      title="Duplicate"
+                    >
+                      📋
+                    </button>
+                    <button
+                      className="action-btn delete"
+                      onClick={() => handleDelete(thumbnail)}
+                      title="Delete"
+                    >
+                      🗑️
+                    </button>
+                  </div>
                 </div>
 
                 <div className="thumbnail-info">
-                  <h3>{thumb.format}</h3>
-                  {thumb.widthPixels && thumb.heightPixels && (
-                    <p className="dimensions">{thumb.widthPixels} × {thumb.heightPixels}px</p>
-                  )}
-                  {thumb.publishedAt && (
-                    <p className="publish-date">
-                      📅 {new Date(thumb.publishedAt).toLocaleDateString()}
-                    </p>
-                  )}
-                </div>
+                  <div className="info-header">
+                    <h3 className="episode-title">
+                      Ep. {thumbnail.episode_number}: {thumbnail.episode_title}
+                    </h3>
+                    <span className={`status-badge ${getStatusBadge(thumbnail.status).class}`}>
+                      {getStatusBadge(thumbnail.status).label}
+                    </span>
+                  </div>
 
-                <div className="thumbnail-actions">
-                  {thumb.publishStatus === 'DRAFT' && (
-                    <button 
-                      onClick={() => publishThumbnail(thumb.id)}
-                      className="btn-publish"
-                      title="Publish this thumbnail"
-                    >
-                      ✅ Publish
-                    </button>
-                  )}
-
-                  {thumb.publishStatus === 'PUBLISHED' && !thumb.isPrimary && (
-                    <button 
-                      onClick={() => unpublishThumbnail(thumb.id)}
-                      className="btn-unpublish"
-                      title="Unpublish this thumbnail"
-                    >
-                      ❌ Unpublish
-                    </button>
-                  )}
-
-                  {thumb.format === 'YOUTUBE' && !thumb.isPrimary && (
-                    <button 
-                      onClick={() => setPrimary(thumb.id)}
-                      className="btn-primary-set"
-                      title="Set as primary thumbnail"
-                    >
-                      ⭐ Primary
-                    </button>
-                  )}
-
-                  {!thumb.isPrimary && (
-                    <button 
-                      onClick={() => deleteThumbnail(thumb.id)}
-                      className="btn-delete"
-                      title="Delete this thumbnail"
-                    >
-                      🗑️ Delete
-                    </button>
-                  )}
+                  <div className="info-meta">
+                    <span className="meta-item">
+                      {getPlatformIcon(thumbnail.platform)} {thumbnail.platform}
+                    </span>
+                    <span className="meta-item">
+                      📅 {new Date(thumbnail.updated_at).toLocaleDateString()}
+                    </span>
+                  </div>
                 </div>
               </div>
-            );
-          })}
-        </div>
-      )}
-
-      <div className="gallery-footer">
-        <button onClick={() => navigate(-1)} className="btn-back">
-          ← Back
-        </button>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

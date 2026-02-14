@@ -4,6 +4,7 @@
  */
 
 import React from 'react';
+import { Link } from 'react-router-dom';
 import { formatters } from '../utils/formatters';
 import '../styles/EpisodeCard.css';
 
@@ -13,11 +14,14 @@ import '../styles/EpisodeCard.css';
 const StatusBadge = ({ status }) => {
   const getStatusDisplay = (status) => {
     const displays = {
-      draft: { emoji: '🟡', label: 'Draft' },
-      published: { emoji: '🟢', label: 'Published' },
-      scheduled: { emoji: '🔵', label: 'Scheduled' },
-      archived: { emoji: '⚪', label: 'Archived' },
-      in_progress: { emoji: '🟠', label: 'In Progress' },
+      draft: { emoji: '✏️', label: 'Draft' },
+      scripted: { emoji: '📜', label: 'Scripted' },
+      in_build: { emoji: '🎬', label: 'In Build' },
+      in_review: { emoji: '👀', label: 'In Review' },
+      review: { emoji: '👀', label: 'In Review' },
+      scheduled: { emoji: '📅', label: 'Scheduled' },
+      published: { emoji: '✅', label: 'Published' },
+      archived: { emoji: '📦', label: 'Archived' },
     };
     return displays[status] || { emoji: '⚪', label: formatters.formatStatus(status) };
   };
@@ -25,9 +29,9 @@ const StatusBadge = ({ status }) => {
   const { emoji, label } = getStatusDisplay(status);
 
   return (
-    <span className={`status-badge-new status-${status}`}>
+    <span className={`status-badge status-${status}`}>
       <span className="status-emoji">{emoji}</span>
-      <span className="status-label">{label}</span>
+      <span className="status-text">{label}</span>
     </span>
   );
 };
@@ -39,15 +43,15 @@ const MetaRow = ({ episodeNumber, airDate, show }) => {
   const parts = [];
   
   if (episodeNumber) {
-    parts.push(`Episode ${episodeNumber}`);
+    parts.push({ type: 'text', content: `Episode ${episodeNumber}` });
   }
   
   if (airDate) {
-    parts.push(formatters.formatDate(airDate));
+    parts.push({ type: 'text', content: formatters.formatDate(airDate) });
   }
   
   if (show?.name) {
-    parts.push(show.name);
+    parts.push({ type: 'link', content: show.name, id: show.id });
   }
 
   return (
@@ -55,7 +59,17 @@ const MetaRow = ({ episodeNumber, airDate, show }) => {
       {parts.map((part, idx) => (
         <React.Fragment key={idx}>
           {idx > 0 && <span className="meta-separator">•</span>}
-          <span className="meta-text">{part}</span>
+          {part.type === 'link' ? (
+            <Link 
+              to={`/shows/${part.id}`} 
+              className="meta-text meta-link"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {part.content}
+            </Link>
+          ) : (
+            <span className="meta-text">{part.content}</span>
+          )}
         </React.Fragment>
       ))}
     </div>
@@ -66,8 +80,8 @@ const MetaRow = ({ episodeNumber, airDate, show }) => {
  * CardHeader - Episode title (hero element)
  */
 const CardHeader = ({ title }) => (
-  <div className="episode-card-header-new">
-    <h3 className="episode-title-hero">{title || 'Untitled Episode'}</h3>
+  <div className="card-content-area">
+    <h3 className="card-title">{title || 'Untitled Episode'}</h3>
   </div>
 );
 
@@ -76,7 +90,7 @@ const CardHeader = ({ title }) => (
  */
 const CardBody = ({ episode }) => {
   return (
-    <div className="episode-card-body-new">
+    <div className="card-meta-area">
       {/* Meta Row */}
       <MetaRow 
         episodeNumber={episode.episode_number}
@@ -86,14 +100,14 @@ const CardBody = ({ episode }) => {
       
       {/* Description - 2 line clamp */}
       {episode.description && (
-        <p className="episode-description-clamp">
+        <p className="card-description">
           {episode.description}
         </p>
       )}
       
       {/* Categories/Tags */}
       {episode.categories && episode.categories.length > 0 && (
-        <div className="episode-tags-row">
+        <div className="card-tags">
           {episode.categories.slice(0, 3).map((category, index) => (
             <span key={index} className="tag-chip">
               {category}
@@ -114,7 +128,7 @@ const CardBody = ({ episode }) => {
  * CardFooter - Normalized actions (Primary, Secondary, Tertiary)
  */
 const CardFooter = ({ episodeId, onView, onEdit, onDelete }) => (
-  <div className="episode-card-footer-new">
+  <div className="card-footer-actions">
     {/* Primary Action */}
     {onView && (
       <button 
@@ -170,13 +184,13 @@ const CardFooter = ({ episodeId, onView, onEdit, onDelete }) => (
  */
 const EpisodeCard = ({ episode, onEdit, onDelete, onView, isSelected, onSelect, viewMode = 'grid' }) => {
   return (
-    <div className={`episode-card-enhanced ${isSelected ? 'is-selected' : ''} view-${viewMode}`}>
+    <div className={`episode-card-modern ${isSelected ? 'is-selected' : ''} view-${viewMode}`}>
       {/* Status Badge - Top Right */}
       <StatusBadge status={episode.status} />
       
       {/* Checkbox for bulk selection */}
       {onSelect && (
-        <div className="episode-card-checkbox-new">
+        <div className="episode-card-checkbox">
           <input
             type="checkbox"
             checked={isSelected || false}
@@ -188,8 +202,8 @@ const EpisodeCard = ({ episode, onEdit, onDelete, onView, isSelected, onSelect, 
       
       {/* Card Content - Wrapped for list view */}
       {viewMode === 'list' ? (
-        <div className="episode-card-header-new">
-          <h3 className="episode-title-hero">{episode.title}</h3>
+        <div className="episode-card-header">
+          <h3 className="episode-title">{episode.title}</h3>
           <MetaRow 
             episodeNumber={episode.episode_number}
             airDate={episode.air_date}

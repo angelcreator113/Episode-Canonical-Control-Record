@@ -546,3 +546,32 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 480px) {
+  .outfit-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .outfit-sets-grid {
+    gap: 0.75rem;
+  }
+
+  .outfit-set-card {
+    padding: 0.75rem;
+  }
+
+  .items-preview {
+    grid-template-columns: repeat(auto-fill, minmax(55px, 1fr));
+  }
+
+  .modal-content {
+    margin: 8px;
+    max-width: calc(100vw - 16px);
+    padding: 1rem;
+  }
+
+  .controls-filters .filter-select {
+    min-width: 0;
+    width: 100%;
+  }
+}

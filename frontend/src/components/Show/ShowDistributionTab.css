@@ -1,0 +1,587 @@
+/* frontend/src/components/Show/ShowDistributionTab.css */
+
+.show-distribution-tab {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+/* ==================== HEADER ==================== */
+
+.distribution-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1.5rem;
+}
+
+.distribution-header .header-left h2 {
+  margin: 0 0 0.25rem 0;
+  font-size: 1.5rem;
+  color: #1e293b;
+}
+
+.header-subtitle {
+  margin: 0;
+  color: #64748b;
+  font-size: 0.95rem;
+}
+
+.header-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+}
+
+.unsaved-indicator {
+  color: #f59e0b;
+  font-weight: 600;
+  font-size: 0.9rem;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.btn-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.625rem 1rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  height: 40px;
+}
+
+.btn-save:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+.btn-save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==================== INFO BANNER ==================== */
+
+.info-banner {
+  display: flex;
+  gap: 0.875rem;
+  padding: 1rem;
+  background: linear-gradient(135deg, #e0f2fe 0%, #dbeafe 100%);
+  border: 1px solid #bae6fd;
+  border-radius: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.banner-icon {
+  font-size: 1.5rem;
+  flex-shrink: 0;
+}
+
+.banner-content {
+  color: #0c4a6e;
+  line-height: 1.6;
+}
+
+.banner-content strong {
+  font-weight: 700;
+}
+
+/* ==================== PLATFORM SELECTOR ==================== */
+
+.platform-selector {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 2rem;
+}
+
+.platform-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.5rem;
+  background: white;
+  border: 3px solid #e2e8f0;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-align: left;
+}
+
+.platform-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.platform-card.active {
+  border-width: 3px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+
+.platform-card.enabled {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 100%);
+}
+
+.platform-icon {
+  font-size: 2.5rem;
+  flex-shrink: 0;
+}
+
+.platform-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.platform-name {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 0.25rem;
+}
+
+.platform-status {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85rem;
+}
+
+.status-enabled {
+  color: #10b981;
+  font-weight: 600;
+}
+
+.status-disabled {
+  color: #94a3b8;
+  font-weight: 600;
+}
+
+.account-name {
+  color: #64748b;
+  font-size: 0.8rem;
+}
+
+/* ==================== PLATFORM CONFIG ==================== */
+
+.platform-config {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+}
+
+.config-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.config-title {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.config-icon {
+  font-size: 2rem;
+}
+
+.config-title h3 {
+  margin: 0;
+  font-size: 1.5rem;
+  color: #1e293b;
+}
+
+.aspect-badge {
+  padding: 0.375rem 0.875rem;
+  background: #f1f5f9;
+  color: #475569;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+/* ==================== TOGGLE SWITCH ==================== */
+
+.toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  cursor: pointer;
+}
+
+.toggle-switch input {
+  display: none;
+}
+
+.toggle-slider {
+  position: relative;
+  width: 52px;
+  height: 28px;
+  background: #cbd5e1;
+  border-radius: 14px;
+  transition: background 0.3s ease;
+}
+
+.toggle-slider::before {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 24px;
+  height: 24px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+  background: #10b981;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+  transform: translateX(24px);
+}
+
+.toggle-label {
+  font-weight: 600;
+  color: #475569;
+}
+
+.toggle-switch input:checked ~ .toggle-label {
+  color: #10b981;
+}
+
+/* ==================== CONFIG DISABLED ==================== */
+
+.config-disabled {
+  text-align: center;
+  padding: 4rem 2rem;
+  color: #94a3b8;
+}
+
+.config-disabled p {
+  margin-bottom: 1.5rem;
+  font-size: 1.05rem;
+}
+
+/* ==================== CONFIG FORM ==================== */
+
+.config-form {
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.section-icon {
+  font-size: 1.25rem;
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.form-group label {
+  font-weight: 700;
+  font-size: 0.9rem;
+  color: #334155;
+}
+
+.form-input,
+.form-textarea {
+  width: 100%;
+  padding: 0.875rem;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.form-input:focus,
+.form-textarea:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.form-textarea {
+  resize: vertical;
+  font-family: monospace;
+  line-height: 1.6;
+}
+
+.form-hint {
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.form-hint code {
+  padding: 0.125rem 0.375rem;
+  background: #f1f5f9;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  color: #8b5cf6;
+}
+
+/* ==================== HASHTAG INPUT ==================== */
+
+.hashtag-input {
+  margin-bottom: 0.75rem;
+}
+
+.hashtag-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.hashtag-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.875rem;
+  background: linear-gradient(135deg, #ec4899 0%, #8b5cf6 100%);
+  color: white;
+  border-radius: 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.hashtag-remove {
+  background: rgba(255, 255, 255, 0.3);
+  border: none;
+  color: white;
+  border-radius: 50%;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.125rem;
+  font-weight: 700;
+  transition: background 0.2s ease;
+}
+
+.hashtag-remove:hover {
+  background: rgba(255, 255, 255, 0.5);
+}
+
+/* ==================== COLOR INPUT ==================== */
+
+.color-input-wrapper {
+  display: flex;
+  gap: 0.75rem;
+  align-items: center;
+}
+
+.color-input {
+  width: 60px;
+  height: 44px;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  cursor: pointer;
+  background: white;
+}
+
+.color-text {
+  flex: 1;
+}
+
+/* ==================== CHECKBOX LABEL ==================== */
+
+.checkbox-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  padding: 1.25rem;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.checkbox-label:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin-top: 2px;
+  cursor: pointer;
+}
+
+.checkbox-text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.checkbox-text strong {
+  font-size: 0.95rem;
+  color: #1e293b;
+}
+
+.checkbox-text small {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 400;
+}
+
+/* ==================== QUICK ACTIONS ==================== */
+
+.quick-actions {
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 2rem;
+}
+
+.quick-actions h4 {
+  margin: 0 0 1.5rem 0;
+  font-size: 1.125rem;
+  color: #1e293b;
+}
+
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.action-card:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+.action-icon {
+  font-size: 2rem;
+}
+
+.action-label {
+  font-weight: 600;
+  color: #475569;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* ==================== PRIMARY BUTTON ==================== */
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 768px) {
+  .show-distribution-tab {
+    padding: 1rem;
+  }
+  
+  .distribution-header {
+    flex-direction: column;
+    gap: 1rem;
+  }
+  
+  .header-actions {
+    width: 100%;
+    flex-direction: column;
+  }
+  
+  .btn-save {
+    width: 100%;
+    justify-content: center;
+  }
+  
+  .platform-selector {
+    grid-template-columns: 1fr;
+  }
+  
+  .config-header {
+    flex-direction: column;
+    gap: 1rem;
+    align-items: flex-start;
+  }
+  
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+  
+  .actions-grid {
+    grid-template-columns: 1fr;
+  }
+}

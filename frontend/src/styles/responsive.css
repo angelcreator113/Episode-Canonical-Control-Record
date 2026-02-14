@@ -1,0 +1,1083 @@
+/* ============================================================
+   RESPONSIVE OVERRIDES — Mobile & Tablet Optimization
+   ============================================================
+   Breakpoints:
+     480px  — Small mobile (iPhone SE, Galaxy S)
+     768px  — Large mobile / small tablet (iPad mini portrait)
+     1024px — Tablet landscape / small laptop
+     1200px — Desktop narrow
+   ============================================================ */
+
+/* ============================================================
+   1. GLOBAL TOUCH & INTERACTION IMPROVEMENTS
+   ============================================================ */
+
+/* Touch-friendly targets — minimum 44px on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  button,
+  [role="button"],
+  a,
+  select,
+  input[type="checkbox"],
+  input[type="radio"],
+  .btn,
+  .btn-primary,
+  .btn-secondary,
+  .btn-danger,
+  .btn-success {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  input[type="number"],
+  input[type="search"],
+  input[type="url"],
+  input[type="tel"],
+  textarea,
+  select {
+    font-size: 16px !important; /* Prevents iOS zoom on focus */
+    min-height: 44px;
+  }
+
+  /* Larger tap targets for small interactive elements */
+  .tag-remove,
+  .label-badge button,
+  .close-btn,
+  .aum-close,
+  .swp-close {
+    min-width: 44px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
+
+/* Smooth scrolling on mobile */
+@media (max-width: 1024px) {
+  .scrollable,
+  [style*="overflow-y"],
+  [style*="overflow: auto"] {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+
+/* ============================================================
+   2. GLOBAL TYPOGRAPHY — Mobile Scaling
+   ============================================================ */
+
+@media (max-width: 480px) {
+  h1 {
+    font-size: 1.5rem !important;
+  }
+  h2 {
+    font-size: 1.25rem !important;
+  }
+  h3 {
+    font-size: 1.1rem !important;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  h1 {
+    font-size: 1.75rem !important;
+  }
+  h2 {
+    font-size: 1.35rem !important;
+  }
+}
+
+
+/* ============================================================
+   3. LOGIN PAGE — Tablet enhancement (already has 480px)
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .login-container {
+    padding: 1rem;
+  }
+
+  .login-box {
+    padding: 2rem 1.5rem;
+    margin: 1rem;
+  }
+}
+
+
+/* ============================================================
+   4. TEMPLATE DESIGNER — Mobile breakpoint (has 1400px + 1024px)
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .designer-header {
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
+
+  .header-left {
+    gap: 0.5rem;
+  }
+
+  .header-breadcrumb {
+    display: none;
+  }
+
+  .header-actions {
+    gap: 0.5rem;
+    flex-wrap: wrap;
+  }
+
+  .header-actions .btn {
+    font-size: 0.8rem;
+    padding: 0.4rem 0.75rem;
+  }
+
+  .role-palette,
+  .slot-properties {
+    max-height: 200px;
+  }
+
+  .designer-body {
+    flex-direction: column;
+  }
+
+  .canvas-container {
+    min-height: 300px;
+    order: -1;
+  }
+
+  .canvas-wrapper {
+    padding: 0.5rem;
+  }
+
+  /* Stack slot list vertically */
+  .slot-list,
+  .role-list {
+    max-height: 150px;
+  }
+}
+
+@media (max-width: 480px) {
+  .template-designer {
+    height: 100dvh;
+  }
+
+  .designer-header {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .header-actions .btn {
+    font-size: 0.75rem;
+    padding: 0.35rem 0.5rem;
+  }
+}
+
+
+/* ============================================================
+   5. TIMELINE SYSTEM — Full responsive overhaul
+   ============================================================ */
+
+/* --- 5a. TimelineEditor (fullscreen overlay) --- */
+@media (max-width: 1024px) {
+  .timeline-editor {
+    flex-direction: column;
+  }
+
+  .timeline-header {
+    height: auto;
+    min-height: 56px;
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .timeline-controls {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .keyboard-shortcuts-hint {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .timeline-header {
+    padding: 8px 12px;
+    min-height: 48px;
+  }
+
+  .back-btn span,
+  .export-btn span {
+    display: none;
+  }
+
+  .back-btn,
+  .export-btn {
+    padding: 8px;
+    min-width: 40px;
+  }
+
+  .transport-controls {
+    gap: 4px;
+  }
+
+  .transport-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 0.9rem;
+  }
+
+  .timecode-display {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
+
+  .control-btn {
+    padding: 6px 10px;
+    font-size: 0.75rem;
+  }
+
+  .timeline-zoom-group {
+    min-width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .timeline-header {
+    padding: 6px 8px;
+  }
+
+  .transport-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 0.8rem;
+  }
+
+  .playback-controls-group {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+/* --- 5b. Timeline (track-based timeline) --- */
+@media (max-width: 1024px) {
+  .timeline-labels {
+    width: 100px;
+    min-width: 100px;
+  }
+
+  .track-label {
+    width: 100px;
+    min-width: 100px;
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .timeline-labels {
+    width: 70px;
+    min-width: 70px;
+  }
+
+  .track-label {
+    width: 70px;
+    min-width: 70px;
+    font-size: 0.65rem;
+    padding: 2px 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .timeline-track {
+    height: 48px;
+    min-height: 48px;
+  }
+
+  .scene-block {
+    font-size: 0.65rem;
+    padding: 2px 4px;
+  }
+
+  .beat-marker .marker-label,
+  .timeline-marker .marker-label {
+    font-size: 0.6rem;
+    max-width: 60px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .time-ruler {
+    font-size: 0.65rem;
+    height: 24px;
+  }
+}
+
+@media (max-width: 480px) {
+  .timeline-labels {
+    width: 50px;
+    min-width: 50px;
+  }
+
+  .track-label {
+    width: 50px;
+    min-width: 50px;
+    font-size: 0.6rem;
+  }
+
+  .timeline-track {
+    height: 40px;
+    min-height: 40px;
+  }
+}
+
+/* --- 5c. KeyframePropertyEditor (side panel) --- */
+@media (max-width: 1024px) {
+  .kpe-panel {
+    width: 260px;
+  }
+}
+
+@media (max-width: 768px) {
+  .kpe-panel {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    top: auto;
+    width: 100% !important;
+    max-height: 50vh;
+    border-radius: 16px 16px 0 0;
+    z-index: 1100;
+  }
+
+  .kpe-body {
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+
+  .kpe-row {
+    flex-wrap: wrap;
+  }
+
+  .kpe-label {
+    width: auto;
+    min-width: 60px;
+  }
+
+  .kpe-number {
+    width: 60px;
+  }
+}
+
+/* --- 5d. PreviewMonitor --- */
+@media (max-width: 768px) {
+  .canvas-top-bar {
+    padding: 6px 8px;
+    gap: 6px;
+    flex-wrap: wrap;
+  }
+
+  .platform-select {
+    min-width: 100px;
+    font-size: 0.75rem;
+  }
+
+  .canvas-tools {
+    position: static;
+    width: auto;
+    display: flex;
+    flex-direction: row;
+    gap: 4px;
+    flex-wrap: wrap;
+    padding: 4px;
+  }
+
+  .canvas-tool-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .scene-badge {
+    font-size: 0.65rem;
+    padding: 2px 6px;
+  }
+}
+
+/* --- 5e. AudioWaveform --- */
+@media (max-width: 480px) {
+  .awf-container {
+    height: 36px;
+  }
+}
+
+
+/* ============================================================
+   6. SCENE COMPOSER FULL — Tablet & mobile panels
+   ============================================================ */
+
+@media (max-width: 1200px) {
+  .scene-flow-panel {
+    width: 220px !important;
+    min-width: 220px !important;
+    max-width: 220px !important;
+  }
+
+  .scene-controls-panel {
+    width: 240px !important;
+  }
+
+  .preview-controls-panel {
+    width: 240px !important;
+  }
+}
+
+@media (max-width: 1024px) {
+  .scene-composer-full {
+    flex-direction: column;
+  }
+
+  /* Stack panels below the canvas on tablet */
+  .scene-flow-panel {
+    width: 100% !important;
+    min-width: 100% !important;
+    max-width: 100% !important;
+    max-height: 200px;
+    overflow-y: auto;
+    order: 2;
+    border-right: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .scene-canvas {
+    flex: 1;
+    min-height: 300px;
+    order: 1;
+  }
+
+  .scene-controls-panel {
+    width: 100% !important;
+    max-height: 250px;
+    overflow-y: auto;
+    order: 3;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .preview-controls-panel,
+  .timeline-controls-drawer {
+    width: 100% !important;
+    max-height: 200px;
+    overflow-y: auto;
+    border-left: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  .timeline-info-panel {
+    width: 100% !important;
+  }
+
+  .track-header {
+    width: 120px !important;
+    min-width: 120px !important;
+    max-width: 120px !important;
+    font-size: 0.75rem;
+  }
+
+  .composer-header {
+    height: auto;
+    min-height: 56px;
+    padding: 8px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  .scene-flow-panel {
+    max-height: 150px;
+  }
+
+  .scene-controls-panel {
+    max-height: 200px;
+  }
+
+  .composer-header {
+    padding: 6px 8px;
+    min-height: 48px;
+  }
+
+  .composer-header .btn,
+  .composer-header button {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+
+  .track-header {
+    width: 80px !important;
+    min-width: 80px !important;
+    max-width: 80px !important;
+    font-size: 0.65rem;
+  }
+
+  .time-scrubber {
+    min-width: 120px;
+    max-width: none;
+  }
+
+  .playback-controls {
+    flex-wrap: wrap;
+    gap: 4px;
+    justify-content: center;
+  }
+
+  .platform-dropdown-btn {
+    font-size: 0.75rem;
+    padding: 4px 8px;
+  }
+
+  .export-menu {
+    right: 0;
+    left: auto;
+    min-width: 200px;
+  }
+
+  .character-placeholder-preview {
+    width: 100px;
+    height: 170px;
+  }
+}
+
+@media (max-width: 480px) {
+  .scene-composer-full {
+    height: 100dvh;
+  }
+
+  .scene-flow-panel {
+    max-height: 120px;
+  }
+
+  .scene-controls-panel {
+    max-height: 160px;
+  }
+
+  .track-header {
+    width: 60px !important;
+    min-width: 60px !important;
+    max-width: 60px !important;
+  }
+
+  .character-placeholder-preview {
+    width: 80px;
+    height: 140px;
+  }
+}
+
+
+/* ============================================================
+   7. MODALS & PICKERS — Overflow protection
+   ============================================================ */
+
+/* AssetUploadModal */
+@media (max-width: 520px) {
+  .aum-modal {
+    width: calc(100vw - 16px) !important;
+    max-width: 100vw;
+    border-radius: 12px;
+    max-height: 90vh;
+  }
+
+  .aum-header {
+    padding: 16px;
+  }
+
+  .aum-body {
+    padding: 16px;
+  }
+
+  .aum-mode-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .aum-mode-card {
+    padding: 20px 12px;
+  }
+}
+
+/* SceneWardrobePicker */
+@media (max-width: 768px) {
+  .swp-modal {
+    width: calc(100vw - 16px);
+    max-height: 90vh;
+  }
+
+  .swp-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
+
+  .swp-card-img {
+    height: 100px;
+  }
+
+  .swp-filters {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .swp-char-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .swp-char-btn {
+    font-size: 0.75rem;
+    padding: 6px 10px;
+  }
+
+  .swp-footer {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .swp-confirm,
+  .swp-cancel {
+    width: 100%;
+  }
+}
+
+/* EpisodeWardrobeTab Drawer */
+@media (max-width: 480px) {
+  .ewt-drawer {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+
+  .ewt-grid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+
+  .ewt-card-image {
+    height: 140px;
+  }
+
+  .ewt-header {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ewt-stats {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ewt-filters {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+@media (min-width: 481px) and (max-width: 768px) {
+  .ewt-drawer {
+    width: 85vw !important;
+    max-width: 85vw !important;
+  }
+
+  .ewt-grid {
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  }
+}
+
+/* LabelSelector dropdown */
+@media (max-width: 480px) {
+  .label-dropdown {
+    min-width: 200px;
+    max-width: calc(100vw - 32px);
+    left: 0;
+    right: 0;
+  }
+
+  .label-create-form {
+    flex-direction: column;
+    gap: 8px;
+  }
+}
+
+/* ExportDropdown */
+@media (max-width: 480px) {
+  .export-dropdown-menu {
+    min-width: 200px;
+    max-width: calc(100vw - 32px);
+    right: 0;
+    left: auto;
+  }
+
+  .export-dropdown-item {
+    padding: 10px 14px;
+    font-size: 0.85rem;
+  }
+}
+
+
+/* ============================================================
+   8. PAGE ENHANCEMENTS — Additional breakpoints
+   ============================================================ */
+
+/* --- SearchResults: Fix 350px minmax grid overflow --- */
+@media (max-width: 480px) {
+  .results-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .search-header {
+    padding: 1rem !important;
+  }
+
+  .search-bar-section {
+    padding: 0.75rem 1rem !important;
+  }
+
+  .search-results-container {
+    padding: 1rem !important;
+  }
+
+  .search-tips {
+    max-width: 100%;
+  }
+}
+
+/* --- OutfitSets: Fix 320px minmax grid overflow --- */
+@media (max-width: 480px) {
+  .outfit-sets-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+
+  .controls-filters {
+    max-width: 100% !important;
+  }
+
+  .filter-select {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .modal-content {
+    max-width: calc(100vw - 16px);
+    margin: 8px;
+  }
+}
+
+/* --- CreateEpisode: tablet enhancement --- */
+@media (min-width: 481px) and (max-width: 1024px) {
+  .episode-body {
+    padding: 1.5rem !important;
+  }
+
+  .tabs-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .tabs-container::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .episode-body {
+    padding: 0.75rem !important;
+  }
+
+  .header-container {
+    padding: 0.75rem !important;
+  }
+
+  .tabs-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding: 0 0.75rem;
+  }
+
+  .tabs-container::-webkit-scrollbar {
+    display: none;
+  }
+
+  .form-section {
+    padding: 1rem !important;
+  }
+}
+
+/* --- CreateShow: tablet enhancement --- */
+@media (max-width: 480px) {
+  .create-show-page {
+    padding: 0.75rem !important;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .form-actions button,
+  .form-actions .btn {
+    width: 100%;
+  }
+}
+
+/* --- SceneLibrary: tablet + small mobile --- */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .scenes-grid {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+
+  .filters-section {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .scene-library-page {
+    padding: 0.75rem !important;
+  }
+
+  .scenes-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+
+  .library-header h1 {
+    font-size: 1.25rem;
+  }
+}
+
+/* --- CompositionDetail: tablet --- */
+@media (min-width: 769px) and (max-width: 1024px) {
+  .composition-detail {
+    padding: 1.5rem !important;
+  }
+
+  .composition-detail__outputs-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+}
+
+@media (max-width: 480px) {
+  .composition-detail {
+    padding: 0.75rem !important;
+  }
+
+  .composition-detail__tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .composition-detail__tabs::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* --- WardrobeLibraryUpload: small mobile --- */
+@media (max-width: 480px) {
+  .wardrobe-library-upload {
+    padding: 0.75rem !important;
+  }
+
+  .upload-header {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .upload-preview {
+    max-width: 100%;
+  }
+}
+
+/* --- Wardrobe: small mobile --- */
+@media (max-width: 480px) {
+  .wardrobe-unified {
+    padding: 0.75rem !important;
+  }
+
+  .wardrobe-header {
+    gap: 0.75rem;
+  }
+}
+
+/* --- DiagnosticPage enhancement --- */
+@media (max-width: 480px) {
+  .diagnostic-page {
+    padding: 0.75rem;
+  }
+
+  .diagnostic-page .card {
+    padding: 1rem;
+  }
+}
+
+
+/* ============================================================
+   9. TABLES — Responsive table handling
+   ============================================================ */
+
+@media (max-width: 768px) {
+  /* Scroll wrapper for wide tables */
+  .table-responsive,
+  table {
+    display: block;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+
+  table {
+    min-width: 600px;
+  }
+
+  td, th {
+    padding: 8px 10px;
+    font-size: 0.8rem;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  td, th {
+    padding: 6px 8px;
+    font-size: 0.75rem;
+  }
+}
+
+
+/* ============================================================
+   10. ADMIN PANEL & AUDIT LOG — Tablet enhancement
+   ============================================================ */
+
+@media (max-width: 480px) {
+  .admin-panel {
+    padding: 0.75rem;
+  }
+
+  .admin-panel .tab-buttons,
+  .audit-log .tab-buttons {
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .admin-panel .tab-buttons button,
+  .audit-log .tab-buttons button {
+    width: 100%;
+  }
+}
+
+
+/* ============================================================
+   11. DECISION ANALYTICS DASHBOARD — Tablet refinement
+   ============================================================ */
+
+@media (max-width: 480px) {
+  .decision-dashboard {
+    padding: 0.75rem;
+  }
+
+  .decision-dashboard .chart-container {
+    min-height: 200px;
+  }
+}
+
+
+/* ============================================================
+   12. GENERIC CARD GRID RESPONSIVE PATTERN
+   ============================================================ */
+
+/* Ensure auto-fill grids never overflow on tiny screens */
+@media (max-width: 400px) {
+  [style*="grid-template-columns: repeat(auto-fill"] {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+
+/* ============================================================
+   13. SCROLLBAR — Mobile-friendly thin scrollbar
+   ============================================================ */
+
+@media (max-width: 768px) {
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+
+  * {
+    scrollbar-width: thin;
+  }
+}
+
+
+/* ============================================================
+   14. PRINT — Hide non-essential UI
+   ============================================================ */
+
+@media print {
+  .sidebar,
+  .header,
+  .nav-toggle-btn,
+  .sidebar-backdrop,
+  .toast-container {
+    display: none !important;
+  }
+
+  .main-wrapper {
+    margin-left: 0 !important;
+  }
+}
+
+
+/* ============================================================
+   15. REDUCED MOTION — Accessibility
+   ============================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+
+/* ============================================================
+   16. LANDSCAPE MOBILE — Prevent awkward layouts
+   ============================================================ */
+
+@media (max-height: 500px) and (orientation: landscape) {
+  .login-container {
+    padding: 0.5rem;
+  }
+
+  .login-box {
+    padding: 1rem;
+    margin: 0.5rem;
+  }
+
+  /* Reduce header height in landscape */
+  .composer-header,
+  .timeline-header,
+  .designer-header {
+    min-height: 40px !important;
+    padding: 4px 8px !important;
+  }
+}

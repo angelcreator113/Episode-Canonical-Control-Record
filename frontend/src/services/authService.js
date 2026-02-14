@@ -3,12 +3,7 @@
  * Handles login, token storage, and token retrieval
  */
 
-import axios from 'axios';
-
-// Use full backend URL in development, relative path in production
-const API_BASE_URL = process.env.NODE_ENV === 'development' 
-  ? import.meta.env.VITE_API_URL || '/api/v1'
-  : '/api/v1';
+import api from './api';
 
 export const authService = {
   /**
@@ -17,8 +12,8 @@ export const authService = {
    */
   async login(email, password) {
     try {
-      console.log('[authService] Sending login request to:', `${API_BASE_URL}/auth/login`);
-      const response = await axios.post(`${API_BASE_URL}/auth/login`, {
+      console.log('[authService] Sending login request to:', '/api/v1/auth/login');
+      const response = await api.post('/api/v1/auth/login', {
         email,
         password,
         groups: ['USER', 'EDITOR'],
@@ -103,7 +98,7 @@ export const authService = {
       const token = this.getToken();
       if (token) {
         try {
-          await axios.post(`${API_BASE_URL}/auth/logout`, {}, {
+          await api.post('/api/v1/auth/logout', {}, {
             headers: {
               'Authorization': `Bearer ${token}`,
             },
@@ -130,7 +125,7 @@ export const authService = {
         throw new Error('No refresh token');
       }
 
-      const response = await axios.post(`${API_BASE_URL}/auth/refresh`, {
+      const response = await api.post('/api/v1/auth/refresh', {
         refreshToken,
       });
 
@@ -146,49 +141,6 @@ export const authService = {
       throw error;
     }
   },
-};
-
-/**
- * Create axios instance with auth header
- */
-export const createAuthenticatedAxios = () => {
-  const token = authService.getToken();
-  const axiosInstance = axios.create({
-    baseURL: API_BASE_URL,
-    headers: {
-      'Content-Type': 'application/json',
-    },
-  });
-
-  if (token) {
-    axiosInstance.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  }
-
-  // Add response interceptor to handle 401
-  axiosInstance.interceptors.response.use(
-    (response) => response,
-    async (error) => {
-      const originalRequest = error.config;
-
-      if (error.response?.status === 401 && !originalRequest._retry) {
-        originalRequest._retry = true;
-
-        try {
-          const newToken = await authService.refreshToken();
-          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
-          return axiosInstance(originalRequest);
-        } catch (refreshError) {
-          authService.logout();
-          window.location.href = '/login'; // Redirect to login
-          return Promise.reject(refreshError);
-        }
-      }
-
-      return Promise.reject(error);
-    }
-  );
-
-  return axiosInstance;
 };
 
 export default authService;

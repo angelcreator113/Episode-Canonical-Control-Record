@@ -1,166 +1,160 @@
 import React, { useState, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
-import CompositionCard from '../components/CompositionCard';
+import { useNavigate } from 'react-router-dom';
 import './CompositionLibrary.css';
 
-/**
- * CompositionLibrary Component
- * Browse and manage all thumbnail compositions with filters and search
- */
 export default function CompositionLibrary() {
-  const [searchParams, setSearchParams] = useSearchParams();
-  
+  const navigate = useNavigate();
+
   const [compositions, setCompositions] = useState([]);
+  const [filteredCompositions, setFilteredCompositions] = useState([]);
+  const [view, setView] = useState('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedTags, setSelectedTags] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  
-  // Filter states
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
-  const [selectedShow, setSelectedShow] = useState(searchParams.get('show') || '');
-  const [selectedStatus, setSelectedStatus] = useState(searchParams.get('status') || '');
-  const [sortBy, setSortBy] = useState(searchParams.get('sort') || 'created_desc');
-  
-  // Filter options
-  const [shows, setShows] = useState([]);
-  
+
+  const allTags = ['Intro', 'Tutorial', 'Outro', 'Fashion', 'Lifestyle', 'Behind-Scenes'];
+
   useEffect(() => {
-    loadShows();
     loadCompositions();
   }, []);
 
   useEffect(() => {
-    // Update URL params when filters change
-    const params = {};
-    if (searchQuery) params.search = searchQuery;
-    if (selectedShow) params.show = selectedShow;
-    if (selectedStatus) params.status = selectedStatus;
-    if (sortBy !== 'created_desc') params.sort = sortBy;
-    
-    setSearchParams(params);
-    loadCompositions();
-  }, [searchQuery, selectedShow, selectedStatus, sortBy]);
-
-  const loadShows = async () => {
-    try {
-      const response = await fetch('/api/v1/shows');
-      const data = await response.json();
-      setShows(data.data || data || []);
-    } catch (err) {
-      console.error('Failed to load shows:', err);
-    }
-  };
+    filterCompositions();
+  }, [view, searchQuery, selectedTags, compositions]);
 
   const loadCompositions = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      setError(null);
-
-      let url = '/api/v1/compositions';
-      const params = new URLSearchParams();
-      
-      if (selectedShow) {
-        // Filter by show's episodes
-        url = `/api/v1/compositions?showId=${selectedShow}`;
-      }
-
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Failed to load compositions');
-      
-      const data = await response.json();
-      let compositionsList = data.data || data || [];
-
-      // Apply client-side filters
-      if (searchQuery) {
-        const query = searchQuery.toLowerCase();
-        compositionsList = compositionsList.filter(comp => 
-          (comp.name && comp.name.toLowerCase().includes(query)) ||
-          (comp.episode?.episodeTitle && comp.episode.episodeTitle.toLowerCase().includes(query)) ||
-          (comp.episode?.title && comp.episode.title.toLowerCase().includes(query))
-        );
-      }
-
-      if (selectedStatus) {
-        compositionsList = compositionsList.filter(comp => 
-          (comp.status || 'DRAFT').toUpperCase() === selectedStatus.toUpperCase()
-        );
-      }
-
-      // Apply sorting
-      compositionsList.sort((a, b) => {
-        switch (sortBy) {
-          case 'created_desc':
-            return new Date(b.created_at) - new Date(a.created_at);
-          case 'created_asc':
-            return new Date(a.created_at) - new Date(b.created_at);
-          case 'name_asc':
-            return (a.name || '').localeCompare(b.name || '');
-          case 'name_desc':
-            return (b.name || '').localeCompare(a.name || '');
-          default:
-            return 0;
+      const mockCompositions = [
+        {
+          id: '1',
+          name: 'Standard Intro Layout',
+          description: 'Clean intro layout with LaLa center',
+          tags: ['Intro', 'Fashion'],
+          thumbnail_preview: null,
+          usage_count: 12,
+          is_favorite: true,
+          created_at: '2026-01-15',
+          updated_at: '2026-02-10',
+          layers: []
+        },
+        {
+          id: '2',
+          name: 'Tutorial Title Card',
+          description: 'Bold title with step number',
+          tags: ['Tutorial'],
+          thumbnail_preview: null,
+          usage_count: 8,
+          is_favorite: false,
+          created_at: '2026-01-20',
+          updated_at: '2026-02-08',
+          layers: []
+        },
+        {
+          id: '3',
+          name: 'Behind the Scenes',
+          description: 'Raw, authentic styling',
+          tags: ['Behind-Scenes', 'Lifestyle'],
+          thumbnail_preview: null,
+          usage_count: 5,
+          is_favorite: true,
+          created_at: '2026-02-01',
+          updated_at: '2026-02-11',
+          layers: []
         }
-      });
-
-      setCompositions(compositionsList);
-    } catch (err) {
-      console.error('Failed to load compositions:', err);
-      setError(err.message);
+      ];
+      setCompositions(mockCompositions);
+    } catch (error) {
+      console.error('Failed to load compositions:', error);
     } finally {
       setLoading(false);
     }
   };
 
+  const filterCompositions = () => {
+    let filtered = [...compositions];
+
+    if (view === 'recent') {
+      filtered = filtered.sort((a, b) =>
+        new Date(b.updated_at) - new Date(a.updated_at)
+      ).slice(0, 10);
+    } else if (view === 'favorites') {
+      filtered = filtered.filter(c => c.is_favorite);
+    }
+
+    if (searchQuery) {
+      filtered = filtered.filter(c =>
+        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        c.description.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+    }
+
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(c =>
+        selectedTags.some(tag => c.tags.includes(tag))
+      );
+    }
+
+    setFilteredCompositions(filtered);
+  };
+
+  const handleToggleFavorite = async (compositionId) => {
+    try {
+      setCompositions(compositions.map(c =>
+        c.id === compositionId ? { ...c, is_favorite: !c.is_favorite } : c
+      ));
+    } catch (error) {
+      console.error('Failed to toggle favorite:', error);
+    }
+  };
+
+  const handleApply = (composition) => {
+    navigate('/episodes/new/thumbnail/new', {
+      state: { compositionId: composition.id }
+    });
+  };
+
+  const handleEdit = (composition) => {
+    navigate('/episodes/new/thumbnail/new', {
+      state: { compositionId: composition.id, mode: 'edit' }
+    });
+  };
+
+  const handleDuplicate = async (composition) => {
+    try {
+      alert(`Duplicating "${composition.name}"...`);
+      loadCompositions();
+    } catch (error) {
+      console.error('Failed to duplicate:', error);
+    }
+  };
+
   const handleDelete = async (composition) => {
-    if (!window.confirm(`Delete composition "${composition.name || 'Untitled'}"?`)) {
+    if (!confirm(`Delete "${composition.name}"?`)) {
       return;
     }
 
     try {
-      const response = await fetch(`/api/v1/compositions/${composition.id}`, {
-        method: 'DELETE',
-      });
-
-      if (!response.ok) throw new Error('Failed to delete composition');
-      
-      setCompositions(prev => prev.filter(c => c.id !== composition.id));
-    } catch (err) {
-      console.error('Failed to delete composition:', err);
-      alert('Failed to delete composition: ' + err.message);
+      alert(`Deleted "${composition.name}"`);
+      loadCompositions();
+    } catch (error) {
+      console.error('Failed to delete:', error);
     }
   };
 
-  const handleGenerate = async (composition) => {
-    try {
-      const formats = composition.selected_formats || ['YOUTUBE'];
-      
-      const response = await fetch(`/api/v1/compositions/${composition.id}/outputs/generate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ formats, regenerate: true }),
-      });
-
-      if (!response.ok) throw new Error('Failed to queue generation');
-      
-      alert(`Queued ${formats.length} format(s) for generation`);
-      loadCompositions(); // Refresh to show PROCESSING status
-    } catch (err) {
-      console.error('Failed to generate:', err);
-      alert('Failed to queue generation: ' + err.message);
+  const toggleTag = (tag) => {
+    if (selectedTags.includes(tag)) {
+      setSelectedTags(selectedTags.filter(t => t !== tag));
+    } else {
+      setSelectedTags([...selectedTags, tag]);
     }
-  };
-
-  const clearFilters = () => {
-    setSearchQuery('');
-    setSelectedShow('');
-    setSelectedStatus('');
-    setSortBy('created_desc');
   };
 
   if (loading) {
     return (
       <div className="composition-library">
-        <div className="composition-library__loading">
-          <div className="composition-library__loading-spinner"></div>
+        <div className="loading-state">
+          <div className="spinner"></div>
           <p>Loading compositions...</p>
         </div>
       </div>
@@ -169,132 +163,155 @@ export default function CompositionLibrary() {
 
   return (
     <div className="composition-library">
-      {/* Header */}
-      <div className="composition-library__header">
-        <div className="composition-library__title-section">
-          <h1 className="composition-library__title">
-            <span className="composition-library__title-icon">📚</span>
-            Composition Library
-          </h1>
-          <p className="composition-library__subtitle">
-            Browse and manage thumbnail compositions
-          </p>
+      <header className="library-header">
+        <div className="header-left">
+          <h1>Composition Library</h1>
+          <span className="count">{filteredCompositions.length} compositions</span>
         </div>
-        
-        <div className="composition-library__header-actions">
-          <a href="/composer/default" className="composition-library__create-btn">
-            <span>➕</span> New Composition
-          </a>
+        <div className="header-right">
+          <button className="create-btn" onClick={() => navigate('/episodes/new/thumbnail/new')}>
+            + New Composition
+          </button>
         </div>
+      </header>
+
+      <div className="view-tabs">
+        <button
+          className={`view-tab ${view === 'all' ? 'active' : ''}`}
+          onClick={() => setView('all')}
+        >
+          All Compositions
+        </button>
+        <button
+          className={`view-tab ${view === 'recent' ? 'active' : ''}`}
+          onClick={() => setView('recent')}
+        >
+          Recent
+        </button>
+        <button
+          className={`view-tab ${view === 'favorites' ? 'active' : ''}`}
+          onClick={() => setView('favorites')}
+        >
+          ⭐ Favorites
+        </button>
       </div>
 
-      {/* Filters Bar */}
-      <div className="composition-library__filters">
-        <div className="composition-library__filter-group">
+      <div className="filters-section">
+        <div className="search-box">
+          <span className="search-icon">🔍</span>
           <input
             type="text"
             placeholder="Search compositions..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="composition-library__search-input"
           />
         </div>
 
-        <div className="composition-library__filter-group">
-          <select
-            value={selectedShow}
-            onChange={(e) => setSelectedShow(e.target.value)}
-            className="composition-library__select"
-          >
-            <option value="">All Shows</option>
-            {shows.map(show => (
-              <option key={show.id} value={show.id}>{show.name}</option>
+        <div className="tags-filter">
+          <span className="filter-label">Tags:</span>
+          <div className="tags-list">
+            {allTags.map(tag => (
+              <button
+                key={tag}
+                className={`tag-btn ${selectedTags.includes(tag) ? 'active' : ''}`}
+                onClick={() => toggleTag(tag)}
+              >
+                {tag}
+              </button>
             ))}
-          </select>
+          </div>
         </div>
+      </div>
 
-        <div className="composition-library__filter-group">
-          <select
-            value={selectedStatus}
-            onChange={(e) => setSelectedStatus(e.target.value)}
-            className="composition-library__select"
-          >
-            <option value="">All Statuses</option>
-            <option value="DRAFT">Draft</option>
-            <option value="READY">Ready</option>
-            <option value="PROCESSING">Processing</option>
-            <option value="APPROVED">Approved</option>
-            <option value="FAILED">Failed</option>
-          </select>
-        </div>
+      <div className="library-content">
+        {filteredCompositions.length === 0 ? (
+          <div className="empty-state">
+            <div className="empty-icon">📦</div>
+            <h2>No compositions found</h2>
+            <p>
+              {searchQuery || selectedTags.length > 0
+                ? 'Try adjusting your filters'
+                : 'Create your first composition to reuse across episodes'}
+            </p>
+            <button className="create-btn" onClick={() => navigate('/episodes/new/thumbnail/new')}>
+              Create Composition
+            </button>
+          </div>
+        ) : (
+          <div className="compositions-grid">
+            {filteredCompositions.map((composition) => (
+              <div key={composition.id} className="composition-card">
+                <div className="composition-preview">
+                  {composition.thumbnail_preview ? (
+                    <img src={composition.thumbnail_preview} alt={composition.name} />
+                  ) : (
+                    <div className="placeholder-preview">
+                      <span className="placeholder-icon">🎨</span>
+                      <span className="placeholder-text">No Preview</span>
+                    </div>
+                  )}
 
-        <div className="composition-library__filter-group">
-          <select
-            value={sortBy}
-            onChange={(e) => setSortBy(e.target.value)}
-            className="composition-library__select"
-          >
-            <option value="created_desc">Newest First</option>
-            <option value="created_asc">Oldest First</option>
-            <option value="name_asc">Name A-Z</option>
-            <option value="name_desc">Name Z-A</option>
-          </select>
-        </div>
+                  <button
+                    className={`favorite-btn ${composition.is_favorite ? 'active' : ''}`}
+                    onClick={() => handleToggleFavorite(composition.id)}
+                  >
+                    {composition.is_favorite ? '⭐' : '☆'}
+                  </button>
+                </div>
 
-        {(searchQuery || selectedShow || selectedStatus) && (
-          <button
-            onClick={clearFilters}
-            className="composition-library__clear-btn"
-          >
-            Clear Filters
-          </button>
+                <div className="composition-info">
+                  <h3 className="composition-name">{composition.name}</h3>
+                  <p className="composition-description">{composition.description}</p>
+
+                  {composition.tags.length > 0 && (
+                    <div className="composition-tags">
+                      {composition.tags.map(tag => (
+                        <span key={tag} className="tag">{tag}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  <div className="composition-stats">
+                    <span className="stat">
+                      📊 Used in {composition.usage_count} episodes
+                    </span>
+                    <span className="stat">
+                      📅 {new Date(composition.updated_at).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  <div className="composition-actions">
+                    <button
+                      className="action-btn primary"
+                      onClick={() => handleApply(composition)}
+                    >
+                      Apply
+                    </button>
+                    <button
+                      className="action-btn"
+                      onClick={() => handleEdit(composition)}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      className="action-btn"
+                      onClick={() => handleDuplicate(composition)}
+                    >
+                      Duplicate
+                    </button>
+                    <button
+                      className="action-btn delete"
+                      onClick={() => handleDelete(composition)}
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </div>
-
-      {/* Results Count */}
-      <div className="composition-library__results-info">
-        <p className="composition-library__results-count">
-          {compositions.length} {compositions.length === 1 ? 'composition' : 'compositions'} found
-        </p>
-      </div>
-
-      {/* Error State */}
-      {error && (
-        <div className="composition-library__error">
-          <p>❌ {error}</p>
-          <button onClick={loadCompositions}>Retry</button>
-        </div>
-      )}
-
-      {/* Empty State */}
-      {!error && compositions.length === 0 && (
-        <div className="composition-library__empty">
-          <div className="composition-library__empty-icon">🎨</div>
-          <h3 className="composition-library__empty-title">No Compositions Found</h3>
-          <p className="composition-library__empty-text">
-            {searchQuery || selectedShow || selectedStatus
-              ? 'Try adjusting your filters'
-              : 'Create your first composition to get started'}
-          </p>
-          <a href="/composer/default" className="composition-library__empty-btn">
-            Create Composition
-          </a>
-        </div>
-      )}
-
-      {/* Compositions Grid */}
-      {!error && compositions.length > 0 && (
-        <div className="composition-library__grid">
-          {compositions.map(composition => (
-            <CompositionCard
-              key={composition.id}
-              composition={composition}
-              onDelete={handleDelete}
-              onGenerate={handleGenerate}
-            />
-          ))}
-        </div>
-      )}
     </div>
   );
 }

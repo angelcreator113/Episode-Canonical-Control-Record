@@ -1,5 +1,6 @@
-const { models } = require('../models');
+const { models, sequelize } = require('../models');
 const { Scene, Episode, Thumbnail, Asset, SceneAsset } = models;
+const { QueryTypes } = require('sequelize');
 
 /**
  * Scene Controller
@@ -69,26 +70,63 @@ exports.listScenes = async (req, res) => {
  * @access  Authenticated
  * @param   {string} id - Scene UUID
  */
+/**
+ * @route   GET /api/v1/scenes/:id
+ * @desc    Get single scene by ID with full details
+ * @access  Authenticated
+ * @param   {string} id - Scene UUID
+ */
 exports.getScene = async (req, res) => {
+  const timestamp = new Date().toISOString();
+  console.log('\n🎬 getScene CONTROLLER CALLED! [TIMESTAMP:', timestamp, ']');
+  console.log('   Request ID:', req.params.id);
+  console.log('   Query params:', req.query);
+  
   try {
     const { id } = req.params;
+    const { include } = req.query;
+    const includeThumbnail = include && include.includes('thumbnail');
 
-    const scene = await Scene.findByPk(id, {
-      include: [
-        {
-          model: Episode,
-          as: 'episode',
-          attributes: ['id', 'title', 'episode_number', 'status'],
-        },
-        {
-          model: Thumbnail,
-          as: 'thumbnail',
-          attributes: ['id', 'url', 's3Key', 'metadata'],
-        },
-      ],
-    });
+    console.log('🔍 Executing RAW SQL query for scene...');
 
-    if (!scene) {
+    // Use raw SQL like getEpisodeScenes does (which works)
+    const scenes = await sequelize.query(
+      `
+      SELECT 
+        s.*,
+        ${includeThumbnail ? `
+          json_build_object(
+            'id', t.id,
+            's3Bucket', t."s3Bucket",
+            's3Key', t."s3Key",
+            'thumbnailType', t."thumbnailType",
+            'url', t."url",
+            's3Key', t."s3Key",
+            'metadata', t."metadata"
+          ) as thumbnail
+        ` : 'NULL as thumbnail'},
+        json_build_object(
+          'id', e.id,
+          'title', e.title,
+          'episode_number', e.episode_number,
+          'status', e.status
+        ) as episode
+      FROM scenes s
+      LEFT JOIN episodes e ON s.episode_id = e.id
+      ${includeThumbnail ? 'LEFT JOIN thumbnails t ON s.thumbnail_id = t.id' : ''}
+      WHERE s.id = :sceneId::uuid
+        AND s.deleted_at IS NULL
+      `,
+      {
+        replacements: { sceneId: id },
+        type: QueryTypes.SELECT
+      }
+    );
+
+    console.log('✅ Raw SQL query completed. Results:', scenes.length, 'scene(s)');
+
+    if (!scenes || scenes.length === 0) {
+      console.log('❌ Scene not found in database');
       return res.status(404).json({
         success: false,
         error: 'Scene not found',
@@ -97,10 +135,11 @@ exports.getScene = async (req, res) => {
 
     res.json({
       success: true,
-      data: scene,
+      data: scenes[0],
     });
   } catch (error) {
-    console.error('Error getting scene:', error);
+    console.error('[getScene] Error:', error.message);
+    console.error('[getScene] Error stack:', error.stack);
     res.status(500).json({
       success: false,
       error: 'Failed to get scene',
@@ -405,7 +444,10 @@ exports.deleteScene = async (req, res) => {
 exports.getEpisodeScenes = async (req, res) => {
   try {
     const { episodeId } = req.params;
+    const { include } = req.query;
+    const includeAssets = include && include.includes('thumbnail');
 
+    // First check if episode exists
     const episode = await Episode.findByPk(episodeId);
     if (!episode) {
       return res.status(404).json({
@@ -414,12 +456,35 @@ exports.getEpisodeScenes = async (req, res) => {
       });
     }
 
-    const scenes = await Scene.getEpisodeScenes(episodeId);
+    // Use raw query with explicit UUID casting to avoid type mismatch
+    const scenes = await sequelize.query(
+      `
+      SELECT 
+        s.*,
+        ${includeAssets ? `
+          json_build_object(
+            'id', t.id,
+            's3Bucket', t."s3Bucket",
+            's3Key', t."s3Key",
+            'thumbnailType', t."thumbnailType"
+          ) as thumbnail
+        ` : 'NULL as thumbnail'}
+      FROM scenes s
+      ${includeAssets ? 'LEFT JOIN thumbnails t ON s.thumbnail_id = t.id' : ''}
+      WHERE s.episode_id = :episodeId::uuid
+        AND s.deleted_at IS NULL
+      ORDER BY s.scene_number ASC
+      `,
+      {
+        replacements: { episodeId },
+        type: QueryTypes.SELECT
+      }
+    );
 
     // Calculate statistics
     const stats = {
       total: scenes.length,
-      totalDuration: scenes.reduce((sum, s) => sum + (s.duration_seconds || 0), 0),
+      totalDuration: scenes.reduce((sum, s) => sum + (parseFloat(s.duration_seconds) || 0), 0),
       byType: {},
       byStatus: {},
     };
@@ -1249,4 +1314,324 @@ exports.duplicateScene = async (req, res) => {
   }
 };
 
+// ==========================================
+// SCENE COMPOSER ENDPOINTS
+// ==========================================
+
+/**
+ * @route   POST /api/v1/scenes/:scene_id/calculate-duration
+ * @desc    Auto-calculate scene duration from video clips
+ * @access  Editor+
+ */
+exports.calculateDuration = async (req, res) => {
+  try {
+    const { scene_id } = req.params;
+
+    // Validate scene exists
+    const scene = await Scene.findByPk(scene_id);
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene not found',
+      });
+    }
+
+    // Use database function to calculate duration
+    const [result] = await Scene.sequelize.query(
+      'SELECT calculate_scene_duration(:scene_id) as duration',
+      {
+        replacements: { scene_id },
+        type: Scene.sequelize.QueryTypes.SELECT,
+      }
+    );
+
+    const duration = result.duration;
+
+    // Update scene if duration_auto is true
+    let updated = false;
+    if (scene.duration_auto && duration !== null) {
+      await scene.update({ duration_seconds: duration });
+      updated = true;
+    }
+
+    res.json({
+      success: true,
+      duration_seconds: duration,
+      updated,
+      message: updated 
+        ? 'Duration calculated and updated' 
+        : duration === null
+          ? 'No video clips found in scene'
+          : 'Duration calculated (not updated - manual mode)',
+    });
+  } catch (error) {
+    console.error('Error calculating scene duration:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to calculate duration',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   GET /api/v1/scenes/:scene_id/completeness
+ * @desc    Check if scene has all required elements
+ * @access  Viewer+
+ */
+exports.checkCompleteness = async (req, res) => {
+  try {
+    const { scene_id } = req.params;
+
+    // Validate scene exists
+    const scene = await Scene.findByPk(scene_id, {
+      include: [
+        {
+          model: SceneAsset,
+          as: 'sceneAssets',
+          include: [
+            {
+              model: Asset,
+              as: 'asset',
+            },
+          ],
+        },
+      ],
+    });
+
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene not found',
+      });
+    }
+
+    // Check for required elements
+    const assets = scene.sceneAssets || [];
+    const has_background = assets.some(a => a.role && a.role.startsWith('BG.'));
+    const has_clips = assets.some(a => a.role && a.role.startsWith('CLIP.'));
+    const has_duration = scene.duration_seconds !== null && scene.duration_seconds > 0;
+
+    // Build warnings list
+    const warnings = [];
+    if (!has_background) warnings.push('Scene has no background');
+    if (!has_clips) warnings.push('Scene has no video clips assigned');
+    if (!has_duration) warnings.push('Duration not set');
+
+    const complete = has_background && has_clips && has_duration;
+
+    res.json({
+      success: true,
+      complete,
+      missing: {
+        background: !has_background,
+        clips: !has_clips,
+        duration: !has_duration,
+      },
+      warnings,
+      details: {
+        background_count: assets.filter(a => a.role && a.role.startsWith('BG.')).length,
+        clip_count: assets.filter(a => a.role && a.role.startsWith('CLIP.')).length,
+        duration_seconds: scene.duration_seconds,
+      },
+    });
+  } catch (error) {
+    console.error('Error checking scene completeness:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to check completeness',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   POST /api/v1/scenes/:scene_id/assets
+ * @desc    Add or update asset binding to scene
+ * @access  Editor+
+ * @body    {asset_id, role, metadata}
+ */
+exports.addAssetToScene = async (req, res) => {
+  try {
+    const { scene_id } = req.params;
+    const { asset_id, role, metadata = {} } = req.body;
+
+    // Validate scene exists
+    const scene = await Scene.findByPk(scene_id);
+    if (!scene) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene not found',
+      });
+    }
+
+    // Validate asset exists
+    const asset = await Asset.findByPk(asset_id);
+    if (!asset) {
+      return res.status(404).json({
+        success: false,
+        error: 'Asset not found',
+      });
+    }
+
+    // Check if role already exists for this scene
+    const existing = await SceneAsset.findOne({
+      where: { scene_id, role },
+    });
+
+    let scene_asset;
+    if (existing) {
+      // Update existing binding
+      await existing.update({ asset_id, metadata });
+      scene_asset = existing;
+    } else {
+      // Create new binding
+      scene_asset = await SceneAsset.create({
+        scene_id,
+        asset_id,
+        role,
+        metadata,
+      });
+    }
+
+    // Reload with asset details
+    await scene_asset.reload({
+      include: [{ model: Asset, as: 'asset' }],
+    });
+
+    res.status(existing ? 200 : 201).json({
+      success: true,
+      data: scene_asset,
+      message: existing ? 'Asset binding updated' : 'Asset added to scene',
+    });
+  } catch (error) {
+    console.error('Error adding asset to scene:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to add asset',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   GET /api/v1/scenes/:scene_id/assets
+ * @desc    List all assets in scene
+ * @access  Viewer+
+ * @query   {string} role_filter - Filter by role pattern (e.g., "CLIP.%")
+ */
+exports.listSceneAssets = async (req, res) => {
+  try {
+    const { scene_id } = req.params;
+    const { role_filter } = req.query;
+
+    const where_clause = { scene_id };
+
+    if (role_filter) {
+      where_clause.role = { [Scene.sequelize.Sequelize.Op.like]: role_filter };
+    }
+
+    const assets = await SceneAsset.findAll({
+      where: where_clause,
+      include: [
+        {
+          model: Asset,
+          as: 'asset',
+        },
+      ],
+      order: [['role', 'ASC']],
+    });
+
+    res.json({
+      success: true,
+      data: assets,
+      count: assets.length,
+    });
+  } catch (error) {
+    console.error('Error listing scene assets:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to list assets',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   PUT /api/v1/scenes/:scene_id/assets/:scene_asset_id
+ * @desc    Update scene asset metadata
+ * @access  Editor+
+ * @body    {metadata}
+ */
+exports.updateSceneAsset = async (req, res) => {
+  try {
+    const { scene_asset_id } = req.params;
+    const { metadata } = req.body;
+
+    const scene_asset = await SceneAsset.findByPk(scene_asset_id);
+    if (!scene_asset) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene asset not found',
+      });
+    }
+
+    // Merge metadata (don't replace entirely)
+    const updated_metadata = {
+      ...scene_asset.metadata,
+      ...metadata,
+    };
+
+    await scene_asset.update({ metadata: updated_metadata });
+
+    res.json({
+      success: true,
+      data: scene_asset,
+      message: 'Scene asset updated',
+    });
+  } catch (error) {
+    console.error('Error updating scene asset:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update asset',
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * @route   DELETE /api/v1/scenes/:scene_id/assets/:scene_asset_id
+ * @desc    Remove asset from scene
+ * @access  Editor+
+ */
+exports.removeAssetFromScene = async (req, res) => {
+  try {
+    const { scene_asset_id } = req.params;
+
+    const scene_asset = await SceneAsset.findByPk(scene_asset_id);
+    if (!scene_asset) {
+      return res.status(404).json({
+        success: false,
+        error: 'Scene asset not found',
+      });
+    }
+
+    await scene_asset.destroy();
+
+    res.json({
+      success: true,
+      message: 'Asset removed from scene',
+      deleted_id: scene_asset_id,
+    });
+  } catch (error) {
+    console.error('Error removing asset from scene:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to remove asset',
+      message: error.message,
+    });
+  }
+};
+
 module.exports = exports;
+

@@ -1,0 +1,198 @@
+/* ============================================
+   KeyframePropertyEditor — transform sliders
+   ============================================ */
+
+.kpe-panel {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  margin-bottom: 8px;
+  width: 320px;
+  background: #1a1a24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), 0 0 12px rgba(251, 191, 36, 0.1);
+  z-index: 100;
+  overflow: hidden;
+  animation: kpe-slide-up 0.2s ease-out;
+}
+
+@keyframes kpe-slide-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Header */
+.kpe-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: rgba(251, 191, 36, 0.08);
+  border-bottom: 1px solid rgba(251, 191, 36, 0.15);
+}
+
+.kpe-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #fbbf24;
+  letter-spacing: 0.3px;
+}
+
+.kpe-header-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.kpe-reset-btn,
+.kpe-close-btn {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(255, 255, 255, 0.5);
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.kpe-reset-btn:hover { background: rgba(251, 191, 36, 0.15); color: #fbbf24; }
+.kpe-close-btn:hover { background: rgba(239, 68, 68, 0.15); color: #ef4444; }
+
+/* Body — property rows */
+.kpe-body {
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.kpe-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.kpe-label {
+  width: 48px;
+  font-size: 11px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.55);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  flex-shrink: 0;
+}
+
+/* Slider — custom range */
+.kpe-slider {
+  flex: 1;
+  height: 4px;
+  -webkit-appearance: none;
+  appearance: none;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  outline: none;
+  cursor: pointer;
+}
+
+.kpe-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fbbf24;
+  border: 2px solid #1a1a24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+  cursor: grab;
+  transition: transform 0.1s;
+}
+
+.kpe-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
+
+.kpe-slider::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #fbbf24;
+  border: 2px solid #1a1a24;
+  box-shadow: 0 0 6px rgba(251, 191, 36, 0.4);
+  cursor: grab;
+}
+
+.kpe-slider::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 2px;
+}
+
+/* Opacity slider — gradient track hint */
+.kpe-slider-opacity {
+  background: linear-gradient(to right,
+    rgba(255, 255, 255, 0.05),
+    rgba(251, 191, 36, 0.4)
+  );
+}
+
+/* Number input */
+.kpe-number {
+  width: 52px;
+  padding: 4px 6px;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 11px;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  text-align: right;
+  outline: none;
+  transition: border-color 0.15s;
+}
+
+.kpe-number:focus {
+  border-color: rgba(251, 191, 36, 0.5);
+}
+
+/* Hide spinner arrows */
+.kpe-number::-webkit-inner-spin-button,
+.kpe-number::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.kpe-number { -moz-appearance: textfield; }
+
+.kpe-unit {
+  width: 14px;
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.3);
+  flex-shrink: 0;
+}
+
+/* Footer */
+.kpe-footer {
+  padding: 8px 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.kpe-delete-btn {
+  padding: 5px 12px;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: 6px;
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.kpe-delete-btn:hover {
+  background: rgba(239, 68, 68, 0.2);
+  border-color: rgba(239, 68, 68, 0.5);
+}

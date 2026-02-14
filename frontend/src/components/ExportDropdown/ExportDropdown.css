@@ -1,0 +1,134 @@
+/* ================================
+   SHARED EXPORT DROPDOWN
+   ================================ */
+
+.export-dropdown-wrapper {
+  position: relative;
+}
+
+.export-dropdown-btn {
+  padding: 10px 22px;
+  background: linear-gradient(135deg, #10b981, #059669);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.export-dropdown-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+}
+
+.export-dropdown-btn:active {
+  transform: translateY(0);
+}
+
+/* Backdrop */
+.export-dropdown-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+
+/* Menu */
+.export-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 260px;
+  background: rgba(18, 18, 28, 0.98);
+  backdrop-filter: blur(24px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
+  z-index: 1000;
+  overflow: hidden;
+  padding: 6px 0;
+  animation: exportSlideDown 0.18s ease;
+}
+
+@keyframes exportSlideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Items */
+.export-dropdown-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: transparent;
+  border: none;
+  text-align: left;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.export-dropdown-item:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.export-dropdown-item .edi {
+  font-size: 18px;
+  width: 24px;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.export-dropdown-item .item-label {
+  flex: 1;
+}
+
+/* Primary item (Export Studio) */
+.export-dropdown-item.primary {
+  padding: 12px 16px;
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.export-dropdown-item.primary:hover {
+  background: rgba(16, 185, 129, 0.18);
+}
+
+.export-dropdown-item.primary .item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.export-dropdown-item.primary .item-label {
+  font-weight: 600;
+  color: #fff;
+}
+
+.export-dropdown-item.primary .item-desc {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
+  font-weight: 400;
+}
+
+/* Divider */
+.export-dropdown-divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 4px 0;
+}
+
+/* Section label */
+.export-dropdown-section {
+  padding: 8px 16px 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}

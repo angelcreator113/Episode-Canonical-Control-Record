@@ -57,13 +57,15 @@ let Wardrobe, EpisodeWardrobe, OutfitSet;
 let WardrobeLibrary, OutfitSetItems, WardrobeUsageHistory, WardrobeLibraryReferences;
 let SceneLibrary, EpisodeScene;
 let CompositionAsset, CompositionOutput;
-let TimelinePlacement;
+let TimelinePlacement, Marker;
 let AIEditPlan, EditingDecision, AIRevision, VideoProcessingJob;
 let AITrainingData, ScriptMetadata, SceneLayerConfiguration, LayerPreset, Layer, LayerAsset;
 let SceneFootageLink;
 let UserDecision, DecisionPattern, DecisionLog;
 let ShowConfig, ScriptTemplate, ScriptLearningProfile, ScriptEditHistory, ScriptSuggestion;
 let EditMap, CharacterProfile, RawFootage;
+let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
+let TimelineData; // Scene Composer & Timeline Editor integration
 
 try {
   // Core models
@@ -115,6 +117,14 @@ try {
 
   // Timeline system models
   TimelinePlacement = require('./TimelinePlacement')(sequelize);
+  
+  // Phase 2 Timeline Markers
+  Marker = require('./Marker')(sequelize);
+  
+  // Phase 2.5 Animatic System models
+  Beat = require('./Beat')(sequelize);
+  CharacterClip = require('./CharacterClip')(sequelize);
+  AudioClip = require('./AudioClip')(sequelize);
 
   // AI Editing Models
   AIEditPlan = require('./AIEditPlan')(sequelize);
@@ -165,6 +175,9 @@ try {
   EditMap = require('./EditMap')(sequelize, DataTypes);
   CharacterProfile = require('./CharacterProfile')(sequelize, DataTypes);
 
+  // Scene Composer & Timeline Editor integration
+  TimelineData = require('./TimelineData')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -203,6 +216,10 @@ const requiredModels = {
   SceneLibrary,
   EpisodeScene,
   TimelinePlacement,
+  Marker,
+  Beat, // Phase 2.5
+  CharacterClip, // Phase 2.5
+  AudioClip, // Phase 2.5
   AIEditPlan,
   EditingDecision,
   AIRevision,
@@ -236,6 +253,20 @@ if (UserDecision && UserDecision.associate) {
 if (DecisionPattern && DecisionPattern.associate) {
   DecisionPattern.associate(requiredModels);
 }
+if (Marker && Marker.associate) {
+  Marker.associate(requiredModels);
+}
+if (Beat && Beat.associate) {
+  Beat.associate(requiredModels);
+}
+if (CharacterClip && CharacterClip.associate) {
+  CharacterClip.associate(requiredModels);
+}
+if (AudioClip && AudioClip.associate) {
+  AudioClip.associate(requiredModels);
+}
+
+console.log('✅ Model associations defined');
 
 /**
  * Define Model Associations
@@ -259,14 +290,14 @@ MetadataStorage.belongsTo(Episode, {
 
 // Episode → Thumbnail (1:N)
 Episode.hasMany(Thumbnail, {
-  foreignKey: 'episode_id',
+  foreignKey: 'episodeId',
   as: 'thumbnails',
   onDelete: 'CASCADE',
   onUpdate: 'CASCADE',
 });
 
 Thumbnail.belongsTo(Episode, {
-  foreignKey: 'episode_id',
+  foreignKey: 'episodeId',
   as: 'episode',
 });
 
@@ -1025,6 +1056,10 @@ const db = {
     SceneLibrary,
     EpisodeScene,
     TimelinePlacement,
+    Marker,
+    Beat, // Phase 2.5
+    CharacterClip, // Phase 2.5
+    AudioClip, // Phase 2.5
     AIEditPlan,
     EditingDecision,
     AIRevision,
@@ -1036,6 +1071,7 @@ const db = {
     UserDecision,
     DecisionPattern,
     DecisionLog,
+    TimelineData,
   },
 
   /**
@@ -1233,6 +1269,10 @@ module.exports.AssetLabel = AssetLabel;
 module.exports.EpisodeAsset = EpisodeAsset;
 module.exports.SceneAsset = SceneAsset;
 module.exports.TimelinePlacement = TimelinePlacement;
+module.exports.Marker = Marker;
+module.exports.Beat = Beat;
+module.exports.CharacterClip = CharacterClip;
+module.exports.AudioClip = AudioClip;
 module.exports.AIEditPlan = AIEditPlan;
 module.exports.EditingDecision = EditingDecision;
 module.exports.AIRevision = AIRevision;
@@ -1252,3 +1292,4 @@ module.exports.ScriptTemplate = ScriptTemplate;
 module.exports.ScriptLearningProfile = ScriptLearningProfile;
 module.exports.ScriptEditHistory = ScriptEditHistory;
 module.exports.ScriptSuggestion = ScriptSuggestion;
+module.exports.TimelineData = TimelineData;

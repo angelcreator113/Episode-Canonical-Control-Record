@@ -1,0 +1,480 @@
+/* frontend/src/components/Show/StudioTab.css */
+
+.studio-tab {
+  max-width: 1120px;
+  margin: 0 auto;
+}
+
+.studio-loading {
+  text-align: center;
+  padding: 3rem;
+  color: #64748b;
+  font-size: 16px;
+}
+
+/* SECTION STYLING */
+.studio-section {
+  margin-bottom: 2rem;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  margin: 0 0 1rem 0;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.section-icon {
+  font-size: 1.5rem;
+}
+
+/* ==================== CURRENT WORK SECTION ==================== */
+
+.current-episode-card {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 12px;
+  padding: 1.5rem;
+  color: white;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.episode-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 1rem;
+}
+
+.episode-info {}
+
+.episode-title {
+  margin: 0 0 0.5rem 0;
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.episode-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.status-badge {
+  display: inline-block;
+  padding: 0.4rem 1rem;
+  background: rgba(255, 255, 255, 0.25);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+/* Status-specific colors */
+.status-badge.status-draft {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.status-badge.status-scripted {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.status-badge.status-in_build {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.status-badge.status-in_review {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+
+.status-badge.status-scheduled {
+  background: #cffafe;
+  color: #0e7490;
+}
+
+.status-badge.status-published {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.progress-text {
+  font-size: 0.875rem;
+  color: rgba(255, 255, 255, 0.95);
+  font-weight: 500;
+}
+
+/* Progress Bar */
+.progress-bar {
+  height: 12px;
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #10b981 0%, #34d399 100%);
+  border-radius: 6px;
+  transition: width 0.3s ease;
+}
+
+/* Next Steps */
+.next-steps {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+.step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.15);
+  backdrop-filter: blur(10px);
+  border-radius: 8px;
+  font-size: 0.875rem;
+}
+
+.step-item.done {
+  background: rgba(16, 185, 129, 0.2);
+}
+
+.step-icon {
+  font-size: 1.25rem;
+}
+
+.step-label {
+  flex: 1;
+}
+
+/* Episode Actions */
+.episode-actions {
+  display: flex;
+  gap: 1rem;
+}
+
+.btn-continue {
+  flex: 1;
+  background: white;
+  color: #667eea;
+  font-weight: 700;
+  font-size: 1rem;
+  padding: 1rem 2rem;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-continue:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+}
+
+.btn-secondary {
+  padding: 1rem 2rem;
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  border-radius: 8px;
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: white;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+  background: #f8fafc;
+  border-radius: 16px;
+  border: 2px dashed #cbd5e1;
+}
+
+.empty-icon {
+  font-size: 4rem;
+  margin-bottom: 1rem;
+}
+
+.empty-text {
+  color: #64748b;
+  font-size: 1.125rem;
+  margin-bottom: 1.5rem;
+}
+
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 1rem 2rem;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: all 0.2s ease;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+/* ==================== SUGGESTIONS SECTION ==================== */
+
+.suggestions-list {
+  display: grid;
+  gap: 1rem;
+}
+
+.suggestion-card {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  background: linear-gradient(135deg, #fef3c7 0%, #fde68a 100%);
+  border-radius: 12px;
+  border-left: 4px solid #f59e0b;
+  transition: all 0.2s ease;
+}
+
+.suggestion-card:hover {
+  transform: translateX(4px);
+  box-shadow: 0 5px 15px rgba(245, 158, 11, 0.2);
+}
+
+.suggestion-icon {
+  font-size: 2rem;
+  flex-shrink: 0;
+}
+
+.suggestion-text {
+  flex: 1;
+  margin: 0;
+  color: #78350f;
+  font-size: 0.95rem;
+  line-height: 1.5;
+}
+
+.btn-suggestion {
+  padding: 0.5rem 1.25rem;
+  background: white;
+  color: #f59e0b;
+  border: 2px solid #f59e0b;
+  border-radius: 6px;
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.btn-suggestion:hover {
+  background: #f59e0b;
+  color: white;
+}
+
+/* ==================== SHOW HEALTH SECTION ==================== */
+
+.health-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.health-card {
+  text-align: center;
+  padding: 1.5rem 1rem;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+}
+
+.health-card:hover {
+  border-color: #667eea;
+  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.1);
+  transform: translateY(-2px);
+}
+
+.health-card.highlight {
+  background: linear-gradient(135deg, #10b981 0%, #34d399 100%);
+  border-color: #10b981;
+}
+
+.health-value {
+  font-size: 2rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 0.5rem;
+}
+
+.health-card.highlight .health-value {
+  color: white;
+}
+
+.health-value.growth {
+  color: white;
+}
+
+.health-label {
+  font-size: 0.875rem;
+  color: #64748b;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.health-card.highlight .health-label {
+  color: rgba(255, 255, 255, 0.9);
+}
+
+/* Health Alerts */
+.health-alerts {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.alert {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.875rem 1.25rem;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.alert-warning {
+  background: #fef3c7;
+  color: #78350f;
+  border-left: 4px solid #f59e0b;
+}
+
+.alert-success {
+  background: #d1fae5;
+  color: #065f46;
+  border-left: 4px solid #10b981;
+}
+
+.alert-icon {
+  font-size: 1.25rem;
+}
+
+.alert-text {
+  flex: 1;
+}
+
+/* ==================== QUICK ACTIONS SECTION ==================== */
+
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1.5rem;
+}
+
+.action-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem 1rem;
+  background: white;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  text-decoration: none;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.action-card:hover {
+  border-color: #667eea;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+}
+
+.action-icon {
+  font-size: 2.5rem;
+  transition: transform 0.2s ease;
+}
+
+.action-card:hover .action-icon {
+  transform: scale(1.1);
+}
+
+.action-label {
+  font-weight: 600;
+  font-size: 1rem;
+  color: #1e293b;
+  transition: color 0.2s ease;
+}
+
+.action-card:hover .action-label {
+  color: white;
+}
+
+/* ==================== RESPONSIVE ==================== */
+
+@media (max-width: 768px) {
+  .studio-tab {
+    padding: 1rem;
+  }
+  
+  .section-title {
+    font-size: 1.25rem;
+  }
+  
+  .episode-title {
+    font-size: 1.5rem;
+  }
+  
+  .episode-actions {
+    flex-direction: column;
+  }
+  
+  .health-cards {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .actions-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .next-steps {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .health-cards {
+    grid-template-columns: 1fr;
+  }
+  
+  .actions-grid {
+    grid-template-columns: 1fr;
+  }
+}

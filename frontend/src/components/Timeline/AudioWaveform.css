@@ -1,0 +1,54 @@
+/* ============================================
+   AudioWaveform — waveform inside audio track
+   ============================================ */
+
+.awf-container {
+  position: relative;
+  height: 48px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(236, 72, 153, 0.06);
+}
+
+.awf-waveform {
+  width: 100%;
+  height: 100%;
+}
+
+/* Loading state */
+.awf-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.35);
+  pointer-events: none;
+}
+
+.awf-loading-pulse {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ec4899;
+  animation: awf-pulse 1s ease infinite;
+}
+
+@keyframes awf-pulse {
+  0%, 100% { opacity: 0.3; transform: scale(0.8); }
+  50%      { opacity: 1;   transform: scale(1.2); }
+}
+
+/* Error state */
+.awf-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  color: rgba(239, 68, 68, 0.7);
+  pointer-events: none;
+}

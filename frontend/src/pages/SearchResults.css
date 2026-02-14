@@ -531,3 +531,29 @@
     width: 100%;
   }
 }
+
+@media (max-width: 480px) {
+  .search-header {
+    padding: 1rem;
+  }
+
+  .search-bar-section {
+    padding: 0.75rem 1rem;
+  }
+
+  .search-results-container {
+    padding: 0.75rem;
+  }
+
+  .results-grid {
+    gap: 0.75rem;
+  }
+
+  .result-card {
+    padding: 0.75rem;
+  }
+
+  .search-form input {
+    font-size: 16px;
+  }
+}

@@ -1,0 +1,113 @@
+/* ============================================
+   KeyframeTrack — diamond keyframe system
+   ============================================ */
+
+.kft-track {
+  position: relative;
+  height: 100%;
+  min-height: 48px;
+  cursor: crosshair;
+}
+
+/* SVG interpolation curve */
+.kft-curve {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.kft-curve-line {
+  fill: none;
+  stroke: rgba(251, 191, 36, 0.4);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Diamond markers */
+.kft-diamond {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  cursor: grab;
+  z-index: 5;
+  transition: transform 0.1s ease;
+}
+
+.kft-diamond:hover {
+  transform: translate(-50%, -50%) scale(1.2);
+}
+
+.kft-diamond-icon {
+  font-size: 14px;
+  color: #fbbf24;
+  text-shadow: 0 0 6px rgba(251, 191, 36, 0.5);
+  line-height: 1;
+}
+
+.kft-diamond-selected .kft-diamond-icon {
+  color: #f59e0b;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.8);
+  font-size: 16px;
+}
+
+.kft-delete {
+  position: absolute;
+  top: -14px;
+  right: -10px;
+  width: 14px;
+  height: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ef4444;
+  border: none;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 10px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.kft-diamond:hover .kft-delete,
+.kft-diamond-selected .kft-delete {
+  opacity: 1;
+}
+
+/* Current interpolated position dot */
+.kft-current {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.kft-current-dot {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fbbf24;
+  opacity: 0.6;
+  box-shadow: 0 0 8px rgba(251, 191, 36, 0.5);
+}
+
+/* Empty state */
+.kft-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  color: rgba(255,255,255,0.2);
+  pointer-events: none;
+}
