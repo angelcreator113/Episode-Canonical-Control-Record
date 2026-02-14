@@ -14,7 +14,8 @@ if (!process.env.PM2_HOME) {
 
 console.log('🚀 Starting application... [VERSION 2026-01-23-19:25]');
 console.log('🔍 This log confirms latest code is running!');
-console.log('📋 Environment:', process.env.NODE_ENV || 'development');
+console.log('�🚨🚨 [2026-02-10 05:17] - NEW CODE WITH ULTRA-EARLY LOGGING 🚨🚨🚨');
+console.log('�📋 Environment:', process.env.NODE_ENV || 'development');
 console.log('📋 Database URL:', process.env.DATABASE_URL ? '***SET***' : '❌ NOT SET');
 console.log('📋 Port:', process.env.PORT || 3002);
 console.log('📋 DB_HOST:', process.env.DB_HOST || 'NOT SET');
@@ -153,7 +154,14 @@ app.use(
 );
 
 // Handle preflight requests for all routes
-app.options('*', cors());
+app.options(/(.*)/, cors());
+
+// 🚨 ULTRA-EARLY DEBUG MIDDLEWARE - Log EVERY request
+app.use((req, res, next) => {
+  console.log(`\n🌍 INCOMING REQUEST: ${req.method} ${req.path}`);
+  console.log(`   Original URL: ${req.originalUrl}`);
+  next();
+});
 
 app.use(
   helmet({
@@ -266,7 +274,7 @@ app.use('/api/v1/auth', authRoutes);
 let episodeRoutes, thumbnailRoutes, metadataRoutes, processingRoutes;
 let filesRoutes, searchRoutes, jobsRoutes;
 let assetRoutes, compositionRoutes, templateRoutes;
-let sceneRoutes, wardrobeRoutes;
+let sceneRoutes, scenesFixedRoutes, wardrobeRoutes;
 
 try {
   episodeRoutes = require('./routes/episodes');
@@ -361,13 +369,27 @@ try {
   templateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
-// Scene routes
+// Scene routes [CACHE CLEARED 2026-02-10 03:59]
 try {
+  delete require.cache[require.resolve('./routes/scenes')];
   sceneRoutes = require('./routes/scenes');
-  console.log('✓ Scenes routes loaded');
+  console.log('✓ Scenes routes loaded (cache cleared)');
 } catch (e) {
   console.error('✗ Failed to load scenes routes:', e.message);
   sceneRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// FIXED Scene routes (temporary workaround)
+try {
+  console.log('Attempting to load scenes-fixed routes...');
+  scenesFixedRoutes = require('./routes/scenes-fixed');
+  console.log('✓ FIXED Scenes routes loaded successfully!');
+  console.log('  Routes object:', typeof scenesFixedRoutes, scenesFixedRoutes.name);
+  console.log('  Is Router?', scenesFixedRoutes && scenesFixedRoutes.stack);
+} catch (e) {
+  console.error('✗ Failed to load fixed scenes routes:', e.message);
+  console.error('  Stack:', e.stack);
+  scenesFixedRoutes = (req, res) => res.status(500).json({ error: 'FALLBACK - Routes not available' });
 }
 
 // Scene template routes
@@ -551,7 +573,71 @@ try {
   editMapsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
 }
 
+// ============================================================================
+// ICON CUE TIMELINE SYSTEM ROUTES (Week 4 - Production System)
+// ============================================================================
+
+// Icon Cue routes (icon timeline management)
+let iconCueRoutes;
+try {
+  iconCueRoutes = require('./routes/iconCues');
+  console.log('✓ Icon Cue routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Icon Cue routes:', e.message);
+  iconCueRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Cursor Path routes (cursor action timeline)
+let cursorPathRoutes;
+try {
+  cursorPathRoutes = require('./routes/cursorPaths');
+  console.log('✓ Cursor Path routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Cursor Path routes:', e.message);
+  cursorPathRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Music Cue routes (music timeline)
+let musicCueRoutes;
+try {
+  musicCueRoutes = require('./routes/musicCues');
+  console.log('✓ Music Cue routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Music Cue routes:', e.message);
+  musicCueRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Production Package routes (export bundles)
+let productionPackageRoutes;
+try {
+  productionPackageRoutes = require('./routes/productionPackage');
+  console.log('✓ Production Package routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Production Package routes:', e.message);
+  productionPackageRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
+// Icon Slot Mapping routes (icon role → slot mappings)
+let iconSlotRoutes;
+try {
+  iconSlotRoutes = require('./routes/iconSlots');
+  console.log('✓ Icon Slot routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Icon Slot routes:', e.message);
+  iconSlotRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 app.use('/api/v1/episodes', episodeRoutes);
+
+// Timeline Data routes (scene composer & timeline editor)
+try {
+  const timelineDataRoutes = require('./routes/timelineData');
+  app.use('/api/v1/episodes', timelineDataRoutes);
+  console.log('✓ Timeline Data routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load Timeline Data routes:', e.message);
+}
+
 app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
 app.use('/api/v1/processing-queue', processingRoutes);
@@ -572,12 +658,53 @@ app.use('/api/v1/roles', rolesRoutes); // Asset roles registry
 app.use('/api/v1/compositions', compositionRoutes);
 app.use('/api/v1/templates', templateRoutes);
 
+// DEBUG: Direct DB test route
+const testDbDirectRoutes = require('./routes/test-db-direct');
+app.use('/api/v1/debug', testDbDirectRoutes);
+console.log('🧪 DEBUG: Test DB direct route mounted at /api/v1/debug');
+
+// 🚨 DEBUG MIDDLEWARE - Log ALL requests to /api/v1/scenes*
+app.use('/api/v1/scenes', (req, res, next) => {
+  console.log('\n🚨🚨🚨 REQUEST TO /api/v1/scenes*:');
+  console.log('  Method:', req.method);
+  console.log('  Path:', req.path);
+  console.log('  Full URL:', req.originalUrl);
+  console.log('  Query:', req.query);
+  console.log('  Params:', req.params);
+  next();
+});
+
 // Scene routes
+console.log('📌 Mounting scenes routes at /api/v1/scenes...');
+console.log('   scenesFixedRoutes type:', typeof scenesFixedRoutes);
+app.use('/api/v1/scenes-fixed', scenesFixedRoutes); // TEMPORARY WORKAROUND
 app.use('/api/v1/scenes', sceneRoutes);
+console.log('✅ Scenes routes mounted successfully');
 app.use('/api/v1/scene-templates', sceneTemplateRoutes);
 
 // Scene Library routes (new system)
 app.use('/api/v1/scene-library', sceneLibraryRoutes);
+
+// Marker routes (Phase 2 Timeline)
+const markerRoutes = require('./routes/markers');
+app.use('/api/v1', markerRoutes); // Handles both /episodes/:id/markers and /markers/:id
+console.log('✅ Marker routes mounted (Phase 2)');
+
+// Export routes (Phase 3 - Video Export System)
+const exportRoutes = require('./routes/export');
+app.use('/api/v1', exportRoutes);
+console.log('✅ Export routes mounted (Phase 3)');
+
+// Phase 2.5 Animatic System routes
+const beatRoutes = require('./routes/beats');
+const characterClipRoutes = require('./routes/character-clips');
+const audioClipRoutes = require('./routes/audio-clips');
+const animaticRoutes = require('./routes/animatic'); // Extended routes with beat generation
+app.use('/api/v1', beatRoutes);
+app.use('/api/v1', characterClipRoutes);
+app.use('/api/v1', audioClipRoutes);
+app.use('/api/v1', animaticRoutes); // Beat generation and composition endpoints
+console.log('✅ Phase 2.5 Animatic System routes mounted (beats, character-clips, audio-clips, generation)');
 
 // Wardrobe routes
 app.use('/api/v1/wardrobe', wardrobeRoutes);
@@ -633,6 +760,7 @@ try {
   showRoutes = (req, res) => res.status(500).json({ error: 'Routes not available', details: e.message });
 }
 app.use('/api/v1/shows', showRoutes);
+console.log('✅ Shows routes MOUNTED at /api/v1/shows');
 
 // Game Show routes (phases, layouts, interactive elements)
 let gameShowRoutes;
@@ -692,6 +820,24 @@ console.log('✓ YouTube training routes loaded');
 // Development seed routes
 app.use('/api/v1/seed', seedRoutes);
 
+// Icon Cue Timeline System routes (Week 4 - Production System)
+app.use('/api/v1/episodes', iconCueRoutes);
+app.use('/api/v1/episodes', cursorPathRoutes);
+app.use('/api/v1/episodes', musicCueRoutes);
+app.use('/api/v1/episodes', productionPackageRoutes);
+app.use('/api/v1/icon-slots', iconSlotRoutes); // Global icon slot mappings
+console.log('✓ Icon Cue Timeline System routes registered');
+
+// Export Queue Monitor (Bull Board dashboard + stats API)
+let queueMonitorRoutes;
+try {
+  queueMonitorRoutes = require('./routes/queue-monitor');
+  app.use('/admin/queues', queueMonitorRoutes);
+  console.log('✓ Queue Monitor routes loaded at /admin/queues');
+} catch (e) {
+  console.error('✗ Failed to load Queue Monitor routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
@@ -716,6 +862,7 @@ app.get('/api/v1', (req, res) => {
       presence: '/api/v1/presence',
       socket: '/api/v1/socket',
       health: '/health',
+      'queue-monitor': '/admin/queues',
     },
   });
 });
