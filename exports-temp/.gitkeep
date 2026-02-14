@@ -1,0 +1,3 @@
+This directory stores temporary export files during video rendering.
+Files here are cleaned up automatically after export completion or after 24 hours.
+Do not commit export output files to version control.

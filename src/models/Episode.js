@@ -76,6 +76,37 @@ module.exports = (sequelize) => {
         field: 'thumbnail_url',
         comment: 'URL to episode cover image, typically from primary composition',
       },
+      current_ai_edit_plan_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        field: 'current_ai_edit_plan_id',
+        comment: 'Reference to the current AI edit plan for this episode',
+      },
+      platform: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        defaultValue: 'youtube',
+        comment: 'Target platform for the episode (youtube, instagram, tiktok, etc.)',
+      },
+      width: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 1920,
+        comment: 'Canvas width in pixels for the target platform',
+      },
+      height: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 1080,
+        comment: 'Canvas height in pixels for the target platform',
+      },
+      aspect_ratio: {
+        type: DataTypes.STRING(10),
+        allowNull: true,
+        defaultValue: '16:9',
+        field: 'aspect_ratio',
+        comment: 'Aspect ratio string for the target platform',
+      },
     },
     {
       sequelize,

@@ -58,7 +58,7 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
       duration_seconds: {
-        type: DataTypes.INTEGER,
+        type: DataTypes.DECIMAL(10, 2),
         allowNull: true,
         field: 'duration_seconds',
         validate: {
@@ -75,6 +75,40 @@ module.exports = (sequelize) => {
           this.setDataValue('duration_seconds', value);
         },
       },
+      duration_auto: {
+        type: DataTypes.BOOLEAN,
+        allowNull: false,
+        defaultValue: true,
+        field: 'duration_auto',
+        comment: 'If true, duration is auto-calculated from longest clip',
+      },
+      // CamelCase alias for duration_auto
+      durationAuto: {
+        type: DataTypes.VIRTUAL,
+        get() {
+          return this.getDataValue('duration_auto');
+        },
+        set(value) {
+          this.setDataValue('duration_auto', value);
+        },
+      },
+      layout: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'layout',
+        comment: 'JSONB: Spatial layout data for composition (canvas settings, default positions)',
+      },
+      // status field commented out - doesn't exist in current DB schema
+      // status: {
+      //   type: DataTypes.STRING(50),
+      //   allowNull: true,
+      //   defaultValue: null,
+      //   field: 'status',
+      //   validate: {
+      //     isIn: [['planned', 'in_progress', 'complete']],
+      //   },
+      //   comment: 'Scene completion status for Scene Composer (optional, may not exist in DB yet)',
+      // },
       location: {
         type: DataTypes.STRING(255),
         allowNull: true,
@@ -216,6 +250,18 @@ module.exports = (sequelize) => {
         allowNull: false,
         defaultValue: [],
       },
+      ui_elements: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: [],
+        comment: 'Array of UI overlay elements (titles, descriptions, etc.) for Scene Composer',
+      },
+      dialogue_clips: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: [],
+        comment: 'Array of dialogue/voiceover clips for the scene',
+      },
       created_by: {
         type: DataTypes.STRING(255),
         allowNull: true,
@@ -247,7 +293,7 @@ module.exports = (sequelize) => {
         },
       },
       thumbnail_id: {
-        type: DataTypes.UUID,
+        type: DataTypes.INTEGER,
         allowNull: true,
         field: 'thumbnail_id',
         references: {
@@ -322,11 +368,18 @@ module.exports = (sequelize) => {
   );
 
   // Static helper methods
-  Scene.getEpisodeScenes = async function (episodeId) {
-    return await this.findAll({
+  Scene.getEpisodeScenes = async function (episodeId, options = {}) {
+    const queryOptions = {
       where: { episode_id: episodeId },
       order: [['scene_number', 'ASC']],
-    });
+    };
+
+    // Add includes if specified
+    if (options.include) {
+      queryOptions.include = options.include;
+    }
+
+    return await this.findAll(queryOptions);
   };
 
   Scene.getNextSceneNumber = async function (episodeId) {
@@ -444,6 +497,8 @@ module.exports = (sequelize) => {
       thumbnailId: this.thumbnail_id,
       thumbnail: this.thumbnail,
       assets: this.assets,
+      uiElements: this.ui_elements,
+      dialogueClips: this.dialogue_clips,
       rawFootageS3Key: this.raw_footage_s3_key,
       aiSceneDetected: this.ai_scene_detected,
       aiConfidenceScore: this.ai_confidence_score,

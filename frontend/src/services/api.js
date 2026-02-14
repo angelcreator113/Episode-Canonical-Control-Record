@@ -113,4 +113,32 @@ export const healthCheck = () => {
   return apiClient.get('/health');
 };
 
+// ==================== Scene Composer & Timeline Editor APIs ====================
+
+// Platform API
+export const platformAPI = {
+  get: (episodeId) => apiClient.get(`/api/v1/episodes/${episodeId}/platform`),
+  update: (episodeId, platformData) => apiClient.put(`/api/v1/episodes/${episodeId}/platform`, platformData),
+};
+
+// Scenes API
+export const sceneAPI = {
+  getAll: (episodeId) => apiClient.get(`/api/v1/episodes/${episodeId}/scenes`),
+  create: (episodeId, sceneData) => apiClient.post(`/api/v1/episodes/${episodeId}/scenes`, sceneData),
+  update: (sceneId, sceneData) => apiClient.put(`/api/v1/scenes/${sceneId}`, sceneData),
+  delete: (sceneId) => apiClient.delete(`/api/v1/scenes/${sceneId}`),
+  reorder: (episodeId, scenes) => apiClient.put(`/api/v1/episodes/${episodeId}/scenes/reorder`, { scenes }),
+};
+
+// Timeline Data API
+export const timelineDataAPI = {
+  get: (episodeId) => apiClient.get(`/api/v1/episodes/${episodeId}/timeline-data`),
+  update: (episodeId, data) => apiClient.put(`/api/v1/episodes/${episodeId}/timeline-data`, data),
+};
+
+// Unified Save API (atomic save for Scene Composer & Timeline Editor)
+export const saveEpisodeData = (episodeId, data) => {
+  return apiClient.post(`/api/v1/episodes/${episodeId}/save`, data);
+};
+
 export default apiClient;

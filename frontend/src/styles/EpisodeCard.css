@@ -1,587 +1,381 @@
-/* =========================================================
-   ENHANCED EPISODE CARD - UNIFIED LAYOUT SYSTEM
-   Production-ready, scannable, clear actions
-   Grid & List share same spacing/hierarchy
-   ========================================================= */
+/* Modern SaaS Episode Card Design */
 
-.episode-card-enhanced {
-  background: #ffffff;
-  border: 2px solid #e5e7eb;
-  border-radius: 16px;
+.episode-card-modern {
+  background: white;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
   overflow: hidden;
-  display: flex;
-  flex-direction: column;
-  position: relative;
   transition: all 0.2s ease;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
-  height: 100%;
-  /* Unified spacing system */
-  --card-padding-x: 20px;
-  --card-padding-y: 16px;
-  --card-gap: 12px;
-}
-
-.episode-card-enhanced:hover {
-  transform: translateY(-2px);
-  border-color: #a5b4fc;
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.12);
-}
-
-.episode-card-enhanced.is-selected {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.12), 0 8px 20px rgba(0, 0, 0, 0.1);
-}
-
-/* ---------------------------------------------------------
-   Checkbox - GRID VIEW positioning
---------------------------------------------------------- */
-.episode-card-checkbox-new {
-  position: absolute;
-  top: var(--card-padding-y);
-  left: var(--card-padding-x);
-  z-index: 10;
-  /* Floating control feel */
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(229, 231, 235, 0.9);
-  border-radius: 8px;
-  padding: 6px;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 2px 8px rgba(17, 24, 39, 0.08);
-}
-
-.episode-card-checkbox-new input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
   cursor: pointer;
-  accent-color: #6366f1;
-  margin: 0;
-  display: block;
-}
-
-/* ---------------------------------------------------------
-   Header
---------------------------------------------------------- */
-.episode-card-header {
-  padding: 14px 14px 12px;
-  border-bottom: 1px solid var(--border, #e5e7eb);
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  position: relative;
+  height: 100%;
 }
 
-/* subtle premium top accent */
-.episode-card-header::before {
-  content: "";
+.episode-card-modern:hover {
+  border-color: #667eea;
+  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.12);
+  transform: translateY(-3px);
+}
+
+.episode-card-modern:hover .card-actions-overlay {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.episode-card-modern.is-selected {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+}
+
+/* Status Badge */
+.status-badge {
   position: absolute;
-  top: 0;
-  left: 0;
-  height: 3px;
-  width: 100%;
-  background: linear-gradient(90deg, rgba(99,102,241,0.9), rgba(118,75,162,0.9));
-}
-
-.episode-card-header-top {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  width: 100%;
-  flex-wrap: wrap;
-}
-
-.episode-card-header h3 {
-  margin: 0;
-  flex: 1;
-  word-break: break-word;
-  line-height: 1.25;
-  font-size: 1.125rem;
-  font-weight: 900;
-  color: #111827;
-  letter-spacing: -0.02em;
-  margin-bottom: 0.25rem;
-}
-
-/* Episode Card Header New (for CardHeader component) */
-.episode-card-header-new {
-  padding: 52px var(--card-padding-x) var(--card-gap) var(--card-padding-x);
-  position: relative;
-}
-
-.episode-title-hero {
-  margin: 0;
-  font-size: 1.125rem;
-  font-weight: 900;
-  line-height: 1.25;
-  color: #111827;
-  letter-spacing: -0.02em;
-  word-break: break-word;
-}
-
-/* Meta Row - Softened for hierarchy */
-.meta-row {
+  top: 0.875rem;
+  right: 0.875rem;
   display: flex;
   align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  font-size: 0.8125rem;
-  color: #6b7280;
-  font-weight: 500;
-}
-
-.meta-text {
-  color: #6b7280;
-}
-
-.meta-separator {
-  color: #d1d5db;
-  font-weight: 400;
-}
-
-/* Status Badge New */
-.status-badge-new {
-  position: absolute;
-  top: var(--card-padding-y);
-  right: var(--card-padding-x);
-  z-index: 10;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
+  gap: 0.375rem;
+  padding: 0.375rem 0.625rem;
   border-radius: 8px;
-  font-size: 0.8125rem;
-  font-weight: 700;
+  font-size: 0.75rem;
+  font-weight: 600;
+  z-index: 10;
   background: white;
-  border: 1px solid #e5e7eb;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  border: 1.5px solid #e2e8f0;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
 .status-emoji {
   font-size: 0.875rem;
-  line-height: 1;
 }
 
-.status-label {
-  line-height: 1;
+.status-text {
+  display: none;
 }
 
-/* Checkbox New */
-.episode-card-checkbox-new {
+.episode-card-modern:hover .status-text {
+  display: inline;
+}
+
+.episode-card-checkbox {
   position: absolute;
-  top: 12px;
-  left: 12px;
+  top: 0.75rem;
+  left: 0.75rem;
   z-index: 10;
-  background: rgba(255, 255, 255, 0.95);
-  border: 1px solid rgba(229, 231, 235, 0.9);
-  border-radius: 8px;
-  padding: 6px;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 2px 8px rgba(17, 24, 39, 0.08);
 }
 
-.episode-card-checkbox-new input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
+.episode-card-checkbox input[type="checkbox"] {
+  width: 1.125rem;
+  height: 1.125rem;
   cursor: pointer;
-  accent-color: var(--primary, #6366f1);
 }
 
-/* ---------------------------------------------------------
-   BODY - DESCRIPTION & TAGS (unified spacing)
---------------------------------------------------------- */
-.episode-card-body-new {
-  padding: 0 var(--card-padding-x) var(--card-padding-y) var(--card-padding-x);
-  flex: 1;
+/* Card Footer */
+.card-footer-actions {
+  padding: 0.875rem 1rem;
+  border-top: 1.5px solid #f1f5f9;
   display: flex;
-  flex-direction: column;
-  gap: var(--card-gap);
-}
-
-/* Description - 2 line clamp */
-.episode-description-clamp {
-  margin: 0;
-  font-size: 0.95rem;
-  line-height: 1.5;
-  color: #4b5563;
-  
-  /* 2 line clamp */
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-/* Tags Row */
-.episode-tags-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: auto; /* Push to bottom */
-}
-
-.tag-chip {
-  display: inline-flex;
+  gap: 0.625rem;
   align-items: center;
-  padding: 6px 12px;
-  border-radius: 8px;
-  
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #e5e7eb;
-  
-  font-size: 0.75rem;
-  font-weight: 700;
-  line-height: 1;
-  text-transform: capitalize;
-  
-  transition: all 0.2s ease;
-}
-
-.tag-chip:hover {
-  background: #e5e7eb;
-  border-color: #d1d5db;
-}
-
-.tag-chip.tag-more {
-  background: #6366f1;
-  color: white;
-  border-color: #6366f1;
-}
-
-/* ---------------------------------------------------------
-   FOOTER - NORMALIZED ACTIONS (unified spacing)
---------------------------------------------------------- */
-.episode-card-footer-new {
-  padding: var(--card-padding-y) var(--card-padding-x) var(--card-padding-y) var(--card-padding-x);
-  border-top: 1px solid #e5e7eb;
-  display: flex;
-  gap: 10px;
-  align-items: stretch;
+  background: #fafbfc;
 }
 
 .btn-action {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  
-  padding: 14px 18px;
-  border-radius: 12px;
-  border: 2px solid transparent;
-  
-  font-size: 0.875rem;
-  font-weight: 800;
-  line-height: 1.2;
-  white-space: nowrap;
-  
+  padding: 0.5rem 1rem;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 0.8125rem;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s ease;
-  
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  background: white;
+  color: #475569;
 }
 
-.btn-action:hover {
-  transform: translateY(-1px);
-  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.15);
-}
-
-.btn-action:active {
-  transform: translateY(0);
-}
-
-/* Primary Action - Emphasized */
 .btn-primary-action {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
   flex: 1;
-  background: #dbeafe;
-  color: #111827;
-  border-color: #3b82f6;
-  font-weight: 900;
-  font-size: 0.7rem;
+  box-shadow: 0 1px 3px rgba(102, 126, 234, 0.2);
 }
 
 .btn-primary-action:hover {
-  background: #bfdbfe;
-  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.25);
-  color: #000000;
+  background: #5568d3;
+  border-color: #5568d3;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  transform: translateY(-1px);
 }
 
-/* Secondary Action - Strong contrast */
 .btn-secondary-action {
-  flex: 1;
-  background: #f3f4f6;
-  color: #111827;
-  border-color: #d1d5db;
-  font-weight: 900;
-  font-size: 0.8rem;
+  background: white;
+  color: #667eea;
+  border-color: #e2e8f0;
 }
 
 .btn-secondary-action:hover {
-  background: #e5e7eb;
-  border-color: #9ca3af;
-  color: #000000;
+  background: #f8fafc;
+  border-color: #cbd5e1;
 }
 
-/* Danger Action - Icon Only */
 .btn-danger-action {
-  flex: 0 0 auto;
-  width: 48px;
-  padding: 12px;
-  background: #fef2f2;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   color: #dc2626;
-  border-color: #fecaca;
+  border-color: #fee2e2;
+  background: white;
 }
 
 .btn-danger-action:hover {
-  background: #fee2e2;
-  border-color: #fca5a5;
-  color: #991b1b;
+  background: #fef2f2;
+  border-color: #fecaca;
 }
 
-.btn-danger-action svg {
-  display: block;
-}
-
-/* ---------------------------------------------------------
-   LIST VIEW MODE - COLUMN GRID SYSTEM (Denser, Scannable)
-   Fixed alignment, shared baseline, visual consistency
---------------------------------------------------------- */
-.episode-card-enhanced.view-list {
-  flex-direction: row;
+/* Status Bar */
+.status-indicator-bar {
+  height: 0.25rem;
+  width: 100%;
+  display: flex;
   align-items: center;
-  height: auto;
-  /* LIST VIEW = 20% less padding than grid */
-  min-height: 64px;
-  /* Grid template for perfect column alignment */
-  display: grid;
-  grid-template-columns: 48px 1fr auto 100px;
-  grid-template-areas: "checkbox content actions status";
-  gap: 16px;
-  /* Reduced padding for density */
-  padding: 12px 16px;
-}
-
-/* Checkbox Column - Aligned with content baseline */
-.episode-card-enhanced.view-list .episode-card-checkbox-new {
-  grid-area: checkbox;
-  position: static;
-  display: flex;
-  align-items: flex-start;
   justify-content: center;
-  background: none;
-  border: none;
-  padding: 0;
-  backdrop-filter: none;
-  box-shadow: none;
-  /* Snap to content baseline with micro-adjustment */
-  padding-top: 2px;
+  padding: 0.375rem 0.75rem;
+  transition: height 0.2s ease;
 }
 
-.episode-card-enhanced.view-list .episode-card-checkbox-new input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  margin: 0;
+.status-label-inline {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: white;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-/* Content Column - Proper wrapper for title + meta */
-.episode-card-enhanced.view-list .episode-card-header-new {
-  grid-area: content;
-  padding: 0;
-  border: none;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  /* Ensure content wraps, doesn't overflow */
-  min-width: 0;
+.episode-card-modern:hover .status-indicator-bar {
+  height: 1.75rem;
+}
+
+.episode-card-modern:hover .status-label-inline {
+  opacity: 1;
+}
+
+/* Thumbnail Area */
+.card-thumbnail-area {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #f1f5f9;
   overflow: hidden;
+  position: relative;
 }
 
-.episode-card-enhanced.view-list .episode-card-body-new {
-  /* Body content stays inside header wrapper in list view */
-  padding: 0;
-  border: none;
-  margin: 0;
+.card-thumbnail-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
-.episode-card-enhanced.view-list .episode-title-hero {
-  font-size: 0.95rem;
-  line-height: 1.3;
-  margin: 0;
-  font-weight: 700;
-}
-
-.episode-card-enhanced.view-list .meta-row {
-  margin: 0;
-  line-height: 1.3;
-  font-size: 0.8rem;
-}
-
-.episode-card-enhanced.view-list .episode-description-clamp,
-.episode-card-enhanced.view-list .episode-tags-row {
-  display: none; /* Hide in list view for compactness */
-}
-
-/* Actions Column - Aligned right, tighter */
-.episode-card-enhanced.view-list .episode-card-footer-new {
-  grid-area: actions;
-  flex-direction: row;
-  gap: 6px;
-  border: none;
-  padding: 0;
-  align-items: center;
-}
-
-.episode-card-enhanced.view-list .btn-action {
-  white-space: nowrap;
-  /* Tighter buttons for list density */
-  padding: 6px 12px;
-  font-size: 0.85rem;
-  height: 32px;
-}
-
-.episode-card-enhanced.view-list .btn-danger-action {
-  padding: 6px 10px;
-  height: 32px;
-}
-
-/* Status Column - METADATA TREATMENT, not action */
-.episode-card-enhanced.view-list .status-badge-new {
-  grid-area: status;
-  position: static;
-  align-self: center;
-  margin: 0;
-  /* Anchored to content, not floating in action zone */
-  justify-self: start;
-  padding: 5px 10px;
-  font-size: 0.8rem;
-}
-
-/* ---------------------------------------------------------
-   RESPONSIVE
---------------------------------------------------------- */
-@media (max-width: 768px) {
-  .episode-title-hero {
-    font-size: 1.15rem;
-  }
-  
-  .episode-card-header-new {
-    padding: 55px 16px 12px 16px;
-  }
-  
-  .episode-card-body-new {
-    padding: 0 16px 16px 16px;
-  }
-  
-  .episode-card-footer-new {
-    padding: 12px 16px 16px 16px;
-  }
-  
-  .status-badge-new {
-    top: 12px;
-    right: 12px;
-    padding: 6px 10px;
-  }
-  
-  /* Move checkbox to its own row - clear hierarchy */
-  .episode-card-checkbox-new {
-    position: relative;
-    top: auto;
-    left: auto;
-    padding: 12px 16px 8px 16px;
-    background: transparent;
-    border: none;
-    box-shadow: none;
-    backdrop-filter: none;
-  }
-  
-  /* Adjust header padding since checkbox is now above it */
-  .episode-card-header-new {
-    padding: 12px 16px 12px 16px;
-  }
-  
-  /* Give title full width */
-  .episode-title-hero {
-    max-width: 100%;
-    padding-right: 60px; /* Space for status badge */
-  }
-}
-
-@media (max-width: 640px) {
-  /* List view reverts to vertical on mobile */
-  .episode-card-enhanced.view-list {
-    grid-template-columns: 1fr;
-    grid-template-areas: 
-      "status"
-      "checkbox"
-      "content"
-      "actions";
-    gap: 12px;
-    padding: 16px;
-  }
-  
-  .episode-card-enhanced.view-list .episode-card-checkbox-new {
-    justify-content: flex-start;
-  }
-  
-  .episode-card-enhanced.view-list .status-badge-new {
-    justify-self: flex-end;
-  }
-  
-  .episode-card-enhanced.view-list .episode-card-footer-new {
-    flex-direction: column;
-    gap: 8px;
-  }
-  
-  .episode-card-enhanced.view-list .btn-action {
-    width: 100%;
-  }
-  
-  .episode-card-enhanced.view-list .btn-danger-action {
-    width: 100%;
-  }
-  
-  /* Grid view fallback */
-  .episode-card-footer-new {
-    flex-direction: column;
-  }
-  
-  .btn-action {
-    width: 100%;
-  }
-  
-  .btn-danger-action {
-    width: 100%;
-  }
-}
-
-/* ---------------------------------------------------------
-   EMPTY STATE ENHANCEMENT (if no episodes)
---------------------------------------------------------- */
-.empty-state-enhanced {
+.card-thumbnail-placeholder {
+  width: 100%;
+  height: 100%;
   display: flex;
-  flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 60px 20px;
-  text-align: center;
+  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+}
+
+.placeholder-icon {
+  font-size: 3rem;
+  opacity: 0.3;
+}
+
+/* Content Area */
+.card-content-area {
+  padding: 1rem 1rem 0.875rem;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.625rem;
+}
+
+.card-meta-area {
+  padding: 0 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.meta-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.meta-text {
+  color: #64748b;
+}
+
+.meta-link {
+  color: #667eea;
+  text-decoration: none;
+}
+
+.meta-link:hover {
+  text-decoration: underline;
+}
+
+.meta-separator {
+  opacity: 0.5;
+}
+
+.card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.tag-chip {
+  padding: 0.25rem 0.625rem;
+  background: #f1f5f9;
+  border-radius: 0.375rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #475569;
+}
+
+.tag-more {
+  background: #e2e8f0;
+}
+
+.card-title {
+  margin: 0;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+.card-meta {
+  font-size: 0.75rem;
+  color: #64748b;
+  line-height: 1.4;
+}
+
+.meta-sep {
+  opacity: 0.5;
+}
+
+.card-description {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: #64748b;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* Actions Overlay */
+.card-actions-overlay {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.8), transparent);
+  padding: 2rem 1rem 1rem;
+  display: flex;
+  gap: 0.5rem;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+  justify-content: flex-end;
+}
+
+.card-action-btn {
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1;
+}
+
+.card-action-btn.primary {
   background: white;
-  border-radius: 16px;
-  border: 2px dashed #d1d5db;
+  color: #667eea;
 }
 
-.empty-state-enhanced h2 {
-  margin: 16px 0 8px 0;
+.card-action-btn.primary:hover {
+  background: #f8fafc;
+  transform: scale(1.05);
+}
+
+.card-action-btn.secondary {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.card-action-btn.secondary:hover {
+  background: rgba(255, 255, 255, 0.3);
+  border-color: rgba(255, 255, 255, 0.5);
+}
+
+.card-action-btn.danger {
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: rgba(239, 68, 68, 0.9);
+  color: white;
   font-size: 1.5rem;
-  font-weight: 800;
-  color: #111827;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.empty-state-enhanced p {
-  margin: 0 0 24px 0;
-  color: #6b7280;
-  font-size: 1rem;
+.card-action-btn.danger:hover {
+  background: #dc2626;
 }
 
-.empty-state-icon {
-  font-size: 4rem;
-  opacity: 0.4;
+/* Responsive Adjustments */
+@media (max-width: 768px) {
+  .card-actions-overlay {
+    opacity: 1;
+    pointer-events: auto;
+    background: linear-gradient(to top, rgba(0, 0, 0, 0.6), transparent);
+  }
+  
+  .status-indicator-bar {
+    height: 1.75rem;
+  }
+  
+  .status-label-inline {
+    opacity: 1;
+  }
+}
+
+/* Accessibility */
+@media (prefers-reduced-motion: reduce) {
+  .episode-card-modern,
+  .card-action-btn,
+  .status-indicator-bar {
+    transition: none;
+  }
 }

@@ -1,0 +1,381 @@
+/* ============================================
+   AssetUploadModal — Scene Composer Upload UI
+   ============================================ */
+
+/* Overlay */
+.aum-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.5);
+}
+
+/* Modal */
+.aum-modal {
+  background: #1a1d24;
+  border-radius: 16px;
+  width: 480px;
+  max-width: 95vw;
+  max-height: 85vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.06);
+  display: flex;
+  flex-direction: column;
+}
+
+/* Header */
+.aum-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid rgba(255,255,255,0.06);
+}
+
+.aum-header-icon {
+  font-size: 1.4rem;
+}
+
+.aum-header h2 {
+  flex: 1;
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: #fff;
+}
+
+.aum-close {
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.06);
+  border: none;
+  border-radius: 8px;
+  color: rgba(255,255,255,0.6);
+  font-size: 1.25rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aum-close:hover {
+  background: rgba(255,255,255,0.12);
+  color: #fff;
+}
+
+/* Body */
+.aum-body {
+  padding: 20px 24px;
+}
+
+/* Mode Grid (Upload / URL chooser) */
+.aum-mode-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.aum-mode-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 28px 16px;
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  color: #fff;
+}
+
+.aum-mode-card:hover {
+  background: rgba(102, 126, 234, 0.08);
+  border-color: rgba(102, 126, 234, 0.3);
+  transform: translateY(-2px);
+}
+
+.aum-mode-icon {
+  font-size: 2rem;
+}
+
+.aum-mode-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.aum-mode-hint {
+  font-size: 0.75rem;
+  color: rgba(255,255,255,0.45);
+}
+
+/* Dropzone */
+.aum-dropzone {
+  border: 2px dashed rgba(255,255,255,0.12);
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.aum-dropzone:hover {
+  border-color: rgba(102, 126, 234, 0.4);
+  background: rgba(102, 126, 234, 0.04);
+}
+
+.aum-dropzone-active {
+  border-color: #667eea;
+  background: rgba(102, 126, 234, 0.1);
+}
+
+.aum-dropzone-icon {
+  font-size: 2.5rem;
+  margin-bottom: 12px;
+}
+
+.aum-dropzone-text {
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+  color: rgba(255,255,255,0.8);
+  font-weight: 500;
+}
+
+.aum-dropzone-hint {
+  margin: 0;
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.4);
+}
+
+/* Back link */
+.aum-back-link {
+  display: inline-block;
+  margin-top: 16px;
+  background: none;
+  border: none;
+  color: rgba(255,255,255,0.4);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.aum-back-link:hover {
+  color: rgba(255,255,255,0.7);
+}
+
+/* URL Input */
+.aum-url-input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.aum-url-label {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.7);
+}
+
+.aum-url-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  outline: none;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.aum-url-input:focus {
+  border-color: #667eea;
+}
+
+.aum-url-input::placeholder {
+  color: rgba(255,255,255,0.25);
+}
+
+.aum-url-preview {
+  margin-top: 12px;
+  border-radius: 8px;
+  overflow: hidden;
+  max-height: 200px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+.aum-url-preview img {
+  width: 100%;
+  max-height: 200px;
+  object-fit: contain;
+  display: block;
+}
+
+/* File Preview */
+.aum-preview {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.aum-preview-img {
+  max-width: 100%;
+  max-height: 240px;
+  border-radius: 10px;
+  object-fit: contain;
+  background: repeating-conic-gradient(rgba(255,255,255,0.04) 0% 25%, transparent 0% 50%) 50% / 16px 16px;
+}
+
+.aum-preview-placeholder {
+  font-size: 4rem;
+  width: 120px;
+  height: 120px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.03);
+  border-radius: 16px;
+  border: 1px solid rgba(255,255,255,0.06);
+}
+
+/* File Info */
+.aum-file-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 14px;
+  background: rgba(255,255,255,0.03);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.aum-file-name {
+  font-size: 0.85rem;
+  color: rgba(255,255,255,0.8);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.aum-file-size {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.4);
+  flex-shrink: 0;
+}
+
+/* Progress */
+.aum-progress {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.aum-progress-bar {
+  flex: 1;
+  height: 6px;
+  background: rgba(255,255,255,0.08);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.aum-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #667eea, #764ba2);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+.aum-progress-text {
+  font-size: 0.8rem;
+  color: rgba(255,255,255,0.5);
+  font-weight: 600;
+  min-width: 36px;
+  text-align: right;
+}
+
+/* Change file */
+.aum-change-btn {
+  display: block;
+  width: 100%;
+  padding: 8px;
+  background: none;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.5);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aum-change-btn:hover {
+  border-color: rgba(255,255,255,0.15);
+  color: rgba(255,255,255,0.8);
+}
+
+/* Error */
+.aum-error {
+  margin: 0 24px;
+  padding: 10px 14px;
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  border-radius: 8px;
+  color: #f87171;
+  font-size: 0.82rem;
+}
+
+/* Footer */
+.aum-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px 20px;
+  border-top: 1px solid rgba(255,255,255,0.06);
+}
+
+.aum-btn-cancel {
+  padding: 10px 20px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 8px;
+  color: rgba(255,255,255,0.6);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.aum-btn-cancel:hover:not(:disabled) {
+  background: rgba(255,255,255,0.1);
+  color: #fff;
+}
+
+.aum-btn-primary {
+  padding: 10px 24px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.aum-btn-primary:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
+}
+
+.aum-btn-primary:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

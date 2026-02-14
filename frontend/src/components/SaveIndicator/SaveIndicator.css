@@ -1,0 +1,144 @@
+/* SaveIndicator — Inline header save status + button */
+
+.save-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 4px;
+}
+
+/* Status badge */
+.save-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  white-space: nowrap;
+}
+
+/* -- Saved state */
+.save-indicator.saved .save-status-badge {
+  background: rgba(16, 185, 129, 0.12);
+  color: #34d399;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+
+.save-indicator.saved .save-icon {
+  font-size: 14px;
+}
+
+/* -- Saving state */
+.save-indicator.saving .save-status-badge {
+  background: rgba(102, 126, 234, 0.12);
+  color: #93a3f8;
+  border: 1px solid rgba(102, 126, 234, 0.2);
+}
+
+/* -- Unsaved state */
+.save-indicator.unsaved .save-status-badge {
+  background: rgba(251, 191, 36, 0.12);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.25);
+}
+
+.save-indicator.unsaved .save-icon {
+  font-size: 10px;
+  animation: pulse-dot 1.5s infinite;
+}
+
+/* -- Error state */
+.save-indicator.error .save-status-badge {
+  background: rgba(239, 68, 68, 0.12);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+/* Spinner */
+.save-spinner {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(102, 126, 234, 0.2);
+  border-top-color: #667eea;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+/* Time label */
+.save-time {
+  color: rgba(255, 255, 255, 0.4);
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 2px;
+}
+
+/* Error tooltip */
+.save-error-tip {
+  font-size: 11px;
+  color: #f87171;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: help;
+}
+
+/* Manual save button */
+.save-btn-manual {
+  padding: 6px 14px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.save-btn-manual:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+.save-btn-manual:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.save-btn-manual:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* When unsaved — make the button more prominent */
+.save-indicator.unsaved .save-btn-manual {
+  background: rgba(102, 126, 234, 0.2);
+  border-color: rgba(102, 126, 234, 0.4);
+  color: #93a3f8;
+}
+
+.save-indicator.unsaved .save-btn-manual:hover:not(:disabled) {
+  background: rgba(102, 126, 234, 0.3);
+}
+
+/* When error — make save button red-ish */
+.save-indicator.error .save-btn-manual {
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
+  color: #f87171;
+}

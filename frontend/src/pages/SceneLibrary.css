@@ -311,7 +311,7 @@
   margin-bottom: 2rem;
 }
 
-.scene-card {
+.scene-library-page .scene-card {
   background: white;
   border-radius: 12px;
   overflow: hidden;
@@ -320,7 +320,7 @@
   transition: all 0.2s;
 }
 
-.scene-card:hover {
+.scene-library-page .scene-card:hover {
   box-shadow: 0 8px 16px rgba(0, 0, 0, 0.15);
   transform: translateY(-2px);
 }
@@ -552,5 +552,24 @@
   .scenes-grid {
     grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
     gap: 1rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .scene-library-page {
+    padding: 0.75rem;
+  }
+
+  .scenes-grid {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+
+  .library-header h1 {
+    font-size: 1.25rem;
+  }
+
+  .scene-card {
+    padding: 0.75rem;
   }
 }

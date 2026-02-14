@@ -22,9 +22,13 @@ updates:
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 5
+    versioning-strategy: increase-if-necessary
     labels:
       - "dependencies"
       - "frontend"
+    ignore:
+      - dependency-name: "@vitejs/plugin-react"
+        versions: [">=5.0.0"]
 
   # GitHub Actions
   - package-ecosystem: "github-actions"

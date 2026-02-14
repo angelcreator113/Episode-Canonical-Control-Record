@@ -146,6 +146,37 @@ router.get('/', async (req, res) => {
 });
 
 /**
+ * GET /api/v1/shows/:id
+ * Get a single show by ID
+ */
+router.get('/:id', async (req, res) => {
+  try {
+    const Show = getShow();
+    const { id } = req.params;
+
+    const show = await Show.findByPk(id);
+
+    if (!show) {
+      return res.status(404).json({
+        error: 'Not Found',
+        message: 'Show not found',
+      });
+    }
+
+    res.json({
+      status: 'SUCCESS',
+      data: show,
+    });
+  } catch (error) {
+    console.error('Failed to get show:', error);
+    res.status(500).json({
+      error: 'Failed to get show',
+      message: error.message,
+    });
+  }
+});
+
+/**
  * POST /api/v1/shows
  * Create a new show
  */
@@ -363,6 +394,59 @@ router.get('/:id/template', async (req, res) => {
     console.error('Failed to get template:', error);
     res.status(500).json({
       error: 'Failed to get template',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * GET /api/v1/shows/:id/wardrobe
+ * Get all wardrobe items belonging to a show
+ */
+router.get('/:id/wardrobe', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { character, category } = req.query;
+    const models = require('../models');
+
+    // Build optional filters
+    const filters = [];
+    const replacements = { show_id: id };
+
+    if (character) {
+      filters.push('AND w.character = :character');
+      replacements.character = character;
+    }
+    if (category) {
+      filters.push('AND w.clothing_category = :category');
+      replacements.category = category;
+    }
+
+    const items = await models.sequelize.query(
+      `SELECT w.id, w.name, w.character, w.clothing_category,
+              w.s3_url, w.s3_url_processed, w.thumbnail_url,
+              w.color, w.season, w.tags, w.is_favorite,
+              w.description, w.created_at, w.updated_at
+       FROM wardrobe w
+       WHERE w.show_id = :show_id
+         AND w.deleted_at IS NULL
+         ${filters.join(' ')}
+       ORDER BY w.character, w.clothing_category, w.name`,
+      {
+        replacements,
+        type: require('sequelize').QueryTypes.SELECT,
+      }
+    );
+
+    res.json({
+      success: true,
+      data: items || [],
+      count: (items || []).length,
+    });
+  } catch (error) {
+    console.error('Failed to get show wardrobe:', error);
+    res.status(500).json({
+      error: 'Failed to get show wardrobe',
       message: error.message,
     });
   }

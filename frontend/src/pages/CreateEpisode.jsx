@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import { API_URL } from '../config/api';
@@ -14,15 +14,18 @@ import ErrorMessage from '../components/ErrorMessage';
 import LoadingSpinner from '../components/LoadingSpinner';
 import TagInput from '../components/TagInput';
 import { STATUS_OPTIONS } from '../utils/constants';
-import '../styles/EpisodeForm.css';
+import SceneComposerFull from '../components/SceneComposer/SceneComposerFull';
+import './CreateEpisode.css';
 
 const MAX_THUMB_MB = 5;
 const MAX_THUMB_BYTES = MAX_THUMB_MB * 1024 * 1024;
 
 const CreateEpisode = () => {
+  const { episodeId } = useParams();
   const navigate = useNavigate();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const toast = useToast();
+  const isEditMode = Boolean(episodeId);
 
   const [formData, setFormData] = useState({
     title: '',
@@ -152,6 +155,93 @@ const CreateEpisode = () => {
     };
     fetchShows();
   }, []);
+
+  // Load episode data for edit mode
+  useEffect(() => {
+    if (!isEditMode) return;
+
+    if (!episodeId) {
+      setError('Invalid episode ID');
+      setTimeout(() => navigate('/episodes', { replace: true }), 1000);
+      return;
+    }
+
+    const fetchEpisode = async () => {
+      try {
+        setLoading(true);
+        const episode = await episodeService.getEpisode(episodeId);
+
+        setFormData({
+          title: episode.title || '',
+          episodeNumber: episode.episode_number || '',
+          season: episode.season || '',
+          status: episode.status || 'draft',
+          description: episode.description || '',
+          airDate: episode.air_date ? episode.air_date.split('T')[0] : '',
+          categories: Array.isArray(episode.categories) ? episode.categories : [],
+          showId: episode.show_id || '',
+        });
+
+        // Load distribution & platforms
+        if (episode.platforms) setPlatforms(episode.platforms);
+        if (episode.platforms_other) setPlatformsOther(episode.platforms_other);
+        if (episode.content_strategy) setContentStrategy(episode.content_strategy);
+        if (episode.platform_descriptions) setPlatformDescriptions(episode.platform_descriptions);
+
+        // Load content intent
+        if (episode.content_types) setContentTypes(episode.content_types);
+        if (episode.primary_audience) setPrimaryAudience(episode.primary_audience);
+        if (episode.tones) setTones(episode.tones);
+
+        // Load structure
+        if (episode.structure) setStructure(episode.structure);
+
+        // Load visual requirements
+        if (episode.visual_requirements) setVisualReqs(episode.visual_requirements);
+
+        // Load team & ownership
+        if (episode.owner_creator) setOwnerCreator(episode.owner_creator);
+        if (episode.collaborators) setCollaborators(episode.collaborators);
+        if (typeof episode.needs_approval === 'boolean') setNeedsApproval(episode.needs_approval);
+
+        // Load sponsorship data
+        if (typeof episode.has_brand_deal === 'boolean') setHasBrandDeal(episode.has_brand_deal);
+        if (episode.sponsor_name) setSponsorName(episode.sponsor_name);
+        if (episode.deal_value) setDealValue(episode.deal_value);
+        if (episode.deliverables) setDeliverables(episode.deliverables);
+        if (episode.integration_requirements) setIntegrationRequirements(episode.integration_requirements);
+        if (episode.deal_deadline) setDealDeadline(episode.deal_deadline.split('T')[0]);
+        if (episode.sponsor_expectations) setSponsorExpectations(episode.sponsor_expectations);
+
+        // Load social collab data
+        if (typeof episode.has_social_collab === 'boolean') setHasSocialCollab(episode.has_social_collab);
+        if (episode.collab_partners) setCollabPartners(episode.collab_partners);
+        if (episode.collab_platforms) setCollabPlatforms(episode.collab_platforms);
+        if (episode.collab_type) setCollabType(episode.collab_type);
+        if (episode.collab_deliverables) setCollabDeliverables(episode.collab_deliverables);
+        if (episode.collab_timeline) setCollabTimeline(episode.collab_timeline);
+        if (episode.collab_notes) setCollabNotes(episode.collab_notes);
+
+        // Set existing thumbnail
+        if (episode.thumbnail_url) {
+          setThumbnailPreview(episode.thumbnail_url);
+        }
+        if (episode.thumbnail_id) {
+          setThumbnailId(episode.thumbnail_id);
+        }
+
+        setLoading(false);
+      } catch (err) {
+        console.error('Failed to load episode:', err);
+        const errorMessage = err?.response?.data?.error || err?.message || 'Failed to load episode';
+        setError(errorMessage);
+        toast.showError(errorMessage);
+        setLoading(false);
+      }
+    };
+
+    fetchEpisode();
+  }, [episodeId, isEditMode, navigate, toast]);
 
   const progress = useMemo(() => {
     const sections = {
@@ -310,7 +400,7 @@ const CreateEpisode = () => {
     try {
       setLoading(true);
 
-      const response = await episodeService.createEpisode({
+      const episodeData = {
         title: formData.title.trim(),
         episode_number: formData.episodeNumber !== '' ? Number(formData.episodeNumber) : null,
         season: formData.season !== '' ? Number(formData.season) : null,
@@ -337,16 +427,40 @@ const CreateEpisode = () => {
         owner_creator: ownerCreator,
         needs_approval: needsApproval,
         collaborators: collaborators,
-      });
+        // Sponsorship & Brand Deals
+        has_brand_deal: hasBrandDeal,
+        sponsor_name: sponsorName,
+        deal_value: dealValue,
+        deliverables: deliverables,
+        integration_requirements: integrationRequirements,
+        deal_deadline: dealDeadline || null,
+        sponsor_expectations: sponsorExpectations,
+        // Social Media Collaborations
+        has_social_collab: hasSocialCollab,
+        collab_partners: collabPartners,
+        collab_platforms: collabPlatforms,
+        collab_type: collabType,
+        collab_deliverables: collabDeliverables,
+        collab_timeline: collabTimeline,
+        collab_notes: collabNotes,
+      };
 
-      const newEpisode = response?.data || response;
+      let resultEpisode;
+      if (isEditMode) {
+        const response = await episodeService.updateEpisode(episodeId, episodeData);
+        resultEpisode = response?.data || response;
+        await uploadThumbnailIfNeeded(episodeId);
+        toast.showSuccess('Episode updated successfully!');
+      } else {
+        const response = await episodeService.createEpisode(episodeData);
+        resultEpisode = response?.data || response;
+        await uploadThumbnailIfNeeded(resultEpisode.id);
+        toast.showSuccess('Episode created successfully!');
+      }
 
-      await uploadThumbnailIfNeeded(newEpisode.id);
-
-      toast.showSuccess('Episode created successfully!');
-      navigate(`/episodes/${newEpisode.id}`);
+      navigate(`/episodes/${resultEpisode.id}`);
     } catch (err) {
-      const errorMessage = err?.response?.data?.error || err?.message || 'Failed to create episode';
+      const errorMessage = err?.response?.data?.error || err?.message || `Failed to ${isEditMode ? 'update' : 'create'} episode`;
       setError(errorMessage);
       toast.showError(errorMessage);
       setLoading(false);
@@ -356,115 +470,126 @@ const CreateEpisode = () => {
   if (authLoading) return <LoadingSpinner />;
 
   return (
-    <div className="episode-form-page ce-page">
+    <div className="create-episode-page">
       {/* HEADER */}
-      <div className="ce-header">
-        <div className="ce-header__inner">
-          <button
-            type="button"
-            className="ce-link"
-            onClick={() => navigate('/episodes')}
-            disabled={loading}
-          >
-            ← Episodes
-          </button>
-
-          <div className="ce-header__title">
-            <h1>Create New Episode</h1>
-            <div className="ce-subline">
-              <span className="ce-pill">Draft-friendly</span>
-              <span className="ce-dot">•</span>
-              <span className="ce-mutedSm">
-                {progress.percent}% complete
-              </span>
-              {formData.status && (
-                <>
-                  <span className="ce-dot">•</span>
-                  <span className="ce-pill ce-pill--soft">
-                    Status: {STATUS_OPTIONS.find((o) => o.value === formData.status)?.label || formData.status}
-                  </span>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Desktop header actions */}
-          <div className="ce-header__actions">
+      <div className="create-episode-header">
+        <div className="header-container">
+          <div className="header-top">
             <button
               type="button"
-              className="ce-btn ce-btn--ghost"
+              className="back-btn"
               onClick={() => navigate('/episodes')}
               disabled={loading}
             >
-              Cancel
+              ← Back to Episodes
             </button>
-            <button
-              type="submit"
-              form="create-episode-form"
-              className="ce-btn ce-btn--primary"
-              disabled={loading}
-            >
-              {loading ? 'Creating…' : 'Create Episode'}
-            </button>
+
+            <div className="header-title-section">
+              <h1>{isEditMode ? 'Edit Episode' : 'Create New Episode'}</h1>
+              <div className="header-meta">
+                <span className="meta-badge">Draft-friendly</span>
+                <span className="meta-separator">•</span>
+                <span className="meta-badge">
+                  {progress.percent}% complete
+                </span>
+                {formData.status && (
+                  <>
+                    <span className="meta-separator">•</span>
+                    <span className="meta-badge">
+                      Status: {STATUS_OPTIONS.find((o) => o.value === formData.status)?.label || formData.status}
+                    </span>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Desktop header actions */}
+            <div className="header-actions">
+              <button
+                type="button"
+                className="btn-cancel"
+                onClick={() => navigate('/episodes')}
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="create-episode-form"
+                className="btn-submit"
+                disabled={loading}
+              >
+                {loading ? (isEditMode ? 'Updating…' : 'Creating…') : (isEditMode ? 'Update Episode' : 'Create Episode')}
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
       {/* TABS */}
-      <div className="ce-tabs">
-        <div className="ce-tabs__inner">
+      <div className="episode-tabs">
+        <div className="tabs-container">
           <button
             type="button"
-            className={`ce-tab ${activeTab === 'essentials' ? 'active' : ''}`}
+            className={`tab-button ${activeTab === 'essentials' ? 'active' : ''}`}
             onClick={() => setActiveTab('essentials')}
           >
             ✨ Essentials
           </button>
           <button
             type="button"
-            className={`ce-tab ${activeTab === 'publishing' ? 'active' : ''}`}
+            className={`tab-button ${activeTab === 'publishing' ? 'active' : ''}`}
             onClick={() => setActiveTab('publishing')}
           >
             📅 Publishing
           </button>
           <button
             type="button"
-            className={`ce-tab ${activeTab === 'distribution' ? 'active' : ''}`}
+            className={`tab-button ${activeTab === 'distribution' ? 'active' : ''}`}
             onClick={() => setActiveTab('distribution')}
           >
             🌐 Distribution
           </button>
           <button
             type="button"
-            className={`ce-tab ${activeTab === 'metadata' ? 'active' : ''}`}
+            className={`tab-button ${activeTab === 'metadata' ? 'active' : ''}`}
             onClick={() => setActiveTab('metadata')}
           >
             🔍 Metadata
           </button>
           <button
             type="button"
-            className={`ce-tab ${activeTab === 'content' ? 'active' : ''}`}
+            className={`tab-button ${activeTab === 'content' ? 'active' : ''}`}
             onClick={() => setActiveTab('content')}
           >
             🎬 Content
           </button>
+          {isEditMode && (
+            <button
+              type="button"
+              className={`tab-button ${activeTab === 'scenes' ? 'active' : ''}`}
+              onClick={() => setActiveTab('scenes')}
+            >
+              🎞️ Scene Composer
+            </button>
+          )}
           <button
             type="button"
-            className={`ce-tab ${activeTab === 'team' ? 'active' : ''}`}
+            className={`tab-button ${activeTab === 'team' ? 'active' : ''}`}
             onClick={() => setActiveTab('team')}
           >
             👥 Team
           </button>
           <button
             type="button"
-            className={`ce-tab ${activeTab === 'sponsorship' ? 'active' : ''}`}
+            className={`tab-button ${activeTab === 'sponsorship' ? 'active' : ''}`}
             onClick={() => setActiveTab('sponsorship')}
           >
             🤝 Sponsorship
           </button>
           <button
             type="button"
-            className={`ce-tab ${activeTab === 'social' ? 'active' : ''}`}
+            className={`tab-button ${activeTab === 'social' ? 'active' : ''}`}
             onClick={() => setActiveTab('social')}
           >
             📱 Social Collab
@@ -473,62 +598,63 @@ const CreateEpisode = () => {
       </div>
 
       {/* BODY */}
-      <div className="ce-body ce-body--single">
-        <div className="ce-card ce-alert">
-          {error && <ErrorMessage message={error} onDismiss={() => setError(null)} />}
-          {!error && (
-            <div className="ce-mutedSm">
-              💡 Tip: you can create with just a <strong>Title</strong> and <strong>Show</strong>. Everything else can be added later.
-            </div>
-          )}
-        </div>
+      <div className="episode-body">
+        {/* Hide tip banner and form on Scene Composer tab */}
+        {activeTab !== 'scenes' && (
+          <>
+            {error && <ErrorMessage message={error} onDismiss={() => setError(null)} />}
+            {!error && (
+              <div className="tip-banner">
+                💡 Tip: you can create with just a <strong>Title</strong> and <strong>Show</strong>. Everything else can be added later.
+              </div>
+            )}
 
-        <form id="create-episode-form" onSubmit={handleSubmit} className="ce-formWrapper">
+            <form id="create-episode-form" onSubmit={handleSubmit} className="episode-form">
           
           {/* ===== TAB: Essential Information ===== */}
           {activeTab === 'essentials' && (
-            <div className="ce-card ce-section">
-              <div className="ce-sectionHeader">
-                <div className="ce-sectionTitle">
-                  <span className="ce-sectionIcon">✨</span>
-                  <h2>Essential Information</h2>
+            <div className="form-section">
+              <div className="section-header">
+                <h2 className="section-title">
+                  <span className="section-icon">✨</span>
+                  Essential Information
                   {progress.sections.essential.isComplete && (
-                    <span className="ce-checkmark">✓</span>
+                    <span style={{ marginLeft: '0.5rem' }}>✓</span>
                   )}
-                </div>
-                <div className="ce-sectionDesc">Required to get started</div>
+                </h2>
+                <p className="section-description">Required to get started</p>
               </div>
 
-            <div className="ce-grid">
+            <div className="form-grid">
               {/* Title */}
-              <div className="ce-field">
+              <div className="form-group">
                 <label htmlFor="title">
-                  Episode Title <span className="ce-required">*</span>
+                  Episode Title <span className="required">*</span>
                 </label>
                 <input
                   id="title"
                   name="title"
                   type="text"
-                  className={`ce-input ${errors.title ? 'ce-input--error' : ''}`}
+                  className={`form-input ${errors.title ? 'error' : ''}`}
                   value={formData.title}
                   onChange={handleChange}
                   placeholder="e.g., Winter Lookbook: Episode 1"
                   disabled={loading}
                   required
                 />
-                {errors.title && <div className="ce-error">{errors.title}</div>}
-                <div className="ce-hint">Make it searchable and clear</div>
+                {errors.title && <div className="error-message">{errors.title}</div>}
+                <div className="form-hint">Make it searchable and clear</div>
               </div>
 
               {/* Show Selection */}
-              <div className="ce-field">
+              <div className="form-group">
                 <label htmlFor="showId">
-                  Show <span className="ce-required">*</span>
+                  Show <span className="required">*</span>
                 </label>
                 <select
                   id="showId"
                   name="showId"
-                  className={`ce-input ${errors.showId ? 'ce-input--error' : ''}`}
+                  className={`form-input ${errors.showId ? 'error' : ''}`}
                   value={formData.showId}
                   onChange={handleChange}
                   disabled={loading || loadingShows}
@@ -541,8 +667,8 @@ const CreateEpisode = () => {
                     </option>
                   ))}
                 </select>
-                {errors.showId && <div className="ce-error">{errors.showId}</div>}
-                <div className="ce-hint">Which show does this episode belong to?</div>
+                {errors.showId && <div className="error-message">{errors.showId}</div>}
+                <div className="form-hint">Which show does this episode belong to?</div>
               </div>
             </div>
           </div>
@@ -550,25 +676,25 @@ const CreateEpisode = () => {
 
           {/* ===== TAB: Scheduling & Publishing ===== */}
           {activeTab === 'publishing' && (
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">📅</span>
-                <h2>Scheduling & Publishing</h2>
+          <div className="form-section">
+            <div className="section-header">
+              <h2 className="section-title">
+                <span className="section-icon">📅</span>
+                Scheduling & Publishing
                 {progress.sections.scheduling.isComplete && (
-                  <span className="ce-checkmark">✓</span>
+                  <span style={{ marginLeft: '0.5rem' }}>✓</span>
                 )}
-              </div>
-              <div className="ce-sectionDesc">When and how to publish</div>
+              </h2>
+              <p className="section-description">When and how to publish</p>
             </div>
 
-            <div className="ce-grid ce-grid--3">
-              <div className="ce-field">
+            <div className="form-grid form-grid-3">
+              <div className="form-group">
                 <label htmlFor="status">Status</label>
                 <select
                   id="status"
                   name="status"
-                  className="ce-input"
+                  className="form-input"
                   value={formData.status}
                   onChange={handleChange}
                   disabled={loading}
@@ -581,88 +707,88 @@ const CreateEpisode = () => {
                 </select>
               </div>
 
-              <div className="ce-field">
+              <div className="form-group">
                 <label htmlFor="episodeNumber">Episode Number</label>
                 <input
                   id="episodeNumber"
                   name="episodeNumber"
                   type="number"
-                  className={`ce-input ${errors.episodeNumber ? 'ce-input--error' : ''}`}
+                  className={`form-input ${errors.episodeNumber ? 'error' : ''}`}
                   value={formData.episodeNumber}
                   onChange={handleChange}
                   placeholder="e.g., 1"
                   disabled={loading}
                   min={0}
                 />
-                {errors.episodeNumber && <div className="ce-error">{errors.episodeNumber}</div>}
+                {errors.episodeNumber && <div className="error-message">{errors.episodeNumber}</div>}
               </div>
 
-              <div className="ce-field">
+              <div className="form-group">
                 <label htmlFor="season">Season</label>
                 <input
                   id="season"
                   name="season"
                   type="number"
-                  className="ce-input"
+                  className="form-input"
                   value={formData.season}
                   onChange={handleChange}
                   placeholder="e.g., 1"
                   disabled={loading}
                   min={0}
                 />
-                <div className="ce-hint">Optional</div>
+                <div className="form-hint">Optional</div>
               </div>
             </div>
 
-            <div className="ce-field">
+            <div className="form-group">
               <label htmlFor="airDate">Air Date</label>
               <input
                 id="airDate"
                 name="airDate"
                 type="date"
-                className="ce-input"
+                className="form-input"
                 value={formData.airDate}
                 onChange={handleChange}
                 disabled={loading}
               />
-              <div className="ce-hint">When will this episode be released?</div>
+              <div className="form-hint">When will this episode be released?</div>
             </div>
           </div>
           )}
 
           {/* ===== TAB: Discovery & Metadata ===== */}
           {activeTab === 'metadata' && (
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">🔍</span>
+          <div className="form-section">
+            <div className="section-header">
+              <div>
+                <span className="section-icon">🔍</span>
                 <h2>Discovery & Metadata</h2>
                 {progress.sections.discovery.isComplete && (
-                  <span className="ce-checkmark">✓</span>
+                  <span style={{ marginLeft: '0.5rem' }}>✓</span>
                 )}
               </div>
-              <div className="ce-sectionDesc">Help people find this episode</div>
+              <p>Help people find this episode</p>
             </div>
 
-            <div className="ce-grid">
+            <div className="form-grid">
               {/* Description */}
-              <div className="ce-field">
+              <div className="form-group">
                 <label htmlFor="description">Description</label>
                 <textarea
                   id="description"
                   name="description"
-                  className="ce-input ce-textarea"
+                  className="form-input textarea"
                   value={formData.description}
                   onChange={handleChange}
                   placeholder="What is this episode about?"
                   disabled={loading}
                   rows={4}
                 />
-                <div className="ce-hint">Brief summary visible in search and listings</div>
+                <div className="form-hint">Brief summary visible in search and listings</div>
               </div>
 
               {/* Tags */}
-              <div className="ce-field">
+              <div className="form-group">
                 <label>Categories / Tags</label>
                 <TagInput
                   tags={formData.categories}
@@ -671,7 +797,7 @@ const CreateEpisode = () => {
                   disabled={loading}
                   maxTags={10}
                 />
-                <div className="ce-hint">Tags improve searchability and organization</div>
+                <div className="form-hint">Tags improve searchability and organization</div>
               </div>
             </div>
           </div>
@@ -679,23 +805,23 @@ const CreateEpisode = () => {
 
           {/* ===== TAB: Distribution & Platforms ===== */}
           {activeTab === 'distribution' && (
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">🌐</span>
+          <div className="form-section">
+            <div className="section-header">
+              <div>
+                <span className="section-icon">🌐</span>
                 <h2>Distribution & Platforms</h2>
                 {progress.sections.distribution.isComplete && (
-                  <span className="ce-checkmark">✓</span>
+                  <span style={{ marginLeft: '0.5rem' }}>✓</span>
                 )}
               </div>
-              <div className="ce-sectionDesc">Where will this episode be published?</div>
+              <p>Where will this episode be published?</p>
             </div>
 
             {/* Platform Selection */}
-            <div className="ce-field">
+            <div className="form-group">
               <label>Target Platforms</label>
-              <div className="ce-checkboxGrid">
-                <label className="ce-checkbox">
+              <div className="checkbox-grid">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.youtube}
@@ -704,7 +830,7 @@ const CreateEpisode = () => {
                   />
                   <span>YouTube (Long-form)</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.youtubeShorts}
@@ -713,7 +839,7 @@ const CreateEpisode = () => {
                   />
                   <span>YouTube Shorts</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.tiktok}
@@ -722,7 +848,7 @@ const CreateEpisode = () => {
                   />
                   <span>TikTok</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.instagramReels}
@@ -731,7 +857,7 @@ const CreateEpisode = () => {
                   />
                   <span>Instagram Reels</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.instagramFeed}
@@ -740,7 +866,7 @@ const CreateEpisode = () => {
                   />
                   <span>Instagram Feed</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.instagramStories}
@@ -749,7 +875,7 @@ const CreateEpisode = () => {
                   />
                   <span>Instagram Stories</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.facebook}
@@ -758,7 +884,7 @@ const CreateEpisode = () => {
                   />
                   <span>Facebook</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.twitter}
@@ -767,7 +893,7 @@ const CreateEpisode = () => {
                   />
                   <span>X / Twitter</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.linkedin}
@@ -776,7 +902,7 @@ const CreateEpisode = () => {
                   />
                   <span>LinkedIn</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={platforms.other}
@@ -789,7 +915,7 @@ const CreateEpisode = () => {
               {platforms.other && (
                 <input
                   type="text"
-                  className="ce-input"
+                  className="form-input"
                   value={platformsOther}
                   onChange={(e) => setPlatformsOther(e.target.value)}
                   placeholder="Specify other platforms..."
@@ -797,17 +923,17 @@ const CreateEpisode = () => {
                   style={{ marginTop: '0.5rem' }}
                 />
               )}
-              <div className="ce-hint" style={{ marginTop: '0.75rem' }}>
+              <div className="form-hint" style={{ marginTop: '0.75rem' }}>
                 💡 This determines aspect ratios, safe areas, templates, and export presets
               </div>
             </div>
 
             {/* Content Strategy */}
             {selectedPlatforms.length > 0 && (
-              <div className="ce-field">
+              <div className="form-group">
                 <label>Content Strategy</label>
-                <div className="ce-radioGroup">
-                  <label className="ce-radio">
+                <div className="radio-group">
+                  <label className="radio-item">
                     <input
                       type="radio"
                       name="contentStrategy"
@@ -818,7 +944,7 @@ const CreateEpisode = () => {
                     />
                     <span>Same visuals & copy everywhere</span>
                   </label>
-                  <label className="ce-radio">
+                  <label className="radio-item">
                     <input
                       type="radio"
                       name="contentStrategy"
@@ -829,7 +955,7 @@ const CreateEpisode = () => {
                     />
                     <span>Same visuals, different captions</span>
                   </label>
-                  <label className="ce-radio">
+                  <label className="radio-item">
                     <input
                       type="radio"
                       name="contentStrategy"
@@ -841,7 +967,7 @@ const CreateEpisode = () => {
                     <span>Different visuals and captions per platform</span>
                   </label>
                 </div>
-                <div className="ce-hint">
+                <div className="form-hint">
                   Choosing customized options enables platform-specific overrides in the composer
                 </div>
               </div>
@@ -849,9 +975,9 @@ const CreateEpisode = () => {
 
             {/* Platform-Specific Descriptions */}
             {showPlatformDescriptions && (
-              <div className="ce-field">
+              <div className="form-group">
                 <label>Platform-Specific Descriptions (Optional)</label>
-                <div className="ce-platformDescriptions">
+                <div className="platform-descriptions">
                   {selectedPlatforms.map((platformKey) => {
                     const platformLabels = {
                       youtube: 'YouTube',
@@ -866,10 +992,10 @@ const CreateEpisode = () => {
                       other: platformsOther || 'Other',
                     };
                     return (
-                      <div key={platformKey} className="ce-platformDesc">
-                        <h4 className="ce-platformDescTitle">{platformLabels[platformKey]}</h4>
+                      <div key={platformKey} className="platform-desc">
+                        <h4 className="platform-desc-title">{platformLabels[platformKey]}</h4>
                         <textarea
-                          className="ce-input ce-textarea"
+                          className="form-input textarea"
                           placeholder="Description / caption"
                           value={platformDescriptions[platformKey]?.description || ''}
                           onChange={(e) => handlePlatformDescriptionChange(platformKey, 'description', e.target.value)}
@@ -878,7 +1004,7 @@ const CreateEpisode = () => {
                         />
                         <input
                           type="text"
-                          className="ce-input"
+                          className="form-input"
                           placeholder="Hashtags (e.g., #fashion #style)"
                           value={platformDescriptions[platformKey]?.hashtags || ''}
                           onChange={(e) => handlePlatformDescriptionChange(platformKey, 'hashtags', e.target.value)}
@@ -887,7 +1013,7 @@ const CreateEpisode = () => {
                         />
                         <input
                           type="text"
-                          className="ce-input"
+                          className="form-input"
                           placeholder="Mentions / CTAs"
                           value={platformDescriptions[platformKey]?.cta || ''}
                           onChange={(e) => handlePlatformDescriptionChange(platformKey, 'cta', e.target.value)}
@@ -906,23 +1032,23 @@ const CreateEpisode = () => {
           {/* ===== TAB: Content Intent & Format ===== */}
           {activeTab === 'content' && (
           <>
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">🎬</span>
+          <div className="form-section">
+            <div className="section-header">
+              <div>
+                <span className="section-icon">🎬</span>
                 <h2>Content Intent & Format</h2>
                 {progress.sections.contentIntent.isComplete && (
-                  <span className="ce-checkmark">✓</span>
+                  <span style={{ marginLeft: '0.5rem' }}>✓</span>
                 )}
               </div>
-              <div className="ce-sectionDesc">Help us understand the nature of this content</div>
+              <p>Help us understand the nature of this content</p>
             </div>
 
             {/* Content Type */}
-            <div className="ce-field">
+            <div className="form-group">
               <label>Content Type (Optional)</label>
-              <div className="ce-checkboxGrid">
-                <label className="ce-checkbox">
+              <div className="checkbox-grid">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={contentTypes.trailer}
@@ -931,7 +1057,7 @@ const CreateEpisode = () => {
                   />
                   <span>Trailer</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={contentTypes.behindTheScenes}
@@ -940,7 +1066,7 @@ const CreateEpisode = () => {
                   />
                   <span>Behind the Scenes</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={contentTypes.announcement}
@@ -949,7 +1075,7 @@ const CreateEpisode = () => {
                   />
                   <span>Announcement</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={contentTypes.mainShow}
@@ -958,7 +1084,7 @@ const CreateEpisode = () => {
                   />
                   <span>Main Show</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={contentTypes.credits}
@@ -968,14 +1094,14 @@ const CreateEpisode = () => {
                   <span>Credits</span>
                 </label>
               </div>
-              <div className="ce-hint">Informs default pacing and scene templates</div>
+              <div className="form-hint">Informs default pacing and scene templates</div>
             </div>
 
             {/* Tone */}
-            <div className="ce-field">
+            <div className="form-group">
               <label>Tone (Optional)</label>
-              <div className="ce-checkboxGrid">
-                <label className="ce-checkbox">
+              <div className="checkbox-grid">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={tones.playful}
@@ -984,7 +1110,7 @@ const CreateEpisode = () => {
                   />
                   <span>Playful</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={tones.educational}
@@ -993,7 +1119,7 @@ const CreateEpisode = () => {
                   />
                   <span>Educational</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={tones.inspirational}
@@ -1002,7 +1128,7 @@ const CreateEpisode = () => {
                   />
                   <span>Inspirational</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={tones.dramatic}
@@ -1011,7 +1137,7 @@ const CreateEpisode = () => {
                   />
                   <span>Dramatic</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={tones.calm}
@@ -1020,7 +1146,7 @@ const CreateEpisode = () => {
                   />
                   <span>Calm</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={tones.highEnergy}
@@ -1029,7 +1155,7 @@ const CreateEpisode = () => {
                   />
                   <span>High-energy</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={tones.professional}
@@ -1039,38 +1165,38 @@ const CreateEpisode = () => {
                   <span>Professional</span>
                 </label>
               </div>
-              <div className="ce-hint">Can influence music, caption tone, and pacing</div>
+              <div className="form-hint">Can influence music, caption tone, and pacing</div>
             </div>
 
             {/* Audience */}
-            <div className="ce-field">
+            <div className="form-group">
               <label htmlFor="primaryAudience">Primary Audience (Optional)</label>
               <input
                 id="primaryAudience"
                 type="text"
-                className="ce-input"
+                className="form-input"
                 value={primaryAudience}
                 onChange={(e) => setPrimaryAudience(e.target.value)}
                 placeholder="e.g., Fashion enthusiasts, Young professionals"
                 disabled={loading}
               />
-              <div className="ce-hint">Who is this content for?</div>
+              <div className="form-hint">Who is this content for?</div>
             </div>
           </div>
 
           {/* ===== Episode Structure (Optional) ===== */}
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">🏗️</span>
+          <div className="form-section">
+            <div className="section-header">
+              <div>
+                <span className="section-icon">🏗️</span>
                 <h2>Episode Structure (Optional)</h2>
               </div>
-              <div className="ce-sectionDesc">Helps pre-create scene slots and suggest templates</div>
+              <p>Helps pre-create scene slots and suggest templates</p>
             </div>
 
-            <div className="ce-field">
-              <div className="ce-checkboxGrid">
-                <label className="ce-checkbox">
+            <div className="form-group">
+              <div className="checkbox-grid">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={structure.hasIntro}
@@ -1079,7 +1205,7 @@ const CreateEpisode = () => {
                   />
                   <span>Has intro</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={structure.hasOutro}
@@ -1088,7 +1214,7 @@ const CreateEpisode = () => {
                   />
                   <span>Has outro</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={structure.hasCTA}
@@ -1097,7 +1223,7 @@ const CreateEpisode = () => {
                   />
                   <span>Has CTA</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={structure.hasRecurringSegment}
@@ -1106,7 +1232,7 @@ const CreateEpisode = () => {
                   />
                   <span>Has recurring segment</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={structure.hasSponsor}
@@ -1120,18 +1246,18 @@ const CreateEpisode = () => {
           </div>
 
           {/* ===== Visual Requirements & Constraints ===== */}
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">🎨</span>
+          <div className="form-section">
+            <div className="section-header">
+              <div>
+                <span className="section-icon">🎨</span>
                 <h2>Visual Requirements (Optional)</h2>
               </div>
-              <div className="ce-sectionDesc">Constraints for the Scene Composer</div>
+              <p>Constraints for the Scene Composer</p>
             </div>
 
-            <div className="ce-field">
-              <div className="ce-checkboxGrid">
-                <label className="ce-checkbox">
+            <div className="form-group">
+              <div className="checkbox-grid">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={visualReqs.brandSafeColors}
@@ -1140,7 +1266,7 @@ const CreateEpisode = () => {
                   />
                   <span>Brand safe colors only</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={visualReqs.mustIncludeLogo}
@@ -1149,7 +1275,7 @@ const CreateEpisode = () => {
                   />
                   <span>Must include logo</span>
                 </label>
-                <label className="ce-checkbox">
+                <label className="checkbox-item">
                   <input
                     type="checkbox"
                     checked={visualReqs.avoidTextNearEdges}
@@ -1159,7 +1285,7 @@ const CreateEpisode = () => {
                   <span>Avoid text near edges (safe areas)</span>
                 </label>
               </div>
-              <div className="ce-hint">These constraints will show warnings in the composer</div>
+              <div className="form-hint">These constraints will show warnings in the composer</div>
             </div>
           </div>
           </>
@@ -1167,22 +1293,22 @@ const CreateEpisode = () => {
 
           {/* ===== TAB: Team & Approvals (Optional) ===== */}
           {activeTab === 'team' && (
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">👥</span>
+          <div className="form-section">
+            <div className="section-header">
+              <div>
+                <span className="section-icon">👥</span>
                 <h2>Team & Approvals (Optional)</h2>
               </div>
-              <div className="ce-sectionDesc">Ownership and collaboration</div>
+              <p>Ownership and collaboration</p>
             </div>
 
-            <div className="ce-grid">
-              <div className="ce-field">
+            <div className="form-grid">
+              <div className="form-group">
                 <label htmlFor="ownerCreator">Owner / Creator</label>
                 <input
                   id="ownerCreator"
                   type="text"
-                  className="ce-input"
+                  className="form-input"
                   value={ownerCreator}
                   onChange={(e) => setOwnerCreator(e.target.value)}
                   placeholder="e.g., John Doe"
@@ -1190,12 +1316,12 @@ const CreateEpisode = () => {
                 />
               </div>
 
-              <div className="ce-field">
+              <div className="form-group">
                 <label htmlFor="collaborators">Collaborators</label>
                 <input
                   id="collaborators"
                   type="text"
-                  className="ce-input"
+                  className="form-input"
                   value={collaborators}
                   onChange={(e) => setCollaborators(e.target.value)}
                   placeholder="e.g., Jane Smith, Alice Johnson"
@@ -1204,8 +1330,8 @@ const CreateEpisode = () => {
               </div>
             </div>
 
-            <div className="ce-field">
-              <label className="ce-checkbox">
+            <div className="form-group">
+              <label className="checkbox-item">
                 <input
                   type="checkbox"
                   checked={needsApproval}
@@ -1220,17 +1346,17 @@ const CreateEpisode = () => {
 
           {/* ===== TAB: Sponsorship & Brand Deals ===== */}
           {activeTab === 'sponsorship' && (
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">🤝</span>
+          <div className="form-section">
+            <div className="section-header">
+              <div>
+                <span className="section-icon">🤝</span>
                 <h2>Sponsorship & Brand Deals</h2>
               </div>
-              <div className="ce-sectionDesc">Track partnerships and brand integrations</div>
+              <p>Track partnerships and brand integrations</p>
             </div>
 
-            <div className="ce-field">
-              <label className="ce-checkbox">
+            <div className="form-group">
+              <label className="checkbox-item">
                 <input
                   type="checkbox"
                   checked={hasBrandDeal}
@@ -1243,13 +1369,13 @@ const CreateEpisode = () => {
 
             {hasBrandDeal && (
               <>
-                <div className="ce-grid ce-grid--2">
-                  <div className="ce-field">
+                <div className="form-grid form-grid-2">
+                  <div className="form-group">
                     <label htmlFor="sponsorName">Sponsor / Brand Name *</label>
                     <input
                       id="sponsorName"
                       type="text"
-                      className="ce-input"
+                      className="form-input"
                       value={sponsorName}
                       onChange={(e) => setSponsorName(e.target.value)}
                       placeholder="e.g., Nike, Spotify"
@@ -1257,12 +1383,12 @@ const CreateEpisode = () => {
                     />
                   </div>
 
-                  <div className="ce-field">
+                  <div className="form-group">
                     <label htmlFor="dealValue">Deal Value / Compensation</label>
                     <input
                       id="dealValue"
                       type="text"
-                      className="ce-input"
+                      className="form-input"
                       value={dealValue}
                       onChange={(e) => setDealValue(e.target.value)}
                       placeholder="e.g., $5,000, Product exchange"
@@ -1271,41 +1397,41 @@ const CreateEpisode = () => {
                   </div>
                 </div>
 
-                <div className="ce-field">
+                <div className="form-group">
                   <label htmlFor="deliverables">Deliverables *</label>
                   <textarea
                     id="deliverables"
-                    className="ce-input ce-textarea"
+                    className="form-input textarea"
                     value={deliverables}
                     onChange={(e) => setDeliverables(e.target.value)}
                     placeholder="What needs to be delivered? (e.g., 60-second product feature, 2 Instagram stories, brand logo in intro)"
                     disabled={loading}
                     rows={3}
                   />
-                  <div className="ce-hint">Specify what content you're contractually obligated to create</div>
+                  <div className="form-hint">Specify what content you're contractually obligated to create</div>
                 </div>
 
-                <div className="ce-field">
+                <div className="form-group">
                   <label htmlFor="integrationRequirements">Integration Requirements</label>
                   <textarea
                     id="integrationRequirements"
-                    className="ce-input ce-textarea"
+                    className="form-input textarea"
                     value={integrationRequirements}
                     onChange={(e) => setIntegrationRequirements(e.target.value)}
                     placeholder="How should the brand be featured? (e.g., Seamless product integration in scene 2, verbal mention in intro, logo placement requirements)"
                     disabled={loading}
                     rows={3}
                   />
-                  <div className="ce-hint">Details about how to integrate the brand into the episode</div>
+                  <div className="form-hint">Details about how to integrate the brand into the episode</div>
                 </div>
 
-                <div className="ce-grid ce-grid--2">
-                  <div className="ce-field">
+                <div className="form-grid form-grid-2">
+                  <div className="form-group">
                     <label htmlFor="dealDeadline">Deadline / Due Date</label>
                     <input
                       id="dealDeadline"
                       type="date"
-                      className="ce-input"
+                      className="form-input"
                       value={dealDeadline}
                       onChange={(e) => setDealDeadline(e.target.value)}
                       disabled={loading}
@@ -1313,11 +1439,11 @@ const CreateEpisode = () => {
                   </div>
                 </div>
 
-                <div className="ce-field">
+                <div className="form-group">
                   <label htmlFor="sponsorExpectations">Special Expectations / Notes</label>
                   <textarea
                     id="sponsorExpectations"
-                    className="ce-input ce-textarea"
+                    className="form-input textarea"
                     value={sponsorExpectations}
                     onChange={(e) => setSponsorExpectations(e.target.value)}
                     placeholder="Any special requirements, approval processes, do's and don'ts, or other notes"
@@ -1332,17 +1458,17 @@ const CreateEpisode = () => {
 
           {/* ===== TAB: Social Media Collaborations ===== */}
           {activeTab === 'social' && (
-          <div className="ce-card ce-section">
-            <div className="ce-sectionHeader">
-              <div className="ce-sectionTitle">
-                <span className="ce-sectionIcon">📱</span>
+          <div className="form-section">
+            <div className="section-header">
+              <div>
+                <span className="section-icon">📱</span>
                 <h2>Social Media Collaborations</h2>
               </div>
-              <div className="ce-sectionDesc">Coordinate with influencers and partners</div>
+              <p>Coordinate with influencers and partners</p>
             </div>
 
-            <div className="ce-field">
-              <label className="ce-checkbox">
+            <div className="form-group">
+              <label className="checkbox-item">
                 <input
                   type="checkbox"
                   checked={hasSocialCollab}
@@ -1355,27 +1481,27 @@ const CreateEpisode = () => {
 
             {hasSocialCollab && (
               <>
-                <div className="ce-grid ce-grid--2">
-                  <div className="ce-field">
+                <div className="form-grid form-grid-2">
+                  <div className="form-group">
                     <label htmlFor="collabPartners">Collaboration Partners *</label>
                     <input
                       id="collabPartners"
                       type="text"
-                      className="ce-input"
+                      className="form-input"
                       value={collabPartners}
                       onChange={(e) => setCollabPartners(e.target.value)}
                       placeholder="e.g., @fashioninfluencer, @brandname"
                       disabled={loading}
                     />
-                    <div className="ce-hint">Names or handles of collaborators</div>
+                    <div className="form-hint">Names or handles of collaborators</div>
                   </div>
 
-                  <div className="ce-field">
+                  <div className="form-group">
                     <label htmlFor="collabPlatforms">Platforms</label>
                     <input
                       id="collabPlatforms"
                       type="text"
-                      className="ce-input"
+                      className="form-input"
                       value={collabPlatforms}
                       onChange={(e) => setCollabPlatforms(e.target.value)}
                       placeholder="e.g., Instagram, TikTok, YouTube"
@@ -1384,12 +1510,12 @@ const CreateEpisode = () => {
                   </div>
                 </div>
 
-                <div className="ce-field">
+                <div className="form-group">
                   <label htmlFor="collabType">Collaboration Type</label>
                   <input
                     id="collabType"
                     type="text"
-                    className="ce-input"
+                    className="form-input"
                     value={collabType}
                     onChange={(e) => setCollabType(e.target.value)}
                     placeholder="e.g., Duet, Shoutout, Guest appearance, Cross-promotion"
@@ -1397,11 +1523,11 @@ const CreateEpisode = () => {
                   />
                 </div>
 
-                <div className="ce-field">
+                <div className="form-group">
                   <label htmlFor="collabDeliverables">Deliverables & Expectations</label>
                   <textarea
                     id="collabDeliverables"
-                    className="ce-input ce-textarea"
+                    className="form-input textarea"
                     value={collabDeliverables}
                     onChange={(e) => setCollabDeliverables(e.target.value)}
                     placeholder="What content will each party create? (e.g., Partner will share our video on their story, we'll tag them in 2 posts)"
@@ -1410,11 +1536,11 @@ const CreateEpisode = () => {
                   />
                 </div>
 
-                <div className="ce-field">
+                <div className="form-group">
                   <label htmlFor="collabTimeline">Timeline / Post Schedule</label>
                   <textarea
                     id="collabTimeline"
-                    className="ce-input ce-textarea"
+                    className="form-input textarea"
                     value={collabTimeline}
                     onChange={(e) => setCollabTimeline(e.target.value)}
                     placeholder="When will content be posted? (e.g., Day 1: Our video goes live, Day 2: Partner shares story, Day 3: Follow-up post)"
@@ -1423,11 +1549,11 @@ const CreateEpisode = () => {
                   />
                 </div>
 
-                <div className="ce-field">
+                <div className="form-group">
                   <label htmlFor="collabNotes">Additional Notes</label>
                   <textarea
                     id="collabNotes"
-                    className="ce-input ce-textarea"
+                    className="form-input textarea"
                     value={collabNotes}
                     onChange={(e) => setCollabNotes(e.target.value)}
                     placeholder="Contact info, agreements, special arrangements, etc."
@@ -1441,23 +1567,30 @@ const CreateEpisode = () => {
           )}
 
         </form>
+          </>
+        )}
+
+        {/* ===== TAB: Scene Composer (Outside Form) ===== */}
+        {activeTab === 'scenes' && isEditMode && (
+          <SceneComposerFull />
+        )}
 
         {/* Sticky Footer */}
-        <div className="ce-stickyFooter">
-          <div className="ce-stickyFooterContent">
-            <div className="ce-footerProgress">
-              <div className="ce-footerProgressText">
-                <span className="ce-footerProgressIcon">💪</span>
+        <div className="sticky-footer">
+          <div className="footer-content">
+            <div className="footer-progress">
+              <div className="progress-text">
+                <span className="progress-icon">💪</span>
                 <span>{progress.percent}% Complete</span>
               </div>
-              <div className="ce-footerHint">
+              <div className="progress-hint">
                 ✨ You can finish this later — your progress is saved
               </div>
             </div>
-            <div className="ce-footerActions">
+            <div className="footer-actions">
               <button
                 type="button"
-                className="ce-btn ce-btn--ghost"
+                className="btn-cancel"
                 onClick={() => navigate('/episodes')}
                 disabled={loading}
               >
@@ -1466,16 +1599,16 @@ const CreateEpisode = () => {
               <button
                 type="submit"
                 form="create-episode-form"
-                className="ce-btn ce-btn--primary ce-btn--large"
+                className="btn-submit btn-large"
                 disabled={loading}
               >
                 {loading ? (
                   <>
-                    <span className="ce-spinner"></span>
-                    Creating...
+                    <span className="spinner"></span>
+                    {isEditMode ? 'Updating...' : 'Creating...'}
                   </>
                 ) : (
-                  'Create Episode'
+                  isEditMode ? 'Update Episode' : 'Create Episode'
                 )}
               </button>
             </div>

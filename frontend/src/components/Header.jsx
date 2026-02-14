@@ -8,7 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/Header.css';
 
-const Header = ({ onMenuClick }) => {
+const Header = ({ navOpen, onNavToggle }) => {
   const navigate = useNavigate();
   const { user, logout, isAuthenticated } = useAuth();
 
@@ -30,14 +30,18 @@ const Header = ({ onMenuClick }) => {
     <header className="header">
       <div className="header-content">
         <div className="header-left">
-          <button 
-            className="menu-button" 
-            onClick={onMenuClick}
-            aria-label="Open menu"
-          >
-            <span className="menu-icon" aria-hidden="true">☰</span>
-          </button>
-          <h1 className="header-title">Episodes</h1>
+          {onNavToggle && (
+            <button 
+              className="nav-toggle-btn" 
+              onClick={onNavToggle}
+              aria-label="Toggle Navigation"
+              data-location="header"
+              data-state={navOpen ? 'open' : 'closed'}
+            >
+              {navOpen ? '✕' : '☰'}
+            </button>
+          )}
+          <h1 className="header-title">Prime Studios</h1>
         </div>
 
         <div className="header-right">

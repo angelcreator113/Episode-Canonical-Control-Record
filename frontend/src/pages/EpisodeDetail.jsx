@@ -1,18 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import episodeService from '../services/episodeService';
-import EpisodeWardrobe from '../components/EpisodeWardrobe';
-import EpisodeAssetsTab from '../components/EpisodeAssetsTab';
-import EpisodeScripts from '../components/EpisodeScripts';
-import RawFootageUpload from '../components/RawFootageUpload';
+import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
+import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
+import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
+import EpisodeSceneComposerTab from '../components/Episodes/EpisodeSceneComposerTab';
+import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
+import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
-import DecisionHistory from '../components/DecisionHistory';
-import DecisionStats from '../components/DecisionStats';
-import YouTubeAnalyzer from '../components/YouTubeAnalyzer';
-import DecisionHistoryWithAnalytics from '../components/DecisionHistoryWithAnalytics';
-import LayerStudioFinal from '../components/LayerStudio/LayerStudioFinal';
 import './EpisodeDetail.css';
 
 
@@ -78,7 +75,6 @@ const EpisodeDetail = () => {
   }, [searchParams]);
 
   const [loadingScenes, setLoadingScenes] = useState(false);
-  const [episodeAssets, setEpisodeAssets] = useState([]);
   const [episodeWardrobes, setEpisodeWardrobes] = useState([]);
   const [selectedSceneId, setSelectedSceneId] = useState(null);
   const [editingTrim, setEditingTrim] = useState({});
@@ -113,6 +109,18 @@ const EpisodeDetail = () => {
       fetchEpisode();
     }
   }, [episodeId]);
+
+  // Handle episode updates from Overview tab
+  const handleUpdateEpisode = async (updates) => {
+    try {
+      await episodeService.updateEpisode(episode.id, updates);
+      // Refresh episode data
+      await fetchEpisode();
+    } catch (error) {
+      console.error('Error updating episode:', error);
+      throw error;
+    }
+  };
 
   // Load primary script for scene linking
   useEffect(() => {
@@ -151,23 +159,6 @@ const EpisodeDetail = () => {
     };
 
     fetchEpisodeScenes();
-  }, [episodeId, activeTab]);
-
-  // Load episode assets
-  useEffect(() => {
-    const fetchEpisodeAssets = async () => {
-      if (!episodeId || activeTab !== 'assets') return;
-      
-      try {
-        const response = await fetch(`/api/v1/episodes/${episodeId}/assets`);
-        const data = await response.json();
-        setEpisodeAssets(data.data || data.assets || []);
-      } catch (err) {
-        console.error('Failed to load episode assets:', err);
-      }
-    };
-
-    fetchEpisodeAssets();
   }, [episodeId, activeTab]);
 
   // Load episode wardrobe
@@ -362,7 +353,7 @@ const EpisodeDetail = () => {
       return {
         title: 'Create a thumbnail',
         description: 'Design a compelling thumbnail to represent this episode',
-        action: () => navigate(`/episodes/${episode.id}/timeline`),
+        action: () => navigate(`/episodes/${episode.id}/scene-composer`),
         buttonText: 'Create Thumbnail'
       };
     }
@@ -397,7 +388,7 @@ const EpisodeDetail = () => {
     }
     
     if (!episode.thumbnailUrl && !episode.thumbnail_url && primaryAction?.title !== 'Create a thumbnail') {
-      steps.push({ title: 'Create Thumbnail', status: 'pending', action: () => navigate(`/episodes/${episode.id}/timeline`) });
+      steps.push({ title: 'Create Thumbnail', status: 'pending', action: () => navigate(`/episodes/${episode.id}/scene-composer`) });
     } else if (episode.thumbnailUrl || episode.thumbnail_url) {
       steps.push({ title: 'Create Thumbnail', status: 'complete' });
     }
@@ -435,8 +426,8 @@ const EpisodeDetail = () => {
           <span className="ed-error-icon">⚠️</span>
           <h2>Episode Not Found</h2>
           <p>{error || 'The episode you\'re looking for doesn\'t exist.'}</p>
-          <button onClick={() => navigate('/episodes')} className="ed-btn ed-btn-primary">
-            ← Back to Episodes
+          <button onClick={() => navigate(episode?.show_id ? `/shows/${episode.show_id}` : '/episodes')} className="ed-btn ed-btn-primary">
+            ← Back to Show
           </button>
         </div>
       </div>
@@ -448,8 +439,8 @@ const EpisodeDetail = () => {
       {/* Simplified Header: Identity + Action */}
       <div className="ed-header-new">
         <div className="ed-header-left">
-          <button onClick={() => navigate('/episodes')} className="ed-back-btn">
-            ← Episodes
+          <button onClick={() => navigate(episode?.show_id || episode?.showId ? `/shows/${episode.show_id || episode.showId}` : '/episodes')} className="ed-back-btn">
+            ← Back to Show
           </button>
           <div className="ed-header-info">
             <h1 className="ed-header-title">{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
@@ -458,6 +449,16 @@ const EpisodeDetail = () => {
                 <span className="ed-meta-label">Episode</span>
                 <span className="ed-meta-value">{episode.episode_number || episode.episodeNumber || '?'}</span>
               </span>
+              {episode.show && (
+                <Link 
+                  to={`/shows/${episode.show.id}`} 
+                  className="ed-show-link"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <span className="ed-show-icon">📺</span>
+                  <span className="ed-show-name">{episode.show.name}</span>
+                </Link>
+              )}
               <span className={`ed-status-badge ed-status-${episode.status?.toLowerCase() || 'draft'}`}>
                 {episode.status || 'Draft'}
               </span>
@@ -465,13 +466,6 @@ const EpisodeDetail = () => {
           </div>
         </div>
         <div className="ed-header-actions">
-          <button
-            onClick={() => navigate(`/episodes/${episode.id}/edit`)}
-            className="ed-btn-primary-action"
-          >
-            <span>✏️</span>
-            <span>Edit Episode</span>
-          </button>
           <div className="ed-more-menu">
             <button
               onClick={() => setShowMoreActions(!showMoreActions)}
@@ -484,7 +478,17 @@ const EpisodeDetail = () => {
               <div className="ed-dropdown">
                 <button
                   onClick={() => {
-                    navigate(`/episodes/${episode.id}/timeline`);
+                    navigate(`/episodes/${episode.id}/edit`);
+                    setShowMoreActions(false);
+                  }}
+                  className="ed-dropdown-item"
+                >
+                  <span>✏️</span>
+                  <span>Edit Episode</span>
+                </button>
+                <button
+                  onClick={() => {
+                    navigate(`/episodes/${episode.id}/scene-composer`);
                     setShowMoreActions(false);
                   }}
                   className="ed-dropdown-item"
@@ -525,36 +529,28 @@ const EpisodeDetail = () => {
             <span className="ed-tab-label">Overview</span>
           </button>
           <button
-            className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('wardrobe')}
-            title="Wardrobe"
-          >
-            <span className="ed-tab-icon">👔</span>
-            <span className="ed-tab-label">Wardrobe</span>
-          </button>
-          <button
             className={`ed-tab ${activeTab === 'scripts' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('scripts')}
             title="Scripts"
           >
             <span className="ed-tab-icon">📝</span>
-            <span className="ed-tab-label">Scripts</span>
-          </button>
-          <button
-            className={`ed-tab ${activeTab === 'footage' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('footage')}
-            title="Raw Footage"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Raw Footage</span>
+            <span className="ed-tab-label">Script</span>
           </button>
           <button
             className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('scenes')}
-            title="Scenes"
+            title="Scene Composer"
           >
             <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Scenes</span>
+            <span className="ed-tab-label">Scene Composer</span>
+          </button>
+          <button
+            className={`ed-tab ${activeTab === 'timeline' ? 'ed-tab-active' : ''}`}
+            onClick={() => navigate(`/episodes/${episodeId}/timeline`)}
+            title="Timeline Editor"
+          >
+            <span className="ed-tab-icon">⏱️</span>
+            <span className="ed-tab-label">Timeline</span>
           </button>
           <button
             className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
@@ -565,20 +561,20 @@ const EpisodeDetail = () => {
             <span className="ed-tab-label">Assets</span>
           </button>
           <button
-            className={`ed-tab ${activeTab === 'metadata' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('metadata')}
-            title="Metadata"
+            className={`ed-tab ${activeTab === 'wardrobe' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('wardrobe')}
+            title="Wardrobe"
           >
-            <span className="ed-tab-icon">📊</span>
-            <span className="ed-tab-label">Meta</span>
+            <span className="ed-tab-icon">👗</span>
+            <span className="ed-tab-label">Wardrobe</span>
           </button>
           <button
-            className={`ed-tab ${activeTab === 'history' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('history')}
-            title="Decisions & Analytics"
+            className={`ed-tab ${activeTab === 'distribution' ? 'ed-tab-active' : ''}`}
+            onClick={() => setActiveTab('distribution')}
+            title="Distribution"
           >
-            <span className="ed-tab-icon">🎯</span>
-            <span className="ed-tab-label">Decisions</span>
+            <span className="ed-tab-icon">📤</span>
+            <span className="ed-tab-label">Distribution</span>
           </button>
           {/* TEMPORARILY DISABLED - YouTube Training feature in development
           <button
@@ -596,320 +592,61 @@ const EpisodeDetail = () => {
         <div className="ed-content">
         {/* Overview Tab */}
         {activeTab === 'overview' && (
-          <div className="ed-stack">
-            {/* Primary Next Action */}
-            {getPrimaryNextAction() && (
-              <div className="ed-card ed-next-primary">
-                <div className="ed-next-icon">→</div>
-                <div className="ed-next-body">
-                  <h3 className="ed-next-title">{getPrimaryNextAction().title}</h3>
-                  <p className="ed-next-desc">{getPrimaryNextAction().description}</p>
-                </div>
-                <button 
-                  onClick={getPrimaryNextAction().action}
-                  className="ed-btn ed-btn-primary"
-                >
-                  {getPrimaryNextAction().buttonText}
-                </button>
-              </div>
-            )}
-
-            {/* Other Steps (Collapsible) */}
-            {getOtherSteps().length > 0 && (
-              <div className="ed-card ed-compact">
-                <button 
-                  className="ed-expand-trigger"
-                  onClick={() => setShowOtherSteps(!showOtherSteps)}
-                >
-                  <span className="ed-expand-label">Other steps</span>
-                  <span className="ed-expand-count">({getOtherSteps().filter(s => s.status === 'complete').length}/{getOtherSteps().length})</span>
-                  <span className={`ed-expand-arrow ${showOtherSteps ? 'is-open' : ''}`}>▼</span>
-                </button>
-                {showOtherSteps && (
-                  <div className="ed-other-steps">
-                    {getOtherSteps().map((step, idx) => (
-                      <div key={idx} className={`ed-step-item ${step.status}`}>
-                        <span className="ed-step-icon">{step.status === 'complete' ? '✓' : '○'}</span>
-                        <span className="ed-step-text">
-                          {step.title}
-                          {step.count && <span className="ed-step-badge">{step.count}</span>}
-                        </span>
-                        {step.action && step.status === 'pending' && (
-                          <button onClick={step.action} className="ed-step-btn">→</button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Description Section */}
-            {episode.description && (
-              <div className="ed-card ed-compact">
-                <h3 className="ed-section-title">Description</h3>
-                <p className="ed-bodytext">{episode.description}</p>
-              </div>
-            )}
-
-            {/* Categories */}
-            {episode.categories && Array.isArray(episode.categories) && episode.categories.length > 0 && (
-              <div className="ed-card ed-compact">
-                <h3 className="ed-section-title">Categories</h3>
-                <div className="ed-tags">
-                  {episode.categories.map((cat, idx) => (
-                    <span key={idx} className="ed-tag">
-                      {cat}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Wardrobe Tab */}
-        {activeTab === 'wardrobe' && (
-          <div className="ed-fullbleed">
-            <EpisodeWardrobe
-              episodeId={episode.id}
-              episodeNumber={episode.episode_number}
-            />
-          </div>
+          <EpisodeOverviewTab 
+            episode={episode} 
+            show={episode.show || show}
+            onUpdate={handleUpdateEpisode}
+          />
         )}
 
         {/* Scripts Tab */}
         {activeTab === 'scripts' && (
-          <EpisodeScripts episodeId={episode.id} showId={episode.show_id} />
+          <EpisodeScriptTab 
+            episode={episode}
+            onUpdate={handleUpdateEpisode}
+          />
         )}
 
-        {/* Raw Footage Tab */}
-        {activeTab === 'footage' && (
-          <div className="ed-card">
-            <div className="ed-cardhead">
-              <h2 className="ed-cardtitle">🎬 Raw Footage Upload</h2>
-              <p className="text-sm text-gray-600 mt-2">
-                Upload raw video clips for this episode. Files will be stored in S3 and metadata extracted automatically.
-              </p>
-            </div>
-            <div className="ed-cardbody">
-              <RawFootageUpload 
-                episodeId={episode.id} 
-                onUploadComplete={() => {
-                  console.log('Upload complete');
-                }}
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Scenes Tab - Consolidated (Composer + Linking) */}
+        {/* Scenes Tab - Scene Composer */}
         {activeTab === 'scenes' && (
-          <div className="ed-fullbleed">
-            {/* Scene Subtabs */}
-            <div style={{
-              display: 'flex',
-              gap: '1px',
-              borderBottom: '1px solid #1f2937',
-              backgroundColor: '#111827',
-              padding: '0 1.5rem'
-            }}>
-              <button
-                onClick={() => setSceneView('composer')}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  fontSize: '0.875rem',
-                  fontWeight: sceneView === 'composer' ? '600' : '500',
-                  color: sceneView === 'composer' ? '#ec4899' : '#9ca3af',
-                  borderBottom: sceneView === 'composer' ? '2px solid #ec4899' : 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  border: 'none',
-                  transition: 'all 0.2s'
-                }}
-              >
-                🎬 Scene Composer
-              </button>
-              <button
-                onClick={() => setSceneView('linking')}
-                style={{
-                  padding: '0.75rem 1.5rem',
-                  fontSize: '0.875rem',
-                  fontWeight: sceneView === 'linking' ? '600' : '500',
-                  color: sceneView === 'linking' ? '#ec4899' : '#9ca3af',
-                  borderBottom: sceneView === 'linking' ? '2px solid #ec4899' : 'none',
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  border: 'none',
-                  transition: 'all 0.2s'
-                }}
-              >
-                🔗 Scene Linking
-              </button>
-            </div>
-
-            {/* Composer View */}
-            {sceneView === 'composer' && (
-              <div className="ed-layers-tab-container">
-                <LayerStudioFinal episodeId={episodeId} />
-              </div>
-            )}
-
-            {/* Linking View */}
-            {sceneView === 'linking' && (
-              <div className="ed-card">
-                <div className="ed-cardhead">
-                  <h2 className="ed-cardtitle">🔗 Scene Linking</h2>
-                  <p className="text-sm text-gray-600 mt-2">
-                    Link uploaded footage clips to AI-detected scenes from your script.
-                  </p>
-                </div>
-                <div className="ed-cardbody">
-                  <SceneLinking 
-                    episodeId={episode.id} 
-                    scriptId={primaryScript?.id}
-                  />
-                </div>
-              </div>
-            )}
-          </div>
+          <EpisodeSceneComposerTab episode={episode} show={episode.show} />
         )}
 
         {/* Assets Tab */}
         {activeTab === 'assets' && (
-          <EpisodeAssetsTab episodeId={episode.id} />
-        )}
-
-        {/* Metadata Tab */}
-        {activeTab === 'metadata' && (
-          <div className="ed-stack">
-            {/* Quick Stats */}
+          episode.show ? (
+            <EpisodeAssetsTab episode={episode} show={episode.show} />
+          ) : (
             <div className="ed-card">
               <div className="ed-cardhead">
-                <h2 className="ed-cardtitle">📊 Episode Stats</h2>
-                <button 
-                  onClick={() => navigate(`/episodes/${episode.id}/edit`)}
-                  className="ed-btn ed-btn-primary ed-btn-sm">
-                  <span>✏️</span>
-                  <span>Edit</span>
-                </button>
+                <h2 className="ed-cardtitle">🎨 Episode Assets</h2>
               </div>
-              <div className="ed-statgrid">
-                <div className="ed-stat">
-                  <div className="k">Status</div>
-                  <div className="v">
-                    <span className={`ed-badge ed-badge-${episode.status?.toLowerCase() === 'published' ? 'success' : episode.status?.toLowerCase() === 'pending' ? 'warning' : 'neutral'}`}>
-                      {episode.status || 'Draft'}
-                    </span>
-                  </div>
-                </div>
-                <div className="ed-stat">
-                  <div className="k">Episode Number</div>
-                  <div className="v">
-                    {episode.episode_number || episode.episodeNumber || 'N/A'}
-                  </div>
-                </div>
-                {(episode.air_date || episode.airDate) && (
-                  <div className="ed-stat">
-                    <div className="k">Air Date</div>
-                    <div className="v">
-                      {formatDate(episode.air_date || episode.airDate)}
-                    </div>
-                  </div>
-                )}
-                {episode.duration && (
-                  <div className="ed-stat">
-                    <div className="k">Duration</div>
-                    <div className="v">{episode.duration} minutes</div>
-                  </div>
-                )}
-                <div className="ed-stat">
-                  <div className="k">Scenes</div>
-                  <div className="v">{episodeScenes.length || 0}</div>
-                </div>
-                <div className="ed-stat">
-                  <div className="k">Thumbnail</div>
-                  <div className="v">
-                    <span className={`ed-badge ${episode.thumbnailUrl || episode.thumbnail_url ? 'ed-badge-success' : 'ed-badge-warning'}`}>
-                      {episode.thumbnailUrl || episode.thumbnail_url ? '✓ Ready' : '⚠ Missing'}
-                    </span>
-                  </div>
-                </div>
-                <div className="ed-stat">
-                  <div className="k">Wardrobe Items</div>
-                  <div className="v">{episode.wardrobeCount || 0}</div>
+              <div className="ed-cardbody">
+                <div style={{ textAlign: 'center', padding: '3rem' }}>
+                  <div style={{ fontSize: '3rem', marginBottom: '1rem' }}>📁</div>
+                  <p style={{ color: '#64748b' }}>
+                    This episode needs to be linked to a show to use the asset system.
+                  </p>
+                  <p style={{ color: '#94a3b8', fontSize: '0.9rem', marginTop: '1rem' }}>
+                    Please edit the episode and select a show.
+                  </p>
                 </div>
               </div>
             </div>
-
-            {/* System Information */}
-            <div className="ed-card">
-              <div className="ed-cardhead">
-                <h2 className="ed-cardtitle">🔐 System Information</h2>
-              </div>
-              <div className="ed-infogrid">
-                <div className="ed-info">
-                  <div className="k">Episode ID</div>
-                  <div className="v ed-mono">{episode.id}</div>
-                </div>
-                {episode.show_id && (
-                  <div className="ed-info">
-                    <div className="k">Show ID</div>
-                    <div className="v ed-mono">{episode.show_id}</div>
-                  </div>
-                )}
-                {(episode.created_at || episode.createdAt) && (
-                  <div className="ed-info">
-                    <div className="k">Created</div>
-                    <div className="v">
-                      {formatDateTime(episode.created_at || episode.createdAt)}
-                    </div>
-                  </div>
-                )}
-                {(episode.updated_at || episode.updatedAt) && (
-                  <div className="ed-info">
-                    <div className="k">Last Updated</div>
-                    <div className="v">
-                      {formatDateTime(episode.updated_at || episode.updatedAt)}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Episode Metadata Card */}
-            <div className="ed-card">
-              <div className="ed-cardhead">
-                <h2 className="ed-cardtitle">🔧 Raw JSON Metadata</h2>
-              </div>
-              {episode.metadata && Object.keys(episode.metadata).length > 0 ? (
-                <div className="ed-codebox">
-                  <pre>
-                    {JSON.stringify(episode.metadata, null, 2)}
-                  </pre>
-                </div>
-              ) : (
-                <div className="ed-empty ed-empty-tight">
-                  <div className="ed-empty-ic">📋</div>
-                  <h3>No Additional Metadata</h3>
-                  <p>Custom metadata fields will appear here</p>
-                </div>
-              )}
-            </div>
-          </div>
+          )
         )}
 
-        {/* YouTube Training Tab - TEMPORARILY DISABLED
-        {activeTab === 'youtube' && (
-          <YouTubeAnalyzer episodeId={episodeId} />
+        {/* Wardrobe Tab */}
+        {activeTab === 'wardrobe' && (
+          <EpisodeWardrobeTab
+            episodeId={episodeId}
+            episode={episode}
+          />
         )}
-        */}
 
-        {/* Decisions Tab - Analytics + History */}
-        {activeTab === 'history' && (
-          <div className="ed-stack">
-            <DecisionHistoryWithAnalytics episodeId={episodeId} />
-          </div>
+        {/* Distribution Tab */}
+        {activeTab === 'distribution' && (
+          <EpisodeDistributionTab episode={episode} onUpdate={handleUpdateEpisode} />
         )}
       </div>
 

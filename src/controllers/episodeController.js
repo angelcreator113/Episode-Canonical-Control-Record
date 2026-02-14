@@ -694,9 +694,11 @@ module.exports = {
       const { id } = req.params;
       const db = require('../models');
 
-      // Use raw SQL query to avoid Sequelize association issues
+      // Use raw SQL query with UNION to get assets from both linking methods
+      // Method 1: episode_assets join table (new, proper many-to-many)
+      // Method 2: assets.episode_id direct link (legacy)
       const assets = await db.sequelize.query(
-        `SELECT 
+        `SELECT DISTINCT
           a.id,
           a.name,
           a.asset_type,
@@ -718,15 +720,16 @@ module.exports = {
           a.metadata,
           a.created_at,
           ea.usage_type,
-          ea.display_order,
-          ea.created_at as linked_at
-        FROM episode_assets ea
-        INNER JOIN assets a ON ea.asset_id = a.id
-        WHERE ea.episode_id = $1 
+          COALESCE(ea.display_order, 0) as display_order,
+          COALESCE(ea.created_at, a.created_at) as linked_at
+        FROM assets a
+        LEFT JOIN episode_assets ea ON ea.asset_id = a.id AND ea.episode_id = :episodeId AND ea.deleted_at IS NULL
+        WHERE (a.episode_id = :episodeId OR ea.episode_id = :episodeId)
         AND a.deleted_at IS NULL
-        ORDER BY ea.display_order ASC, ea.created_at DESC`,
+        AND (a.episode_id IS NOT NULL OR ea.id IS NOT NULL)
+        ORDER BY display_order ASC, linked_at DESC`,
         {
-          bind: [id],
+          replacements: { episodeId: id },
           type: db.sequelize.QueryTypes.SELECT,
         }
       );
@@ -838,6 +841,18 @@ module.exports = {
       const { id, assetId } = req.params;
       const { usageType } = req.query;
 
+      console.log('🗑️ DELETE Episode Asset Request:');
+      console.log('  Episode ID:', id);
+      console.log('  Asset ID:', assetId);
+
+      // Strategy: Remove from both possible locations
+      // 1. episode_assets join table (many-to-many)
+      // 2. assets.episode_id direct link (legacy)
+
+      let deletedCount = 0;
+      let deletionMethods = [];
+
+      // Method 1: Remove from episode_assets join table
       const where = {
         episode_id: id,
         asset_id: assetId,
@@ -847,19 +862,38 @@ module.exports = {
         where.usage_type = usageType;
       }
 
-      const deleted = await EpisodeAsset.destroy({ where });
+      const joinTableDeleted = await EpisodeAsset.destroy({ where });
+      if (joinTableDeleted > 0) {
+        deletedCount += joinTableDeleted;
+        deletionMethods.push('episode_assets join table');
+        console.log(`  ✅ Removed from episode_assets join table (${joinTableDeleted} record(s))`);
+      }
 
-      if (deleted === 0) {
-        return res.status(404).json({
-          error: 'Episode asset link not found',
-          episode_id: id,
-          asset_id: assetId,
+      // Method 2: Clear episode_id from asset if it matches this episode
+      const asset = await Asset.findByPk(assetId);
+      if (asset && asset.episode_id === id) {
+        await asset.update({ episode_id: null });
+        deletedCount++;
+        deletionMethods.push('asset.episode_id cleared');
+        console.log('  ✅ Cleared episode_id from asset');
+      }
+
+      // If asset wasn't linked in any way, treat as success (idempotent delete)
+      if (deletedCount === 0) {
+        console.log('  ℹ️  Asset was not linked to episode (already removed or never linked)');
+        return res.json({
+          message: `Asset already removed or not linked to episode`,
+          deleted: 0,
+          methods: ['none - already removed'],
         });
       }
 
+      console.log(`  ✅ Total removals: ${deletedCount} (${deletionMethods.join(', ')})`);
+
       res.json({
         message: `Removed asset from episode`,
-        deleted,
+        deleted: deletedCount,
+        methods: deletionMethods,
       });
     } catch (error) {
       console.error('❌ Error removing episode asset:', error);

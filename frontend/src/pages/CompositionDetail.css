@@ -582,3 +582,30 @@
     width: 100%;
   }
 }
+
+@media (max-width: 480px) {
+  .composition-detail {
+    padding: 0.75rem;
+  }
+
+  .composition-detail__tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 0.25rem;
+  }
+
+  .composition-detail__tabs::-webkit-scrollbar {
+    display: none;
+  }
+
+  .composition-detail__tab {
+    white-space: nowrap;
+    font-size: 0.8rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .composition-detail__outputs-grid {
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+  }
+}

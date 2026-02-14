@@ -130,6 +130,70 @@ const sceneService = {
     const response = await api.post(`/scenes/${sceneId}/duplicate`);
     return response.data;
   },
+
+  // ============================================================================
+  // PHASE 1: SCENE COMPOSER API METHODS
+  // ============================================================================
+
+  /**
+   * Calculate scene duration from video clips
+   * POST /api/v1/scenes/:id/calculate-duration
+   */
+  calculateDuration: async (sceneId) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/calculate-duration`);
+    return data;
+  },
+
+  /**
+   * Check scene completeness (has required assets)
+   * GET /api/v1/scenes/:id/completeness
+   */
+  checkCompleteness: async (sceneId) => {
+    const { data } = await api.get(`/api/v1/scenes/${sceneId}/completeness`);
+    return data;
+  },
+
+  /**
+   * Add asset to scene with role and metadata
+   * POST /api/v1/scenes/:id/assets
+   * @param {string} sceneId
+   * @param {object} assetData - { assetId, roleKey, metadata }
+   */
+  addAssetToScene: async (sceneId, assetData) => {
+    const { data } = await api.post(`/api/v1/scenes/${sceneId}/assets`, assetData);
+    return data;
+  },
+
+  /**
+   * List scene assets with optional role filtering
+   * GET /api/v1/scenes/:id/assets?role=BG.MAIN
+   */
+  listSceneAssets: async (sceneId, role = null) => {
+    const params = role ? { role } : {};
+    const { data } = await api.get(`/api/v1/scenes/${sceneId}/assets`, { params });
+    return data;
+  },
+
+  /**
+   * Update scene asset metadata
+   * PUT /api/v1/scenes/:id/assets/:asset_id
+   * @param {string} sceneId
+   * @param {string} assetId
+   * @param {object} updates - { metadata: { x, y, scale, etc } }
+   */
+  updateSceneAssetMetadata: async (sceneId, assetId, updates) => {
+    const { data } = await api.put(`/api/v1/scenes/${sceneId}/assets/${assetId}`, updates);
+    return data;
+  },
+
+  /**
+   * Remove asset from scene
+   * DELETE /api/v1/scenes/:id/assets/:asset_id
+   */
+  removeSceneAssetFromScene: async (sceneId, assetId) => {
+    const { data } = await api.delete(`/api/v1/scenes/${sceneId}/assets/${assetId}`);
+    return data;
+  },
 };
 
 export default sceneService;
