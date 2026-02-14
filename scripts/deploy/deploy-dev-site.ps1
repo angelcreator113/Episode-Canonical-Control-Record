@@ -1,7 +1,7 @@
 # Simple deployment script for dev site
 $ErrorActionPreference = "Stop"
 
-$EC2_HOST = "ubuntu@3.94.166.174"
+$EC2_HOST = "ubuntu@52.91.217.230"
 $KEY_FILE = "C:\Users\12483\episode-prod-key.pem"
 $PROJECT_ROOT = "C:\Users\12483\Projects\Episode-Canonical-Control-Record-1"
 

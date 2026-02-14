@@ -6,7 +6,7 @@
       "Name": "dev.primepisodes.com",
       "Type": "A",
       "TTL": 300,
-      "ResourceRecords": [{"Value": "3.94.166.174"}]
+      "ResourceRecords": [{"Value": "52.91.217.230"}]
     }
   }]
 }
