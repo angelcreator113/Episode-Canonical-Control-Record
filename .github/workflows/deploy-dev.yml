@@ -4,12 +4,11 @@ on:
   push:
     branches:
       - dev
-  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     services:
       postgres:
         image: postgres:15
@@ -27,15 +26,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
-        with:
-          clean: true
-          
-      - name: Debug - List migration files
-        run: |
-          echo "=== Migrations in repo ==="
-          ls -la src/migrations/
-          echo "=== Current commit ==="
-          git log -1 --oneline
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -66,7 +56,6 @@ jobs:
 
   build:
     needs: test
-    if: always()
     runs-on: ubuntu-latest
 
     steps:
@@ -78,16 +67,15 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install backend dependencies
         run: npm ci --production
 
       - name: Build frontend
         run: |
           cd frontend
-          rm -rf dist node_modules/.vite
           npm ci
           npm run build
-          echo "Build complete - listing assets:"
+          echo "Build complete:"
           ls -lh dist/assets/
 
       - name: Create artifact
@@ -107,38 +95,61 @@ jobs:
 
   deploy:
     needs: build
-    if: always()
     runs-on: ubuntu-latest
     environment:
       name: development
       url: https://dev.primepisodes.com
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Download artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: episode-metadata-build-dev
 
-      - name: Skip EC2 deployment (local development only)
+      - name: Deploy to EC2
+        env:
+          EC2_HOST: ${{ secrets.DEV_EC2_HOST }}
+          EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
         run: |
-          echo "⏭️  Skipping EC2 deployment - working in local development mode"
-          echo "✅ Code successfully pushed to dev branch"
-          echo "📦 Build artifacts generated successfully"
-          echo ""
-          echo "To enable EC2 deployment, configure these GitHub secrets:"
-          echo "  - EC2_HOST"
-          echo "  - EC2_SSH_KEY"
-          echo "  - DATABASE_URL"
-          echo "  - AWS_ACCESS_KEY_ID"
-          echo "  - AWS_SECRET_ACCESS_KEY"
-          echo ""
-          echo "Commit: ${{ github.sha }}"
-          echo "Branch: ${{ github.ref_name }}"
+          if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
+            echo "⏭️  EC2 deployment skipped - secrets not configured"
+            echo "Set DEV_EC2_HOST and EC2_SSH_KEY in GitHub Secrets to enable"
+            echo ""
+            echo "Commit: ${{ github.sha }}"
+            echo "Branch: ${{ github.ref_name }}"
+            exit 0
+          fi
 
-      - name: Deployment summary (skipped)
+          echo "🚀 Deploying to dev server..."
+
+          # Setup SSH key
+          mkdir -p ~/.ssh
+          echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+          # Upload build
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
+            episode-metadata-${{ github.sha }}.tar.gz \
+            ubuntu@$EC2_HOST:/tmp/dev-deploy.tar.gz
+
+          # Deploy on server
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
+            set -e
+            cd /tmp
+            tar -xzf dev-deploy.tar.gz
+            sudo rm -rf /var/www/html/*
+            sudo cp -r deploy/dist/* /var/www/html/
+            sudo chown -R www-data:www-data /var/www/html
+            sudo systemctl restart nginx
+            rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz
+            echo 'Deployment complete'
+          "
+
+      - name: Deployment summary
         run: |
-          echo "✅ Development workflow completed"
-          echo "Environment: development (local)"
-          echo "Commit: ${{ github.sha }}"
-          echo "Branch: ${{ github.ref_name }}"
-          echo ""
-          echo "EC2 deployment skipped - configure secrets to enable"
+          echo "## Dev Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Site: https://dev.primepisodes.com" >> $GITHUB_STEP_SUMMARY
 
 

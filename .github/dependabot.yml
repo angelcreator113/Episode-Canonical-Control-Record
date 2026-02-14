@@ -1,40 +1,20 @@
 version: 2
 updates:
-  # Enable version updates for npm
+  # Backend dependencies - monitor only, no PRs
   - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    versioning-strategy: increase
-    labels:
-      - "dependencies"
-      - "npm"
-    groups:
-      production-dependencies:
-        dependency-type: "production"
-      development-dependencies:
-        dependency-type: "development"
-
-  # Frontend dependencies
-  - package-ecosystem: "npm"
-    directory: "/frontend"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    versioning-strategy: increase-if-necessary
-    labels:
-      - "dependencies"
-      - "frontend"
-    ignore:
-      - dependency-name: "@vitejs/plugin-react"
-        versions: [">=5.0.0"]
-
-  # GitHub Actions
-  - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    open-pull-requests-limit: 0
     labels:
       - "dependencies"
-      - "github-actions"
+
+  # Frontend dependencies - monitor only, no PRs
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "monthly"
+    open-pull-requests-limit: 0
+    labels:
+      - "dependencies"
+      - "frontend"
