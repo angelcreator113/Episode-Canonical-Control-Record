@@ -37,7 +37,7 @@
     "@testing-library/react": "^14.0.0",
     "@vitejs/plugin-react": "^4.2.0",
     "autoprefixer": "^10.4.24",
-    "eslint": "^9.39.2",
+    "eslint": "^10.0.0",
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "postcss": "^8.5.6",
