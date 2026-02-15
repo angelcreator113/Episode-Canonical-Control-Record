@@ -351,7 +351,7 @@
 .asset-thumbnail {
   position: relative;
   width: 100%;
-  padding-top: 65%; /* More compact aspect ratio */
+  padding-top: 133%; /* Portrait 3:4 aspect ratio */
   background: #f1f5f9;
   overflow: hidden;
   border-radius: 10px 10px 0 0;
@@ -550,7 +550,7 @@
   
   .view-list .asset-thumbnail {
     width: 100%;
-    padding-top: 75%;
+    padding-top: 133%;
     height: auto;
   }
 }
@@ -572,9 +572,9 @@
     gap: 0.5rem;
   }
 
-  /* Less aggressive crop on small cards */
+  /* Portrait crop on small cards */
   .assets-container.view-grid .asset-thumbnail {
-    padding-top: 56%;
+    padding-top: 133%;
   }
   
   .show-assets-tab .recommended-grid {

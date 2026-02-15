@@ -225,9 +225,8 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
               <div
                 className="progress-fill"
                 style={{ width: `${progress.total}%` }}
-              >
-                <span className="progress-label">{progress.total}% Complete</span>
-              </div>
+              />
+              <span className="progress-label">{progress.total}% Complete</span>
             </div>
           </div>
           
