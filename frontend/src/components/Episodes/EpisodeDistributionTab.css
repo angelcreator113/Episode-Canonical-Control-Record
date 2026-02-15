@@ -49,7 +49,7 @@
   font-size: 0.9rem;
 }
 
-.btn-save {
+.episode-distribution-tab .btn-save {
   padding: 0.5rem 1rem;
   background: linear-gradient(135deg, #10b981 0%, #059669 100%);
   color: white;
@@ -62,14 +62,16 @@
   display: flex;
   align-items: center;
   gap: 0.375rem;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: none;
 }
 
-.btn-save:hover:not(:disabled) {
+.episode-distribution-tab .btn-save:hover:not(:disabled) {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(16, 185, 129, 0.4);
 }
 
-.btn-save:disabled {
+.episode-distribution-tab .btn-save:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -422,8 +424,8 @@
 
 /* ==================== BUTTONS ==================== */
 
-.btn-primary,
-.btn-secondary {
+.episode-distribution-tab .btn-primary,
+.episode-distribution-tab .btn-secondary {
   padding: 0.5rem 1rem;
   border-radius: 8px;
   font-weight: 600;
@@ -431,26 +433,54 @@
   cursor: pointer;
   transition: all 0.2s ease;
   border: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow: none;
 }
 
-.btn-primary {
+.episode-distribution-tab .btn-primary {
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
+  box-shadow: none;
 }
 
-.btn-primary:hover {
+.episode-distribution-tab .btn-primary:hover {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
 }
 
-.btn-secondary {
+.episode-distribution-tab .btn-secondary {
   background: white;
   color: #64748b;
   border: 2px solid #e2e8f0;
+  box-shadow: none;
 }
 
-.btn-secondary:hover {
+.episode-distribution-tab .btn-secondary:hover {
   border-color: #cbd5e1;
+}
+
+/* Disable hover effects on touch devices */
+@media (hover: none) and (pointer: coarse) {
+  .episode-distribution-tab .btn-primary:hover,
+  .episode-distribution-tab .btn-primary:active,
+  .episode-distribution-tab .btn-primary:focus {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .episode-distribution-tab .btn-secondary:hover,
+  .episode-distribution-tab .btn-secondary:active,
+  .episode-distribution-tab .btn-secondary:focus {
+    transform: none;
+    box-shadow: none;
+  }
+
+  .episode-distribution-tab .btn-save:hover,
+  .episode-distribution-tab .btn-save:active,
+  .episode-distribution-tab .btn-save:focus {
+    transform: none;
+    box-shadow: none;
+  }
 }
 
 /* ==================== RESPONSIVE ==================== */
