@@ -127,7 +127,22 @@ router.post('/:id/cover-image', upload.single('image'), async (req, res) => {
 router.get('/', async (req, res) => {
   try {
     const Show = getShow();
+    const { Episode } = require('../models');
+    const { fn, col, literal } = require('sequelize');
+
     const shows = await Show.findAll({
+      attributes: {
+        include: [
+          [fn('COUNT', col('episodes.id')), 'episodeCount']
+        ]
+      },
+      include: [{
+        model: Episode,
+        as: 'episodes',
+        attributes: [],
+        required: false,
+      }],
+      group: ['Show.id'],
       order: [['name', 'ASC']],
     });
 
