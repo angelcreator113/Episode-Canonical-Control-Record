@@ -363,36 +363,269 @@
   }
   
   .overview-cover {
-    padding: 2rem 1.5rem;
+    padding: 1.5rem 1.25rem;
+    border-radius: 12px;
+  }
+
+  .cover-section {
+    margin-bottom: 1.75rem;
+  }
+
+  .title-section {
+    padding-bottom: 1.25rem;
   }
   
   .episode-title {
-    font-size: 2rem;
+    font-size: 1.75rem;
   }
   
   .episode-logline {
-    font-size: 1.05rem;
+    font-size: 1rem;
   }
   
   .cover-meta-grid {
     grid-template-columns: 1fr;
+    gap: 0.875rem;
+    margin-bottom: 1.75rem;
+  }
+
+  .meta-card {
+    padding: 1rem;
+  }
+
+  .meta-label {
+    font-size: 0.8rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .meta-value {
+    font-size: 1rem;
+  }
+
+  .section-title {
+    font-size: 1.1rem;
+    gap: 0.5rem;
+  }
+
+  .section-icon {
+    font-size: 1.25rem;
+  }
+
+  .intent-section {
+    padding: 1.25rem;
+  }
+
+  .intent-text {
+    font-size: 1rem;
+  }
+
+  .progress-bar {
+    height: 36px;
+    border-radius: 18px;
+  }
+
+  .progress-label {
+    font-size: 0.875rem;
   }
   
   .progress-checklist {
     grid-template-columns: 1fr;
+    gap: 0.5rem;
+  }
+
+  .notes-section {
+    padding: 1.25rem;
   }
   
   .form-row {
     grid-template-columns: 1fr;
+  }
+
+  .overview-form {
+    padding: 1.5rem;
   }
   
   .overview-header {
     flex-direction: column;
     gap: 1rem;
     align-items: stretch;
+    margin-bottom: 1.25rem;
   }
   
   .btn-edit {
     width: 100%;
+  }
+}
+
+@media (max-width: 480px) {
+  .episode-overview-tab {
+    padding: 0.5rem;
+  }
+  
+  .overview-header {
+    margin-bottom: 0.875rem;
+  }
+
+  .overview-header h2 {
+    font-size: 1.2rem;
+  }
+
+  .btn-edit {
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    border-radius: 6px;
+  }
+
+  .overview-cover {
+    padding: 1rem 0.875rem;
+    border-radius: 10px;
+    border-width: 1.5px;
+  }
+
+  .cover-section {
+    margin-bottom: 1.25rem;
+  }
+
+  .title-section {
+    padding-bottom: 1rem;
+  }
+
+  .episode-title {
+    font-size: 1.375rem;
+    line-height: 1.25;
+  }
+
+  .episode-logline {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .cover-meta-grid {
+    gap: 0.625rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .meta-card {
+    padding: 0.75rem;
+    border-radius: 8px;
+  }
+
+  .meta-label {
+    font-size: 0.7rem;
+    margin-bottom: 0.375rem;
+    letter-spacing: 0.3px;
+  }
+
+  .meta-value {
+    font-size: 0.9rem;
+  }
+
+  .show-link {
+    padding: 0.375rem 0.75rem;
+    font-size: 0.85rem;
+    border-radius: 6px;
+  }
+
+  .section-title {
+    font-size: 0.95rem;
+    gap: 0.375rem;
+    margin-bottom: 0.75rem;
+  }
+
+  .section-icon {
+    font-size: 1.1rem;
+  }
+
+  .intent-section {
+    padding: 0.875rem;
+    border-radius: 8px;
+    border-width: 1.5px;
+  }
+
+  .intent-text {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .progress-bar-container {
+    margin-bottom: 1rem;
+  }
+
+  .progress-bar {
+    height: 28px;
+    border-radius: 14px;
+  }
+
+  .progress-label {
+    font-size: 0.75rem;
+  }
+
+  .progress-checklist {
+    gap: 0.375rem;
+  }
+
+  .check-item {
+    padding: 0.5rem 0.75rem;
+    gap: 0.375rem;
+    border-radius: 6px;
+  }
+
+  .check-icon {
+    font-size: 1rem;
+  }
+
+  .check-label {
+    font-size: 0.8rem;
+  }
+
+  .notes-section {
+    padding: 0.875rem;
+    border-radius: 8px;
+  }
+
+  .notes-content {
+    font-size: 0.875rem;
+    line-height: 1.6;
+  }
+
+  .empty-prompt {
+    padding: 2rem 1rem;
+    border-radius: 8px;
+  }
+
+  .empty-prompt p {
+    font-size: 0.9rem;
+  }
+
+  .overview-form {
+    padding: 1rem;
+    border-radius: 10px;
+  }
+
+  .form-group {
+    margin-bottom: 1.25rem;
+  }
+
+  .form-group label {
+    font-size: 0.85rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-input,
+  .form-textarea {
+    padding: 0.625rem 0.75rem;
+    font-size: 0.875rem;
+    border-radius: 6px;
+  }
+
+  .header-actions {
+    gap: 0.625rem;
+  }
+
+  .btn-primary,
+  .btn-secondary {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+    border-radius: 6px;
   }
 }
