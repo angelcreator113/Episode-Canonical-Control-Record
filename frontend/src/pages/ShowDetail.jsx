@@ -173,8 +173,8 @@ function ShowDetail() {
       {/* Show Header */}
       <div className="show-header">
         <div className="show-cover">
-          {show.cover_image ? (
-            <img src={show.cover_image} alt={show.name} />
+          {(show.coverImageUrl || show.cover_image_url) ? (
+            <img src={show.coverImageUrl || show.cover_image_url} alt={show.name} />
           ) : (
             <div className="placeholder-cover">🎬</div>
           )}

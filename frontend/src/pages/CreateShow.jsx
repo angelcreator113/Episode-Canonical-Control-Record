@@ -128,12 +128,13 @@ function CreateShow() {
         throw new Error(errData.error || 'Failed to create show');
       }
       
-      const newShow = await response.json();
+      const result = await response.json();
+      const newShow = result.data || result;
       
       // Upload cover image if provided
-      if (formData.coverImage) {
+      if (formData.coverImage && newShow.id) {
         const imgForm = new FormData();
-        imgForm.append('coverImage', formData.coverImage);
+        imgForm.append('image', formData.coverImage);
         await fetch(`${API_URL}/shows/${newShow.id}/cover-image`, {
           method: 'POST',
           headers: token ? { 'Authorization': `Bearer ${token}` } : {},
