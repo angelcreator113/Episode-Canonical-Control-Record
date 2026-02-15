@@ -150,21 +150,21 @@
   align-items: center;
   gap: 0.5rem;
   padding: 0.5rem 0.75rem;
-  background: rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.85);
   backdrop-filter: none;
   border-radius: 20px;
   font-size: 0.9rem;
-  color: #ffffff;
+  color: #4c1d95;
   font-weight: 600;
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  box-shadow: none;
+  border: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   text-shadow: none;
 }
 
 .step-item.done {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.15);
-  opacity: 0.7;
+  background: rgba(255, 255, 255, 0.6);
+  border: none;
+  opacity: 0.8;
 }
 
 .step-icon {
@@ -180,11 +180,11 @@
 
 .step-label {
   flex: 1;
-  color: #ffffff;
+  color: #4c1d95;
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.01em;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.15);
+  text-shadow: none;
 }
 
 /* Episode Actions */
