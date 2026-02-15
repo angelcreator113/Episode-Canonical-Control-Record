@@ -322,21 +322,15 @@ const ShowManagement = () => {
                 <div className="show-content">
                   {/* Top Section */}
                   <div className="show-header-section">
-                    <div className="show-info">
-                      <h3 className="show-name">{show.name}</h3>
-                      
+                    <h3 className="show-name">{show.name}</h3>
+
+                    <div className="show-meta">
                       <span className={`status-badge status-${show.status || 'active'}`}>
                         {show.status === 'coming_soon' ? 'Coming Soon' : 
                          show.status === 'active' ? 'Active' : 
                          show.status || 'Active'}
                       </span>
-                    </div>
-
-                    {show.description && (
-                      <p className="show-description">{show.description}</p>
-                    )}
-
-                    <div className="show-meta">
+                      <span className="meta-separator">·</span>
                       <span className="meta-item">
                         {show.episodeCount || show.episode_count || 0} Episodes
                       </span>
