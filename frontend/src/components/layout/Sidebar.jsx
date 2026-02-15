@@ -89,8 +89,16 @@ function Sidebar({ isOpen, onClose }) {
           <button
             className={`nav-item ${isActive('/shows') ? 'active' : ''}`}
             onClick={() => {
-              setShowsExpanded(!showsExpanded);
-              if (!showsExpanded) navigate('/shows');
+              if (showsExpanded) {
+                // Already expanded - navigate to shows and close sidebar
+                navigate('/shows');
+                if (onClose) onClose();
+              } else {
+                // Expand the sub-items and navigate
+                setShowsExpanded(true);
+                navigate('/shows');
+                if (onClose) onClose();
+              }
             }}
           >
             <span className="nav-icon">🎬</span>
