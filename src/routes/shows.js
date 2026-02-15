@@ -205,6 +205,17 @@ router.post('/', async (req, res) => {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
+    // If a soft-deleted show with the same name/slug exists, hard-delete it first
+    const existingSoftDeleted = await Show.findOne({
+      where: {
+        [require('sequelize').Op.or]: [{ name }, { slug }],
+      },
+      paranoid: false, // include soft-deleted
+    });
+    if (existingSoftDeleted && existingSoftDeleted.deletedAt) {
+      await existingSoftDeleted.destroy({ force: true }); // hard delete
+    }
+
     // Merge tagline into metadata if sent as top-level field
     const mergedMetadata = { ...(metadata || {}), ...(tagline ? { tagline } : {}) };
 

@@ -17,7 +17,6 @@ module.exports = (sequelize, DataTypes = require('sequelize').DataTypes) => {
       name: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true,
         comment: 'Show name',
         validate: {
           len: [1, 255],
@@ -34,7 +33,6 @@ module.exports = (sequelize, DataTypes = require('sequelize').DataTypes) => {
       slug: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true,
         comment: 'URL-friendly show identifier',
         validate: {
           len: [1, 255],
@@ -140,8 +138,16 @@ module.exports = (sequelize, DataTypes = require('sequelize').DataTypes) => {
       underscored: true,
       indexes: [
         {
+          fields: ['name'],
+          unique: true,
+          where: { deleted_at: null },
+          name: 'shows_name_unique_active',
+        },
+        {
           fields: ['slug'],
           unique: true,
+          where: { deleted_at: null },
+          name: 'shows_slug_unique_active',
         },
         {
           fields: ['status'],
