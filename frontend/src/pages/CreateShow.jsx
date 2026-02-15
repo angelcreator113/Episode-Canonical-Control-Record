@@ -102,7 +102,7 @@ function CreateShow() {
     setSaving(true);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       
       // First create the show with JSON data
       const showPayload = {
@@ -133,6 +133,13 @@ function CreateShow() {
       const result = await response.json();
       const newShow = result.data || result;
       
+      console.log('[CreateShow] API response:', JSON.stringify(result));
+      console.log('[CreateShow] New show ID:', newShow.id, 'Name:', newShow.name);
+      
+      if (!newShow.id) {
+        throw new Error('Show created but no ID returned from API');
+      }
+      
       // Upload cover image if provided
       if (formData.coverImage && newShow.id) {
         const imgForm = new FormData();
@@ -144,7 +151,7 @@ function CreateShow() {
         });
       }
       
-      alert('Show created successfully!');
+      console.log('[CreateShow] Navigating to /shows/' + newShow.id);
       navigate(`/shows/${newShow.id}`);
     } catch (error) {
       console.error('Error creating show:', error);

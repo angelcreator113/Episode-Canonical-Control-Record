@@ -86,8 +86,10 @@ function ShowDetail() {
     
     try {
       setLoading(true);
+      console.log('[ShowDetail] Fetching show with ID:', showId);
       // Fetch show details
       const showResponse = await showService.getShowById(showId);
+      console.log('[ShowDetail] Got show:', showResponse?.name, 'ID:', showResponse?.id);
       setShow(showResponse);
       
       // Fetch episodes for this show

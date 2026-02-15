@@ -350,7 +350,10 @@ const ShowManagement = () => {
                   {/* Actions */}
                   <div className="show-actions">
                     <button
-                      onClick={() => navigate(`/shows/${show.id}`)}
+                      onClick={() => {
+                        console.log('[Shows] Opening show:', show.name, 'ID:', show.id);
+                        navigate(`/shows/${show.id}`);
+                      }}
                       className="action-btn action-primary"
                     >
                       Open
