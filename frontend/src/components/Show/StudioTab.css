@@ -55,7 +55,7 @@
   font-size: 1.5rem;
   font-weight: 700;
   color: #ffffff;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.4), 0 0 12px rgba(0, 0, 0, 0.15);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .episode-meta {
@@ -120,7 +120,7 @@
   font-size: 1rem;
   color: #ffffff;
   font-weight: 700;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.45), 0 0 8px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 /* Progress Bar */
@@ -160,7 +160,7 @@
   color: #ffffff;
   font-weight: 700;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 8px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .step-item.done {
@@ -177,7 +177,7 @@
   justify-content: center;
   min-width: 1.75rem;
   min-height: 1.75rem;
-  filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.35));
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.2));
 }
 
 .step-label {
@@ -186,7 +186,7 @@
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.5), 0 0 8px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* Episode Actions */
