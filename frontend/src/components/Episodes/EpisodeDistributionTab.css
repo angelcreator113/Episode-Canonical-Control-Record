@@ -416,6 +416,17 @@
   height: auto;
   width: auto;
   font-size: inherit;
+  /* Reset absolute positioning from SceneLibraryPicker.css / SceneLibrary.css */
+  position: static;
+  top: auto;
+  left: auto;
+  /* Reset opacity from EpisodeSceneComposerTab.css */
+  opacity: 1;
+  /* Reset purple gradient from SceneLibraryPicker.css / SceneLibrary.css */
+  background: none;
+  /* Reset flex centering from EpisodeDetail.css / SceneLibrary.css */
+  align-items: unset;
+  justify-content: unset;
 }
 
 .episode-distribution-tab .thumbnail-placeholder span {
