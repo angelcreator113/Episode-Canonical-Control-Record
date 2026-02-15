@@ -786,7 +786,7 @@
   }
   
   .show-wardrobe-tab .cat-label {
-    display: none;
+    font-size: 0.6rem;
   }
   
   .show-wardrobe-tab .controls-right {

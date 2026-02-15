@@ -166,11 +166,11 @@
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
 }
 
-.cat-icon {
+.category-option .cat-icon {
   font-size: 2rem;
 }
 
-.cat-label {
+.category-option .cat-label {
   font-size: 0.8rem;
   font-weight: 600;
   color: #1e293b;

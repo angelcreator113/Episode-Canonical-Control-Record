@@ -587,6 +587,6 @@
   }
   
   .show-assets-tab .cat-label {
-    display: none;
+    font-size: 0.6rem;
   }
 }
