@@ -29,9 +29,45 @@ function ShowDetail() {
   const [show, setShow] = useState(null);
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || 'studio');
+  const [activeTabState, setActiveTabState] = useState(searchParams.get('tab') || 'studio');
+  const [tabLoading, setTabLoading] = useState(false);
   const [episodeView, setEpisodeView] = useState('grid');
-  
+
+  // Tab management with URL persistence (matches EpisodeDetail)
+  const setActiveTab = (tab) => {
+    setTabLoading(true);
+    setActiveTabState(tab);
+    setSearchParams({ tab });
+    setTimeout(() => setTabLoading(false), 300);
+  };
+
+  // Sync URL → tab (bidirectional)
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab && tab !== activeTabState) {
+      setActiveTabState(tab);
+    }
+  }, [searchParams]);
+
+  // Keyboard shortcuts for tab navigation
+  useEffect(() => {
+    const handleKeyPress = (e) => {
+      if (e.metaKey || e.ctrlKey) {
+        switch (e.key) {
+          case '1': e.preventDefault(); setActiveTab('studio'); break;
+          case '2': e.preventDefault(); setActiveTab('episodes'); break;
+          case '3': e.preventDefault(); setActiveTab('assets'); break;
+          case '4': e.preventDefault(); setActiveTab('wardrobe'); break;
+          case '5': e.preventDefault(); setActiveTab('distribution'); break;
+          case '6': e.preventDefault(); setActiveTab('insights'); break;
+          default: break;
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
+
   // Load show data when showId is available
   useEffect(() => {
     if (!showId) {
@@ -41,11 +77,6 @@ function ShowDetail() {
     }
     fetchShowData();
   }, [showId, navigate]);
-  
-  useEffect(() => {
-    // Update URL when tab changes
-    setSearchParams({ tab: activeTab });
-  }, [activeTab, setSearchParams]);
   
   const fetchShowData = async () => {
     if (!showId) {
@@ -69,9 +100,7 @@ function ShowDetail() {
     }
   };
   
-  const handleTabChange = (tab) => {
-    setActiveTab(tab);
-  };
+  const activeTab = activeTabState;
 
   const handleStatusChange = async (episodeId, newStatus) => {
     try {
@@ -183,7 +212,8 @@ function ShowDetail() {
       <div className="tab-navigation">
         <button
           className={`tab-button ${activeTab === 'studio' ? 'active' : ''}`}
-          onClick={() => handleTabChange('studio')}
+          onClick={() => setActiveTab('studio')}
+          title="Studio (Ctrl+1)"
         >
           <span className="tab-icon">🎬</span>
           <span className="tab-label">Studio</span>
@@ -191,7 +221,8 @@ function ShowDetail() {
         
         <button
           className={`tab-button ${activeTab === 'episodes' ? 'active' : ''}`}
-          onClick={() => handleTabChange('episodes')}
+          onClick={() => setActiveTab('episodes')}
+          title="Episodes (Ctrl+2)"
         >
           <span className="tab-icon">📺</span>
           <span className="tab-label">Episodes</span>
@@ -200,7 +231,8 @@ function ShowDetail() {
         
         <button
           className={`tab-button ${activeTab === 'assets' ? 'active' : ''}`}
-          onClick={() => handleTabChange('assets')}
+          onClick={() => setActiveTab('assets')}
+          title="Assets (Ctrl+3)"
         >
           <span className="tab-icon">📁</span>
           <span className="tab-label">Assets</span>
@@ -208,7 +240,8 @@ function ShowDetail() {
         
         <button
           className={`tab-button ${activeTab === 'wardrobe' ? 'active' : ''}`}
-          onClick={() => handleTabChange('wardrobe')}
+          onClick={() => setActiveTab('wardrobe')}
+          title="Wardrobe (Ctrl+4)"
         >
           <span className="tab-icon">👗</span>
           <span className="tab-label">Wardrobe</span>
@@ -216,7 +249,8 @@ function ShowDetail() {
         
         <button
           className={`tab-button ${activeTab === 'distribution' ? 'active' : ''}`}
-          onClick={() => handleTabChange('distribution')}
+          onClick={() => setActiveTab('distribution')}
+          title="Distribution (Ctrl+5)"
         >
           <span className="tab-icon">🚀</span>
           <span className="tab-label">Distribution</span>
@@ -224,7 +258,8 @@ function ShowDetail() {
         
         <button
           className={`tab-button ${activeTab === 'insights' ? 'active' : ''}`}
-          onClick={() => handleTabChange('insights')}
+          onClick={() => setActiveTab('insights')}
+          title="Insights (Ctrl+6)"
         >
           <span className="tab-icon">📊</span>
           <span className="tab-label">Insights</span>
@@ -232,7 +267,7 @@ function ShowDetail() {
       </div>
       
       {/* Tab Content */}
-      <div className="tab-content">
+      <div className={`tab-content ${tabLoading ? 'tab-loading' : ''}`}>
         {activeTab === 'studio' && (
           <StudioTab show={show} episodes={episodes} />
         )}
