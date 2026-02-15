@@ -338,11 +338,11 @@ const ShowManagement = () => {
 
                     <div className="show-meta">
                       <span className="meta-item">
-                        {show.episode_count || 0} Episodes
+                        {show.episodeCount || show.episode_count || 0} Episodes
                       </span>
                       <span className="meta-separator">·</span>
                       <span className="meta-item">
-                        Last updated 3d ago
+                        {show.updatedAt ? `Updated ${new Date(show.updatedAt).toLocaleDateString()}` : ''}
                       </span>
                     </div>
                   </div>
