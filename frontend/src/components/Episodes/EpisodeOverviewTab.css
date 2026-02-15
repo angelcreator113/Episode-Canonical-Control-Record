@@ -164,11 +164,11 @@
 }
 
 /* PROGRESS SECTION */
-.progress-bar-container {
+.episode-overview-tab .progress-bar-container {
   margin-bottom: 1.5rem;
 }
 
-.progress-bar {
+.episode-overview-tab .progress-bar {
   width: 100%;
   height: 48px;
   background: #e2e8f0;
@@ -178,7 +178,7 @@
   border: 2px solid #cbd5e1;
 }
 
-.progress-fill {
+.episode-overview-tab .progress-fill {
   height: 100%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   display: flex;
@@ -187,7 +187,7 @@
   transition: width 0.3s ease;
 }
 
-.progress-label {
+.episode-overview-tab .progress-label {
   position: absolute;
   top: 0;
   left: 0;
@@ -439,12 +439,12 @@
     font-size: 1rem;
   }
 
-  .progress-bar {
+  .episode-overview-tab .progress-bar {
     height: 36px;
     border-radius: 18px;
   }
 
-  .progress-label {
+  .episode-overview-tab .progress-label {
     font-size: 0.875rem;
   }
   
@@ -567,16 +567,16 @@
     line-height: 1.5;
   }
 
-  .progress-bar-container {
+  .episode-overview-tab .progress-bar-container {
     margin-bottom: 1rem;
   }
 
-  .progress-bar {
+  .episode-overview-tab .progress-bar {
     height: 28px;
     border-radius: 14px;
   }
 
-  .progress-label {
+  .episode-overview-tab .progress-label {
     font-size: 0.75rem;
   }
 
