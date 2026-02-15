@@ -154,7 +154,7 @@
   backdrop-filter: none;
   border-radius: 20px;
   font-size: 0.9rem;
-  color: #4c1d95;
+  color: #4c1d95 !important;
   font-weight: 600;
   border: none;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
@@ -180,7 +180,7 @@
 
 .step-label {
   flex: 1;
-  color: #4c1d95;
+  color: #4c1d95 !important;
   font-size: 0.85rem;
   font-weight: 600;
   letter-spacing: 0.01em;
