@@ -1,0 +1,68 @@
+/* OrientationToast — brief notification on rotation */
+
+.orientation-toast {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  z-index: 10000;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(12px);
+  color: #ffffff;
+  padding: 0.75rem 1.25rem;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  opacity: 0;
+  pointer-events: none;
+  animation: toastSlideIn 0.35s ease-out forwards,
+             toastSlideOut 0.35s ease-in 2.15s forwards;
+  white-space: nowrap;
+}
+
+.orientation-toast.visible {
+  opacity: 1;
+}
+
+.orientation-toast-icon {
+  font-size: 1.25rem;
+  line-height: 1;
+}
+
+.orientation-toast-text {
+  line-height: 1.2;
+}
+
+@keyframes toastSlideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes toastSlideOut {
+  from {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(20px);
+  }
+}
+
+/* Hide on desktop */
+@media (min-width: 768px) {
+  .orientation-toast {
+    display: none;
+  }
+}

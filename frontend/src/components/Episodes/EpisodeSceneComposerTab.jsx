@@ -1,6 +1,7 @@
 // frontend/src/components/Episodes/EpisodeSceneComposerTab.jsx
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import LandscapeRequired from '../LandscapeRequired';
 import './EpisodeSceneComposerTab.css';
 
 /**
@@ -28,6 +29,7 @@ function EpisodeSceneComposerTab({ episode, show }) {
   const hasScenes = sceneCount > 0;
   
   return (
+    <LandscapeRequired>
     <div className="scene-composer-tab">
       {/* Compact Header */}
       <div className="composer-hero">
@@ -182,6 +184,7 @@ function EpisodeSceneComposerTab({ episode, show }) {
         </div>
       )}
     </div>
+    </LandscapeRequired>
   );
 }
 

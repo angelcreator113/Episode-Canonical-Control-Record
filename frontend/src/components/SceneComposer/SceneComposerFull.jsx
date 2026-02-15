@@ -7,6 +7,7 @@ import SaveIndicator from '../SaveIndicator/SaveIndicator';
 import ExportDropdown from '../ExportDropdown/ExportDropdown';
 import { episodeAPI, platformAPI, sceneAPI, saveEpisodeData } from '../../services/api';
 import useSaveManager from '../../hooks/useSaveManager';
+import LandscapeRequired from '../LandscapeRequired';
 import SceneWardrobePicker from './SceneWardrobePicker';
 import AssetUploadModal from './AssetUploadModal';
 import './SceneComposerFull.css';
@@ -425,6 +426,7 @@ function SceneComposerFull() {
   }
 
   return (
+    <LandscapeRequired>
     <div className="scene-composer-full">
       {/* Header with Platform Selector and Export Dropdown */}
       <header className="composer-header">
@@ -653,6 +655,7 @@ function SceneComposerFull() {
       )}
 
     </div>
+    </LandscapeRequired>
   );
 }
 

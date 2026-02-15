@@ -1081,3 +1081,78 @@
     padding: 4px 8px !important;
   }
 }
+
+/* ============================================================
+   17. LANDSCAPE MOBILE — Optimize tab pages on rotation
+   ============================================================ */
+
+@media (max-width: 920px) and (orientation: landscape) {
+  /* Compact the app header in landscape */
+  .app-header {
+    padding: 0.25rem 0.75rem !important;
+    min-height: 40px !important;
+  }
+
+  /* ShowDetail tabs - horizontal layout takes advantage of width */
+  .tab-content {
+    padding: 0.75rem !important;
+  }
+
+  /* Episode detail - tighter in landscape */
+  .ed-wrap {
+    padding: 0.5rem 0.75rem 1rem !important;
+  }
+
+  .ed-topbar {
+    padding: 0.4rem 0.75rem !important;
+  }
+
+  .ed-content {
+    margin-top: 0.5rem !important;
+  }
+
+  /* Summary grid can go 2-col in landscape */
+  .ed-summary-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+
+  /* Quick actions row in landscape */
+  .ed-quickactions {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+
+  /* StudioTab: better use of landscape width */
+  .studio-tab {
+    padding: 0.5rem !important;
+  }
+
+  .current-episode-card {
+    padding: 0.75rem !important;
+  }
+
+  .next-steps {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 0.5rem !important;
+  }
+
+  .health-cards {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  .actions-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* Episodes grid in landscape */
+  .episodes-grid {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Reduce footer */
+  .app-footer {
+    padding: 0.25rem !important;
+    font-size: 0.75rem !important;
+  }
+}
