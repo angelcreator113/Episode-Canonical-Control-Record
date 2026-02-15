@@ -46,7 +46,7 @@ function ShowInsightsTab({ show }) {
         },
         platformBreakdown: [
           { platform: 'YouTube', views: 89234, percentage: 56.9, color: '#FF0000' },
-          { platform: 'TikTok', views: 42156, percentage: 26.9, color: '#000000' },
+          { platform: 'TikTok', views: 42156, percentage: 26.9, color: '#25F4EE' },
           { platform: 'Instagram', views: 18765, percentage: 12.0, color: '#E4405F' },
           { platform: 'Facebook', views: 6634, percentage: 4.2, color: '#1877F2' }
         ],

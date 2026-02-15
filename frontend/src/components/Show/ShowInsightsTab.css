@@ -606,4 +606,15 @@
   .top-episodes-table td {
     padding: 0.75rem 0.5rem;
   }
+
+  /* Platform bars: reduce min-width so they don't look like floating buttons */
+  .platform-bar {
+    min-width: 40px;
+    height: 24px;
+    border-radius: 6px;
+  }
+
+  .bar-label {
+    font-size: 0.6875rem;
+  }
 }

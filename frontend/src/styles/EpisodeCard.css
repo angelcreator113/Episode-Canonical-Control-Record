@@ -48,12 +48,61 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
+/* Per-status badge colors */
+.status-badge.status-draft {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #475569;
+}
+
+.status-badge.status-scripted {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1e40af;
+}
+
+.status-badge.status-in_build {
+  background: #fefce8;
+  border-color: #fde047;
+  color: #a16207;
+}
+
+.status-badge.status-in_review {
+  background: #f5f3ff;
+  border-color: #a78bfa;
+  color: #6d28d9;
+}
+
+.status-badge.status-review {
+  background: #f5f3ff;
+  border-color: #a78bfa;
+  color: #6d28d9;
+}
+
+.status-badge.status-scheduled {
+  background: #ecfeff;
+  border-color: #67e8f9;
+  color: #0e7490;
+}
+
+.status-badge.status-published {
+  background: #ecfdf5;
+  border-color: #6ee7b7;
+  color: #065f46;
+}
+
+.status-badge.status-archived {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #334155;
+}
+
 .status-emoji {
   font-size: 0.875rem;
 }
 
 .status-text {
-  display: none;
+  display: inline;
 }
 
 .episode-card-modern:hover .status-text {

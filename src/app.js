@@ -916,7 +916,7 @@ app.get('/api/v1', (req, res) => {
 const path = require('path');
 const fs = require('fs');
 
-const frontendDistPath = path.join(__dirname, '../dist');
+const frontendDistPath = path.join(__dirname, '../frontend/dist');
 const indexHtmlPath = path.join(frontendDistPath, 'index.html');
 
 console.log('🔍 Frontend serving check:');

@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../components/ToastContainer';
 import { API_URL } from '../config/api';
@@ -23,6 +23,7 @@ const MAX_THUMB_BYTES = MAX_THUMB_MB * 1024 * 1024;
 const CreateEpisode = () => {
   const { episodeId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const toast = useToast();
   const isEditMode = Boolean(episodeId);
@@ -37,6 +38,14 @@ const CreateEpisode = () => {
     categories: [],
     showId: '',
   });
+
+  // Pre-populate show_id from URL query parameter (e.g. /episodes/create?show_id=<uuid>)
+  useEffect(() => {
+    const showIdFromUrl = searchParams.get('show_id');
+    if (showIdFromUrl && !isEditMode) {
+      setFormData(prev => ({ ...prev, showId: showIdFromUrl }));
+    }
+  }, [searchParams, isEditMode]);
 
   // Distribution & Platforms
   const [platforms, setPlatforms] = useState({

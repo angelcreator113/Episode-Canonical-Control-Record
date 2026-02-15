@@ -1,6 +1,7 @@
 // frontend/src/pages/CreateShow.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { API_URL } from '../config/api';
 import './CreateShow.css';
 
 function CreateShow() {
@@ -101,18 +102,50 @@ function CreateShow() {
     setSaving(true);
     
     try {
-      // TODO: Replace with actual API call
-      // const formDataToSend = new FormData();
-      // Object.keys(formData).forEach(key => {
-      //   if (formData[key]) formDataToSend.append(key, formData[key]);
-      // });
-      // const response = await showService.createShow(formDataToSend);
+      const token = localStorage.getItem('token');
       
-      // Mock success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // First create the show with JSON data
+      const showPayload = {
+        name: formData.name,
+        description: formData.description,
+        genre: formData.category,
+        color: formData.primaryColor,
+        status: formData.status,
+        metadata: {
+          tagline: formData.tagline
+        }
+      };
+      
+      const response = await fetch(`${API_URL}/shows`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify(showPayload)
+      });
+      
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || 'Failed to create show');
+      }
+      
+      const result = await response.json();
+      const newShow = result.data || result;
+      
+      // Upload cover image if provided
+      if (formData.coverImage && newShow.id) {
+        const imgForm = new FormData();
+        imgForm.append('image', formData.coverImage);
+        await fetch(`${API_URL}/shows/${newShow.id}/cover-image`, {
+          method: 'POST',
+          headers: token ? { 'Authorization': `Bearer ${token}` } : {},
+          body: imgForm
+        });
+      }
       
       alert('Show created successfully!');
-      navigate('/shows');
+      navigate(`/shows/${newShow.id}`);
     } catch (error) {
       console.error('Error creating show:', error);
       alert('Failed to create show. Please try again.');

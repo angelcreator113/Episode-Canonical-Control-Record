@@ -198,12 +198,15 @@ router.get('/:id', async (req, res) => {
 router.post('/', async (req, res) => {
   try {
     const Show = getShow();
-    const { name, description, icon, color, status, coverImageUrl } = req.body;
+    const { name, description, icon, color, status, coverImageUrl, genre, metadata, tagline } = req.body;
 
     const slug = name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
+
+    // Merge tagline into metadata if sent as top-level field
+    const mergedMetadata = { ...(metadata || {}), ...(tagline ? { tagline } : {}) };
 
     const show = await Show.create({
       name,
@@ -211,8 +214,10 @@ router.post('/', async (req, res) => {
       description,
       icon,
       color,
+      genre,
       status,
       coverImageUrl,
+      metadata: Object.keys(mergedMetadata).length > 0 ? mergedMetadata : undefined,
     });
 
     res.status(201).json({
