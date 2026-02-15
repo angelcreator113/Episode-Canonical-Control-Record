@@ -3,6 +3,9 @@
 .show-assets-tab {
   max-width: 1120px;
   margin: 0 auto;
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .show-assets-loading {
@@ -132,6 +135,8 @@
   flex-direction: column;
   gap: 1rem;
   margin-bottom: 1.5rem;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 /* Category Filter */
@@ -462,22 +467,25 @@
   
   .show-assets-tab .category-filter {
     overflow-x: auto;
+    overflow-y: hidden;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     -ms-overflow-style: none;
     padding-bottom: 0.25rem;
+    max-width: 100%;
   }
-  
-  .show-assets-tab .category-filter::-webkit-scrollbar {
-    display: none;
-  }
-  
+
   .show-assets-tab .category-btn {
+    flex-shrink: 0;
     padding: 0.375rem 0.625rem;
     font-size: 0.75rem;
     border-width: 1.5px;
     border-radius: 6px;
+  }
+  
+  .show-assets-tab .category-filter::-webkit-scrollbar {
+    display: none;
   }
   
   .show-assets-tab .cat-icon {
@@ -576,5 +584,9 @@
   .show-assets-tab .category-btn {
     padding: 0.3rem 0.5rem;
     font-size: 0.6875rem;
+  }
+  
+  .show-assets-tab .cat-label {
+    display: none;
   }
 }

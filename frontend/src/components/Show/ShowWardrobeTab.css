@@ -3,6 +3,9 @@
 .show-wardrobe-tab {
   max-width: 1120px;
   margin: 0 auto;
+  width: 100%;
+  overflow: hidden;
+  box-sizing: border-box;
 }
 
 .show-wardrobe-loading {
@@ -132,6 +135,8 @@
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  max-width: 100%;
+  overflow: hidden;
 }
 
 .show-wardrobe-tab .category-filter {
@@ -725,11 +730,13 @@
   
   .show-wardrobe-tab .category-filter {
     overflow-x: auto;
+    overflow-y: hidden;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
     scrollbar-width: none;
     -ms-overflow-style: none;
     padding-bottom: 0.5rem;
+    max-width: 100%;
   }
   
   .show-wardrobe-tab .category-filter::-webkit-scrollbar {
@@ -765,5 +772,29 @@
   
   .show-wardrobe-tab .recommended-grid {
     grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 480px) {
+  .show-wardrobe-tab {
+    padding: 0.5rem;
+  }
+
+  .show-wardrobe-tab .category-btn {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.6875rem;
+  }
+  
+  .show-wardrobe-tab .cat-label {
+    display: none;
+  }
+  
+  .show-wardrobe-tab .controls-right {
+    gap: 0.5rem;
+  }
+  
+  .wardrobe-container.view-grid {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.5rem;
   }
 }
