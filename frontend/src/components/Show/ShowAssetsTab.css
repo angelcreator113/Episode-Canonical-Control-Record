@@ -20,24 +20,24 @@
   margin-bottom: 1.5rem;
 }
 
-.header-left h2 {
+.show-assets-tab .header-left h2 {
   margin: 0 0 0.25rem 0;
   font-size: 1.25rem;
   color: #1e293b;
 }
 
-.header-subtitle {
+.show-assets-tab .header-subtitle {
   margin: 0;
   color: #64748b;
   font-size: 0.8125rem;
 }
 
-.header-actions {
+.show-assets-tab .header-actions {
   display: flex;
   gap: 1rem;
 }
 
-.btn-upload {
+.show-assets-tab .btn-upload {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -52,14 +52,14 @@
   transition: all 0.2s ease;
 }
 
-.btn-upload:hover {
+.show-assets-tab .btn-upload:hover {
   transform: translateY(-2px);
   box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
 }
 
 /* ==================== EMPTY STATE ==================== */
 
-.empty-state-recommended {
+.show-assets-tab .empty-state-recommended {
   text-align: center;
   padding: 4rem 2rem;
   background: linear-gradient(135deg, #f8fafc 0%, #ffffff 100%);
@@ -67,25 +67,25 @@
   border: 2px dashed #cbd5e1;
 }
 
-.empty-icon {
+.show-assets-tab .empty-icon {
   font-size: 5rem;
   margin-bottom: 1rem;
   opacity: 0.7;
 }
 
-.empty-state-recommended h3 {
+.show-assets-tab .empty-state-recommended h3 {
   margin: 0 0 0.5rem 0;
   font-size: 1.75rem;
   color: #1e293b;
 }
 
-.empty-state-recommended p {
+.show-assets-tab .empty-state-recommended p {
   margin: 0 0 2.5rem 0;
   color: #64748b;
   font-size: 1.05rem;
 }
 
-.recommended-grid {
+.show-assets-tab .recommended-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   gap: 1.5rem;
@@ -93,7 +93,7 @@
   margin: 0 auto;
 }
 
-.recommended-card {
+.show-assets-tab .recommended-card {
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -108,17 +108,17 @@
   color: inherit;
 }
 
-.recommended-card:hover {
+.show-assets-tab .recommended-card:hover {
   border-color: #667eea;
   transform: translateY(-4px);
   box-shadow: 0 10px 25px rgba(102, 126, 234, 0.15);
 }
 
-.rec-icon {
+.show-assets-tab .rec-icon {
   font-size: 3rem;
 }
 
-.rec-label {
+.show-assets-tab .rec-label {
   font-weight: 600;
   font-size: 0.95rem;
   color: #1e293b;
@@ -135,13 +135,13 @@
 }
 
 /* Category Filter */
-.category-filter {
+.show-assets-tab .category-filter {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.category-btn {
+.show-assets-tab .category-btn {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -156,37 +156,37 @@
   white-space: nowrap;
 }
 
-.category-btn:hover {
+.show-assets-tab .category-btn:hover {
   border-color: #cbd5e1;
   transform: translateY(-1px);
 }
 
-.category-btn.active {
+.show-assets-tab .category-btn.active {
   background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%);
   border-width: 2px;
 }
 
-.cat-icon {
+.show-assets-tab .cat-icon {
   font-size: 1rem;
 }
 
-.cat-label {
+.show-assets-tab .cat-label {
   font-weight: 600;
 }
 
-.cat-count {
+.show-assets-tab .cat-count {
   opacity: 0.7;
   font-size: 0.85em;
 }
 
 /* Search & View Toggle */
-.controls-right {
+.show-assets-tab .controls-right {
   display: flex;
   gap: 1rem;
   align-items: center;
 }
 
-.search-input {
+.show-assets-tab .search-input {
   flex: 1;
   min-width: 200px;
   padding: 0.5rem 0.875rem;
@@ -196,17 +196,17 @@
   transition: border-color 0.2s ease;
 }
 
-.search-input:focus {
+.show-assets-tab .search-input:focus {
   outline: none;
   border-color: #667eea;
 }
 
-.view-toggle {
+.show-assets-tab .view-toggle {
   display: flex;
   gap: 0.5rem;
 }
 
-.view-btn {
+.show-assets-tab .view-btn {
   width: 34px;
   height: 34px;
   padding: 0;
@@ -221,11 +221,11 @@
   justify-content: center;
 }
 
-.view-btn:hover {
+.show-assets-tab .view-btn:hover {
   border-color: #cbd5e1;
 }
 
-.view-btn.active {
+.show-assets-tab .view-btn.active {
   background: #667eea;
   color: white;
   border-color: #667eea;
@@ -249,7 +249,7 @@
   gap: 1rem;
 }
 
-.no-results {
+.show-assets-tab .no-results {
   text-align: center;
   padding: 4rem;
   color: #94a3b8;
@@ -445,22 +445,22 @@
     gap: 0.75rem;
   }
   
-  .header-left h2 {
+  .show-assets-tab .header-left h2 {
     font-size: 1.1rem;
   }
   
-  .header-actions {
+  .show-assets-tab .header-actions {
     width: 100%;
   }
   
-  .btn-upload {
+  .show-assets-tab .btn-upload {
     width: 100%;
     justify-content: center;
     padding: 0.5rem 1rem;
     font-size: 0.8125rem;
   }
   
-  .category-filter {
+  .show-assets-tab .category-filter {
     overflow-x: auto;
     flex-wrap: nowrap;
     -webkit-overflow-scrolling: touch;
@@ -469,27 +469,27 @@
     padding-bottom: 0.25rem;
   }
   
-  .category-filter::-webkit-scrollbar {
+  .show-assets-tab .category-filter::-webkit-scrollbar {
     display: none;
   }
   
-  .category-btn {
+  .show-assets-tab .category-btn {
     padding: 0.375rem 0.625rem;
     font-size: 0.75rem;
     border-width: 1.5px;
     border-radius: 6px;
   }
   
-  .cat-icon {
+  .show-assets-tab .cat-icon {
     font-size: 0.875rem;
   }
   
-  .controls-right {
+  .show-assets-tab .controls-right {
     flex-direction: column;
     width: 100%;
   }
   
-  .search-input {
+  .show-assets-tab .search-input {
     width: 100%;
     min-width: 0;
   }
@@ -499,38 +499,38 @@
     gap: 0.75rem;
   }
   
-  .empty-state-recommended {
+  .show-assets-tab .empty-state-recommended {
     padding: 2rem 1rem;
   }
   
-  .empty-icon {
+  .show-assets-tab .empty-icon {
     font-size: 3rem;
   }
   
-  .empty-state-recommended h3 {
+  .show-assets-tab .empty-state-recommended h3 {
     font-size: 1.25rem;
   }
   
-  .empty-state-recommended p {
+  .show-assets-tab .empty-state-recommended p {
     font-size: 0.875rem;
     margin-bottom: 1.5rem;
   }
   
-  .recommended-grid {
+  .show-assets-tab .recommended-grid {
     grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
     gap: 0.75rem;
   }
   
-  .recommended-card {
+  .show-assets-tab .recommended-card {
     padding: 1.25rem 0.75rem;
     gap: 0.625rem;
   }
   
-  .rec-icon {
+  .show-assets-tab .rec-icon {
     font-size: 2rem;
   }
   
-  .rec-label {
+  .show-assets-tab .rec-label {
     font-size: 0.8125rem;
   }
   
@@ -555,25 +555,25 @@
     gap: 0.5rem;
   }
   
-  .recommended-grid {
+  .show-assets-tab .recommended-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
   }
   
-  .recommended-card {
+  .show-assets-tab .recommended-card {
     padding: 1rem 0.5rem;
     gap: 0.5rem;
   }
   
-  .rec-icon {
+  .show-assets-tab .rec-icon {
     font-size: 1.75rem;
   }
   
-  .rec-label {
+  .show-assets-tab .rec-label {
     font-size: 0.75rem;
   }
   
-  .category-btn {
+  .show-assets-tab .category-btn {
     padding: 0.3rem 0.5rem;
     font-size: 0.6875rem;
   }
