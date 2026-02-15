@@ -107,11 +107,13 @@ function CreateShow() {
       // First create the show with JSON data
       const showPayload = {
         name: formData.name,
-        tagline: formData.tagline,
         description: formData.description,
-        category: formData.category,
-        primaryColor: formData.primaryColor,
-        status: formData.status
+        genre: formData.category,
+        color: formData.primaryColor,
+        status: formData.status,
+        metadata: {
+          tagline: formData.tagline
+        }
       };
       
       const response = await fetch(`${API_URL}/shows`, {
