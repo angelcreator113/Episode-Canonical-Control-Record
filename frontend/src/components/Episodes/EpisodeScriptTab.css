@@ -508,11 +508,27 @@
     gap: 0.75rem;
     padding: 1rem;
   }
+
+  .block-field {
+    width: 100%;
+  }
+
+  .character-input,
+  .dialogue-textarea {
+    width: 100%;
+    box-sizing: border-box;
+  }
   
   .block-actions {
     flex-direction: row;
+    flex-wrap: wrap;
     justify-content: flex-start;
     padding-top: 0;
+  }
+
+  .preview-block {
+    grid-template-columns: 1fr;
+    gap: 0.25rem;
   }
 
   .script-preview {
