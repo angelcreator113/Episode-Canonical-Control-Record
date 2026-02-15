@@ -28,7 +28,7 @@ function Sidebar({ isOpen, onClose }) {
       const formattedShows = showsData.map(show => ({
         id: show.id,
         name: show.name || show.title || 'Untitled Show',
-        episodeCount: show.episode_count || show.episodes?.length || 0
+        episodeCount: show.episodeCount || show.episode_count || show.episodes?.length || 0
       }));
       
       setShows(formattedShows);

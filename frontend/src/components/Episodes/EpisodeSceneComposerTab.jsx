@@ -29,14 +29,14 @@ function EpisodeSceneComposerTab({ episode, show }) {
   
   return (
     <div className="scene-composer-tab">
-      {/* Prominent Header */}
+      {/* Compact Header */}
       <div className="composer-hero">
         <div className="hero-content">
           <div className="hero-icon">🎬</div>
           <div className="hero-text">
-            <h1 className="hero-title">Scene Composer</h1>
+            <h2 className="hero-title">Scene Composer</h2>
             <p className="hero-subtitle">
-              This is where the episode comes alive
+              Arrange characters, backgrounds, and timing for each scene
             </p>
           </div>
         </div>
@@ -63,19 +63,19 @@ function EpisodeSceneComposerTab({ episode, show }) {
           className="btn-primary btn-open-composer"
           onClick={handleOpenSceneComposer}
         >
-          🚀 Open Scene Composer
+          Open Scene Composer
         </button>
         
         {hasScenes && (
           <>
             <button className="btn-action">
-              ➕ Add Scene
+              + Add Scene
             </button>
             <button className="btn-action">
-              👁️ Preview All
+              Preview All
             </button>
             <button className="btn-action">
-              📋 Manage Beats
+              Manage Beats
             </button>
           </>
         )}
@@ -86,12 +86,11 @@ function EpisodeSceneComposerTab({ episode, show }) {
         /* Empty State - First Time */
         <div className="composer-empty-state">
           <div className="empty-illustration">
-            <div className="illustration-icon">🎬</div>
             <div className="illustration-text">
-              <h2>Design Your First Scene</h2>
+              <h3>Design Your First Scene</h3>
               <p>
-                Scene Composer lets you spatially arrange characters, backgrounds,
-                UI elements, and camera angles to bring your episode to life.
+                Spatially arrange characters, backgrounds, UI elements, 
+                and camera angles to bring your episode to life.
               </p>
             </div>
           </div>
@@ -99,46 +98,46 @@ function EpisodeSceneComposerTab({ episode, show }) {
           <div className="empty-features">
             <div className="feature-card">
               <span className="feature-icon">👥</span>
-              <h3>Place Characters</h3>
+              <h4>Place Characters</h4>
               <p>Position LaLa and guests in your scene</p>
             </div>
             
             <div className="feature-card">
               <span className="feature-icon">🖼️</span>
-              <h3>Select Backgrounds</h3>
+              <h4>Select Backgrounds</h4>
               <p>Choose from your show asset library</p>
             </div>
             
             <div className="feature-card">
               <span className="feature-icon">✨</span>
-              <h3>Add UI Elements</h3>
+              <h4>Add UI Elements</h4>
               <p>Trigger overlays, text, and effects</p>
             </div>
             
             <div className="feature-card">
               <span className="feature-icon">⏱️</span>
-              <h3>Set Timing</h3>
+              <h4>Set Timing</h4>
               <p>Control scene duration and pacing</p>
             </div>
           </div>
           
           <button
-            className="btn-primary btn-large btn-get-started"
+            className="btn-primary btn-get-started"
             onClick={handleOpenSceneComposer}
           >
-            🎨 Get Started with Scene Composer
+            Get Started
           </button>
         </div>
       ) : (
         /* Scene Overview - Has Scenes */
         <div className="composer-overview">
           <div className="overview-header">
-            <h2>Scene Overview</h2>
+            <h3>Scene Overview</h3>
             <button
               className="btn-secondary"
               onClick={handleOpenSceneComposer}
             >
-              View Full Composer →
+              Full Composer →
             </button>
           </div>
           
@@ -176,7 +175,7 @@ function EpisodeSceneComposerTab({ episode, show }) {
           <div className="composer-tips">
             <div className="tip-icon">💡</div>
             <div className="tip-content">
-              <strong>Pro Tip:</strong> Open Scene Composer to spatially design each scene,
+              Open Scene Composer to spatially design each scene,
               arrange characters and backgrounds, and set precise timing.
             </div>
           </div>

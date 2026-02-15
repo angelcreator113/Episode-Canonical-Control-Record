@@ -32,13 +32,19 @@ module.exports = {
    */
   async listEpisodes(req, res, _next) {
     try {
-      const { page = 1, limit = 20, status, sort } = req.query;
+      const { page = 1, limit = 20, status, sort, show_id } = req.query;
       const offset = (page - 1) * limit;
 
       const where = {
         // ✅ FIX: Only show episodes that haven't been soft-deleted
         deleted_at: null,
       };
+
+      // Filter by show
+      if (show_id) {
+        where.show_id = show_id;
+      }
+
       // Validate status if provided
       if (status) {
         const validStatuses = ['pending', 'approved', 'rejected', 'archived', 'draft', 'published'];
