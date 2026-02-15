@@ -48,6 +48,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ToastProvider from './components/ToastContainer';
 import SceneComposerFull from './components/SceneComposer/SceneComposerFull';
 import AnimaticPreview from './components/Episodes/SceneComposer/AnimaticPreview';
+import OrientationToast from './components/OrientationToast';
 
 import './App.css';
 
@@ -287,6 +288,9 @@ function AppContent() {
         </footer>
       )}
       </div>
+
+      {/* Orientation awareness toast */}
+      <OrientationToast />
     </div>
   );
 }
