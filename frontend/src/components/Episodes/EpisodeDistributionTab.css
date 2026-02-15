@@ -15,14 +15,14 @@
 
 /* ==================== HEADER ==================== */
 
-.distribution-header {
+.episode-distribution-tab .distribution-header {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
   margin-bottom: 1.25rem;
 }
 
-.header-left h2 {
+.episode-distribution-tab .header-left h2 {
   margin: 0 0 0.25rem 0;
   font-size: 1.2rem;
   color: #1e293b;
@@ -31,19 +31,19 @@
   gap: 0.375rem;
 }
 
-.header-subtitle {
+.episode-distribution-tab .header-subtitle {
   margin: 0;
   color: #64748b;
   font-size: 0.825rem;
 }
 
-.header-actions {
+.episode-distribution-tab .header-actions {
   display: flex;
   align-items: center;
   gap: 1rem;
 }
 
-.unsaved-indicator {
+.episode-distribution-tab .unsaved-indicator {
   color: #f59e0b;
   font-weight: 600;
   font-size: 0.9rem;
@@ -142,25 +142,26 @@
   font-size: 0.75rem;
 }
 
-.status-enabled {
+.episode-distribution-tab .status-enabled {
   color: #10b981;
   font-weight: 600;
 }
 
-.status-disabled {
+.episode-distribution-tab .status-disabled {
   color: #94a3b8;
 }
 
 /* ==================== PLATFORM EDITOR ==================== */
 
-.platform-editor {
+.episode-distribution-tab .platform-editor {
   background: white;
   border: 2px solid #e2e8f0;
   border-radius: 12px;
   overflow: clip;
+  isolation: isolate;
 }
 
-.editor-header {
+.episode-distribution-tab .editor-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
@@ -169,24 +170,24 @@
   border-bottom: 1px solid #e2e8f0;
 }
 
-.editor-title {
+.episode-distribution-tab .editor-title {
   display: flex;
   align-items: center;
   gap: 0.625rem;
 }
 
-.editor-icon {
+.episode-distribution-tab .editor-icon {
   font-size: 1.375rem;
 }
 
-.editor-title h3 {
+.episode-distribution-tab .editor-title h3 {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 700;
   color: #1e293b;
 }
 
-.aspect-badge {
+.episode-distribution-tab .aspect-badge {
   padding: 0.25rem 0.625rem;
   background: #e2e8f0;
   color: #64748b;
@@ -196,18 +197,18 @@
 }
 
 /* Toggle Switch */
-.toggle-switch {
+.episode-distribution-tab .toggle-switch {
   display: flex;
   align-items: center;
   gap: 0.75rem;
   cursor: pointer;
 }
 
-.toggle-switch input {
+.episode-distribution-tab .toggle-switch input {
   display: none;
 }
 
-.toggle-slider {
+.episode-distribution-tab .toggle-slider {
   position: relative;
   width: 42px;
   height: 22px;
@@ -216,7 +217,7 @@
   transition: background 0.2s ease;
 }
 
-.toggle-slider::after {
+.episode-distribution-tab .toggle-slider::after {
   content: '';
   position: absolute;
   top: 2px;
@@ -229,15 +230,15 @@
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
 }
 
-.toggle-switch input:checked + .toggle-slider {
+.episode-distribution-tab .toggle-switch input:checked + .toggle-slider {
   background: #10b981;
 }
 
-.toggle-switch input:checked + .toggle-slider::after {
+.episode-distribution-tab .toggle-switch input:checked + .toggle-slider::after {
   transform: translateX(20px);
 }
 
-.toggle-label {
+.episode-distribution-tab .toggle-label {
   font-weight: 600;
   color: #1e293b;
   font-size: 0.85rem;
@@ -245,32 +246,34 @@
 
 /* ==================== EDITOR STATES ==================== */
 
-.editor-disabled {
+.episode-distribution-tab .editor-disabled {
   padding: 2.5rem 1.5rem;
   text-align: center;
   color: #64748b;
 }
 
-.editor-disabled p {
+.episode-distribution-tab .editor-disabled p {
   margin: 0 0 1rem 0;
   font-size: 0.9rem;
 }
 
-.editor-form {
+.episode-distribution-tab .editor-form {
   padding: 1.25rem;
+  background: white;
+  position: relative;
 }
 
 /* ==================== FORM ELEMENTS ==================== */
 
-.form-group {
+.episode-distribution-tab .form-group {
   margin-bottom: 1.25rem;
 }
 
-.form-group:last-child {
+.episode-distribution-tab .form-group:last-child {
   margin-bottom: 0;
 }
 
-.form-group label {
+.episode-distribution-tab .form-group label {
   display: block;
   margin-bottom: 0.375rem;
   font-weight: 600;
@@ -278,9 +281,9 @@
   font-size: 0.8rem;
 }
 
-.form-input,
-.form-textarea,
-.form-select {
+.episode-distribution-tab .form-input,
+.episode-distribution-tab .form-textarea,
+.episode-distribution-tab .form-select {
   width: 100%;
   padding: 0.625rem 0.75rem;
   border: 1.5px solid #e2e8f0;
@@ -291,19 +294,19 @@
   box-sizing: border-box;
 }
 
-.form-input:focus,
-.form-textarea:focus,
-.form-select:focus {
+.episode-distribution-tab .form-input:focus,
+.episode-distribution-tab .form-textarea:focus,
+.episode-distribution-tab .form-select:focus {
   outline: none;
   border-color: #667eea;
 }
 
-.form-textarea {
+.episode-distribution-tab .form-textarea {
   resize: vertical;
   line-height: 1.6;
 }
 
-.form-hint {
+.episode-distribution-tab .form-hint {
   display: block;
   margin-top: 0.375rem;
   font-size: 0.75rem;
@@ -311,7 +314,7 @@
   font-style: italic;
 }
 
-.char-count {
+.episode-distribution-tab .char-count {
   display: block;
   margin-top: 0.375rem;
   font-size: 0.75rem;
@@ -319,7 +322,7 @@
   text-align: right;
 }
 
-.form-row {
+.episode-distribution-tab .form-row {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 1rem;
@@ -327,17 +330,17 @@
 
 /* ==================== HASHTAGS ==================== */
 
-.hashtag-input {
+.episode-distribution-tab .hashtag-input {
   margin-bottom: 1rem;
 }
 
-.hashtag-list {
+.episode-distribution-tab .hashtag-list {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
 }
 
-.hashtag-chip {
+.episode-distribution-tab .hashtag-chip {
   display: inline-flex;
   align-items: center;
   gap: 0.375rem;
@@ -349,7 +352,7 @@
   font-weight: 600;
 }
 
-.hashtag-remove {
+.episode-distribution-tab .hashtag-remove {
   background: rgba(255, 255, 255, 0.3);
   border: none;
   color: white;
@@ -365,29 +368,29 @@
   transition: background 0.2s ease;
 }
 
-.hashtag-remove:hover {
+.episode-distribution-tab .hashtag-remove:hover {
   background: rgba(255, 255, 255, 0.5);
 }
 
 /* ==================== THUMBNAIL ==================== */
 
-.thumbnail-upload {
+.episode-distribution-tab .thumbnail-upload {
   border: 2px dashed #cbd5e1;
   border-radius: 12px;
   overflow: hidden;
 }
 
-.thumbnail-preview {
+.episode-distribution-tab .thumbnail-preview {
   position: relative;
 }
 
-.thumbnail-preview img {
+.episode-distribution-tab .thumbnail-preview img {
   width: 100%;
   height: auto;
   display: block;
 }
 
-.btn-remove-thumb {
+.episode-distribution-tab .btn-remove-thumb {
   position: absolute;
   top: 1rem;
   right: 1rem;
@@ -401,23 +404,27 @@
   transition: all 0.2s ease;
 }
 
-.btn-remove-thumb:hover {
+.episode-distribution-tab .btn-remove-thumb:hover {
   background: #dc2626;
 }
 
-.thumbnail-placeholder {
+.episode-distribution-tab .thumbnail-placeholder {
   padding: 2rem 1.5rem;
   text-align: center;
   color: #64748b;
+  display: block;
+  height: auto;
+  width: auto;
+  font-size: inherit;
 }
 
-.thumbnail-placeholder span {
+.episode-distribution-tab .thumbnail-placeholder span {
   font-size: 2rem;
   display: block;
   margin-bottom: 0.625rem;
 }
 
-.thumbnail-placeholder p {
+.episode-distribution-tab .thumbnail-placeholder p {
   margin: 0 0 1rem 0;
   font-size: 0.875rem;
 }
@@ -502,26 +509,26 @@
     box-sizing: border-box;
   }
   
-  .distribution-header {
+  .episode-distribution-tab .distribution-header {
     flex-direction: column;
     gap: 0.75rem;
     margin-bottom: 1rem;
   }
 
-  .header-left h2 {
+  .episode-distribution-tab .header-left h2 {
     font-size: 1.1rem;
   }
 
-  .header-subtitle {
+  .episode-distribution-tab .header-subtitle {
     font-size: 0.78rem;
   }
   
-  .header-actions {
+  .episode-distribution-tab .header-actions {
     width: 100%;
     justify-content: space-between;
   }
   
-  .btn-save {
+  .episode-distribution-tab .btn-save {
     flex: 1;
   }
   
@@ -576,21 +583,21 @@
     z-index: 1;
   }
 
-  .editor-header {
+  .episode-distribution-tab .editor-header {
     flex-wrap: wrap;
     gap: 0.625rem;
     padding: 0.75rem 1rem;
   }
 
-  .editor-title {
+  .episode-distribution-tab .editor-title {
     flex: 1 1 100%;
   }
 
-  .editor-icon {
+  .episode-distribution-tab .editor-icon {
     font-size: 1.15rem;
   }
 
-  .editor-title h3 {
+  .episode-distribution-tab .editor-title h3 {
     font-size: 0.95rem;
   }
   
@@ -622,27 +629,27 @@
     padding: 0;
   }
 
-  .distribution-header {
+  .episode-distribution-tab .distribution-header {
     gap: 0.5rem;
     margin-bottom: 0.75rem;
   }
 
-  .header-left h2 {
+  .episode-distribution-tab .header-left h2 {
     font-size: 1rem;
     gap: 0.25rem;
   }
 
-  .header-subtitle {
+  .episode-distribution-tab .header-subtitle {
     font-size: 0.7rem;
   }
 
-  .btn-save {
+  .episode-distribution-tab .btn-save {
     padding: 0.4rem 0.75rem;
     font-size: 0.75rem;
     border-radius: 6px;
   }
 
-  .unsaved-indicator {
+  .episode-distribution-tab .unsaved-indicator {
     font-size: 0.78rem;
   }
 
@@ -687,47 +694,47 @@
     max-width: 100%;
   }
 
-  .editor-header {
+  .episode-distribution-tab .editor-header {
     flex-wrap: wrap;
     gap: 0.5rem;
     padding: 0.625rem 0.75rem;
   }
 
-  .editor-title {
+  .episode-distribution-tab .editor-title {
     flex: 1 1 100%;
     gap: 0.4rem;
   }
 
-  .editor-icon {
+  .episode-distribution-tab .editor-icon {
     font-size: 1rem;
   }
 
-  .editor-title h3 {
+  .episode-distribution-tab .editor-title h3 {
     font-size: 0.85rem;
   }
 
-  .aspect-badge {
+  .episode-distribution-tab .aspect-badge {
     padding: 0.175rem 0.5rem;
     font-size: 0.65rem;
     border-radius: 4px;
   }
 
-  .toggle-slider {
+  .episode-distribution-tab .toggle-slider {
     width: 36px;
     height: 18px;
     border-radius: 9px;
   }
 
-  .toggle-slider::after {
+  .episode-distribution-tab .toggle-slider::after {
     width: 14px;
     height: 14px;
   }
 
-  .toggle-switch input:checked + .toggle-slider::after {
+  .episode-distribution-tab .toggle-switch input:checked + .toggle-slider::after {
     transform: translateX(18px);
   }
 
-  .toggle-label {
+  .episode-distribution-tab .toggle-label {
     font-size: 0.78rem;
   }
 
@@ -735,11 +742,11 @@
     padding: 0.75rem 0.625rem;
   }
 
-  .editor-disabled {
+  .episode-distribution-tab .editor-disabled {
     padding: 1.5rem 1rem;
   }
 
-  .editor-disabled p {
+  .episode-distribution-tab .editor-disabled p {
     font-size: 0.8rem;
   }
 
@@ -773,17 +780,17 @@
     gap: 0.625rem;
   }
 
-  .hashtag-list {
+  .episode-distribution-tab .hashtag-list {
     gap: 0.375rem;
   }
 
-  .hashtag-chip {
+  .episode-distribution-tab .hashtag-chip {
     padding: 0.2rem 0.5rem;
     font-size: 0.675rem;
     border-radius: 10px;
   }
 
-  .hashtag-remove {
+  .episode-distribution-tab .hashtag-remove {
     width: 14px;
     height: 14px;
     font-size: 0.75rem;
