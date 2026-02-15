@@ -354,6 +354,7 @@
   padding-top: 65%; /* More compact aspect ratio */
   background: #f1f5f9;
   overflow: hidden;
+  border-radius: 10px 10px 0 0;
 }
 
 .asset-thumbnail img {
@@ -363,6 +364,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
+  object-position: center top;
 }
 
 .asset-info {
@@ -557,10 +559,22 @@
   .show-assets-tab {
     padding: 0.5rem;
   }
+
+  /* Larger tap targets for view toggle on mobile */
+  .show-assets-tab .view-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+  }
   
   .assets-container.view-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
+  }
+
+  /* Less aggressive crop on small cards */
+  .assets-container.view-grid .asset-thumbnail {
+    padding-top: 56%;
   }
   
   .show-assets-tab .recommended-grid {

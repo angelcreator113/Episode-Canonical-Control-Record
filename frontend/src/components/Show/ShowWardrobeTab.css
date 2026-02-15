@@ -773,6 +773,35 @@
   .show-wardrobe-tab .recommended-grid {
     grid-template-columns: repeat(2, 1fr);
   }
+
+  /* ===== List view mobile: stack vertically ===== */
+  .wardrobe-container.view-list .wardrobe-item-card {
+    flex-direction: column;
+    min-height: auto;
+  }
+
+  .wardrobe-container.view-list .item-thumbnail {
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 10px 10px 0 0;
+  }
+
+  .wardrobe-container.view-list .item-info {
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 1rem;
+  }
+
+  .wardrobe-container.view-list .item-side {
+    padding-right: 2.5rem;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: flex-start;
+  }
+
+  .wardrobe-container.view-list .item-name {
+    font-size: 1.125rem;
+  }
 }
 
 @media (max-width: 480px) {
@@ -796,5 +825,31 @@
   .wardrobe-container.view-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.5rem;
+  }
+
+  /* List view 480px: even tighter */
+  .wardrobe-container.view-list .item-info {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .wardrobe-container.view-list .item-name {
+    font-size: 1rem;
+  }
+
+  .wardrobe-container.view-list .item-side {
+    padding-right: 2rem;
+  }
+
+  .wardrobe-container.view-list .item-category-badge {
+    font-size: 0.6875rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  /* Larger view-toggle tap targets */
+  .show-wardrobe-tab .view-btn {
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
   }
 }
