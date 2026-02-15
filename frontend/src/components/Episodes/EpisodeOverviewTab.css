@@ -220,9 +220,17 @@
 }
 
 .check-icon {
-  color: #10b981;
+  color: #ffffff;
+  background: #10b981;
   font-weight: 700;
-  font-size: 1.125rem;
+  font-size: 0.75rem;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
 }
 
 .check-label {
