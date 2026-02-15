@@ -6,6 +6,7 @@ import KeyframePropertyEditor from '../components/Timeline/KeyframePropertyEdito
 import SaveIndicator from '../components/SaveIndicator/SaveIndicator';
 import ExportDropdown from '../components/ExportDropdown/ExportDropdown';
 import useSaveManager from '../hooks/useSaveManager';
+import LandscapeRequired from '../components/LandscapeRequired';
 import { episodeAPI, platformAPI, sceneAPI, timelineDataAPI } from '../services/api';
 import { API_URL } from '../config/api';
 import '../components/Timeline/TimelineEditor.css';
@@ -730,6 +731,7 @@ function TimelineEditor() {
   const timelineHeight = `calc((100vh - 72px) * ${1 - splitRatio})`;
 
   return (
+    <LandscapeRequired>
     <div className="timeline-editor" ref={editorRef}>
       {/* Header */}
       <header className="timeline-header">
@@ -917,6 +919,7 @@ function TimelineEditor() {
             </div>
           </div>
     </div>
+    </LandscapeRequired>
   );
 }
 
