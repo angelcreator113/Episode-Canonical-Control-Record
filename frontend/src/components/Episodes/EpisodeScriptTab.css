@@ -4,6 +4,7 @@
   padding: 2rem;
   max-width: 1400px;
   margin: 0 auto;
+  overflow-x: hidden;
 }
 
 /* HEADER */
@@ -198,6 +199,8 @@
   font-weight: 600;
   color: #1e293b;
   transition: border-color 0.2s ease;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .character-input:focus {
@@ -215,6 +218,8 @@
   font-family: inherit;
   resize: vertical;
   transition: border-color 0.2s ease;
+  box-sizing: border-box;
+  width: 100%;
 }
 
 .dialogue-textarea:focus {
@@ -279,6 +284,7 @@
   font-family: inherit;
   resize: vertical;
   transition: border-color 0.2s ease;
+  box-sizing: border-box;
 }
 
 .youtube-description:focus {
@@ -497,7 +503,8 @@
   }
 
   .dialogue-block {
-    grid-template-columns: 1fr;
+    display: flex;
+    flex-direction: column;
     gap: 0.75rem;
     padding: 1rem;
   }
