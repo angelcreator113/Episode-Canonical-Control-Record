@@ -444,13 +444,20 @@
 
 @media (max-width: 768px) {
   .show-assets-tab {
-    padding: 0.75rem;
+    padding: 0;
     overflow-x: hidden;
     box-sizing: border-box;
+    max-width: 100%;
+    width: 100%;
   }
 
   .show-assets-tab * {
     box-sizing: border-box;
+  }
+
+  .assets-container {
+    max-width: 100%;
+    overflow: hidden;
   }
   
   .assets-header {
@@ -524,6 +531,12 @@
   .assets-container.view-grid {
     grid-template-columns: repeat(2, 1fr);
     gap: 0.75rem;
+    width: 100%;
+  }
+
+  .show-asset-card {
+    min-width: 0;
+    overflow: hidden;
   }
   
   .show-assets-tab .empty-state-recommended {
@@ -574,7 +587,7 @@
 
 @media (max-width: 480px) {
   .show-assets-tab {
-    padding: 0.5rem;
+    padding: 0;
   }
 
   .assets-header {
