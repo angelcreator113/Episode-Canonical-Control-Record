@@ -209,8 +209,12 @@ jobs:
 
             # Restart the Node.js backend via PM2
             echo '🔄 Restarting PM2...'
-            pm2 restart ecosystem.config.js --env development 2>&1 | tail -5 || \
-              pm2 start ecosystem.config.js --env development 2>&1 | tail -5
+            pm2 delete episode-api 2>/dev/null || true
+            sleep 2
+            # Kill anything still holding port 3002
+            fuser -k 3002/tcp 2>/dev/null || true
+            sleep 1
+            pm2 start ecosystem.config.js --env development 2>&1 | tail -5
             pm2 save
 
             # Health check — wait for backend to come up
