@@ -78,22 +78,128 @@ module.exports = {
       }
 
       // ──────────────────────────────────────────────
-      // 3. Add new columns to scene_assets table
+      // 3. Create scene_assets table if not exists, then add columns
       // ──────────────────────────────────────────────
-      const sceneAssetColumns = [
-        { name: 'asset_role',      sql: "VARCHAR(50)" },
-        { name: 'character_name',  sql: "VARCHAR(100)" },
-        { name: 'position_x',     sql: "INTEGER" },
-        { name: 'position_y',     sql: "INTEGER" },
-        { name: 'scale',          sql: "DECIMAL(5,2) DEFAULT 1.0" },
-        { name: 'z_index',        sql: "INTEGER DEFAULT 0" },
-      ];
+      const [sceneAssetsExists] = await queryInterface.sequelize.query(
+        `SELECT EXISTS (
+          SELECT FROM information_schema.tables 
+          WHERE table_schema = 'public' 
+          AND table_name = 'scene_assets'
+        ) as exists`,
+        { transaction }
+      );
 
-      for (const col of sceneAssetColumns) {
-        await queryInterface.sequelize.query(
-          `ALTER TABLE scene_assets ADD COLUMN IF NOT EXISTS "${col.name}" ${col.sql};`,
-          { transaction }
-        );
+      if (!sceneAssetsExists[0].exists) {
+        await queryInterface.createTable('scene_assets', {
+          id: {
+            type: Sequelize.UUID,
+            defaultValue: Sequelize.UUIDV4,
+            primaryKey: true,
+            allowNull: false,
+          },
+          scene_id: {
+            type: Sequelize.UUID,
+            allowNull: false,
+            references: { model: 'scenes', key: 'id' },
+            onDelete: 'CASCADE',
+          },
+          asset_id: {
+            type: Sequelize.UUID,
+            allowNull: false,
+            references: { model: 'assets', key: 'id' },
+            onDelete: 'CASCADE',
+          },
+          usage_type: {
+            type: Sequelize.STRING(50),
+            allowNull: false,
+            defaultValue: 'overlay',
+          },
+          start_timecode: {
+            type: Sequelize.STRING(20),
+            allowNull: true,
+          },
+          end_timecode: {
+            type: Sequelize.STRING(20),
+            allowNull: true,
+          },
+          layer_order: {
+            type: Sequelize.INTEGER,
+            allowNull: false,
+            defaultValue: 0,
+          },
+          opacity: {
+            type: Sequelize.DECIMAL(3, 2),
+            allowNull: false,
+            defaultValue: 1.0,
+          },
+          position: {
+            type: Sequelize.JSONB,
+            allowNull: true,
+            defaultValue: { x: 0, y: 0, width: '100%', height: '100%' },
+          },
+          metadata: {
+            type: Sequelize.JSONB,
+            allowNull: true,
+            defaultValue: {},
+          },
+          asset_role: {
+            type: Sequelize.STRING(50),
+            allowNull: true,
+          },
+          character_name: {
+            type: Sequelize.STRING(100),
+            allowNull: true,
+          },
+          position_x: {
+            type: Sequelize.INTEGER,
+            allowNull: true,
+          },
+          position_y: {
+            type: Sequelize.INTEGER,
+            allowNull: true,
+          },
+          scale: {
+            type: Sequelize.DECIMAL(5, 2),
+            allowNull: true,
+            defaultValue: 1.0,
+          },
+          z_index: {
+            type: Sequelize.INTEGER,
+            allowNull: true,
+            defaultValue: 0,
+          },
+          created_at: {
+            type: Sequelize.DATE,
+            allowNull: false,
+            defaultValue: Sequelize.NOW,
+          },
+          updated_at: {
+            type: Sequelize.DATE,
+            allowNull: false,
+            defaultValue: Sequelize.NOW,
+          },
+          deleted_at: {
+            type: Sequelize.DATE,
+            allowNull: true,
+          },
+        }, { transaction });
+      } else {
+        // Table exists — just add the extended columns
+        const sceneAssetColumns = [
+          { name: 'asset_role',      sql: "VARCHAR(50)" },
+          { name: 'character_name',  sql: "VARCHAR(100)" },
+          { name: 'position_x',     sql: "INTEGER" },
+          { name: 'position_y',     sql: "INTEGER" },
+          { name: 'scale',          sql: "DECIMAL(5,2) DEFAULT 1.0" },
+          { name: 'z_index',        sql: "INTEGER DEFAULT 0" },
+        ];
+
+        for (const col of sceneAssetColumns) {
+          await queryInterface.sequelize.query(
+            `ALTER TABLE scene_assets ADD COLUMN IF NOT EXISTS "${col.name}" ${col.sql};`,
+            { transaction }
+          );
+        }
       }
 
       // ──────────────────────────────────────────────
