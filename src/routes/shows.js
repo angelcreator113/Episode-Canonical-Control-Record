@@ -207,16 +207,22 @@ router.post('/', async (req, res) => {
       });
     }
 
-    const slug = name
+    const trimmedName = name.trim();
+    const slug = trimmedName
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
-    // Check for existing active show with same name or slug
     const { Op } = require('sequelize');
+    const sequelize = Show.sequelize;
+
+    // Case-insensitive check for existing active show with same name or slug
     const existingActive = await Show.findOne({
       where: {
-        [Op.or]: [{ name: name.trim() }, { slug }],
+        [Op.or]: [
+          sequelize.where(sequelize.fn('LOWER', sequelize.col('name')), trimmedName.toLowerCase()),
+          { slug },
+        ],
       },
     });
     if (existingActive) {
@@ -230,7 +236,10 @@ router.post('/', async (req, res) => {
     // If a soft-deleted show with the same name/slug exists, hard-delete it first
     const existingSoftDeleted = await Show.findOne({
       where: {
-        [Op.or]: [{ name: name.trim() }, { slug }],
+        [Op.or]: [
+          sequelize.where(sequelize.fn('LOWER', sequelize.col('name')), trimmedName.toLowerCase()),
+          { slug },
+        ],
       },
       paranoid: false, // include soft-deleted
     });
@@ -242,7 +251,7 @@ router.post('/', async (req, res) => {
     const mergedMetadata = { ...(metadata || {}), ...(tagline ? { tagline } : {}) };
 
     const show = await Show.create({
-      name: name.trim(),
+      name: trimmedName,
       slug,
       description,
       icon,
@@ -260,8 +269,14 @@ router.post('/', async (req, res) => {
   } catch (error) {
     console.error('Failed to create show:', error);
 
-    // Handle unique constraint violations
-    if (error.name === 'SequelizeUniqueConstraintError') {
+    // Handle unique constraint violations (check multiple error indicators)
+    const isUniqueError =
+      error.name === 'SequelizeUniqueConstraintError' ||
+      (error.parent && error.parent.code === '23505') ||
+      (error.original && error.original.code === '23505') ||
+      (error.message && error.message.includes('Validation error') && error.errors?.length > 0);
+
+    if (isUniqueError) {
       return res.status(409).json({
         error: 'A show with this name already exists',
         message: 'Please choose a different name for your show.',
