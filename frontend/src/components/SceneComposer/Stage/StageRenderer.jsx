@@ -5,7 +5,10 @@
  * - Aspect-ratio scaling (16:9 contain)
  * - Rendering background, characters, UI elements
  * - Hit-testing and selection hit zones
- * - Interactive dragging & resizing
+ * - Interactive dragging, resizing, & rotating
+ * - Timeline-based element visibility (enterTime / exitTime)
+ * - Character name labels
+ * - Snap-to-grid integration
  * - Read-only vs edit mode
  */
 
@@ -14,29 +17,45 @@ import React, { useState, useRef, useEffect, useCallback } from 'react';
 function StageRenderer({ 
   platform,
   scene,
-  currentTime,
+  currentTime = 0,
   interactionMode = 'view', // 'view' or 'edit'
   selected,
   onSelect,
   onUpdatePosition,
   onResizeElement,
-  onDeleteElement
+  onRotateElement,
+  onDeleteElement,
+  snapPosition,       // from useSnapEngine
+  onDragEnd,          // clear guides on mouse up
+  showCharacterLabels = true
 }) {
   const [hoveredElementId, setHoveredElementId] = useState(null);
-  const [activeInteraction, setActiveInteraction] = useState(null); // 'drag' | 'resize' | null
+  const [activeInteraction, setActiveInteraction] = useState(null); // 'drag' | 'resize' | 'rotate' | null
   const rendererRef = useRef(null);
-  const dragRef = useRef(null);   // { type, id, startX, startY, startPosX, startPosY }
-  const resizeRef = useRef(null); // { type, id, startX, startY, startW, startH }
+  const dragRef = useRef(null);
+  const resizeRef = useRef(null);
+  const rotateRef = useRef(null);
   const isEditable = interactionMode === 'edit';
 
-  // ---- DRAG-TO-MOVE ----
+  // ── Timeline Visibility: filter elements by currentTime ──
+  const isElementVisible = useCallback((element) => {
+    // If no timing data, always visible
+    const enter = parseFloat(element.enterTime ?? element.enter_time ?? -1);
+    const exit = parseFloat(element.exitTime ?? element.exit_time ?? -1);
+    if (enter < 0 && exit < 0) return true;
+    const t = currentTime || 0;
+    if (enter >= 0 && t < enter) return false;
+    if (exit >= 0 && t >= exit) return false;
+    return true;
+  }, [currentTime]);
+
+  // ── DRAG-TO-MOVE ──
   const handleDragStart = useCallback((e, type, id) => {
     if (!isEditable || !rendererRef.current) return;
     e.stopPropagation();
     e.preventDefault();
 
     const rect = rendererRef.current.getBoundingClientRect();
-    // Find current element position
     let el;
     if (type === 'character') {
       const idx = scene?.characters?.findIndex((c, i) => (c.id || `char-${i}`) === id);
@@ -47,7 +66,6 @@ function StageRenderer({
     }
     if (!el) return;
 
-    // Select the element on drag start
     if (onSelect) onSelect({ type, id });
 
     dragRef.current = {
@@ -66,7 +84,7 @@ function StageRenderer({
     document.body.style.userSelect = 'none';
   }, [isEditable, scene, onSelect]);
 
-  // ---- RESIZE ----
+  // ── RESIZE ──
   const handleResizeStart = useCallback((e, type, id) => {
     if (!isEditable || !rendererRef.current) return;
     e.stopPropagation();
@@ -99,6 +117,43 @@ function StageRenderer({
     document.body.style.userSelect = 'none';
   }, [isEditable, scene]);
 
+  // ── ROTATE ──
+  const handleRotateStart = useCallback((e, type, id) => {
+    if (!isEditable || !rendererRef.current) return;
+    e.stopPropagation();
+    e.preventDefault();
+
+    let el;
+    if (type === 'character') {
+      const idx = scene?.characters?.findIndex((c, i) => (c.id || `char-${i}`) === id);
+      el = scene?.characters?.[idx];
+    } else if (type === 'ui') {
+      const idx = scene?.ui_elements?.findIndex((u, i) => (u.id || `ui-${i}`) === id);
+      el = scene?.ui_elements?.[idx];
+    }
+    if (!el) return;
+
+    // Get element center in viewport coords
+    const rect = rendererRef.current.getBoundingClientRect();
+    const posX = parseFloat(el.position?.x) || 50;
+    const posY = parseFloat(el.position?.y) || 50;
+    const centerX = rect.left + (posX / 100) * rect.width;
+    const centerY = rect.top + (posY / 100) * rect.height;
+
+    rotateRef.current = {
+      type,
+      id,
+      centerX,
+      centerY,
+      startAngle: Math.atan2(e.clientY - centerY, e.clientX - centerX),
+      startRotation: parseFloat(el.rotation) || 0,
+    };
+
+    setActiveInteraction('rotate');
+    document.body.style.cursor = 'crosshair';
+    document.body.style.userSelect = 'none';
+  }, [isEditable, scene]);
+
   useEffect(() => {
     const handleMouseMove = (e) => {
       // Handle drag
@@ -106,9 +161,16 @@ function StageRenderer({
         const d = dragRef.current;
         const dx = e.clientX - d.startMouseX;
         const dy = e.clientY - d.startMouseY;
-        const newX = Math.max(0, Math.min(100, d.startPosX + (dx / d.containerW) * 100));
-        const newY = Math.max(0, Math.min(100, d.startPosY + (dy / d.containerH) * 100));
+        let newX = Math.max(0, Math.min(100, d.startPosX + (dx / d.containerW) * 100));
+        let newY = Math.max(0, Math.min(100, d.startPosY + (dy / d.containerH) * 100));
         
+        // Apply snap if available
+        if (snapPosition) {
+          const snapped = snapPosition(newX, newY);
+          newX = snapped.snappedX;
+          newY = snapped.snappedY;
+        }
+
         if (onUpdatePosition) {
           onUpdatePosition(d.type, d.id, {
             x: `${Math.round(newX * 10) / 10}%`,
@@ -121,7 +183,6 @@ function StageRenderer({
         const r = resizeRef.current;
         const dx = e.clientX - r.startMouseX;
         const dy = e.clientY - r.startMouseY;
-        // Allow up to 95% of the stage frame dimensions
         const maxW = Math.round(r.containerW * 0.95);
         const maxH = Math.round(r.containerH * 0.95);
         const newW = Math.max(20, Math.min(r.startW + dx, maxW));
@@ -134,6 +195,26 @@ function StageRenderer({
           });
         }
       }
+      // Handle rotation
+      if (rotateRef.current) {
+        const rot = rotateRef.current;
+        const angle = Math.atan2(e.clientY - rot.centerY, e.clientX - rot.centerX);
+        const delta = ((angle - rot.startAngle) * 180) / Math.PI;
+        let newRotation = rot.startRotation + delta;
+        
+        // Snap to 0/90/180/270 when close (within 5 degrees)
+        const snapAngles = [0, 90, 180, 270, -90, -180, -270, 360];
+        for (const snap of snapAngles) {
+          if (Math.abs(newRotation - snap) < 5) {
+            newRotation = snap;
+            break;
+          }
+        }
+
+        if (onRotateElement) {
+          onRotateElement(rot.type, rot.id, Math.round(newRotation));
+        }
+      }
     };
 
     const handleMouseUp = () => {
@@ -142,9 +223,16 @@ function StageRenderer({
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         setActiveInteraction(null);
+        if (onDragEnd) onDragEnd();
       }
       if (resizeRef.current) {
         resizeRef.current = null;
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        setActiveInteraction(null);
+      }
+      if (rotateRef.current) {
+        rotateRef.current = null;
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         setActiveInteraction(null);
@@ -157,7 +245,7 @@ function StageRenderer({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [onUpdatePosition, onResizeElement]);
+  }, [onUpdatePosition, onResizeElement, onRotateElement, snapPosition, onDragEnd]);
 
   const handleBackgroundClick = () => {
     if (isEditable && onSelect) {
@@ -208,11 +296,14 @@ function StageRenderer({
       {/* Character Layer */}
       {scene?.characters && scene.characters.map((character, idx) => {
         const charId = character.id || `char-${idx}`;
+        if (!isElementVisible(character)) return null;
+
         const isSelected = isSelectedCharacterId === charId;
         const isHovered = hoveredElementId === charId;
         const charWidth = character.width || '100px';
         const charHeight = character.height || '150px';
-        const isDragging = activeInteraction && (dragRef.current?.id === charId || resizeRef.current?.id === charId);
+        const rotation = parseFloat(character.rotation) || 0;
+        const isDragging = activeInteraction && (dragRef.current?.id === charId || resizeRef.current?.id === charId || rotateRef.current?.id === charId);
 
         return (
           <div
@@ -222,7 +313,7 @@ function StageRenderer({
               position: 'absolute',
               left: character.position?.x || '10%',
               top: character.position?.y || '50%',
-              transform: 'translate(-50%, -50%)',
+              transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
               width: charWidth,
               height: charHeight,
               cursor: isEditable ? 'grab' : 'default',
@@ -244,7 +335,15 @@ function StageRenderer({
                 {character.name}
               </div>
             )}
-            {/* Resize handle + Delete button */}
+
+            {/* Character Name Label */}
+            {showCharacterLabels && character.name && character.imageUrl && (
+              <div className="stage-character-label">
+                {character.name}
+              </div>
+            )}
+
+            {/* Resize handle + Rotate handle + Delete button */}
             {isEditable && isSelected && (
               <>
                 <div
@@ -252,29 +351,14 @@ function StageRenderer({
                   onMouseDown={(e) => handleResizeStart(e, 'character', charId)}
                 />
                 <div
+                  className="stage-rotate-handle"
+                  onMouseDown={(e) => handleRotateStart(e, 'character', charId)}
+                  title="Rotate"
+                />
+                <div
                   className="stage-delete-handle"
                   onClick={(e) => { e.stopPropagation(); onDeleteElement && onDeleteElement('character', charId); }}
                   title="Delete (Del key)"
-                  style={{
-                    position: 'absolute',
-                    top: '-12px',
-                    right: '-12px',
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: '#ff4b4b',
-                    border: '2px solid #fff',
-                    color: '#fff',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 100,
-                    lineHeight: 1,
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                  }}
                 >×</div>
               </>
             )}
@@ -285,9 +369,12 @@ function StageRenderer({
       {/* UI Elements Layer */}
       {scene?.ui_elements && scene.ui_elements.map((element, idx) => {
         const uiId = element.id || `ui-${idx}`;
+        if (!isElementVisible(element)) return null;
+
         const isSelected = isSelectedUiId === uiId;
         const isHovered = hoveredElementId === uiId;
-        const isDragging = activeInteraction && (dragRef.current?.id === uiId || resizeRef.current?.id === uiId);
+        const rotation = parseFloat(element.rotation) || 0;
+        const isDragging = activeInteraction && (dragRef.current?.id === uiId || resizeRef.current?.id === uiId || rotateRef.current?.id === uiId);
 
         return (
           <div
@@ -297,7 +384,7 @@ function StageRenderer({
               position: 'absolute',
               left: element.position?.x || '50%',
               top: element.position?.y || '10%',
-              transform: 'translate(-50%, -50%)',
+              transform: `translate(-50%, -50%) rotate(${rotation}deg)`,
               backgroundColor: element.imageUrl ? 'transparent' : (element.backgroundColor || 'rgba(255, 255, 255, 0.1)'),
               padding: element.imageUrl ? '0' : (element.padding || '12px'),
               borderRadius: element.borderRadius || '8px',
@@ -329,7 +416,8 @@ function StageRenderer({
             ) : (
               <span>{element.label || 'UI Element'}</span>
             )}
-            {/* Resize handle + Delete button */}
+
+            {/* Resize handle + Rotate handle + Delete button */}
             {isEditable && isSelected && (
               <>
                 <div
@@ -337,29 +425,14 @@ function StageRenderer({
                   onMouseDown={(e) => handleResizeStart(e, 'ui', uiId)}
                 />
                 <div
+                  className="stage-rotate-handle"
+                  onMouseDown={(e) => handleRotateStart(e, 'ui', uiId)}
+                  title="Rotate"
+                />
+                <div
                   className="stage-delete-handle"
                   onClick={(e) => { e.stopPropagation(); onDeleteElement && onDeleteElement('ui', uiId); }}
                   title="Delete (Del key)"
-                  style={{
-                    position: 'absolute',
-                    top: '-12px',
-                    right: '-12px',
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: '#ff4b4b',
-                    border: '2px solid #fff',
-                    color: '#fff',
-                    fontSize: '14px',
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    zIndex: 100,
-                    lineHeight: 1,
-                    boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
-                  }}
                 >×</div>
               </>
             )}

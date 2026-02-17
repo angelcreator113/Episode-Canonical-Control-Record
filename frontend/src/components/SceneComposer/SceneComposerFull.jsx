@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { Eye, EyeOff } from 'lucide-react';
 import Stage from './Stage';
+import { useStageClipboard } from './Stage';
 import SceneControlsPanel from './SceneControlsPanel';
 import SaveIndicator from '../SaveIndicator/SaveIndicator';
 import SceneExportDropdown from './SceneExportDropdown';
@@ -43,6 +44,15 @@ function SceneComposerFull() {
   const [selected, setSelected] = useState(null); // { type: 'character' | 'ui' | 'background', id }
   const [editLayoutEnabled, setEditLayoutEnabled] = useState(false);
   const [showSafeZones, setShowSafeZones] = useState(true); // Safe zones toggle
+
+  // Stage overlay toggles
+  const [showSubtitles, setShowSubtitles] = useState(true);
+  const [showAlignmentGuides, setShowAlignmentGuides] = useState(true);
+  const [showCharacterLabels, setShowCharacterLabels] = useState(true);
+  const [snapEnabled, setSnapEnabled] = useState(true);
+
+  // Clipboard for copy/paste elements
+  const { clipboard, copyElement, pasteElement, hasClipboard } = useStageClipboard();
 
   // Drag-and-drop state for scene reordering
   const [draggedSceneIndex, setDraggedSceneIndex] = useState(null);
@@ -170,13 +180,44 @@ function SceneComposerFull() {
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && selected && !e.target.closest('input, textarea, [contenteditable]')) {
         e.preventDefault();
         handleDeleteElement(selected.type, selected.id);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'c' && selected) {
+        // Copy selected element
+        e.preventDefault();
+        const scene = scenes[currentSceneIndex];
+        if (!scene) return;
+        let element = null;
+        if (selected.type === 'character') {
+          element = (scene.characters || []).find((c, i) => (c.id || `char-${i}`) === selected.id);
+        } else if (selected.type === 'ui') {
+          element = (scene.ui_elements || []).find((u, i) => (u.id || `ui-${i}`) === selected.id);
+        }
+        if (element) copyElement(selected.type, element);
+      } else if ((e.ctrlKey || e.metaKey) && e.key === 'v' && hasClipboard) {
+        // Paste element
+        e.preventDefault();
+        const pasted = pasteElement();
+        if (!pasted) return;
+        pushHistory();
+        setScenes(prev => {
+          const next = [...prev];
+          const scene = { ...next[currentSceneIndex] };
+          if (pasted.type === 'character') {
+            scene.characters = [...(scene.characters || []), pasted.element];
+          } else if (pasted.type === 'ui') {
+            scene.ui_elements = [...(scene.ui_elements || []), pasted.element];
+          }
+          next[currentSceneIndex] = scene;
+          return next;
+        });
+        setSelected({ type: pasted.type, id: pasted.element.id });
+        markDirty();
       } else if (e.key === 'Escape') {
         setSelected(null);
       }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [handleUndo, handleRedo, handleDeleteElement, selected]);
+  }, [handleUndo, handleRedo, handleDeleteElement, selected, scenes, currentSceneIndex, copyElement, pasteElement, hasClipboard, pushHistory, markDirty]);
 
   useEffect(() => {
     loadEpisodeData();
@@ -469,6 +510,29 @@ function SceneComposerFull() {
     markDirty();
   };
 
+  // Rotate element on canvas
+  const handleRotateElement = (type, id, angle) => {
+    pushHistory();
+    setScenes(prev => {
+      const next = [...prev];
+      const scene = { ...next[currentSceneIndex] };
+      if (type === 'character') {
+        scene.characters = scene.characters.map((c, i) => {
+          const cid = c.id || `char-${i}`;
+          return cid === id ? { ...c, rotation: angle } : c;
+        });
+      } else if (type === 'ui') {
+        scene.ui_elements = scene.ui_elements.map((u, i) => {
+          const uid = u.id || `ui-${i}`;
+          return uid === id ? { ...u, rotation: angle } : u;
+        });
+      }
+      next[currentSceneIndex] = scene;
+      return next;
+    });
+    markDirty();
+  };
+
   // Change layer (z-index) of an element
   const handleLayerChange = (type, id, direction) => {
     setScenes(prev => {
@@ -617,7 +681,22 @@ function SceneComposerFull() {
       const cx = (posX / 100) * W - canvasElW / 2;
       const cy = (posY / 100) * H - canvasElH / 2;
 
+      // Apply rotation if present
+      const rotation = el.rotation || 0;
+      if (rotation !== 0) {
+        ctx.save();
+        const centerX = cx + canvasElW / 2;
+        const centerY = cy + canvasElH / 2;
+        ctx.translate(centerX, centerY);
+        ctx.rotate((rotation * Math.PI) / 180);
+        ctx.translate(-centerX, -centerY);
+      }
+
       drawContainImage(img, cx, cy, canvasElW, canvasElH);
+
+      if (rotation !== 0) {
+        ctx.restore();
+      }
     }
 
     return canvas;
@@ -1187,14 +1266,34 @@ function SceneComposerFull() {
               onSelect={setSelected}
               onUpdatePosition={handleUpdatePosition}
               onResizeElement={handleResizeElement}
+              onRotateElement={handleRotateElement}
               onDeleteElement={handleDeleteElement}
               showPlatformBadge={true}
               showSafeZones={showSafeZones}
+              showSubtitles={showSubtitles}
+              showAlignmentGuides={showAlignmentGuides}
+              showCharacterLabels={showCharacterLabels}
+              snapEnabled={snapEnabled}
             />
           ) : (
             <div className="stage-no-scene">
               <p>No scenes yet</p>
-              <button onClick={() => {/* add scene */}}>Create First Scene</button>
+              <button onClick={() => {
+                pushHistory();
+                const newScene = {
+                  id: `scene-${Date.now()}`,
+                  scene_number: 1,
+                  title: 'Scene 1',
+                  duration_seconds: 5,
+                  background_url: null,
+                  characters: [],
+                  ui_elements: [],
+                  dialogue_clips: []
+                };
+                setScenes([newScene]);
+                setCurrentSceneIndex(0);
+                markDirty();
+              }}>Create First Scene</button>
             </div>
           )}
         </main>
@@ -1212,6 +1311,7 @@ function SceneComposerFull() {
           onUploadUIElement={handleAddUIElement}
           onDeleteElement={handleDeleteElement}
           onResizeElement={handleResizeElement}
+          onRotateElement={handleRotateElement}
           onLayerChange={handleLayerChange}
           onAssignWardrobe={() => {
             if (!currentScene?.characters || currentScene.characters.length === 0) {
@@ -1233,6 +1333,12 @@ function SceneComposerFull() {
           selected={selected}
           showSafeZones={showSafeZones}
           onToggleSafeZones={() => setShowSafeZones(!showSafeZones)}
+          showSubtitles={showSubtitles}
+          onToggleSubtitles={() => setShowSubtitles(!showSubtitles)}
+          showCharacterLabels={showCharacterLabels}
+          onToggleCharacterLabels={() => setShowCharacterLabels(!showCharacterLabels)}
+          snapEnabled={snapEnabled}
+          onToggleSnap={() => setSnapEnabled(!snapEnabled)}
         />
       </div>
 

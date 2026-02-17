@@ -113,6 +113,10 @@ jobs:
         env:
           EC2_HOST: ${{ secrets.DEV_EC2_HOST }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          DEV_DB_HOST: ${{ secrets.DEV_DB_HOST }}
+          DEV_DB_USER: ${{ secrets.DEV_DB_USER }}
+          DEV_DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
+          DEV_DB_NAME: ${{ secrets.DEV_DB_NAME }}
         run: |
           if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
             echo "⏭️  EC2 deployment skipped - secrets not configured"
@@ -191,12 +195,12 @@ jobs:
             # Rebuild native modules (sharp, etc.) for the server architecture
             npm rebuild sharp 2>&1 | tail -3 || echo '⚠️ sharp rebuild skipped'
 
-            # Set DB env vars for RDS
-            export DB_HOST='episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com'
+            # Set DB env vars for RDS (from GitHub Secrets)
+            export DB_HOST='$DEV_DB_HOST'
             export DB_PORT='5432'
-            export DB_NAME='episode_metadata'
-            export DB_USER='postgres'
-            export DB_PASSWORD='Ayanna123!!'
+            export DB_NAME='$DEV_DB_NAME'
+            export DB_USER='$DEV_DB_USER'
+            export DB_PASSWORD='$DEV_DB_PASSWORD'
             export DB_SSL='true'
 
             # Bootstrap SequelizeMeta for databases created by sequelize.sync()

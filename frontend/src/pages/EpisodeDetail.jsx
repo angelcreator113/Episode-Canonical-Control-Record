@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
 import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
@@ -17,6 +18,7 @@ import './EpisodeDetail.css';
 const EpisodeDetail = () => {
   const { episodeId } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const { isAuthenticated, loading: authLoading } = useAuth();
   const [episode, setEpisode] = useState(null);
@@ -94,11 +96,17 @@ const EpisodeDetail = () => {
       const data = await episodeService.getEpisode(episodeId);
       setEpisode(data);
     } catch (err) {
-      setError(err.message || 'Failed to load episode');
+      const msg = err.message || '';
+      if (msg.includes('Not Found') || msg.includes('404')) {
+        toast.showError('Episode not found — it may have been deleted.');
+        navigate('/shows', { replace: true });
+        return;
+      }
+      setError(msg || 'Failed to load episode');
     } finally {
       setLoading(false);
     }
-  }, [episodeId]);
+  }, [episodeId, navigate, toast]);
 
   // Auth check
   useEffect(() => {
