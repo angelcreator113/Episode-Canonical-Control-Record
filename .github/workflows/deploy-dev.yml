@@ -85,6 +85,8 @@ jobs:
           cp -r frontend/dist deploy/
           cp package.json deploy/
           cp package-lock.json deploy/
+          cp ecosystem.config.js deploy/
+          cp .sequelizerc deploy/
           tar -czf episode-metadata-${{ github.sha }}.tar.gz deploy/
 
       - name: Upload artifact
@@ -154,11 +156,16 @@ jobs:
 
             echo '🔧 Deploying backend...'
 
+            # Ensure app directory exists (first-time deploy)
+            mkdir -p \$APP_DIR
+
             # Update backend source from the build artifact
             rm -rf \$APP_DIR/src
             cp -r /tmp/deploy/src \$APP_DIR/src
             cp /tmp/deploy/package.json \$APP_DIR/package.json
             cp /tmp/deploy/package-lock.json \$APP_DIR/package-lock.json
+            cp /tmp/deploy/ecosystem.config.js \$APP_DIR/ecosystem.config.js
+            cp /tmp/deploy/.sequelizerc \$APP_DIR/.sequelizerc
 
             # Install production dependencies
             cd \$APP_DIR
