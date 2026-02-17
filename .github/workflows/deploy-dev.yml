@@ -152,12 +152,19 @@ jobs:
           # ─── Deploy backend (code + deps + migrations + PM2 restart) ───
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
             set -e
+
+            # Load nvm so we get Node 20 + globally-installed pm2
+            export NVM_DIR=\$HOME/.nvm
+            [ -s \$NVM_DIR/nvm.sh ] && . \$NVM_DIR/nvm.sh
+            nvm use 20 2>/dev/null || nvm use default
+            echo \"Node: \$(node -v)  npm: \$(npm -v)\"
+
             APP_DIR=\$HOME/episode-metadata
 
             echo '🔧 Deploying backend...'
 
-            # Ensure app directory exists (first-time deploy)
-            mkdir -p \$APP_DIR
+            # Ensure app directory and logs dir exist (first-time deploy)
+            mkdir -p \$APP_DIR/logs
 
             # Update backend source from the build artifact
             rm -rf \$APP_DIR/src
@@ -174,18 +181,25 @@ jobs:
             # Rebuild native modules (sharp, etc.) for the server architecture
             npm rebuild sharp 2>&1 | tail -3 || echo '⚠️ sharp rebuild skipped'
 
-            # Run database migrations
+            # Run database migrations against RDS (env vars from ecosystem.config.js)
             echo '🗃️ Running migrations...'
+            export DB_HOST='episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com'
+            export DB_PORT='5432'
+            export DB_NAME='episode_metadata'
+            export DB_USER='postgres'
+            export DB_PASSWORD='Ayanna123!!'
+            export DB_SSL='true'
             npx sequelize-cli db:migrate --env development 2>&1 | tail -10
 
             # Restart the Node.js backend via PM2
             echo '🔄 Restarting PM2...'
-            pm2 restart ecosystem.config.js --env development 2>&1 | tail -5
+            pm2 restart ecosystem.config.js --env development 2>&1 | tail -5 || \
+              pm2 start ecosystem.config.js --env development 2>&1 | tail -5
             pm2 save
 
             # Health check — wait for backend to come up
             echo '🏥 Health check...'
-            sleep 3
+            sleep 5
             if curl -sf http://localhost:3002/api/v1/episodes > /dev/null 2>&1; then
               echo '✅ Backend is healthy'
             else
