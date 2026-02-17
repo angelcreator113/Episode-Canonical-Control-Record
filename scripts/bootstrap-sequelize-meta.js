@@ -65,6 +65,8 @@ const KNOWN_MIGRATIONS = [
   '20260215000000-add-scene-background-url.js',
   '20260216000001-asset-wardrobe-system.js',
   '20260217000001-add-script-content-to-episodes.js',
+  '20260217000001-fix-wardrobe-schema-gaps.js',
+  '20260217000002-fix-episode-number-nullable.js',
 ];
 
 async function bootstrap() {
