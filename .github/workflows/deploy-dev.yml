@@ -153,11 +153,15 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
             set -e
 
-            # Load nvm so we get Node 20 + globally-installed pm2
+            # Ensure Node 20 + pm2 are on PATH (nvm non-interactive workaround)
             export NVM_DIR=\$HOME/.nvm
-            [ -s \$NVM_DIR/nvm.sh ] && . \$NVM_DIR/nvm.sh
-            nvm use 20 2>/dev/null || nvm use default
-            echo \"Node: \$(node -v)  npm: \$(npm -v)\"
+            if [ -s \$NVM_DIR/nvm.sh ]; then
+              . \$NVM_DIR/nvm.sh
+              nvm use 20 2>/dev/null || true
+            fi
+            # Fallback: prepend known Node 20 bin path
+            export PATH=/home/ubuntu/.nvm/versions/node/v20.20.0/bin:\$PATH
+            echo \"Node: \$(node -v)  npm: \$(npm -v)  pm2: \$(pm2 -v 2>/dev/null || echo not-found)\"
 
             APP_DIR=\$HOME/episode-metadata
 
