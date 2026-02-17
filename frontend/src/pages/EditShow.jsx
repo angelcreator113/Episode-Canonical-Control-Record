@@ -1,6 +1,7 @@
 // frontend/src/pages/EditShow.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import showService from '../services/showService';
 import './CreateShow.css'; // Reuse same CSS
 
 function EditShow() {
@@ -40,36 +41,26 @@ function EditShow() {
     }
     
     try {
-      // TODO: Replace with actual API call
-      // const response = await showService.getShow(showId);
+      // Load actual show data from API
+      const showData = await showService.getShowById(showId);
       
-      // Mock data
-      const mockShow = {
-        id: showId,
-        name: 'Just a Woman in Her Prime',
-        tagline: 'Fashion, life, and everything in between',
-        description: 'Join me as I navigate life, style, and entrepreneurship.',
-        category: 'Lifestyle',
-        coverImageUrl: null,
-        logoUrl: null,
-        primaryColor: '#667eea',
-        status: 'active',
-        updatedAt: '2026-02-10T15:30:00Z'
-      };
+      if (!showData) {
+        throw new Error('Show not found');
+      }
       
-      setShow(mockShow);
+      setShow(showData);
       setFormData({
-        name: mockShow.name,
-        tagline: mockShow.tagline || '',
-        description: mockShow.description || '',
-        category: mockShow.category,
+        name: showData.name || '',
+        tagline: showData.tagline || '',
+        description: showData.description || '',
+        category: showData.category || '',
         coverImage: null,
         logo: null,
-        primaryColor: mockShow.primaryColor,
-        status: mockShow.status
+        primaryColor: showData.primaryColor || showData.color || '#667eea',
+        status: showData.status || 'active'
       });
-      setCoverPreview(mockShow.coverImageUrl);
-      setLogoPreview(mockShow.logoUrl);
+      setCoverPreview(showData.coverImageUrl);
+      setLogoPreview(showData.logoUrl);
     } catch (error) {
       console.error('Error loading show:', error);
       alert('Failed to load show');
@@ -160,15 +151,18 @@ function EditShow() {
     setSaving(true);
     
     try {
-      // TODO: Replace with actual API call
-      // const formDataToSend = new FormData();
-      // Object.keys(formData).forEach(key => {
-      //   if (formData[key]) formDataToSend.append(key, formData[key]);
-      // });
-      // const response = await showService.updateShow(showId, formDataToSend);
+      // Build update data (excluding file uploads for now)
+      const updateData = {
+        name: formData.name,
+        tagline: formData.tagline || null,
+        description: formData.description || null,
+        category: formData.category || null,
+        primaryColor: formData.primaryColor,
+        status: formData.status
+      };
       
-      // Mock success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Call the actual API
+      await showService.updateShow(showId, updateData);
       
       alert('Show updated successfully!');
       navigate(`/shows/${showId}`);
@@ -186,8 +180,7 @@ function EditShow() {
     }
     
     try {
-      // TODO: await showService.deleteShow(showId);
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await showService.deleteShow(showId);
       alert('Show deleted successfully');
       navigate('/shows');
     } catch (error) {

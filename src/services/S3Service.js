@@ -58,12 +58,13 @@ class S3Service {
    * @param {number} expiresIn - URL expiration time in seconds (default 3600)
    * @returns {Promise<string>} Pre-signed URL
    */
-  async getPreSignedUrl(bucket, key, expiresIn = 3600) {
+  async getPreSignedUrl(bucket, key, expiresIn = 3600, extraParams = {}) {
     try {
       const params = {
         Bucket: bucket,
         Key: key,
         Expires: expiresIn,
+        ...extraParams,
       };
 
       // AWS SDK v2: getSignedUrl is synchronous, wrap in Promise

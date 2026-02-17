@@ -382,6 +382,11 @@
     padding: 1rem;
   }
   
+  /* Hide title section on mobile - it's shown in the page header already */
+  .title-section {
+    display: none;
+  }
+  
   .overview-cover {
     padding: 1.5rem 1.25rem;
     border-radius: 12px;
@@ -389,10 +394,6 @@
 
   .cover-section {
     margin-bottom: 1.75rem;
-  }
-
-  .title-section {
-    padding-bottom: 1.25rem;
   }
   
   .episode-title {

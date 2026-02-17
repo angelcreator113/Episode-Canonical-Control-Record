@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import showService from '../../services/showService';
+import { episodeService } from '../../services/episodeService';
 import './Sidebar.css';
 
 /**
@@ -15,10 +16,39 @@ function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
   const [shows, setShows] = useState([]);
   const [showsExpanded, setShowsExpanded] = useState(true);
+  const [currentShowId, setCurrentShowId] = useState(null);
   
   useEffect(() => {
     loadShows();
   }, []);
+  
+  // Detect if we're on an episode page and get its parent show
+  useEffect(() => {
+    const checkEpisodeRoute = async () => {
+      const match = location.pathname.match(/\/episodes\/([^/]+)/);
+      if (match) {
+        const episodeId = match[1];
+        try {
+          const episode = await episodeService.getEpisode(episodeId);
+          if (episode?.show_id || episode?.showId) {
+            setCurrentShowId(episode.show_id || episode.showId);
+            setShowsExpanded(true); // Auto-expand shows when viewing an episode
+          }
+        } catch (err) {
+          console.error('Failed to get episode for sidebar:', err);
+        }
+      } else {
+        // Check if we're on a show page
+        const showMatch = location.pathname.match(/\/shows\/([^/]+)/);
+        if (showMatch) {
+          setCurrentShowId(showMatch[1]);
+        } else {
+          setCurrentShowId(null);
+        }
+      }
+    };
+    checkEpisodeRoute();
+  }, [location.pathname]);
   
   const loadShows = async () => {
     try {
@@ -89,8 +119,16 @@ function Sidebar({ isOpen, onClose }) {
           <button
             className={`nav-item ${isActive('/shows') ? 'active' : ''}`}
             onClick={() => {
-              setShowsExpanded(!showsExpanded);
-              if (!showsExpanded) navigate('/shows');
+              if (showsExpanded) {
+                // Already expanded - navigate to shows and close sidebar
+                navigate('/shows');
+                if (onClose) onClose();
+              } else {
+                // Expand the sub-items and navigate
+                setShowsExpanded(true);
+                navigate('/shows');
+                if (onClose) onClose();
+              }
             }}
           >
             <span className="nav-icon">🎬</span>
@@ -105,7 +143,7 @@ function Sidebar({ isOpen, onClose }) {
               {shows.map(show => (
                 <button
                   key={show.id}
-                  className={`nav-subitem ${isActive(`/shows/${show.id}`) ? 'active' : ''}`}
+                  className={`nav-subitem ${isActive(`/shows/${show.id}`) || currentShowId === show.id ? 'active' : ''}`}
                   onClick={() => handleNavigate(`/shows/${show.id}`)}
                 >
                   <span className="subitem-indicator">└─</span>

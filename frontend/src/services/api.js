@@ -12,6 +12,17 @@ const apiClient = axios.create({
 // ✅ REQUEST INTERCEPTOR - Add token to requests
 apiClient.interceptors.request.use(
   (config) => {
+    // Don't set Content-Type header for FormData - let browser handle it
+    if (config.data instanceof FormData) {
+      delete config.headers['Content-Type'];
+      console.log('📤 Uploading FormData:', {
+        method: config.method.toUpperCase(),
+        url: config.url,
+        formDataEntries: Array.from(config.data.entries()).map(([k, v]) => [k, v instanceof File ? `[File:${v.name}]` : v])
+      });
+      return config;
+    }
+
     // In development, skip token to avoid expiration errors
     if (import.meta.env.DEV) {
       console.log('API Request (dev):', config.method.toUpperCase(), config.url);
@@ -139,6 +150,71 @@ export const timelineDataAPI = {
 // Unified Save API (atomic save for Scene Composer & Timeline Editor)
 export const saveEpisodeData = (episodeId, data) => {
   return apiClient.post(`/api/v1/episodes/${episodeId}/save`, data);
+};
+
+// ==================== Asset System APIs ====================
+
+// Wardrobe Defaults API
+export const wardrobeDefaultsAPI = {
+  getAll: (episodeId) => apiClient.get(`/api/v1/episodes/${episodeId}/wardrobe-defaults`),
+  set: (episodeId, data) => apiClient.post(`/api/v1/episodes/${episodeId}/wardrobe-defaults`, data),
+  remove: (episodeId, characterName) =>
+    apiClient.delete(`/api/v1/episodes/${episodeId}/wardrobe-defaults/${encodeURIComponent(characterName)}`),
+};
+
+// Scene Assets API
+export const sceneAssetsAPI = {
+  getAll: (sceneId) => apiClient.get(`/api/v1/scenes/${sceneId}/assets`),
+  add: (sceneId, data) => apiClient.post(`/api/v1/scenes/${sceneId}/assets`, data),
+  remove: (sceneId, assetId, usageType) => {
+    const params = usageType ? `?usageType=${encodeURIComponent(usageType)}` : '';
+    return apiClient.delete(`/api/v1/scenes/${sceneId}/assets/${assetId}${params}`);
+  },
+};
+
+// Wardrobe API (character outfits live here, not in assets table)
+export const wardrobeAPI = {
+  getAll: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.character) params.append('character', filters.character);
+    if (filters.category) params.append('category', filters.category);
+    if (filters.favorite) params.append('favorite', filters.favorite);
+    if (filters.search) params.append('search', filters.search);
+    if (filters.page) params.append('page', filters.page);
+    if (filters.limit) params.append('limit', filters.limit || '200');
+    return apiClient.get(`/api/v1/wardrobe?${params}`);
+  },
+  getById: (id) => apiClient.get(`/api/v1/wardrobe/${id}`),
+};
+
+// Characters API
+export const characterAPI = {
+  getAll: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.show_id) params.append('show_id', filters.show_id);
+    if (filters.role) params.append('role', filters.role);
+    return apiClient.get(`/api/v1/characters?${params}`);
+  },
+  getById: (id) => apiClient.get(`/api/v1/characters/${id}`),
+};
+
+// Assets API (for filtered queries)
+export const assetsAPI = {
+  getAll: (filters = {}) => {
+    const params = new URLSearchParams();
+    if (filters.show_id) params.append('show_id', filters.show_id);
+    if (filters.category) params.append('category', filters.category);
+    if (filters.entity_type) params.append('entity_type', filters.entity_type);
+    if (filters.character_name) params.append('character_name', filters.character_name);
+    if (filters.location_name) params.append('location_name', filters.location_name);
+    if (filters.asset_type) params.append('asset_type', filters.asset_type);
+    if (filters.asset_scope) params.append('asset_scope', filters.asset_scope);
+    if (filters.include_global) params.append('include_global', 'true');
+    if (filters.page) params.append('page', filters.page);
+    if (filters.limit) params.append('limit', filters.limit);
+    return apiClient.get(`/api/v1/assets?${params}`);
+  },
+  getById: (id) => apiClient.get(`/api/v1/assets/${id}`),
 };
 
 export default apiClient;

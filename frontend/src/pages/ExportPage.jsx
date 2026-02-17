@@ -114,7 +114,7 @@ function ExportPage() {
       let fetchedScenes = [];
       try {
         const scRes = await api.get(`/api/v1/episodes/${episodeId}/scenes`);
-        fetchedScenes = scRes.data?.scenes || scRes.data || [];
+        fetchedScenes = scRes.data?.data || scRes.data?.scenes || (Array.isArray(scRes.data) ? scRes.data : []);
       } catch (e) {
         console.warn('Could not fetch scenes:', e.message);
       }

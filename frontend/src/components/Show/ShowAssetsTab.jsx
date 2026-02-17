@@ -1,7 +1,42 @@
-// frontend/src/components/Show/ShowAssetsTab.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AssetUploader from '../Assets/AssetUploader';
+
+function AssetEditModal({ asset, onSave, onClose }) {
+  const [name, setName] = useState(asset.name || '');
+  const [locationName, setLocationName] = useState(asset.location_name || asset.metadata?.location_name || '');
+  const [saving, setSaving] = useState(false);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await onSave({ ...asset, name, location_name: locationName });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="asset-edit-modal-overlay" onClick={onClose}>
+      <div className="asset-edit-modal" onClick={e => e.stopPropagation()}>
+        <h3>Edit Asset</h3>
+        <div className="edit-field">
+          <label>Name</label>
+          <input value={name} onChange={e => setName(e.target.value)} />
+        </div>
+        <div className="edit-field">
+          <label>Location Name (for backgrounds)</label>
+          <input value={locationName} onChange={e => setLocationName(e.target.value)} />
+        </div>
+        <div className="edit-actions">
+          <button onClick={onClose} disabled={saving}>Cancel</button>
+          <button onClick={handleSave} disabled={saving}>{saving ? 'Saving...' : 'Save'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+import { assetService } from '../../services/assetService';
 import './ShowAssetsTab.css';
 
 /**
@@ -39,6 +74,28 @@ function ShowAssetsTab({ show }) {
   const [selectedAsset, setSelectedAsset] = useState(null);
   const [loading, setLoading] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);
+  const [editingAsset, setEditingAsset] = useState(null);
+    // Open edit modal for asset
+    const handleEditAsset = (asset) => {
+      console.log('[ShowAssetsTab] handleEditAsset called for', asset);
+      setEditingAsset(asset);
+      setOpenDropdownId(null);
+    };
+
+    // Save asset edits
+    const handleSaveEdit = async (updatedAsset) => {
+      try {
+        await assetService.updateAsset(updatedAsset.id, {
+          name: updatedAsset.name,
+          location_name: updatedAsset.location_name,
+        });
+        // Update asset in local state
+        setAssets((prev) => prev.map(a => a.id === updatedAsset.id ? { ...a, ...updatedAsset } : a));
+        setEditingAsset(null);
+      } catch (err) {
+        alert('Failed to update asset');
+      }
+    };
   
   useEffect(() => {
     fetchShowAssets();
@@ -56,52 +113,66 @@ function ShowAssetsTab({ show }) {
   const fetchShowAssets = async () => {
     setLoading(true);
     try {
-      // TODO: Replace with actual API call
-      // const response = await assetService.getShowAssets(show.id);
-      // setAssets(response.data);
+      // Fetch assets that belong to this show
+      const response = await assetService.getAssets({
+        show_id: show.id,
+        asset_scope: 'SHOW'
+      });
       
-      // Mock data for now
-      setAssets([
-        {
-          id: '1',
-          name: 'Show Logo',
-          type: 'image',
-          category: 'logos',
-          url: '/placeholder-logo.png',
-          thumbnail_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzY2N2VlYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+8J+OrDwvdGV4dD48L3N2Zz4=',
-          size: 245678,
-          usage_count: 12,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: '2',
-          name: 'Intro Music',
-          type: 'audio',
-          category: 'intros',
-          url: '/intro-music.mp3',
-          thumbnail_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1OWUwYiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+8J+OtTwvdGV4dD48L3N2Zz4=',
-          size: 3456789,
-          usage_count: 15,
-          duration: 8,
-          created_at: new Date().toISOString()
-        },
-        {
-          id: '3',
-          name: 'Studio Background',
-          type: 'image',
-          category: 'backgrounds',
-          url: '/studio-bg.jpg',
-          thumbnail_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzEwYjk4MSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+8J+WvO+4jzwvdGV4dD48L3N2Zz4=',
-          size: 1234567,
-          usage_count: 8,
-          created_at: new Date().toISOString()
-        }
-      ]);
+      // Map API response to component format
+      // Backend returns { status, data: assets[], count }
+      const assetsArray = response.data?.data || response.data || [];
+      const showAssets = assetsArray.map(asset => ({
+        id: asset.id,
+        name: asset.name || asset.file_name || 'Untitled Asset',
+        type: asset.media_type || (asset.content_type?.startsWith('video') ? 'video' : 'image'),
+        category: mapAssetTypeToCategory(asset.asset_type || asset.asset_role),
+        url: asset.s3_url_raw || asset.url,
+        thumbnail_url: asset.s3_url_raw || asset.metadata?.thumbnail_url || generatePlaceholderThumbnail(asset.asset_type),
+        size: asset.file_size_bytes || 0,
+        usage_count: asset.usage_count || 0,
+        created_at: asset.created_at
+      }));
+      
+      setAssets(showAssets);
+      console.log(`✅ Loaded ${showAssets.length} show assets`);
     } catch (error) {
       console.error('Error fetching show assets:', error);
+      setAssets([]);
     } finally {
       setLoading(false);
     }
+  };
+  
+  // Map asset type/role to UI category
+  const mapAssetTypeToCategory = (assetType) => {
+    if (!assetType) return 'other';
+    const type = assetType.toUpperCase();
+    if (type.includes('LOGO') || type.includes('BRAND')) return 'logos';
+    if (type.includes('BACKGROUND') || type.includes('BG')) return 'backgrounds';
+    if (type.includes('INTRO')) return 'intros';
+    if (type.includes('OUTRO')) return 'outros';
+    if (type.includes('MUSIC') || type.includes('AUDIO')) return 'music';
+    if (type.includes('WARDROBE') || type.includes('OUTFIT')) return 'wardrobe';
+    if (type.includes('GRAPHIC') || type.includes('OVERLAY')) return 'graphics';
+    return 'other';
+  };
+  
+  // Generate placeholder thumbnail based on type
+  const generatePlaceholderThumbnail = (assetType) => {
+    const colors = {
+      logos: '#667eea',
+      backgrounds: '#10b981', 
+      intros: '#f59e0b',
+      outros: '#8b5cf6',
+      music: '#ec4899',
+      wardrobe: '#06b6d4',
+      graphics: '#f59e0b',
+      other: '#94a3b8'
+    };
+    const category = mapAssetTypeToCategory(assetType);
+    const color = colors[category] || '#94a3b8';
+    return `data:image/svg+xml;base64,${btoa(`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="${color}"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dy=".3em" fill="white">📁</text></svg>`)}`;
   };
   
   // Filter assets
@@ -117,21 +188,71 @@ function ShowAssetsTab({ show }) {
     return acc;
   }, {});
   
-  const handleUpload = async (files, category) => {
+  // Map UI category to asset type for API
+  const categoryToAssetType = (category) => {
+    const mapping = {
+      logos: 'BRAND_LOGO',
+      backgrounds: 'BACKGROUND_IMAGE',
+      intros: 'PROMO_VIDEO',
+      outros: 'PROMO_VIDEO',
+      music: 'PROMO_VIDEO',
+      wardrobe: 'PROMO_LALA',
+      graphics: 'EPISODE_FRAME',
+      other: 'EPISODE_FRAME'
+    };
+    return mapping[category] || 'EPISODE_FRAME';
+  };
+  
+  const handleUpload = async (files, category, destination, extraMeta = {}) => {
     try {
-      // TODO: Implement actual upload
-      console.log('Uploading to show library:', files, 'Category:', category);
+      console.log('Uploading to show library:', files, 'Category:', category, 'ExtraMeta:', extraMeta);
       
-      // Mock success
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // Upload each file
+      for (const file of files) {
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('assetType', categoryToAssetType(category));
+        formData.append('show_id', show.id); // Explicit show_id field
+        formData.append('metadata', JSON.stringify({
+          showId: show.id,
+          show_id: show.id,
+          asset_scope: 'SHOW',
+          purpose: category,
+          uploadedFrom: 'ShowAssetsTab'
+        }));
+
+        // Append wardrobe/background fields for the asset system
+        if (extraMeta.category) formData.append('category', extraMeta.category);
+        if (extraMeta.entity_type) formData.append('entity_type', extraMeta.entity_type);
+        if (extraMeta.character_name) formData.append('character_name', extraMeta.character_name);
+        if (extraMeta.outfit_name) formData.append('outfit_name', extraMeta.outfit_name);
+        if (extraMeta.outfit_era) formData.append('outfit_era', extraMeta.outfit_era);
+        if (extraMeta.transformation_stage) formData.append('transformation_stage', extraMeta.transformation_stage);
+        if (extraMeta.location_name) formData.append('location_name', extraMeta.location_name);
+        if (extraMeta.location_version) formData.append('location_version', extraMeta.location_version);
+        if (extraMeta.mood_tags) formData.append('mood_tags', extraMeta.mood_tags);
+        if (extraMeta.color_palette) formData.append('color_palette', extraMeta.color_palette);
+        
+        // Debug: Log what's in FormData
+        console.log('📦 FormData contents:', {
+          show_id: show.id,
+          entity_type: extraMeta.entity_type,
+          category: extraMeta.category,
+          entries: Array.from(formData.entries()).map(([k, v]) => [k, typeof v === 'object' ? '[Object/File]' : v])
+        });
+        
+        await assetService.uploadAsset(formData);
+        console.log(`✅ Uploaded: ${file.name}`);
+      }
       
       // Refresh assets
       await fetchShowAssets();
       
       setShowUploader(false);
+      alert(`Successfully uploaded ${files.length} asset(s) to show library!`);
     } catch (error) {
       console.error('Upload error:', error);
-      alert('Failed to upload assets');
+      alert('Failed to upload assets: ' + error.message);
     }
   };
   
@@ -141,10 +262,12 @@ function ShowAssetsTab({ show }) {
     }
     
     try {
-      // TODO: Implement actual delete
+      await assetService.deleteAsset(assetId);
       setAssets(assets.filter(a => a.id !== assetId));
+      console.log(`✅ Deleted asset: ${assetId}`);
     } catch (error) {
       console.error('Delete error:', error);
+      alert('Failed to delete asset');
     }
   };
   
@@ -319,7 +442,23 @@ function ShowAssetsTab({ show }) {
                     onClick={() => setSelectedAsset(asset)}
                   >
                     <div className="asset-thumbnail">
-                      <img src={asset.thumbnail_url} alt={asset.name} />
+                      {asset.type === 'video' ? (
+                        <video
+                          src={asset.url}
+                          poster={
+                            asset.thumbnail_url && !asset.thumbnail_url.startsWith('data:image/svg+xml')
+                              ? asset.thumbnail_url
+                              : 'data:image/svg+xml;base64,' + btoa('<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="#64748b"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dy=".3em" fill="white">🎬</text></svg>')
+                          }
+                          width="100%"
+                          height="100%"
+                          style={{ objectFit: 'cover' }}
+                          controls={false}
+                          muted
+                        />
+                      ) : (
+                        <img src={asset.url || asset.thumbnail_url} alt={asset.name} />
+                      )}
                     </div>
                     
                     <div className="asset-info">
@@ -360,6 +499,15 @@ function ShowAssetsTab({ show }) {
                           className="menu-item"
                           onClick={(e) => {
                             e.stopPropagation();
+                            handleEditAsset(asset);
+                          }}
+                        >
+                          ✏️ Edit Asset
+                        </button>
+                        <button
+                          className="menu-item"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             handleLinkToEpisode(asset);
                             setOpenDropdownId(null);
                           }}
@@ -386,6 +534,16 @@ function ShowAssetsTab({ show }) {
         </>
       )}
       
+      {/* Edit Asset Modal */}
+      {editingAsset && (
+        (() => { console.log('[ShowAssetsTab] Rendering AssetEditModal for', editingAsset); return null; })() ||
+        <AssetEditModal
+          asset={editingAsset}
+          onSave={handleSaveEdit}
+          onClose={() => setEditingAsset(null)}
+        />
+      )}
+
       {/* Upload Modal */}
       {showUploader && (
         <AssetUploader

@@ -21,9 +21,14 @@ module.exports = (sequelize) => {
         comment: 'Name/description of the clothing item',
       },
       character: {
-        type: DataTypes.STRING(50),
-        allowNull: false,
-        comment: 'Character who wears this: lala, justawoman, guest',
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Character name (denormalized for quick filtering)',
+      },
+      character_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'FK to characters.id',
       },
       clothing_category: {
         type: DataTypes.STRING(50),
@@ -35,11 +40,21 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
 
-      // Image storage
+      // S3 storage
+      s3_key: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: 'S3 object key',
+      },
       s3_url: {
         type: DataTypes.TEXT,
         allowNull: true,
         comment: 'Full S3 URL for wardrobe item image',
+      },
+      s3_key_processed: {
+        type: DataTypes.STRING(500),
+        allowNull: true,
+        comment: 'S3 key for background-removed image',
       },
       s3_url_processed: {
         type: DataTypes.TEXT,
@@ -52,17 +67,68 @@ module.exports = (sequelize) => {
         comment: 'Thumbnail image URL',
       },
 
+      // Shopping / sourcing
+      brand: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      price: {
+        type: DataTypes.DECIMAL(10, 2),
+        allowNull: true,
+      },
+      purchase_link: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      website: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+
       // Metadata
       color: {
         type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+      size: {
+        type: DataTypes.STRING(50),
         allowNull: true,
       },
       season: {
         type: DataTypes.STRING(50),
         allowNull: true,
       },
+      occasion: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+      outfit_set_id: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      outfit_set_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      scene_description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      outfit_notes: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+      times_worn: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+      },
+      last_worn_date: {
+        type: DataTypes.DATE,
+        allowNull: true,
+      },
       tags: {
-        type: DataTypes.ARRAY(DataTypes.TEXT),
+        type: DataTypes.JSONB,
         allowNull: true,
         defaultValue: [],
       },
@@ -74,6 +140,16 @@ module.exports = (sequelize) => {
         type: DataTypes.BOOLEAN,
         allowNull: false,
         defaultValue: false,
+      },
+      library_item_id: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'FK to wardrobe_library.id',
+      },
+      show_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Primary show ownership',
       },
 
       // Timestamps
@@ -99,7 +175,7 @@ module.exports = (sequelize) => {
       underscored: true,
       indexes: [
         {
-          fields: ['character'],
+          fields: ['character_id'],
         },
         {
           fields: ['clothing_category'],
@@ -157,6 +233,12 @@ module.exports = (sequelize) => {
     Wardrobe.hasMany(models.EpisodeWardrobe, {
       foreignKey: 'wardrobe_id',
       as: 'episodeLinks',
+    });
+
+    // Belongs to Character
+    Wardrobe.belongsTo(models.Character, {
+      foreignKey: 'character_id',
+      as: 'characterModel',
     });
   };
 

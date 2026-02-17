@@ -1,5 +1,6 @@
 // frontend/src/components/Assets/AssetLinkModal.jsx
 import React, { useState, useEffect } from 'react';
+import { assetService } from '../../services/assetService';
 import './AssetLinkModal.css';
 
 /**
@@ -12,6 +13,36 @@ import './AssetLinkModal.css';
  * - Search
  * - Preview
  */
+
+// Map asset type/role to UI category
+const mapAssetTypeToCategory = (assetType) => {
+  if (!assetType) return 'other';
+  const type = assetType.toUpperCase();
+  if (type.includes('LOGO') || type.includes('BRAND')) return 'logos';
+  if (type.includes('BACKGROUND') || type.includes('BG')) return 'backgrounds';
+  if (type.includes('INTRO')) return 'intros';
+  if (type.includes('OUTRO')) return 'outros';
+  if (type.includes('MUSIC') || type.includes('AUDIO')) return 'music';
+  if (type.includes('WARDROBE') || type.includes('OUTFIT')) return 'wardrobe';
+  if (type.includes('GRAPHIC') || type.includes('OVERLAY')) return 'graphics';
+  return 'other';
+};
+
+// Generate placeholder thumbnail for assets without one
+const generatePlaceholderThumbnail = (category) => {
+  const icons = {
+    logos: '🎬',
+    backgrounds: '🖼️',
+    intros: '🎵',
+    outros: '🎬',
+    music: '🎵',
+    wardrobe: '👗',
+    graphics: '✨',
+    other: '📎'
+  };
+  const icon = icons[category] || '📎';
+  return `data:image/svg+xml;base64,${btoa(`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="#64748b"/><text x="50%" y="50%" font-size="80" text-anchor="middle" dy=".3em">${icon}</text></svg>`)}`;
+};
 
 function AssetLinkModal({ show, episode, onLink, onClose }) {
   const [showAssets, setShowAssets] = useState([]);
@@ -29,46 +60,32 @@ function AssetLinkModal({ show, episode, onLink, onClose }) {
   const fetchShowAssets = async () => {
     setLoading(true);
     try {
-      // TODO: Replace with API call
-      // const response = await assetService.getShowAssets(show.id);
+      // Fetch real show assets from API
+      const response = await assetService.getAssets({
+        show_id: show.id,
+        asset_scope: 'SHOW'
+      });
       
-      // Mock data
-      setShowAssets([
-        {
-          id: 'show-1',
-          name: 'Show Logo',
-          type: 'image',
-          category: 'logos',
-          thumbnail_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzY2N2VlYSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+8J+OrDwvdGV4dD48L3N2Zz4=',
-          usage_count: 12
-        },
-        {
-          id: 'show-2',
-          name: 'Intro Music',
-          type: 'audio',
-          category: 'intros',
-          thumbnail_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iI2Y1OWUwYiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+8J+OtTwvdGV4dD48L3N2Zz4=',
-          usage_count: 15
-        },
-        {
-          id: 'show-3',
-          name: 'Studio Background',
-          type: 'image',
-          category: 'backgrounds',
-          thumbnail_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzEwYjk4MSIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+8J+WvO+4jzwvdGV4dD48L3N2Zz4=',
-          usage_count: 8
-        },
-        {
-          id: 'show-4',
-          name: 'Outro Music',
-          type: 'audio',
-          category: 'outros',
-          thumbnail_url: 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMjAwIiBoZWlnaHQ9IjIwMCIgZmlsbD0iIzhiNWNmNiIvPjx0ZXh0IHg9IjUwJSIgeT0iNTAlIiBmb250LXNpemU9IjgwIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+8J+OrDwvdGV4dD48L3N2Zz4=',
-          usage_count: 10
-        }
-      ]);
+      // Map API response to component format
+      const assetsArray = response.data?.data || response.data || [];
+      const mappedAssets = assetsArray.map(asset => {
+        const category = mapAssetTypeToCategory(asset.asset_type || asset.asset_role);
+        return {
+          id: asset.id,
+          name: asset.name || asset.file_name || 'Untitled Asset',
+          type: asset.media_type || (asset.content_type?.startsWith('video') ? 'video' : 'image'),
+          category: category,
+          url: asset.s3_url_raw || asset.url,
+          thumbnail_url: asset.metadata?.thumbnail_url || asset.s3_url_raw || generatePlaceholderThumbnail(category),
+          usage_count: asset.usage_count || 0
+        };
+      });
+      
+      setShowAssets(mappedAssets);
+      console.log(`✅ AssetLinkModal: Loaded ${mappedAssets.length} show assets for show ${show.id}`);
     } catch (error) {
       console.error('Error fetching show assets:', error);
+      setShowAssets([]);
     } finally {
       setLoading(false);
     }

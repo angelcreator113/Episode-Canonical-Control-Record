@@ -245,6 +245,22 @@ module.exports = (sequelize) => {
           this.setDataValue('locked_by', value);
         },
       },
+      background_url: {
+        type: DataTypes.STRING(1000),
+        allowNull: true,
+        field: 'background_url',
+        comment: 'URL of the background image/video for scene composition',
+      },
+      // CamelCase alias for background_url
+      backgroundUrl: {
+        type: DataTypes.VIRTUAL,
+        get() {
+          return this.getDataValue('background_url');
+        },
+        set(value) {
+          this.setDataValue('background_url', value);
+        },
+      },
       characters: {
         type: DataTypes.JSONB,
         allowNull: false,

@@ -141,6 +141,30 @@ async function startServer() {
     try {
       await sequelize.authenticate();
       console.log('✓ Database connection established');
+
+      // Auto-migrate: fix shows unique constraints for soft-delete compatibility
+      try {
+        // Check if old absolute unique constraints exist on shows table
+        const [constraints] = await sequelize.query(`
+          SELECT conname FROM pg_constraint
+          WHERE conrelid = 'shows'::regclass
+          AND contype = 'u'
+          AND conname IN ('shows_name_key', 'shows_slug_key')
+        `);
+        if (constraints.length > 0) {
+          console.log('🔧 Migrating shows unique constraints for soft-delete compatibility...');
+          for (const c of constraints) {
+            await sequelize.query(`ALTER TABLE shows DROP CONSTRAINT IF EXISTS "${c.conname}" CASCADE`);
+          }
+          await sequelize.query('DROP INDEX IF EXISTS shows_name_unique_active CASCADE');
+          await sequelize.query('DROP INDEX IF EXISTS shows_slug_unique_active CASCADE');
+          await sequelize.query('CREATE UNIQUE INDEX shows_name_unique_active ON shows(name) WHERE deleted_at IS NULL');
+          await sequelize.query('CREATE UNIQUE INDEX shows_slug_unique_active ON shows(slug) WHERE deleted_at IS NULL');
+          console.log('✓ Shows unique constraints migrated');
+        }
+      } catch (migErr) {
+        console.warn('⚠️  Auto-migration warning:', migErr.message);
+      }
     } catch (dbError) {
       console.warn(
         '⚠️  Database not available, starting in degraded mode:',

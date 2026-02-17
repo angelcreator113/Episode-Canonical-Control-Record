@@ -479,3 +479,65 @@
     order: -1;
   }
 }
+
+/* ==================== Metadata Fields (Wardrobe/Background) ==================== */
+
+.metadata-fields {
+  padding: 0 2rem 1rem;
+  border-top: 1px solid #e2e8f0;
+  margin-top: 0.25rem;
+  padding-top: 1rem;
+}
+
+.metadata-fields .section-label {
+  margin-bottom: 0.75rem;
+}
+
+.meta-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.meta-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.meta-field label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.meta-field input,
+.meta-field select {
+  padding: 0.5rem 0.75rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  color: #1e293b;
+  background: #f8fafc;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.meta-field input:focus,
+.meta-field select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+  background: white;
+}
+
+.meta-field input::placeholder {
+  color: #94a3b8;
+}
+
+@media (max-width: 600px) {
+  .meta-grid {
+    grid-template-columns: 1fr;
+  }
+}

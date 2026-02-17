@@ -200,16 +200,49 @@ router.post('/', async (req, res) => {
     const Show = getShow();
     const { name, description, icon, color, status, coverImageUrl, genre, metadata, tagline } = req.body;
 
+    if (!name || !name.trim()) {
+      return res.status(400).json({
+        error: 'Show name is required',
+        message: 'Please provide a name for the show.',
+      });
+    }
+
     const slug = name
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '');
 
+    // Check for existing active show with same name or slug
+    const { Op } = require('sequelize');
+    const existingActive = await Show.findOne({
+      where: {
+        [Op.or]: [{ name: name.trim() }, { slug }],
+      },
+    });
+    if (existingActive) {
+      return res.status(409).json({
+        error: 'A show with this name already exists',
+        message: `A show named "${existingActive.name}" already exists. Please choose a different name.`,
+        existingId: existingActive.id,
+      });
+    }
+
+    // If a soft-deleted show with the same name/slug exists, hard-delete it first
+    const existingSoftDeleted = await Show.findOne({
+      where: {
+        [Op.or]: [{ name: name.trim() }, { slug }],
+      },
+      paranoid: false, // include soft-deleted
+    });
+    if (existingSoftDeleted && existingSoftDeleted.deletedAt) {
+      await existingSoftDeleted.destroy({ force: true }); // hard delete
+    }
+
     // Merge tagline into metadata if sent as top-level field
     const mergedMetadata = { ...(metadata || {}), ...(tagline ? { tagline } : {}) };
 
     const show = await Show.create({
-      name,
+      name: name.trim(),
       slug,
       description,
       icon,
@@ -226,6 +259,15 @@ router.post('/', async (req, res) => {
     });
   } catch (error) {
     console.error('Failed to create show:', error);
+
+    // Handle unique constraint violations
+    if (error.name === 'SequelizeUniqueConstraintError') {
+      return res.status(409).json({
+        error: 'A show with this name already exists',
+        message: 'Please choose a different name for your show.',
+      });
+    }
+
     res.status(500).json({
       error: 'Failed to create show',
       message: error.message,
@@ -448,7 +490,7 @@ router.get('/:id/wardrobe', async (req, res) => {
               w.color, w.season, w.tags, w.is_favorite,
               w.description, w.created_at, w.updated_at
        FROM wardrobe w
-       WHERE w.show_id = :show_id
+       WHERE (w.show_id = :show_id OR w.show_id IS NULL)
          AND w.deleted_at IS NULL
          ${filters.join(' ')}
        ORDER BY w.character, w.clothing_category, w.name`,

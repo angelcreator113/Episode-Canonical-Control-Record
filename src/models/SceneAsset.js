@@ -77,6 +77,39 @@ module.exports = (sequelize) => {
         defaultValue: {},
         comment: 'Additional metadata about this asset usage',
       },
+      // ── Extended placement columns ──
+      asset_role: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'Role in scene: background, character, ui_element, prop',
+      },
+      character_name: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Character name if role = character',
+      },
+      position_x: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'X position on canvas',
+      },
+      position_y: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Y position on canvas',
+      },
+      scale: {
+        type: DataTypes.DECIMAL(5, 2),
+        allowNull: true,
+        defaultValue: 1.0,
+        comment: 'Scale factor for asset',
+      },
+      z_index: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+        comment: 'Z-index stacking order',
+      },
       created_at: {
         type: DataTypes.DATE,
         allowNull: false,

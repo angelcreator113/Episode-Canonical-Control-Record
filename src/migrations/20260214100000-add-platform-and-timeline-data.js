@@ -46,15 +46,11 @@ module.exports = {
         }, { transaction });
       }
 
-      // Add index on platform
-      try {
-        await queryInterface.addIndex('episodes', ['platform'], {
-          name: 'idx_episodes_platform',
-          transaction
-        });
-      } catch (e) {
-        console.log('Index idx_episodes_platform may already exist:', e.message);
-      }
+      // Add index on platform (use raw SQL with IF NOT EXISTS)
+      await queryInterface.sequelize.query(
+        'CREATE INDEX IF NOT EXISTS idx_episodes_platform ON episodes(platform)',
+        { transaction }
+      );
 
       // ── 2. Add ui_elements and dialogue_clips to scenes ──
       const [sceneCols] = await queryInterface.sequelize.query(

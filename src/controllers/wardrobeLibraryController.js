@@ -12,6 +12,29 @@ const {
 } = models;
 const { NotFoundError, ValidationError } = require('../middleware/errorHandler');
 const { Op } = require('sequelize');
+const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
+const { v4: uuidv4 } = require('uuid');
+const sharp = require('sharp');
+
+// S3 configuration
+const BUCKET_NAME = process.env.AWS_BUCKET_NAME || process.env.S3_BUCKET_NAME || 'episode-assets-dev';
+
+let s3Client = null;
+const getS3Client = () => {
+  if (!s3Client) {
+    const config = {
+      region: process.env.AWS_REGION || 'us-east-1',
+    };
+    if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+      config.credentials = {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+      };
+    }
+    s3Client = new S3Client(config);
+  }
+  return s3Client;
+};
 
 /**
  * Wardrobe Library Controller
@@ -40,6 +63,8 @@ module.exports = {
         defaultSeason,
       } = req.body;
 
+      console.log('📥 Wardrobe upload request:', { name, type, itemType, hasFile: !!req.file });
+
       // Validate required fields
       if (!name || !type) {
         throw new ValidationError('Name and type are required');
@@ -49,10 +74,62 @@ module.exports = {
         throw new ValidationError('Type must be either "item" or "set"');
       }
 
-      // For now, we'll use a placeholder image URL until S3 upload is implemented
-      const imageUrl = req.body.imageUrl || req.file?.location || 'https://via.placeholder.com/300';
-      const thumbnailUrl = req.body.thumbnailUrl || imageUrl;
-      const s3Key = req.file?.key || req.body.s3Key || null;
+      let imageUrl = req.body.imageUrl || 'https://via.placeholder.com/300';
+      let thumbnailUrl = req.body.thumbnailUrl || imageUrl;
+      let s3Key = req.body.s3Key || null;
+
+      // Handle file upload to S3
+      if (req.file) {
+        try {
+          const assetId = uuidv4();
+          const timestamp = Date.now();
+          const extension = req.file.mimetype === 'image/png' ? '.png' : 
+                           req.file.mimetype === 'image/webp' ? '.webp' : '.jpg';
+          
+          s3Key = `wardrobe/${timestamp}-${assetId}${extension}`;
+          
+          // Upload to S3
+          const s3 = getS3Client();
+          await s3.send(new PutObjectCommand({
+            Bucket: BUCKET_NAME,
+            Key: s3Key,
+            Body: req.file.buffer,
+            ContentType: req.file.mimetype,
+          }));
+          
+          imageUrl = `https://${BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
+          console.log(`✅ Uploaded wardrobe image to S3: ${imageUrl}`);
+          
+          // Generate thumbnail
+          try {
+            const thumbBuffer = await sharp(req.file.buffer)
+              .resize(300, 300, { fit: 'inside', withoutEnlargement: true })
+              .jpeg({ quality: 80 })
+              .toBuffer();
+            
+            const thumbKey = `wardrobe/thumbnails/${timestamp}-${assetId}-thumb.jpg`;
+            await s3.send(new PutObjectCommand({
+              Bucket: BUCKET_NAME,
+              Key: thumbKey,
+              Body: thumbBuffer,
+              ContentType: 'image/jpeg',
+            }));
+            
+            thumbnailUrl = `https://${BUCKET_NAME}.s3.amazonaws.com/${thumbKey}`;
+            console.log(`✅ Generated thumbnail: ${thumbnailUrl}`);
+          } catch (thumbError) {
+            console.warn('⚠️ Thumbnail generation failed:', thumbError.message);
+            thumbnailUrl = imageUrl;
+          }
+        } catch (s3Error) {
+          console.error('❌ S3 upload failed:', s3Error.message);
+          // Fall back to data URL for development
+          const base64 = req.file.buffer.toString('base64');
+          imageUrl = `data:${req.file.mimetype};base64,${base64}`;
+          thumbnailUrl = imageUrl;
+          console.log('⚠️ Using data URL fallback for image');
+        }
+      }
 
       // Parse tags if string
       let parsedTags = tags;
@@ -65,6 +142,7 @@ module.exports = {
       }
 
       // Create library item
+      const now = new Date();
       const libraryItem = await WardrobeLibrary.create({
         name,
         description,
@@ -81,21 +159,30 @@ module.exports = {
         website,
         price,
         vendor,
+        createdAt: now,
+        updatedAt: now,
         showId,
         createdBy: req.user?.id || 'system',
         updatedBy: req.user?.id || 'system',
       });
 
-      // Create S3 reference if s3Key exists
+      // Create S3 reference if s3Key exists (non-critical, wrap in try-catch)
       if (s3Key) {
-        await WardrobeLibraryReferences.create({
-          libraryItemId: libraryItem.id,
-          s3Key,
-          referenceCount: 1,
-          fileSize: req.file?.size || null,
-          contentType: req.file?.mimetype || 'image/jpeg',
-        });
+        try {
+          await WardrobeLibraryReferences.create({
+            libraryItemId: libraryItem.id,
+            s3Key,
+            referenceCount: 1,
+            fileSize: req.file?.size || null,
+            contentType: req.file?.mimetype || 'image/jpeg',
+          });
+        } catch (refError) {
+          console.warn('⚠️ S3 reference tracking failed (non-critical):', refError.message);
+          // Don't throw — upload was successful
+        }
       }
+
+      console.log(`✅ Created wardrobe library item: ${libraryItem.id}`);
 
       res.status(201).json({
         success: true,

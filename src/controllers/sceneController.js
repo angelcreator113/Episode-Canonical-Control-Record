@@ -1,5 +1,5 @@
 const { models, sequelize } = require('../models');
-const { Scene, Episode, Thumbnail, Asset, SceneAsset } = models;
+const { Scene, Episode, Thumbnail, Asset, SceneAsset, AssetUsageLog } = models;
 const { QueryTypes } = require('sequelize');
 
 /**
@@ -1047,6 +1047,21 @@ exports.addSceneAsset = async (req, res) => {
           position: position || sceneAsset.position,
           metadata: metadata || sceneAsset.metadata,
         });
+      }
+
+      // Track usage: increment usage_count and log
+      try {
+        await Asset.increment('usage_count', { where: { id } });
+        if (AssetUsageLog) {
+          await AssetUsageLog.create({
+            asset_id: id,
+            episode_id: scene.episode_id,
+            scene_id: scene.id,
+            context: usageType || 'overlay',
+          });
+        }
+      } catch (logErr) {
+        console.warn('⚠️ Usage logging failed (non-blocking):', logErr.message);
       }
 
       sceneAssets.push(sceneAsset);

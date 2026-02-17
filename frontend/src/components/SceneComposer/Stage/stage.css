@@ -42,7 +42,7 @@
   border: 1px solid rgba(255,255,255,0.1);
   box-shadow: 0 2px 8px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.05);
   overflow: hidden;
-  max-width: 100%;
+  max-width: min(100%, 960px);
   max-height: 100%;
 }
 
@@ -172,12 +172,16 @@
 /* Character Layer */
 .stage-character {
   z-index: 5;
-  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.stage-character:not(.dragging) {
+  transition: filter 0.2s;
 }
 
 .stage-character img {
-  max-width: 200px;
-  max-height: 300px;
   object-fit: contain;
   filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
 }
@@ -226,7 +230,10 @@
   font-weight: 600;
   border: 1px solid rgba(255, 255, 255, 0.2);
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  transition: all 0.2s;
+}
+
+.stage-ui-element:not(.dragging) {
+  transition: filter 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
 .stage-ui-element.editable {

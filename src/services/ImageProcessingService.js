@@ -7,8 +7,9 @@
 const sharp = require('sharp');
 const { S3Client, PutObjectCommand } = require('@aws-sdk/client-s3');
 const path = require('path');
-const { models } = require('../models');
-const { Asset } = models;
+const db = require('../models');
+const { Asset } = db.models;
+const { sequelize, Sequelize } = db;
 
 // Configure S3 client
 const s3Client = new S3Client({
@@ -27,9 +28,9 @@ const BUCKET_NAME = process.env.S3_BUCKET_NAME || 'episode-metadata-storage-dev'
  * Thumbnail sizes to generate
  */
 const THUMBNAIL_SIZES = {
-  small: { width: 150, height: 150, fit: 'cover' },
-  medium: { width: 300, height: 300, fit: 'cover' },
-  large: { width: 800, height: null, fit: 'inside' }, // Maintain aspect ratio
+  small: { width: 200, height: 200, fit: 'cover' },
+  medium: { width: 400, height: 400, fit: 'cover' },
+  large: { width: 1200, height: null, fit: 'inside' }, // Maintain aspect ratio
 };
 
 /**
@@ -57,20 +58,20 @@ async function processImage(assetId, imageBuffer, originalKey) {
     for (const [size, config] of Object.entries(THUMBNAIL_SIZES)) {
       const { width, height, fit } = config;
 
-      // Generate JPEG thumbnail
+      // Generate JPEG thumbnail with maximum quality
       const jpegBuffer = await sharp(imageBuffer)
         .resize(width, height, { fit, withoutEnlargement: true })
-        .jpeg({ quality: 85, progressive: true })
+        .jpeg({ quality: 95, progressive: true, mozjpeg: true })
         .toBuffer();
 
       const jpegKey = `thumbnails/${size}/${assetId}.jpg`;
       await uploadToS3(jpegKey, jpegBuffer, 'image/jpeg');
       results.thumbnails[size] = getS3Url(jpegKey);
 
-      // Generate WebP version (better compression)
+      // Generate WebP version with maximum quality
       const webpBuffer = await sharp(imageBuffer)
         .resize(width, height, { fit, withoutEnlargement: true })
-        .webp({ quality: 80, effort: 4 })
+        .webp({ quality: 92, effort: 6, alphaQuality: 100 })
         .toBuffer();
 
       const webpKey = `thumbnails/${size}/${assetId}.webp`;
@@ -80,10 +81,10 @@ async function processImage(assetId, imageBuffer, originalKey) {
       console.log(`  ✅ Generated ${size} (${width}${height ? 'x' + height : 'w'}): JPEG + WebP`);
     }
 
-    // Generate optimized processed version (800px max width)
+    // Generate optimized processed version (1200px max width for better quality)
     const processedBuffer = await sharp(imageBuffer)
-      .resize(800, null, { fit: 'inside', withoutEnlargement: true })
-      .jpeg({ quality: 85, progressive: true })
+      .resize(1200, null, { fit: 'inside', withoutEnlargement: true })
+      .jpeg({ quality: 95, progressive: true, mozjpeg: true })
       .toBuffer();
 
     const processedKey = `processed/${path.dirname(originalKey)}/${assetId}.jpg`;
@@ -96,7 +97,7 @@ async function processImage(assetId, imageBuffer, originalKey) {
     await Asset.update(
       {
         s3_url_processed: results.processedUrl,
-        metadata: models.sequelize.literal(`
+        metadata: sequelize.literal(`
           metadata || jsonb_build_object(
             'thumbnails', '${JSON.stringify(results.thumbnails)}'::jsonb,
             'webp', '${JSON.stringify(results.webp)}'::jsonb,
@@ -117,7 +118,7 @@ async function processImage(assetId, imageBuffer, originalKey) {
     // Update asset with error status
     await Asset.update(
       {
-        metadata: models.sequelize.literal(`
+        metadata: sequelize.literal(`
           metadata || jsonb_build_object(
             'processing_status', 'failed',
             'processing_error', '${error.message.replace(/'/g, "''")}',

@@ -102,7 +102,7 @@ function CreateShow() {
     setSaving(true);
     
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
       
       // First create the show with JSON data
       const showPayload = {
@@ -127,11 +127,18 @@ function CreateShow() {
       
       if (!response.ok) {
         const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || 'Failed to create show');
+        throw new Error(errData.message || errData.error || 'Failed to create show');
       }
       
       const result = await response.json();
       const newShow = result.data || result;
+      
+      console.log('[CreateShow] API response:', JSON.stringify(result));
+      console.log('[CreateShow] New show ID:', newShow.id, 'Name:', newShow.name);
+      
+      if (!newShow.id) {
+        throw new Error('Show created but no ID returned from API');
+      }
       
       // Upload cover image if provided
       if (formData.coverImage && newShow.id) {
@@ -144,11 +151,12 @@ function CreateShow() {
         });
       }
       
-      alert('Show created successfully!');
+      console.log('[CreateShow] Navigating to /shows/' + newShow.id);
       navigate(`/shows/${newShow.id}`);
     } catch (error) {
       console.error('Error creating show:', error);
-      alert('Failed to create show. Please try again.');
+      const msg = error.message || 'Failed to create show. Please try again.';
+      alert(msg);
     } finally {
       setSaving(false);
     }

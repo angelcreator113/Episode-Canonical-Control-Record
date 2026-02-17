@@ -170,7 +170,7 @@
 /* Mobile: 481px - 768px */
 @media (min-width: 481px) and (max-width: 768px) {
   .header-title {
-    font-size: 0.85rem;
+    font-size: 1.1rem;
   }
   
   .header-content {

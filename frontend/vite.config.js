@@ -22,6 +22,12 @@ export default defineConfig(({ mode }) => {
           target: 'http://127.0.0.1:3002',
           changeOrigin: true,
           secure: false
+        },
+        '/s3-proxy': {
+          target: 'https://episode-metadata-storage-dev.s3.amazonaws.com',
+          changeOrigin: true,
+          secure: true,
+          rewrite: (path) => path.replace(/^\/s3-proxy/, '')
         }
       }
     },

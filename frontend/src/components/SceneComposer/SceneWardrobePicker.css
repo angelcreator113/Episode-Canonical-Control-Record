@@ -32,8 +32,8 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 20px 24px;
-  border-bottom: 1px solid #e2e8f0;
+  padding: 20px 24px 12px;
+  border-bottom: none;
 }
 
 .swp-header h2 {
@@ -59,6 +59,33 @@
 }
 
 .swp-close:hover { background: #f1f5f9; }
+
+/* Tabs */
+.swp-tabs {
+  display: flex;
+  gap: 0;
+  padding: 0 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.swp-tab {
+  padding: 10px 20px;
+  background: transparent;
+  border: none;
+  border-bottom: 3px solid transparent;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.swp-tab:hover { color: #667eea; }
+
+.swp-tab.active {
+  color: #667eea;
+  border-bottom-color: #667eea;
+}
 
 /* Body */
 .swp-body {
@@ -119,6 +146,92 @@
 
 .swp-char-icon { font-size: 16px; }
 
+/* ── Upload Area ── */
+.swp-upload-area {
+  margin-top: 8px;
+}
+
+.swp-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 40px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: #f8fafc;
+}
+
+.swp-dropzone:hover {
+  border-color: #667eea;
+  background: #f0f4ff;
+}
+
+.swp-dropzone.dragover {
+  border-color: #667eea;
+  background: #eef2ff;
+  transform: scale(1.01);
+}
+
+.swp-dropzone-icon {
+  font-size: 40px;
+  margin-bottom: 8px;
+}
+
+.swp-dropzone-text {
+  font-size: 14px;
+  font-weight: 600;
+  color: #475569;
+  margin-bottom: 4px;
+}
+
+.swp-dropzone-hint {
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.swp-upload-preview {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  background: #f8fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px;
+  min-height: 200px;
+}
+
+.swp-upload-preview img {
+  max-width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: 8px;
+}
+
+.swp-upload-clear {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #ff4b4b;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  font-size: 16px;
+  font-weight: bold;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  transition: transform 0.15s;
+}
+
+.swp-upload-clear:hover {
+  transform: scale(1.1);
+}
+
 /* Filters */
 .swp-filters {
   display: flex;
@@ -150,7 +263,7 @@
 /* Grid */
 .swp-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
   gap: 12px;
 }
 
@@ -177,7 +290,7 @@
 
 .swp-card-img {
   width: 100%;
-  height: 130px;
+  height: 120px;
   background: #f8fafc;
   overflow: hidden;
 }
@@ -196,24 +309,6 @@
   justify-content: center;
   font-size: 32px;
   color: #cbd5e1;
-}
-
-.swp-card-info {
-  padding: 8px 10px;
-}
-
-.swp-card-name {
-  font-size: 12px;
-  font-weight: 600;
-  color: #1a1a2e;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.swp-card-char {
-  font-size: 11px;
-  color: #667eea;
 }
 
 .swp-card-check {

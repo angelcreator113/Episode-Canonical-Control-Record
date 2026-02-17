@@ -322,27 +322,21 @@ const ShowManagement = () => {
                 <div className="show-content">
                   {/* Top Section */}
                   <div className="show-header-section">
-                    <div className="show-info">
-                      <h3 className="show-name">{show.name}</h3>
-                      
+                    <h3 className="show-name">{show.name}</h3>
+
+                    <div className="show-meta">
                       <span className={`status-badge status-${show.status || 'active'}`}>
                         {show.status === 'coming_soon' ? 'Coming Soon' : 
                          show.status === 'active' ? 'Active' : 
                          show.status || 'Active'}
                       </span>
-                    </div>
-
-                    {show.description && (
-                      <p className="show-description">{show.description}</p>
-                    )}
-
-                    <div className="show-meta">
-                      <span className="meta-item">
-                        {show.episode_count || 0} Episodes
+                      <span className="meta-separator" style={{ color: '#64748b' }}>·</span>
+                      <span className="meta-item" style={{ color: '#1e293b' }}>
+                        {show.episodeCount || show.episode_count || 0} Episodes
                       </span>
-                      <span className="meta-separator">·</span>
-                      <span className="meta-item">
-                        Last updated 3d ago
+                      <span className="meta-separator" style={{ color: '#64748b' }}>·</span>
+                      <span className="meta-item" style={{ color: '#1e293b' }}>
+                        {show.updatedAt ? `Updated ${new Date(show.updatedAt).toLocaleDateString()}` : ''}
                       </span>
                     </div>
                   </div>
@@ -350,7 +344,10 @@ const ShowManagement = () => {
                   {/* Actions */}
                   <div className="show-actions">
                     <button
-                      onClick={() => navigate(`/shows/${show.id}`)}
+                      onClick={() => {
+                        console.log('[Shows] Opening show:', show.name, 'ID:', show.id);
+                        navigate(`/shows/${show.id}`);
+                      }}
                       className="action-btn action-primary"
                     >
                       Open

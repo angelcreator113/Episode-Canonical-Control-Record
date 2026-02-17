@@ -28,16 +28,19 @@ export const wardrobeLibraryService = {
    */
   async uploadToLibrary(formData) {
     try {
+      // Add Authorization header if token exists, do NOT set Content-Type for FormData
+      const headers = {};
+      const token = localStorage.getItem('authToken');
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       const response = await fetch(`${API_BASE}/wardrobe-library`, {
         method: 'POST',
-        body: formData, // Don't set Content-Type, browser will set it with boundary
+        body: formData,
+        headers,
       });
-      
       if (!response.ok) {
         const error = await response.json();
         throw new Error(error.message || 'Failed to upload item');
       }
-      
       const result = await response.json();
       return result.data;
     } catch (error) {

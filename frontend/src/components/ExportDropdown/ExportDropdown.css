@@ -85,6 +85,14 @@
   flex-shrink: 0;
 }
 
+.export-dropdown-item .item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
 .export-dropdown-item .item-label {
   flex: 1;
 }
@@ -97,12 +105,6 @@
 
 .export-dropdown-item.primary:hover {
   background: rgba(16, 185, 129, 0.18);
-}
-
-.export-dropdown-item.primary .item-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
 }
 
 .export-dropdown-item.primary .item-label {

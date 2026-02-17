@@ -148,6 +148,83 @@ module.exports = (sequelize) => {
         defaultValue: {},
         comment: 'Processing parameters and results (provider, settings, timestamps)',
       },
+      // ── Wardrobe & Category System ──
+      entity_type: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'Entity type: character, creator, prop, environment',
+      },
+      category: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'Asset category: wardrobe_outfit, background, ui_element, etc.',
+      },
+      character_name: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Character this asset belongs to (e.g., Lala)',
+      },
+      outfit_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Outfit name (e.g., Parisian Tea Party)',
+      },
+      outfit_era: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'Style era (e.g., Soft Luxury Era)',
+      },
+      transformation_stage: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'Transformation stage: before, during, after, neutral',
+      },
+      first_used_episode_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Episode where this asset was first used',
+      },
+      usage_count: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+        comment: 'Number of times this asset has been used in scenes',
+      },
+      color_palette: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        comment: 'Extracted color palette from asset',
+      },
+      mood_tags: {
+        type: DataTypes.ARRAY(DataTypes.TEXT),
+        allowNull: true,
+        comment: 'Mood descriptors (luxury, casual, event)',
+      },
+      location_name: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+        comment: 'Location name for backgrounds (e.g., Lala\'s Closet)',
+      },
+      location_version: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Version number for location backgrounds',
+      },
+      introduced_episode_id: {
+        type: DataTypes.UUID,
+        allowNull: true,
+        comment: 'Episode that introduced this background version',
+      },
+      active_from_episode: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'First episode number this asset is active',
+      },
+      active_to_episode: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Last episode number this asset is active (null = still active)',
+      },
     },
     {
       tableName: 'assets',

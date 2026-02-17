@@ -162,6 +162,29 @@ export const assetService = {
   rejectAsset: async (assetId, reason) => {
     return api.put(`/api/v1/assets/${assetId}/reject`, { reason });
   },
+
+  // ==================== EPISODE-ASSET LINKING ====================
+
+  /**
+   * Link assets to an episode
+   */
+  linkAssetsToEpisode: async (episodeId, assetIds) => {
+    return api.post(`/api/footage/episodes/${episodeId}/assets`, { assetIds });
+  },
+
+  /**
+   * Get all assets linked to an episode
+   */
+  getEpisodeAssets: async (episodeId) => {
+    return api.get(`/api/footage/episodes/${episodeId}/assets`);
+  },
+
+  /**
+   * Unlink an asset from an episode
+   */
+  unlinkAssetFromEpisode: async (episodeId, assetId) => {
+    return api.delete(`/api/footage/episodes/${episodeId}/assets/${assetId}`);
+  },
 };
 
 export default assetService;
