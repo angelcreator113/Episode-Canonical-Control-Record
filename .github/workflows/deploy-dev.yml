@@ -82,6 +82,7 @@ jobs:
         run: |
           mkdir -p deploy
           cp -r src deploy/
+          cp -r scripts deploy/
           cp -r frontend/dist deploy/
           cp package.json deploy/
           cp package-lock.json deploy/
@@ -153,15 +154,19 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
             set -e
 
-            # Ensure Node 20 + pm2 are on PATH (nvm non-interactive workaround)
+            # Use whatever Node is available on the system
             export NVM_DIR=\$HOME/.nvm
             if [ -s \$NVM_DIR/nvm.sh ]; then
               . \$NVM_DIR/nvm.sh
-              nvm use 20 2>/dev/null || true
             fi
-            # Fallback: prepend known Node 20 bin path
-            export PATH=/home/ubuntu/.nvm/versions/node/v20.20.0/bin:\$PATH
-            echo \"Node: \$(node -v)  npm: \$(npm -v)  pm2: \$(pm2 -v 2>/dev/null || echo not-found)\"
+            echo \"Node: \$(node -v)  npm: \$(npm -v)\"
+
+            # Install pm2 globally if not found
+            if ! command -v pm2 &>/dev/null; then
+              echo '📦 Installing pm2...'
+              npm install -g pm2
+            fi
+            echo \"pm2: \$(pm2 -v)\"
 
             APP_DIR=\$HOME/episode-metadata
 
@@ -171,8 +176,9 @@ jobs:
             mkdir -p \$APP_DIR/logs
 
             # Update backend source from the build artifact
-            rm -rf \$APP_DIR/src
+            rm -rf \$APP_DIR/src \$APP_DIR/scripts
             cp -r /tmp/deploy/src \$APP_DIR/src
+            cp -r /tmp/deploy/scripts \$APP_DIR/scripts
             cp /tmp/deploy/package.json \$APP_DIR/package.json
             cp /tmp/deploy/package-lock.json \$APP_DIR/package-lock.json
             cp /tmp/deploy/ecosystem.config.js \$APP_DIR/ecosystem.config.js
@@ -185,14 +191,20 @@ jobs:
             # Rebuild native modules (sharp, etc.) for the server architecture
             npm rebuild sharp 2>&1 | tail -3 || echo '⚠️ sharp rebuild skipped'
 
-            # Run database migrations against RDS (env vars from ecosystem.config.js)
-            echo '🗃️ Running migrations...'
+            # Set DB env vars for RDS
             export DB_HOST='episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com'
             export DB_PORT='5432'
             export DB_NAME='episode_metadata'
             export DB_USER='postgres'
             export DB_PASSWORD='Ayanna123!!'
             export DB_SSL='true'
+
+            # Bootstrap SequelizeMeta for databases created by sequelize.sync()
+            echo '🔧 Bootstrapping migration metadata...'
+            node scripts/bootstrap-sequelize-meta.js
+
+            # Run database migrations against RDS
+            echo '🗃️ Running migrations...'
             npx sequelize-cli db:migrate --env development 2>&1 | tail -10
 
             # Restart the Node.js backend via PM2
