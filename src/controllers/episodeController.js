@@ -131,21 +131,7 @@ module.exports = {
     try {
       const { id } = req.params;
 
-      // Query with proper column names that match the model
       const episode = await Episode.findByPk(id, {
-        attributes: [
-          'id',
-          'episode_number',
-          'title',
-          'description',
-          'air_date',
-          'status',
-          'categories',
-          'show_id',
-          'created_at',
-          'updated_at',
-          'script_content',
-        ],
         include: [
           {
             model: Show,
