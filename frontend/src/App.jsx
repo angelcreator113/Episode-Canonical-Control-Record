@@ -77,10 +77,10 @@ function AppContent() {
   const location = useLocation();
   const isNavigatingRef = React.useRef(false);
 
-  // Extract episode ID from URL if present
+  // Extract episode ID from URL if present (skip non-ID segments like 'create')
   React.useEffect(() => {
     const match = location.pathname.match(/\/episodes\/([^/]+)/);
-    if (match && match[1]) {
+    if (match && match[1] && match[1] !== 'create') {
       setCurrentEpisodeId(match[1]);
     }
   }, [location.pathname]);

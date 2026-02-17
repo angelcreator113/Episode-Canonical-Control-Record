@@ -26,7 +26,7 @@ function Sidebar({ isOpen, onClose }) {
   useEffect(() => {
     const checkEpisodeRoute = async () => {
       const match = location.pathname.match(/\/episodes\/([^/]+)/);
-      if (match) {
+      if (match && match[1] !== 'create') {
         const episodeId = match[1];
         try {
           const episode = await episodeService.getEpisode(episodeId);
