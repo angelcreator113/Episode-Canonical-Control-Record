@@ -31,6 +31,18 @@ export default function useSaveManager({
   const changeCounterRef = useRef(0);
   const isMountedRef = useRef(true);
 
+  // ── Refs to avoid stale closures in timers ──
+  // When markDirty() sets a setTimeout, the timer callback must always
+  // read the LATEST getSavePayload and episodeId, not the ones captured
+  // at the time the timer was created. Without refs, the timer would
+  // save the state from BEFORE the change that triggered markDirty().
+  const getSavePayloadRef = useRef(getSavePayload);
+  const episodeIdRef = useRef(episodeId);
+
+  // Keep refs in sync with latest values every render
+  useEffect(() => { getSavePayloadRef.current = getSavePayload; }, [getSavePayload]);
+  useEffect(() => { episodeIdRef.current = episodeId; }, [episodeId]);
+
   // Cleanup on unmount
   useEffect(() => {
     isMountedRef.current = true;
@@ -40,32 +52,47 @@ export default function useSaveManager({
     };
   }, []);
 
-  // Perform the actual save
+  // Perform the actual save — always reads latest payload via ref
   const doSave = useCallback(async () => {
-    if (!episodeId || !getSavePayload) return;
+    const currentEpisodeId = episodeIdRef.current;
+    const currentGetPayload = getSavePayloadRef.current;
+    if (!currentEpisodeId || !currentGetPayload) {
+      console.warn('[SaveManager] Cannot save — missing episodeId or getSavePayload');
+      return;
+    }
 
-    const payload = getSavePayload();
-    if (!payload) return;
+    const payload = currentGetPayload();
+    if (!payload) {
+      console.warn('[SaveManager] Cannot save — getSavePayload returned null/undefined');
+      return;
+    }
+
+    const sceneCount = payload.scenes?.length || 0;
+    const sceneSummary = (payload.scenes || []).map(s => `#${s.scene_number} "${s.title}"`).join(', ');
+    console.log(`[SaveManager] Saving ${sceneCount} scenes for episode ${currentEpisodeId}: ${sceneSummary}`);
+    console.log('[SaveManager] Payload preview:', JSON.stringify(payload).substring(0, 300));
 
     setSaveStatus('saving');
     setErrorMessage(null);
 
     try {
       // Use unified save endpoint for atomic saves
-      await saveEpisodeData(episodeId, payload);
+      const response = await saveEpisodeData(currentEpisodeId, payload);
 
       if (isMountedRef.current) {
         setSaveStatus('saved');
         setLastSaved(new Date());
+        console.log(`[SaveManager] ✅ Save successful — ${sceneCount} scenes saved at ${new Date().toLocaleTimeString()}`);
       }
     } catch (error) {
-      console.error('Save failed:', error);
+      console.error('[SaveManager] ❌ Save FAILED:', error.message);
+      console.error('[SaveManager] Error details:', error.response?.status, error.response?.data);
       if (isMountedRef.current) {
         setSaveStatus('error');
         setErrorMessage(error.response?.data?.error || error.message);
       }
     }
-  }, [episodeId, getSavePayload]);
+  }, []); // No deps needed — reads everything from refs
 
   // Manual save
   const save = useCallback(() => {

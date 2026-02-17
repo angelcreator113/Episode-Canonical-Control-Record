@@ -32,6 +32,55 @@
 @media (min-width: 1025px){
   .ed-only-mobile{ display: none; }
   .ed-only-desktop{ display: inline-flex; }
+
+  /* Desktop: Compact header */
+  .ed-header-new {
+    padding: 0.875rem 1.5rem;
+    gap: 1rem;
+  }
+
+  .ed-header-new::before {
+    height: 2px;
+  }
+
+  .ed-header-left {
+    gap: 0.5rem;
+  }
+
+  .ed-back-btn {
+    font-size: 0.8125rem;
+    padding: 0.25rem 0.5rem;
+  }
+
+  .ed-header-info {
+    gap: 0.4rem;
+  }
+
+  .ed-header-title {
+    font-size: 1.375rem;
+  }
+
+  .ed-header-meta {
+    gap: 0.75rem;
+  }
+
+  .ed-show-link {
+    padding: 0.25rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .ed-meta-item {
+    font-size: 0.8125rem;
+  }
+
+  .ed-status-badge {
+    padding: 0.3rem 0.65rem;
+    font-size: 0.75rem;
+  }
+
+  .ed-header-actions {
+    gap: 0.5rem;
+  }
 }
 
 /* =========================================================
@@ -272,6 +321,9 @@
   align-items: flex-start;
   gap: 0.75rem;
   flex-shrink: 0;
+  position: relative;
+  z-index: 9997;
+  pointer-events: auto;
 }
 
 .ed-btn-thumbnail {
@@ -397,6 +449,8 @@
 
 .ed-more-menu{
   position: relative;
+  z-index: 9998;
+  pointer-events: auto;
 }
 
 .ed-btn-more{
@@ -433,9 +487,10 @@
   border-radius: 14px;
   box-shadow: 0 12px 32px rgba(0,0,0,0.15), 0 4px 8px rgba(0,0,0,0.08);
   min-width: 220px;
-  z-index: 100;
+  z-index: 9999;
   overflow: hidden;
   animation: dropdownSlideIn 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  pointer-events: auto;
 }
 
 @keyframes dropdownSlideIn {
@@ -464,6 +519,7 @@
   font-size: 0.9375rem;
   text-align: left;
   position: relative;
+  pointer-events: auto;
 }
 
 .ed-dropdown-item::before {

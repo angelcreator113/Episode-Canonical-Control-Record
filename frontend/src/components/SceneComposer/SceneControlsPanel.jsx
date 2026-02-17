@@ -18,8 +18,14 @@ function SceneControlsPanel({
   onSetBackground,
   onAddCharacter,
   onAddUIElement,
+  onUploadBackground,
+  onUploadCharacter,
+  onUploadUIElement,
   onAssignWardrobe,
+  onDeleteElement,
   onDurationChange,
+  onResizeElement,
+  onLayerChange,
   selected,
   isCompact = false,
   showSafeZones = true,
@@ -28,6 +34,17 @@ function SceneControlsPanel({
   if (!currentScene) {
     return null;
   }
+
+  // Find the selected element for size/layer controls
+  let selectedElement = null;
+  if (selected && (selected.type === 'character' || selected.type === 'ui')) {
+    const list = selected.type === 'character' ? currentScene.characters : currentScene.ui_elements;
+    selectedElement = (list || []).find((el, i) => (el.id || `${selected.type === 'character' ? 'char' : 'ui'}-${i}`) === selected.id);
+  }
+
+  const selectedW = selectedElement ? parseInt(selectedElement.width) || (selected.type === 'character' ? 100 : 120) : 0;
+  const selectedH = selectedElement ? parseInt(selectedElement.height) || (selected.type === 'character' ? 150 : 50) : 0;
+  const selectedLayer = selectedElement?.layer ?? (selected?.type === 'character' ? 5 : selected?.type === 'ui' ? 4 : 1);
 
   return (
     <aside 
@@ -48,6 +65,135 @@ function SceneControlsPanel({
         </p>
       </div>
 
+      {/* Selected Element Actions */}
+      {selected && onDeleteElement && (
+        <div className="control-section">
+          <div style={{
+            padding: '8px 12px',
+            background: 'rgba(255, 75, 75, 0.08)',
+            border: '1px solid rgba(255, 75, 75, 0.2)',
+            borderRadius: '8px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+          }}>
+            <span style={{ fontSize: '13px', color: 'rgba(255, 255, 255, 0.8)' }}>
+              {selected.type === 'character' ? '👤' : selected.type === 'ui' ? '📝' : '🎨'}
+              {' '}{selected.type} selected
+            </span>
+            <button
+              onClick={() => onDeleteElement(selected.type, selected.id)}
+              style={{
+                padding: '4px 12px',
+                background: 'rgba(255, 75, 75, 0.15)',
+                border: '1px solid rgba(255, 75, 75, 0.3)',
+                borderRadius: '6px',
+                color: '#ff4b4b',
+                fontSize: '12px',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+              title="Delete (Del key)"
+            >
+              🗑 Delete
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Size & Layer Controls — visible when a character or UI element is selected */}
+      {selected && selectedElement && (selected.type === 'character' || selected.type === 'ui') && (
+        <div className="control-section">
+          {/* Exact size inputs */}
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+            📐 Size (px)
+          </label>
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '12px' }}>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', display: 'block', marginBottom: '4px' }}>W</label>
+              <input
+                type="number"
+                value={selectedW}
+                min={20}
+                max={1920}
+                step={1}
+                onChange={(e) => {
+                  const v = Math.max(20, Math.min(1920, parseInt(e.target.value) || 20));
+                  onResizeElement && onResizeElement(selected.type, selected.id, { width: `${v}px`, height: `${selectedH}px` });
+                }}
+                style={{
+                  width: '100%', padding: '6px 8px', background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px',
+                  color: '#fff', fontSize: '14px', fontWeight: 600, textAlign: 'center',
+                }}
+              />
+            </div>
+            <span style={{ alignSelf: 'flex-end', color: 'rgba(255,255,255,0.3)', fontSize: '14px', paddingBottom: '6px' }}>×</span>
+            <div style={{ flex: 1 }}>
+              <label style={{ fontSize: '10px', color: 'rgba(255,255,255,0.45)', display: 'block', marginBottom: '4px' }}>H</label>
+              <input
+                type="number"
+                value={selectedH}
+                min={20}
+                max={1920}
+                step={1}
+                onChange={(e) => {
+                  const v = Math.max(20, Math.min(1920, parseInt(e.target.value) || 20));
+                  onResizeElement && onResizeElement(selected.type, selected.id, { width: `${selectedW}px`, height: `${v}px` });
+                }}
+                style={{
+                  width: '100%', padding: '6px 8px', background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px',
+                  color: '#fff', fontSize: '14px', fontWeight: 600, textAlign: 'center',
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Layer (z-index) controls */}
+          <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+            🗂 Layer
+          </label>
+          <div style={{ display: 'flex', gap: '4px' }}>
+            <button
+              onClick={() => onLayerChange && onLayerChange(selected.type, selected.id, 'back')}
+              title="Send to Back"
+              style={{
+                flex: 1, padding: '6px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: 500, cursor: 'pointer',
+              }}
+            >⇊ Back</button>
+            <button
+              onClick={() => onLayerChange && onLayerChange(selected.type, selected.id, 'down')}
+              title="Move Down"
+              style={{
+                flex: 1, padding: '6px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: 500, cursor: 'pointer',
+              }}
+            >↓ Down</button>
+            <button
+              onClick={() => onLayerChange && onLayerChange(selected.type, selected.id, 'up')}
+              title="Move Up"
+              style={{
+                flex: 1, padding: '6px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: 500, cursor: 'pointer',
+              }}
+            >↑ Up</button>
+            <button
+              onClick={() => onLayerChange && onLayerChange(selected.type, selected.id, 'front')}
+              title="Bring to Front"
+              style={{
+                flex: 1, padding: '6px 0', background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: '6px', color: 'rgba(255,255,255,0.7)', fontSize: '11px', fontWeight: 500, cursor: 'pointer',
+              }}
+            >⇈ Front</button>
+          </div>
+          <div style={{ textAlign: 'center', marginTop: '4px', fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>
+            Layer: {selectedLayer}
+          </div>
+        </div>
+      )}
+
       {/* Background Control */}
       <div className="control-section">
         <button 
@@ -61,9 +207,17 @@ function SceneControlsPanel({
           <span className="action-icon">🎨</span>
           <div className="action-text">
             <div className="action-label">Set Background</div>
-            <div className="action-hint">{currentScene.background_url ? 'Change' : 'Add'} background</div>
+            <div className="action-hint">{currentScene.background_url ? 'Browse library' : 'Browse library'}</div>
           </div>
         </button>
+        {onUploadBackground && (
+          <button
+            className="control-upload-link"
+            onClick={onUploadBackground}
+          >
+            📤 Upload New
+          </button>
+        )}
       </div>
 
       {/* Character Control */}
@@ -82,6 +236,14 @@ function SceneControlsPanel({
             <div className="action-hint">{currentScene.characters?.length || 0} character{(currentScene.characters?.length || 0) !== 1 ? 's' : ''}</div>
           </div>
         </button>
+        {onUploadCharacter && (
+          <button
+            className="control-upload-link"
+            onClick={onUploadCharacter}
+          >
+            📤 Upload New
+          </button>
+        )}
       </div>
 
       {/* UI Element Control */}
@@ -100,6 +262,14 @@ function SceneControlsPanel({
             <div className="action-hint">{currentScene.ui_elements?.length || 0} element{(currentScene.ui_elements?.length || 0) !== 1 ? 's' : ''}</div>
           </div>
         </button>
+        {onUploadUIElement && (
+          <button
+            className="control-upload-link"
+            onClick={onUploadUIElement}
+          >
+            📤 Upload New
+          </button>
+        )}
       </div>
 
       {/* Wardrobe Control */}
@@ -115,7 +285,7 @@ function SceneControlsPanel({
           >
             <span className="action-icon">👗</span>
             <div className="action-text">
-              <div className="action-label">Assign Wardrobe</div>
+              <div className="action-label">Add Wardrobe</div>
               <div className="action-hint">{currentScene?.characters?.length || 0} character{currentScene?.characters?.length !== 1 ? 's' : ''}</div>
             </div>
           </button>

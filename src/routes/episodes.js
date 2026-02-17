@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 
+const multer = require('multer');
 const episodeController = require('../controllers/episodeController');
 const sceneController = require('../controllers/sceneController');
 const wardrobeController = require('../controllers/wardrobeController');
@@ -203,6 +204,8 @@ router.post(
       const episodeRecord = await Episode.findByPk(id, { transaction: t });
       if (!episodeRecord) throw new Error('Episode not found');
 
+      console.log(`[Save] Episode ${id}: ${scenes?.length || 0} scenes, timeline=${!!timeline}`);
+
       const episodeUpdate = {};
       if (episodeData?.title) episodeUpdate.title = episodeData.title;
       if (platformData?.platform) episodeUpdate.platform = platformData.platform;
@@ -215,12 +218,14 @@ router.post(
       }
 
       // 2. Upsert scenes
+      let savedSceneCount = 0;
       if (scenes && Array.isArray(scenes)) {
         // Delete existing scenes for this episode, then bulk create
-        await Scene.destroy({ where: { episode_id: id }, transaction: t, force: true });
+        const deletedCount = await Scene.destroy({ where: { episode_id: id }, transaction: t, force: true });
+        console.log(`[Save] Deleted ${deletedCount} existing scenes`);
 
         if (scenes.length > 0) {
-          await Scene.bulkCreate(
+          const created = await Scene.bulkCreate(
             scenes.map((scene, idx) => ({
               episode_id: id,
               scene_number: scene.scene_number || idx + 1,
@@ -233,6 +238,12 @@ router.post(
             })),
             { transaction: t }
           );
+          savedSceneCount = created.length;
+          console.log(`[Save] Created ${created.length} scenes`);
+          if (scenes.length > 0) {
+            console.log(`[Save] Scene 1 background_url: ${scenes[0].background_url || 'null'}`);
+            console.log(`[Save] Scene 1 characters: ${JSON.stringify(scenes[0].characters || []).substring(0, 100)}`);
+          }
         }
       }
 
@@ -288,6 +299,59 @@ router.put(
   // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
   // requirePermission('episodes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
   asyncHandler(episodeController.updateEpisode)
+);
+
+// ✅ UPLOAD THUMBNAIL for episode
+const thumbnailUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith('image/')) cb(null, true);
+    else cb(new Error('Only image files are allowed'));
+  },
+});
+
+router.post(
+  '/:id/thumbnail',
+  thumbnailUpload.single('thumbnail'),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { models } = require('../models');
+    const { Episode } = models;
+    const S3Service = require('../services/S3Service');
+    const { v4: uuidv4 } = require('uuid');
+
+    const episode = await Episode.findByPk(id);
+    if (!episode) {
+      return res.status(404).json({ success: false, error: 'Episode not found' });
+    }
+
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No thumbnail file provided' });
+    }
+
+    const bucket = process.env.S3_BUCKET || 'episode-metadata-storage-dev';
+    const ext = req.file.mimetype === 'image/jpeg' ? 'jpg' : 'png';
+    const key = `thumbnails/${id}/${uuidv4()}.${ext}`;
+
+    const uploadResult = await S3Service.uploadFile(bucket, key, req.file.buffer, {
+      ContentType: req.file.mimetype,
+      ACL: 'public-read',
+    });
+
+    const thumbnailUrl = uploadResult.location || `https://${bucket}.s3.amazonaws.com/${key}`;
+
+    await episode.update({ thumbnail_url: thumbnailUrl });
+
+    res.json({
+      success: true,
+      data: {
+        thumbnail_url: thumbnailUrl,
+        s3Key: key,
+        s3Bucket: bucket,
+      },
+    });
+  })
 );
 
 // ✅ DELETE EPISODE - AUTH DISABLED FOR TESTING
@@ -654,5 +718,137 @@ router.delete(
   validateUUIDParam('episodeId'),
   asyncHandler(videoCompositionController.remove)
 );
+
+// ==================== WARDROBE DEFAULTS ====================
+
+/**
+ * GET /api/v1/episodes/:id/wardrobe-defaults
+ * Get episode wardrobe defaults for all characters
+ */
+router.get('/:id/wardrobe-defaults', async (req, res) => {
+  try {
+    const { EpisodeWardrobeDefault, Asset } = require('../models');
+
+    const defaults = await EpisodeWardrobeDefault.findAll({
+      where: { episode_id: req.params.id },
+      include: [{
+        model: Asset,
+        as: 'outfit',
+        attributes: [
+          'id', 'name', 's3_url_raw', 's3_url_processed', 'asset_type',
+          'category', 'character_name', 'outfit_name', 'outfit_era',
+          'transformation_stage', 'color_palette', 'mood_tags', 'metadata'
+        ],
+      }],
+      order: [['character_name', 'ASC']],
+    });
+
+    res.json({
+      status: 'SUCCESS',
+      data: defaults,
+      count: defaults.length,
+    });
+  } catch (error) {
+    console.error('❌ Error getting wardrobe defaults:', error);
+    res.status(500).json({
+      error: 'Failed to get wardrobe defaults',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/v1/episodes/:id/wardrobe-defaults
+ * Set/update default outfit for a character in an episode
+ */
+router.post('/:id/wardrobe-defaults', async (req, res) => {
+  try {
+    const { EpisodeWardrobeDefault, Asset } = require('../models');
+    const { character_name, outfit_asset_id } = req.body;
+
+    if (!character_name) {
+      return res.status(400).json({
+        error: 'character_name is required',
+      });
+    }
+
+    // Upsert: create or update
+    const [wardrobeDefault, created] = await EpisodeWardrobeDefault.findOrCreate({
+      where: {
+        episode_id: req.params.id,
+        character_name,
+      },
+      defaults: {
+        default_outfit_asset_id: outfit_asset_id || null,
+      },
+    });
+
+    if (!created) {
+      await wardrobeDefault.update({
+        default_outfit_asset_id: outfit_asset_id || null,
+      });
+    }
+
+    // Reload with outfit association
+    const result = await EpisodeWardrobeDefault.findByPk(wardrobeDefault.id, {
+      include: [{
+        model: Asset,
+        as: 'outfit',
+        attributes: [
+          'id', 'name', 's3_url_raw', 'category', 'character_name',
+          'outfit_name', 'outfit_era', 'transformation_stage', 'metadata'
+        ],
+      }],
+    });
+
+    res.status(created ? 201 : 200).json({
+      status: 'SUCCESS',
+      data: result,
+      message: created
+        ? `Default outfit set for ${character_name}`
+        : `Default outfit updated for ${character_name}`,
+    });
+  } catch (error) {
+    console.error('❌ Error setting wardrobe default:', error);
+    res.status(500).json({
+      error: 'Failed to set wardrobe default',
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * DELETE /api/v1/episodes/:id/wardrobe-defaults/:character
+ * Remove default outfit for a character
+ */
+router.delete('/:id/wardrobe-defaults/:character', async (req, res) => {
+  try {
+    const { EpisodeWardrobeDefault } = require('../models');
+
+    const deleted = await EpisodeWardrobeDefault.destroy({
+      where: {
+        episode_id: req.params.id,
+        character_name: req.params.character,
+      },
+    });
+
+    if (!deleted) {
+      return res.status(404).json({
+        error: `No wardrobe default found for character "${req.params.character}"`,
+      });
+    }
+
+    res.json({
+      status: 'SUCCESS',
+      message: `Wardrobe default removed for ${req.params.character}`,
+    });
+  } catch (error) {
+    console.error('❌ Error removing wardrobe default:', error);
+    res.status(500).json({
+      error: 'Failed to remove wardrobe default',
+      message: error.message,
+    });
+  }
+});
 
 module.exports = router;

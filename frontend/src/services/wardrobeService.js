@@ -47,6 +47,20 @@ const wardrobeService = {
   },
 
   /**
+   * Link a wardrobe item to an episode
+   */
+  linkToEpisode: async (episodeId, wardrobeId) => {
+    return api.post(`/api/v1/episodes/${episodeId}/wardrobe/${wardrobeId}`);
+  },
+
+  /**
+   * Unlink a wardrobe item from an episode
+   */
+  unlinkFromEpisode: async (episodeId, wardrobeId) => {
+    return api.delete(`/api/v1/episodes/${episodeId}/wardrobe/${wardrobeId}`);
+  },
+
+  /**
    * Get wardrobe items grouped by character
    */
   getWardrobeByCharacter: async (showId) => {

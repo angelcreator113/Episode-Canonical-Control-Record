@@ -276,6 +276,16 @@ let filesRoutes, searchRoutes, jobsRoutes;
 let assetRoutes, compositionRoutes, templateRoutes;
 let sceneRoutes, scenesFixedRoutes, wardrobeRoutes;
 
+// Characters routes
+let characterRoutes;
+try {
+  characterRoutes = require('./routes/characters');
+  console.log('✓ Characters routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load characters routes:', e.message);
+  characterRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
+}
+
 try {
   episodeRoutes = require('./routes/episodes');
   console.log('✓ Episodes routes loaded');
@@ -658,6 +668,8 @@ app.use('/api/v1/jobs', jobsRoutes);
 
 // Phase 2.5 routes (composite thumbnails)
 app.use('/api/v1/assets', assetRoutes);
+// Register the characters API route
+app.use('/api/v1/characters', characterRoutes);
 app.use('/api/v1/assets', imageProcessingRoutes); // Image processing endpoints
 app.use('/api/v1/roles', rolesRoutes); // Asset roles registry
 app.use('/api/v1/compositions', compositionRoutes);

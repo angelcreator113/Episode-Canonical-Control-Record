@@ -438,3 +438,134 @@
   color: #1a1a2e;
   font-weight: 600;
 }
+
+/* ── Wardrobe Picker Modal ── */
+.ewt-picker-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.ewt-picker-modal {
+  background: white;
+  border-radius: 16px;
+  width: 90%;
+  max-width: 700px;
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+}
+
+.ewt-picker-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.ewt-picker-header h3 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+  color: #1a1a2e;
+}
+
+.ewt-picker-close {
+  background: none;
+  border: none;
+  font-size: 24px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+}
+
+.ewt-picker-close:hover {
+  background: #f1f5f9;
+  color: #1a1a2e;
+}
+
+.ewt-picker-body {
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.ewt-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.ewt-picker-item {
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  border: 2px solid transparent;
+}
+
+.ewt-picker-item:hover {
+  background: #e2e8f0;
+  border-color: #8b5cf6;
+  transform: translateY(-2px);
+}
+
+.ewt-picker-thumb {
+  aspect-ratio: 1;
+  background: #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+}
+
+.ewt-picker-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ewt-picker-thumb .ewt-placeholder {
+  font-size: 40px;
+}
+
+.ewt-picker-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ewt-picker-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1a1a2e;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ewt-picker-type {
+  font-size: 11px;
+  color: #64748b;
+  text-transform: capitalize;
+}
+
+.ewt-picker-empty {
+  text-align: center;
+  padding: 40px 20px;
+  color: #64748b;
+}
+
+.ewt-picker-empty p {
+  margin: 8px 0;
+}

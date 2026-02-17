@@ -1,4 +1,5 @@
 const router = require('express').Router();
+const multer = require('multer');
 const controller = require('../controllers/wardrobeLibraryController');
 const { authenticate } = require('../middleware/auth');
 
@@ -11,12 +12,21 @@ const authMiddleware = isDevelopment
     }
   : authenticate;
 
-// Note: Upload middleware will be added when S3 integration is implemented
-// For now, we'll use a simple placeholder that passes through
-const uploadPlaceholder = (req, res, next) => {
-  // Placeholder for future multer/S3 upload middleware
-  next();
-};
+// Configure multer for file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 50 * 1024 * 1024, // 50MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedMimes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
+    if (allowedMimes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type. Only JPEG, PNG, GIF, WebP allowed.'));
+    }
+  },
+});
 
 /**
  * Wardrobe Library Routes
@@ -41,10 +51,10 @@ router.get('/analytics/never-used', controller.getNeverUsedItems);
 router.post('/bulk-assign', controller.bulkAssign);
 
 // Library CRUD operations
-router.post('/', uploadPlaceholder, controller.uploadToLibrary);
+router.post('/', upload.single('image'), controller.uploadToLibrary);
 router.get('/', controller.listLibrary);
 router.get('/:id', controller.getLibraryItem);
-router.put('/:id', uploadPlaceholder, controller.updateLibraryItem);
+router.put('/:id', upload.single('image'), controller.updateLibraryItem);
 router.delete('/:id', controller.deleteLibraryItem);
 
 // Outfit set management (Phase 3)

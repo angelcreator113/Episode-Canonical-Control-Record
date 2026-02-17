@@ -54,14 +54,18 @@ module.exports = {
         showId, // NEW: Primary show ownership
       } = req.body;
 
-      // Validation - character is REQUIRED
-      if (!name || !character || !clothingCategory) {
+      // Validation - character is REQUIRED, name and category auto-fill
+      if (!character) {
         return res.status(400).json({
-          error: 'Missing required fields',
-          required: ['name', 'character', 'clothingCategory'],
+          error: 'Missing required field: character',
+          required: ['character'],
           message: 'Character is required for all wardrobe items',
         });
       }
+
+      // Auto-generate name from filename if not provided
+      const resolvedName = name || (req.file ? req.file.originalname.replace(/\.[^.]+$/, '') : `Outfit ${Date.now()}`);
+      const resolvedCategory = clothingCategory || 'general';
 
       // Handle file upload if present
       let s3Key = null;
@@ -91,11 +95,24 @@ module.exports = {
         }
       }
 
+      // Resolve character_id from character name
+      let resolvedCharacterId = null;
+      try {
+        const { Character } = require('../models');
+        if (Character) {
+          const charRecord = await Character.findOne({ where: { name: character } });
+          if (charRecord) resolvedCharacterId = charRecord.id;
+        }
+      } catch (lookupErr) {
+        console.warn('⚠️ Could not resolve character_id:', lookupErr.message);
+      }
+
       // Create wardrobe item
       const wardrobeItem = await Wardrobe.create({
-        name,
+        name: resolvedName,
         character, // Required field
-        clothing_category: clothingCategory,
+        character_id: resolvedCharacterId,
+        clothing_category: resolvedCategory,
         show_id: showId || null, // Primary show ownership
         s3_key: s3Key,
         s3_url: s3Url,

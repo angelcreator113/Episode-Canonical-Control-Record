@@ -144,6 +144,7 @@ module.exports = {
           'show_id',
           'created_at',
           'updated_at',
+          'script_content',
         ],
         include: [
           {
@@ -472,6 +473,8 @@ module.exports = {
       air_date: true,
       status: true,
       categories: true,
+      script_content: true,
+      thumbnail_url: true,
     };
 
     const updateData = {};

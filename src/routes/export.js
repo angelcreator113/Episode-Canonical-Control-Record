@@ -5,14 +5,20 @@
 
 const express = require('express');
 const router = express.Router();
-const { authenticate } = require('../middleware/auth');
+const { authenticate, optionalAuth } = require('../middleware/auth');
 const { addExportJob, getExportJob, getQueueStats, cancelExportJob, videoQueue } = require('../queues/videoQueue');
 const db = require('../config/database');
+const { sequelize } = require('../models');
+const s3Service = require('../services/S3Service');
+const AWS = require('aws-sdk');
+
+// Use optionalAuth in dev so exports work without Cognito tokens
+const authMiddleware = process.env.NODE_ENV === 'production' ? authenticate : optionalAuth;
 
 // ============================================================================
 // POST /api/v1/episodes/:episodeId/export  — Start a new export job
 // ============================================================================
-router.post('/episodes/:episodeId/export', authenticate, async (req, res) => {
+router.post('/episodes/:episodeId/export', authMiddleware, async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { platform, quality, format, compositionId } = req.body;
@@ -51,28 +57,26 @@ router.post('/episodes/:episodeId/export', authenticate, async (req, res) => {
       : `${platformRes.width}x${platformRes.height}`;
 
     // Fetch episode to verify it exists
-    const episodeResult = await db.query(
+    const [episodeRows] = await sequelize.query(
       'SELECT id, title, episode_number, show_id FROM episodes WHERE id = $1',
-      [episodeId]
+      { bind: [episodeId] }
     );
 
-    if (episodeResult.rows.length === 0) {
+    if (!episodeRows || episodeRows.length === 0) {
       return res.status(404).json({ error: 'Episode not found' });
     }
 
-    const episode = episodeResult.rows[0];
+    const episode = episodeRows[0];
 
     // Fetch scenes for this episode
-    const scenesResult = await db.query(
-      `SELECT id, title, scene_order, duration_seconds, background_url,
-              characters, ui_elements, background_color
+    const [scenes] = await sequelize.query(
+      `SELECT id, title, scene_number, duration_seconds, background_url,
+              characters, ui_elements
        FROM scenes
        WHERE episode_id = $1
-       ORDER BY scene_order ASC`,
-      [episodeId]
+       ORDER BY scene_number ASC`,
+      { bind: [episodeId] }
     );
-
-    const scenes = scenesResult.rows;
 
     if (scenes.length === 0) {
       return res.status(400).json({
@@ -84,15 +88,15 @@ router.post('/episodes/:episodeId/export', authenticate, async (req, res) => {
     // Fetch timeline data (keyframes, etc) if available
     let timelineData = null;
     try {
-      const tlResult = await db.query(
+      const [tlRows] = await sequelize.query(
         `SELECT keyframes, beats, markers, audio_clips, character_clips
          FROM timeline_data
          WHERE episode_id = $1
          LIMIT 1`,
-        [episodeId]
+        { bind: [episodeId] }
       );
-      if (tlResult.rows.length > 0) {
-        timelineData = tlResult.rows[0];
+      if (tlRows && tlRows.length > 0) {
+        timelineData = tlRows[0];
       }
     } catch (e) {
       // timeline_data table may not exist — non-fatal
@@ -116,10 +120,10 @@ router.post('/episodes/:episodeId/export', authenticate, async (req, res) => {
       scenes: scenes.map((s) => ({
         id: s.id,
         title: s.title,
-        scene_order: s.scene_order,
+        scene_number: s.scene_number,
         duration_seconds: s.duration_seconds || 5,
         background_url: s.background_url,
-        background_color: s.background_color || '#1a1a2e',
+        background_color: '#1a1a2e',
         characters: s.characters || [],
         ui_elements: s.ui_elements || [],
       })),
@@ -152,7 +156,7 @@ router.post('/episodes/:episodeId/export', authenticate, async (req, res) => {
 // ============================================================================
 // GET /api/v1/export/status/:jobId  — Get status of a specific export job
 // ============================================================================
-router.get('/export/status/:jobId', authenticate, async (req, res) => {
+router.get('/export/status/:jobId', authMiddleware, async (req, res) => {
   try {
     const { jobId } = req.params;
     const job = await getExportJob(jobId);
@@ -193,7 +197,7 @@ router.get('/export/status/:jobId', authenticate, async (req, res) => {
 // ============================================================================
 // GET /api/v1/exports  — List recent export jobs for the current user
 // ============================================================================
-router.get('/exports', authenticate, async (req, res) => {
+router.get('/exports', authMiddleware, async (req, res) => {
   try {
     const userId = req.user?.id || 'anonymous';
     const limit = parseInt(req.query.limit) || 20;
@@ -246,7 +250,7 @@ router.get('/exports', authenticate, async (req, res) => {
 // ============================================================================
 // DELETE /api/v1/export/:jobId  — Cancel a pending export job
 // ============================================================================
-router.delete('/export/:jobId', authenticate, async (req, res) => {
+router.delete('/export/:jobId', authMiddleware, async (req, res) => {
   try {
     const { jobId } = req.params;
     const job = await getExportJob(jobId);
@@ -280,7 +284,7 @@ router.delete('/export/:jobId', authenticate, async (req, res) => {
 // ============================================================================
 // GET /api/v1/export/download/:jobId  — Get download URL for completed export
 // ============================================================================
-router.get('/export/download/:jobId', authenticate, async (req, res) => {
+router.get('/export/download/:jobId', authMiddleware, async (req, res) => {
   try {
     const { jobId } = req.params;
     const job = await getExportJob(jobId);
@@ -300,15 +304,45 @@ router.get('/export/download/:jobId', authenticate, async (req, res) => {
 
     const result = job.returnvalue;
 
-    if (!result?.downloadUrl && !result?.s3Url) {
+    const rawUrl = result?.downloadUrl || result?.s3Url || result?.videoUrl;
+
+    if (!rawUrl) {
       return res.status(404).json({
         error: 'Download not available',
         message: 'Export completed but no download URL available',
       });
     }
 
+    // Generate a presigned URL so the browser can actually download the file
+    let downloadUrl = rawUrl;
+    try {
+      const urlObj = new URL(rawUrl);
+      // Parse bucket and key from S3 URL patterns:
+      //   https://<bucket>.s3.amazonaws.com/<key>
+      //   https://s3.<region>.amazonaws.com/<bucket>/<key>
+      let bucket, key;
+      if (urlObj.hostname.endsWith('.s3.amazonaws.com')) {
+        bucket = urlObj.hostname.replace('.s3.amazonaws.com', '');
+        key = decodeURIComponent(urlObj.pathname.slice(1));
+      } else if (urlObj.hostname.startsWith('s3.') && urlObj.hostname.endsWith('.amazonaws.com')) {
+        const parts = urlObj.pathname.slice(1).split('/');
+        bucket = parts[0];
+        key = decodeURIComponent(parts.slice(1).join('/'));
+      }
+
+      if (bucket && key) {
+        const fileName = result.fileName || `export-${jobId}.${job.data.format || 'mp4'}`;
+        downloadUrl = await s3Service.getPreSignedUrl(bucket, key, 3600, {
+          ResponseContentDisposition: `attachment; filename="${fileName}"`,
+        });
+        console.log(`[Export] Generated presigned URL for ${bucket}/${key}`);
+      }
+    } catch (presignErr) {
+      console.warn('[Export] Could not generate presigned URL, using raw URL:', presignErr.message);
+    }
+
     return res.json({
-      downloadUrl: result.downloadUrl || result.s3Url,
+      downloadUrl,
       fileName: result.fileName || `export-${jobId}.${job.data.format || 'mp4'}`,
       fileSize: result.fileSize || null,
       format: job.data.format,
@@ -316,6 +350,95 @@ router.get('/export/download/:jobId', authenticate, async (req, res) => {
   } catch (error) {
     console.error('Download export error:', error);
     return res.status(500).json({ error: 'Failed to get download URL', message: error.message });
+  }
+});
+
+// ============================================================================
+// GET /api/v1/export/file/:jobId  — Stream the file through the backend (avoids CORS)
+// ============================================================================
+router.get('/export/file/:jobId', authMiddleware, async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const job = await getExportJob(jobId);
+
+    if (!job) {
+      return res.status(404).json({ error: 'Export job not found' });
+    }
+
+    const state = await job.getState();
+    if (state !== 'completed') {
+      return res.status(400).json({ error: 'Export not ready', message: `Export is currently ${state}` });
+    }
+
+    const result = job.returnvalue;
+    const rawUrl = result?.downloadUrl || result?.s3Url || result?.videoUrl;
+
+    if (!rawUrl) {
+      return res.status(404).json({ error: 'Download not available' });
+    }
+
+    // Parse bucket and key from the S3 URL
+    let bucket, key;
+    try {
+      const urlObj = new URL(rawUrl);
+      if (urlObj.hostname.endsWith('.s3.amazonaws.com')) {
+        bucket = urlObj.hostname.replace('.s3.amazonaws.com', '');
+        key = decodeURIComponent(urlObj.pathname.slice(1));
+      } else if (urlObj.hostname.startsWith('s3.') && urlObj.hostname.endsWith('.amazonaws.com')) {
+        const parts = urlObj.pathname.slice(1).split('/');
+        bucket = parts[0];
+        key = decodeURIComponent(parts.slice(1).join('/'));
+      }
+    } catch (e) {
+      return res.status(500).json({ error: 'Could not parse S3 URL' });
+    }
+
+    if (!bucket || !key) {
+      return res.status(500).json({ error: 'Could not determine S3 bucket/key' });
+    }
+
+    const format = job.data.format || 'mp4';
+    const fileName = result.fileName || `export-${jobId}.${format}`;
+    const mimeTypes = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' };
+
+    // If ?preview=true, serve inline for in-browser playback; otherwise attachment for download
+    const isPreview = req.query.preview === 'true';
+    const disposition = isPreview ? 'inline' : `attachment; filename="${fileName}"`;
+
+    console.log(`[Export] Streaming file ${bucket}/${key} as ${fileName} (${isPreview ? 'preview' : 'download'})`);
+
+    const s3 = new AWS.S3({
+      region: process.env.AWS_REGION,
+      accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+      secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    });
+
+    // Get the object metadata first to set Content-Length
+    try {
+      const head = await s3.headObject({ Bucket: bucket, Key: key }).promise();
+      res.setHeader('Content-Length', head.ContentLength);
+    } catch (headErr) {
+      console.warn('[Export] Could not HEAD object:', headErr.message);
+    }
+
+    res.setHeader('Content-Type', mimeTypes[format] || 'application/octet-stream');
+    res.setHeader('Content-Disposition', disposition);
+
+    const s3Stream = s3.getObject({ Bucket: bucket, Key: key }).createReadStream();
+    s3Stream.on('error', (err) => {
+      console.error('[Export] S3 stream error:', err.message);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to stream file from S3' });
+      } else {
+        res.end();
+      }
+    });
+    s3Stream.pipe(res);
+  } catch (error) {
+    console.error('File stream error:', error);
+    if (!res.headersSent) {
+      return res.status(500).json({ error: 'Failed to stream file', message: error.message });
+    }
   }
 });
 

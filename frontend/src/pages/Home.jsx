@@ -1,6 +1,7 @@
 // frontend/src/pages/Home.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { episodeService } from '../services/episodeService';
 import './Home.css';
 
 /**
@@ -25,56 +26,101 @@ function Home() {
   const loadDashboard = async () => {
     setLoading(true);
     try {
-      // TODO: Replace with actual API call
-      // const response = await dashboardService.getDashboard();
+      // Fetch real episodes from API
+      const response = await episodeService.getEpisodes(1, 50);
+      const episodes = response?.data || [];
       
-      // Mock data
+      // Calculate days since last update
+      const daysSince = (dateStr) => {
+        if (!dateStr) return 999;
+        const diff = Date.now() - new Date(dateStr).getTime();
+        return Math.floor(diff / (1000 * 60 * 60 * 24));
+      };
+      
+      // Format relative time
+      const formatRelativeTime = (dateStr) => {
+        if (!dateStr) return 'Unknown';
+        const days = daysSince(dateStr);
+        if (days === 0) return 'Today';
+        if (days === 1) return 'Yesterday';
+        if (days < 7) return `${days} days ago`;
+        if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
+        return `${Math.floor(days / 30)} months ago`;
+      };
+      
+      // Categorize episodes
+      const inProgress = episodes
+        .filter(ep => ['in_build', 'in_progress', 'editing'].includes(ep.status))
+        .map(ep => ({
+          id: ep.id,
+          title: ep.title,
+          episodeNumber: ep.episode_number,
+          status: ep.status,
+          progress: 65, // Could calculate based on assets/scripts
+          lastEdited: formatRelativeTime(ep.updated_at),
+          nextStep: 'Continue editing',
+          showName: ep.show?.name || 'Unknown Show'
+        }));
+      
+      const recentlyCompleted = episodes
+        .filter(ep => ['published', 'complete', 'completed'].includes(ep.status))
+        .map(ep => ({
+          id: ep.id,
+          title: ep.title,
+          episodeNumber: ep.episode_number,
+          publishedDate: formatRelativeTime(ep.air_date || ep.updated_at),
+          platforms: { youtube: 'live' },
+          views: 0,
+          showName: ep.show?.name || 'Unknown Show'
+        }));
+      
+      const needsAttention = episodes
+        .filter(ep => {
+          const days = daysSince(ep.updated_at);
+          return ['draft', 'review'].includes(ep.status) && days > 7;
+        })
+        .map(ep => ({
+          id: ep.id,
+          title: ep.title,
+          episodeNumber: ep.episode_number,
+          status: ep.status,
+          daysStalled: daysSince(ep.updated_at),
+          showName: ep.show?.name || 'Unknown Show'
+        }));
+      
+      // If no in-progress, show recent drafts
+      const drafts = episodes
+        .filter(ep => ep.status === 'draft')
+        .slice(0, 3)
+        .map(ep => ({
+          id: ep.id,
+          title: ep.title,
+          episodeNumber: ep.episode_number,
+          status: ep.status,
+          progress: 25,
+          lastEdited: formatRelativeTime(ep.updated_at),
+          nextStep: 'Continue working',
+          showName: ep.show?.name || 'Unknown Show'
+        }));
+      
       setDashboard({
-        inProgress: [
-          {
-            id: '6',
-            title: 'Brunch Invite',
-            episodeNumber: 6,
-            status: 'in_build',
-            progress: 65,
-            lastEdited: '2 hours ago',
-            nextStep: 'Add final scene',
-            showName: 'Just a Woman in Her Prime'
-          }
-        ],
-        recentlyCompleted: [
-          {
-            id: '5',
-            title: 'Spring Wardrobe',
-            episodeNumber: 5,
-            publishedDate: '3 days ago',
-            platforms: {
-              youtube: 'live',
-              tiktok: 'live',
-              instagram: 'scheduled'
-            },
-            views: 1240,
-            showName: 'Just a Woman in Her Prime'
-          }
-        ],
-        needsAttention: [
-          {
-            id: '4',
-            title: 'Winter Fashion Haul',
-            episodeNumber: 4,
-            status: 'draft',
-            daysStalled: 28,
-            showName: 'Just a Woman in Her Prime'
-          }
-        ],
+        inProgress: inProgress.length > 0 ? inProgress : drafts,
+        recentlyCompleted,
+        needsAttention,
         stats: {
-          totalEpisodes: 12,
-          avgViews: 2500,
+          totalEpisodes: episodes.length,
+          avgViews: 0,
           cadence: 'Weekly'
         }
       });
     } catch (error) {
       console.error('Error loading dashboard:', error);
+      setDashboard({
+        inProgress: [],
+        recentlyCompleted: [],
+        needsAttention: [],
+        stats: { totalEpisodes: 0, avgViews: 0, cadence: 'N/A' }
+      });
     } finally {
       setLoading(false);
     }
@@ -110,7 +156,7 @@ function Home() {
       <div className="home-container">
         {/* Welcome */}
         <div className="home-welcome">
-          <h1>Welcome back, LaLa! 👋</h1>
+          <h1>Welcome back! 👋</h1>
           <p>Let's keep the momentum going</p>
         </div>
       

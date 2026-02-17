@@ -161,16 +161,23 @@
 }
 
 .link-asset-thumbnail {
+  position: relative;
   width: 100%;
-  height: 140px;
-  background: #f1f5f9;
+  padding-top: 75%; /* 4:3 aspect ratio */
+  background: #1e293b;
   overflow: hidden;
 }
 
 .link-asset-thumbnail img {
+  position: absolute;
+  top: 0;
+  left: 0;
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  object-position: center;
+  image-rendering: -webkit-optimize-contrast;
+  image-rendering: crisp-edges;
 }
 
 .link-asset-info {

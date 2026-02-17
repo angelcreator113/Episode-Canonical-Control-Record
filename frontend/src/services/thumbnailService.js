@@ -28,6 +28,15 @@ export const thumbnailService = {
   getThumbnailsForEpisode: async (episodeId) => {
     return api.get(`/api/v1/episodes/${episodeId}/thumbnails`);
   },
+
+  // Upload thumbnail image blob to episode
+  uploadThumbnail: async (episodeId, blob, filename = 'thumbnail.png') => {
+    const formData = new FormData();
+    formData.append('thumbnail', blob, filename);
+    return api.post(`/api/v1/episodes/${episodeId}/thumbnail`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
 };
 
 export default thumbnailService;

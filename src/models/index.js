@@ -54,6 +54,7 @@ let Episode, MetadataStorage, Thumbnail, ProcessingQueue, ActivityLog;
 let FileStorage, Asset, ThumbnailComposition, ThumbnailTemplate, EpisodeTemplate;
 let Show, Scene, AssetLabel, EpisodeAsset, SceneAsset, SceneTemplate, ShowAsset;
 let Wardrobe, EpisodeWardrobe, OutfitSet;
+let EpisodeWardrobeDefault, AssetUsageLog;
 let WardrobeLibrary, OutfitSetItems, WardrobeUsageHistory, WardrobeLibraryReferences;
 let SceneLibrary, EpisodeScene;
 let CompositionAsset, CompositionOutput;
@@ -64,6 +65,7 @@ let SceneFootageLink;
 let UserDecision, DecisionPattern, DecisionLog;
 let ShowConfig, ScriptTemplate, ScriptLearningProfile, ScriptEditHistory, ScriptSuggestion;
 let EditMap, CharacterProfile, RawFootage;
+let Character; // Characters model
 let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration
 
@@ -98,12 +100,19 @@ try {
   SceneAsset = require('./SceneAsset')(sequelize);
   ShowAsset = require('./ShowAsset')(sequelize);
 
+  // Characters model
+  Character = require('./Character')(sequelize, DataTypes);
+
   // Wardrobe models
   Wardrobe = require('./Wardrobe')(sequelize);
   EpisodeWardrobe = require('./EpisodeWardrobe')(sequelize);
 
   // Outfit sets model
   OutfitSet = require('./OutfitSet')(sequelize);
+
+  // Asset wardrobe system models
+  EpisodeWardrobeDefault = require('./EpisodeWardrobeDefault')(sequelize);
+  AssetUsageLog = require('./AssetUsageLog')(sequelize);
 
   // Wardrobe Library models
   WardrobeLibrary = require('./WardrobeLibrary')(sequelize);
@@ -209,6 +218,8 @@ const requiredModels = {
   Wardrobe,
   EpisodeWardrobe,
   OutfitSet,
+  EpisodeWardrobeDefault,
+  AssetUsageLog,
   WardrobeLibrary,
   OutfitSetItems,
   WardrobeUsageHistory,
@@ -235,6 +246,7 @@ const requiredModels = {
   SceneFootageLink,
   EditMap,
   CharacterProfile,
+  Character,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -264,6 +276,9 @@ if (CharacterClip && CharacterClip.associate) {
 }
 if (AudioClip && AudioClip.associate) {
   AudioClip.associate(requiredModels);
+}
+if (Character && Character.associate) {
+  Character.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -412,6 +427,40 @@ SceneAsset.belongsTo(Asset, {
   foreignKey: 'asset_id',
   as: 'asset',
 });
+
+// ==================== EPISODE WARDROBE DEFAULTS ====================
+
+// Episode ↔ EpisodeWardrobeDefault (1:N)
+Episode.hasMany(EpisodeWardrobeDefault, {
+  foreignKey: 'episode_id',
+  as: 'wardrobeDefaults',
+});
+
+EpisodeWardrobeDefault.belongsTo(Episode, {
+  foreignKey: 'episode_id',
+  as: 'episode',
+});
+
+// Asset ↔ EpisodeWardrobeDefault (1:N)
+Asset.hasMany(EpisodeWardrobeDefault, {
+  foreignKey: 'default_outfit_asset_id',
+  as: 'wardrobeDefaultUsages',
+});
+
+EpisodeWardrobeDefault.belongsTo(Asset, {
+  foreignKey: 'default_outfit_asset_id',
+  as: 'outfit',
+});
+
+// ==================== ASSET USAGE LOG ====================
+
+AssetUsageLog.belongsTo(Asset, { foreignKey: 'asset_id', as: 'asset' });
+AssetUsageLog.belongsTo(Episode, { foreignKey: 'episode_id', as: 'episode' });
+AssetUsageLog.belongsTo(Scene, { foreignKey: 'scene_id', as: 'scene' });
+
+Asset.hasMany(AssetUsageLog, { foreignKey: 'asset_id', as: 'usageLogs' });
+Episode.hasMany(AssetUsageLog, { foreignKey: 'episode_id', as: 'assetUsageLogs' });
+Scene.hasMany(AssetUsageLog, { foreignKey: 'scene_id', as: 'assetUsageLogs' });
 
 // ==================== PROCESSING QUEUE ASSOCIATIONS ====================
 
@@ -1292,4 +1341,7 @@ module.exports.ScriptTemplate = ScriptTemplate;
 module.exports.ScriptLearningProfile = ScriptLearningProfile;
 module.exports.ScriptEditHistory = ScriptEditHistory;
 module.exports.ScriptSuggestion = ScriptSuggestion;
+module.exports.EpisodeWardrobeDefault = EpisodeWardrobeDefault;
+module.exports.AssetUsageLog = AssetUsageLog;
 module.exports.TimelineData = TimelineData;
+module.exports.Character = Character;

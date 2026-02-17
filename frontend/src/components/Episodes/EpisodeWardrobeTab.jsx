@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import wardrobeService from '../../services/wardrobeService';
-import WardrobeAssignmentModal from '../WardrobeAssignmentModal';
 import './EpisodeWardrobeTab.css';
 
 function EpisodeWardrobeTab({ episodeId, episode }) {
@@ -46,19 +45,11 @@ function EpisodeWardrobeTab({ episodeId, episode }) {
   const handleUnlink = async (wardrobeId) => {
     if (!confirm('Remove this wardrobe item from the episode?')) return;
     try {
-      await wardrobeService.deleteWardrobeItem
-        ? fetch(`/api/v1/episodes/${episodeId}/wardrobe/${wardrobeId}`, { method: 'DELETE' })
-        : null;
+      await wardrobeService.unlinkFromEpisode(episodeId, wardrobeId);
       await loadWardrobeData();
     } catch (err) {
       console.error('Failed to unlink wardrobe item:', err);
     }
-  };
-
-  const handleAssignSuccess = () => {
-    setShowAssignModal(false);
-    setSelectedItem(null);
-    loadWardrobeData();
   };
 
   // Group items by character
@@ -196,13 +187,58 @@ function EpisodeWardrobeTab({ episodeId, episode }) {
         </div>
       )}
 
-      {/* Assignment Modal — reuse existing */}
+      {/* Show Wardrobe Picker Modal */}
       {showAssignModal && (
-        <WardrobeAssignmentModal
-          item={selectedItem || { id: 'new' }}
-          onClose={() => { setShowAssignModal(false); setSelectedItem(null); }}
-          onSuccess={handleAssignSuccess}
-        />
+        <div className="ewt-picker-overlay" onClick={() => setShowAssignModal(false)}>
+          <div className="ewt-picker-modal" onClick={e => e.stopPropagation()}>
+            <div className="ewt-picker-header">
+              <h3>Add from Show Wardrobe</h3>
+              <button className="ewt-picker-close" onClick={() => setShowAssignModal(false)}>×</button>
+            </div>
+            <div className="ewt-picker-body">
+              {showWardrobe.length === 0 ? (
+                <div className="ewt-picker-empty">
+                  <p>No wardrobe items in show library yet.</p>
+                  <p>Upload items to the show's wardrobe first.</p>
+                </div>
+              ) : (
+                <div className="ewt-picker-grid">
+                  {showWardrobe
+                    .filter(item => !wardrobeItems.some(w => w.id === item.id))
+                    .map(item => (
+                      <div key={item.id} className="ewt-picker-item" onClick={async () => {
+                        try {
+                          await wardrobeService.linkToEpisode(episodeId, item.id);
+                          await loadWardrobeData();
+                          setShowAssignModal(false);
+                        } catch (err) {
+                          console.error('Failed to link wardrobe item:', err);
+                          alert('Failed to add wardrobe item');
+                        }
+                      }}>
+                        <div className="ewt-picker-thumb">
+                          {item.thumbnail_url || item.s3_url || item.s3_url_processed ? (
+                            <img src={item.thumbnail_url || item.s3_url || item.s3_url_processed} alt={item.name} />
+                          ) : (
+                            <span className="ewt-placeholder">👗</span>
+                          )}
+                        </div>
+                        <div className="ewt-picker-info">
+                          <span className="ewt-picker-name">{item.name || 'Untitled'}</span>
+                          <span className="ewt-picker-type">{item.clothing_category || 'Wardrobe'}</span>
+                        </div>
+                      </div>
+                    ))}
+                  {showWardrobe.filter(item => !wardrobeItems.some(w => w.id === item.id)).length === 0 && (
+                    <div className="ewt-picker-empty">
+                      <p>All show wardrobe items have been added to this episode.</p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Item Detail Drawer */}
@@ -210,14 +246,14 @@ function EpisodeWardrobeTab({ episodeId, episode }) {
         <div className="ewt-drawer-overlay" onClick={() => setSelectedItem(null)}>
           <div className="ewt-drawer" onClick={e => e.stopPropagation()}>
             <div className="ewt-drawer-header">
-              <h3>{selectedItem.name || selectedItem.original_filename}</h3>
+              <h3>{selectedItem.name}</h3>
               <button className="ewt-drawer-close" onClick={() => setSelectedItem(null)}>×</button>
             </div>
             <div className="ewt-drawer-body">
-              {(selectedItem.processed_url || selectedItem.original_url || selectedItem.thumbnail_url) && (
+              {(selectedItem.thumbnail_url || selectedItem.s3_url || selectedItem.s3_url_processed) && (
                 <div className="ewt-drawer-image">
                   <img
-                    src={selectedItem.processed_url || selectedItem.original_url || selectedItem.thumbnail_url}
+                    src={selectedItem.thumbnail_url || selectedItem.s3_url || selectedItem.s3_url_processed}
                     alt={selectedItem.name}
                   />
                 </div>
@@ -229,10 +265,10 @@ function EpisodeWardrobeTab({ episodeId, episode }) {
                     <span className="ewt-detail-value">{selectedItem.character}</span>
                   </div>
                 )}
-                {(selectedItem.category || selectedItem.garment_type) && (
+                {selectedItem.clothing_category && (
                   <div className="ewt-detail-row">
                     <span className="ewt-detail-label">Category</span>
-                    <span className="ewt-detail-value">{selectedItem.category || selectedItem.garment_type}</span>
+                    <span className="ewt-detail-value">{selectedItem.clothing_category}</span>
                   </div>
                 )}
                 {selectedItem.style && (
@@ -258,9 +294,9 @@ function EpisodeWardrobeTab({ episodeId, episode }) {
 
 /* Wardrobe Card sub-component */
 function WardrobeCard({ item, onView, onRemove }) {
-  const imageUrl = item.processed_url || item.original_url || item.thumbnail_url;
-  const name = item.name || item.original_filename || 'Wardrobe Item';
-  const category = item.category || item.garment_type || '';
+  const imageUrl = item.thumbnail_url || item.s3_url || item.s3_url_processed;
+  const name = item.name || 'Wardrobe Item';
+  const category = item.clothing_category || '';
 
   return (
     <div className="ewt-card" onClick={onView}>

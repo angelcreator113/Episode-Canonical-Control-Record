@@ -1,6 +1,7 @@
 // frontend/src/components/Show/ShowWardrobeTab.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { wardrobeLibraryService } from '../../services/wardrobeLibraryService';
 import './ShowWardrobeTab.css';
 
 /**
@@ -37,6 +38,17 @@ function ShowWardrobeTab({ show }) {
   const [selectedItem, setSelectedItem] = useState(null);
   const [loading, setLoading] = useState(false);
   const [openDropdownId, setOpenDropdownId] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadForm, setUploadForm] = useState({
+    name: '',
+    itemType: 'dresses',
+    color: '',
+    character: 'LaLa',
+    notes: ''
+  });
+  const [uploadFile, setUploadFile] = useState(null);
+  const [uploadPreview, setUploadPreview] = useState(null);
+  const fileInputRef = useRef(null);
   
   useEffect(() => {
     fetchWardrobeItems();
@@ -57,11 +69,29 @@ function ShowWardrobeTab({ show }) {
   const fetchWardrobeItems = async () => {
     setLoading(true);
     try {
-      // TODO: Replace with actual API call
-      // const response = await wardrobeService.getShowWardrobe(show.id);
-      // setWardrobeItems(response.data);
+      const response = await wardrobeLibraryService.getLibrary({ showId: show.id }, 1, 100);
+      const items = response.data || [];
       
-      // Mock data for now
+      // Map API response to component format
+      const mappedItems = items.map(item => ({
+        id: item.id,
+        name: item.name,
+        category: item.itemType || 'other',
+        character: item.defaultCharacter || 'LaLa',
+        url: item.imageUrl,
+        thumbnail_url: item.thumbnailUrl || item.imageUrl,
+        size: 0,
+        usage_count: item.usageCount || 0,
+        color: item.color,
+        notes: item.description,
+        created_at: item.createdAt
+      }));
+      
+      setWardrobeItems(mappedItems);
+      console.log(`✅ Loaded ${mappedItems.length} wardrobe items`);
+    } catch (error) {
+      console.error('Error fetching wardrobe items:', error);
+      // Fall back to mock data if API fails
       setWardrobeItems([
         {
           id: '1',
@@ -120,8 +150,6 @@ function ShowWardrobeTab({ show }) {
           created_at: new Date().toISOString()
         }
       ]);
-    } catch (error) {
-      console.error('Error fetching wardrobe items:', error);
     } finally {
       setLoading(false);
     }
@@ -470,21 +498,167 @@ function ShowWardrobeTab({ show }) {
       {/* Upload Modal */}
       {showUploader && (
         <div className="wardrobe-uploader-modal">
-          <div className="modal-overlay" onClick={() => setShowUploader(false)} />
-          <div className="modal-content">
+          <div className="modal-overlay" onClick={() => !uploading && setShowUploader(false)} />
+          <div className="modal-content wardrobe-upload-form">
             <div className="modal-header">
-              <h2>Add Wardrobe Item</h2>
+              <h2>👗 Add Wardrobe Item</h2>
               <button 
                 className="btn-close"
-                onClick={() => setShowUploader(false)}
+                onClick={() => !uploading && setShowUploader(false)}
+                disabled={uploading}
               >
                 ✕
               </button>
             </div>
             <div className="modal-body">
-              <p>Upload interface for wardrobe items</p>
-              <p className="text-muted">Integration with AssetUploader or custom wardrobe upload form</p>
-              {/* TODO: Implement actual upload form */}
+              {/* Image Upload */}
+              <div className="form-group">
+                <label>Item Image *</label>
+                <div 
+                  className={`image-drop-zone ${uploadPreview ? 'has-image' : ''}`}
+                  onClick={() => fileInputRef.current?.click()}
+                >
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    style={{ display: 'none' }}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setUploadFile(file);
+                        setUploadPreview(URL.createObjectURL(file));
+                      }
+                    }}
+                  />
+                  {uploadPreview ? (
+                    <img src={uploadPreview} alt="Preview" className="upload-preview" />
+                  ) : (
+                    <div className="upload-placeholder">
+                      <span className="upload-icon">📸</span>
+                      <span>Click to upload image</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+              
+              {/* Name */}
+              <div className="form-group">
+                <label>Item Name *</label>
+                <input
+                  type="text"
+                  value={uploadForm.name}
+                  onChange={(e) => setUploadForm({ ...uploadForm, name: e.target.value })}
+                  placeholder="e.g., Red Cocktail Dress"
+                />
+              </div>
+              
+              {/* Category */}
+              <div className="form-group">
+                <label>Category *</label>
+                <select
+                  value={uploadForm.itemType}
+                  onChange={(e) => setUploadForm({ ...uploadForm, itemType: e.target.value })}
+                >
+                  <option value="tops">👕 Tops</option>
+                  <option value="dresses">👗 Dresses</option>
+                  <option value="bottoms">👖 Bottoms</option>
+                  <option value="shoes">👠 Shoes</option>
+                  <option value="accessories">👜 Accessories</option>
+                  <option value="jewelry">💍 Jewelry</option>
+                </select>
+              </div>
+              
+              {/* Character */}
+              <div className="form-group">
+                <label>Character</label>
+                <select
+                  value={uploadForm.character}
+                  onChange={(e) => setUploadForm({ ...uploadForm, character: e.target.value })}
+                >
+                  <option value="LaLa">LaLa</option>
+                  <option value="Guest">Guest</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+              
+              {/* Color */}
+              <div className="form-group">
+                <label>Color</label>
+                <input
+                  type="text"
+                  value={uploadForm.color}
+                  onChange={(e) => setUploadForm({ ...uploadForm, color: e.target.value })}
+                  placeholder="e.g., Red, Navy Blue"
+                />
+              </div>
+              
+              {/* Notes */}
+              <div className="form-group">
+                <label>Notes</label>
+                <textarea
+                  value={uploadForm.notes}
+                  onChange={(e) => setUploadForm({ ...uploadForm, notes: e.target.value })}
+                  placeholder="Any special notes about this item..."
+                  rows={2}
+                />
+              </div>
+            </div>
+            
+            <div className="modal-footer">
+              <button
+                className="btn-cancel"
+                onClick={() => setShowUploader(false)}
+                disabled={uploading}
+              >
+                Cancel
+              </button>
+              <button
+                className="btn-upload"
+                onClick={async () => {
+                  if (!uploadFile) {
+                    alert('Please select an image');
+                    return;
+                  }
+                  if (!uploadForm.name.trim()) {
+                    alert('Please enter an item name');
+                    return;
+                  }
+                  
+                  setUploading(true);
+                  try {
+                    const formData = new FormData();
+                    formData.append('image', uploadFile);
+                    formData.append('name', uploadForm.name);
+                    formData.append('type', 'item');
+                    formData.append('itemType', uploadForm.itemType);
+                    formData.append('color', uploadForm.color);
+                    formData.append('defaultCharacter', uploadForm.character);
+                    formData.append('description', uploadForm.notes);
+                    formData.append('showId', show.id);
+                    
+                    await wardrobeLibraryService.uploadToLibrary(formData);
+                    
+                    // Reset form
+                    setUploadForm({ name: '', itemType: 'dresses', color: '', character: 'LaLa', notes: '' });
+                    setUploadFile(null);
+                    setUploadPreview(null);
+                    setShowUploader(false);
+                    
+                    // Refresh list
+                    await fetchWardrobeItems();
+                    alert('✅ Wardrobe item added successfully!');
+                  } catch (error) {
+                    console.error('Upload error:', error);
+                    alert('Failed to upload: ' + error.message);
+                  } finally {
+                    setUploading(false);
+                  }
+                }}
+                disabled={uploading || !uploadFile || !uploadForm.name.trim()}
+              >
+                {uploading ? 'Uploading...' : '✅ Add Item'}
+              </button>
             </div>
           </div>
         </div>

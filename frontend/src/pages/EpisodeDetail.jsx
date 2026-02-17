@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import episodeService from '../services/episodeService';
@@ -86,6 +86,20 @@ const EpisodeDetail = () => {
   const [showOtherSteps, setShowOtherSteps] = useState(false);
   const [primaryScript, setPrimaryScript] = useState(null);
 
+  // Fetch episode data - extracted for reuse
+  const fetchEpisode = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await episodeService.getEpisode(episodeId);
+      setEpisode(data);
+    } catch (err) {
+      setError(err.message || 'Failed to load episode');
+    } finally {
+      setLoading(false);
+    }
+  }, [episodeId]);
+
   // Auth check
   useEffect(() => {
     if (!isAuthenticated && !authLoading) {
@@ -95,23 +109,10 @@ const EpisodeDetail = () => {
 
   // Episode loading
   useEffect(() => {
-    const fetchEpisode = async () => {
-      try {
-        setLoading(true);
-        setError(null);
-        const data = await episodeService.getEpisode(episodeId);
-        setEpisode(data);
-      } catch (err) {
-        setError(err.message || 'Failed to load episode');
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (episodeId) {
       fetchEpisode();
     }
-  }, [episodeId]);
+  }, [episodeId, fetchEpisode]);
 
   // Handle episode updates from Overview tab
   const handleUpdateEpisode = async (updates) => {
@@ -448,10 +449,12 @@ const EpisodeDetail = () => {
           <div className="ed-header-info">
             <h1 className="ed-header-title">{episode.title || episode.episodeTitle || 'Untitled Episode'}</h1>
             <div className="ed-header-meta">
-              <span className="ed-meta-item">
-                <span className="ed-meta-label">Episode</span>
-                <span className="ed-meta-value">{episode.episode_number || episode.episodeNumber || '?'}</span>
-              </span>
+              {(episode.episode_number || episode.episodeNumber) && (
+                <span className="ed-meta-item">
+                  <span className="ed-meta-label">Episode</span>
+                  <span className="ed-meta-value">{episode.episode_number || episode.episodeNumber}</span>
+                </span>
+              )}
               {episode.show && (
                 <Link 
                   to={`/shows/${episode.show.id}`} 

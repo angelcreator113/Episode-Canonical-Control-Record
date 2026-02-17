@@ -23,6 +23,7 @@ function Stage({
   onSelect,
   onUpdatePosition,
   onResizeElement,
+  onDeleteElement,
   showPlatformBadge = true,
   showSafeZones = false,
   className = ''
@@ -48,6 +49,7 @@ function Stage({
           onSelect={onSelect}
           onUpdatePosition={onUpdatePosition}
           onResizeElement={onResizeElement}
+          onDeleteElement={onDeleteElement}
         />
       </StageFrame>
     </div>

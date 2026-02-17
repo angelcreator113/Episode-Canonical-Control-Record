@@ -330,12 +330,12 @@ const ShowManagement = () => {
                          show.status === 'active' ? 'Active' : 
                          show.status || 'Active'}
                       </span>
-                      <span className="meta-separator">·</span>
-                      <span className="meta-item">
+                      <span className="meta-separator" style={{ color: '#64748b' }}>·</span>
+                      <span className="meta-item" style={{ color: '#1e293b' }}>
                         {show.episodeCount || show.episode_count || 0} Episodes
                       </span>
-                      <span className="meta-separator">·</span>
-                      <span className="meta-item">
+                      <span className="meta-separator" style={{ color: '#64748b' }}>·</span>
+                      <span className="meta-item" style={{ color: '#1e293b' }}>
                         {show.updatedAt ? `Updated ${new Date(show.updatedAt).toLocaleDateString()}` : ''}
                       </span>
                     </div>

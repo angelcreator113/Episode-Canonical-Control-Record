@@ -107,6 +107,12 @@ module.exports = (sequelize) => {
         field: 'aspect_ratio',
         comment: 'Aspect ratio string for the target platform',
       },
+      script_content: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        field: 'script_content',
+        comment: 'JSON stringified script data with dialogue blocks',
+      },
     },
     {
       sequelize,

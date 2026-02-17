@@ -221,12 +221,13 @@ router.post('/episodes/:episodeId/assets', async (req, res) => {
 
 /**
  * GET /api/footage/episodes/:episodeId/assets
- * Get all assets linked to an episode
+ * Get all assets linked to an episode (both via junction table AND direct episode_id)
  */
 router.get('/episodes/:episodeId/assets', async (req, res) => {
   try {
     const { episodeId } = req.params;
     const { Episode, Asset } = require('../models');
+    const { Op } = require('sequelize');
 
     const episode = await Episode.findByPk(episodeId, {
       include: [{
@@ -240,10 +241,24 @@ router.get('/episodes/:episodeId/assets', async (req, res) => {
       return res.status(404).json({ error: 'Episode not found' });
     }
 
+    // Get linked assets from junction table
+    const linkedAssets = episode.assets || [];
+    
+    // Get episode-only assets (those with episode_id set directly)
+    const episodeOnlyAssets = await Asset.findAll({
+      where: {
+        episode_id: episodeId,
+        id: { [Op.notIn]: linkedAssets.map(a => a.id) } // Exclude already linked ones
+      }
+    });
+
+    // Combine both sets
+    const allAssets = [...linkedAssets, ...episodeOnlyAssets];
+
     res.json({
       success: true,
-      assets: episode.assets || [],
-      count: episode.assets ? episode.assets.length : 0
+      assets: allAssets,
+      count: allAssets.length
     });
 
   } catch (error) {

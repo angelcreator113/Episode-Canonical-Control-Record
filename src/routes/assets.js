@@ -62,6 +62,10 @@ const VALID_ASSET_TYPES = [
   'BACKGROUND_VIDEO',
   'SHOW_JAIA',
   'PROMO_JUSTAMOVIE',
+  'THUMBNAIL',
+  'GUEST_PHOTO',
+  'CUSTOM_GRAPHIC',
+  'B_ROLL',
 ];
 
 /**
@@ -75,6 +79,9 @@ router.get('/', async (req, res) => {
       offset = 0,
       approval_status,
       asset_type,
+      show_id,
+      episode_id,
+      asset_scope,
       sortBy = 'created_at',
       sortOrder = 'DESC',
     } = req.query;
@@ -84,9 +91,15 @@ router.get('/', async (req, res) => {
       offset,
       approval_status,
       asset_type,
+      show_id,
+      episode_id,
+      asset_scope,
       sortBy,
       sortOrder,
     });
+
+    const { category, character_name, entity_type: entityTypeFilter, location_name, include_global } = req.query;
+    const { Op } = require('sequelize');
 
     const where = {};
     if (approval_status) {
@@ -94,6 +107,44 @@ router.get('/', async (req, res) => {
     }
     if (asset_type) {
       where.asset_type = asset_type;
+    }
+    // When show_id is provided, also include GLOBAL assets (available everywhere)
+    if (show_id) {
+      if (include_global === 'true') {
+        // Include both show-specific and GLOBAL assets
+        where[Op.or] = [
+          { show_id: show_id },
+          { asset_scope: 'GLOBAL' },
+          { show_id: null } // Assets without show_id
+        ];
+      } else {
+        where.show_id = show_id;
+      }
+    }
+    if (episode_id) {
+      where.episode_id = episode_id;
+    }
+    if (asset_scope && !include_global) {
+      where.asset_scope = asset_scope;
+    }
+    // New wardrobe system filters
+    if (category) {
+      // Support multiple categories as comma-separated values
+      if (category.includes(',')) {
+        const categories = category.split(',').map((c) => c.trim()).filter(Boolean);
+        where.category = { [Op.in]: categories };
+      } else {
+        where.category = category;
+      }
+    }
+    if (character_name) {
+      where.character_name = character_name;
+    }
+    if (entityTypeFilter) {
+      where.entity_type = entityTypeFilter;
+    }
+    if (location_name) {
+      where.location_name = location_name;
     }
 
     const assets = await models.Asset.findAll({
@@ -121,6 +172,20 @@ router.get('/', async (req, res) => {
         'height',
         'file_size_bytes',
         'metadata', // CRITICAL: Include metadata for thumbnail_url
+        // New wardrobe system columns
+        'entity_type',
+        'category',
+        'character_name',
+        'outfit_name',
+        'outfit_era',
+        'transformation_stage',
+        'usage_count',
+        'color_palette',
+        'mood_tags',
+        'location_name',
+        'location_version',
+        'active_from_episode',
+        'active_to_episode',
         'created_at',
         'updated_at',
       ],
@@ -695,11 +760,34 @@ router.post('/', upload.single('file'), validateAssetUpload, async (req, res) =>
 
     const { assetType, assetRole, metadata } = req.body;
 
+    // Extract wardrobe system fields from body
+    const {
+      category: assetCategory,
+      entity_type: entityType,
+      character_name: charName,
+      outfit_name: outfitName,
+      outfit_era: outfitEra,
+      transformation_stage: transformStage,
+      location_name: locName,
+      location_version: locVersion,
+      tags: rawTags,
+      color_palette: rawPalette,
+      mood_tags: rawMoodTags,
+      show_id: bodyShowId,
+      episode_id: bodyEpisodeId,
+    } = req.body;
+
     console.log('📥 Asset upload request body:', {
       assetType,
       assetRole,
+      assetCategory,
+      entityType,
+      charName,
       metadata,
       allBodyFields: Object.keys(req.body),
+      bodyShowId,
+      bodyEpisodeId,
+      FULL_REQ_BODY: req.body,
     });
 
     if (!assetType) {
@@ -741,6 +829,10 @@ router.post('/', upload.single('file'), validateAssetUpload, async (req, res) =>
       }
     }
 
+    // ✅ CRITICAL: Add show_id and asset_scope to metadata so AssetService can use it
+    if (bodyShowId) parsedMetadata.show_id = bodyShowId;
+    if (bodyShowId) parsedMetadata.showId = bodyShowId;  // Also add camelCase for compatibility
+
     // Upload to S3 and create database record
     const asset = await AssetService.uploadAsset(
       req.file,
@@ -750,11 +842,52 @@ router.post('/', upload.single('file'), validateAssetUpload, async (req, res) =>
       req.user?.id || 'system'
     );
 
+    // Apply wardrobe system metadata if provided
+    const wardrobeUpdates = {};
+    if (assetCategory) wardrobeUpdates.category = assetCategory;
+    if (entityType) wardrobeUpdates.entity_type = entityType;
+    if (charName) wardrobeUpdates.character_name = charName;
+    if (outfitName) wardrobeUpdates.outfit_name = outfitName;
+    if (outfitEra) wardrobeUpdates.outfit_era = outfitEra;
+    if (transformStage) wardrobeUpdates.transformation_stage = transformStage;
+    if (locName) wardrobeUpdates.location_name = locName;
+    if (locVersion) wardrobeUpdates.location_version = parseInt(locVersion);
+    
+    // Extract show_id and episode_id (from body or metadata)
+    const showId = bodyShowId || parsedMetadata?.show_id || parsedMetadata?.showId;
+    const episodeId = bodyEpisodeId || parsedMetadata?.episode_id || parsedMetadata?.episodeId;
+    if (showId) wardrobeUpdates.show_id = showId;
+    if (episodeId) wardrobeUpdates.episode_id = episodeId;
+    
+    if (rawPalette) {
+      try {
+        wardrobeUpdates.color_palette = typeof rawPalette === 'string' ? JSON.parse(rawPalette) : rawPalette;
+      } catch (e) { /* skip invalid JSON */ }
+    }
+    if (rawMoodTags) {
+      wardrobeUpdates.mood_tags = typeof rawMoodTags === 'string' ? rawMoodTags.split(',').map(t => t.trim()) : rawMoodTags;
+    }
+
+    if (Object.keys(wardrobeUpdates).length > 0) {
+      console.log('🔄 Applying wardrobe updates:', wardrobeUpdates);
+      await models.Asset.update(wardrobeUpdates, {
+        where: { id: asset.id },
+      });
+      Object.assign(asset, wardrobeUpdates);
+      console.log('✅ Updates applied. Asset now:', {
+        id: asset.id,
+        show_id: asset.show_id,
+        entity_type: asset.entity_type,
+        category: asset.category,
+      });
+    }
+
     console.log('✅ Asset created:', {
       id: asset.id,
       name: asset.name,
       asset_type: asset.asset_type,
       asset_role: asset.asset_role,
+      category: asset.category,
       wasRoleProvided: !!assetRole,
     });
 

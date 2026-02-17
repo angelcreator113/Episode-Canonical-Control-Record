@@ -18,27 +18,30 @@ function EpisodeScriptTab({ episode, onUpdate }) {
   
   useEffect(() => {
     loadScript();
-  }, [episode.id]);
+  }, [episode.id, episode.script_content]);
   
   const loadScript = () => {
+    console.log('📜 Loading script, episode.script_content:', episode.script_content);
     try {
       // Parse existing script (if it's JSON format)
       if (episode.script_content) {
         const parsed = JSON.parse(episode.script_content);
+        console.log('📜 Parsed script data:', parsed);
         setDialogueBlocks(parsed.dialogue || []);
         setYoutubeDescription(parsed.youtubeDescription || '');
       } else {
         // Default empty state
         setDialogueBlocks([
-          { id: Date.now(), character: 'LaLa', dialogue: '' }
+          { id: Date.now(), character: 'Lala', dialogue: '' }
         ]);
         setYoutubeDescription('');
       }
     } catch (error) {
+      console.error('📜 Error parsing script:', error);
       // If not JSON, treat as plain text and convert
       if (episode.script_content) {
         setDialogueBlocks([
-          { id: Date.now(), character: 'LaLa', dialogue: episode.script_content }
+          { id: Date.now(), character: 'Lala', dialogue: episode.script_content }
         ]);
       }
     }
@@ -66,7 +69,7 @@ function EpisodeScriptTab({ episode, onUpdate }) {
   const addDialogueBlock = (afterIndex = -1) => {
     const newBlock = {
       id: Date.now(),
-      character: 'LaLa',
+      character: 'Lala',
       dialogue: ''
     };
     
@@ -131,12 +134,8 @@ function EpisodeScriptTab({ episode, onUpdate }) {
   };
   
   const characterSuggestions = [
-    'LaLa',
-    'Narrator',
-    'Kelli',
-    'Sarah',
-    'Guest',
-    'Voiceover'
+    'Lala',
+    'Justawomaninherprime'
   ];
   
   return (
@@ -203,19 +202,15 @@ function EpisodeScriptTab({ episode, onUpdate }) {
                   {/* Character Input */}
                   <div className="block-field character-field">
                     <label>Character</label>
-                    <input
-                      type="text"
+                    <select
                       className="character-input"
                       value={block.character}
                       onChange={(e) => updateDialogueBlock(index, 'character', e.target.value)}
-                      placeholder="Character name..."
-                      list={`character-suggestions-${index}`}
-                    />
-                    <datalist id={`character-suggestions-${index}`}>
+                    >
                       {characterSuggestions.map(char => (
-                        <option key={char} value={char} />
+                        <option key={char} value={char}>{char}</option>
                       ))}
-                    </datalist>
+                    </select>
                   </div>
                   
                   {/* Dialogue Input */}

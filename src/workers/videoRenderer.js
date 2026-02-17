@@ -22,6 +22,11 @@ const { emitExportProgress, emitExportComplete, emitExportFailed } = require('..
 const TEMP_DIR = path.resolve(process.env.EXPORT_TEMP_DIR || './exports-temp');
 const S3_BUCKET = process.env.S3_PROCESSED_VIDEOS_BUCKET || process.env.S3_PRIMARY_BUCKET || 'episode-metadata-storage-dev';
 
+// Reference stage width matching the CSS max-width of the stage frame in the frontend.
+// All element pixel sizes in scene data are relative to this reference canvas width.
+// The renderer scales them proportionally to the actual export resolution.
+const STAGE_REFERENCE_WIDTH = 960;
+
 // Quality presets → CRF values (lower = better quality, bigger file)
 const QUALITY_CRF = {
   low: 28,
@@ -35,6 +40,7 @@ const QUALITY_CRF = {
 // ============================================================================
 
 videoQueue.process(
+  'export-video',
   parseInt(process.env.EXPORT_MAX_CONCURRENT_JOBS, 10) || 2,
   async (job) => {
     const { episodeId, episode, scenes, platform, timeline, userId } = job.data;
@@ -130,6 +136,7 @@ async function downloadAssets(scenes, jobDir) {
   const downloaded = {
     backgrounds: {},
     characters: {},
+    uiElements: {},
     audio: {},
   };
 
@@ -161,11 +168,29 @@ async function downloadAssets(scenes, jobDir) {
         }
       }
     }
+
+    // Download UI element images
+    if (scene.ui_elements) {
+      for (const element of scene.ui_elements) {
+        const elId = element.id || `ui-${scene.ui_elements.indexOf(element)}`;
+        if (element.imageUrl && !downloaded.uiElements[elId]) {
+          try {
+            const filename = `ui-${elId}.${getFileExtension(element.imageUrl)}`;
+            const filepath = path.join(assetsDir, filename);
+            await downloadFile(element.imageUrl, filepath);
+            downloaded.uiElements[elId] = filepath;
+          } catch (err) {
+            console.warn(`⚠️  Failed to download UI element ${elId}:`, err.message);
+          }
+        }
+      }
+    }
   }
 
   const bgCount = Object.keys(downloaded.backgrounds).length;
   const charCount = Object.keys(downloaded.characters).length;
-  console.log(`   📦 Downloaded ${bgCount} backgrounds, ${charCount} characters`);
+  const uiCount = Object.keys(downloaded.uiElements).length;
+  console.log(`   📦 Downloaded ${bgCount} backgrounds, ${charCount} characters, ${uiCount} UI elements`);
 
   return downloaded;
 }
@@ -195,6 +220,50 @@ function getFileExtension(url) {
 // ============================================================================
 
 /**
+ * Draw an image with CSS object-fit: cover behaviour (fill + crop, centred).
+ * Draws on ctx at (dx, dy) filling (dw, dh), cropping source as needed.
+ */
+function drawImageCover(ctx, img, dx, dy, dw, dh) {
+  const srcAR = img.width / img.height;
+  const dstAR = dw / dh;
+  let sx, sy, sw, sh;
+  if (srcAR > dstAR) {
+    // Source is wider → crop sides
+    sh = img.height;
+    sw = img.height * dstAR;
+    sx = (img.width - sw) / 2;
+    sy = 0;
+  } else {
+    // Source is taller → crop top/bottom
+    sw = img.width;
+    sh = img.width / dstAR;
+    sx = 0;
+    sy = (img.height - sh) / 2;
+  }
+  ctx.drawImage(img, sx, sy, sw, sh, dx, dy, dw, dh);
+}
+
+/**
+ * Draw an image with CSS object-fit: contain behaviour (fit inside, centred).
+ * Draws on ctx centred at (cx, cy) fitting within (maxW, maxH), preserving aspect ratio.
+ */
+function drawImageContain(ctx, img, cx, cy, maxW, maxH) {
+  const srcAR = img.width / img.height;
+  const boxAR = maxW / maxH;
+  let drawW, drawH;
+  if (srcAR > boxAR) {
+    // Image is wider than box → width-limited
+    drawW = maxW;
+    drawH = maxW / srcAR;
+  } else {
+    // Image is taller than box → height-limited
+    drawH = maxH;
+    drawW = maxH * srcAR;
+  }
+  ctx.drawImage(img, cx - drawW / 2, cy - drawH / 2, drawW, drawH);
+}
+
+/**
  * Render each scene as a PNG frame with characters and UI elements composited
  */
 async function renderSceneFrames(scenes, downloadedAssets, platform, timeline, jobDir) {
@@ -212,11 +281,11 @@ async function renderSceneFrames(scenes, downloadedAssets, platform, timeline, j
     const canvas = createCanvas(width, height);
     const ctx = canvas.getContext('2d');
 
-    // 1. Draw background
+    // 1. Draw background (object-fit: cover — fill and crop, no stretching)
     if (scene.background_url && downloadedAssets.backgrounds[scene.id]) {
       try {
         const bgImage = await loadImage(downloadedAssets.backgrounds[scene.id]);
-        ctx.drawImage(bgImage, 0, 0, width, height);
+        drawImageCover(ctx, bgImage, 0, 0, width, height);
       } catch {
         drawDefaultBackground(ctx, width, height);
       }
@@ -224,7 +293,9 @@ async function renderSceneFrames(scenes, downloadedAssets, platform, timeline, j
       drawDefaultBackground(ctx, width, height);
     }
 
-    // 2. Draw characters
+    // 2. Draw characters — scale from stage-pixel sizes to export resolution
+    const refHeight = Math.round(STAGE_REFERENCE_WIDTH * height / width);
+
     if (scene.characters) {
       for (const char of scene.characters) {
         if (char.imageUrl && downloadedAssets.characters[char.id]) {
@@ -233,6 +304,12 @@ async function renderSceneFrames(scenes, downloadedAssets, platform, timeline, j
 
             const x = parsePosition(char.position?.x, width);
             const y = parsePosition(char.position?.y, height);
+
+            // Scale character size from stage pixels to export pixels
+            const charStageW = parseInt(char.width) || 100;
+            const charStageH = parseInt(char.height) || 150;
+            const drawW = (charStageW / STAGE_REFERENCE_WIDTH) * width;
+            const drawH = (charStageH / refHeight) * height;
 
             // Apply keyframe transforms if present
             const transform = getKeyframeTransform(scene.id, char.id, 0, timeline);
@@ -243,14 +320,8 @@ async function renderSceneFrames(scenes, downloadedAssets, platform, timeline, j
             if (transform.scale) ctx.scale(transform.scale, transform.scale);
             ctx.globalAlpha = transform.opacity ?? 1.0;
 
-            // Draw centered
-            ctx.drawImage(
-              charImage,
-              -charImage.width / 2,
-              -charImage.height / 2,
-              charImage.width,
-              charImage.height,
-            );
+            // Draw centered at scaled size (contain — preserve aspect ratio)
+            drawImageContain(ctx, charImage, 0, 0, drawW, drawH);
 
             ctx.restore();
           } catch (err) {
@@ -260,10 +331,31 @@ async function renderSceneFrames(scenes, downloadedAssets, platform, timeline, j
       }
     }
 
-    // 3. Draw UI elements (labels, buttons, overlays)
+    // 3. Draw UI elements (labels, buttons, overlays, images)
     if (scene.ui_elements) {
       for (const element of scene.ui_elements) {
-        drawUIElement(ctx, element, width, height);
+        const elId = element.id || `ui-${scene.ui_elements.indexOf(element)}`;
+
+        // UI elements with images
+        if (element.imageUrl && downloadedAssets.uiElements?.[elId]) {
+          try {
+            const uiImage = await loadImage(downloadedAssets.uiElements[elId]);
+            const ux = parsePosition(element.position?.x, width);
+            const uy = parsePosition(element.position?.y, height);
+
+            const uiStageW = parseInt(element.width) || 120;
+            const uiStageH = parseInt(element.height) || 120;
+            const uiDrawW = (uiStageW / STAGE_REFERENCE_WIDTH) * width;
+            const uiDrawH = (uiStageH / refHeight) * height;
+
+            drawImageContain(ctx, uiImage, ux, uy, uiDrawW, uiDrawH);
+          } catch (err) {
+            console.warn(`⚠️  Failed to draw UI element image ${elId}:`, err.message);
+          }
+        } else {
+          // Text / box UI elements
+          drawUIElement(ctx, element, width, height, refHeight);
+        }
       }
     }
 
@@ -297,26 +389,30 @@ function drawDefaultBackground(ctx, width, height) {
 /**
  * Draw a UI element (text label with optional background box)
  */
-function drawUIElement(ctx, element, canvasWidth, canvasHeight) {
+function drawUIElement(ctx, element, canvasWidth, canvasHeight, refHeight) {
   const x = parsePosition(element.position?.x, canvasWidth);
   const y = parsePosition(element.position?.y, canvasHeight);
 
   ctx.save();
 
-  // Background box
+  // Background box — scale from stage pixels to export resolution
   if (element.backgroundColor) {
     ctx.fillStyle = element.backgroundColor;
-    const w = parseInt(element.width, 10) || 300;
-    const h = parseInt(element.height, 10) || 50;
+    const stageW = parseInt(element.width, 10) || 300;
+    const stageH = parseInt(element.height, 10) || 50;
+    const w = (stageW / STAGE_REFERENCE_WIDTH) * canvasWidth;
+    const h = (stageH / refHeight) * canvasHeight;
     const r = parseInt(element.borderRadius, 10) || 8;
     roundRect(ctx, x - w / 2, y - h / 2, w, h, r);
     ctx.fill();
   }
 
-  // Text label
+  // Text label — scale font size proportionally
   if (element.label) {
     ctx.fillStyle = element.color || '#ffffff';
-    ctx.font = `${element.fontSize || 24}px Arial`;
+    const stageFontSize = parseInt(element.fontSize) || 24;
+    const fontSize = Math.round((stageFontSize / STAGE_REFERENCE_WIDTH) * canvasWidth);
+    ctx.font = `${fontSize}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText(element.label, x, y);

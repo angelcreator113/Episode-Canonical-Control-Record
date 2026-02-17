@@ -404,11 +404,18 @@ class AssetService {
       // Override asset_group if assetRole is provided (role is more specific than type)
       const assetGroup = assetRole ? getAssetGroupFromRole(assetRole) : orgDefaults.asset_group;
 
+      // Determine asset scope - use metadata if provided, otherwise use defaults
+      // ✅ FIX: Check both snake_case and camelCase versions of showId
+      const assetScope = metadata?.asset_scope || (metadata?.showId || metadata?.show_id ? 'SHOW' : (orgDefaults.is_global ? 'GLOBAL' : 'EPISODE'));
+      const showId = metadata?.showId || metadata?.show_id || null;
+
       console.log('📁 Asset folder assignment:', {
         assetRole,
         assetType,
         derivedGroup: assetGroup,
         defaultGroup: orgDefaults.asset_group,
+        assetScope,
+        showId,
       });
 
       // Create database record with new schema
@@ -421,12 +428,12 @@ class AssetService {
 
         // Asset organization fields (new)
         asset_group: assetGroup,
-        asset_scope: orgDefaults.is_global ? 'GLOBAL' : 'EPISODE',
-        show_id: null,
+        asset_scope: assetScope,
+        show_id: showId,
         episode_id: metadata?.episodeId || null,
-        purpose: orgDefaults.purpose,
+        purpose: metadata?.purpose || orgDefaults.purpose,
         allowed_uses: orgDefaults.allowed_uses,
-        is_global: orgDefaults.is_global,
+        is_global: assetScope === 'GLOBAL',
 
         // Media type field
         media_type: mediaType,

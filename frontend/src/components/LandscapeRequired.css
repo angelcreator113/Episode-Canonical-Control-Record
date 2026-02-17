@@ -42,11 +42,7 @@
   color: rgba(255, 255, 255, 0.75);
 }
 
-/* Only show on phones in portrait — hide otherwise */
-@media (min-width: 768px) {
-  .landscape-overlay { display: none !important; }
-}
-
-@media (orientation: landscape) {
+/* Only show on small screens in wrong orientation — hide otherwise */
+@media (min-width: 1024px) {
   .landscape-overlay { display: none !important; }
 }

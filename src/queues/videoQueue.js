@@ -17,7 +17,7 @@ const videoQueue = new Bull('video-export', {
     password: redisConfig.password,
     maxRetriesPerRequest: null,
     enableReadyCheck: false,
-    lazyConnect: true,  // Don't connect on module load — prevents early rejection
+    lazyConnect: false,  // Must eagerly connect so Bull's subscriber picks up jobs
     retryStrategy(times) {
       if (times > 5) {
         if (!queueErrorLogged) {
