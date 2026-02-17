@@ -127,22 +127,69 @@ jobs:
           echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          # Upload build
+          # Upload build artifact
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             episode-metadata-${{ github.sha }}.tar.gz \
             ubuntu@$EC2_HOST:/tmp/dev-deploy.tar.gz
 
-          # Deploy on server
+          # ─── Deploy frontend (static files → Nginx) ───
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
             set -e
+            echo '📦 Extracting build artifact...'
             cd /tmp
             tar -xzf dev-deploy.tar.gz
+
+            echo '🎨 Deploying frontend...'
             sudo rm -rf /var/www/html/*
             sudo cp -r deploy/dist/* /var/www/html/
             sudo chown -R www-data:www-data /var/www/html
             sudo systemctl restart nginx
+            echo '✅ Frontend deployed'
+          "
+
+          # ─── Deploy backend (code + deps + migrations + PM2 restart) ───
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
+            set -e
+            APP_DIR=\$HOME/episode-metadata
+
+            echo '🔧 Deploying backend...'
+
+            # Update backend source from the build artifact
+            rm -rf \$APP_DIR/src
+            cp -r /tmp/deploy/src \$APP_DIR/src
+            cp /tmp/deploy/package.json \$APP_DIR/package.json
+            cp /tmp/deploy/package-lock.json \$APP_DIR/package-lock.json
+
+            # Install production dependencies
+            cd \$APP_DIR
+            npm ci --production --ignore-scripts 2>&1 | tail -5
+
+            # Rebuild native modules (sharp, etc.) for the server architecture
+            npm rebuild sharp 2>&1 | tail -3 || echo '⚠️ sharp rebuild skipped'
+
+            # Run database migrations
+            echo '🗃️ Running migrations...'
+            npx sequelize-cli db:migrate --env development 2>&1 | tail -10
+
+            # Restart the Node.js backend via PM2
+            echo '🔄 Restarting PM2...'
+            pm2 restart ecosystem.config.js --env development 2>&1 | tail -5
+            pm2 save
+
+            # Health check — wait for backend to come up
+            echo '🏥 Health check...'
+            sleep 3
+            if curl -sf http://localhost:3002/api/v1/episodes > /dev/null 2>&1; then
+              echo '✅ Backend is healthy'
+            else
+              echo '⚠️ Backend health check failed — check PM2 logs'
+              pm2 logs episode-api --lines 20 --nostream
+              exit 1
+            fi
+
+            # Cleanup
             rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz
-            echo 'Deployment complete'
+            echo '✅ Full deployment complete'
           "
 
       - name: Deployment summary
@@ -151,5 +198,7 @@ jobs:
           echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- Site: https://dev.primepisodes.com" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ✅ Deployed to Nginx" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: ✅ Deployed, migrated, PM2 restarted" >> $GITHUB_STEP_SUMMARY
 
 
