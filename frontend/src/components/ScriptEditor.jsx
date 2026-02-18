@@ -267,10 +267,12 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
 
   const handleAutofix = useCallback((w) => {
     if (!w.autofix?.available) return;
+    let applied = false;
     if (w.autofix.action === 'insert_voice_activate' && w.at?.line) {
       const lines = scriptContent.split('\n');
       lines.splice(Math.max(0, w.at.line - 2), 0, '[UI:CLICK VoiceIcon]', '[UI:VOICE_ACTIVATE Lala]');
       setScriptContent(lines.join('\n')); setHasUnsavedChanges(true);
+      applied = true;
     }
     if (w.autofix.action === 'insert_login_template') {
       const lb = '[UI:OPEN LoginWindow]\n[UI:TYPE Username "JustAWomanInHerPrime"]\n[UI:TYPE Password "••••••"]\n[UI:CLICK LoginButton]\n[UI:SFX LoginSuccessDing]';
@@ -279,9 +281,17 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
         if (idx >= 0) { const nl = scriptContent.indexOf('\n', idx) + 1; setScriptContent(scriptContent.substring(0, nl) + lb + '\n' + scriptContent.substring(nl)); }
         else setScriptContent(lb + '\n\n' + scriptContent);
         setHasUnsavedChanges(true);
+        applied = true;
       }
     }
-  }, [scriptContent]);
+    // Remove the fixed warning from the analysis panel
+    if (applied && analysis) {
+      setAnalysis(prev => ({
+        ...prev,
+        warnings: (prev.warnings || []).filter(x => x !== w),
+      }));
+    }
+  }, [scriptContent, analysis]);
 
   const lineCount = scriptContent.split('\n').length;
   const wordCount = scriptContent.trim() ? scriptContent.trim().split(/\s+/).length : 0;
