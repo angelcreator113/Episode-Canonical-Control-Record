@@ -62,6 +62,8 @@ function WorldAdmin() {
   const [eventForm, setEventForm] = useState({ ...EMPTY_EVENT });
   const [savingEvent, setSavingEvent] = useState(false);
   const [injectTarget, setInjectTarget] = useState(null);
+  const [injecting, setInjecting] = useState(false);
+  const [injectError, setInjectError] = useState(null);
   const [generateTarget, setGenerateTarget] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
@@ -128,10 +130,23 @@ function WorldAdmin() {
   };
 
   const injectEvent = async (eventId, episodeId) => {
+    setInjecting(true); setInjectError(null); setError(null);
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/inject`, { episode_id: episodeId });
-      if (res.data.success) { setSuccessMsg(`Injected! ${res.data.event_tag}`); setInjectTarget(null); }
-    } catch (err) { setError(err.response?.data?.error || err.message); }
+      if (res.data.success) {
+        setSuccessMsg(`Injected! ${res.data.event_tag}`);
+        setInjectTarget(null);
+        // Update local event status to 'used'
+        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'used', times_used: (ev.times_used || 0) + 1, used_in_episode_id: episodeId } : ev));
+      } else {
+        const msg = res.data?.error || res.data?.message || 'Inject returned unexpected response';
+        setInjectError(msg); setError(msg);
+      }
+    } catch (err) {
+      const msg = err.response?.data?.error || err.response?.data?.message || err.message;
+      setInjectError(msg); setError(msg);
+      console.error('Inject failed:', err.response?.status, msg);
+    } finally { setInjecting(false); }
   };
 
   const generateScript = async (eventId, episodeId) => {
@@ -585,12 +600,14 @@ function WorldAdmin() {
                 {injectTarget === ev.id && (
                   <div style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                     <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Inject into which episode?</div>
-                    {episodes.map(ep => (
-                      <button key={ep.id} onClick={() => injectEvent(ev.id, ep.id)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', marginBottom: 4, color: '#1a1a2e' }}>
+                    {injecting && <div style={{ fontSize: 12, color: '#6366f1', padding: '6px 0', fontWeight: 600 }}>⏳ Injecting...</div>}
+                    {injectError && <div style={{ fontSize: 12, color: '#dc2626', padding: '6px 10px', background: '#fef2f2', borderRadius: 6, marginBottom: 6, border: '1px solid #fecaca' }}>❌ {injectError}</div>}
+                    {!injecting && episodes.map(ep => (
+                      <button key={ep.id} onClick={() => injectEvent(ev.id, ep.id)} disabled={injecting} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', marginBottom: 4, color: '#1a1a2e' }}>
                         {ep.episode_number || '?'}. {ep.title || 'Untitled'}
                       </button>
                     ))}
-                    {episodes.length === 0 && <span style={S.muted}>No episodes</span>}
+                    {!injecting && episodes.length === 0 && <span style={S.muted}>No episodes yet — create an episode first</span>}
                   </div>
                 )}
                 {generateTarget === ev.id && (
