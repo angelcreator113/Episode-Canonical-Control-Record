@@ -1,402 +1,458 @@
 /**
- * Script Beat Parser
+ * Script Beat Parser v2
  * 
- * Parses Lala's World enhanced script format into structured Scene Plans.
- * The Scene Plan pre-populates Scene Composer with labeled scenes,
- * character expectations, UI hints, and duration estimates.
- * 
- * SCRIPT FORMAT SPEC:
- * 
- *   ## BEAT: BEAT_NAME
- *   [LOCATION_HINT: "description"]
- *   [CHARACTERS: lala, justawoman, guest]
- *   [UI:OPEN ElementName]
- *   [UI:CLOSE ElementName]
- *   [DURATION: 8s]
- *   [DENSITY: low|medium|high]
- *   [MOOD: energetic|calm|tense|playful|dramatic]
- *   [TRANSITION: cut|fade|dissolve|swipe]
- *   
- *   Script dialogue and action lines go here...
- *   
- *   LALA: "Dialogue line"
- *   JUSTAWOMAN: "Dialogue line"
- *   (action description)
- * 
- * EXAMPLE SCRIPT:
- * 
- *   ## BEAT: OPENING RITUAL
- *   [CHARACTERS: justawoman]
- *   [DURATION: 8s]
- *   [DENSITY: low]
- *   [MOOD: calm]
- *   
- *   (Headphones on. Login sequence. The world outside fades.)
- *   JUSTAWOMAN: "Let's see what today brings."
- *   
- *   ## BEAT: INTERRUPTION — INVITE
- *   [CHARACTERS: lala]
- *   [UI:OPEN MailIcon]
- *   [UI:OPEN MailPanel]
- *   [DURATION: 10s]
- *   [DENSITY: medium]
- *   
- *   (A notification slides in. Lala's eyes light up.)
- *   LALA: "Oh... this is interesting."
- *   [UI:CLOSE MailPanel]
- * 
- * OUTPUT: Scene Plan JSON (see parseScript return value)
+ * Full parser for Lala's World enhanced script format.
+ * Supports:
+ *   - ## BEAT: headers (canonical + repeatables with #N)
+ *   - Speaker dialogue (Lala, Prime/Me, Guest, System)
+ *   - UI action tags ([UI:OPEN], [UI:CLICK], [UI:DISPLAY], etc.)
+ *   - Mail tags ([MAIL: type=invite from="Maison Belle" ...])
+ *   - Stat tags ([STAT: coins +120])
+ *   - Duration estimation from word count (words / 2.2)
+ *   - Grammar warnings (login presence, voice activate before Lala)
  * 
  * Location: src/utils/scriptBeatParser.js
  */
 
 'use strict';
 
-// Known characters in the Lala universe
+// ─── CANONICAL TYPES ───
+
+const BEAT_TYPES = [
+  'opening_ritual', 'creator_welcome', 'interruption', 'reveal',
+  'stakes_intention', 'transformation', 'transition', 'event_travel',
+  'event_outcome', 'deliverable_creation', 'payoff_cta', 'cliffhanger'
+];
+
+const SPEAKER_MAP = {
+  'lala': 'lala',
+  'prime': 'prime',
+  'me': 'prime',
+  'guest': 'guest',
+  'system': 'system',
+};
+
+const UI_ACTION_TYPES = [
+  'open', 'close', 'click', 'type', 'display', 'hide',
+  'notification', 'voice_activate', 'scroll', 'add', 'remove',
+  'check_item', 'set_background', 'play_sfx', 'play_music', 'stop_music'
+];
+
+const UI_ACTION_DURATIONS = {
+  click: 0.8, open: 1.2, close: 1.0, display: 0.2, hide: 0.2,
+  type: 1.5, notification: 0.6, voice_activate: 0.4, scroll: 1.0,
+  add: 0.6, remove: 0.4, check_item: 0.5, set_background: 0.8,
+  play_sfx: 0.0, play_music: 0.0, stop_music: 0.0,
+};
+
+const BEAT_DEFAULTS = {
+  'opening_ritual': { duration: 8, density: 'low', mood: 'calm' },
+  'creator_welcome': { duration: 12, density: 'low', mood: 'warm' },
+  'interruption': { duration: 6, density: 'medium', mood: 'energetic' },
+  'reveal': { duration: 15, density: 'high', mood: 'dramatic' },
+  'stakes_intention': { duration: 10, density: 'medium', mood: 'tense' },
+  'transformation': { duration: 34, density: 'high', mood: 'energetic' },
+  'transition': { duration: 4, density: 'low', mood: 'calm' },
+  'event_travel': { duration: 8, density: 'medium', mood: 'energetic' },
+  'event_outcome': { duration: 12, density: 'high', mood: 'dramatic' },
+  'deliverable_creation': { duration: 12, density: 'medium', mood: 'playful' },
+  'payoff_cta': { duration: 8, density: 'medium', mood: 'warm' },
+  'cliffhanger': { duration: 5, density: 'medium', mood: 'tense' },
+};
+
 const KNOWN_CHARACTERS = {
   'lala': { id: 'lala', name: 'Lala', emoji: '👑' },
-  'justawoman': { id: 'justawomaninherprime', name: 'JustAWomanInHerPrime', emoji: '💎' },
-  'justawomaninherprime': { id: 'justawomaninherprime', name: 'JustAWomanInHerPrime', emoji: '💎' },
+  'prime': { id: 'justawomaninherprime', name: 'Prime', emoji: '💎' },
+  'me': { id: 'justawomaninherprime', name: 'Prime', emoji: '💎' },
   'guest': { id: 'guest', name: 'Guest', emoji: '🌟' },
+  'system': { id: 'system', name: 'System', emoji: '⚙️' },
 };
 
-// Beat type classification for duration/density defaults
-const BEAT_DEFAULTS = {
-  'opening': { duration: 8, density: 'low', mood: 'calm' },
-  'opening ritual': { duration: 8, density: 'low', mood: 'calm' },
-  'interruption': { duration: 10, density: 'medium', mood: 'energetic' },
-  'reveal': { duration: 12, density: 'high', mood: 'dramatic' },
-  'transformation': { duration: 15, density: 'high', mood: 'energetic' },
-  'deliverable': { duration: 10, density: 'medium', mood: 'playful' },
-  'deliverable_creation': { duration: 10, density: 'medium', mood: 'playful' },
-  'cliffhanger': { duration: 6, density: 'medium', mood: 'tense' },
-  'closing': { duration: 8, density: 'low', mood: 'calm' },
-  'montage': { duration: 12, density: 'high', mood: 'energetic' },
-  'dialogue': { duration: 15, density: 'medium', mood: 'calm' },
-  'conflict': { duration: 12, density: 'high', mood: 'tense' },
-  'resolution': { duration: 10, density: 'medium', mood: 'calm' },
-  'tutorial': { duration: 20, density: 'medium', mood: 'calm' },
-  'reaction': { duration: 8, density: 'medium', mood: 'playful' },
-};
 
-/**
- * Parse a script string into a structured Scene Plan
- * 
- * @param {string} scriptContent - Raw script text with ## BEAT: tags
- * @param {object} options - Optional overrides
- * @param {string} options.episodeId - Episode UUID
- * @param {string} options.episodeTitle - Episode title for scene naming
- * @returns {object} Scene Plan with scenes array
- */
+// ─── MAIN PARSER ───
+
 function parseScript(scriptContent, options = {}) {
   if (!scriptContent || typeof scriptContent !== 'string') {
     return {
       success: false,
       error: 'No script content provided',
-      scenes: [],
-      metadata: { totalBeats: 0 }
+      beats: [], ui_actions: [], warnings: [], metadata: {}
     };
   }
 
   const lines = scriptContent.split('\n');
-  const beats = [];
+  const rawBeats = [];
   let currentBeat = null;
   let lineBuffer = [];
+  let globalLineIndex = 0;
 
+  // Pass 1: Split into beats
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const trimmed = line.trim();
+    globalLineIndex = i + 1;
 
-    // Detect beat header: ## BEAT: NAME or ## BEAT: NAME — SUBTITLE
     const beatMatch = trimmed.match(/^##\s*BEAT:\s*(.+)$/i);
     if (beatMatch) {
-      // Save previous beat
       if (currentBeat) {
-        currentBeat.scriptLines = lineBuffer.filter(l => l.trim());
-        currentBeat.dialogueLines = extractDialogue(lineBuffer);
-        beats.push(currentBeat);
+        currentBeat.lines = lineBuffer;
+        rawBeats.push(currentBeat);
       }
 
-      const beatTitle = beatMatch[1].trim();
+      const rawTitle = beatMatch[1].trim();
+      const { type, index } = parseBeatHeader(rawTitle);
+
       currentBeat = {
-        rawTitle: beatTitle,
-        title: formatBeatTitle(beatTitle),
-        beatType: classifyBeatType(beatTitle),
-        characters: [],
-        uiElements: [],
-        locationHint: null,
-        duration: null,
-        density: null,
-        mood: null,
-        transition: null,
-        scriptLines: [],
-        dialogueLines: [],
-        lineNumber: i + 1,
+        rawTitle,
+        type,
+        beatIndex: index,
+        headerLine: globalLineIndex,
+        lines: [],
+        headerPresent: true,
       };
       lineBuffer = [];
       continue;
     }
 
-    if (!currentBeat) continue;
+    // If no beat header seen yet, create an implicit "preamble" beat
+    if (!currentBeat && trimmed) {
+      currentBeat = {
+        rawTitle: 'PREAMBLE',
+        type: 'opening_ritual',
+        beatIndex: 1,
+        headerLine: globalLineIndex,
+        lines: [],
+        headerPresent: false,
+      };
+      lineBuffer = [];
+    }
 
-    // Parse metadata tags within a beat
-    const parsed = parseMetadataLine(trimmed);
-    if (parsed) {
-      switch (parsed.type) {
-        case 'characters':
-          currentBeat.characters = parsed.value;
-          break;
-        case 'location':
-          currentBeat.locationHint = parsed.value;
-          break;
-        case 'ui_open':
-          currentBeat.uiElements.push({ element: parsed.value, action: 'open' });
-          break;
-        case 'ui_close':
-          currentBeat.uiElements.push({ element: parsed.value, action: 'close' });
-          break;
-        case 'duration':
-          currentBeat.duration = parsed.value;
-          break;
-        case 'density':
-          currentBeat.density = parsed.value;
-          break;
-        case 'mood':
-          currentBeat.mood = parsed.value;
-          break;
-        case 'transition':
-          currentBeat.transition = parsed.value;
-          break;
-        default:
-          lineBuffer.push(line);
-      }
-    } else {
-      lineBuffer.push(line);
+    lineBuffer.push({ text: line, lineNumber: globalLineIndex });
+  }
 
-      // Auto-detect characters from dialogue lines: LALA: "..."
-      const dialogueMatch = trimmed.match(/^([A-Z_]+)\s*:\s*["'"]/);
+  // Don't forget last beat
+  if (currentBeat) {
+    currentBeat.lines = lineBuffer;
+    rawBeats.push(currentBeat);
+  }
+
+  if (rawBeats.length === 0) {
+    return {
+      success: false,
+      error: 'No content found in script',
+      beats: [], ui_actions: [], warnings: [], metadata: {}
+    };
+  }
+
+  // Pass 2: Parse each beat's content
+  const beats = [];
+  const allUiActions = [];
+  const warnings = [];
+  let orderPosition = 0;
+  let lalaHasSpoken = false;
+  let voiceActivateSeen = false;
+  let loginSeen = false;
+
+  for (const raw of rawBeats) {
+    orderPosition++;
+    const tempId = `beat-${orderPosition}`;
+    const speakers = new Set();
+    const uiActions = [];
+    const mailPayloads = [];
+    const statPayloads = [];
+    const dialogueLines = [];
+    let wordCount = 0;
+    let uiTimeOffset = 0;
+
+    for (const { text, lineNumber } of raw.lines) {
+      const trimmed = text.trim();
+      if (!trimmed) continue;
+
+      // ── Dialogue ──
+      const dialogueMatch = trimmed.match(/^(Lala|Prime|Me|Guest|System)\s*(?:\(.*?\))?\s*:\s*["\u201C]?(.*?)["\u201D]?\s*$/i);
       if (dialogueMatch) {
-        const charName = dialogueMatch[1].toLowerCase();
-        if (KNOWN_CHARACTERS[charName] && !currentBeat.characters.includes(charName)) {
-          currentBeat.characters.push(charName);
+        const speaker = SPEAKER_MAP[dialogueMatch[1].toLowerCase()] || 'system';
+        const dialogue = dialogueMatch[2];
+        speakers.add(speaker);
+        dialogueLines.push({ speaker, line: dialogue, lineNumber });
+        wordCount += dialogue.split(/\s+/).length;
+
+        if (speaker === 'lala' && !voiceActivateSeen) {
+          lalaHasSpoken = true;
+          warnings.push({
+            code: 'lala_without_voice_activate',
+            severity: 'warning',
+            message: `Lala speaks without VOICE_ACTIVATE before line ${lineNumber}`,
+            at: { line: lineNumber, beat_temp_id: tempId },
+            autofix: {
+              available: true,
+              action: 'insert_voice_activate',
+              insert_at_line: lineNumber,
+              preview: '[UI:VOICE_ACTIVATE Lala]',
+            }
+          });
         }
+        continue;
       }
+
+      // ── Stage directions (parenthetical) ──
+      const stageMatch = trimmed.match(/^\((.+)\)$/);
+      if (stageMatch) {
+        wordCount += stageMatch[1].split(/\s+/).length;
+        continue;
+      }
+
+      // ── UI Tags ──
+      const uiMatch = trimmed.match(/^\[UI:(\w+)\s+(.+)\]$/i);
+      if (uiMatch) {
+        const actionType = normalizeUiAction(uiMatch[1]);
+        const target = uiMatch[2].trim();
+
+        if (actionType === 'voice_activate') {
+          voiceActivateSeen = true;
+        }
+        if (target.toLowerCase().includes('login')) {
+          loginSeen = true;
+        }
+
+        const duration = UI_ACTION_DURATIONS[actionType] || 0.5;
+        uiActions.push({
+          temp_id: `${tempId}-ui-${uiActions.length + 1}`,
+          beat_temp_id: tempId,
+          type: actionType,
+          target: target,
+          timestamp_s: Math.round(uiTimeOffset * 10) / 10,
+          duration_s: duration,
+          order_position: uiActions.length + 1,
+          metadata: parseUiMetadata(actionType, target),
+          source: { line: lineNumber },
+        });
+        uiTimeOffset += duration;
+        continue;
+      }
+
+      // ── MAIL Tags ──
+      const mailMatch = trimmed.match(/^\[MAIL:\s*(.+)\]$/i);
+      if (mailMatch) {
+        mailPayloads.push(parseMailTag(mailMatch[1]));
+        continue;
+      }
+
+      // ── STAT Tags ──
+      const statMatch = trimmed.match(/^\[STAT:\s*(\w+)\s*([+-]?\d+(?:\.\d+)?)\]$/i);
+      if (statMatch) {
+        statPayloads.push({
+          key: statMatch[1].toLowerCase(),
+          delta: parseFloat(statMatch[2]),
+        });
+        continue;
+      }
+
+      // ── Duration override ──
+      const durMatch = trimmed.match(/^\[DURATION:\s*(\d+)s?\]$/i);
+      if (durMatch) {
+        raw.durationOverride = parseInt(durMatch[1]);
+        continue;
+      }
+
+      // ── Other metadata tags ──
+      const metaMatch = trimmed.match(/^\[(\w+):\s*(.+)\]$/i);
+      if (metaMatch) {
+        // Store but don't process further
+        continue;
+      }
+
+      // ── Plain text (narration) ──
+      wordCount += trimmed.split(/\s+/).length;
+    }
+
+    // Calculate duration
+    const dialogueDuration = Math.ceil(wordCount / 2.2);
+    const uiDuration = Math.ceil(uiTimeOffset);
+    const defaults = BEAT_DEFAULTS[raw.type] || { duration: 10 };
+    const estimatedDuration = raw.durationOverride || Math.max(dialogueDuration + uiDuration, defaults.duration);
+
+    // Build beat object
+    const beat = {
+      temp_id: tempId,
+      type: raw.type,
+      beat_index: raw.beatIndex,
+      order_position: orderPosition,
+      title: formatBeatTitle(raw.rawTitle),
+      confidence: raw.headerPresent ? 'confident' : 'review',
+      duration_s: estimatedDuration,
+      source: {
+        header_present: raw.headerPresent,
+        line_start: raw.headerLine,
+        line_end: raw.lines.length > 0 ? raw.lines[raw.lines.length - 1].lineNumber : raw.headerLine,
+      },
+      speakers: [...speakers],
+      dialogue_count: dialogueLines.length,
+      word_count: wordCount,
+      density: defaults.density || 'medium',
+      mood: defaults.mood || 'calm',
+      tags: {},
+    };
+
+    if (mailPayloads.length > 0) beat.tags.mail = mailPayloads;
+    if (statPayloads.length > 0) beat.tags.stats = statPayloads;
+
+    beats.push(beat);
+    allUiActions.push(...uiActions);
+  }
+
+  // Grammar warnings
+  if (!loginSeen && beats.length > 0) {
+    const firstBeatType = beats[0].type;
+    if (['opening_ritual', 'creator_welcome'].includes(firstBeatType)) {
+      warnings.push({
+        code: 'missing_login',
+        severity: 'warning',
+        message: 'LoginWindow not detected in opening beats',
+        at: { beat_temp_id: beats[0].temp_id },
+        autofix: {
+          available: true,
+          action: 'insert_login_template',
+          preview: '[UI:OPEN LoginWindow]\n[UI:TYPE Username "JustAWomanInHerPrime"]\n[UI:TYPE Password "\u2022\u2022\u2022\u2022\u2022\u2022"]\n[UI:CLICK LoginButton]\n[UI:SFX LoginSuccessDing]',
+        }
+      });
     }
   }
 
-  // Don't forget the last beat
-  if (currentBeat) {
-    currentBeat.scriptLines = lineBuffer.filter(l => l.trim());
-    currentBeat.dialogueLines = extractDialogue(lineBuffer);
-    beats.push(currentBeat);
-  }
-
-  // Build Scene Plan from parsed beats
-  const scenes = beats.map((beat, index) => {
-    const defaults = BEAT_DEFAULTS[beat.beatType] || BEAT_DEFAULTS['dialogue'] || {};
-    const duration = beat.duration || defaults.duration || 10;
-    const density = beat.density || defaults.density || 'medium';
-    const mood = beat.mood || defaults.mood || 'calm';
-
-    // Resolve character references
-    const characters = beat.characters.map(c => {
-      const known = KNOWN_CHARACTERS[c.toLowerCase()];
-      return known || { id: c, name: c, emoji: '👤' };
-    });
-
-    // Extract unique UI elements (only opens, not closes)
-    const uiExpected = [...new Set(
-      beat.uiElements
-        .filter(ui => ui.action === 'open')
-        .map(ui => ui.element)
-    )];
-
-    return {
-      scene_number: index + 1,
-      title: beat.title,
-      beat_type: beat.beatType,
-      raw_beat_title: beat.rawTitle,
-      duration_seconds: duration,
-      density: density,
-      mood: mood,
-      transition: beat.transition || (index === 0 ? 'cut' : 'dissolve'),
-      location_hint: beat.locationHint,
-      characters_expected: characters,
-      ui_expected: uiExpected,
-      dialogue_count: beat.dialogueLines.length,
-      script_excerpt: beat.scriptLines.slice(0, 3).join(' ').substring(0, 200),
-      notes: buildSceneNotes(beat, characters, uiExpected),
-    };
-  });
-
-  const totalDuration = scenes.reduce((sum, s) => sum + s.duration_seconds, 0);
+  // Calculate totals
+  const totalDuration = beats.reduce((sum, b) => sum + b.duration_s, 0);
+  const allSpeakers = [...new Set(beats.flatMap(b => b.speakers))];
+  const totalWords = beats.reduce((sum, b) => sum + b.word_count, 0);
+  const totalDialogue = beats.reduce((sum, b) => sum + b.dialogue_count, 0);
 
   return {
     success: true,
     episodeId: options.episodeId || null,
     episodeTitle: options.episodeTitle || null,
-    totalScenes: scenes.length,
-    totalDuration: totalDuration,
-    formattedDuration: formatDuration(totalDuration),
-    scenes: scenes,
+
+    beats,
+    ui_actions: allUiActions,
+    warnings,
+
     metadata: {
       totalBeats: beats.length,
-      totalDialogueLines: beats.reduce((sum, b) => sum + b.dialogueLines.length, 0),
-      charactersUsed: [...new Set(beats.flatMap(b => b.characters))],
-      uiElementsUsed: [...new Set(beats.flatMap(b => b.uiElements.map(u => u.element)))],
-      hasLocationHints: beats.some(b => b.locationHint),
-      densityBreakdown: {
-        low: scenes.filter(s => s.density === 'low').length,
-        medium: scenes.filter(s => s.density === 'medium').length,
-        high: scenes.filter(s => s.density === 'high').length,
-      },
+      totalDuration,
+      formattedDuration: formatDuration(totalDuration),
+      totalWords,
+      totalDialogueLines: totalDialogue,
+      totalUiActions: allUiActions.length,
+      speakers: allSpeakers,
+      hasHeaders: beats.some(b => b.source.header_present),
+      parseMode: beats.every(b => b.source.header_present) ? 'headers' : beats.some(b => b.source.header_present) ? 'mixed' : 'inference',
       parsedAt: new Date().toISOString(),
-    }
+    },
+
+    // Scene plan compatibility (for ScenePlanLoader)
+    totalScenes: beats.length,
+    formattedDuration: formatDuration(totalDuration),
+    scenes: beats.map(b => ({
+      scene_number: b.order_position,
+      title: b.title,
+      beat_type: b.type,
+      raw_beat_title: b.type,
+      duration_seconds: b.duration_s,
+      density: b.density,
+      mood: b.mood,
+      transition: b.order_position === 1 ? 'cut' : 'dissolve',
+      location_hint: null,
+      characters_expected: b.speakers.map(s => KNOWN_CHARACTERS[s] || { id: s, name: s, emoji: '👤' }),
+      ui_expected: allUiActions.filter(a => a.beat_temp_id === b.temp_id).map(a => `${a.type}:${a.target}`),
+      dialogue_count: b.dialogue_count,
+      script_excerpt: '',
+      notes: buildSceneNotes(b, allUiActions.filter(a => a.beat_temp_id === b.temp_id)),
+    })),
   };
 }
 
-// ─── HELPER FUNCTIONS ───
 
-/**
- * Parse a metadata line like [CHARACTERS: lala, guest] or [UI:OPEN MailPanel]
- */
-function parseMetadataLine(line) {
-  // [CHARACTERS: lala, justawoman, guest]
-  const charMatch = line.match(/^\[CHARACTERS?:\s*(.+)\]$/i);
-  if (charMatch) {
-    const chars = charMatch[1].split(',').map(c => c.trim().toLowerCase()).filter(Boolean);
-    return { type: 'characters', value: chars };
-  }
+// ─── HELPERS ───
 
-  // [LOCATION_HINT: "Parisian rooftop garden"]
-  const locMatch = line.match(/^\[LOCATION_HINT:\s*"?([^"\]]+)"?\]$/i);
-  if (locMatch) {
-    return { type: 'location', value: locMatch[1].trim() };
-  }
-
-  // [LOCATION: "Parisian rooftop garden"] (alternate syntax)
-  const locMatch2 = line.match(/^\[LOCATION:\s*"?([^"\]]+)"?\]$/i);
-  if (locMatch2) {
-    return { type: 'location', value: locMatch2[1].trim() };
-  }
-
-  // [UI:OPEN ElementName]
-  const uiOpenMatch = line.match(/^\[UI:OPEN\s+(.+)\]$/i);
-  if (uiOpenMatch) {
-    return { type: 'ui_open', value: uiOpenMatch[1].trim() };
-  }
-
-  // [UI:CLOSE ElementName]
-  const uiCloseMatch = line.match(/^\[UI:CLOSE\s+(.+)\]$/i);
-  if (uiCloseMatch) {
-    return { type: 'ui_close', value: uiCloseMatch[1].trim() };
-  }
-
-  // [DURATION: 8s] or [DURATION: 12]
-  const durMatch = line.match(/^\[DURATION:\s*(\d+)s?\]$/i);
-  if (durMatch) {
-    return { type: 'duration', value: parseInt(durMatch[1]) };
-  }
-
-  // [DENSITY: low|medium|high]
-  const densMatch = line.match(/^\[DENSITY:\s*(low|medium|high)\]$/i);
-  if (densMatch) {
-    return { type: 'density', value: densMatch[1].toLowerCase() };
-  }
-
-  // [MOOD: energetic|calm|tense|playful|dramatic]
-  const moodMatch = line.match(/^\[MOOD:\s*(\w+)\]$/i);
-  if (moodMatch) {
-    return { type: 'mood', value: moodMatch[1].toLowerCase() };
-  }
-
-  // [TRANSITION: cut|fade|dissolve|swipe]
-  const transMatch = line.match(/^\[TRANSITION:\s*(\w+)\]$/i);
-  if (transMatch) {
-    return { type: 'transition', value: transMatch[1].toLowerCase() };
-  }
-
-  return null;
+function parseBeatHeader(raw) {
+  // "INTERRUPTION #2" → { type: 'interruption', index: 2 }
+  // "OPENING_RITUAL" → { type: 'opening_ritual', index: 1 }
+  const indexMatch = raw.match(/#(\d+)\s*$/);
+  const index = indexMatch ? parseInt(indexMatch[1]) : 1;
+  
+  let typeStr = raw.replace(/#\d+\s*$/, '').trim();
+  typeStr = typeStr.replace(/[\u2014\u2013]/g, '_').replace(/\s+/g, '_').toLowerCase();
+  
+  // Map to canonical
+  const mapped = BEAT_TYPES.find(t => typeStr.includes(t));
+  return { type: mapped || typeStr, index };
 }
 
-/**
- * Format beat title: "OPENING RITUAL" → "Opening Ritual"
- */
+function normalizeUiAction(raw) {
+  const normalized = raw.toLowerCase().replace(/_/g, '');
+  const map = {
+    'open': 'open', 'close': 'close', 'click': 'click',
+    'type': 'type', 'display': 'display', 'hide': 'hide',
+    'notification': 'notification', 'voiceactivate': 'voice_activate',
+    'voice_activate': 'voice_activate', 'scroll': 'scroll',
+    'add': 'add', 'remove': 'remove', 'checkitem': 'check_item',
+    'check_item': 'check_item', 'check': 'check_item',
+    'setbackground': 'set_background', 'set_background': 'set_background',
+    'sfx': 'play_sfx', 'playsfx': 'play_sfx', 'play_sfx': 'play_sfx',
+    'playmusic': 'play_music', 'play_music': 'play_music',
+    'stopmusic': 'stop_music', 'stop_music': 'stop_music',
+  };
+  return map[normalized] || normalized;
+}
+
+function parseUiMetadata(actionType, target) {
+  const meta = {};
+  // [UI:TYPE Username "JustAWomanInHerPrime"]
+  if (actionType === 'type') {
+    const match = target.match(/^(\w+)\s+"(.+)"$/);
+    if (match) {
+      meta.field = match[1];
+      meta.text = match[2];
+    }
+  }
+  // [UI:SCROLL ClosetItems x5]
+  if (actionType === 'scroll') {
+    const match = target.match(/^(.+)\s+x(\d+)$/i);
+    if (match) {
+      meta.target = match[1];
+      meta.scrollCount = parseInt(match[2]);
+    }
+  }
+  return meta;
+}
+
+function parseMailTag(content) {
+  // type=invite from="Maison Belle" prestige=4 cost=150
+  const mail = {};
+  const pairs = content.match(/(\w+)=(?:"([^"]+)"|(\S+))/g) || [];
+  for (const pair of pairs) {
+    const match = pair.match(/(\w+)=(?:"([^"]+)"|(\S+))/);
+    if (match) {
+      const key = match[1];
+      const value = match[2] || match[3];
+      mail[key] = isNaN(value) ? value : parseFloat(value);
+    }
+  }
+  return mail;
+}
+
 function formatBeatTitle(raw) {
   return raw
-    .replace(/—/g, '–')
-    .split(/[\s]+/)
-    .map(word => {
-      if (word === '–' || word === '—') return '–';
-      return word.charAt(0).toUpperCase() + word.slice(1).toLowerCase();
+    .replace(/_/g, ' ')
+    .replace(/\s*#\d+/, (m) => ` ${m.trim()}`)
+    .split(/\s+/)
+    .map(w => {
+      if (w.startsWith('#')) return w;
+      if (w === '\u2014' || w === '\u2013') return '\u2013';
+      return w.charAt(0).toUpperCase() + w.slice(1).toLowerCase();
     })
-    .join(' ');
+    .join(' ')
+    .trim();
 }
 
-/**
- * Classify beat type from title for default lookups
- * "INTERRUPTION — INVITE" → "interruption"
- * "OPENING RITUAL" → "opening ritual"
- */
-function classifyBeatType(raw) {
-  const normalized = raw.toLowerCase().replace(/[—–]/g, ' ').replace(/\s+/g, ' ').trim();
-  
-  // Check exact matches first
-  if (BEAT_DEFAULTS[normalized]) return normalized;
-  
-  // Check first word
-  const firstWord = normalized.split(/[\s–—]/)[0].trim();
-  if (BEAT_DEFAULTS[firstWord]) return firstWord;
-
-  // Fuzzy match known types
-  for (const key of Object.keys(BEAT_DEFAULTS)) {
-    if (normalized.includes(key)) return key;
-  }
-
-  return normalized;
-}
-
-/**
- * Extract dialogue lines from script content
- */
-function extractDialogue(lines) {
-  return lines
-    .map(l => l.trim())
-    .filter(l => l.match(/^[A-Z_]+\s*:\s*["'"]/))
-    .map(l => {
-      const match = l.match(/^([A-Z_]+)\s*:\s*["'"](.+?)["'"]?\s*$/);
-      if (match) {
-        return { character: match[1].toLowerCase(), line: match[2] };
-      }
-      return { character: 'unknown', line: l };
-    });
-}
-
-/**
- * Build human-readable scene notes
- */
-function buildSceneNotes(beat, characters, uiExpected) {
-  const parts = [];
-  
-  if (characters.length > 0) {
-    parts.push(`Characters: ${characters.map(c => `${c.emoji} ${c.name}`).join(', ')}`);
-  }
-  if (uiExpected.length > 0) {
-    parts.push(`UI: ${uiExpected.join(', ')}`);
-  }
-  if (beat.locationHint) {
-    parts.push(`Location: ${beat.locationHint}`);
-  }
-  if (beat.dialogueLines.length > 0) {
-    parts.push(`${beat.dialogueLines.length} dialogue line${beat.dialogueLines.length > 1 ? 's' : ''}`);
-  }
-
-  return parts.join(' · ');
-}
-
-/**
- * Format seconds into readable duration
- */
 function formatDuration(seconds) {
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -405,14 +461,35 @@ function formatDuration(seconds) {
   return `${mins}m ${secs}s`;
 }
 
+function buildSceneNotes(beat, uiActions) {
+  const parts = [];
+  if (beat.speakers.length > 0) {
+    parts.push(`Speakers: ${beat.speakers.map(s => (KNOWN_CHARACTERS[s] || {}).emoji + ' ' + (KNOWN_CHARACTERS[s] || {}).name || s).join(', ')}`);
+  }
+  if (uiActions.length > 0) {
+    parts.push(`${uiActions.length} UI actions`);
+  }
+  if (beat.tags.mail && beat.tags.mail.length > 0) {
+    parts.push(`${beat.tags.mail.length} mail event(s)`);
+  }
+  if (beat.tags.stats && beat.tags.stats.length > 0) {
+    parts.push(`Stat changes: ${beat.tags.stats.map(s => `${s.key} ${s.delta > 0 ? '+' : ''}${s.delta}`).join(', ')}`);
+  }
+  return parts.join(' \u00b7 ');
+}
+
+
 // ─── EXPORTS ───
 
 module.exports = {
   parseScript,
-  parseMetadataLine,
-  formatBeatTitle,
-  classifyBeatType,
-  extractDialogue,
-  KNOWN_CHARACTERS,
+  parseBeatHeader,
+  normalizeUiAction,
+  parseMailTag,
+  BEAT_TYPES,
+  SPEAKER_MAP,
+  UI_ACTION_TYPES,
+  UI_ACTION_DURATIONS,
   BEAT_DEFAULTS,
+  KNOWN_CHARACTERS,
 };
