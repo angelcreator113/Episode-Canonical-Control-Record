@@ -626,6 +626,9 @@ const EpisodeDetail = () => {
           <ScriptEditor 
             episodeId={episode.id}
             episode={episode}
+            onScriptSaved={(newScript) => {
+              setEpisode(prev => ({ ...prev, script_content: newScript }));
+            }}
           />
         )}
 
