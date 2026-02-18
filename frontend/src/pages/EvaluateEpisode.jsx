@@ -120,6 +120,8 @@ function EvaluateEpisode() {
       const res = await api.post(`/api/v1/episodes/${episodeId}/evaluate`, { character_key: 'lala' });
       if (res.data.success) {
         setEvaluation(res.data.evaluation);
+        // Reset episode status so Override/Accept buttons reappear
+        setEpisode(prev => ({ ...prev, evaluation_status: 'computed', evaluation_json: res.data.evaluation }));
         // Refresh character state
         if (episode?.show_id) {
           const stateRes = await api.get(`/api/v1/characters/lala/state?show_id=${episode.show_id}`);
