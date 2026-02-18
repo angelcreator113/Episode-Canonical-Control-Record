@@ -756,6 +756,15 @@ try {
   console.error('✗ Failed to load evaluation routes:', e.message);
 }
 
+// World Admin routes (dashboard, decisions, browse-pool)
+try {
+  const worldRoutes = require('./routes/world');
+  app.use('/api/v1', worldRoutes);
+  console.log('✓ World routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load world routes:', e.message);
+}
+
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 
