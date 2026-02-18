@@ -25,11 +25,18 @@ function SceneControlsPanel({
   onDeleteElement,
   onDurationChange,
   onResizeElement,
+  onRotateElement,
   onLayerChange,
   selected,
   isCompact = false,
   showSafeZones = true,
-  onToggleSafeZones
+  onToggleSafeZones,
+  showSubtitles = true,
+  onToggleSubtitles,
+  showCharacterLabels = true,
+  onToggleCharacterLabels,
+  snapEnabled = true,
+  onToggleSnap,
 }) {
   if (!currentScene) {
     return null;
@@ -45,6 +52,7 @@ function SceneControlsPanel({
   const selectedW = selectedElement ? parseInt(selectedElement.width) || (selected.type === 'character' ? 100 : 120) : 0;
   const selectedH = selectedElement ? parseInt(selectedElement.height) || (selected.type === 'character' ? 150 : 50) : 0;
   const selectedLayer = selectedElement?.layer ?? (selected?.type === 'character' ? 5 : selected?.type === 'ui' ? 4 : 1);
+  const selectedRotation = selectedElement?.rotation ?? 0;
 
   return (
     <aside 
@@ -191,6 +199,55 @@ function SceneControlsPanel({
           <div style={{ textAlign: 'center', marginTop: '4px', fontSize: '10px', color: 'rgba(255,255,255,0.35)' }}>
             Layer: {selectedLayer}
           </div>
+
+          {/* Rotation control */}
+          {onRotateElement && (
+            <>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginTop: '12px', marginBottom: '8px' }}>
+                🔄 Rotation
+              </label>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  type="range"
+                  min={-180}
+                  max={180}
+                  step={1}
+                  value={selectedRotation}
+                  onChange={(e) => onRotateElement(selected.type, selected.id, parseInt(e.target.value) || 0)}
+                  style={{ flex: 1, accentColor: '#667eea' }}
+                />
+                <input
+                  type="number"
+                  value={selectedRotation}
+                  min={-360}
+                  max={360}
+                  step={1}
+                  onChange={(e) => onRotateElement(selected.type, selected.id, parseInt(e.target.value) || 0)}
+                  style={{
+                    width: '56px', padding: '4px 6px', background: 'rgba(255,255,255,0.05)',
+                    border: '1px solid rgba(255,255,255,0.12)', borderRadius: '6px',
+                    color: '#fff', fontSize: '12px', fontWeight: 600, textAlign: 'center',
+                  }}
+                />
+                <span style={{ fontSize: '11px', color: 'rgba(255,255,255,0.4)' }}>°</span>
+              </div>
+              <div style={{ display: 'flex', gap: '4px', marginTop: '8px' }}>
+                {[0, 90, 180, 270].map(angle => (
+                  <button
+                    key={angle}
+                    onClick={() => onRotateElement(selected.type, selected.id, angle)}
+                    style={{
+                      flex: 1, padding: '4px 0', background: selectedRotation === angle ? 'rgba(102,126,234,0.2)' : 'rgba(255,255,255,0.04)',
+                      border: selectedRotation === angle ? '1px solid rgba(102,126,234,0.4)' : '1px solid rgba(255,255,255,0.1)',
+                      borderRadius: '4px', color: 'rgba(255,255,255,0.7)', fontSize: '10px', fontWeight: 500, cursor: 'pointer',
+                    }}
+                  >
+                    {angle}°
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -311,6 +368,66 @@ function SceneControlsPanel({
           </button>
         </div>
       )}
+
+      {/* Stage Overlay Toggles */}
+      <div className="control-section">
+        <label style={{ display: 'block', fontSize: '12px', fontWeight: 600, color: 'rgba(255,255,255,0.7)', marginBottom: '8px' }}>
+          🎛 Stage Overlays
+        </label>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+          {onToggleSubtitles && (
+            <button
+              className="control-action"
+              onClick={onToggleSubtitles}
+              style={{
+                border: showSubtitles ? '1px solid rgba(102,126,234,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                background: showSubtitles ? 'rgba(102,126,234,0.08)' : 'rgba(255,255,255,0.03)',
+                padding: '6px 10px',
+              }}
+            >
+              <span className="action-icon" style={{ fontSize: '14px' }}>💬</span>
+              <div className="action-text">
+                <div className="action-label" style={{ fontSize: '12px' }}>Subtitles</div>
+                <div className="action-hint">{showSubtitles ? 'On' : 'Off'}</div>
+              </div>
+            </button>
+          )}
+          {onToggleCharacterLabels && (
+            <button
+              className="control-action"
+              onClick={onToggleCharacterLabels}
+              style={{
+                border: showCharacterLabels ? '1px solid rgba(102,126,234,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                background: showCharacterLabels ? 'rgba(102,126,234,0.08)' : 'rgba(255,255,255,0.03)',
+                padding: '6px 10px',
+              }}
+            >
+              <span className="action-icon" style={{ fontSize: '14px' }}>🏷</span>
+              <div className="action-text">
+                <div className="action-label" style={{ fontSize: '12px' }}>Char Labels</div>
+                <div className="action-hint">{showCharacterLabels ? 'On' : 'Off'}</div>
+              </div>
+            </button>
+          )}
+          {onToggleSnap && (
+            <button
+              className="control-action"
+              onClick={onToggleSnap}
+              style={{
+                border: snapEnabled ? '1px solid rgba(102,126,234,0.3)' : '1px solid rgba(255,255,255,0.08)',
+                background: snapEnabled ? 'rgba(102,126,234,0.08)' : 'rgba(255,255,255,0.03)',
+                padding: '6px 10px',
+              }}
+            >
+              <span className="action-icon" style={{ fontSize: '14px' }}>🧲</span>
+              <div className="action-text">
+                <div className="action-label" style={{ fontSize: '12px' }}>Snap to Grid</div>
+                <div className="action-hint">{snapEnabled ? 'On' : 'Off'}</div>
+              </div>
+            </button>
+          )}
+        </div>
+      </div>
 
       {/* Duration Control */}
       <div className="control-section">

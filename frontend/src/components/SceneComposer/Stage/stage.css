@@ -219,6 +219,30 @@
   box-sizing: border-box;
 }
 
+/* ================================
+   CHARACTER NAME LABELS
+   ================================ */
+
+.stage-character-label {
+  position: absolute;
+  bottom: -22px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.85);
+  background: rgba(0, 0, 0, 0.7);
+  border-radius: 4px;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 10;
+  max-width: 140px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  backdrop-filter: blur(4px);
+}
+
 /* UI Elements Layer */
 .stage-ui-element {
   z-index: 4;
@@ -307,6 +331,73 @@
   background: #7c93ff;
 }
 
+/* ================================
+   ROTATE HANDLES
+   ================================ */
+
+.stage-rotate-handle {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 16px;
+  height: 16px;
+  background: #667eea;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  cursor: crosshair;
+  z-index: 30;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.stage-rotate-handle::before {
+  content: '';
+  position: absolute;
+  bottom: -10px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 1px;
+  height: 10px;
+  background: rgba(102, 126, 234, 0.6);
+}
+
+.stage-rotate-handle:hover {
+  transform: translateX(-50%) scale(1.3);
+  background: #7c93ff;
+}
+
+/* ================================
+   DELETE HANDLES
+   ================================ */
+
+.stage-delete-handle {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: #ff4b4b;
+  border: 2px solid #fff;
+  color: #fff;
+  font-size: 14px;
+  font-weight: bold;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.stage-delete-handle:hover {
+  transform: scale(1.15);
+  background: #ff3333;
+}
+
 /* Drag active state (applied via JS cursor override) */
 .stage-character.editable:active,
 .stage-ui-element.editable:active {
@@ -319,4 +410,95 @@
 .stage-ui-element.selected {
   outline: 2px solid rgba(102, 126, 234, 0.8);
   outline-offset: 2px;
+}
+
+/* ================================
+   ALIGNMENT GUIDES
+   ================================ */
+
+.stage-alignment-guides {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.stage-guide-line {
+  position: absolute;
+  background: rgba(245, 158, 11, 0.7);
+  box-shadow: 0 0 4px rgba(245, 158, 11, 0.4);
+}
+
+.stage-guide-vertical {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.stage-guide-horizontal {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+/* Center guides are slightly more prominent */
+.stage-guide-vertical[style*="50%"] {
+  background: rgba(102, 126, 234, 0.8);
+  box-shadow: 0 0 6px rgba(102, 126, 234, 0.5);
+}
+
+.stage-guide-horizontal[style*="50%"] {
+  background: rgba(102, 126, 234, 0.8);
+  box-shadow: 0 0 6px rgba(102, 126, 234, 0.5);
+}
+
+/* ================================
+   SUBTITLE OVERLAY
+   ================================ */
+
+.stage-subtitles {
+  position: absolute;
+  bottom: 8%;
+  left: 5%;
+  right: 5%;
+  z-index: 25;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  animation: subtitleFadeIn 0.2s ease;
+}
+
+.stage-subtitle-bar {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.75);
+  border-radius: 6px;
+  backdrop-filter: blur(6px);
+  max-width: 85%;
+}
+
+.stage-subtitle-speaker {
+  font-size: 10px;
+  font-weight: 700;
+  color: rgba(102, 126, 234, 0.9);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.stage-subtitle-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: #fff;
+  text-align: center;
+  line-height: 1.4;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes subtitleFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
 }

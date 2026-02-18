@@ -154,7 +154,10 @@ const ShowManagement = () => {
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) throw new Error('Failed to save show');
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.message || errData.error || 'Failed to save show');
+      }
 
       const result = await response.json();
       const savedShow = result.data;

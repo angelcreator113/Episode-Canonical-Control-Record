@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useSearchParams, Link, useNavigate } from 'react-router-dom';
 import showService from '../services/showService';
 import episodeService from '../services/episodeService';
+import { useToast } from '../components/ToastContainer';
 import StudioTab from '../components/Show/StudioTab';
 import ShowAssetsTab from '../components/Show/ShowAssetsTab';
 import ShowWardrobeTab from '../components/Show/ShowWardrobeTab';
@@ -25,10 +26,12 @@ import './ShowDetail.css';
 function ShowDetail() {
   const { id: showId } = useParams();
   const navigate = useNavigate();
+  const toast = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const [show, setShow] = useState(null);
   const [episodes, setEpisodes] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [notFound, setNotFound] = useState(false);
   const [activeTabState, setActiveTabState] = useState(searchParams.get('tab') || 'studio');
   const [tabLoading, setTabLoading] = useState(false);
   const [episodeView, setEpisodeView] = useState('grid');
@@ -86,6 +89,7 @@ function ShowDetail() {
     
     try {
       setLoading(true);
+      setNotFound(false);
       console.log('[ShowDetail] Fetching show with ID:', showId);
       // Fetch show details
       const showResponse = await showService.getShowById(showId);
@@ -97,6 +101,14 @@ function ShowDetail() {
       setEpisodes(episodesResponse.data || episodesResponse || []);
     } catch (error) {
       console.error('Error fetching show:', error);
+      // Detect 404 / "Not Found" errors — redirect to shows list with toast
+      const msg = error.message || '';
+      if (msg.includes('Not Found') || msg.includes('404')) {
+        setNotFound(true);
+        toast.showError('Show not found — it may have been deleted.');
+        navigate('/shows', { replace: true });
+        return;
+      }
     } finally {
       setLoading(false);
     }
@@ -157,7 +169,8 @@ function ShowDetail() {
   if (!show) {
     return (
       <div className="show-detail-error">
-        <h2>Show not found</h2>
+        <h2>😕 Show not found</h2>
+        <p>This show may have been deleted or the link is no longer valid.</p>
         <Link to="/shows" className="btn-primary">← Back to Shows</Link>
       </div>
     );

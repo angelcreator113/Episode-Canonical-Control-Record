@@ -82,9 +82,12 @@ jobs:
         run: |
           mkdir -p deploy
           cp -r src deploy/
+          cp -r scripts deploy/
           cp -r frontend/dist deploy/
           cp package.json deploy/
           cp package-lock.json deploy/
+          cp ecosystem.config.js deploy/
+          cp .sequelizerc deploy/
           tar -czf episode-metadata-${{ github.sha }}.tar.gz deploy/
 
       - name: Upload artifact
@@ -110,6 +113,10 @@ jobs:
         env:
           EC2_HOST: ${{ secrets.DEV_EC2_HOST }}
           EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+          DEV_DB_HOST: ${{ secrets.DEV_DB_HOST }}
+          DEV_DB_USER: ${{ secrets.DEV_DB_USER }}
+          DEV_DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
+          DEV_DB_NAME: ${{ secrets.DEV_DB_NAME }}
         run: |
           if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
             echo "⏭️  EC2 deployment skipped - secrets not configured"
@@ -127,22 +134,107 @@ jobs:
           echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
-          # Upload build
+          # Upload build artifact
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             episode-metadata-${{ github.sha }}.tar.gz \
             ubuntu@$EC2_HOST:/tmp/dev-deploy.tar.gz
 
-          # Deploy on server
+          # ─── Deploy frontend (static files → Nginx) ───
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
             set -e
+            echo '📦 Extracting build artifact...'
             cd /tmp
             tar -xzf dev-deploy.tar.gz
+
+            echo '🎨 Deploying frontend...'
             sudo rm -rf /var/www/html/*
             sudo cp -r deploy/dist/* /var/www/html/
             sudo chown -R www-data:www-data /var/www/html
             sudo systemctl restart nginx
+            echo '✅ Frontend deployed'
+          "
+
+          # ─── Deploy backend (code + deps + migrations + PM2 restart) ───
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
+            set -e
+
+            # Use whatever Node is available on the system
+            export NVM_DIR=\$HOME/.nvm
+            if [ -s \$NVM_DIR/nvm.sh ]; then
+              . \$NVM_DIR/nvm.sh
+            fi
+            echo \"Node: \$(node -v)  npm: \$(npm -v)\"
+
+            # Install pm2 globally if not found
+            if ! command -v pm2 &>/dev/null; then
+              echo '📦 Installing pm2...'
+              sudo npm install -g pm2
+            fi
+            echo \"pm2: \$(pm2 -v)\"
+
+            APP_DIR=\$HOME/episode-metadata
+
+            echo '🔧 Deploying backend...'
+
+            # Ensure app directory and logs dir exist (first-time deploy)
+            mkdir -p \$APP_DIR/logs
+
+            # Update backend source from the build artifact
+            rm -rf \$APP_DIR/src \$APP_DIR/scripts
+            cp -r /tmp/deploy/src \$APP_DIR/src
+            cp -r /tmp/deploy/scripts \$APP_DIR/scripts
+            cp /tmp/deploy/package.json \$APP_DIR/package.json
+            cp /tmp/deploy/package-lock.json \$APP_DIR/package-lock.json
+            cp /tmp/deploy/ecosystem.config.js \$APP_DIR/ecosystem.config.js
+            cp /tmp/deploy/.sequelizerc \$APP_DIR/.sequelizerc
+
+            # Install production dependencies
+            cd \$APP_DIR
+            npm ci --production --ignore-scripts 2>&1 | tail -5
+
+            # Rebuild native modules (sharp, etc.) for the server architecture
+            npm rebuild sharp 2>&1 | tail -3 || echo '⚠️ sharp rebuild skipped'
+
+            # Set DB env vars for RDS (from GitHub Secrets)
+            export DB_HOST='$DEV_DB_HOST'
+            export DB_PORT='5432'
+            export DB_NAME='$DEV_DB_NAME'
+            export DB_USER='$DEV_DB_USER'
+            export DB_PASSWORD='$DEV_DB_PASSWORD'
+            export DB_SSL='true'
+
+            # Bootstrap SequelizeMeta for databases created by sequelize.sync()
+            echo '🔧 Bootstrapping migration metadata...'
+            node scripts/bootstrap-sequelize-meta.js
+
+            # Run database migrations against RDS
+            echo '🗃️ Running migrations...'
+            npx sequelize-cli db:migrate --env development 2>&1 | tail -10
+
+            # Restart the Node.js backend via PM2
+            echo '🔄 Restarting PM2...'
+            pm2 delete episode-api 2>/dev/null || true
+            sleep 2
+            # Kill anything still holding port 3002
+            fuser -k 3002/tcp 2>/dev/null || true
+            sleep 1
+            pm2 start ecosystem.config.js --env development 2>&1 | tail -5
+            pm2 save
+
+            # Health check — wait for backend to come up
+            echo '🏥 Health check...'
+            sleep 5
+            if curl -sf http://localhost:3002/api/v1/episodes > /dev/null 2>&1; then
+              echo '✅ Backend is healthy'
+            else
+              echo '⚠️ Backend health check failed — check PM2 logs'
+              pm2 logs episode-api --lines 20 --nostream
+              exit 1
+            fi
+
+            # Cleanup
             rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz
-            echo 'Deployment complete'
+            echo '✅ Full deployment complete'
           "
 
       - name: Deployment summary
@@ -151,5 +243,7 @@ jobs:
           echo "- Commit: \`${{ github.sha }}\`" >> $GITHUB_STEP_SUMMARY
           echo "- Branch: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
           echo "- Site: https://dev.primepisodes.com" >> $GITHUB_STEP_SUMMARY
+          echo "- Frontend: ✅ Deployed to Nginx" >> $GITHUB_STEP_SUMMARY
+          echo "- Backend: ✅ Deployed, migrated, PM2 restarted" >> $GITHUB_STEP_SUMMARY
 
 
