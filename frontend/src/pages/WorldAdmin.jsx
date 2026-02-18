@@ -113,9 +113,21 @@ function WorldAdmin() {
 
   const injectEvent = async (eventId, episodeId) => {
     try {
+      setSuccessMsg(null);
+      setError(null);
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/inject`, { episode_id: episodeId });
-      if (res.data.success) { setSuccessMsg(`Injected! ${res.data.event_tag}`); setInjectTarget(null); }
-    } catch (err) { setError(err.response?.data?.error || err.message); }
+      const d = res.data;
+      if (d.success) {
+        setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'used', used_in_episode_id: episodeId, times_used: (ev.times_used || 0) + 1 } : ev));
+        setSuccessMsg(`✅ Injected! ${d.event_tag}`);
+        setInjectTarget(null);
+      } else {
+        setError(d.error || d.message || 'Inject returned unexpected response');
+      }
+    } catch (err) {
+      console.error('Inject error:', err);
+      setError(err.response?.data?.error || err.response?.data?.message || err.message);
+    }
   };
 
   // ─── CHARACTER STAT EDIT ───
@@ -328,9 +340,10 @@ function WorldAdmin() {
                 {ev.host_brand && <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>🏛️ {ev.host_brand}</div>}
                 {ev.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginBottom: 4, lineHeight: 1.4 }}>{ev.narrative_stakes}</div>}
                 {ev.location_hint && <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 8 }}>📍 {ev.location_hint}</div>}
+                {ev.status === 'used' && <div style={{ fontSize: 11, color: '#16a34a', fontWeight: 600, marginBottom: 4 }}>✅ Injected (used {ev.times_used || 1}x)</div>}
                 <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
                   <button onClick={() => openEditEvent(ev)} style={S.smBtn}>✏️ Edit</button>
-                  <button onClick={() => setInjectTarget(injectTarget === ev.id ? null : ev.id)} style={S.smBtn}>💉 Inject</button>
+                  <button onClick={() => setInjectTarget(injectTarget === ev.id ? null : ev.id)} style={S.smBtn}>{ev.status === 'used' ? '💉 Re-inject' : '💉 Inject'}</button>
                   <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>🗑️</button>
                 </div>
                 {injectTarget === ev.id && (
