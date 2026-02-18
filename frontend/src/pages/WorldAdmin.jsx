@@ -303,33 +303,172 @@ function WorldAdmin() {
       {/* ════════════════════════ EPISODE LEDGER ════════════════════════ */}
       {activeTab === 'episodes' && (
         <div style={S.content}>
-          <div style={S.card}>
-            <h2 style={S.cardTitle}>📋 Episode Ledger</h2>
-            <div style={S.tHead}>
-              <span style={{ ...S.tCol, flex: '0 0 40px' }}>#</span>
-              <span style={{ ...S.tCol, flex: 2 }}>Title</span>
-              <span style={S.tCol}>Tier</span>
-              <span style={S.tCol}>Score</span>
-              <span style={S.tCol}>Overrides</span>
-              <span style={S.tCol}>Status</span>
-              <span style={S.tCol}>Actions</span>
-            </div>
-            {episodes.map((ep, i) => {
-              const ej = ep.evaluation_json;
-              return (
-                <div key={ep.id} style={S.tRow}>
-                  <span style={{ ...S.tCol, flex: '0 0 40px', fontWeight: 700 }}>{ep.episode_number || i + 1}</span>
-                  <span style={{ ...S.tCol, flex: 2, fontWeight: 600 }}>{ep.title || 'Untitled'}</span>
-                  <span style={S.tCol}>{ej?.tier_final ? <span style={S.tierPill(ej.tier_final)}>{TIER_EMOJIS[ej.tier_final]} {ej.tier_final.toUpperCase()}</span> : '—'}</span>
-                  <span style={{ ...S.tCol, fontWeight: 700 }}>{ej?.score ?? '—'}</span>
-                  <span style={S.tCol}>{(ej?.overrides || []).length > 0 ? `${(ej.overrides).length} ⬆️` : '—'}</span>
-                  <span style={S.tCol}><span style={S.statusPill(ep.evaluation_status)}>{ep.evaluation_status || 'draft'}</span></span>
-                  <span style={S.tCol}><Link to={`/episodes/${ep.id}/evaluate`} style={{ color: '#6366f1', fontSize: 12, textDecoration: 'none' }}>Evaluate</Link></span>
-                </div>
-              );
-            })}
-            {episodes.length === 0 && <div style={S.empty}>No episodes yet.</div>}
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ ...S.cardTitle, margin: 0 }}>📋 Episode Ledger</h2>
+            <div style={{ fontSize: 12, color: '#94a3b8' }}>{episodes.length} episodes · {acceptedEpisodes.length} evaluated</div>
           </div>
+
+          {episodes.map((ep, i) => {
+            const ej = ep.evaluation_json;
+            const tier = ej?.tier_final;
+            const score = ej?.score;
+            const isExpanded = expandedEpisode === ep.id;
+            const epHistory = stateHistory.filter(h => h.episode_id === ep.id);
+            const deltas = epHistory.length > 0 ? (typeof epHistory[0].deltas_json === 'string' ? JSON.parse(epHistory[0].deltas_json) : epHistory[0].deltas_json) : null;
+            const stateAfter = epHistory.length > 0 ? (typeof epHistory[0].state_after_json === 'string' ? JSON.parse(epHistory[0].state_after_json) : epHistory[0].state_after_json) : null;
+            const linkedEvent = worldEvents.find(ev => ep.script_content?.includes(ev.name));
+
+            return (
+              <div key={ep.id} style={{ background: '#fff', border: isExpanded ? '2px solid #6366f1' : '1px solid #e2e8f0', borderRadius: 12, marginBottom: 10, overflow: 'hidden', transition: 'border 0.2s' }}>
+                {/* Row header — always visible */}
+                <div onClick={() => setExpandedEpisode(isExpanded ? null : ep.id)} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '14px 16px', cursor: 'pointer' }}>
+                  <span style={{ fontSize: 16, fontWeight: 800, color: '#6366f1', flex: '0 0 36px' }}>
+                    {ep.episode_number || i + 1}
+                  </span>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{ep.title || 'Untitled'}</div>
+                    {linkedEvent && <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{EVENT_TYPE_ICONS[linkedEvent.event_type]} {linkedEvent.name}</div>}
+                  </div>
+                  {tier && <span style={S.tierPill(tier)}>{TIER_EMOJIS[tier]} {tier.toUpperCase()}</span>}
+                  {score && <span style={{ fontSize: 18, fontWeight: 800, color: '#1a1a2e', margin: '0 8px' }}>{score}</span>}
+                  <span style={S.statusPill(ep.evaluation_status)}>{ep.evaluation_status || 'draft'}</span>
+                  {deltas && (
+                    <div style={{ display: 'flex', gap: 3, marginLeft: 8 }}>
+                      {Object.entries(deltas).filter(([, v]) => v !== 0).slice(0, 3).map(([k, v]) => (
+                        <span key={k} style={{ ...S.deltaBadge(v), fontSize: 10 }}>{STAT_ICONS[k]}{v > 0 ? '+' : ''}{v}</span>
+                      ))}
+                    </div>
+                  )}
+                  <span style={{ fontSize: 12, color: '#94a3b8', marginLeft: 8 }}>{isExpanded ? '▲' : '▼'}</span>
+                </div>
+
+                {/* Expanded case file */}
+                {isExpanded && (
+                  <div style={{ padding: '0 16px 16px', borderTop: '1px solid #f1f5f9' }}>
+
+                    {/* ── Stat Impact ── */}
+                    {deltas && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Stat Impact</div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                          {Object.entries(deltas).map(([k, v]) => {
+                            const afterVal = stateAfter ? stateAfter[k] : null;
+                            const beforeVal = afterVal !== null ? afterVal - v : null;
+                            return (
+                              <div key={k} style={{ padding: 10, background: v > 0 ? '#f0fdf4' : v < 0 ? '#fef2f2' : '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
+                                <div style={{ fontSize: 14 }}>{STAT_ICONS[k]}</div>
+                                <div style={{ fontSize: 11, color: '#64748b', marginBottom: 2 }}>{k.replace(/_/g, ' ')}</div>
+                                {beforeVal !== null ? (
+                                  <div style={{ fontSize: 13, fontWeight: 700 }}>
+                                    <span style={{ color: '#94a3b8' }}>{beforeVal}</span>
+                                    <span style={{ color: '#64748b', margin: '0 3px' }}>→</span>
+                                    <span style={{ color: v > 0 ? '#16a34a' : v < 0 ? '#dc2626' : '#1a1a2e' }}>{afterVal}</span>
+                                  </div>
+                                ) : (
+                                  <div style={{ fontSize: 14, fontWeight: 700, color: v > 0 ? '#16a34a' : v < 0 ? '#dc2626' : '#94a3b8' }}>
+                                    {v > 0 ? '+' : ''}{v}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Event Reference ── */}
+                    {linkedEvent && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>💌 Event</div>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                          <span style={{ fontSize: 14, fontWeight: 700 }}>{linkedEvent.name}</span>
+                          <span style={S.eTag}>⭐ {linkedEvent.prestige}</span>
+                          <span style={S.eTag}>🪙 {linkedEvent.cost_coins}</span>
+                          <span style={S.eTag}>📏 {linkedEvent.strictness}</span>
+                          {linkedEvent.is_paid && <span style={{ padding: '2px 8px', background: '#f0fdf4', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a' }}>💰 Paid</span>}
+                          {linkedEvent.career_milestone && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, color: '#4338ca' }}>🎯 {linkedEvent.career_milestone}</span>}
+                        </div>
+                        {linkedEvent.narrative_stakes && <div style={{ fontSize: 12, color: '#475569', fontStyle: 'italic', marginTop: 4 }}>{linkedEvent.narrative_stakes}</div>}
+                      </div>
+                    )}
+
+                    {/* ── Evaluation Details ── */}
+                    {ej && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>🏆 Evaluation</div>
+                        <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                          {ej.outfit_match !== undefined && (
+                            <div style={{ padding: '8px 14px', background: '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>Outfit Match</div>
+                              <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.outfit_match}/25</div>
+                            </div>
+                          )}
+                          {ej.accessory_match !== undefined && (
+                            <div style={{ padding: '8px 14px', background: '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>Accessory</div>
+                              <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.accessory_match}/25</div>
+                            </div>
+                          )}
+                          {ej.event_prestige_score !== undefined && (
+                            <div style={{ padding: '8px 14px', background: '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>Prestige</div>
+                              <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.event_prestige_score}/30</div>
+                            </div>
+                          )}
+                          {ej.timing_score !== undefined && (
+                            <div style={{ padding: '8px 14px', background: '#f8fafc', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: '#64748b' }}>Timing</div>
+                              <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.timing_score}/20</div>
+                            </div>
+                          )}
+                          {(ej.overrides || []).length > 0 && (
+                            <div style={{ padding: '8px 14px', background: '#fef3c7', borderRadius: 8, textAlign: 'center' }}>
+                              <div style={{ fontSize: 11, color: '#92400e' }}>Overrides</div>
+                              <div style={{ fontSize: 16, fontWeight: 800 }}>{ej.overrides.length} ⬆️</div>
+                            </div>
+                          )}
+                        </div>
+                        {ej.narrative_line && (
+                          <div style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 8, fontSize: 13, color: '#475569', fontStyle: 'italic', borderLeft: `3px solid ${TIER_COLORS[tier] || '#6366f1'}` }}>
+                            "{ej.narrative_line}"
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* ── Unlocks ── */}
+                    {linkedEvent?.success_unlock && tier && (tier === 'slay' || tier === 'pass') && (
+                      <div style={{ marginTop: 14 }}>
+                        <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>✨ Unlocked</div>
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                          {linkedEvent.success_unlock.split(',').map((u, ui) => (
+                            <span key={ui} style={{ padding: '4px 10px', background: 'linear-gradient(135deg, #fef3c7, #fde68a)', borderRadius: 6, fontSize: 11, fontWeight: 600, color: '#92400e' }}>
+                              ✨ {u.trim()}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* ── Actions ── */}
+                    <div style={{ display: 'flex', gap: 8, marginTop: 16, paddingTop: 12, borderTop: '1px solid #f1f5f9' }}>
+                      <Link to={`/episodes/${ep.id}`} style={{ ...S.smBtn, textDecoration: 'none' }}>📝 Edit Episode</Link>
+                      <Link to={`/episodes/${ep.id}/evaluate`} style={{ ...S.smBtn, textDecoration: 'none', background: '#eef2ff', borderColor: '#c7d2fe', color: '#4338ca' }}>🏆 Evaluate</Link>
+                      {ep.script_content && <span style={{ ...S.smBtn, color: '#16a34a' }}>✅ Has Script ({(ep.script_content || '').split('\n').length} lines)</span>}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {episodes.length === 0 && (
+            <div style={{ textAlign: 'center', padding: 40, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+              <div style={{ fontSize: 40, marginBottom: 12 }}>📋</div>
+              <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>No episodes yet</div>
+              <div style={{ fontSize: 13, color: '#94a3b8' }}>Create an episode from the Show page, then come back here.</div>
+            </div>
+          )}
         </div>
       )}
 
