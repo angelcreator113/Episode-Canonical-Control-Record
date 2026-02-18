@@ -14,10 +14,28 @@ class ScriptsService {
       process.env.NODE_ENV === 'production' ||
       process.env.NODE_ENV === 'staging';
 
-    this.pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: useSSL ? { rejectUnauthorized: false } : false,
-    });
+    const sslConfig = useSSL
+      ? { rejectUnauthorized: false }
+      : false;
+
+    // Support both DATABASE_URL and individual DB_* env vars
+    if (process.env.DATABASE_URL) {
+      // Strip sslmode from connection string — we set ssl explicitly below
+      const connStr = process.env.DATABASE_URL.replace(/[?&]sslmode=[^&]*/g, '');
+      this.pool = new Pool({
+        connectionString: connStr,
+        ssl: sslConfig,
+      });
+    } else {
+      this.pool = new Pool({
+        host: process.env.DB_HOST || '127.0.0.1',
+        port: parseInt(process.env.DB_PORT || '5432', 10),
+        database: process.env.DB_NAME || 'episode_metadata',
+        user: process.env.DB_USER || 'postgres',
+        password: process.env.DB_PASSWORD || '',
+        ssl: sslConfig,
+      });
+    }
   }
 
   /**

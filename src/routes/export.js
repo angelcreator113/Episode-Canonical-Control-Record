@@ -130,8 +130,24 @@ router.post('/episodes/:episodeId/export', authMiddleware, async (req, res) => {
       timelineData,
     };
 
-    // Add to Bull queue
-    const job = await addExportJob(jobData);
+    // Add to Bull queue (requires Redis)
+    let job;
+    try {
+      job = await addExportJob(jobData);
+    } catch (queueError) {
+      // Redis/Bull unavailable — return a clear error instead of generic 500
+      const isRedisDown = queueError.message.includes('Connection is closed')
+        || queueError.message.includes('ECONNREFUSED');
+      if (isRedisDown) {
+        console.warn('Export queue unavailable (Redis not running):', queueError.message);
+        return res.status(503).json({
+          success: false,
+          error: 'Export service unavailable',
+          message: 'Video export requires Redis which is not currently running. Please try again later or contact support.',
+        });
+      }
+      throw queueError; // Re-throw non-Redis errors
+    }
 
     return res.status(202).json({
       success: true,

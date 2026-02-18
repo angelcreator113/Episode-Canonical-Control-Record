@@ -773,6 +773,16 @@ app.use('/api/v1/edit-maps', editMapsRoutes);
 // Script analysis routes (AI)
 app.use('/api/scripts', scriptAnalysisRoutes);
 
+// Script Beat Parser routes (Scene Plan from script)
+try {
+  const scriptParseRoutes = require('./routes/scriptParse');
+  app.use('/api/v1/scripts', scriptParseRoutes);   // POST /api/v1/scripts/parse
+  app.use('/api/v1/episodes', scriptParseRoutes);   // POST /api/v1/episodes/:id/parse-script, apply-scene-plan
+  console.log('✓ Script parse routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load script parse routes:', e.message);
+}
+
 // Footage upload routes
 app.use('/api/footage', footageRoutes);
 

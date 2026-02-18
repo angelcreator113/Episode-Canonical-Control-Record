@@ -5,7 +5,7 @@ import { useToast } from '../components/ToastContainer';
 import episodeService from '../services/episodeService';
 import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
-import EpisodeScriptTab from '../components/Episodes/EpisodeScriptTab';
+import ScriptEditor from '../components/ScriptEditor';
 import EpisodeSceneComposerTab from '../components/Episodes/EpisodeSceneComposerTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
@@ -623,9 +623,9 @@ const EpisodeDetail = () => {
 
         {/* Scripts Tab */}
         {activeTab === 'scripts' && (
-          <EpisodeScriptTab 
+          <ScriptEditor 
+            episodeId={episode.id}
             episode={episode}
-            onUpdate={handleUpdateEpisode}
           />
         )}
 

@@ -45,75 +45,77 @@ module.exports = (sequelize) => {
           this.setDataValue('asset_id', value);
         },
       },
-      folder: {
-        type: DataTypes.STRING(100),
-        allowNull: true,
-        comment: 'Organization folder (Promo, Overlays, Lower Thirds, etc.)',
+      usage_type: {
+        type: DataTypes.STRING(50),
+        allowNull: false,
+        defaultValue: 'general',
+        field: 'usage_type',
+        comment: 'Usage type (general, thumbnail, overlay, etc.)',
       },
-      sort_order: {
+      usageType: {
+        type: DataTypes.VIRTUAL,
+        get() {
+          return this.getDataValue('usage_type');
+        },
+        set(value) {
+          this.setDataValue('usage_type', value);
+        },
+      },
+      scene_number: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'scene_number',
+        comment: 'Scene number this asset is used in',
+      },
+      sceneNumber: {
+        type: DataTypes.VIRTUAL,
+        get() {
+          return this.getDataValue('scene_number');
+        },
+        set(value) {
+          this.setDataValue('scene_number', value);
+        },
+      },
+      display_order: {
         type: DataTypes.INTEGER,
         allowNull: true,
         defaultValue: 0,
-        field: 'sort_order',
+        field: 'display_order',
         comment: 'Display order within episode library',
       },
-      sortOrder: {
+      displayOrder: {
         type: DataTypes.VIRTUAL,
         get() {
-          return this.getDataValue('sort_order');
+          return this.getDataValue('display_order');
         },
         set(value) {
-          this.setDataValue('sort_order', value);
+          this.setDataValue('display_order', value);
         },
       },
-      tags: {
-        type: DataTypes.ARRAY(DataTypes.STRING),
+      metadata: {
+        type: DataTypes.JSONB,
         allowNull: true,
-        defaultValue: [],
-        comment: 'Episode-specific tags for filtering',
-      },
-      added_at: {
-        type: DataTypes.DATE,
-        allowNull: false,
-        defaultValue: DataTypes.NOW,
-        field: 'added_at',
-      },
-      addedAt: {
-        type: DataTypes.VIRTUAL,
-        get() {
-          return this.getDataValue('added_at');
-        },
-        set(value) {
-          this.setDataValue('added_at', value);
-        },
-      },
-      added_by: {
-        type: DataTypes.STRING(100),
-        allowNull: true,
-        field: 'added_by',
-        comment: 'User who added this asset to episode',
-      },
-      addedBy: {
-        type: DataTypes.VIRTUAL,
-        get() {
-          return this.getDataValue('added_by');
-        },
-        set(value) {
-          this.setDataValue('added_by', value);
-        },
+        defaultValue: {},
+        comment: 'Additional metadata for this episode-asset link',
       },
     },
     {
       tableName: 'episode_assets',
       underscored: true,
       timestamps: true,
+      paranoid: true,
       createdAt: 'created_at',
       updatedAt: 'updated_at',
+      deletedAt: 'deleted_at',
       indexes: [
         { fields: ['episode_id'] },
         { fields: ['asset_id'] },
-        { fields: ['episode_id', 'folder'] },
-        { fields: ['episode_id', 'asset_id'], unique: true, name: 'unique_episode_asset' },
+        { fields: ['usage_type'] },
+        {
+          fields: ['episode_id', 'asset_id', 'usage_type'],
+          unique: true,
+          name: 'episode_assets_episode_id_asset_id_usage_type_key',
+        },
       ],
     }
   );
