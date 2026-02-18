@@ -57,6 +57,8 @@ function WorldAdmin() {
   const [eventForm, setEventForm] = useState({ ...EMPTY_EVENT });
   const [savingEvent, setSavingEvent] = useState(false);
   const [injectTarget, setInjectTarget] = useState(null);
+  const [generateTarget, setGenerateTarget] = useState(null);
+  const [generating, setGenerating] = useState(false);
 
   // Character editor state
   const [editingStats, setEditingStats] = useState(false);
@@ -129,6 +131,18 @@ function WorldAdmin() {
       console.error('Inject error:', err);
       setError(err.response?.data?.error || err.response?.data?.message || err.message);
     }
+  };
+
+  const generateScript = async (eventId, episodeId) => {
+    setGenerating(true); setError(null);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-script`, { episode_id: episodeId });
+      if (res.data.success) {
+        setSuccessMsg(`Script generated! ${res.data.beat_count} beats, ${res.data.line_count} lines.`);
+        setGenerateTarget(null);
+      }
+    } catch (err) { setError(err.response?.data?.error || err.message); }
+    finally { setGenerating(false); }
   };
 
   // ─── CHARACTER STAT EDIT ───
@@ -350,6 +364,7 @@ function WorldAdmin() {
                 <div style={{ display: 'flex', gap: 6, borderTop: '1px solid #f1f5f9', paddingTop: 8 }}>
                   <button onClick={() => openEditEvent(ev)} style={S.smBtn}>✏️ Edit</button>
                   <button onClick={() => setInjectTarget(injectTarget === ev.id ? null : ev.id)} style={S.smBtn}>{ev.status === 'used' ? '💉 Re-inject' : '💉 Inject'}</button>
+                  <button onClick={() => setGenerateTarget(generateTarget === ev.id ? null : ev.id)} style={S.smBtn}>📝 Generate</button>
                   <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>🗑️</button>
                 </div>
                 {injectTarget === ev.id && (
@@ -358,6 +373,18 @@ function WorldAdmin() {
                     {episodes.map(ep => (
                       <button key={ep.id} onClick={() => injectEvent(ev.id, ep.id)} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', marginBottom: 4, color: '#1a1a2e' }}>
                         {ep.episode_number || '?'}. {ep.title || 'Untitled'}
+                      </button>
+                    ))}
+                    {episodes.length === 0 && <span style={S.muted}>No episodes</span>}
+                  </div>
+                )}
+                {generateTarget === ev.id && (
+                  <div style={{ marginTop: 8, padding: 10, background: '#f0fdf4', borderRadius: 8, border: '1px solid #bbf7d0' }}>
+                    <div style={{ fontSize: 11, fontWeight: 600, color: '#16a34a', marginBottom: 6 }}>📝 Generate full script skeleton for which episode?</div>
+                    {episodes.map(ep => (
+                      <button key={ep.id} onClick={() => generateScript(ev.id, ep.id)} disabled={generating}
+                        style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', marginBottom: 4, color: '#1a1a2e' }}>
+                        {generating ? '⏳ Generating...' : `${ep.episode_number || '?'}. ${ep.title || 'Untitled'}`}
                       </button>
                     ))}
                     {episodes.length === 0 && <span style={S.muted}>No episodes</span>}

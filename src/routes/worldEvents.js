@@ -6,6 +6,7 @@
  * PUT    /api/v1/world/:showId/events/:eventId  — Update event
  * DELETE /api/v1/world/:showId/events/:eventId  — Delete event
  * POST   /api/v1/world/:showId/events/:eventId/inject — Inject event into episode script
+ * POST   /api/v1/world/:showId/events/:eventId/generate-script — Generate full script skeleton
  * 
  * Location: src/routes/worldEvents.js
  */
@@ -314,6 +315,89 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
   } catch (error) {
     console.error('Inject event error:', error);
     return res.status(500).json({ error: 'Failed to inject event', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/world/:showId/events/:eventId/generate-script
+// Generate a full episode script skeleton from an event
+// ═══════════════════════════════════════════
+
+let scriptSkeletonGenerator;
+try { scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator'); } catch (e) { scriptSkeletonGenerator = null; }
+
+router.post('/world/:showId/events/:eventId/generate-script', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const {
+      episode_id,
+      intent = null,
+      include_narration = true,
+      include_animations = true,
+    } = req.body;
+
+    if (!scriptSkeletonGenerator) {
+      return res.status(500).json({ error: 'Script skeleton generator not loaded' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Get event
+    const [events] = await models.sequelize.query(
+      `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId`,
+      { replacements: { eventId, showId } }
+    );
+    if (!events || events.length === 0) return res.status(404).json({ error: 'Event not found' });
+    const event = events[0];
+
+    // Get character state for context-aware generation
+    let characterState = {};
+    try {
+      const [states] = await models.sequelize.query(
+        `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
+        { replacements: { showId } }
+      );
+      if (states && states.length > 0) {
+        characterState = {
+          coins: states[0].coins,
+          reputation: states[0].reputation,
+          brand_trust: states[0].brand_trust,
+          influence: states[0].influence,
+          stress: states[0].stress,
+        };
+      }
+    } catch (e) { /* no state yet */ }
+
+    // Generate skeleton
+    const script = scriptSkeletonGenerator.generateScriptSkeleton(event, {
+      characterState,
+      intent,
+      includeNarration: include_narration,
+      includeAnimations: include_animations,
+    });
+
+    // If episode_id provided, save to episode
+    if (episode_id) {
+      const episode = await models.Episode.findByPk(episode_id);
+      if (episode) {
+        await episode.update({ script_content: script });
+      }
+    }
+
+    return res.json({
+      success: true,
+      script,
+      event_name: event.name,
+      character_state_used: characterState,
+      intent,
+      line_count: script.split('\n').length,
+      beat_count: (script.match(/## BEAT:/g) || []).length,
+    });
+  } catch (error) {
+    console.error('Generate script error:', error);
+    return res.status(500).json({ error: 'Script generation failed', message: error.message });
   }
 });
 
