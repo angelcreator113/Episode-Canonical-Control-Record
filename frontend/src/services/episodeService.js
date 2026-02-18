@@ -24,6 +24,11 @@ export const episodeService = {
 
   // Get single episode
   getEpisode: async (id) => {
+    // Guard: reject non-UUID values to avoid 400 errors from /:id route
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (!id || !uuidRegex.test(id)) {
+      throw new Error(`Invalid episode ID: ${id}`);
+    }
     try {
       const response = await api.get(`/api/v1/episodes/${id}`);
       // Handle different response formats
