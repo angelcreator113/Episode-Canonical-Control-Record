@@ -181,7 +181,7 @@ function AppContent() {
 
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<CreateEpisode />} />
-          <Route path="/episodes/:episodeId/evaluate" element={<EvaluateEpisode />} />
+          <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
           
           {/* Assets */}

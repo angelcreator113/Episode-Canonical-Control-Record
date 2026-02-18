@@ -63,7 +63,7 @@ const STAT_ICONS = {
 
 
 function EvaluateEpisode() {
-  const { episodeId } = useParams();
+  const { id: episodeId } = useParams();
   const navigate = useNavigate();
 
   const [episode, setEpisode] = useState(null);
