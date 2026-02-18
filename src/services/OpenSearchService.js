@@ -193,9 +193,17 @@ class OpenSearchService {
   async searchPostgreSQL(query, options = {}) {
     try {
       const { Pool } = require('pg');
-      const pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
-      });
+      const sslConfig = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
+      const pool = process.env.DATABASE_URL
+        ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: sslConfig })
+        : new Pool({
+            host: process.env.DB_HOST || '127.0.0.1',
+            port: parseInt(process.env.DB_PORT || '5432', 10),
+            database: process.env.DB_NAME || 'episode_metadata',
+            user: process.env.DB_USER || 'postgres',
+            password: process.env.DB_PASSWORD || '',
+            ssl: sslConfig,
+          });
 
       const { from = 0, size = 20 } = options;
       const offset = Math.max(0, from);

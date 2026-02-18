@@ -8,10 +8,17 @@ const claudeService = require('../services/claudeService');
 const { Pool } = require('pg');
 
 // Create pool for raw SQL queries (scripts use raw SQL, not Sequelize)
-const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false,
-});
+const sslConfig = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
+const pool = process.env.DATABASE_URL
+  ? new Pool({ connectionString: process.env.DATABASE_URL, ssl: sslConfig })
+  : new Pool({
+      host: process.env.DB_HOST || '127.0.0.1',
+      port: parseInt(process.env.DB_PORT || '5432', 10),
+      database: process.env.DB_NAME || 'episode_metadata',
+      user: process.env.DB_USER || 'postgres',
+      password: process.env.DB_PASSWORD || '',
+      ssl: sslConfig,
+    });
 
 /**
  * POST /api/scripts/:scriptId/analyze

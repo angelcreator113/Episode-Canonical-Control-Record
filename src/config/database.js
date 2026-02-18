@@ -10,15 +10,27 @@ let pool = null;
 
 const getPool = () => {
   if (!pool) {
-    pool = new Pool({
-      connectionString: process.env.DATABASE_URL,
+    const sslConfig = process.env.DB_SSL === 'true' ? { rejectUnauthorized: false } : false;
+    const baseConfig = {
       max: parseInt(process.env.DATABASE_POOL_MAX || 10),
       min: parseInt(process.env.DATABASE_POOL_MIN || 2),
       idleTimeoutMillis: 30000,
       connectionTimeoutMillis: 2000,
-      // Force UTF-8 encoding for all connections
       client_encoding: 'UTF8',
-    });
+      ssl: sslConfig,
+    };
+
+    if (process.env.DATABASE_URL) {
+      baseConfig.connectionString = process.env.DATABASE_URL;
+    } else {
+      baseConfig.host = process.env.DB_HOST || '127.0.0.1';
+      baseConfig.port = parseInt(process.env.DB_PORT || '5432', 10);
+      baseConfig.database = process.env.DB_NAME || 'episode_metadata';
+      baseConfig.user = process.env.DB_USER || 'postgres';
+      baseConfig.password = process.env.DB_PASSWORD || '';
+    }
+
+    pool = new Pool(baseConfig);
 
     pool.on('error', (err) => {
       console.error('Unexpected error on idle client', err);
