@@ -59,6 +59,7 @@ function WorldAdmin() {
   const [injectTarget, setInjectTarget] = useState(null);
   const [generateTarget, setGenerateTarget] = useState(null);
   const [generating, setGenerating] = useState(false);
+  const [generatedScript, setGeneratedScript] = useState(null);
 
   // Character editor state
   const [editingStats, setEditingStats] = useState(false);
@@ -138,8 +139,10 @@ function WorldAdmin() {
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/generate-script`, { episode_id: episodeId });
       if (res.data.success) {
-        setSuccessMsg(`Script generated! ${res.data.beat_count} beats, ${res.data.line_count} lines.`);
+        setGeneratedScript({ script: res.data.script, event_name: res.data.event_name, beat_count: res.data.beat_count, line_count: res.data.line_count });
         setGenerateTarget(null);
+      } else {
+        setError(res.data.error || 'Generation returned no script');
       }
     } catch (err) { setError(err.response?.data?.error || err.message); }
     finally { setGenerating(false); }
@@ -179,6 +182,27 @@ function WorldAdmin() {
 
       {error && <div style={S.errorBanner}>{error}<button onClick={() => setError(null)} style={S.xBtn}>✕</button></div>}
       {successMsg && <div style={S.successBanner}>{successMsg}</div>}
+
+      {/* ─── GENERATED SCRIPT PREVIEW ─── */}
+      {generatedScript && (
+        <div style={S.scriptOverlay}>
+          <div style={S.scriptModal}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#1a1a2e' }}>📝 Generated Script — {generatedScript.event_name}</h2>
+              <button onClick={() => setGeneratedScript(null)} style={S.xBtn}>✕</button>
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginBottom: 12 }}>
+              <span style={{ padding: '4px 10px', background: '#eef2ff', borderRadius: 6, fontSize: 12, fontWeight: 600, color: '#6366f1' }}>🎬 {generatedScript.beat_count} beats</span>
+              <span style={{ padding: '4px 10px', background: '#f0fdf4', borderRadius: 6, fontSize: 12, fontWeight: 600, color: '#16a34a' }}>📄 {generatedScript.line_count} lines</span>
+              <button onClick={() => { navigator.clipboard.writeText(generatedScript.script); setSuccessMsg('Script copied to clipboard!'); }} style={{ padding: '4px 12px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', color: '#475569' }}>📋 Copy</button>
+            </div>
+            <pre style={S.scriptPre}>{generatedScript.script}</pre>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+              <button onClick={() => setGeneratedScript(null)} style={S.secBtn}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ─── TABS ─── */}
       <div className="tab-navigation">
@@ -596,6 +620,9 @@ const S = {
   statusPill: (s) => ({ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s === 'accepted' ? '#f0fdf4' : s === 'computed' ? '#eef2ff' : s === 'ready' ? '#f0fdf4' : s === 'used' ? '#eef2ff' : '#f1f5f9', color: s === 'accepted' || s === 'ready' ? '#16a34a' : s === 'computed' || s === 'used' ? '#6366f1' : '#94a3b8' }),
   sourceBadge: (s) => ({ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s === 'override' ? '#fef3c7' : s === 'manual' ? '#fef2f2' : '#eef2ff', color: s === 'override' ? '#92400e' : s === 'manual' ? '#dc2626' : '#4338ca' }),
   deltaBadge: (v) => ({ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 11, fontWeight: 600, background: v > 0 ? '#f0fdf4' : '#fef2f2', color: v > 0 ? '#16a34a' : '#dc2626' }),
+  scriptOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 },
+  scriptModal: { background: '#fff', borderRadius: 16, padding: 24, maxWidth: 900, width: '100%', maxHeight: '85vh', overflow: 'auto', boxShadow: '0 20px 60px rgba(0,0,0,0.3)' },
+  scriptPre: { background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 16, fontSize: 12, lineHeight: 1.7, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: '55vh', overflow: 'auto', color: '#1e293b', fontFamily: '"JetBrains Mono", "Fira Code", monospace' },
   evCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 },
   eTag: { padding: '2px 8px', background: '#f3e8ff', borderRadius: 4, fontSize: 11, color: '#7c3aed' },
   fLabel: { display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' },
