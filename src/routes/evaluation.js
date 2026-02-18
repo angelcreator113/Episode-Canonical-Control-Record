@@ -348,7 +348,7 @@ router.post('/episodes/:id/override', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'Episode must be evaluated before overriding. Current status: ' + episode.evaluation_status });
     }
 
-    const evalJson = episode.evaluation_json;
+    const evalJson = JSON.parse(JSON.stringify(episode.evaluation_json));
     if (!evalJson) return res.status(400).json({ error: 'No evaluation data found' });
 
     // ─── TIER CHANGE ───
@@ -421,7 +421,7 @@ router.post('/episodes/:id/override', optionalAuth, async (req, res) => {
       // The score was already computed. Style adjust is for the display/record.
     }
 
-    await episode.update({ evaluation_json: JSON.parse(JSON.stringify(evalJson)) });
+    await episode.update({ evaluation_json: evalJson });
 
     return res.json({
       success: true,
@@ -461,7 +461,7 @@ router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'Episode must be evaluated first.' });
     }
 
-    const evalJson = episode.evaluation_json;
+    const evalJson = JSON.parse(JSON.stringify(episode.evaluation_json));
     if (!evalJson) return res.status(400).json({ error: 'No evaluation data found' });
 
     const characterKey = evalJson.character_key || 'lala';
@@ -544,7 +544,7 @@ router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
     // Mark episode as accepted
     evalJson.accepted_at = new Date().toISOString();
     await episode.update({
-      evaluation_json: JSON.parse(JSON.stringify(evalJson)),
+      evaluation_json: evalJson,
       evaluation_status: 'accepted',
     });
 
