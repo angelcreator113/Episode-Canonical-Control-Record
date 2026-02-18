@@ -87,6 +87,9 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
       browse_pool_bias = 'balanced', browse_pool_size = 8,
       rewards = {},
       season_id, arc_id,
+      is_paid = false, payment_amount = 0,
+      requirements = {}, career_tier = 1,
+      career_milestone, fail_consequence, success_unlock,
     } = req.body;
 
     if (!name) return res.status(400).json({ error: 'Event name is required' });
@@ -102,14 +105,18 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
         dress_code, dress_code_keywords, location_hint, narrative_stakes,
         canon_consequences, seeds_future_events,
         overlay_template, required_ui_overlays, browse_pool_bias, browse_pool_size,
-        rewards, status, created_at, updated_at)
+        rewards, is_paid, payment_amount, requirements, career_tier,
+        career_milestone, fail_consequence, success_unlock,
+        status, created_at, updated_at)
        VALUES
        (:id, :showId, :season_id, :arc_id, :name, :event_type, :host_brand, :description,
         :prestige, :cost_coins, :strictness, :deadline_type, :deadline_minutes,
         :dress_code, :dress_code_keywords, :location_hint, :narrative_stakes,
         :canon_consequences, :seeds_future_events,
         :overlay_template, :required_ui_overlays, :browse_pool_bias, :browse_pool_size,
-        :rewards, 'draft', NOW(), NOW())`,
+        :rewards, :is_paid, :payment_amount, :requirements, :career_tier,
+        :career_milestone, :fail_consequence, :success_unlock,
+        'draft', NOW(), NOW())`,
       {
         replacements: {
           id, showId,
@@ -130,6 +137,13 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
           required_ui_overlays: JSON.stringify(required_ui_overlays),
           browse_pool_bias, browse_pool_size,
           rewards: JSON.stringify(rewards),
+          is_paid: is_paid,
+          payment_amount: payment_amount,
+          requirements: JSON.stringify(requirements),
+          career_tier: career_tier,
+          career_milestone: career_milestone || null,
+          fail_consequence: fail_consequence || null,
+          success_unlock: success_unlock || null,
         },
       }
     );
@@ -167,6 +181,8 @@ router.put('/world/:showId/events/:eventId', optionalAuth, async (req, res) => {
       'seeds_future_events', 'overlay_template', 'required_ui_overlays',
       'browse_pool_bias', 'browse_pool_size', 'rewards', 'status',
       'season_id', 'arc_id',
+      'is_paid', 'payment_amount', 'requirements', 'career_tier',
+      'career_milestone', 'fail_consequence', 'success_unlock',
     ];
 
     const setClauses = [];
@@ -398,6 +414,80 @@ router.post('/world/:showId/events/:eventId/generate-script', optionalAuth, asyn
   } catch (error) {
     console.error('Generate script error:', error);
     return res.status(500).json({ error: 'Script generation failed', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/world/:showId/events/bulk-seed
+// Seed multiple events at once (for initial setup)
+// ═══════════════════════════════════════════
+
+router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { events } = req.body;
+
+    if (!events || !Array.isArray(events) || events.length === 0) {
+      return res.status(400).json({ error: 'events array is required' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const created = [];
+    for (const ev of events) {
+      const id = uuidv4();
+      await models.sequelize.query(
+        `INSERT INTO world_events 
+         (id, show_id, name, event_type, host_brand, description,
+          prestige, cost_coins, strictness, deadline_type,
+          dress_code, location_hint, narrative_stakes,
+          browse_pool_bias, browse_pool_size,
+          is_paid, payment_amount, requirements, career_tier,
+          career_milestone, fail_consequence, success_unlock,
+          status, created_at, updated_at)
+         VALUES
+         (:id, :showId, :name, :event_type, :host_brand, :description,
+          :prestige, :cost_coins, :strictness, :deadline_type,
+          :dress_code, :location_hint, :narrative_stakes,
+          :browse_pool_bias, :browse_pool_size,
+          :is_paid, :payment_amount, :requirements, :career_tier,
+          :career_milestone, :fail_consequence, :success_unlock,
+          'ready', NOW(), NOW())`,
+        {
+          replacements: {
+            id, showId,
+            name: ev.name,
+            event_type: ev.event_type || 'invite',
+            host_brand: ev.host_brand || null,
+            description: ev.description || null,
+            prestige: ev.prestige || 5,
+            cost_coins: ev.cost_coins || 0,
+            strictness: ev.strictness || 5,
+            deadline_type: ev.deadline_type || 'medium',
+            dress_code: ev.dress_code || null,
+            location_hint: ev.location_hint || null,
+            narrative_stakes: ev.narrative_stakes || null,
+            browse_pool_bias: ev.browse_pool_bias || 'balanced',
+            browse_pool_size: ev.browse_pool_size || 8,
+            is_paid: ev.is_paid || false,
+            payment_amount: ev.payment_amount || 0,
+            requirements: JSON.stringify(ev.requirements || {}),
+            career_tier: ev.career_tier || 1,
+            career_milestone: ev.career_milestone || null,
+            fail_consequence: ev.fail_consequence || null,
+            success_unlock: ev.success_unlock || null,
+          },
+        }
+      );
+      created.push({ id, name: ev.name });
+    }
+
+    return res.status(201).json({ success: true, created_count: created.length, events: created });
+  } catch (error) {
+    console.error('Bulk seed error:', error);
+    return res.status(500).json({ error: 'Bulk seed failed', message: error.message });
   }
 });
 
