@@ -83,6 +83,10 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(500),
         allowNull: true,
       },
+      file_hash: {
+        type: DataTypes.STRING(64),
+        allowNull: true,
+      },
       content_type: {
         type: DataTypes.STRING(100),
         allowNull: true,
