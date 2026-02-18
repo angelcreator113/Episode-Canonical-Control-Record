@@ -78,7 +78,7 @@ function WorldAdmin() {
     setLoading(true);
     try {
       await Promise.allSettled([
-        api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data)).catch(() => setShow({ id: showId, title: 'Show' })),
+        api.get(`/api/v1/shows/${showId}`).then(r => setShow(r.data?.data || r.data)).catch(() => setShow({ id: showId, title: 'Show' })),
         api.get(`/api/v1/characters/lala/state?show_id=${showId}`).then(r => setCharState(r.data)).catch(() => {}),
         api.get(`/api/v1/episodes?show_id=${showId}&limit=100`).then(r => {
           const list = r.data?.episodes || r.data?.data || r.data || [];

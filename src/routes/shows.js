@@ -163,13 +163,23 @@ router.get('/', async (req, res) => {
 /**
  * GET /api/v1/shows/:id
  * Get a single show by ID
+ * Falls back to auto-creating a minimal show record if episodes exist for this show_id
  */
 router.get('/:id', async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
 
-    const show = await Show.findByPk(id);
+    let show = await Show.findByPk(id);
+
+    // If no show record but episodes reference this show_id, auto-create a minimal record
+    if (!show) {
+      const { Episode } = require('../models');
+      const episodeCount = await Episode.count({ where: { show_id: id } });
+      if (episodeCount > 0) {
+        show = await Show.create({ id, name: 'Untitled Show', status: 'in-production' });
+      }
+    }
 
     if (!show) {
       return res.status(404).json({
