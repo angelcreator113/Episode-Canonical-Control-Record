@@ -163,13 +163,69 @@ router.get('/', async (req, res) => {
 /**
  * GET /api/v1/shows/:id
  * Get a single show by ID
+ * Falls back to auto-creating a minimal show record if episodes exist for this show_id
+ * Includes raw SQL fallback if Sequelize model query fails
  */
 router.get('/:id', async (req, res) => {
   try {
     const Show = getShow();
     const { id } = req.params;
 
-    const show = await Show.findByPk(id);
+    if (!Show) {
+      console.error('GET /shows/:id — Show model is not available');
+      return res.status(503).json({ error: 'Show model not loaded', message: 'Database models are still initializing' });
+    }
+
+    let show = null;
+
+    // Primary: use Sequelize model
+    try {
+      show = await Show.findByPk(id);
+    } catch (modelErr) {
+      console.error('GET /shows/:id — Sequelize findByPk failed, trying raw SQL fallback:', modelErr.message);
+      // Fallback: raw SQL in case the model has column mismatch with DB
+      try {
+        const sequelize = Show.sequelize || require('../models').sequelize;
+        const [rows] = await sequelize.query(
+          'SELECT * FROM shows WHERE id = :id AND deleted_at IS NULL LIMIT 1',
+          { replacements: { id }, type: sequelize.QueryTypes.SELECT }
+        );
+        show = rows || null;
+      } catch (rawErr) {
+        console.error('GET /shows/:id — Raw SQL fallback also failed:', rawErr.message);
+      }
+    }
+
+    // If no show record but episodes reference this show_id, auto-create a minimal record
+    if (!show) {
+      try {
+        const { Episode, sequelize } = require('../models');
+        const episodeCount = await Episode.count({ where: { show_id: id } });
+        if (episodeCount > 0) {
+          try {
+            show = await Show.create({ id, name: 'Untitled Show', slug: `show-${id.slice(0, 8)}`, status: 'in_development' });
+          } catch (createErr) {
+            console.error('GET /shows/:id — Show.create failed, trying raw INSERT:', createErr.message);
+            // Raw SQL fallback for create
+            const seq = Show.sequelize || sequelize;
+            const slug = `show-${id.slice(0, 8)}`;
+            await seq.query(
+              `INSERT INTO shows (id, name, slug, status, is_active, created_at, updated_at)
+               VALUES (:id, 'Untitled Show', :slug, 'in_development', true, NOW(), NOW())
+               ON CONFLICT (id) DO NOTHING`,
+              { replacements: { id, slug } }
+            );
+            const [rows] = await seq.query(
+              'SELECT * FROM shows WHERE id = :id LIMIT 1',
+              { replacements: { id }, type: seq.QueryTypes.SELECT }
+            );
+            show = rows || null;
+          }
+        }
+      } catch (epErr) {
+        console.error('GET /shows/:id — Episode count / auto-create failed:', epErr.message);
+      }
+    }
 
     if (!show) {
       return res.status(404).json({
@@ -187,6 +243,7 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({
       error: 'Failed to get show',
       message: error.message,
+      stack: process.env.NODE_ENV !== 'production' ? error.stack : undefined,
     });
   }
 });

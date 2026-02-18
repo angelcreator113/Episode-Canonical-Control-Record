@@ -6,6 +6,7 @@
  * PUT    /api/v1/world/:showId/events/:eventId  — Update event
  * DELETE /api/v1/world/:showId/events/:eventId  — Delete event
  * POST   /api/v1/world/:showId/events/:eventId/inject — Inject event into episode script
+ * POST   /api/v1/world/:showId/events/:eventId/generate-script — Generate full script skeleton
  * 
  * Location: src/routes/worldEvents.js
  */
@@ -86,6 +87,9 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
       browse_pool_bias = 'balanced', browse_pool_size = 8,
       rewards = {},
       season_id, arc_id,
+      is_paid = false, payment_amount = 0,
+      requirements = {}, career_tier = 1,
+      career_milestone, fail_consequence, success_unlock,
     } = req.body;
 
     if (!name) return res.status(400).json({ error: 'Event name is required' });
@@ -101,14 +105,18 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
         dress_code, dress_code_keywords, location_hint, narrative_stakes,
         canon_consequences, seeds_future_events,
         overlay_template, required_ui_overlays, browse_pool_bias, browse_pool_size,
-        rewards, status, created_at, updated_at)
+        rewards, is_paid, payment_amount, requirements, career_tier,
+        career_milestone, fail_consequence, success_unlock,
+        status, created_at, updated_at)
        VALUES
        (:id, :showId, :season_id, :arc_id, :name, :event_type, :host_brand, :description,
         :prestige, :cost_coins, :strictness, :deadline_type, :deadline_minutes,
         :dress_code, :dress_code_keywords, :location_hint, :narrative_stakes,
         :canon_consequences, :seeds_future_events,
         :overlay_template, :required_ui_overlays, :browse_pool_bias, :browse_pool_size,
-        :rewards, 'draft', NOW(), NOW())`,
+        :rewards, :is_paid, :payment_amount, :requirements, :career_tier,
+        :career_milestone, :fail_consequence, :success_unlock,
+        'draft', NOW(), NOW())`,
       {
         replacements: {
           id, showId,
@@ -129,6 +137,13 @@ router.post('/world/:showId/events', optionalAuth, async (req, res) => {
           required_ui_overlays: JSON.stringify(required_ui_overlays),
           browse_pool_bias, browse_pool_size,
           rewards: JSON.stringify(rewards),
+          is_paid: is_paid,
+          payment_amount: payment_amount,
+          requirements: JSON.stringify(requirements),
+          career_tier: career_tier,
+          career_milestone: career_milestone || null,
+          fail_consequence: fail_consequence || null,
+          success_unlock: success_unlock || null,
         },
       }
     );
@@ -166,6 +181,8 @@ router.put('/world/:showId/events/:eventId', optionalAuth, async (req, res) => {
       'seeds_future_events', 'overlay_template', 'required_ui_overlays',
       'browse_pool_bias', 'browse_pool_size', 'rewards', 'status',
       'season_id', 'arc_id',
+      'is_paid', 'payment_amount', 'requirements', 'career_tier',
+      'career_milestone', 'fail_consequence', 'success_unlock',
     ];
 
     const setClauses = [];
@@ -314,6 +331,163 @@ router.post('/world/:showId/events/:eventId/inject', optionalAuth, async (req, r
   } catch (error) {
     console.error('Inject event error:', error);
     return res.status(500).json({ error: 'Failed to inject event', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/world/:showId/events/:eventId/generate-script
+// Generate a full episode script skeleton from an event
+// ═══════════════════════════════════════════
+
+let scriptSkeletonGenerator;
+try { scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator'); } catch (e) { scriptSkeletonGenerator = null; }
+
+router.post('/world/:showId/events/:eventId/generate-script', optionalAuth, async (req, res) => {
+  try {
+    const { showId, eventId } = req.params;
+    const {
+      episode_id,
+      intent = null,
+      include_narration = true,
+      include_animations = true,
+    } = req.body;
+
+    if (!scriptSkeletonGenerator) {
+      return res.status(500).json({ error: 'Script skeleton generator not loaded' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Get event
+    const [events] = await models.sequelize.query(
+      `SELECT * FROM world_events WHERE id = :eventId AND show_id = :showId`,
+      { replacements: { eventId, showId } }
+    );
+    if (!events || events.length === 0) return res.status(404).json({ error: 'Event not found' });
+    const event = events[0];
+
+    // Get character state for context-aware generation
+    let characterState = {};
+    try {
+      const [states] = await models.sequelize.query(
+        `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
+        { replacements: { showId } }
+      );
+      if (states && states.length > 0) {
+        characterState = {
+          coins: states[0].coins,
+          reputation: states[0].reputation,
+          brand_trust: states[0].brand_trust,
+          influence: states[0].influence,
+          stress: states[0].stress,
+        };
+      }
+    } catch (e) { /* no state yet */ }
+
+    // Generate skeleton
+    const script = scriptSkeletonGenerator.generateScriptSkeleton(event, {
+      characterState,
+      intent,
+      includeNarration: include_narration,
+      includeAnimations: include_animations,
+    });
+
+    // If episode_id provided, save to episode
+    if (episode_id) {
+      const episode = await models.Episode.findByPk(episode_id);
+      if (episode) {
+        await episode.update({ script_content: script });
+      }
+    }
+
+    return res.json({
+      success: true,
+      script,
+      event_name: event.name,
+      character_state_used: characterState,
+      intent,
+      line_count: script.split('\n').length,
+      beat_count: (script.match(/## BEAT:/g) || []).length,
+    });
+  } catch (error) {
+    console.error('Generate script error:', error);
+    return res.status(500).json({ error: 'Script generation failed', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/world/:showId/events/bulk-seed
+// Seed multiple events at once (for initial setup)
+// ═══════════════════════════════════════════
+
+router.post('/world/:showId/events/bulk-seed', optionalAuth, async (req, res) => {
+  try {
+    const { showId } = req.params;
+    const { events } = req.body;
+
+    if (!events || !Array.isArray(events) || events.length === 0) {
+      return res.status(400).json({ error: 'events array is required' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const created = [];
+    for (const ev of events) {
+      const id = uuidv4();
+      await models.sequelize.query(
+        `INSERT INTO world_events 
+         (id, show_id, name, event_type, host_brand, description,
+          prestige, cost_coins, strictness, deadline_type,
+          dress_code, location_hint, narrative_stakes,
+          browse_pool_bias, browse_pool_size,
+          is_paid, payment_amount, requirements, career_tier,
+          career_milestone, fail_consequence, success_unlock,
+          status, created_at, updated_at)
+         VALUES
+         (:id, :showId, :name, :event_type, :host_brand, :description,
+          :prestige, :cost_coins, :strictness, :deadline_type,
+          :dress_code, :location_hint, :narrative_stakes,
+          :browse_pool_bias, :browse_pool_size,
+          :is_paid, :payment_amount, :requirements, :career_tier,
+          :career_milestone, :fail_consequence, :success_unlock,
+          'ready', NOW(), NOW())`,
+        {
+          replacements: {
+            id, showId,
+            name: ev.name,
+            event_type: ev.event_type || 'invite',
+            host_brand: ev.host_brand || null,
+            description: ev.description || null,
+            prestige: ev.prestige || 5,
+            cost_coins: ev.cost_coins || 0,
+            strictness: ev.strictness || 5,
+            deadline_type: ev.deadline_type || 'medium',
+            dress_code: ev.dress_code || null,
+            location_hint: ev.location_hint || null,
+            narrative_stakes: ev.narrative_stakes || null,
+            browse_pool_bias: ev.browse_pool_bias || 'balanced',
+            browse_pool_size: ev.browse_pool_size || 8,
+            is_paid: ev.is_paid || false,
+            payment_amount: ev.payment_amount || 0,
+            requirements: JSON.stringify(ev.requirements || {}),
+            career_tier: ev.career_tier || 1,
+            career_milestone: ev.career_milestone || null,
+            fail_consequence: ev.fail_consequence || null,
+            success_unlock: ev.success_unlock || null,
+          },
+        }
+      );
+      created.push({ id, name: ev.name });
+    }
+
+    return res.status(201).json({ success: true, created_count: created.length, events: created });
+  } catch (error) {
+    console.error('Bulk seed error:', error);
+    return res.status(500).json({ error: 'Bulk seed failed', message: error.message });
   }
 });
 

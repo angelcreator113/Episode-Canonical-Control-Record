@@ -1,195 +1,219 @@
 /**
- * ScriptEditor v3 — Light Theme + Format Script + Beat Inference
+ * ScriptEditor v4 — Calm, Structured, Story-First
  * 
- * Changes from v2:
- *   - Light theme (white background, dark text)
- *   - "Format Script" button — normalizes messy pastes into clean lines
- *   - normalizeScript() — splits speakers, tags, and stage directions onto own lines
- *   - inferBeats() — auto-inserts ## BEAT: headers based on anchor detection
- *   - "Me:" → "Prime:" normalization
+ * Layout:
+ *   ┌─────────────────────────────────────────────────────┐
+ *   │ Script Toolbar (beat selector, status, save, tools) │
+ *   ├───────────────┬─────────────────────────────────────┤
+ *   │  OUTLINE      │  SCRIPT EDITOR                     │
+ *   │  (left pane)  │  + collapsible UI Actions / Meta   │
+ *   └───────────────┴─────────────────────────────────────┘
  * 
- * Replaces: frontend/src/components/ScriptEditor.jsx
+ * Features:
+ *   - Story Outline (left pane, collapsible, grouped by act)
+ *   - Clean editor with beat context header
+ *   - Collapsible UI Actions & Event Metadata sections
+ *   - Tools slide-over drawer (UI Tags, Templates, Variables)
+ *   - Command Palette (Ctrl+K)
+ *   - Keyboard navigation (Ctrl+↑/↓ to switch beats)
+ *   - Auto-save indicator
+ * 
+ * Replaces: ScriptEditor v3
  */
 
-import React, { useState, useRef, useCallback, useEffect } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import api from '../services/api';
+import './ScriptEditor.css';
 
 // ─── BEAT TYPES ───
 const BEAT_OPTIONS = [
-  { value: 'OPENING_RITUAL', label: '🎬 Opening Ritual' },
-  { value: 'CREATOR_WELCOME', label: '👋 Creator Welcome' },
-  { value: 'INTERRUPTION', label: '📩 Interruption' },
-  { value: 'REVEAL', label: '✨ Reveal' },
-  { value: 'STAKES_INTENTION', label: '🎯 Stakes + Intention' },
-  { value: 'TRANSFORMATION', label: '💫 Transformation' },
-  { value: 'DELIVERABLE_CREATION', label: '🎨 Deliverable Creation' },
-  { value: 'PAYOFF_CTA', label: '🎁 Payoff + CTA' },
-  { value: 'CLIFFHANGER', label: '🔥 Cliffhanger' },
-  { value: 'TRANSITION', label: '🔄 Transition' },
-  { value: 'EVENT_TRAVEL', label: '✈️ Event Travel' },
-  { value: 'EVENT_OUTCOME', label: '🏆 Event Outcome' },
+  { value: 'OPENING_RITUAL', label: 'Opening Ritual', icon: '🎬', act: 'SETUP' },
+  { value: 'CREATOR_WELCOME', label: 'Creator Welcome', icon: '👋', act: 'SETUP' },
+  { value: 'INTERRUPTION', label: 'Interruption', icon: '📩', act: 'CONFLICT' },
+  { value: 'REVEAL', label: 'Reveal', icon: '✨', act: 'CONFLICT' },
+  { value: 'STAKES_INTENTION', label: 'Stakes + Intention', icon: '🎯', act: 'CONFLICT' },
+  { value: 'TRANSFORMATION', label: 'Transformation', icon: '💫', act: 'CLIMAX' },
+  { value: 'DELIVERABLE_CREATION', label: 'Deliverable Creation', icon: '🎨', act: 'CLIMAX' },
+  { value: 'PAYOFF_CTA', label: 'Payoff + CTA', icon: '🎁', act: 'RESOLUTION' },
+  { value: 'CLIFFHANGER', label: 'Cliffhanger', icon: '🔥', act: 'RESOLUTION' },
+  { value: 'TRANSITION', label: 'Transition', icon: '🔄', act: 'SETUP' },
+  { value: 'EVENT_TRAVEL', label: 'Event Travel', icon: '✈️', act: 'CONFLICT' },
+  { value: 'EVENT_OUTCOME', label: 'Event Outcome', icon: '🏆', act: 'RESOLUTION' },
 ];
 
+const BEAT_MAP = Object.fromEntries(BEAT_OPTIONS.map(b => [b.value, b]));
+const ACT_ORDER = ['SETUP', 'CONFLICT', 'CLIMAX', 'RESOLUTION'];
+
 // ─── QUICK TEMPLATES ───
-const TEMPLATES = {
-  login: {
-    label: '🔐 Login Sequence',
-    text: `## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me — I'm ready for a new slay."\n\n## BEAT: CREATOR_WELCOME\n[UI:OPEN LoginWindow]\n[UI:TYPE Username "JustAWomanInHerPrime"]\n[UI:TYPE Password "••••••"]\n[UI:CLICK LoginButton]\n[UI:SFX LoginSuccessDing]\nPrime: "Welcome back, besties — and bonjour to our new besties!"\n`,
-  },
-  mailInterrupt: {
-    label: '📩 Mail Interrupt',
-    text: `## BEAT: INTERRUPTION #1\n[UI:NOTIFICATION MailDing]\nPrime: "Oh — Lala's got mail."\n[UI:CLICK MailIcon]\n[UI:OPEN MailPanel]\n[MAIL: type=invite from="EVENT_NAME" prestige=4 cost=150]\n[UI:DISPLAY InviteLetterOverlay]\nPrime: "Bestie. This is major."\n`,
-  },
-  voiceActivate: {
-    label: '🎤 Voice Activate + Lala',
-    text: `[UI:CLICK VoiceIcon]\n[UI:VOICE_ACTIVATE Lala]\nLala: "Bestie, this is IT. I need the perfect look."\n`,
-  },
-  checklist: {
-    label: '✅ Transformation Checklist',
-    text: `## BEAT: TRANSFORMATION\n[UI:DISPLAY ToDoListOverlay]\nPrime: "We're checking everything off — one by one."\n[UI:OPEN ClosetCategory Outfit]\n[UI:SCROLL ClosetItems x5]\n[UI:ADD Outfit ITEM_NAME]\n[UI:CHECK_ITEM Checklist:Outfit]\n[UI:OPEN ClosetCategory Accessories]\n[UI:SCROLL ClosetItems x3]\n[UI:ADD Accessory ITEM_NAME]\n[UI:CHECK_ITEM Checklist:Accessories]\n`,
-  },
-  reveal: {
-    label: '✨ Reveal',
-    text: `## BEAT: REVEAL #1\nPrime: "(Reads invite out loud while it's on screen.)"\n`,
-  },
-  stakes: {
-    label: '🎯 Stakes + Intention',
-    text: `## BEAT: STAKES_INTENTION\n[UI:CLICK VoiceIcon]\n[UI:VOICE_ACTIVATE Lala]\nLala: "Bestie, this is IT. I need the perfect look."\n`,
-  },
-  cliffhanger: {
-    label: '🔥 Cliffhanger',
-    text: `## BEAT: CLIFFHANGER\nLala: "Bestie… this is just the beginning."\nPrime: "Next invite? Bigger. Bougier. You have to be there."\n`,
-  },
-  payoff: {
-    label: '🎁 Payoff + CTA',
-    text: `## BEAT: PAYOFF_CTA\nPrime: "Rate this look 1–10 in the comments — and if you want your own moment, you know where to shop."\nLala: "Drop your look with #LalaStyle. I'll feature favorites."\n`,
-  },
-};
+const TEMPLATES = [
+  { key: 'login', label: '🔐 Login Sequence', desc: 'Opening ritual with login UI flow',
+    text: `## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me — I'm ready for a new slay."\n\n## BEAT: CREATOR_WELCOME\n[UI:OPEN LoginWindow]\n[UI:TYPE Username "JustAWomanInHerPrime"]\n[UI:TYPE Password "••••••"]\n[UI:CLICK LoginButton]\n[UI:SFX LoginSuccessDing]\nPrime: "Welcome back, besties — and bonjour to our new besties!"\n` },
+  { key: 'mailInterrupt', label: '📩 Mail Interrupt', desc: 'Notification + mail panel flow',
+    text: `## BEAT: INTERRUPTION #1\n[UI:NOTIFICATION MailDing]\nPrime: "Oh — Lala's got mail."\n[UI:CLICK MailIcon]\n[UI:OPEN MailPanel]\n[MAIL: type=invite from="EVENT_NAME" prestige=4 cost=150]\n[UI:DISPLAY InviteLetterOverlay]\nPrime: "Bestie. This is major."\n` },
+  { key: 'voiceActivate', label: '🎤 Voice Activate', desc: 'Voice icon + Lala dialogue',
+    text: `[UI:CLICK VoiceIcon]\n[UI:VOICE_ACTIVATE Lala]\nLala: "Bestie, this is IT. I need the perfect look."\n` },
+  { key: 'checklist', label: '✅ Transformation', desc: 'Checklist overlay with closet browsing',
+    text: `## BEAT: TRANSFORMATION\n[UI:DISPLAY ToDoListOverlay]\nPrime: "We're checking everything off — one by one."\n[UI:OPEN ClosetCategory Outfit]\n[UI:SCROLL ClosetItems x5]\n[UI:ADD Outfit ITEM_NAME]\n[UI:CHECK_ITEM Checklist:Outfit]\n[UI:OPEN ClosetCategory Accessories]\n[UI:SCROLL ClosetItems x3]\n[UI:ADD Accessory ITEM_NAME]\n[UI:CHECK_ITEM Checklist:Accessories]\n` },
+  { key: 'reveal', label: '✨ Reveal', desc: 'Invite read-aloud beat',
+    text: `## BEAT: REVEAL #1\nPrime: "(Reads invite out loud while it's on screen.)"\n` },
+  { key: 'stakes', label: '🎯 Stakes + Intention', desc: 'Voice activate + character goal',
+    text: `## BEAT: STAKES_INTENTION\n[UI:CLICK VoiceIcon]\n[UI:VOICE_ACTIVATE Lala]\nLala: "Bestie, this is IT. I need the perfect look."\n` },
+  { key: 'cliffhanger', label: '🔥 Cliffhanger', desc: 'End-of-episode tease',
+    text: `## BEAT: CLIFFHANGER\nLala: "Bestie… this is just the beginning."\nPrime: "Next invite? Bigger. Bougier. You have to be there."\n` },
+  { key: 'payoff', label: '🎁 Payoff + CTA', desc: 'Rate prompt + community CTA',
+    text: `## BEAT: PAYOFF_CTA\nPrime: "Rate this look 1–10 in the comments — and if you want your own moment, you know where to shop."\nLala: "Drop your look with #LalaStyle. I'll feature favorites."\n` },
+];
 
 // ─── UI TAG INSERTS ───
 const UI_TAGS = [
-  { label: 'Open', insert: '[UI:OPEN ]' },
-  { label: 'Close', insert: '[UI:CLOSE ]' },
-  { label: 'Click', insert: '[UI:CLICK ]' },
-  { label: 'Display', insert: '[UI:DISPLAY ]' },
-  { label: 'Hide', insert: '[UI:HIDE ]' },
-  { label: 'Type', insert: '[UI:TYPE Field "value"]' },
-  { label: 'Notification', insert: '[UI:NOTIFICATION ]' },
-  { label: 'Voice Activate', insert: '[UI:VOICE_ACTIVATE Lala]' },
-  { label: 'Scroll', insert: '[UI:SCROLL Target x5]' },
-  { label: 'Add Item', insert: '[UI:ADD Category ItemName]' },
-  { label: 'Check Item', insert: '[UI:CHECK_ITEM Checklist:Item]' },
-  { label: 'SFX', insert: '[UI:SFX SoundName]' },
-  { label: 'Background', insert: '[UI:SET_BACKGROUND SceneName]' },
-  { label: '📨 Mail', insert: '[MAIL: type=invite from="NAME" prestige=4 cost=150]' },
-  { label: '📊 Stat', insert: '[STAT: coins +100]' },
+  { label: 'Open', insert: '[UI:OPEN ]', group: 'Navigation' },
+  { label: 'Close', insert: '[UI:CLOSE ]', group: 'Navigation' },
+  { label: 'Click', insert: '[UI:CLICK ]', group: 'Interaction' },
+  { label: 'Display', insert: '[UI:DISPLAY ]', group: 'Navigation' },
+  { label: 'Hide', insert: '[UI:HIDE ]', group: 'Navigation' },
+  { label: 'Type', insert: '[UI:TYPE Field "value"]', group: 'Interaction' },
+  { label: 'Notification', insert: '[UI:NOTIFICATION ]', group: 'System' },
+  { label: 'Voice Activate', insert: '[UI:VOICE_ACTIVATE Lala]', group: 'System' },
+  { label: 'Scroll', insert: '[UI:SCROLL Target x5]', group: 'Interaction' },
+  { label: 'Add Item', insert: '[UI:ADD Category ItemName]', group: 'Interaction' },
+  { label: 'Check Item', insert: '[UI:CHECK_ITEM Checklist:Item]', group: 'Interaction' },
+  { label: 'SFX', insert: '[UI:SFX SoundName]', group: 'System' },
+  { label: 'Background', insert: '[UI:SET_BACKGROUND SceneName]', group: 'System' },
+  { label: '📨 Mail', insert: '[MAIL: type=invite from="NAME" prestige=4 cost=150]', group: 'Content' },
+  { label: '📊 Stat', insert: '[STAT: coins +100]', group: 'Content' },
 ];
 
-
 // ─── NORMALIZER ───
-
 function normalizeScript(raw) {
   let s = raw;
-
-  // Normalize smart quotes
   s = s.replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"');
   s = s.replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
-
-  // Me: → Prime:
   s = s.replace(/\bMe:\s*/g, 'Prime: ');
-
-  // Newline before speaker labels mid-line
   const speakers = ['Lala:', 'Prime:', 'Guest:', 'Message:', 'System:'];
   for (const tok of speakers) {
     const re = new RegExp(`([^\\n])\\s*(?=${tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
     s = s.replace(re, '$1\n');
   }
-
-  // Bracketed tags on their own line
   s = s.replace(/(\[[A-Z_]+:[^\]]*\])/gi, '\n$1\n');
-
-  // Stage directions on their own line
   s = s.replace(/(\([^)]{3,}\))/g, '\n$1\n');
-
-  // Beat headers on their own line
   s = s.replace(/(##\s*BEAT:[^\n]*)/gi, '\n\n$1\n');
-
-  // Clean up blank lines
   s = s.replace(/\n{3,}/g, '\n\n');
-
   return s.trim();
 }
 
-
 // ─── BEAT INFERENCE ───
-
 function inferBeats(script) {
   if (/##\s*BEAT:/i.test(script)) return script;
-
   const lines = script.split('\n');
   const result = [];
   let currentBeat = null;
-  let interruptionN = 0;
-  let revealN = 0;
-
+  let interruptionN = 0, revealN = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     const low = line.trim().toLowerCase();
     let beat = null;
-
-    if (i === 0 && !currentBeat) {
-      beat = low.startsWith('lala:') ? 'OPENING_RITUAL' : 'CREATOR_WELCOME';
-    }
-    if (low.includes('[ui:open loginwindow]') || low.includes('loginwindow')) {
-      if (currentBeat !== 'CREATOR_WELCOME') beat = 'CREATOR_WELCOME';
-    }
-    if (low.includes('[ui:notification') || low.includes("lala's got mail") || low.includes('got mail')) {
-      interruptionN++;
-      beat = `INTERRUPTION #${interruptionN}`;
-    }
-    if (low.includes('[ui:display inviteletteroverlay]') || low.includes('reads invite') || low.includes('dearest lala') || low.includes('message reads')) {
-      revealN++;
-      beat = `REVEAL #${revealN}`;
-    }
-    if (low.includes('[ui:voice_activate') || low.includes('voice command') || low.includes('clicks voice')) {
-      if (currentBeat !== 'STAKES_INTENTION') beat = 'STAKES_INTENTION';
-    }
-    if (low.includes('[ui:open closetcategory') || low.includes('to-do list') || low.includes('checklist') || low.includes('todolistoverlay')) {
-      if (currentBeat !== 'TRANSFORMATION') beat = 'TRANSFORMATION';
-    }
-    if (low.includes('rate it') || low.includes('rate this') || low.includes('link in bio') || low.includes('#lalastyle')) {
-      if (currentBeat !== 'PAYOFF_CTA') beat = 'PAYOFF_CTA';
-    }
-    if (low.includes('to be continued') || low.includes('next invite') || low.includes('just the beginning') || low.includes('next episode')) {
-      if (currentBeat !== 'CLIFFHANGER') beat = 'CLIFFHANGER';
-    }
-
-    if (beat && beat !== currentBeat) {
-      result.push('');
-      result.push(`## BEAT: ${beat}`);
-      currentBeat = beat;
-    }
+    if (i === 0 && !currentBeat) beat = low.startsWith('lala:') ? 'OPENING_RITUAL' : 'CREATOR_WELCOME';
+    if (low.includes('[ui:open loginwindow]') || low.includes('loginwindow')) { if (currentBeat !== 'CREATOR_WELCOME') beat = 'CREATOR_WELCOME'; }
+    if (low.includes('[ui:notification') || low.includes("lala's got mail") || low.includes('got mail')) { interruptionN++; beat = `INTERRUPTION #${interruptionN}`; }
+    if (low.includes('[ui:display inviteletteroverlay]') || low.includes('reads invite') || low.includes('dearest lala') || low.includes('message reads')) { revealN++; beat = `REVEAL #${revealN}`; }
+    if (low.includes('[ui:voice_activate') || low.includes('voice command') || low.includes('clicks voice')) { if (currentBeat !== 'STAKES_INTENTION') beat = 'STAKES_INTENTION'; }
+    if (low.includes('[ui:open closetcategory') || low.includes('to-do list') || low.includes('checklist') || low.includes('todolistoverlay')) { if (currentBeat !== 'TRANSFORMATION') beat = 'TRANSFORMATION'; }
+    if (low.includes('rate it') || low.includes('rate this') || low.includes('link in bio') || low.includes('#lalastyle')) { if (currentBeat !== 'PAYOFF_CTA') beat = 'PAYOFF_CTA'; }
+    if (low.includes('to be continued') || low.includes('next invite') || low.includes('just the beginning') || low.includes('next episode')) { if (currentBeat !== 'CLIFFHANGER') beat = 'CLIFFHANGER'; }
+    if (beat && beat !== currentBeat) { result.push(''); result.push(`## BEAT: ${beat}`); currentBeat = beat; }
     result.push(line);
   }
-
   return result.join('\n');
 }
 
+// ─── PARSE BEATS FROM SCRIPT ───
+function parseBeatsFromScript(script) {
+  if (!script) return [];
+  const lines = script.split('\n');
+  const beats = [];
+  let current = null;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const m = line.match(/^##\s*BEAT:\s*(.+)/i);
+    if (m) {
+      if (current) { current.endLine = i - 1; beats.push(current); }
+      const raw = m[1].trim();
+      const base = raw.replace(/\s*#\d+$/, '');
+      const info = BEAT_MAP[base] || { icon: '📌', label: raw, act: 'SETUP' };
+      current = { id: `beat-${beats.length}`, raw, base, label: info.label, icon: info.icon, act: info.act, startLine: i, endLine: null, lines: [], uiActions: [], eventMeta: [] };
+    }
+    if (current) {
+      current.lines.push(line);
+      // Parse UI actions
+      const uiMatch = line.match(/^\[UI:(\w+)\s+(.*)\]$/);
+      if (uiMatch) current.uiActions.push({ type: uiMatch[1], target: uiMatch[2].trim() });
+      // Parse event metadata
+      const evMatch = line.match(/^\[(EVENT|MAIL|STAT|EPISODE_INTENT):\s*(.*)\]$/);
+      if (evMatch) current.eventMeta.push({ type: evMatch[1], value: evMatch[2].trim() });
+    }
+  }
+  if (current) { current.endLine = lines.length - 1; beats.push(current); }
+
+  // If no beats found, treat entire script as one block
+  if (beats.length === 0 && script.trim()) {
+    beats.push({ id: 'beat-0', raw: 'SCRIPT', base: 'SCRIPT', label: 'Full Script', icon: '📜', act: 'SETUP', startLine: 0, endLine: lines.length - 1, lines, uiActions: [], eventMeta: [] });
+  }
+  return beats;
+}
+
+// ─── DETECT BEAT STATUS ───
+function getBeatStatus(beat) {
+  const hasDialogue = beat.lines.some(l => /^(Lala|Prime|Guest|Message|System):/.test(l.trim()));
+  const hasUI = beat.uiActions.length > 0;
+  const hasMeta = beat.eventMeta.length > 0;
+  if (!hasDialogue && beat.lines.filter(l => l.trim() && !l.startsWith('##')).length < 2) return 'warning';
+  if (hasUI) return 'has-actions';
+  return 'complete';
+}
+
+
+// ═══════════════════════════════════════════
+// COMPONENT
+// ═══════════════════════════════════════════
 
 function ScriptEditor({ episodeId, episode, onScriptSaved }) {
+  // ─── STATE ───
   const [scriptContent, setScriptContent] = useState('');
   const [analysis, setAnalysis] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
-  const [showToolbar, setShowToolbar] = useState('beats');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [error, setError] = useState(null);
-  const [showRightPanel, setShowRightPanel] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
+
+  // Outline
+  const [outlineCollapsed, setOutlineCollapsed] = useState(false);
+  const [outlineSearch, setOutlineSearch] = useState('');
+  const [selectedBeatId, setSelectedBeatId] = useState(null);
+
+  // Collapsible sections
+  const [uiActionsOpen, setUiActionsOpen] = useState(false);
+  const [eventMetaOpen, setEventMetaOpen] = useState(false);
+
+  // Drawer
+  const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerTab, setDrawerTab] = useState('ui');
+
+  // Command palette
+  const [cmdOpen, setCmdOpen] = useState(false);
+  const [cmdQuery, setCmdQuery] = useState('');
+  const [cmdHighlight, setCmdHighlight] = useState(0);
+
+  // Overflow menu
+  const [overflowOpen, setOverflowOpen] = useState(false);
+
   const textareaRef = useRef(null);
   const initialLoadDone = useRef(false);
+  const cmdInputRef = useRef(null);
 
-  // Load script content ONCE on mount (or when episodeId changes)
+  // ─── LOAD ───
   useEffect(() => {
     if (initialLoadDone.current) return;
     if (episode?.script_content) {
@@ -204,11 +228,38 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
     }
   }, [episode, episodeId]);
 
-  // Reset load flag when switching to a different episode
-  useEffect(() => {
-    initialLoadDone.current = false;
-  }, [episodeId]);
+  useEffect(() => { initialLoadDone.current = false; }, [episodeId]);
 
+  // ─── PARSED BEATS ───
+  const beats = useMemo(() => parseBeatsFromScript(scriptContent), [scriptContent]);
+
+  // Auto-select first beat
+  useEffect(() => {
+    if (beats.length > 0 && !selectedBeatId) setSelectedBeatId(beats[0].id);
+  }, [beats, selectedBeatId]);
+
+  const selectedBeat = beats.find(b => b.id === selectedBeatId) || beats[0] || null;
+
+  // ─── GROUPED BEATS FOR OUTLINE ───
+  const groupedBeats = useMemo(() => {
+    const groups = {};
+    for (const act of ACT_ORDER) groups[act] = [];
+    for (const b of beats) {
+      const act = b.act || 'SETUP';
+      if (!groups[act]) groups[act] = [];
+      groups[act].push(b);
+    }
+    return groups;
+  }, [beats]);
+
+  // Filtered beats
+  const filteredBeats = useMemo(() => {
+    if (!outlineSearch.trim()) return beats;
+    const q = outlineSearch.toLowerCase();
+    return beats.filter(b => b.label.toLowerCase().includes(q) || b.raw.toLowerCase().includes(q));
+  }, [beats, outlineSearch]);
+
+  // ─── HANDLERS ───
   const handleFormatScript = useCallback(() => {
     let f = normalizeScript(scriptContent);
     f = inferBeats(f);
@@ -218,7 +269,7 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
 
   const insertAtCursor = useCallback((text) => {
     const ta = textareaRef.current;
-    if (!ta) return;
+    if (!ta) { setScriptContent(prev => prev + '\n' + text + '\n'); setHasUnsavedChanges(true); return; }
     const s = ta.selectionStart, e = ta.selectionEnd;
     const before = scriptContent.substring(0, s), after = scriptContent.substring(e);
     const nl1 = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
@@ -231,22 +282,16 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
 
   const handleSave = useCallback(async () => {
     if (!episodeId) return;
-    setIsSaving(true); setSaveStatus('Saving...'); setError(null);
+    setIsSaving(true); setSaveStatus('Saving…'); setError(null);
     try {
       await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptContent });
-      setSaveStatus('Saved ✓'); setHasUnsavedChanges(false);
+      setSaveStatus('Saved'); setHasUnsavedChanges(false);
       if (onScriptSaved) onScriptSaved(scriptContent);
-      setTimeout(() => setSaveStatus(''), 3000);
+      setTimeout(() => setSaveStatus(''), 4000);
     } catch (err) {
       setSaveStatus(''); setError('Failed to save: ' + (err.response?.data?.message || err.message));
     } finally { setIsSaving(false); }
   }, [episodeId, scriptContent, onScriptSaved]);
-
-  useEffect(() => {
-    const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave(); } };
-    window.addEventListener('keydown', h);
-    return () => window.removeEventListener('keydown', h);
-  }, [handleSave]);
 
   const handleAnalyze = useCallback(async () => {
     if (!scriptContent.trim()) { setError('Write or paste a script first'); return; }
@@ -259,7 +304,7 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
         setHasUnsavedChanges(false);
       }
       const res = await api.post('/api/v1/scripts/parse', { content: c, title: episode?.title });
-      if (res.data.success) { setAnalysis(res.data.scenePlan); setShowRightPanel(true); }
+      if (res.data.success) { setAnalysis(res.data.scenePlan); setShowAnalysis(true); }
       else setError('Analysis failed: ' + (res.data.error || 'Unknown'));
     } catch (err) {
       setError('Analysis failed: ' + (err.response?.data?.error || err.message));
@@ -282,8 +327,7 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
     if (w.autofix.action === 'insert_voice_activate' && w.at?.line) {
       const lines = scriptContent.split('\n');
       lines.splice(Math.max(0, w.at.line - 2), 0, '[UI:CLICK VoiceIcon]', '[UI:VOICE_ACTIVATE Lala]');
-      setScriptContent(lines.join('\n')); setHasUnsavedChanges(true);
-      applied = true;
+      setScriptContent(lines.join('\n')); setHasUnsavedChanges(true); applied = true;
     }
     if (w.autofix.action === 'insert_login_template') {
       const lb = '[UI:OPEN LoginWindow]\n[UI:TYPE Username "JustAWomanInHerPrime"]\n[UI:TYPE Password "••••••"]\n[UI:CLICK LoginButton]\n[UI:SFX LoginSuccessDing]';
@@ -291,95 +335,301 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
         const idx = scriptContent.indexOf('## BEAT:');
         if (idx >= 0) { const nl = scriptContent.indexOf('\n', idx) + 1; setScriptContent(scriptContent.substring(0, nl) + lb + '\n' + scriptContent.substring(nl)); }
         else setScriptContent(lb + '\n\n' + scriptContent);
-        setHasUnsavedChanges(true);
-        applied = true;
+        setHasUnsavedChanges(true); applied = true;
       }
     }
-    // Remove the fixed warning from the analysis panel
     if (applied && analysis) {
-      setAnalysis(prev => ({
-        ...prev,
-        warnings: (prev.warnings || []).filter(x => x !== w),
-      }));
+      setAnalysis(prev => ({ ...prev, warnings: (prev.warnings || []).filter(x => x !== w) }));
     }
   }, [scriptContent, analysis]);
 
+  // ─── BEAT NAVIGATION ───
+  const scrollToBeat = useCallback((beatId) => {
+    setSelectedBeatId(beatId);
+    const beat = beats.find(b => b.id === beatId);
+    if (beat && textareaRef.current) {
+      const lines = scriptContent.split('\n');
+      let charPos = 0;
+      for (let i = 0; i < beat.startLine; i++) charPos += lines[i].length + 1;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(charPos, charPos);
+      // Scroll textarea to show the beat
+      const lineHeight = 25; // approximate
+      textareaRef.current.scrollTop = Math.max(0, beat.startLine * lineHeight - 40);
+    }
+  }, [beats, scriptContent]);
+
+  const navigateBeat = useCallback((dir) => {
+    const idx = beats.findIndex(b => b.id === selectedBeatId);
+    const next = idx + dir;
+    if (next >= 0 && next < beats.length) scrollToBeat(beats[next].id);
+  }, [beats, selectedBeatId, scrollToBeat]);
+
+  // ─── KEYBOARD ───
+  useEffect(() => {
+    const h = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave(); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'k') { e.preventDefault(); setCmdOpen(true); setCmdQuery(''); setCmdHighlight(0); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowUp') { e.preventDefault(); navigateBeat(-1); }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'ArrowDown') { e.preventDefault(); navigateBeat(1); }
+    };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
+  }, [handleSave, navigateBeat]);
+
+  // Focus command palette input
+  useEffect(() => {
+    if (cmdOpen && cmdInputRef.current) cmdInputRef.current.focus();
+  }, [cmdOpen]);
+
+  // Close overflow on outside click
+  useEffect(() => {
+    if (!overflowOpen) return;
+    const h = () => setOverflowOpen(false);
+    setTimeout(() => document.addEventListener('click', h), 0);
+    return () => document.removeEventListener('click', h);
+  }, [overflowOpen]);
+
+  // ─── COMMAND PALETTE ITEMS ───
+  const cmdItems = useMemo(() => {
+    const items = [
+      ...beats.map(b => ({ icon: b.icon, label: `Jump to: ${b.label}`, action: () => scrollToBeat(b.id) })),
+      ...BEAT_OPTIONS.map(b => ({ icon: b.icon, label: `Add beat: ${b.label}`, action: () => insertAtCursor(`\n## BEAT: ${b.value}\n`) })),
+      ...TEMPLATES.map(t => ({ icon: '📋', label: `Template: ${t.label}`, action: () => insertAtCursor(t.text) })),
+      { icon: '✨', label: 'Format Script', shortcut: '', action: handleFormatScript },
+      { icon: '💾', label: 'Save', shortcut: 'Ctrl+S', action: handleSave },
+      { icon: '🔍', label: 'Analyze Script', action: handleAnalyze },
+      { icon: '🧰', label: 'Open Tools Panel', action: () => { setDrawerOpen(true); setCmdOpen(false); } },
+    ];
+    if (!cmdQuery.trim()) return items.slice(0, 12);
+    const q = cmdQuery.toLowerCase();
+    return items.filter(i => i.label.toLowerCase().includes(q));
+  }, [cmdQuery, beats, scrollToBeat, insertAtCursor, handleFormatScript, handleSave, handleAnalyze]);
+
+  // ─── DERIVED ───
   const lineCount = scriptContent.split('\n').length;
   const wordCount = scriptContent.trim() ? scriptContent.trim().split(/\s+/).length : 0;
-  const beatCount = (scriptContent.match(/##\s*BEAT:/gi) || []).length;
+  const beatCount = beats.length;
+  const episodeStatus = episode?.status || 'draft';
+
+  // ═══════════════════════════════════════════
+  // RENDER
+  // ═══════════════════════════════════════════
 
   return (
-    <div style={S.container}>
-      <div style={S.header}>
-        <div style={S.headerLeft}>
-          <span style={{ fontSize: 20 }}>📜</span>
-          <h2 style={S.headerTitle}>Script</h2>
-          <span style={S.headerSub}>Full episode script editor</span>
+    <div className="se-root">
+      {/* ─── TOP TOOLBAR ─── */}
+      <div className="se-toolbar">
+        <div className="se-toolbar-left">
+          <select
+            className="se-beat-select"
+            value={selectedBeatId || ''}
+            onChange={e => scrollToBeat(e.target.value)}
+          >
+            {beats.map(b => (
+              <option key={b.id} value={b.id}>{b.icon} {b.label}</option>
+            ))}
+          </select>
+          <span className={`se-status-badge ${episodeStatus}`}>{episodeStatus}</span>
         </div>
-        <div style={S.headerRight}>
-          {saveStatus && <span style={S.saveStatus}>{saveStatus}</span>}
-          {hasUnsavedChanges && <span style={S.unsaved}>● Unsaved</span>}
-          <button onClick={handleFormatScript} style={S.formatBtn} title="Auto-format: splits speakers + tags onto separate lines, normalizes Me: → Prime:, infers beat headers">
-            ✨ Format Script
+        <div className="se-toolbar-right">
+          <button className="se-btn-subtle" onClick={handleFormatScript}>Format</button>
+          <div className={`se-save-indicator ${hasUnsavedChanges ? 'unsaved' : saveStatus ? 'saved' : ''}`}>
+            {hasUnsavedChanges ? '● Unsaved' : saveStatus || 'Saved'}
+            <span className="se-shortcut">Ctrl+S</span>
+          </div>
+          <button className="se-btn-primary" onClick={handleAnalyze} disabled={isAnalyzing}>
+            {isAnalyzing ? '⏳ Analyzing…' : 'Analyze'}
           </button>
-          <button onClick={handleSave} disabled={isSaving} style={S.saveBtn}>
-            💾 Save <span style={S.shortcut}>Ctrl+S</span>
-          </button>
-          <button onClick={handleAnalyze} disabled={isAnalyzing} style={S.analyzeBtn}>
-            {isAnalyzing ? '⏳ Analyzing...' : '🔍 Analyze Script'}
-          </button>
+          <div style={{ position: 'relative' }}>
+            <button className="se-btn-overflow" onClick={(e) => { e.stopPropagation(); setOverflowOpen(!overflowOpen); }}>⋯</button>
+            {overflowOpen && (
+              <div className="se-overflow-menu">
+                <button className="se-overflow-item" onClick={() => { setDrawerOpen(true); setDrawerTab('ui'); setOverflowOpen(false); }}>
+                  <span className="se-overflow-icon">📱</span> UI Tags
+                </button>
+                <button className="se-overflow-item" onClick={() => { setDrawerOpen(true); setDrawerTab('templates'); setOverflowOpen(false); }}>
+                  <span className="se-overflow-icon">📋</span> Templates
+                </button>
+                <button className="se-overflow-item" onClick={() => { setDrawerOpen(true); setDrawerTab('variables'); setOverflowOpen(false); }}>
+                  <span className="se-overflow-icon">🔤</span> Variables
+                </button>
+                <button className="se-overflow-item" onClick={() => { setCmdOpen(true); setOverflowOpen(false); }}>
+                  <span className="se-overflow-icon">⌨️</span> Command Palette
+                  <span style={{ marginLeft: 'auto', fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>Ctrl+K</span>
+                </button>
+                <button className="se-overflow-item" onClick={() => { handleSave(); setOverflowOpen(false); }}>
+                  <span className="se-overflow-icon">💾</span> Save
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
+      {/* Error */}
       {error && (
-        <div style={S.errorBanner}>⚠️ {error}<button onClick={() => setError(null)} style={S.errorClose}>✕</button></div>
+        <div className="se-error-banner">
+          ⚠️ {error}
+          <button className="se-error-close" onClick={() => setError(null)}>✕</button>
+        </div>
       )}
 
-      <div style={S.twoPane}>
-        <div style={{ ...S.leftPane, flex: showRightPanel ? '1 1 55%' : '1 1 100%' }}>
-          <div style={S.toolbar}>
-            <div style={S.toolbarTabs}>
-              {['beats', 'ui', 'templates'].map(tab => (
-                <button key={tab} onClick={() => setShowToolbar(tab)} style={showToolbar === tab ? S.toolbarTabActive : S.toolbarTab}>
-                  {tab === 'beats' ? '🎬 Beats' : tab === 'ui' ? '📱 UI Tags' : '📋 Templates'}
-                </button>
-              ))}
+      {/* ─── MAIN BODY ─── */}
+      <div className="se-body">
+
+        {/* ─── LEFT: STORY OUTLINE ─── */}
+        <div className={`se-outline ${outlineCollapsed ? 'collapsed' : ''}`}>
+          <div className="se-outline-header">
+            <span className="se-outline-title">Story Outline</span>
+            <button className="se-outline-collapse-btn" onClick={() => setOutlineCollapsed(true)} title="Collapse outline">◀</button>
+          </div>
+          <input
+            className="se-outline-search"
+            placeholder="Search beats…"
+            value={outlineSearch}
+            onChange={e => setOutlineSearch(e.target.value)}
+          />
+          <div className="se-outline-list">
+            {outlineSearch.trim() ? (
+              // Flat filtered list
+              filteredBeats.length > 0 ? filteredBeats.map(b => (
+                <div
+                  key={b.id}
+                  className={`se-outline-beat ${selectedBeatId === b.id ? 'active' : ''}`}
+                  onClick={() => scrollToBeat(b.id)}
+                >
+                  <span className="se-outline-beat-icon">{b.icon}</span>
+                  <span className="se-outline-beat-label">{b.label}</span>
+                  <span className={`se-outline-indicator ${getBeatStatus(b)}`}>
+                    {getBeatStatus(b) === 'complete' ? '✓' : getBeatStatus(b) === 'warning' ? '⚠' : '●'}
+                  </span>
+                </div>
+              )) : <div className="se-outline-empty">No beats match "{outlineSearch}"</div>
+            ) : (
+              // Grouped by act
+              ACT_ORDER.map(act => {
+                const actBeats = groupedBeats[act] || [];
+                if (actBeats.length === 0) return null;
+                return (
+                  <div key={act}>
+                    <div className="se-outline-group">{act}</div>
+                    {actBeats.map(b => (
+                      <div
+                        key={b.id}
+                        className={`se-outline-beat ${selectedBeatId === b.id ? 'active' : ''}`}
+                        onClick={() => scrollToBeat(b.id)}
+                      >
+                        <span className="se-outline-beat-icon">{b.icon}</span>
+                        <span className="se-outline-beat-label">{b.label}</span>
+                        <span className={`se-outline-indicator ${getBeatStatus(b)}`}>
+                          {getBeatStatus(b) === 'complete' ? '✓' : getBeatStatus(b) === 'warning' ? '⚠' : '●'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })
+            )}
+            {beats.length === 0 && !outlineSearch.trim() && (
+              <div className="se-outline-empty">
+                No beats detected yet.<br />
+                Paste your script and click <strong>Format</strong> to auto-detect beats.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Expand button when collapsed */}
+        {outlineCollapsed && (
+          <button className="se-outline-expand-btn" onClick={() => setOutlineCollapsed(false)} title="Show outline">▶</button>
+        )}
+
+        {/* ─── CENTER: EDITOR ─── */}
+        <div className="se-editor-pane">
+          {/* Beat context header */}
+          {selectedBeat && selectedBeat.raw !== 'SCRIPT' && (
+            <div className="se-editor-beat-header">
+              <h2 className="se-editor-beat-title">
+                <span>{selectedBeat.icon}</span>
+                {selectedBeat.label}
+              </h2>
+              <div className="se-editor-beat-meta">
+                <span className="se-editor-meta-item">
+                  <strong>{selectedBeat.lines.filter(l => l.trim() && !l.startsWith('##')).length}</strong> lines
+                </span>
+                <span className="se-editor-meta-item">
+                  <strong>{selectedBeat.uiActions.length}</strong> UI actions
+                </span>
+                <span className="se-editor-meta-item">
+                  <strong>{selectedBeat.lines.filter(l => /^(Lala|Prime|Guest):/.test(l.trim())).length}</strong> dialogue
+                </span>
+                <span className="se-editor-meta-item" style={{ color: '#cbd5e1' }}>•</span>
+                <span className="se-editor-meta-item" style={{ fontStyle: 'italic', color: '#cbd5e1' }}>
+                  {selectedBeat.act}
+                </span>
+              </div>
             </div>
-            <div style={S.toolbarContent}>
-              {showToolbar === 'beats' && (
-                <div style={S.toolbarRow}>
-                  {BEAT_OPTIONS.map(b => (
-                    <button key={b.value} onClick={() => insertAtCursor(`\n## BEAT: ${b.value}\n`)} style={S.toolbarBtn}>{b.label}</button>
-                  ))}
-                </div>
-              )}
-              {showToolbar === 'ui' && (
-                <div style={S.toolbarRow}>
-                  {UI_TAGS.map(t => (
-                    <button key={t.label} onClick={() => insertAtCursor(t.insert)} style={S.toolbarBtn}>{t.label}</button>
-                  ))}
-                </div>
-              )}
-              {showToolbar === 'templates' && (
-                <div style={S.toolbarRow}>
-                  {Object.entries(TEMPLATES).map(([k, t]) => (
-                    <button key={k} onClick={() => insertAtCursor(t.text)} style={S.templateBtn}>{t.label}</button>
-                  ))}
-                </div>
-              )}
-            </div>
+          )}
+
+          {/* Script textarea */}
+          <div className="se-editor-textarea-wrap">
+            <textarea
+              ref={textareaRef}
+              className="se-editor-textarea"
+              value={scriptContent}
+              onChange={(e) => { setScriptContent(e.target.value); setHasUnsavedChanges(true); }}
+              placeholder={`Paste your full script here, or use the toolbar above.\n\nTip: Paste messy scripts → click "Format" to auto-organize.\n\nExample:\n\n## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me — Parisian tea party edition!"\n\n## BEAT: CREATOR_WELCOME\n[UI:OPEN LoginWindow]\nPrime: "Welcome back, besties!"`}
+              spellCheck={false}
+            />
           </div>
 
-          <textarea
-            ref={textareaRef}
-            value={scriptContent}
-            onChange={(e) => { setScriptContent(e.target.value); setHasUnsavedChanges(true); }}
-            placeholder={`Paste your full script here, or use the toolbar above.\n\nTip: Paste messy scripts → click "✨ Format Script" to auto-organize.\n\nExample:\n\n## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me — Parisian tea party edition!"\n\n## BEAT: CREATOR_WELCOME\n[UI:OPEN LoginWindow]\n[UI:CLICK LoginButton]\nPrime: "Welcome back, besties!"\n\n## BEAT: INTERRUPTION #1\n[UI:NOTIFICATION MailDing]\nPrime: "Oh — Lala's got mail."\n[UI:CLICK MailIcon]\n[UI:OPEN MailPanel]`}
-            style={S.textarea}
-            spellCheck={false}
-          />
+          {/* Collapsible: UI Actions */}
+          {selectedBeat && selectedBeat.uiActions.length > 0 && (
+            <div className="se-collapsible">
+              <div className="se-collapsible-header" onClick={() => setUiActionsOpen(!uiActionsOpen)}>
+                <span className="se-collapsible-title">
+                  UI Actions <span className="se-collapsible-count">{selectedBeat.uiActions.length}</span>
+                </span>
+                <span className={`se-collapsible-arrow ${uiActionsOpen ? 'open' : ''}`}>▸</span>
+              </div>
+              {uiActionsOpen && (
+                <div className="se-collapsible-body">
+                  {selectedBeat.uiActions.map((a, i) => (
+                    <div key={i} className="se-ui-action-row">
+                      <span className="se-ui-action-type">{a.type}</span>
+                      <span className="se-ui-action-target">{a.target}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
 
-          <div style={S.statusBar}>
+          {/* Collapsible: Event Metadata */}
+          {selectedBeat && selectedBeat.eventMeta.length > 0 && (
+            <div className="se-collapsible">
+              <div className="se-collapsible-header" onClick={() => setEventMetaOpen(!eventMetaOpen)}>
+                <span className="se-collapsible-title">
+                  Event Metadata <span className="se-collapsible-count">{selectedBeat.eventMeta.length}</span>
+                </span>
+                <span className={`se-collapsible-arrow ${eventMetaOpen ? 'open' : ''}`}>▸</span>
+              </div>
+              {eventMetaOpen && (
+                <div className="se-collapsible-body">
+                  {selectedBeat.eventMeta.map((m, i) => (
+                    <div key={i} className="se-meta-row">
+                      <span className="se-meta-label">{m.type}</span>
+                      <span className="se-meta-value">{m.value}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Status bar */}
+          <div className="se-status-bar">
             <span>{lineCount} lines</span>
             <span>{wordCount} words</span>
             <span>{beatCount} beats</span>
@@ -387,57 +637,62 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
           </div>
         </div>
 
-        {showRightPanel && analysis && (
-          <div style={S.rightPane}>
-            <div style={S.rightHeader}>
-              <h3 style={S.rightTitle}>📊 Analysis</h3>
-              <button onClick={() => setShowRightPanel(false)} style={S.closePanel}>✕</button>
+        {/* ─── RIGHT: ANALYSIS PANEL ─── */}
+        {showAnalysis && analysis && (
+          <div className="se-analysis">
+            <div className="se-analysis-header">
+              <h3 className="se-analysis-title">📊 Analysis</h3>
+              <button className="se-analysis-close" onClick={() => setShowAnalysis(false)}>✕</button>
             </div>
 
-            <div style={S.statsGrid}>
+            <div className="se-analysis-stats">
               {[
                 { v: analysis.totalScenes || analysis.metadata?.totalBeats || 0, l: 'Beats' },
                 { v: analysis.formattedDuration || analysis.metadata?.formattedDuration || '0s', l: 'Duration' },
                 { v: analysis.metadata?.totalDialogueLines || 0, l: 'Dialogue' },
                 { v: analysis.metadata?.totalUiActions || analysis.ui_actions?.length || 0, l: 'UI Actions' },
               ].map((s, i) => (
-                <div key={i} style={S.statCard}><div style={S.statValue}>{s.v}</div><div style={S.statLabel}>{s.l}</div></div>
+                <div key={i} className="se-analysis-stat">
+                  <div className="se-analysis-stat-val">{s.v}</div>
+                  <div className="se-analysis-stat-lbl">{s.l}</div>
+                </div>
               ))}
             </div>
 
-            <div style={S.rightScroll}>
+            <div className="se-analysis-scroll">
               {analysis.warnings?.length > 0 && (
-                <div style={S.section}>
-                  <h4 style={S.sectionTitle}>⚠️ Warnings</h4>
+                <div className="se-analysis-section">
+                  <h4 className="se-analysis-section-title">⚠️ Warnings</h4>
                   {analysis.warnings.map((w, i) => (
-                    <div key={i} style={S.warningCard}>
-                      <div style={S.warningText}>{w.message}</div>
-                      {w.autofix?.available && <button onClick={() => handleAutofix(w)} style={S.autofixBtn}>🔧 Auto-fix</button>}
+                    <div key={i} className="se-analysis-warning">
+                      <span className="se-analysis-warning-text">{w.message}</span>
+                      {w.autofix?.available && (
+                        <button className="se-analysis-autofix-btn" onClick={() => handleAutofix(w)}>🔧 Auto-fix</button>
+                      )}
                     </div>
                   ))}
                 </div>
               )}
 
-              <div style={S.section}>
-                <h4 style={S.sectionTitle}>🎬 Beat Structure</h4>
+              <div className="se-analysis-section">
+                <h4 className="se-analysis-section-title">🎬 Beat Structure</h4>
                 {(analysis.beats || analysis.scenes || []).map((b, i) => {
                   const c = b.confidence || 'confident';
                   const ic = c === 'confident' ? '✓' : c === 'review' ? '⚠' : '❌';
-                  const cl = c === 'confident' ? '#16a34a' : c === 'review' ? '#ca8a04' : '#dc2626';
                   return (
-                    <div key={i} style={S.beatCard}>
-                      <div style={S.beatRow}>
-                        <span style={{ color: cl, fontWeight: 700, fontSize: 13 }}>{ic}</span>
-                        <span style={S.beatName}>{b.title || b.type}</span>
-                        <span style={S.beatDur}>{b.duration_s || b.duration_seconds}s</span>
+                    <div key={i} className="se-analysis-beat">
+                      <div className="se-analysis-beat-row">
+                        <span className={`se-analysis-beat-conf ${c}`}>{ic}</span>
+                        <span className="se-analysis-beat-name">{b.title || b.type}</span>
+                        <span className="se-analysis-beat-dur">{b.duration_s || b.duration_seconds}s</span>
                       </div>
-                      <div style={S.beatMeta}>
+                      <div className="se-analysis-beat-meta">
                         {(b.speakers || b.characters_expected || []).map((sp, j) => {
                           const n = typeof sp === 'string' ? sp : sp.name;
                           const e = typeof sp === 'string' ? '' : (sp.emoji || '');
-                          return <span key={j} style={S.badge}>{e} {n}</span>;
+                          return <span key={j} className="se-analysis-badge">{e} {n}</span>;
                         })}
-                        {b.dialogue_count > 0 && <span style={S.dimBadge}>💬 {b.dialogue_count}</span>}
+                        {b.dialogue_count > 0 && <span className="se-analysis-badge dim">💬 {b.dialogue_count}</span>}
                       </div>
                     </div>
                   );
@@ -445,19 +700,19 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
               </div>
 
               {(analysis.ui_actions || []).length > 0 && (
-                <div style={S.section}>
-                  <h4 style={S.sectionTitle}>📱 UI Actions</h4>
+                <div className="se-analysis-section">
+                  <h4 className="se-analysis-section-title">📱 UI Actions</h4>
                   {(analysis.beats || analysis.scenes || []).map((b, i) => {
                     const acts = (analysis.ui_actions || []).filter(a => a.beat_temp_id === b.temp_id);
                     if (!acts.length) return null;
                     return (
                       <div key={i} style={{ marginBottom: 10 }}>
-                        <div style={S.uiGroupTitle}>{b.title || b.type}</div>
+                        <div className="se-analysis-ui-group-title">{b.title || b.type}</div>
                         {acts.map((a, j) => (
-                          <div key={j} style={S.uiRow}>
-                            <span style={S.uiType}>{a.type.toUpperCase()}</span>
-                            <span style={S.uiTarget}>{a.target}</span>
-                            <span style={S.uiDur}>{a.duration_s}s</span>
+                          <div key={j} className="se-analysis-ui-row">
+                            <span className="se-analysis-ui-type">{a.type.toUpperCase()}</span>
+                            <span className="se-analysis-ui-target">{a.target}</span>
+                            <span className="se-analysis-ui-dur">{a.duration_s}s</span>
                           </div>
                         ))}
                       </div>
@@ -467,74 +722,138 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
               )}
             </div>
 
-            <div style={S.actions}>
-              <button onClick={handleSendToSceneComposer} style={S.sceneBtn}>🎬 Send to Scene Composer</button>
-              <button onClick={handleAnalyze} style={S.reBtn}>🔄 Re-analyze</button>
+            <div className="se-analysis-actions">
+              <button className="se-analysis-scene-btn" onClick={handleSendToSceneComposer}>🎬 Send to Scene Composer</button>
+              <button className="se-analysis-re-btn" onClick={handleAnalyze}>🔄 Re-analyze</button>
             </div>
           </div>
         )}
       </div>
+
+      {/* ─── TOOLS DRAWER (slide-over) ─── */}
+      {drawerOpen && (
+        <>
+          <div className="se-drawer-overlay" onClick={() => setDrawerOpen(false)} />
+          <div className="se-drawer">
+            <div className="se-drawer-header">
+              <span className="se-drawer-title">🧰 Tools</span>
+              <button className="se-drawer-close" onClick={() => setDrawerOpen(false)}>✕</button>
+            </div>
+            <div className="se-drawer-tabs">
+              {[
+                { key: 'ui', label: 'UI Tags' },
+                { key: 'templates', label: 'Templates' },
+                { key: 'variables', label: 'Variables' },
+              ].map(t => (
+                <button
+                  key={t.key}
+                  className={`se-drawer-tab ${drawerTab === t.key ? 'active' : ''}`}
+                  onClick={() => setDrawerTab(t.key)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <div className="se-drawer-body">
+              {drawerTab === 'ui' && (
+                <>
+                  {['Navigation', 'Interaction', 'System', 'Content'].map(group => {
+                    const items = UI_TAGS.filter(t => t.group === group);
+                    if (!items.length) return null;
+                    return (
+                      <div key={group} className="se-drawer-section">
+                        <div className="se-drawer-section-title">{group}</div>
+                        <div className="se-drawer-grid">
+                          {items.map(t => (
+                            <button key={t.label} className="se-insert-btn" onClick={() => { insertAtCursor(t.insert); setDrawerOpen(false); }}>
+                              {t.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+              {drawerTab === 'templates' && (
+                <div className="se-drawer-section">
+                  {TEMPLATES.map(t => (
+                    <div key={t.key} className="se-template-card" onClick={() => { insertAtCursor(t.text); setDrawerOpen(false); }}>
+                      <div className="se-template-card-label">{t.label}</div>
+                      <div className="se-template-card-desc">{t.desc}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              {drawerTab === 'variables' && (
+                <div className="se-drawer-section">
+                  <div className="se-drawer-section-title">Script Variables</div>
+                  <div className="se-drawer-grid">
+                    {[
+                      { label: 'Episode Title', insert: '{episode.title}' },
+                      { label: 'Episode Number', insert: '{episode.number}' },
+                      { label: 'Character Name', insert: '{character.name}' },
+                      { label: 'Event Name', insert: '{event.name}' },
+                      { label: 'Prestige', insert: '{event.prestige}' },
+                      { label: 'Cost', insert: '{event.cost}' },
+                    ].map(v => (
+                      <button key={v.label} className="se-insert-btn" onClick={() => { insertAtCursor(v.insert); setDrawerOpen(false); }}>
+                        {v.label}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="se-drawer-section-title" style={{ marginTop: 16 }}>Validation</div>
+                  <p style={{ fontSize: 12, color: '#64748b', lineHeight: 1.5, margin: '0 0 8px' }}>
+                    Use <strong>Analyze</strong> to validate your script structure, check for missing beats, and verify UI action coverage.
+                  </p>
+                  <button className="se-insert-btn" onClick={() => { handleAnalyze(); setDrawerOpen(false); }} style={{ width: '100%', textAlign: 'center' }}>
+                    🔍 Run Validation
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ─── COMMAND PALETTE (Ctrl+K) ─── */}
+      {cmdOpen && (
+        <div className="se-cmd-overlay" onClick={() => setCmdOpen(false)}>
+          <div className="se-cmd-palette" onClick={e => e.stopPropagation()}>
+            <input
+              ref={cmdInputRef}
+              className="se-cmd-input"
+              placeholder="Type a command… (jump to beat, add beat, insert template)"
+              value={cmdQuery}
+              onChange={e => { setCmdQuery(e.target.value); setCmdHighlight(0); }}
+              onKeyDown={e => {
+                if (e.key === 'Escape') setCmdOpen(false);
+                if (e.key === 'ArrowDown') { e.preventDefault(); setCmdHighlight(h => Math.min(h + 1, cmdItems.length - 1)); }
+                if (e.key === 'ArrowUp') { e.preventDefault(); setCmdHighlight(h => Math.max(h - 1, 0)); }
+                if (e.key === 'Enter' && cmdItems[cmdHighlight]) { cmdItems[cmdHighlight].action(); setCmdOpen(false); }
+              }}
+            />
+            <div className="se-cmd-list">
+              {cmdItems.length > 0 ? cmdItems.map((item, i) => (
+                <div
+                  key={i}
+                  className={`se-cmd-item ${i === cmdHighlight ? 'highlighted' : ''}`}
+                  onClick={() => { item.action(); setCmdOpen(false); }}
+                  onMouseEnter={() => setCmdHighlight(i)}
+                >
+                  <span className="se-cmd-item-icon">{item.icon}</span>
+                  <span className="se-cmd-item-label">{item.label}</span>
+                  {item.shortcut && <span className="se-cmd-item-shortcut">{item.shortcut}</span>}
+                </div>
+              )) : (
+                <div className="se-cmd-empty">No matching commands</div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-
-// ─── LIGHT THEME STYLES ───
-const S = {
-  container: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 600, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', borderBottom: '1px solid #e2e8f0', background: '#fafbfc', flexWrap: 'wrap', gap: 8 },
-  headerLeft: { display: 'flex', alignItems: 'center', gap: 8 },
-  headerTitle: { color: '#1a1a2e', fontSize: 16, fontWeight: 700, margin: 0 },
-  headerSub: { color: '#94a3b8', fontSize: 13 },
-  headerRight: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  saveStatus: { color: '#16a34a', fontSize: 12, fontWeight: 600 },
-  unsaved: { color: '#ca8a04', fontSize: 12 },
-  formatBtn: { padding: '6px 12px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 6, color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
-  saveBtn: { padding: '6px 14px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 6, color: '#334155', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 },
-  shortcut: { fontSize: 10, opacity: 0.5, background: '#e2e8f0', padding: '1px 4px', borderRadius: 3 },
-  analyzeBtn: { padding: '6px 16px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  errorBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#fef2f2', borderBottom: '1px solid #fecaca', color: '#dc2626', fontSize: 13 },
-  errorClose: { background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 },
-  twoPane: { display: 'flex', flex: 1, overflow: 'hidden' },
-  leftPane: { display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid #e2e8f0' },
-  toolbar: { borderBottom: '1px solid #e2e8f0', background: '#fafbfc' },
-  toolbarTabs: { display: 'flex', borderBottom: '1px solid #e2e8f0' },
-  toolbarTab: { padding: '6px 14px', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer', borderBottom: '2px solid transparent' },
-  toolbarTabActive: { padding: '6px 14px', background: 'transparent', border: 'none', color: '#6366f1', fontSize: 12, cursor: 'pointer', fontWeight: 600, borderBottom: '2px solid #6366f1' },
-  toolbarContent: { padding: '6px 8px', maxHeight: 80, overflowY: 'auto' },
-  toolbarRow: { display: 'flex', flexWrap: 'wrap', gap: 4 },
-  toolbarBtn: { padding: '4px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 4, color: '#475569', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' },
-  templateBtn: { padding: '6px 12px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, color: '#4338ca', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' },
-  textarea: { flex: 1, width: '100%', background: '#fff', border: 'none', color: '#1e293b', fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace", fontSize: 13, lineHeight: '1.7', padding: 16, resize: 'none', outline: 'none', boxSizing: 'border-box' },
-  statusBar: { display: 'flex', gap: 16, padding: '6px 16px', borderTop: '1px solid #e2e8f0', background: '#fafbfc', color: '#94a3b8', fontSize: 11 },
-  rightPane: { flex: '0 0 45%', maxWidth: '45%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fafbfc' },
-  rightHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #e2e8f0' },
-  rightTitle: { color: '#1a1a2e', fontSize: 14, fontWeight: 700, margin: 0 },
-  closePanel: { background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, cursor: 'pointer' },
-  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, padding: '10px 14px' },
-  statCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 8, textAlign: 'center' },
-  statValue: { color: '#1a1a2e', fontSize: 18, fontWeight: 700 },
-  statLabel: { color: '#94a3b8', fontSize: 10, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.5px' },
-  rightScroll: { flex: 1, overflowY: 'auto' },
-  section: { padding: '10px 14px', borderTop: '1px solid #f1f5f9' },
-  sectionTitle: { color: '#64748b', fontSize: 12, fontWeight: 600, margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' },
-  beatCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 10px', marginBottom: 4 },
-  beatRow: { display: 'flex', alignItems: 'center', gap: 8 },
-  beatName: { color: '#1a1a2e', fontSize: 13, fontWeight: 600, flex: 1 },
-  beatDur: { color: '#94a3b8', fontSize: 12 },
-  beatMeta: { display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 },
-  badge: { background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, padding: '1px 6px', fontSize: 10, color: '#4338ca' },
-  dimBadge: { padding: '1px 6px', fontSize: 10, color: '#94a3b8' },
-  warningCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 4 },
-  warningText: { color: '#92400e', fontSize: 12, flex: 1 },
-  autofixBtn: { padding: '3px 8px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 4, color: '#92400e', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 8 },
-  uiGroupTitle: { color: '#64748b', fontSize: 11, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' },
-  uiRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '3px 8px', marginBottom: 2, fontSize: 12 },
-  uiType: { color: '#16a34a', fontFamily: 'monospace', fontSize: 11, fontWeight: 600, minWidth: 100 },
-  uiTarget: { color: '#475569', flex: 1 },
-  uiDur: { color: '#94a3b8', fontSize: 11 },
-  actions: { padding: '12px 14px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 8 },
-  sceneBtn: { flex: 1, padding: 10, background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
-  reBtn: { padding: '10px 16px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, color: '#475569', fontSize: 13, cursor: 'pointer' },
-};
 
 export default ScriptEditor;
