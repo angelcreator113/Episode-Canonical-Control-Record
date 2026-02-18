@@ -40,6 +40,7 @@ import DiagnosticPage from './pages/DiagnosticPage';
 import DecisionAnalyticsDashboard from './pages/DecisionAnalyticsDashboard';
 import TimelineEditor from './pages/TimelineEditor';
 import ExportPage from './pages/ExportPage';
+import AssetLibrary from './pages/AssetLibrary';
 
 // Components
 import Sidebar from './components/layout/Sidebar';
@@ -180,6 +181,9 @@ function AppContent() {
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
+          
+          {/* Assets */}
+          <Route path="/assets" element={<AssetLibrary />} />
           
           {/* Shows */}
           <Route path="/shows" element={<ShowManagement />} />
