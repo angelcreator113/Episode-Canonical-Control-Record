@@ -120,6 +120,8 @@ function EvaluateEpisode() {
       const res = await api.post(`/api/v1/episodes/${episodeId}/evaluate`, { character_key: 'lala' });
       if (res.data.success) {
         setEvaluation(res.data.evaluation);
+        // Reset episode status so Override/Accept buttons reappear
+        setEpisode(prev => ({ ...prev, evaluation_status: 'computed', evaluation_json: res.data.evaluation }));
         // Refresh character state
         if (episode?.show_id) {
           const stateRes = await api.get(`/api/v1/characters/lala/state?show_id=${episode.show_id}`);
@@ -152,6 +154,7 @@ function EvaluateEpisode() {
       });
       if (res.data.success) {
         setEvaluation(res.data.evaluation);
+        setEpisode(prev => ({ ...prev, evaluation_json: res.data.evaluation }));
         setShowOverrideModal(false);
       } else {
         setError(res.data.error || 'Override failed');
@@ -193,7 +196,7 @@ function EvaluateEpisode() {
   const isAccepted = episode?.evaluation_status === 'accepted';
   const tierConfig = evaluation ? TIER_CONFIG[evaluation.tier_final] || TIER_CONFIG.mid : null;
 
-  const nextTier = evaluation ? getNextTier(evaluation.tier_final) : null;
+  const availableTiers = evaluation ? getAllTiers(evaluation.tier_final) : [];
   const hasOverrides = (evaluation?.overrides || []).filter(o => o.type === 'tier_change').length > 0;
 
   if (loading) {
@@ -406,14 +409,14 @@ function EvaluateEpisode() {
               {/* Actions */}
               {!isAccepted && (
                 <div style={S.actionsCard}>
-                  {!hasOverrides && nextTier && (
+                  {!hasOverrides && (
                     <button onClick={() => {
-                      setOverrideTier(nextTier);
+                      setOverrideTier(availableTiers[0] || '');
                       setOverrideNarrative('');
                       setOverrideReason('');
                       setShowOverrideModal(true);
                     }} style={S.overrideBtn}>
-                      ⬆️ Override → {nextTier.toUpperCase()}
+                      🎯 Apply Override
                     </button>
                   )}
                   {hasOverrides && <div style={S.overrideNote}>✓ Override applied (max 1 per episode)</div>}
@@ -456,6 +459,15 @@ function EvaluateEpisode() {
             </p>
 
             <div style={S.formGroup}>
+              <label style={S.formLabel}>Target Tier</label>
+              <select value={overrideTier} onChange={e => setOverrideTier(e.target.value)} style={S.select}>
+                {['fail', 'mid', 'pass', 'slay'].filter(t => t !== evaluation.tier_final).map(t => (
+                  <option key={t} value={t}>{t.toUpperCase()}</option>
+                ))}
+              </select>
+            </div>
+
+            <div style={S.formGroup}>
               <label style={S.formLabel}>Reason</label>
               <select value={overrideReason} onChange={e => setOverrideReason(e.target.value)} style={S.select}>
                 <option value="">Select reason...</option>
@@ -487,8 +499,12 @@ function EvaluateEpisode() {
 
             <div style={S.modalActions}>
               <button onClick={() => setShowOverrideModal(false)} style={S.secondaryBtn}>Cancel</button>
-              <button onClick={handleOverride} disabled={!overrideReason || overriding} style={S.primaryBtn}>
-                {overriding ? '⏳...' : `Apply Override → ${overrideTier?.toUpperCase()}`}
+              <button onClick={handleOverride} disabled={!overrideReason || overriding} style={{
+                ...S.primaryBtn,
+                opacity: (!overrideReason || overriding) ? 0.5 : 1,
+                cursor: (!overrideReason || overriding) ? 'not-allowed' : 'pointer',
+              }}>
+                {overriding ? '⏳...' : !overrideReason ? '↑ Select a Reason first' : `Apply Override → ${overrideTier?.toUpperCase()}`}
               </button>
             </div>
           </div>
@@ -501,10 +517,8 @@ function EvaluateEpisode() {
 
 // ─── HELPERS ───
 
-function getNextTier(current) {
-  const order = ['fail', 'mid', 'pass', 'slay'];
-  const idx = order.indexOf(current);
-  return idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
+function getAllTiers(current) {
+  return ['fail', 'mid', 'pass', 'slay'].filter(t => t !== current);
 }
 
 

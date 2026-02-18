@@ -131,6 +131,12 @@ module.exports = (sequelize) => {
         field: 'formula_version',
         comment: 'Version of the scoring formula used',
       },
+      browse_pool_json: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'browse_pool_json',
+        comment: 'Generated closet-browse pool for this episode',
+      },
     },
     {
       sequelize,
