@@ -747,6 +747,15 @@ try {
   console.error('✗ Failed to load wardrobe approval routes:', e.message);
 }
 
+// Evaluation routes (scoring engine)
+try {
+  const evaluationRoutes = require('./routes/evaluation');
+  app.use('/api/v1', evaluationRoutes);
+  console.log('✓ Evaluation routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load evaluation routes:', e.message);
+}
+
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 
