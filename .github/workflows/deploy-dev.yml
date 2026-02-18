@@ -135,6 +135,14 @@ jobs:
           echo "$EC2_SSH_KEY" | base64 -d > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
 
+          # Free disk space on EC2 before uploading
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
+            echo '🧹 Cleaning up disk space...'
+            rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz /tmp/*.tar.gz 2>/dev/null || true
+            sudo journalctl --vacuum-size=50M 2>/dev/null || true
+            echo \"Disk free: \$(df -h /tmp | tail -1 | awk '{print \$4}')\"
+          "
+
           # Upload build artifact
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             episode-metadata-${{ github.sha }}.tar.gz \
