@@ -113,6 +113,24 @@ module.exports = (sequelize) => {
         field: 'script_content',
         comment: 'JSON stringified script data with dialogue blocks',
       },
+      evaluation_json: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        field: 'evaluation_json',
+        comment: 'Full evaluation result from scoring engine',
+      },
+      evaluation_status: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        field: 'evaluation_status',
+        comment: 'Evaluation workflow status: computed, accepted',
+      },
+      formula_version: {
+        type: DataTypes.STRING(10),
+        allowNull: true,
+        field: 'formula_version',
+        comment: 'Version of the scoring formula used',
+      },
     },
     {
       sequelize,
