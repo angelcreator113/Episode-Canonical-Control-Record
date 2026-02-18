@@ -39,6 +39,7 @@ import TemplateDesigner from './pages/TemplateDesigner';
 import DiagnosticPage from './pages/DiagnosticPage';
 import DecisionAnalyticsDashboard from './pages/DecisionAnalyticsDashboard';
 import TimelineEditor from './pages/TimelineEditor';
+import EvaluateEpisode from './pages/EvaluateEpisode';
 import ExportPage from './pages/ExportPage';
 import AssetLibrary from './pages/AssetLibrary';
 
@@ -180,6 +181,7 @@ function AppContent() {
 
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<CreateEpisode />} />
+          <Route path="/episodes/:episodeId/evaluate" element={<EvaluateEpisode />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
           
           {/* Assets */}
