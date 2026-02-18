@@ -100,6 +100,7 @@ const TABS = [
   { key: 'overview', icon: '📊', label: 'Overview' },
   { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
   { key: 'events', icon: '💌', label: 'Events Library' },
+  { key: 'goals', icon: '🎯', label: 'Career Goals' },
   { key: 'characters', icon: '👑', label: 'Characters' },
   { key: 'decisions', icon: '🧠', label: 'Decision Log' },
 ];
@@ -113,6 +114,7 @@ function WorldAdmin() {
   const [stateHistory, setStateHistory] = useState([]);
   const [decisions, setDecisions] = useState([]);
   const [worldEvents, setWorldEvents] = useState([]);
+  const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
 
@@ -130,6 +132,12 @@ function WorldAdmin() {
   const [editingStats, setEditingStats] = useState(false);
   const [statForm, setStatForm] = useState({});
   const [savingStats, setSavingStats] = useState(false);
+
+  // Goal editor state
+  const [editingGoal, setEditingGoal] = useState(null);
+  const [goalForm, setGoalForm] = useState({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '#6366f1', description: '' });
+  const [savingGoal, setSavingGoal] = useState(false);
+  const [suggestions, setSuggestions] = useState([]);
 
   const [error, setError] = useState(null);
   const [successMsg, setSuccessMsg] = useState(null);
@@ -152,6 +160,7 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/history`).then(r => setStateHistory(r.data?.history || [])).catch(() => setStateHistory([])),
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(() => setDecisions([])),
         api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(() => setWorldEvents([])),
+        api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
       ]);
     } finally { setLoading(false); }
   };
@@ -224,6 +233,45 @@ function WorldAdmin() {
       }
     } catch (err) { setError(err.response?.data?.error || err.message); }
     finally { setSeeding(false); }
+  };
+
+  // ─── GOAL CRUD ───
+  const saveGoal = async () => {
+    setSavingGoal(true); setError(null);
+    try {
+      if (editingGoal === 'new') {
+        const res = await api.post(`/api/v1/world/${showId}/goals`, goalForm);
+        if (res.data.success) { setGoals(p => [res.data.goal, ...p]); setEditingGoal(null); setSuccessMsg('Goal created!'); }
+        else setError(res.data.error);
+      } else {
+        const res = await api.put(`/api/v1/world/${showId}/goals/${editingGoal}`, goalForm);
+        if (res.data.success) { setGoals(p => p.map(g => g.id === editingGoal ? res.data.goal : g)); setEditingGoal(null); setSuccessMsg('Goal updated!'); }
+      }
+    } catch (err) { setError(err.response?.data?.error || err.message); }
+    finally { setSavingGoal(false); }
+  };
+
+  const deleteGoal = async (goalId) => {
+    if (!window.confirm('Delete this goal?')) return;
+    try { await api.delete(`/api/v1/world/${showId}/goals/${goalId}`); setGoals(p => p.filter(g => g.id !== goalId)); setSuccessMsg('Deleted'); }
+    catch (err) { setError(err.response?.data?.error || err.message); }
+  };
+
+  const syncGoals = async () => {
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/goals/sync`);
+      if (res.data.success) {
+        setSuccessMsg(`Synced ${res.data.synced} goals.${res.data.completed?.length ? ` 🎉 Completed: ${res.data.completed.map(c => c.title).join(', ')}` : ''}`);
+        loadData();
+      }
+    } catch (err) { setError(err.response?.data?.error || err.message); }
+  };
+
+  const loadSuggestions = async () => {
+    try {
+      const res = await api.get(`/api/v1/world/${showId}/suggest-events?limit=3`);
+      if (res.data.success) setSuggestions(res.data.suggestions || []);
+    } catch (e) { setSuggestions([]); }
   };
 
   // ─── CHARACTER STAT EDIT ───
@@ -399,11 +447,9 @@ function WorldAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>💌 Events Library ({worldEvents.length})</h2>
             <div style={{ display: 'flex', gap: 8 }}>
-              {worldEvents.length === 0 && (
-                <button onClick={seedEvents} disabled={seeding} style={{ ...S.secBtn, background: '#fef3c7', borderColor: '#fbbf24', color: '#92400e' }}>
-                  {seeding ? '⏳ Seeding...' : '🌱 Seed 40 Events'}
-                </button>
-              )}
+              <button onClick={seedEvents} disabled={seeding} style={{ ...S.secBtn, background: '#fef3c7', borderColor: '#fbbf24', color: '#92400e' }}>
+                {seeding ? '⏳ Seeding...' : '🌱 Seed 40 Events'}
+              </button>
               <button onClick={openNewEvent} style={S.primaryBtn}>+ Create Event</button>
             </div>
           </div>
@@ -539,6 +585,142 @@ function WorldAdmin() {
               </div>
             )}
           </div>
+        </div>
+      )}
+
+      {/* ════════════════════════ CAREER GOALS ════════════════════════ */}
+      {activeTab === 'goals' && (
+        <div style={S.content}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+            <h2 style={{ ...S.cardTitle, margin: 0 }}>🎯 Career Goals</h2>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={syncGoals} style={S.secBtn}>🔄 Sync from Stats</button>
+              <button onClick={loadSuggestions} style={S.secBtn}>💡 Suggest Events</button>
+              <button onClick={() => { setGoalForm({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '#6366f1', description: '' }); setEditingGoal('new'); }} style={S.primaryBtn}>+ New Goal</button>
+            </div>
+          </div>
+
+          {/* Goal editor */}
+          {editingGoal && (
+            <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingGoal === 'new' ? '✨ New Goal' : '✏️ Edit Goal'}</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+                <FG label="Goal Title *" value={goalForm.title} onChange={v => setGoalForm(p => ({ ...p, title: v }))} placeholder="Break Into Luxury Fashion" />
+                <div>
+                  <label style={S.fLabel}>Type</label>
+                  <select value={goalForm.type} onChange={e => setGoalForm(p => ({ ...p, type: e.target.value }))} style={S.sel}>
+                    <option value="primary">🌟 Primary (1 max)</option>
+                    <option value="secondary">🎯 Secondary (2 max)</option>
+                    <option value="passive">🌿 Passive (unlimited)</option>
+                  </select>
+                </div>
+                <div>
+                  <label style={S.fLabel}>Metric</label>
+                  <select value={goalForm.target_metric} onChange={e => setGoalForm(p => ({ ...p, target_metric: e.target.value }))} style={S.sel}>
+                    <option value="coins">🪙 Coins</option>
+                    <option value="reputation">⭐ Reputation</option>
+                    <option value="brand_trust">🤝 Brand Trust</option>
+                    <option value="influence">📣 Influence</option>
+                    <option value="stress">😰 Stress (reduce to)</option>
+                    <option value="followers">👥 Followers</option>
+                    <option value="engagement_rate">📈 Engagement Rate</option>
+                    <option value="portfolio_strength">📁 Portfolio Strength</option>
+                  </select>
+                </div>
+                <FG label="Target Value" value={goalForm.target_value} onChange={v => setGoalForm(p => ({ ...p, target_value: parseFloat(v) || 0 }))} type="number" />
+                <FG label="Icon" value={goalForm.icon} onChange={v => setGoalForm(p => ({ ...p, icon: v }))} placeholder="🎯" />
+                <FG label="Color" value={goalForm.color} onChange={v => setGoalForm(p => ({ ...p, color: v }))} placeholder="#6366f1" />
+              </div>
+              <FG label="Description" value={goalForm.description} onChange={v => setGoalForm(p => ({ ...p, description: v }))} textarea full placeholder="What does achieving this goal mean for Lala's journey?" />
+              <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end', marginTop: 12 }}>
+                <button onClick={() => setEditingGoal(null)} style={S.secBtn}>Cancel</button>
+                <button onClick={saveGoal} disabled={savingGoal || !goalForm.title} style={S.primaryBtn}>
+                  {savingGoal ? '⏳' : editingGoal === 'new' ? '✨ Create' : '💾 Save'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Active goals by type */}
+          {['primary', 'secondary', 'passive'].map(goalType => {
+            const typeGoals = goals.filter(g => g.type === goalType && g.status === 'active');
+            if (typeGoals.length === 0 && goalType === 'passive') return null;
+            const typeLabel = goalType === 'primary' ? '🌟 Primary Goal' : goalType === 'secondary' ? '🎯 Secondary Goals' : '🌿 Passive Goals';
+            const typeLimit = goalType === 'primary' ? '(1 max)' : goalType === 'secondary' ? '(2 max)' : '';
+            return (
+              <div key={goalType}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#64748b', marginBottom: 8 }}>{typeLabel} {typeLimit}</div>
+                <div style={{ display: 'grid', gridTemplateColumns: goalType === 'primary' ? '1fr' : '1fr 1fr', gap: 12, marginBottom: 16 }}>
+                  {typeGoals.map(g => {
+                    const pct = g.progress || Math.min(100, Math.round(((g.current_value - (g.starting_value || 0)) / Math.max(1, (g.target_value - (g.starting_value || 0)))) * 100));
+                    return (
+                      <div key={g.id} style={{ background: '#fff', border: goalType === 'primary' ? `2px solid ${g.color || '#6366f1'}` : '1px solid #e2e8f0', borderRadius: 12, padding: goalType === 'primary' ? 20 : 16 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: goalType === 'primary' ? 28 : 20 }}>{g.icon || '🎯'}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: goalType === 'primary' ? 16 : 14, fontWeight: 700, color: '#1a1a2e' }}>{g.title}</div>
+                            {g.description && <div style={{ fontSize: 12, color: '#64748b', marginTop: 2 }}>{g.description}</div>}
+                          </div>
+                          <div style={{ display: 'flex', gap: 4 }}>
+                            <button onClick={() => { setGoalForm({ ...g }); setEditingGoal(g.id); }} style={S.smBtn}>✏️</button>
+                            <button onClick={() => deleteGoal(g.id)} style={S.smBtnDanger}>🗑️</button>
+                          </div>
+                        </div>
+                        <div style={{ fontSize: 12, color: '#64748b', marginBottom: 6 }}>
+                          {STAT_ICONS[g.target_metric] || '📊'} {g.target_metric?.replace(/_/g, ' ')}: <strong>{g.current_value}</strong> / {g.target_value}
+                        </div>
+                        <div style={{ height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', marginBottom: 4 }}>
+                          <div style={{ height: '100%', width: `${pct}%`, background: pct >= 100 ? '#16a34a' : (g.color || '#6366f1'), borderRadius: 4, transition: 'width 0.3s' }} />
+                        </div>
+                        <div style={{ fontSize: 11, color: pct >= 100 ? '#16a34a' : '#94a3b8', fontWeight: pct >= 100 ? 700 : 400 }}>
+                          {pct >= 100 ? '✅ COMPLETE' : `${pct}% — ${Math.max(0, g.target_value - g.current_value)} remaining`}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {typeGoals.length === 0 && (
+                    <div style={{ padding: 20, background: '#f8fafc', borderRadius: 8, textAlign: 'center', color: '#94a3b8', fontSize: 13, border: '1px dashed #e2e8f0' }}>
+                      No active {goalType} goal. Click &quot;+ New Goal&quot; to create one.
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+
+          {/* Completed goals */}
+          {goals.filter(g => g.status === 'completed').length > 0 && (
+            <div style={S.card}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 10px', color: '#16a34a' }}>✅ Completed Goals</h3>
+              {goals.filter(g => g.status === 'completed').map(g => (
+                <div key={g.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
+                  <span>{g.icon}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#16a34a' }}>{g.title}</span>
+                  <span style={{ fontSize: 11, color: '#94a3b8', marginLeft: 'auto' }}>{g.completed_at ? new Date(g.completed_at).toLocaleDateString() : ''}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Event suggestions */}
+          {suggestions.length > 0 && (
+            <div style={S.card}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, margin: '0 0 10px' }}>💡 Suggested Events (Based on Active Goals)</h3>
+              {suggestions.map((s, i) => (
+                <div key={i} style={{ padding: 12, background: '#f8fafc', borderRadius: 8, marginBottom: 8, border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 16 }}>{EVENT_TYPE_ICONS[s.event_type] || '📌'}</span>
+                    <span style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{s.name}</span>
+                    <span style={S.eTag}>⭐ {s.prestige}</span>
+                    {!s.requirements_met && <span style={{ padding: '2px 6px', background: '#fef2f2', borderRadius: 4, fontSize: 10, color: '#dc2626' }}>Reqs not met</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#6366f1', marginTop: 4 }}>
+                    {(s.suggestion_reasons || []).join(' · ')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

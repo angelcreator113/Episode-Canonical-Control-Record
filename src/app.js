@@ -774,6 +774,15 @@ try {
   console.error('✗ Failed to load world event routes:', e.message);
 }
 
+// Career Goals routes (goal CRUD + sync + suggest-events)
+try {
+  const careerGoalRoutes = require('./routes/careerGoals');
+  app.use('/api/v1', careerGoalRoutes);
+  console.log('✓ Career goal routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load career goal routes:', e.message);
+}
+
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 
