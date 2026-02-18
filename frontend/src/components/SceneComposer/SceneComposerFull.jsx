@@ -14,6 +14,7 @@ import AssetUploadModal from './AssetUploadModal';
 import AssetSelector from './AssetSelector';
 import thumbnailService from '../../services/thumbnailService';
 import { startExport, getExportStatus, subscribeToExportProgress, getExportDownload, cancelExport, disconnectSocket } from '../../services/exportService';
+import ScenePlanLoader from '../ScenePlanLoader';
 import './SceneComposerFull.css';
 
 function SceneComposerFull() {
@@ -68,6 +69,10 @@ function SceneComposerFull() {
   // Thumbnail preview state
   const [thumbnailPreview, setThumbnailPreview] = useState(null); // { url, filename, blob }
   const [thumbnailUploading, setThumbnailUploading] = useState(false);
+
+  // Script → Scene Plan loader state
+  const [showScenePlanLoader, setShowScenePlanLoader] = useState(false);
+  const [scenePlan, setScenePlan] = useState(null);
   const [thumbnailSaved, setThumbnailSaved] = useState(false);
 
   // Video export state
@@ -310,6 +315,16 @@ function SceneComposerFull() {
 
     setLoading(false);
   };
+
+  // Detect empty episode (default single "Scene 1") and offer to load from script
+  useEffect(() => {
+    if (episode && !loading && scenes.length <= 1) {
+      const first = scenes[0];
+      if (!first || (first.title === 'Scene 1' && !first.background_url && first.characters?.length === 0)) {
+        setShowScenePlanLoader(true);
+      }
+    }
+  }, [episode, loading, scenes]);
 
   const handlePlatformChange = async (newPlatform) => {
     setPlatform(newPlatform);
@@ -1222,6 +1237,31 @@ function SceneComposerFull() {
               + Add Scene
             </button>
           </div>
+          {showScenePlanLoader && (
+            <ScenePlanLoader
+              episodeId={episodeId}
+              episode={episode}
+              onApply={(plan, createdScenes) => {
+                const newScenes = createdScenes.map(s => ({
+                  id: s.id,
+                  scene_number: s.scene_number || s.sceneNumber,
+                  title: s.title,
+                  duration_seconds: s.duration_seconds || s.durationSeconds || 5,
+                  background_url: null,
+                  characters: [],
+                  ui_elements: [],
+                  dialogue_clips: [],
+                  metadata: s.metadata || {},
+                }));
+                setScenes(newScenes);
+                setCurrentSceneIndex(0);
+                setShowScenePlanLoader(false);
+                setScenePlan(plan);
+                markDirty();
+              }}
+              onSkip={() => setShowScenePlanLoader(false)}
+            />
+          )}
           <div className="scene-list">
             {scenes.map((scene, index) => (
               <div 
