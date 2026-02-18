@@ -16,6 +16,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import api from '../services/api';
+import './ShowDetail.css';
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
 const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', mid: '#eab308', fail: '#dc2626' };
@@ -166,10 +167,15 @@ function WorldAdmin() {
       {successMsg && <div style={S.successBanner}>{successMsg}</div>}
 
       {/* ─── TABS ─── */}
-      <div style={S.tabBar}>
+      <div className="tab-navigation">
         {TABS.map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab}>
-            {t.icon} {t.label}
+          <button
+            key={t.key}
+            onClick={() => setActiveTab(t.key)}
+            className={`tab-button ${activeTab === t.key ? 'active' : ''}`}
+          >
+            <span className="tab-icon">{t.icon}</span>
+            <span className="tab-label">{t.label}</span>
           </button>
         ))}
       </div>
@@ -538,9 +544,7 @@ const S = {
   errorBanner: { display: 'flex', justifyContent: 'space-between', padding: '10px 16px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#dc2626', fontSize: 13, marginBottom: 12 },
   successBanner: { padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#16a34a', fontSize: 13, marginBottom: 12, fontWeight: 600 },
   xBtn: { background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 },
-  tabBar: { display: 'flex', gap: 2, marginBottom: 20, borderBottom: '1px solid #e2e8f0', overflowX: 'auto' },
-  tab: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' },
-  tabActive: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid #6366f1', color: '#6366f1', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
+
   content: { display: 'flex', flexDirection: 'column', gap: 16 },
   card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 },
   cardTitle: { fontSize: 16, fontWeight: 700, color: '#1a1a2e', margin: '0 0 16px' },
