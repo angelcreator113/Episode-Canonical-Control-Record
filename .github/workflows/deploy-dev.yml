@@ -84,6 +84,7 @@ jobs:
           cp -r src deploy/
           cp -r scripts deploy/
           cp -r frontend/dist deploy/
+          cp -r nginx deploy/
           cp package.json deploy/
           cp package-lock.json deploy/
           cp ecosystem.config.js deploy/
@@ -150,8 +151,13 @@ jobs:
             sudo rm -rf /var/www/html/*
             sudo cp -r deploy/dist/* /var/www/html/
             sudo chown -R www-data:www-data /var/www/html
+            sudo chmod 755 /var/www/html /var/www/html/assets
+
+            echo '🔧 Deploying nginx config...'
+            sudo cp deploy/nginx/episode-dev.conf /etc/nginx/sites-enabled/episode
+            sudo nginx -t
             sudo systemctl restart nginx
-            echo '✅ Frontend deployed'
+            echo '✅ Frontend + Nginx deployed'
           "
 
           # ─── Deploy backend (code + deps + migrations + PM2 restart) ───
@@ -202,6 +208,7 @@ jobs:
             export DB_USER='$DEV_DB_USER'
             export DB_PASSWORD='$DEV_DB_PASSWORD'
             export DB_SSL='true'
+            export DB_SSL_REJECT_UNAUTHORIZED='false'
 
             # Bootstrap SequelizeMeta for databases created by sequelize.sync()
             echo '🔧 Bootstrapping migration metadata...'
