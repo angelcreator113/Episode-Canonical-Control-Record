@@ -198,8 +198,9 @@ jobs:
             cd \$APP_DIR
             npm ci --production --ignore-scripts 2>&1 | tail -5
 
-            # Rebuild native modules (sharp, etc.) for the server architecture
+            # Rebuild native modules (sharp, canvas, etc.) for the server architecture
             npm rebuild sharp 2>&1 | tail -3 || echo '⚠️ sharp rebuild skipped'
+            npm rebuild canvas 2>&1 | tail -3 || echo '⚠️ canvas rebuild skipped'
 
             # Set DB env vars for RDS (from GitHub Secrets)
             export DB_HOST='$DEV_DB_HOST'
@@ -218,9 +219,10 @@ jobs:
             echo '🗃️ Running migrations...'
             npx sequelize-cli db:migrate --env development 2>&1 | tail -10
 
-            # Restart the Node.js backend via PM2
+            # Restart the Node.js backend + worker via PM2
             echo '🔄 Restarting PM2...'
             pm2 delete episode-api 2>/dev/null || true
+            pm2 delete episode-worker 2>/dev/null || true
             sleep 2
             # Kill anything still holding port 3002
             fuser -k 3002/tcp 2>/dev/null || true
