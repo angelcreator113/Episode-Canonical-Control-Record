@@ -195,7 +195,7 @@ function EvaluateEpisode() {
   const isAccepted = episode?.evaluation_status === 'accepted';
   const tierConfig = evaluation ? TIER_CONFIG[evaluation.tier_final] || TIER_CONFIG.mid : null;
 
-  const nextTier = evaluation ? getNextTier(evaluation.tier_final) : null;
+  const availableTiers = evaluation ? getAllTiers(evaluation.tier_final) : [];
   const hasOverrides = (evaluation?.overrides || []).filter(o => o.type === 'tier_change').length > 0;
 
   if (loading) {
@@ -408,14 +408,14 @@ function EvaluateEpisode() {
               {/* Actions */}
               {!isAccepted && (
                 <div style={S.actionsCard}>
-                  {!hasOverrides && nextTier && (
+                  {!hasOverrides && (
                     <button onClick={() => {
-                      setOverrideTier(nextTier);
+                      setOverrideTier(availableTiers[0] || '');
                       setOverrideNarrative('');
                       setOverrideReason('');
                       setShowOverrideModal(true);
                     }} style={S.overrideBtn}>
-                      ⬆️ Override → {nextTier.toUpperCase()}
+                      🎯 Apply Override
                     </button>
                   )}
                   {hasOverrides && <div style={S.overrideNote}>✓ Override applied (max 1 per episode)</div>}
@@ -456,6 +456,15 @@ function EvaluateEpisode() {
             <p style={S.modalSub}>
               {evaluation.tier_final?.toUpperCase()} → {overrideTier?.toUpperCase()}
             </p>
+
+            <div style={S.formGroup}>
+              <label style={S.formLabel}>Target Tier</label>
+              <select value={overrideTier} onChange={e => setOverrideTier(e.target.value)} style={S.select}>
+                {['fail', 'mid', 'pass', 'slay'].filter(t => t !== evaluation.tier_final).map(t => (
+                  <option key={t} value={t}>{t.toUpperCase()}</option>
+                ))}
+              </select>
+            </div>
 
             <div style={S.formGroup}>
               <label style={S.formLabel}>Reason</label>
@@ -503,10 +512,8 @@ function EvaluateEpisode() {
 
 // ─── HELPERS ───
 
-function getNextTier(current) {
-  const order = ['fail', 'mid', 'pass', 'slay'];
-  const idx = order.indexOf(current);
-  return idx >= 0 && idx < order.length - 1 ? order[idx + 1] : null;
+function getAllTiers(current) {
+  return ['fail', 'mid', 'pass', 'slay'].filter(t => t !== current);
 }
 
 

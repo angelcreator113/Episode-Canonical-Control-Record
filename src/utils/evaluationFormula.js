@@ -245,9 +245,8 @@ function validateOverride(currentTier, requestedTier) {
     return { valid: false, error: 'No change requested' };
   }
 
-  if (bump > 1) {
-    return { valid: false, error: `Can only bump one tier at a time. ${currentTier} → ${requestedTier} is ${bump} steps.` };
-  }
+  // Allow any tier change (up or down) — MVP flexibility
+  // The 1-tier-bump-only constraint is removed for creator control
 
   if (bump < 0) {
     // Downgrade — allowed (intentional failure)
