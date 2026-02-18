@@ -421,7 +421,7 @@ router.post('/episodes/:id/override', optionalAuth, async (req, res) => {
       // The score was already computed. Style adjust is for the display/record.
     }
 
-    await episode.update({ evaluation_json: evalJson });
+    await episode.update({ evaluation_json: JSON.parse(JSON.stringify(evalJson)) });
 
     return res.json({
       success: true,
@@ -544,7 +544,7 @@ router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
     // Mark episode as accepted
     evalJson.accepted_at = new Date().toISOString();
     await episode.update({
-      evaluation_json: evalJson,
+      evaluation_json: JSON.parse(JSON.stringify(evalJson)),
       evaluation_status: 'accepted',
     });
 
