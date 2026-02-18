@@ -455,8 +455,9 @@ function SceneComposerFull() {
       console.log('✅ UI Element added from library:', asset.name);
     }
 
-    // Log usage to backend (non-blocking)
-    if (currentScene?.id && asset.id) {
+    // Log usage to backend (non-blocking) — skip for unsaved scenes with temp IDs
+    const isPersistedScene = currentScene?.id && !String(currentScene.id).startsWith('scene-new');
+    if (isPersistedScene && asset.id) {
       sceneAssetsAPI.add(currentScene.id, {
         assetId: asset.id,
         usageType: assetSelectorType === 'background' ? 'background' : 'overlay',
