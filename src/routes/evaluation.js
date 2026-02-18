@@ -567,4 +567,86 @@ router.post('/episodes/:id/accept', optionalAuth, async (req, res) => {
 });
 
 
+// ═══════════════════════════════════════════
+// POST /api/v1/characters/:key/state/update
+// Manual stat edit from World Admin Characters tab
+// ═══════════════════════════════════════════
+
+router.post('/characters/:key/state/update', optionalAuth, async (req, res) => {
+  try {
+    const { key } = req.params;
+    const { show_id, coins, reputation, brand_trust, influence, stress, source = 'manual', notes } = req.body;
+
+    if (!show_id) return res.status(400).json({ error: 'show_id is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Get current state
+    const state = await getOrCreateCharacterState(models.sequelize, show_id, null, key);
+
+    const oldState = {
+      coins: state.coins,
+      reputation: state.reputation,
+      brand_trust: state.brand_trust,
+      influence: state.influence,
+      stress: state.stress,
+    };
+
+    const newState = {
+      coins: coins !== undefined ? parseInt(coins) : state.coins,
+      reputation: reputation !== undefined ? Math.max(0, Math.min(10, parseInt(reputation))) : state.reputation,
+      brand_trust: brand_trust !== undefined ? Math.max(0, Math.min(10, parseInt(brand_trust))) : state.brand_trust,
+      influence: influence !== undefined ? Math.max(0, Math.min(10, parseInt(influence))) : state.influence,
+      stress: stress !== undefined ? Math.max(0, Math.min(10, parseInt(stress))) : state.stress,
+    };
+
+    // Compute deltas
+    const deltas = {};
+    for (const k of Object.keys(newState)) {
+      if (newState[k] !== oldState[k]) deltas[k] = newState[k] - oldState[k];
+    }
+
+    // Update state
+    await models.sequelize.query(
+      `UPDATE character_state
+       SET coins = :coins, reputation = :reputation, brand_trust = :brand_trust,
+           influence = :influence, stress = :stress, updated_at = NOW()
+       WHERE id = :stateId`,
+      { replacements: { ...newState, stateId: state.id } }
+    );
+
+    // Write to history ledger
+    if (Object.keys(deltas).length > 0) {
+      await models.sequelize.query(
+        `INSERT INTO character_state_history
+         (id, show_id, season_id, character_key, episode_id, source, deltas_json, state_after_json, notes, created_at)
+         VALUES (:id, :showId, NULL, :characterKey, NULL, :source, :deltas, :stateAfter, :notes, NOW())`,
+        {
+          replacements: {
+            id: uuidv4(),
+            showId: show_id,
+            characterKey: key,
+            source: 'manual',
+            deltas: JSON.stringify(deltas),
+            stateAfter: JSON.stringify(newState),
+            notes: notes || 'Manual edit from World Admin',
+          },
+        }
+      );
+    }
+
+    return res.json({
+      success: true,
+      state: newState,
+      deltas,
+      previous_state: oldState,
+    });
+  } catch (error) {
+    console.error('Update character state error:', error);
+    return res.status(500).json({ error: 'Failed to update state', message: error.message });
+  }
+});
+
+
 module.exports = router;

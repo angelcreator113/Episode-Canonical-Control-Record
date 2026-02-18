@@ -765,6 +765,15 @@ try {
   console.error('✗ Failed to load world routes:', e.message);
 }
 
+// World Events routes (event library CRUD + inject)
+try {
+  const worldEventRoutes = require('./routes/worldEvents');
+  app.use('/api/v1', worldEventRoutes);
+  console.log('✓ World event routes loaded');
+} catch (e) {
+  console.error('✗ Failed to load world event routes:', e.message);
+}
+
 // Outfit sets routes
 app.use('/api/v1/outfit-sets', outfitSetsRoutes);
 
