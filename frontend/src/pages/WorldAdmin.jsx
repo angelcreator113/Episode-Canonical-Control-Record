@@ -127,6 +127,7 @@ function WorldAdmin() {
   const [generating, setGenerating] = useState(false);
   const [generatedScript, setGeneratedScript] = useState(null);
   const [seeding, setSeeding] = useState(false);
+  const [seedingGoals, setSeedingGoals] = useState(false);
 
   // Character editor state
   const [editingStats, setEditingStats] = useState(false);
@@ -272,6 +273,19 @@ function WorldAdmin() {
       const res = await api.get(`/api/v1/world/${showId}/suggest-events?limit=3`);
       if (res.data.success) setSuggestions(res.data.suggestions || []);
     } catch (e) { setSuggestions([]); }
+  };
+
+  const seedGoals = async () => {
+    if (!window.confirm('Seed all 24 Lala Career Goals? (3 Passive + 21 Tiered across 5 arcs)')) return;
+    setSeedingGoals(true); setError(null);
+    try {
+      const res = await api.post(`/api/v1/world/${showId}/goals/bulk-seed`, {});
+      if (res.data.success) {
+        setSuccessMsg(`Seeded ${res.data.created_count} goals! (${res.data.skipped_count} already existed)`);
+        loadData();
+      }
+    } catch (err) { setError(err.response?.data?.error || err.message); }
+    finally { setSeedingGoals(false); }
   };
 
   // ─── CHARACTER STAT EDIT ───
@@ -594,6 +608,9 @@ function WorldAdmin() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
             <h2 style={{ ...S.cardTitle, margin: 0 }}>🎯 Career Goals</h2>
             <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={seedGoals} disabled={seedingGoals} style={{ ...S.secBtn, background: '#fef3c7', borderColor: '#fbbf24', color: '#92400e' }}>
+                {seedingGoals ? '⏳ Seeding...' : '🌱 Seed 24 Goals'}
+              </button>
               <button onClick={syncGoals} style={S.secBtn}>🔄 Sync from Stats</button>
               <button onClick={loadSuggestions} style={S.secBtn}>💡 Suggest Events</button>
               <button onClick={() => { setGoalForm({ title: '', type: 'secondary', target_metric: 'reputation', target_value: 10, icon: '🎯', color: '#6366f1', description: '' }); setEditingGoal('new'); }} style={S.primaryBtn}>+ New Goal</button>
