@@ -161,6 +161,9 @@ function Sidebar({ isOpen, onClose }) {
           )}
         </div>
         
+        {/* Asset Library */}
+        <NavItem icon="📁" label="Assets" path="/assets" />
+        
         {/* Settings */}
         <NavItem icon="⚙️" label="Settings" path="/settings" />
       </nav>
