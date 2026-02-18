@@ -177,7 +177,7 @@ router.get('/:id', async (req, res) => {
       const { Episode } = require('../models');
       const episodeCount = await Episode.count({ where: { show_id: id } });
       if (episodeCount > 0) {
-        show = await Show.create({ id, name: 'Untitled Show', status: 'in-production' });
+        show = await Show.create({ id, name: 'Untitled Show', slug: `show-${id.slice(0, 8)}`, status: 'in_development' });
       }
     }
 
