@@ -187,16 +187,27 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
   const [error, setError] = useState(null);
   const [showRightPanel, setShowRightPanel] = useState(false);
   const textareaRef = useRef(null);
+  const initialLoadDone = useRef(false);
 
+  // Load script content ONCE on mount (or when episodeId changes)
   useEffect(() => {
+    if (initialLoadDone.current) return;
     if (episode?.script_content) {
       setScriptContent(episode.script_content);
+      initialLoadDone.current = true;
     } else if (episodeId) {
       api.get(`/api/v1/episodes/${episodeId}`).then(res => {
-        if (res.data?.script_content) setScriptContent(res.data.script_content);
+        const ep = res.data?.data || res.data;
+        if (ep?.script_content) setScriptContent(ep.script_content);
+        initialLoadDone.current = true;
       }).catch(() => {});
     }
   }, [episode, episodeId]);
+
+  // Reset load flag when switching to a different episode
+  useEffect(() => {
+    initialLoadDone.current = false;
+  }, [episodeId]);
 
   const handleFormatScript = useCallback(() => {
     let f = normalizeScript(scriptContent);

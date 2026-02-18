@@ -480,6 +480,12 @@ const EpisodeDetail = () => {
           </div>
         </div>
         <div className="ed-header-actions">
+          <Link
+            to={`/episodes/${episode.id}/evaluate`}
+            style={{padding:'8px 16px', background:'linear-gradient(135deg,#6366f1,#8b5cf6)', borderRadius:8, color:'#fff', fontSize:13, fontWeight:600, textDecoration:'none', display:'inline-flex', alignItems:'center', gap:'6px'}}
+          >
+            🎯 Evaluate
+          </Link>
           <div className="ed-more-menu">
             <button
               onClick={() => setShowMoreActions(!showMoreActions)}
@@ -626,6 +632,9 @@ const EpisodeDetail = () => {
           <ScriptEditor 
             episodeId={episode.id}
             episode={episode}
+            onScriptSaved={(newScript) => {
+              setEpisode(prev => ({ ...prev, script_content: newScript }));
+            }}
           />
         )}
 
