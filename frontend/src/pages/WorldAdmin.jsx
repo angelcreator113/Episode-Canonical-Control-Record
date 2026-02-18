@@ -55,6 +55,7 @@ function WorldAdmin() {
   const [goals, setGoals] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('overview');
+  const [expandedEpisode, setExpandedEpisode] = useState(null);
 
   // Event editor state
   const [editingEvent, setEditingEvent] = useState(null);
