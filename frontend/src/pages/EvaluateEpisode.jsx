@@ -154,6 +154,7 @@ function EvaluateEpisode() {
       });
       if (res.data.success) {
         setEvaluation(res.data.evaluation);
+        setEpisode(prev => ({ ...prev, evaluation_json: res.data.evaluation }));
         setShowOverrideModal(false);
       } else {
         setError(res.data.error || 'Override failed');
@@ -498,8 +499,12 @@ function EvaluateEpisode() {
 
             <div style={S.modalActions}>
               <button onClick={() => setShowOverrideModal(false)} style={S.secondaryBtn}>Cancel</button>
-              <button onClick={handleOverride} disabled={!overrideReason || overriding} style={S.primaryBtn}>
-                {overriding ? '⏳...' : `Apply Override → ${overrideTier?.toUpperCase()}`}
+              <button onClick={handleOverride} disabled={!overrideReason || overriding} style={{
+                ...S.primaryBtn,
+                opacity: (!overrideReason || overriding) ? 0.5 : 1,
+                cursor: (!overrideReason || overriding) ? 'not-allowed' : 'pointer',
+              }}>
+                {overriding ? '⏳...' : !overrideReason ? '↑ Select a Reason first' : `Apply Override → ${overrideTier?.toUpperCase()}`}
               </button>
             </div>
           </div>
