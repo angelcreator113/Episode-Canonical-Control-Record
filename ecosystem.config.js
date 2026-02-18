@@ -38,8 +38,8 @@ module.exports = {
       // AWS Config
       AWS_REGION: 'us-east-1',
       AWS_ACCOUNT_ID: '637423256673',
-      AWS_ACCESS_KEY_ID: 'dummy-key-for-dev',
-      AWS_SECRET_ACCESS_KEY: 'dummy-secret-for-dev',
+      AWS_ACCESS_KEY_ID: process.env.AWS_ACCESS_KEY_ID || 'dummy-key-for-dev',
+      AWS_SECRET_ACCESS_KEY: process.env.AWS_SECRET_ACCESS_KEY || 'dummy-secret-for-dev',
       
       // S3 Buckets - Development
       AWS_S3_BUCKET: 'episode-metadata-storage-dev',
