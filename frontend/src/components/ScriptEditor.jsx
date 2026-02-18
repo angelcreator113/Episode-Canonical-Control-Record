@@ -1,23 +1,14 @@
 /**
- * ScriptEditor — Full Script Editor with Raw Mode + Analysis Panel
+ * ScriptEditor v3 — Light Theme + Format Script + Beat Inference
  * 
- * Replaces: EpisodeScripts.jsx (dialogue blocks)
+ * Changes from v2:
+ *   - Light theme (white background, dark text)
+ *   - "Format Script" button — normalizes messy pastes into clean lines
+ *   - normalizeScript() — splits speakers, tags, and stage directions onto own lines
+ *   - inferBeats() — auto-inserts ## BEAT: headers based on anchor detection
+ *   - "Me:" → "Prime:" normalization
  * 
- * Layout: Two-pane
- *   Left:  Raw script editor (textarea with toolbar)
- *   Right: Analysis results (beats, UI actions, warnings, metadata)
- * 
- * Features:
- *   - Full text editing (paste entire scripts)
- *   - Syntax-aware toolbar (insert beats, UI tags, mail tags)
- *   - Analyze button → parses beats, UI actions, warnings
- *   - Save to episode.script_content
- *   - "Send to Scene Composer" button
- *   - Quick templates (Login, Mail Interrupt, Voice Activate, Checklist)
- *   - Duration estimation from word count
- *   - Grammar warnings with autofix
- * 
- * Location: frontend/src/components/ScriptEditor.jsx
+ * Replaces: frontend/src/components/ScriptEditor.jsx
  */
 
 import React, { useState, useRef, useCallback, useEffect } from 'react';
@@ -43,55 +34,35 @@ const BEAT_OPTIONS = [
 const TEMPLATES = {
   login: {
     label: '🔐 Login Sequence',
-    text: `## BEAT: OPENING_RITUAL
-[UI:OPEN LoginWindow]
-[UI:TYPE Username "JustAWomanInHerPrime"]
-[UI:TYPE Password "••••••"]
-[UI:CLICK LoginButton]
-[UI:SFX LoginSuccessDing]
-Prime: "Welcome back, besties — and bonjour to our new besties!"
-`,
+    text: `## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me — I'm ready for a new slay."\n\n## BEAT: CREATOR_WELCOME\n[UI:OPEN LoginWindow]\n[UI:TYPE Username "JustAWomanInHerPrime"]\n[UI:TYPE Password "••••••"]\n[UI:CLICK LoginButton]\n[UI:SFX LoginSuccessDing]\nPrime: "Welcome back, besties — and bonjour to our new besties!"\n`,
   },
   mailInterrupt: {
     label: '📩 Mail Interrupt',
-    text: `## BEAT: INTERRUPTION #1
-[UI:NOTIFICATION MailDing]
-Prime: "Oh — Lala's got mail."
-[UI:CLICK MailIcon]
-[UI:OPEN MailPanel]
-[MAIL: type=invite from="EVENT_NAME" prestige=4 cost=150]
-[UI:DISPLAY InviteLetterOverlay]
-Prime: "Bestie. This is major."
-`,
+    text: `## BEAT: INTERRUPTION #1\n[UI:NOTIFICATION MailDing]\nPrime: "Oh — Lala's got mail."\n[UI:CLICK MailIcon]\n[UI:OPEN MailPanel]\n[MAIL: type=invite from="EVENT_NAME" prestige=4 cost=150]\n[UI:DISPLAY InviteLetterOverlay]\nPrime: "Bestie. This is major."\n`,
   },
   voiceActivate: {
     label: '🎤 Voice Activate + Lala',
-    text: `[UI:CLICK VoiceIcon]
-[UI:VOICE_ACTIVATE Lala]
-Lala: "Bestie, this is IT. I need the perfect look."
-`,
+    text: `[UI:CLICK VoiceIcon]\n[UI:VOICE_ACTIVATE Lala]\nLala: "Bestie, this is IT. I need the perfect look."\n`,
   },
   checklist: {
     label: '✅ Transformation Checklist',
-    text: `## BEAT: TRANSFORMATION
-[UI:DISPLAY ToDoListOverlay]
-Prime: "We're checking everything off — one by one."
-[UI:OPEN ClosetCategory Outfit]
-[UI:SCROLL ClosetItems x5]
-[UI:ADD Outfit ITEM_NAME]
-[UI:CHECK_ITEM Checklist:Outfit]
-[UI:OPEN ClosetCategory Accessories]
-[UI:SCROLL ClosetItems x3]
-[UI:ADD Accessory ITEM_NAME]
-[UI:CHECK_ITEM Checklist:Accessories]
-`,
+    text: `## BEAT: TRANSFORMATION\n[UI:DISPLAY ToDoListOverlay]\nPrime: "We're checking everything off — one by one."\n[UI:OPEN ClosetCategory Outfit]\n[UI:SCROLL ClosetItems x5]\n[UI:ADD Outfit ITEM_NAME]\n[UI:CHECK_ITEM Checklist:Outfit]\n[UI:OPEN ClosetCategory Accessories]\n[UI:SCROLL ClosetItems x3]\n[UI:ADD Accessory ITEM_NAME]\n[UI:CHECK_ITEM Checklist:Accessories]\n`,
+  },
+  reveal: {
+    label: '✨ Reveal',
+    text: `## BEAT: REVEAL #1\nPrime: "(Reads invite out loud while it's on screen.)"\n`,
+  },
+  stakes: {
+    label: '🎯 Stakes + Intention',
+    text: `## BEAT: STAKES_INTENTION\n[UI:CLICK VoiceIcon]\n[UI:VOICE_ACTIVATE Lala]\nLala: "Bestie, this is IT. I need the perfect look."\n`,
   },
   cliffhanger: {
     label: '🔥 Cliffhanger',
-    text: `## BEAT: CLIFFHANGER
-Lala: "Bestie… this is just the beginning."
-Prime: "Next invite? Bigger. Bougier. You have to be there."
-`,
+    text: `## BEAT: CLIFFHANGER\nLala: "Bestie… this is just the beginning."\nPrime: "Next invite? Bigger. Bougier. You have to be there."\n`,
+  },
+  payoff: {
+    label: '🎁 Payoff + CTA',
+    text: `## BEAT: PAYOFF_CTA\nPrime: "Rate this look 1–10 in the comments — and if you want your own moment, you know where to shop."\nLala: "Drop your look with #LalaStyle. I'll feature favorites."\n`,
   },
 };
 
@@ -109,8 +80,100 @@ const UI_TAGS = [
   { label: 'Add Item', insert: '[UI:ADD Category ItemName]' },
   { label: 'Check Item', insert: '[UI:CHECK_ITEM Checklist:Item]' },
   { label: 'SFX', insert: '[UI:SFX SoundName]' },
-  { label: 'Set Background', insert: '[UI:SET_BACKGROUND SceneName]' },
+  { label: 'Background', insert: '[UI:SET_BACKGROUND SceneName]' },
+  { label: '📨 Mail', insert: '[MAIL: type=invite from="NAME" prestige=4 cost=150]' },
+  { label: '📊 Stat', insert: '[STAT: coins +100]' },
 ];
+
+
+// ─── NORMALIZER ───
+
+function normalizeScript(raw) {
+  let s = raw;
+
+  // Normalize smart quotes
+  s = s.replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"');
+  s = s.replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
+
+  // Me: → Prime:
+  s = s.replace(/\bMe:\s*/g, 'Prime: ');
+
+  // Newline before speaker labels mid-line
+  const speakers = ['Lala:', 'Prime:', 'Guest:', 'Message:', 'System:'];
+  for (const tok of speakers) {
+    const re = new RegExp(`([^\\n])\\s*(?=${tok.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    s = s.replace(re, '$1\n');
+  }
+
+  // Bracketed tags on their own line
+  s = s.replace(/(\[[A-Z_]+:[^\]]*\])/gi, '\n$1\n');
+
+  // Stage directions on their own line
+  s = s.replace(/(\([^)]{3,}\))/g, '\n$1\n');
+
+  // Beat headers on their own line
+  s = s.replace(/(##\s*BEAT:[^\n]*)/gi, '\n\n$1\n');
+
+  // Clean up blank lines
+  s = s.replace(/\n{3,}/g, '\n\n');
+
+  return s.trim();
+}
+
+
+// ─── BEAT INFERENCE ───
+
+function inferBeats(script) {
+  if (/##\s*BEAT:/i.test(script)) return script;
+
+  const lines = script.split('\n');
+  const result = [];
+  let currentBeat = null;
+  let interruptionN = 0;
+  let revealN = 0;
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const low = line.trim().toLowerCase();
+    let beat = null;
+
+    if (i === 0 && !currentBeat) {
+      beat = low.startsWith('lala:') ? 'OPENING_RITUAL' : 'CREATOR_WELCOME';
+    }
+    if (low.includes('[ui:open loginwindow]') || low.includes('loginwindow')) {
+      if (currentBeat !== 'CREATOR_WELCOME') beat = 'CREATOR_WELCOME';
+    }
+    if (low.includes('[ui:notification') || low.includes("lala's got mail") || low.includes('got mail')) {
+      interruptionN++;
+      beat = `INTERRUPTION #${interruptionN}`;
+    }
+    if (low.includes('[ui:display inviteletteroverlay]') || low.includes('reads invite') || low.includes('dearest lala') || low.includes('message reads')) {
+      revealN++;
+      beat = `REVEAL #${revealN}`;
+    }
+    if (low.includes('[ui:voice_activate') || low.includes('voice command') || low.includes('clicks voice')) {
+      if (currentBeat !== 'STAKES_INTENTION') beat = 'STAKES_INTENTION';
+    }
+    if (low.includes('[ui:open closetcategory') || low.includes('to-do list') || low.includes('checklist') || low.includes('todolistoverlay')) {
+      if (currentBeat !== 'TRANSFORMATION') beat = 'TRANSFORMATION';
+    }
+    if (low.includes('rate it') || low.includes('rate this') || low.includes('link in bio') || low.includes('#lalastyle')) {
+      if (currentBeat !== 'PAYOFF_CTA') beat = 'PAYOFF_CTA';
+    }
+    if (low.includes('to be continued') || low.includes('next invite') || low.includes('just the beginning') || low.includes('next episode')) {
+      if (currentBeat !== 'CLIFFHANGER') beat = 'CLIFFHANGER';
+    }
+
+    if (beat && beat !== currentBeat) {
+      result.push('');
+      result.push(`## BEAT: ${beat}`);
+      currentBeat = beat;
+    }
+    result.push(line);
+  }
+
+  return result.join('\n');
+}
 
 
 function ScriptEditor({ episodeId, episode, onScriptSaved }) {
@@ -119,462 +182,273 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState('');
-  const [showToolbar, setShowToolbar] = useState('beats'); // 'beats' | 'ui' | 'templates'
+  const [showToolbar, setShowToolbar] = useState('beats');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [error, setError] = useState(null);
   const [showRightPanel, setShowRightPanel] = useState(false);
   const textareaRef = useRef(null);
 
-  // Load existing script content
   useEffect(() => {
     if (episode?.script_content) {
       setScriptContent(episode.script_content);
     } else if (episodeId) {
-      // Try loading from episode_scripts table
-      loadScript();
+      api.get(`/api/v1/episodes/${episodeId}`).then(res => {
+        if (res.data?.script_content) setScriptContent(res.data.script_content);
+      }).catch(() => {});
     }
   }, [episode, episodeId]);
 
-  const loadScript = async () => {
-    try {
-      const res = await api.get(`/api/v1/episodes/${episodeId}`);
-      if (res.data?.script_content) {
-        setScriptContent(res.data.script_content);
-      }
-    } catch (e) { /* episode might not have script yet */ }
-  };
-
-  // ─── INSERT AT CURSOR ───
-  const insertAtCursor = useCallback((text) => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const before = scriptContent.substring(0, start);
-    const after = scriptContent.substring(end);
-    
-    // Add newlines if needed
-    const needNewlineBefore = before.length > 0 && !before.endsWith('\n');
-    const needNewlineAfter = after.length > 0 && !after.startsWith('\n');
-    
-    const insert = (needNewlineBefore ? '\n' : '') + text + (needNewlineAfter ? '\n' : '');
-    const newContent = before + insert + after;
-    
-    setScriptContent(newContent);
+  const handleFormatScript = useCallback(() => {
+    let f = normalizeScript(scriptContent);
+    f = inferBeats(f);
+    setScriptContent(f);
     setHasUnsavedChanges(true);
-
-    // Set cursor position after insert
-    setTimeout(() => {
-      const cursorPos = start + insert.length;
-      textarea.focus();
-      textarea.setSelectionRange(cursorPos, cursorPos);
-    }, 10);
   }, [scriptContent]);
 
-  // ─── SAVE SCRIPT ───
+  const insertAtCursor = useCallback((text) => {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const s = ta.selectionStart, e = ta.selectionEnd;
+    const before = scriptContent.substring(0, s), after = scriptContent.substring(e);
+    const nl1 = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+    const nl2 = after.length > 0 && !after.startsWith('\n') ? '\n' : '';
+    const ins = nl1 + text + nl2;
+    setScriptContent(before + ins + after);
+    setHasUnsavedChanges(true);
+    setTimeout(() => { ta.focus(); ta.setSelectionRange(s + ins.length, s + ins.length); }, 10);
+  }, [scriptContent]);
+
   const handleSave = useCallback(async () => {
     if (!episodeId) return;
-    setIsSaving(true);
-    setSaveStatus('Saving...');
-    setError(null);
-
+    setIsSaving(true); setSaveStatus('Saving...'); setError(null);
     try {
-      await api.put(`/api/v1/episodes/${episodeId}`, {
-        script_content: scriptContent,
-      });
-      setSaveStatus('Saved ✓');
-      setHasUnsavedChanges(false);
+      await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptContent });
+      setSaveStatus('Saved ✓'); setHasUnsavedChanges(false);
       if (onScriptSaved) onScriptSaved(scriptContent);
       setTimeout(() => setSaveStatus(''), 3000);
     } catch (err) {
-      setSaveStatus('');
-      setError('Failed to save: ' + (err.response?.data?.message || err.message));
-    } finally {
-      setIsSaving(false);
-    }
+      setSaveStatus(''); setError('Failed to save: ' + (err.response?.data?.message || err.message));
+    } finally { setIsSaving(false); }
   }, [episodeId, scriptContent, onScriptSaved]);
 
-  // Ctrl+S to save
   useEffect(() => {
-    const handleKey = (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        handleSave();
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
+    const h = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSave(); } };
+    window.addEventListener('keydown', h);
+    return () => window.removeEventListener('keydown', h);
   }, [handleSave]);
 
-  // ─── ANALYZE SCRIPT ───
   const handleAnalyze = useCallback(async () => {
-    if (!scriptContent.trim()) {
-      setError('Write or paste a script first');
-      return;
-    }
-
-    setIsAnalyzing(true);
-    setError(null);
-
+    if (!scriptContent.trim()) { setError('Write or paste a script first'); return; }
+    setIsAnalyzing(true); setError(null);
     try {
-      // Save first
+      let c = normalizeScript(scriptContent);
+      if (!/##\s*BEAT:/i.test(c)) c = inferBeats(c);
       if (episodeId && hasUnsavedChanges) {
-        await api.put(`/api/v1/episodes/${episodeId}`, {
-          script_content: scriptContent,
-        });
+        await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptContent });
         setHasUnsavedChanges(false);
       }
-
-      // Parse
-      const res = await api.post('/api/v1/scripts/parse', {
-        content: scriptContent,
-        title: episode?.title,
-      });
-
-      if (res.data.success) {
-        setAnalysis(res.data.scenePlan);
-        setShowRightPanel(true);
-      } else {
-        setError('Analysis failed: ' + (res.data.error || 'Unknown error'));
-      }
+      const res = await api.post('/api/v1/scripts/parse', { content: c, title: episode?.title });
+      if (res.data.success) { setAnalysis(res.data.scenePlan); setShowRightPanel(true); }
+      else setError('Analysis failed: ' + (res.data.error || 'Unknown'));
     } catch (err) {
       setError('Analysis failed: ' + (err.response?.data?.error || err.message));
-    } finally {
-      setIsAnalyzing(false);
-    }
+    } finally { setIsAnalyzing(false); }
   }, [scriptContent, episodeId, episode, hasUnsavedChanges]);
 
-  // ─── SEND TO SCENE COMPOSER ───
   const handleSendToSceneComposer = useCallback(async () => {
     if (!episodeId || !analysis) return;
-
     try {
-      const res = await api.post(`/api/v1/episodes/${episodeId}/apply-scene-plan`, {
-        content: scriptContent,
-        clearExisting: true,
-      });
-
-      if (res.data.success) {
-        alert(`✅ ${res.data.scenesCreated} scenes created! Open Scene Composer to build visuals.`);
-      }
-    } catch (err) {
-      setError('Failed to create scenes: ' + (err.response?.data?.error || err.message));
-    }
+      let c = normalizeScript(scriptContent);
+      if (!/##\s*BEAT:/i.test(c)) c = inferBeats(c);
+      const res = await api.post(`/api/v1/episodes/${episodeId}/apply-scene-plan`, { content: c, clearExisting: true });
+      if (res.data.success) alert(`✅ ${res.data.scenesCreated} scenes created! Open Scene Composer to build visuals.`);
+    } catch (err) { setError('Failed: ' + (err.response?.data?.error || err.message)); }
   }, [episodeId, analysis, scriptContent]);
 
-  // ─── AUTOFIX ───
-  const handleAutofix = useCallback((warning) => {
-    if (!warning.autofix?.available) return;
-
-    if (warning.autofix.action === 'insert_voice_activate' && warning.at?.line) {
+  const handleAutofix = useCallback((w) => {
+    if (!w.autofix?.available) return;
+    if (w.autofix.action === 'insert_voice_activate' && w.at?.line) {
       const lines = scriptContent.split('\n');
-      const insertIndex = warning.at.line - 2; // Insert before the Lala line
-      lines.splice(Math.max(0, insertIndex), 0, '[UI:CLICK VoiceIcon]', '[UI:VOICE_ACTIVATE Lala]');
-      setScriptContent(lines.join('\n'));
-      setHasUnsavedChanges(true);
+      lines.splice(Math.max(0, w.at.line - 2), 0, '[UI:CLICK VoiceIcon]', '[UI:VOICE_ACTIVATE Lala]');
+      setScriptContent(lines.join('\n')); setHasUnsavedChanges(true);
     }
-
-    if (warning.autofix.action === 'insert_login_template') {
-      const loginBlock = TEMPLATES.login.text;
+    if (w.autofix.action === 'insert_login_template') {
+      const lb = '[UI:OPEN LoginWindow]\n[UI:TYPE Username "JustAWomanInHerPrime"]\n[UI:TYPE Password "••••••"]\n[UI:CLICK LoginButton]\n[UI:SFX LoginSuccessDing]';
       if (!scriptContent.includes('LoginWindow')) {
-        // Insert at the top or after first beat header
-        const firstBeatIdx = scriptContent.indexOf('## BEAT:');
-        if (firstBeatIdx >= 0) {
-          const nextLineIdx = scriptContent.indexOf('\n', firstBeatIdx) + 1;
-          const newContent = scriptContent.substring(0, nextLineIdx) + loginBlock + '\n' + scriptContent.substring(nextLineIdx);
-          setScriptContent(newContent);
-        } else {
-          setScriptContent(loginBlock + '\n' + scriptContent);
-        }
+        const idx = scriptContent.indexOf('## BEAT:');
+        if (idx >= 0) { const nl = scriptContent.indexOf('\n', idx) + 1; setScriptContent(scriptContent.substring(0, nl) + lb + '\n' + scriptContent.substring(nl)); }
+        else setScriptContent(lb + '\n\n' + scriptContent);
         setHasUnsavedChanges(true);
       }
     }
   }, [scriptContent]);
 
-  // ─── LINE + WORD COUNT ───
   const lineCount = scriptContent.split('\n').length;
   const wordCount = scriptContent.trim() ? scriptContent.trim().split(/\s+/).length : 0;
   const beatCount = (scriptContent.match(/##\s*BEAT:/gi) || []).length;
 
   return (
-    <div style={styles.container}>
-      {/* ─── HEADER ─── */}
-      <div style={styles.header}>
-        <div style={styles.headerLeft}>
-          <span style={styles.headerIcon}>📜</span>
-          <h2 style={styles.headerTitle}>Script</h2>
-          <span style={styles.headerSub}>Full episode script editor</span>
+    <div style={S.container}>
+      <div style={S.header}>
+        <div style={S.headerLeft}>
+          <span style={{ fontSize: 20 }}>📜</span>
+          <h2 style={S.headerTitle}>Script</h2>
+          <span style={S.headerSub}>Full episode script editor</span>
         </div>
-        <div style={styles.headerRight}>
-          {saveStatus && <span style={styles.saveStatus}>{saveStatus}</span>}
-          {hasUnsavedChanges && <span style={styles.unsaved}>● Unsaved</span>}
-          <button onClick={handleSave} disabled={isSaving} style={styles.saveBtn}>
-            💾 Save{isSaving ? '...' : ''} <span style={styles.shortcut}>Ctrl+S</span>
+        <div style={S.headerRight}>
+          {saveStatus && <span style={S.saveStatus}>{saveStatus}</span>}
+          {hasUnsavedChanges && <span style={S.unsaved}>● Unsaved</span>}
+          <button onClick={handleFormatScript} style={S.formatBtn} title="Auto-format: splits speakers + tags onto separate lines, normalizes Me: → Prime:, infers beat headers">
+            ✨ Format Script
           </button>
-          <button onClick={handleAnalyze} disabled={isAnalyzing} style={styles.analyzeBtn}>
+          <button onClick={handleSave} disabled={isSaving} style={S.saveBtn}>
+            💾 Save <span style={S.shortcut}>Ctrl+S</span>
+          </button>
+          <button onClick={handleAnalyze} disabled={isAnalyzing} style={S.analyzeBtn}>
             {isAnalyzing ? '⏳ Analyzing...' : '🔍 Analyze Script'}
           </button>
         </div>
       </div>
 
       {error && (
-        <div style={styles.errorBanner}>
-          ⚠️ {error}
-          <button onClick={() => setError(null)} style={styles.errorClose}>✕</button>
-        </div>
+        <div style={S.errorBanner}>⚠️ {error}<button onClick={() => setError(null)} style={S.errorClose}>✕</button></div>
       )}
 
-      {/* ─── TWO-PANE LAYOUT ─── */}
-      <div style={styles.twoPane}>
-        {/* ─── LEFT: EDITOR ─── */}
-        <div style={{ ...styles.leftPane, flex: showRightPanel ? '1 1 55%' : '1 1 100%' }}>
-          
-          {/* Toolbar */}
-          <div style={styles.toolbar}>
-            <div style={styles.toolbarTabs}>
-              <button
-                onClick={() => setShowToolbar('beats')}
-                style={showToolbar === 'beats' ? styles.toolbarTabActive : styles.toolbarTab}
-              >
-                🎬 Beats
-              </button>
-              <button
-                onClick={() => setShowToolbar('ui')}
-                style={showToolbar === 'ui' ? styles.toolbarTabActive : styles.toolbarTab}
-              >
-                📱 UI Tags
-              </button>
-              <button
-                onClick={() => setShowToolbar('templates')}
-                style={showToolbar === 'templates' ? styles.toolbarTabActive : styles.toolbarTab}
-              >
-                📋 Templates
-              </button>
+      <div style={S.twoPane}>
+        <div style={{ ...S.leftPane, flex: showRightPanel ? '1 1 55%' : '1 1 100%' }}>
+          <div style={S.toolbar}>
+            <div style={S.toolbarTabs}>
+              {['beats', 'ui', 'templates'].map(tab => (
+                <button key={tab} onClick={() => setShowToolbar(tab)} style={showToolbar === tab ? S.toolbarTabActive : S.toolbarTab}>
+                  {tab === 'beats' ? '🎬 Beats' : tab === 'ui' ? '📱 UI Tags' : '📋 Templates'}
+                </button>
+              ))}
             </div>
-
-            <div style={styles.toolbarContent}>
+            <div style={S.toolbarContent}>
               {showToolbar === 'beats' && (
-                <div style={styles.toolbarRow}>
-                  {BEAT_OPTIONS.map(beat => (
-                    <button
-                      key={beat.value}
-                      onClick={() => insertAtCursor(`\n## BEAT: ${beat.value}\n`)}
-                      style={styles.toolbarBtn}
-                      title={`Insert ${beat.label} beat header`}
-                    >
-                      {beat.label}
-                    </button>
+                <div style={S.toolbarRow}>
+                  {BEAT_OPTIONS.map(b => (
+                    <button key={b.value} onClick={() => insertAtCursor(`\n## BEAT: ${b.value}\n`)} style={S.toolbarBtn}>{b.label}</button>
                   ))}
                 </div>
               )}
-
               {showToolbar === 'ui' && (
-                <div style={styles.toolbarRow}>
-                  {UI_TAGS.map(tag => (
-                    <button
-                      key={tag.label}
-                      onClick={() => insertAtCursor(tag.insert)}
-                      style={styles.toolbarBtn}
-                      title={`Insert ${tag.insert}`}
-                    >
-                      {tag.label}
-                    </button>
+                <div style={S.toolbarRow}>
+                  {UI_TAGS.map(t => (
+                    <button key={t.label} onClick={() => insertAtCursor(t.insert)} style={S.toolbarBtn}>{t.label}</button>
                   ))}
-                  <button
-                    onClick={() => insertAtCursor('[MAIL: type=invite from="NAME" prestige=4 cost=150]')}
-                    style={styles.toolbarBtn}
-                  >
-                    📨 Mail Tag
-                  </button>
-                  <button
-                    onClick={() => insertAtCursor('[STAT: coins +100]')}
-                    style={styles.toolbarBtn}
-                  >
-                    📊 Stat Tag
-                  </button>
                 </div>
               )}
-
               {showToolbar === 'templates' && (
-                <div style={styles.toolbarRow}>
-                  {Object.entries(TEMPLATES).map(([key, tmpl]) => (
-                    <button
-                      key={key}
-                      onClick={() => insertAtCursor(tmpl.text)}
-                      style={styles.templateBtn}
-                    >
-                      {tmpl.label}
-                    </button>
+                <div style={S.toolbarRow}>
+                  {Object.entries(TEMPLATES).map(([k, t]) => (
+                    <button key={k} onClick={() => insertAtCursor(t.text)} style={S.templateBtn}>{t.label}</button>
                   ))}
                 </div>
               )}
             </div>
           </div>
 
-          {/* Editor */}
           <textarea
             ref={textareaRef}
             value={scriptContent}
-            onChange={(e) => {
-              setScriptContent(e.target.value);
-              setHasUnsavedChanges(true);
-            }}
-            placeholder={`Paste your full script here, or use the toolbar to build one.
-
-Example:
-
-## BEAT: OPENING_RITUAL
-[UI:OPEN LoginWindow]
-[UI:TYPE Username "JustAWomanInHerPrime"]
-[UI:CLICK LoginButton]
-Prime: "Welcome back, besties!"
-
-## BEAT: INTERRUPTION #1
-[UI:NOTIFICATION MailDing]
-Prime: "Oh — Lala's got mail."
-[UI:CLICK MailIcon]
-[UI:OPEN MailPanel]
-
-## BEAT: REVEAL #1
-Prime: "Bestie. MAISON. BELLE."
-[UI:CLICK VoiceIcon]
-[UI:VOICE_ACTIVATE Lala]
-Lala: "This is my moment!"
-
-## BEAT: TRANSFORMATION
-[UI:DISPLAY ToDoListOverlay]
-[UI:OPEN ClosetCategory Outfit]
-[UI:SCROLL ClosetItems x5]
-[UI:ADD Outfit SoftPinkCorsetDress]
-[UI:CHECK_ITEM Checklist:Outfit]
-
-## BEAT: CLIFFHANGER
-Lala: "Bestie… this is just the beginning."`}
-            style={styles.textarea}
+            onChange={(e) => { setScriptContent(e.target.value); setHasUnsavedChanges(true); }}
+            placeholder={`Paste your full script here, or use the toolbar above.\n\nTip: Paste messy scripts → click "✨ Format Script" to auto-organize.\n\nExample:\n\n## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me — Parisian tea party edition!"\n\n## BEAT: CREATOR_WELCOME\n[UI:OPEN LoginWindow]\n[UI:CLICK LoginButton]\nPrime: "Welcome back, besties!"\n\n## BEAT: INTERRUPTION #1\n[UI:NOTIFICATION MailDing]\nPrime: "Oh — Lala's got mail."\n[UI:CLICK MailIcon]\n[UI:OPEN MailPanel]`}
+            style={S.textarea}
             spellCheck={false}
           />
 
-          {/* Status bar */}
-          <div style={styles.statusBar}>
+          <div style={S.statusBar}>
             <span>{lineCount} lines</span>
             <span>{wordCount} words</span>
             <span>{beatCount} beats</span>
-            <span>~{Math.ceil(wordCount / 2.2)}s dialogue</span>
+            <span>~{Math.ceil(wordCount / 2.2)}s est.</span>
           </div>
         </div>
 
-        {/* ─── RIGHT: ANALYSIS PANEL ─── */}
         {showRightPanel && analysis && (
-          <div style={styles.rightPane}>
-            <div style={styles.rightHeader}>
-              <h3 style={styles.rightTitle}>📊 Analysis</h3>
-              <button onClick={() => setShowRightPanel(false)} style={styles.closePanel}>✕</button>
+          <div style={S.rightPane}>
+            <div style={S.rightHeader}>
+              <h3 style={S.rightTitle}>📊 Analysis</h3>
+              <button onClick={() => setShowRightPanel(false)} style={S.closePanel}>✕</button>
             </div>
 
-            {/* Stats Overview */}
-            <div style={styles.statsGrid}>
-              <div style={styles.statCard}>
-                <div style={styles.statValue}>{analysis.totalScenes || analysis.metadata?.totalBeats}</div>
-                <div style={styles.statLabel}>Beats</div>
-              </div>
-              <div style={styles.statCard}>
-                <div style={styles.statValue}>{analysis.formattedDuration || analysis.metadata?.formattedDuration}</div>
-                <div style={styles.statLabel}>Duration</div>
-              </div>
-              <div style={styles.statCard}>
-                <div style={styles.statValue}>{analysis.metadata?.totalDialogueLines || 0}</div>
-                <div style={styles.statLabel}>Dialogue</div>
-              </div>
-              <div style={styles.statCard}>
-                <div style={styles.statValue}>{analysis.metadata?.totalUiActions || analysis.ui_actions?.length || 0}</div>
-                <div style={styles.statLabel}>UI Actions</div>
-              </div>
+            <div style={S.statsGrid}>
+              {[
+                { v: analysis.totalScenes || analysis.metadata?.totalBeats || 0, l: 'Beats' },
+                { v: analysis.formattedDuration || analysis.metadata?.formattedDuration || '0s', l: 'Duration' },
+                { v: analysis.metadata?.totalDialogueLines || 0, l: 'Dialogue' },
+                { v: analysis.metadata?.totalUiActions || analysis.ui_actions?.length || 0, l: 'UI Actions' },
+              ].map((s, i) => (
+                <div key={i} style={S.statCard}><div style={S.statValue}>{s.v}</div><div style={S.statLabel}>{s.l}</div></div>
+              ))}
             </div>
 
-            {/* Warnings */}
-            {analysis.warnings && analysis.warnings.length > 0 && (
-              <div style={styles.section}>
-                <h4 style={styles.sectionTitle}>⚠️ Warnings</h4>
-                {analysis.warnings.map((w, i) => (
-                  <div key={i} style={styles.warningCard}>
-                    <div style={styles.warningText}>{w.message}</div>
-                    {w.autofix?.available && (
-                      <button
-                        onClick={() => handleAutofix(w)}
-                        style={styles.autofixBtn}
-                      >
-                        🔧 Auto-fix
-                      </button>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {/* Beat Structure */}
-            <div style={styles.section}>
-              <h4 style={styles.sectionTitle}>🎬 Beat Structure</h4>
-              {(analysis.beats || analysis.scenes || []).map((beat, i) => {
-                const confidence = beat.confidence || 'confident';
-                const icon = confidence === 'confident' ? '✓' : confidence === 'review' ? '⚠' : '❌';
-                return (
-                  <div key={i} style={styles.beatCard}>
-                    <div style={styles.beatHeader}>
-                      <span style={styles.beatConfidence(confidence)}>{icon}</span>
-                      <span style={styles.beatName}>{beat.title || beat.type}</span>
-                      <span style={styles.beatDuration}>{beat.duration_s || beat.duration_seconds}s</span>
+            <div style={S.rightScroll}>
+              {analysis.warnings?.length > 0 && (
+                <div style={S.section}>
+                  <h4 style={S.sectionTitle}>⚠️ Warnings</h4>
+                  {analysis.warnings.map((w, i) => (
+                    <div key={i} style={S.warningCard}>
+                      <div style={S.warningText}>{w.message}</div>
+                      {w.autofix?.available && <button onClick={() => handleAutofix(w)} style={S.autofixBtn}>🔧 Auto-fix</button>}
                     </div>
-                    <div style={styles.beatMeta}>
-                      {(beat.speakers || beat.characters_expected || []).map((s, j) => {
-                        const name = typeof s === 'string' ? s : s.name;
-                        const emoji = typeof s === 'string' ? '' : (s.emoji || '');
-                        return (
-                          <span key={j} style={styles.speakerBadge}>{emoji} {name}</span>
-                        );
-                      })}
-                      {beat.dialogue_count > 0 && (
-                        <span style={styles.dialogueBadge}>💬 {beat.dialogue_count}</span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  ))}
+                </div>
+              )}
 
-            {/* UI Actions by Beat */}
-            {(analysis.ui_actions || []).length > 0 && (
-              <div style={styles.section}>
-                <h4 style={styles.sectionTitle}>📱 UI Actions</h4>
-                {(analysis.beats || analysis.scenes || []).map((beat, i) => {
-                  const beatActions = (analysis.ui_actions || []).filter(
-                    a => a.beat_temp_id === beat.temp_id
-                  );
-                  if (beatActions.length === 0) return null;
+              <div style={S.section}>
+                <h4 style={S.sectionTitle}>🎬 Beat Structure</h4>
+                {(analysis.beats || analysis.scenes || []).map((b, i) => {
+                  const c = b.confidence || 'confident';
+                  const ic = c === 'confident' ? '✓' : c === 'review' ? '⚠' : '❌';
+                  const cl = c === 'confident' ? '#16a34a' : c === 'review' ? '#ca8a04' : '#dc2626';
                   return (
-                    <div key={i} style={styles.uiGroup}>
-                      <div style={styles.uiGroupTitle}>{beat.title || beat.type}</div>
-                      {beatActions.map((a, j) => (
-                        <div key={j} style={styles.uiAction}>
-                          <span style={styles.uiType}>{a.type.toUpperCase()}</span>
-                          <span style={styles.uiTarget}>{a.target}</span>
-                          <span style={styles.uiDuration}>{a.duration_s}s</span>
-                        </div>
-                      ))}
+                    <div key={i} style={S.beatCard}>
+                      <div style={S.beatRow}>
+                        <span style={{ color: cl, fontWeight: 700, fontSize: 13 }}>{ic}</span>
+                        <span style={S.beatName}>{b.title || b.type}</span>
+                        <span style={S.beatDur}>{b.duration_s || b.duration_seconds}s</span>
+                      </div>
+                      <div style={S.beatMeta}>
+                        {(b.speakers || b.characters_expected || []).map((sp, j) => {
+                          const n = typeof sp === 'string' ? sp : sp.name;
+                          const e = typeof sp === 'string' ? '' : (sp.emoji || '');
+                          return <span key={j} style={S.badge}>{e} {n}</span>;
+                        })}
+                        {b.dialogue_count > 0 && <span style={S.dimBadge}>💬 {b.dialogue_count}</span>}
+                      </div>
                     </div>
                   );
                 })}
               </div>
-            )}
 
-            {/* Action Buttons */}
-            <div style={styles.actionButtons}>
-              <button onClick={handleSendToSceneComposer} style={styles.sceneComposerBtn}>
-                🎬 Send to Scene Composer
-              </button>
-              <button onClick={handleAnalyze} style={styles.reanalyzeBtn}>
-                🔄 Re-analyze
-              </button>
+              {(analysis.ui_actions || []).length > 0 && (
+                <div style={S.section}>
+                  <h4 style={S.sectionTitle}>📱 UI Actions</h4>
+                  {(analysis.beats || analysis.scenes || []).map((b, i) => {
+                    const acts = (analysis.ui_actions || []).filter(a => a.beat_temp_id === b.temp_id);
+                    if (!acts.length) return null;
+                    return (
+                      <div key={i} style={{ marginBottom: 10 }}>
+                        <div style={S.uiGroupTitle}>{b.title || b.type}</div>
+                        {acts.map((a, j) => (
+                          <div key={j} style={S.uiRow}>
+                            <span style={S.uiType}>{a.type.toUpperCase()}</span>
+                            <span style={S.uiTarget}>{a.target}</span>
+                            <span style={S.uiDur}>{a.duration_s}s</span>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div style={S.actions}>
+              <button onClick={handleSendToSceneComposer} style={S.sceneBtn}>🎬 Send to Scene Composer</button>
+              <button onClick={handleAnalyze} style={S.reBtn}>🔄 Re-analyze</button>
             </div>
           </div>
         )}
@@ -583,360 +457,63 @@ Lala: "Bestie… this is just the beginning."`}
   );
 }
 
-
-// ─── STYLES ───
-
-const styles = {
-  container: {
-    display: 'flex',
-    flexDirection: 'column',
-    height: '100%',
-    minHeight: '600px',
-    background: '#0f0f19',
-    borderRadius: '12px',
-    overflow: 'hidden',
-  },
-  header: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '12px 16px',
-    borderBottom: '1px solid rgba(255,255,255,0.08)',
-    background: 'rgba(255,255,255,0.02)',
-    flexWrap: 'wrap',
-    gap: '8px',
-  },
-  headerLeft: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  headerIcon: { fontSize: '20px' },
-  headerTitle: { color: '#fff', fontSize: '16px', fontWeight: 700, margin: 0 },
-  headerSub: { color: 'rgba(255,255,255,0.4)', fontSize: '13px' },
-  headerRight: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    flexWrap: 'wrap',
-  },
-  saveStatus: { color: '#22c55e', fontSize: '12px', fontWeight: 600 },
-  unsaved: { color: '#eab308', fontSize: '12px' },
-  saveBtn: {
-    padding: '6px 14px',
-    background: 'rgba(255,255,255,0.08)',
-    border: '1px solid rgba(255,255,255,0.15)',
-    borderRadius: '6px',
-    color: '#fff',
-    fontSize: '13px',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-  },
-  shortcut: {
-    fontSize: '10px',
-    opacity: 0.5,
-    background: 'rgba(255,255,255,0.1)',
-    padding: '1px 4px',
-    borderRadius: '3px',
-  },
-  analyzeBtn: {
-    padding: '6px 16px',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    border: 'none',
-    borderRadius: '6px',
-    color: '#fff',
-    fontSize: '13px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  errorBanner: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 16px',
-    background: 'rgba(255, 75, 75, 0.1)',
-    borderBottom: '1px solid rgba(255, 75, 75, 0.2)',
-    color: '#ff4b4b',
-    fontSize: '13px',
-  },
-  errorClose: {
-    background: 'none',
-    border: 'none',
-    color: '#ff4b4b',
-    cursor: 'pointer',
-    fontSize: '14px',
-  },
-  twoPane: {
-    display: 'flex',
-    flex: 1,
-    overflow: 'hidden',
-  },
-  leftPane: {
-    display: 'flex',
-    flexDirection: 'column',
-    minWidth: 0,
-    borderRight: '1px solid rgba(255,255,255,0.06)',
-  },
-
-  // Toolbar
-  toolbar: {
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-    background: 'rgba(255,255,255,0.02)',
-  },
-  toolbarTabs: {
-    display: 'flex',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-  },
-  toolbarTab: {
-    padding: '6px 14px',
-    background: 'transparent',
-    border: 'none',
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: '12px',
-    cursor: 'pointer',
-    borderBottom: '2px solid transparent',
-  },
-  toolbarTabActive: {
-    padding: '6px 14px',
-    background: 'transparent',
-    border: 'none',
-    color: '#667eea',
-    fontSize: '12px',
-    cursor: 'pointer',
-    fontWeight: 600,
-    borderBottom: '2px solid #667eea',
-  },
-  toolbarContent: {
-    padding: '6px 8px',
-    maxHeight: '80px',
-    overflowY: 'auto',
-  },
-  toolbarRow: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-  },
-  toolbarBtn: {
-    padding: '4px 8px',
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.1)',
-    borderRadius: '4px',
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: '11px',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-  },
-  templateBtn: {
-    padding: '6px 12px',
-    background: 'rgba(102, 126, 234, 0.1)',
-    border: '1px solid rgba(102, 126, 234, 0.25)',
-    borderRadius: '6px',
-    color: '#667eea',
-    fontSize: '12px',
-    fontWeight: 500,
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-  },
-
-  // Textarea
-  textarea: {
-    flex: 1,
-    width: '100%',
-    background: 'transparent',
-    border: 'none',
-    color: '#e2e8f0',
-    fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace",
-    fontSize: '13px',
-    lineHeight: '1.6',
-    padding: '16px',
-    resize: 'none',
-    outline: 'none',
-    boxSizing: 'border-box',
-    tabSize: 2,
-  },
-
-  // Status bar
-  statusBar: {
-    display: 'flex',
-    gap: '16px',
-    padding: '6px 16px',
-    borderTop: '1px solid rgba(255,255,255,0.06)',
-    background: 'rgba(255,255,255,0.02)',
-    color: 'rgba(255,255,255,0.35)',
-    fontSize: '11px',
-  },
-
-  // Right pane
-  rightPane: {
-    flex: '0 0 45%',
-    maxWidth: '45%',
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    background: 'rgba(255,255,255,0.02)',
-  },
-  rightHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '10px 14px',
-    borderBottom: '1px solid rgba(255,255,255,0.06)',
-  },
-  rightTitle: { color: '#fff', fontSize: '14px', fontWeight: 700, margin: 0 },
-  closePanel: {
-    background: 'none',
-    border: 'none',
-    color: 'rgba(255,255,255,0.4)',
-    fontSize: '16px',
-    cursor: 'pointer',
-  },
-
-  // Stats grid
-  statsGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(4, 1fr)',
-    gap: '6px',
-    padding: '10px 14px',
-  },
-  statCard: {
-    background: 'rgba(255,255,255,0.04)',
-    borderRadius: '8px',
-    padding: '8px',
-    textAlign: 'center',
-  },
-  statValue: { color: '#fff', fontSize: '18px', fontWeight: 700 },
-  statLabel: { color: 'rgba(255,255,255,0.4)', fontSize: '10px', marginTop: '2px', textTransform: 'uppercase', letterSpacing: '0.5px' },
-
-  // Sections
-  section: {
-    padding: '10px 14px',
-    borderTop: '1px solid rgba(255,255,255,0.04)',
-    overflowY: 'auto',
-    flex: 1,
-  },
-  sectionTitle: { color: 'rgba(255,255,255,0.6)', fontSize: '12px', fontWeight: 600, margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' },
-
-  // Beat cards
-  beatCard: {
-    background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.06)',
-    borderRadius: '6px',
-    padding: '8px 10px',
-    marginBottom: '4px',
-  },
-  beatHeader: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-  },
-  beatConfidence: (level) => ({
-    fontSize: '12px',
-    color: level === 'confident' ? '#22c55e' : level === 'review' ? '#eab308' : '#ff4b4b',
-    fontWeight: 700,
-  }),
-  beatName: { color: '#fff', fontSize: '13px', fontWeight: 600, flex: 1 },
-  beatDuration: { color: 'rgba(255,255,255,0.5)', fontSize: '12px' },
-  beatMeta: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-    marginTop: '4px',
-  },
-  speakerBadge: {
-    background: 'rgba(102, 126, 234, 0.12)',
-    border: '1px solid rgba(102, 126, 234, 0.2)',
-    borderRadius: '4px',
-    padding: '1px 6px',
-    fontSize: '10px',
-    color: 'rgba(255,255,255,0.6)',
-  },
-  dialogueBadge: {
-    padding: '1px 6px',
-    fontSize: '10px',
-    color: 'rgba(255,255,255,0.4)',
-  },
-
-  // Warnings
-  warningCard: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 10px',
-    background: 'rgba(234, 179, 8, 0.08)',
-    border: '1px solid rgba(234, 179, 8, 0.2)',
-    borderRadius: '6px',
-    marginBottom: '4px',
-  },
-  warningText: { color: '#eab308', fontSize: '12px', flex: 1 },
-  autofixBtn: {
-    padding: '3px 8px',
-    background: 'rgba(234, 179, 8, 0.15)',
-    border: '1px solid rgba(234, 179, 8, 0.3)',
-    borderRadius: '4px',
-    color: '#eab308',
-    fontSize: '11px',
-    cursor: 'pointer',
-    whiteSpace: 'nowrap',
-    marginLeft: '8px',
-  },
-
-  // UI Actions
-  uiGroup: { marginBottom: '8px' },
-  uiGroupTitle: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: '11px',
-    fontWeight: 600,
-    marginBottom: '4px',
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-  },
-  uiAction: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '3px 8px',
-    marginBottom: '2px',
-    fontSize: '12px',
-  },
-  uiType: {
-    color: '#22c55e',
-    fontFamily: 'monospace',
-    fontSize: '11px',
-    fontWeight: 600,
-    minWidth: '90px',
-  },
-  uiTarget: { color: 'rgba(255,255,255,0.7)', flex: 1 },
-  uiDuration: { color: 'rgba(255,255,255,0.3)', fontSize: '11px' },
-
-  // Action buttons
-  actionButtons: {
-    padding: '12px 14px',
-    borderTop: '1px solid rgba(255,255,255,0.06)',
-    display: 'flex',
-    gap: '8px',
-  },
-  sceneComposerBtn: {
-    flex: 1,
-    padding: '10px',
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    border: 'none',
-    borderRadius: '8px',
-    color: '#fff',
-    fontSize: '13px',
-    fontWeight: 600,
-    cursor: 'pointer',
-  },
-  reanalyzeBtn: {
-    padding: '10px 16px',
-    background: 'rgba(255,255,255,0.06)',
-    border: '1px solid rgba(255,255,255,0.12)',
-    borderRadius: '8px',
-    color: 'rgba(255,255,255,0.7)',
-    fontSize: '13px',
-    cursor: 'pointer',
-  },
+// ─── LIGHT THEME STYLES ───
+const S = {
+  container: { display: 'flex', flexDirection: 'column', height: '100%', minHeight: 600, background: '#fff', borderRadius: 12, border: '1px solid #e2e8f0', overflow: 'hidden' },
+  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 16px', borderBottom: '1px solid #e2e8f0', background: '#fafbfc', flexWrap: 'wrap', gap: 8 },
+  headerLeft: { display: 'flex', alignItems: 'center', gap: 8 },
+  headerTitle: { color: '#1a1a2e', fontSize: 16, fontWeight: 700, margin: 0 },
+  headerSub: { color: '#94a3b8', fontSize: 13 },
+  headerRight: { display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  saveStatus: { color: '#16a34a', fontSize: 12, fontWeight: 600 },
+  unsaved: { color: '#ca8a04', fontSize: 12 },
+  formatBtn: { padding: '6px 12px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 6, color: '#92400e', fontSize: 12, fontWeight: 600, cursor: 'pointer' },
+  saveBtn: { padding: '6px 14px', background: '#f1f5f9', border: '1px solid #cbd5e1', borderRadius: 6, color: '#334155', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 },
+  shortcut: { fontSize: 10, opacity: 0.5, background: '#e2e8f0', padding: '1px 4px', borderRadius: 3 },
+  analyzeBtn: { padding: '6px 16px', background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', border: 'none', borderRadius: 6, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  errorBanner: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 16px', background: '#fef2f2', borderBottom: '1px solid #fecaca', color: '#dc2626', fontSize: 13 },
+  errorClose: { background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 },
+  twoPane: { display: 'flex', flex: 1, overflow: 'hidden' },
+  leftPane: { display: 'flex', flexDirection: 'column', minWidth: 0, borderRight: '1px solid #e2e8f0' },
+  toolbar: { borderBottom: '1px solid #e2e8f0', background: '#fafbfc' },
+  toolbarTabs: { display: 'flex', borderBottom: '1px solid #e2e8f0' },
+  toolbarTab: { padding: '6px 14px', background: 'transparent', border: 'none', color: '#94a3b8', fontSize: 12, cursor: 'pointer', borderBottom: '2px solid transparent' },
+  toolbarTabActive: { padding: '6px 14px', background: 'transparent', border: 'none', color: '#6366f1', fontSize: 12, cursor: 'pointer', fontWeight: 600, borderBottom: '2px solid #6366f1' },
+  toolbarContent: { padding: '6px 8px', maxHeight: 80, overflowY: 'auto' },
+  toolbarRow: { display: 'flex', flexWrap: 'wrap', gap: 4 },
+  toolbarBtn: { padding: '4px 8px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 4, color: '#475569', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap' },
+  templateBtn: { padding: '6px 12px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, color: '#4338ca', fontSize: 12, fontWeight: 500, cursor: 'pointer', whiteSpace: 'nowrap' },
+  textarea: { flex: 1, width: '100%', background: '#fff', border: 'none', color: '#1e293b', fontFamily: "'JetBrains Mono', 'Fira Code', 'Consolas', monospace", fontSize: 13, lineHeight: '1.7', padding: 16, resize: 'none', outline: 'none', boxSizing: 'border-box' },
+  statusBar: { display: 'flex', gap: 16, padding: '6px 16px', borderTop: '1px solid #e2e8f0', background: '#fafbfc', color: '#94a3b8', fontSize: 11 },
+  rightPane: { flex: '0 0 45%', maxWidth: '45%', display: 'flex', flexDirection: 'column', overflow: 'hidden', background: '#fafbfc' },
+  rightHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', borderBottom: '1px solid #e2e8f0' },
+  rightTitle: { color: '#1a1a2e', fontSize: 14, fontWeight: 700, margin: 0 },
+  closePanel: { background: 'none', border: 'none', color: '#94a3b8', fontSize: 16, cursor: 'pointer' },
+  statsGrid: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, padding: '10px 14px' },
+  statCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 8, padding: 8, textAlign: 'center' },
+  statValue: { color: '#1a1a2e', fontSize: 18, fontWeight: 700 },
+  statLabel: { color: '#94a3b8', fontSize: 10, marginTop: 2, textTransform: 'uppercase', letterSpacing: '0.5px' },
+  rightScroll: { flex: 1, overflowY: 'auto' },
+  section: { padding: '10px 14px', borderTop: '1px solid #f1f5f9' },
+  sectionTitle: { color: '#64748b', fontSize: 12, fontWeight: 600, margin: '0 0 8px 0', textTransform: 'uppercase', letterSpacing: '0.5px' },
+  beatCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, padding: '8px 10px', marginBottom: 4 },
+  beatRow: { display: 'flex', alignItems: 'center', gap: 8 },
+  beatName: { color: '#1a1a2e', fontSize: 13, fontWeight: 600, flex: 1 },
+  beatDur: { color: '#94a3b8', fontSize: 12 },
+  beatMeta: { display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 4 },
+  badge: { background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, padding: '1px 6px', fontSize: 10, color: '#4338ca' },
+  dimBadge: { padding: '1px 6px', fontSize: 10, color: '#94a3b8' },
+  warningCard: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, marginBottom: 4 },
+  warningText: { color: '#92400e', fontSize: 12, flex: 1 },
+  autofixBtn: { padding: '3px 8px', background: '#fef3c7', border: '1px solid #fbbf24', borderRadius: 4, color: '#92400e', fontSize: 11, cursor: 'pointer', whiteSpace: 'nowrap', marginLeft: 8 },
+  uiGroupTitle: { color: '#64748b', fontSize: 11, fontWeight: 600, marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.5px' },
+  uiRow: { display: 'flex', alignItems: 'center', gap: 8, padding: '3px 8px', marginBottom: 2, fontSize: 12 },
+  uiType: { color: '#16a34a', fontFamily: 'monospace', fontSize: 11, fontWeight: 600, minWidth: 100 },
+  uiTarget: { color: '#475569', flex: 1 },
+  uiDur: { color: '#94a3b8', fontSize: 11 },
+  actions: { padding: '12px 14px', borderTop: '1px solid #e2e8f0', display: 'flex', gap: 8 },
+  sceneBtn: { flex: 1, padding: 10, background: 'linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  reBtn: { padding: '10px 16px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, color: '#475569', fontSize: 13, cursor: 'pointer' },
 };
 
 export default ScriptEditor;
