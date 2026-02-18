@@ -21,7 +21,8 @@ const getPool = () => {
     };
 
     if (process.env.DATABASE_URL) {
-      baseConfig.connectionString = process.env.DATABASE_URL;
+      // Strip sslmode from connection string — we set ssl explicitly
+      baseConfig.connectionString = process.env.DATABASE_URL.replace(/[?&]sslmode=[^&]*/g, '');
     } else {
       baseConfig.host = process.env.DB_HOST || '127.0.0.1';
       baseConfig.port = parseInt(process.env.DB_PORT || '5432', 10);

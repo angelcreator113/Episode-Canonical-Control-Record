@@ -14,12 +14,16 @@ class ScriptsService {
       process.env.NODE_ENV === 'production' ||
       process.env.NODE_ENV === 'staging';
 
-    const sslConfig = useSSL ? { rejectUnauthorized: false } : false;
+    const sslConfig = useSSL
+      ? { rejectUnauthorized: false }
+      : false;
 
     // Support both DATABASE_URL and individual DB_* env vars
     if (process.env.DATABASE_URL) {
+      // Strip sslmode from connection string — we set ssl explicitly below
+      const connStr = process.env.DATABASE_URL.replace(/[?&]sslmode=[^&]*/g, '');
       this.pool = new Pool({
-        connectionString: process.env.DATABASE_URL,
+        connectionString: connStr,
         ssl: sslConfig,
       });
     } else {
