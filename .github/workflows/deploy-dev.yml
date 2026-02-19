@@ -242,14 +242,24 @@ jobs:
             pm2 start ecosystem.config.js --env development 2>&1 | tail -5
             pm2 save
 
-            # Health check — wait for backend to come up
+            # Health check — retry up to 30 seconds
             echo '🏥 Health check...'
-            sleep 5
-            if curl -sf http://localhost:3002/api/v1/episodes > /dev/null 2>&1; then
-              echo '✅ Backend is healthy'
-            else
-              echo '⚠️ Backend health check failed — check PM2 logs'
-              pm2 logs episode-api --lines 20 --nostream
+            HEALTHY=false
+            for i in 1 2 3 4 5 6; do
+              sleep 5
+              if curl -sf http://localhost:3002/health > /dev/null 2>&1; then
+                HEALTHY=true
+                echo \"✅ Backend is healthy (attempt \$i)\"
+                break
+              fi
+              echo \"  ⏳ Attempt \$i — not ready yet...\"
+            done
+
+            if [ \"\$HEALTHY\" != \"true\" ]; then
+              echo '⚠️ Backend health check failed after 30s — check PM2 logs'
+              pm2 logs episode-api --lines 30 --nostream
+              echo ''
+              echo \"Disk free: \$(df -h / | tail -1 | awk '{print \$4}')\"
               exit 1
             fi
 
