@@ -161,8 +161,12 @@ function Sidebar({ isOpen, onClose }) {
           )}
         </div>
         
-        {/* Settings */}
-        <NavItem icon="⚙️" label="Settings" path="/settings" />
+        {/* Settings — context-aware: show-specific when viewing a show */}
+        <NavItem
+          icon="⚙️"
+          label="Settings"
+          path={currentShowId ? `/shows/${currentShowId}/settings` : '/settings'}
+        />
       </nav>
       
       {/* Footer */}
