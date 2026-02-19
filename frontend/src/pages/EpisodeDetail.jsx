@@ -814,8 +814,8 @@ const EpisodeDetail = () => {
                         showId={episode?.show_id || episode?.showId}
                         event={selectedEvent}
                         characterState={characterState}
-                        onSelect={(item) => {
-                          console.log('Outfit selected:', item.name);
+                        onOutfitComplete={(result) => {
+                          console.log('Outfit locked:', result.slots, 'Synergy:', result.synergy.total);
                         }}
                       />
                     )}

@@ -732,7 +732,7 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
       prestige = 5,
       strictness = 5,
       host_brand = '',
-      is_paid = false,
+      // Lala's current state
       character_state = {},
     } = req.body;
 
@@ -1048,7 +1048,7 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     // 5. Log the purchase in state history
     await models.sequelize.query(
       `INSERT INTO character_state_history (id, show_id, character_key, deltas_json, source, notes, created_at)
-       VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'manual', :notes, NOW())`,
+       VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'wardrobe_purchase', :notes, NOW())`,
       {
         replacements: {
           show_id,
