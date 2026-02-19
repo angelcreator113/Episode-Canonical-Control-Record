@@ -1016,7 +1016,35 @@ router.post('/select', optionalAuth, async (req, res) => {
     if (!item?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
     if (!item[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
 
-    // 2. Link to episode — check existing first, then insert or update
+    // 2. Ensure episode_wardrobe table exists (may not if sync/migration hasn't run)
+    const [ewTables] = await models.sequelize.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe' LIMIT 1`
+    );
+    if (!ewTables?.length) {
+      // Create the table on the fly so select works
+      await models.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS episode_wardrobe (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          episode_id UUID NOT NULL,
+          wardrobe_id UUID NOT NULL,
+          scene_id UUID,
+          scene VARCHAR(255),
+          worn_at TIMESTAMPTZ DEFAULT NOW(),
+          notes TEXT,
+          approval_status VARCHAR(50) DEFAULT 'pending',
+          approved_by VARCHAR(255),
+          approved_at TIMESTAMPTZ,
+          rejection_reason TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await models.sequelize.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS unique_episode_wardrobe ON episode_wardrobe (episode_id, wardrobe_id)
+      `);
+    }
+
+    // 3. Link to episode — check existing first, then insert or update
     const [existing] = await models.sequelize.query(
       `SELECT id FROM episode_wardrobe WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
       { replacements: { episode_id, wardrobe_id } }
@@ -1035,7 +1063,7 @@ router.post('/select', optionalAuth, async (req, res) => {
       );
     }
 
-    // 3. Increment times_worn
+    // 4. Increment times_worn
     await models.sequelize.query(
       `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, last_worn_date = NOW(), updated_at = NOW() WHERE id = :wardrobe_id`,
       { replacements: { wardrobe_id } }
