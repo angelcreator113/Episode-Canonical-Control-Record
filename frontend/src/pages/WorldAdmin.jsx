@@ -31,11 +31,11 @@ const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessor
 const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessories: '🎀', jewelry: '💍', perfume: '🌸' };
 
 const EMPTY_EVENT = {
-  name: '', event_type: 'invite', host_brand: '', description: '',
+  name: '', event_type: 'invite', host: '', host_brand: '', description: '',
   prestige: 5, cost_coins: 100, strictness: 5,
-  deadline_type: 'medium', dress_code: '', location_hint: '',
+  deadline_type: 'medium', dress_code: '', dress_code_keywords: [], location_hint: '',
   narrative_stakes: '', browse_pool_bias: 'balanced', browse_pool_size: 8,
-  is_paid: false, payment_amount: 0, career_tier: 1,
+  is_paid: 'no', payment_amount: 0, career_tier: 1,
   career_milestone: '', fail_consequence: '', success_unlock: '',
   requirements: {},
 };
@@ -127,16 +127,32 @@ function WorldAdmin() {
 
   // ─── EVENT CRUD ───
   const openNewEvent = () => { setEventForm({ ...EMPTY_EVENT }); setEditingEvent('new'); };
-  const openEditEvent = (ev) => { setEventForm({ ...EMPTY_EVENT, ...ev }); setEditingEvent(ev.id); };
+  const openEditEvent = (ev) => {
+    setEventForm({
+      ...EMPTY_EVENT, ...ev,
+      is_paid: ev.is_free ? 'free' : ev.is_paid ? 'yes' : 'no',
+      dress_code_keywords: Array.isArray(ev.dress_code_keywords) ? ev.dress_code_keywords : [],
+    });
+    setEditingEvent(ev.id);
+  };
 
   const saveEvent = async () => {
     setSavingEvent(true); setError(null);
     try {
+      const submitData = {
+        ...eventForm,
+        is_paid: eventForm.is_paid === 'yes',
+        is_free: eventForm.is_paid === 'free',
+        cost_coins: eventForm.is_paid === 'free' ? 0 : eventForm.cost_coins,
+        dress_code_keywords: Array.isArray(eventForm.dress_code_keywords)
+          ? eventForm.dress_code_keywords
+          : (eventForm.dress_code_keywords || '').split(',').map(k => k.trim()).filter(Boolean),
+      };
       if (editingEvent === 'new') {
-        const res = await api.post(`/api/v1/world/${showId}/events`, eventForm);
+        const res = await api.post(`/api/v1/world/${showId}/events`, submitData);
         if (res.data.success) { setWorldEvents(p => [res.data.event, ...p]); setEditingEvent(null); setSuccessMsg('Event created!'); }
       } else {
-        const res = await api.put(`/api/v1/world/${showId}/events/${editingEvent}`, eventForm);
+        const res = await api.put(`/api/v1/world/${showId}/events/${editingEvent}`, submitData);
         if (res.data.success) { setWorldEvents(p => p.map(e => e.id === editingEvent ? res.data.event : e)); setEditingEvent(null); setSuccessMsg('Event updated!'); }
       }
     } catch (err) { setError(err.response?.data?.error || err.message); }
@@ -549,9 +565,10 @@ function WorldAdmin() {
                     {EVENT_TYPES.map(t => <option key={t} value={t}>{EVENT_TYPE_ICONS[t]} {t.replace(/_/g, ' ')}</option>)}
                   </select>
                 </div>
-                <FG label="Host / Brand" value={eventForm.host_brand} onChange={v => setEventForm(p => ({ ...p, host_brand: v }))} placeholder="Velour Society" />
+                <FG label="Host (who's hosting)" value={eventForm.host || ''} onChange={v => setEventForm(p => ({ ...p, host: v }))} placeholder="Velour Society, Fashion Week Committee" />
+                <FG label="Brand Sponsor (optional)" value={eventForm.host_brand} onChange={v => setEventForm(p => ({ ...p, host_brand: v }))} placeholder="Velour, Chanel (leave empty if none)" />
                 <FG label="Prestige (1-10)" value={eventForm.prestige} onChange={v => setEventForm(p => ({ ...p, prestige: parseInt(v) || 5 }))} type="number" min={1} max={10} />
-                <FG label="Cost (coins)" value={eventForm.cost_coins} onChange={v => setEventForm(p => ({ ...p, cost_coins: parseInt(v) || 0 }))} type="number" min={0} />
+                <FG label="Cost (coins)" value={eventForm.cost_coins} onChange={v => setEventForm(p => ({ ...p, cost_coins: parseInt(v) || 0 }))} type="number" min={0} disabled={eventForm.is_paid === 'free'} />
                 <FG label="Strictness (1-10)" value={eventForm.strictness} onChange={v => setEventForm(p => ({ ...p, strictness: parseInt(v) || 5 }))} type="number" min={1} max={10} />
                 <div>
                   <label style={S.fLabel}>Deadline</label>
@@ -560,6 +577,29 @@ function WorldAdmin() {
                   </select>
                 </div>
                 <FG label="Dress Code" value={eventForm.dress_code} onChange={v => setEventForm(p => ({ ...p, dress_code: v }))} placeholder="romantic couture" />
+                <div>
+                  <label style={S.fLabel}>Dress Code Keywords</label>
+                  <input
+                    type="text"
+                    value={(eventForm.dress_code_keywords || []).join(', ')}
+                    onChange={e => {
+                      const keywords = e.target.value.split(',').map(k => k.trim()).filter(Boolean);
+                      setEventForm(p => ({ ...p, dress_code_keywords: keywords }));
+                    }}
+                    placeholder="romantic, garden, floral, soft"
+                    style={S.sel}
+                  />
+                  {(eventForm.dress_code_keywords || []).length > 0 && (
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                      {eventForm.dress_code_keywords.map((kw, i) => (
+                        <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 6, fontSize: 11, color: '#4338ca', fontWeight: 600 }}>
+                          {kw}
+                          <button onClick={() => setEventForm(p => ({ ...p, dress_code_keywords: p.dress_code_keywords.filter((_, idx) => idx !== i) }))} style={{ background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', marginLeft: 4, fontSize: 12 }}>×</button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <div>
                   <label style={S.fLabel}>Browse Pool Bias</label>
                   <select value={eventForm.browse_pool_bias} onChange={e => setEventForm(p => ({ ...p, browse_pool_bias: e.target.value }))} style={S.sel}>
@@ -581,11 +621,14 @@ function WorldAdmin() {
                   </select>
                 </div>
                 <div>
-                  <label style={S.fLabel}>Paid Event?</label>
-                  <select value={eventForm.is_paid ? 'yes' : 'no'} onChange={e => setEventForm(p => ({ ...p, is_paid: e.target.value === 'yes' }))} style={S.sel}>
+                  <label style={S.fLabel}>Event Cost Type</label>
+                  <select value={eventForm.is_paid || 'no'} onChange={e => { const val = e.target.value; setEventForm(p => ({ ...p, is_paid: val, cost_coins: val === 'free' ? 0 : p.cost_coins })); }} style={S.sel}>
                     <option value="no">No — Lala pays to attend</option>
                     <option value="yes">Yes — Lala gets paid</option>
+                    <option value="free">Free — No cost to attend</option>
                   </select>
+                  {eventForm.is_paid === 'free' && <div style={{ fontSize: 10, color: '#16a34a', marginTop: 2 }}>Free event — no cost.</div>}
+                  {eventForm.is_paid === 'yes' && <div style={{ fontSize: 10, color: '#6366f1', marginTop: 2 }}>Lala earns coins for attending.</div>}
                 </div>
                 <FG label="Payment (if paid)" value={eventForm.payment_amount} onChange={v => setEventForm(p => ({ ...p, payment_amount: parseInt(v) || 0 }))} type="number" min={0} />
               </div>
@@ -621,12 +664,20 @@ function WorldAdmin() {
                   <span style={S.eTag}>⏰ {ev.deadline_type}</span>
                   {ev.dress_code && <span style={S.eTag}>👗 {ev.dress_code}</span>}
                 </div>
-                {ev.host_brand && <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>🏛️ {ev.host_brand}</div>}
-                {(ev.career_tier || ev.is_paid) && (
+                {(ev.host || ev.host_brand) && <div style={{ fontSize: 12, color: '#64748b', marginBottom: 4 }}>🏛️ {ev.host}{ev.host_brand ? ` — ${ev.host_brand}` : ''}</div>}
+                {(ev.career_tier || ev.is_paid || ev.is_free) && (
                   <div style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
                     {ev.career_tier && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca' }}>Tier {ev.career_tier}</span>}
                     {ev.is_paid && <span style={{ padding: '2px 8px', background: '#f0fdf4', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#16a34a' }}>💰 Paid {ev.payment_amount ? `(${ev.payment_amount} coins)` : ''}</span>}
-                    {!ev.is_paid && ev.cost_coins > 0 && <span style={{ padding: '2px 8px', background: '#fef2f2', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626' }}>Costs {ev.cost_coins} coins</span>}
+                    {ev.is_free && <span style={{ padding: '2px 8px', background: '#f0f9ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#0284c7' }}>🎟️ Free</span>}
+                    {!ev.is_paid && !ev.is_free && ev.cost_coins > 0 && <span style={{ padding: '2px 8px', background: '#fef2f2', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626' }}>Costs {ev.cost_coins} coins</span>}
+                  </div>
+                )}
+                {Array.isArray(ev.dress_code_keywords) && ev.dress_code_keywords.length > 0 && (
+                  <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', marginBottom: 4 }}>
+                    {ev.dress_code_keywords.map((kw, i) => (
+                      <span key={i} style={{ padding: '1px 6px', background: '#eef2ff', border: '1px solid #c7d2fe', borderRadius: 4, fontSize: 10, color: '#4338ca', fontWeight: 600 }}>{kw}</span>
+                    ))}
                   </div>
                 )}
                 {ev.career_milestone && <div style={{ fontSize: 11, color: '#6366f1', fontWeight: 600, marginBottom: 4 }}>🎯 {ev.career_milestone}</div>}
@@ -1442,15 +1493,15 @@ function WorldAdmin() {
 }
 
 // ─── Form Group helper ───
-function FG({ label, value, onChange, placeholder, type = 'text', textarea, full, min, max }) {
+function FG({ label, value, onChange, placeholder, type = 'text', textarea, full, min, max, disabled }) {
   const style = { marginBottom: full ? 10 : 0 };
   return (
     <div style={style}>
       <label style={S.fLabel}>{label}</label>
       {textarea ? (
-        <textarea value={value || ''} onChange={e => onChange(e.target.value)} style={S.tArea} rows={2} placeholder={placeholder} />
+        <textarea value={value || ''} onChange={e => onChange(e.target.value)} style={{ ...S.tArea, opacity: disabled ? 0.5 : 1 }} rows={2} placeholder={placeholder} disabled={disabled} />
       ) : (
-        <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} style={S.inp} placeholder={placeholder} min={min} max={max} />
+        <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} style={{ ...S.inp, opacity: disabled ? 0.5 : 1 }} placeholder={placeholder} min={min} max={max} disabled={disabled} />
       )}
     </div>
   );
