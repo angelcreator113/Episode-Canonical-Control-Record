@@ -252,8 +252,9 @@ export default function QuickEpisodeCreator() {
         status: 'draft',
         episode_type: 'regular',
       });
-      const episode = epRes.data?.episode || epRes.data;
-      const episodeId = episode.id;
+      const episode = epRes.data?.data || epRes.data?.episode || epRes.data;
+      const episodeId = episode?.id;
+      if (!episodeId) throw new Error('Episode created but no ID returned');
 
       // 2. Create Event
       const evRes = await api.post(`/api/v1/world/${showId}/events`, {
