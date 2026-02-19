@@ -200,6 +200,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
   // ─── Assign item to slot ───
   const assignToSlot = (item) => {
+    if (!item.is_owned) { setError('Cannot equip a locked item — purchase it first'); return; }
     const cat = (item.clothing_category || '').toLowerCase();
     let slotKey = activeSlot;
     if (cat === 'dress') slotKey = 'body';
@@ -236,7 +237,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const lockOutfit = async () => {
     setConfirming(true);
     try {
-      const items = Object.entries(filledSlots).filter(([, v]) => v).map(([slot, item]) => ({ slot, item }));
+      const items = Object.entries(filledSlots).filter(([, v]) => v && v.is_owned).map(([slot, item]) => ({ slot, item }));
+      if (items.length === 0) { setError('No owned items in outfit'); setConfirming(false); return; }
       for (const { item } of items) {
         await api.post('/api/v1/wardrobe/select', { episode_id: episodeId, wardrobe_id: item.id, show_id: showId });
       }

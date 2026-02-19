@@ -956,8 +956,9 @@ router.post('/select', optionalAuth, async (req, res) => {
     }
 
     const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
-    // 1. Verify item is owned
+    // 1. Verify item exists and is owned
     const [item] = await models.sequelize.query(
       `SELECT * FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
       { replacements: { wardrobe_id } }
@@ -965,13 +966,24 @@ router.post('/select', optionalAuth, async (req, res) => {
     if (!item?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
     if (!item[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
 
-    // 2. Link to episode (upsert)
-    await models.sequelize.query(
-      `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
-       VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW())
-       ON CONFLICT (episode_id, wardrobe_id) DO UPDATE SET approval_status = 'approved', updated_at = NOW()`,
+    // 2. Link to episode — check existing first, then insert or update
+    const [existing] = await models.sequelize.query(
+      `SELECT id FROM episode_wardrobe WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
       { replacements: { episode_id, wardrobe_id } }
     );
+    if (existing?.length) {
+      await models.sequelize.query(
+        `UPDATE episode_wardrobe SET approval_status = 'approved', updated_at = NOW()
+         WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
+        { replacements: { episode_id, wardrobe_id } }
+      );
+    } else {
+      await models.sequelize.query(
+        `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
+         VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW())`,
+        { replacements: { episode_id, wardrobe_id } }
+      );
+    }
 
     // 3. Increment times_worn
     await models.sequelize.query(
@@ -985,7 +997,7 @@ router.post('/select', optionalAuth, async (req, res) => {
       item: item[0],
     });
   } catch (error) {
-    console.error('Wardrobe select error:', error);
+    console.error('Wardrobe select error:', error.message, { episode_id: req.body?.episode_id, wardrobe_id: req.body?.wardrobe_id });
     return res.status(500).json({ error: 'Failed to select wardrobe item', message: error.message });
   }
 });
@@ -1003,6 +1015,7 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     }
 
     const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // 1. Get item
     const [items] = await models.sequelize.query(
