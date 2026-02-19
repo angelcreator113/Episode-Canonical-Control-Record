@@ -642,14 +642,14 @@ router.post('/seed', optionalAuth, async (req, res) => {
       const id = uuidv4();
       await models.sequelize.query(
         `INSERT INTO wardrobe
-         (id, show_id, name, clothing_category, color, season, tags,
+         (id, show_id, name, clothing_category, color, season,
           tier, lock_type, unlock_requirement, is_owned, is_visible,
           era_alignment, aesthetic_tags, event_types, outfit_match_weight,
           coin_cost, reputation_required, influence_required, season_unlock_episode,
           lala_reaction_own, lala_reaction_locked, lala_reaction_reject,
           created_at, updated_at)
          VALUES
-         (:id, :show_id, :name, :clothing_category, :color, :season, CAST(:tags AS JSONB),
+         (:id, :show_id, :name, :clothing_category, :color, :season,
           :tier, :lock_type, CAST(:unlock_requirement AS JSONB), :is_owned, :is_visible,
           :era_alignment, CAST(:aesthetic_tags AS JSONB), CAST(:event_types AS JSONB), :outfit_match_weight,
           :coin_cost, :reputation_required, :influence_required, :season_unlock_episode,
@@ -662,7 +662,6 @@ router.post('/seed', optionalAuth, async (req, res) => {
             clothing_category: item.clothing_category,
             color: item.color || null,
             season: item.season || 'all-season',
-            tags: JSON.stringify(item.aesthetic_tags || []),
             tier: item.tier,
             lock_type: item.lock_type,
             unlock_requirement: JSON.stringify(item.unlock_requirement || {}),
