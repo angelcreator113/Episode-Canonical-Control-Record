@@ -147,7 +147,7 @@ router.post('/admin/reset-character-stats', async (req, res) => {
           brand_trust = 0, 
           influence = 0, 
           stress = 0,
-          last_episode_applied = NULL,
+          last_applied_episode_id = NULL,
           updated_at = NOW()
       WHERE show_id = (SELECT id FROM shows LIMIT 1)
     `);
