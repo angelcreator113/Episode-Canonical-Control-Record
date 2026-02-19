@@ -67,6 +67,9 @@ function WorldAdmin() {
   const [wardrobeTierFilter, setWardrobeTierFilter] = useState('all'); // all | basic | mid | luxury | elite
   const [wardrobeCatFilter, setWardrobeCatFilter] = useState('all');   // all | dress | top | ...
   const [seedingWardrobe, setSeedingWardrobe] = useState(false);
+  const [editingWardrobeItem, setEditingWardrobeItem] = useState(null);   // item object or null
+  const [wardrobeForm, setWardrobeForm] = useState({});
+  const [savingWardrobe, setSavingWardrobe] = useState(false);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(initialTab);
   const [expandedEpisode, setExpandedEpisode] = useState(null);
@@ -864,6 +867,82 @@ function WorldAdmin() {
           finally { setSeedingWardrobe(false); }
         };
 
+        const openEditItem = (item) => {
+          setEditingWardrobeItem(item);
+          setWardrobeForm({
+            name: item.name || '',
+            clothing_category: item.clothing_category || '',
+            color: item.color || '',
+            season: item.season || 'all-season',
+            brand: item.brand || '',
+            tier: item.tier || 'basic',
+            lock_type: item.lock_type || 'none',
+            is_owned: !!item.is_owned,
+            is_visible: item.is_visible !== false,
+            era_alignment: item.era_alignment || '',
+            coin_cost: item.coin_cost || 0,
+            reputation_required: item.reputation_required || 0,
+            influence_required: item.influence_required || 0,
+            outfit_match_weight: item.outfit_match_weight || 5,
+            season_unlock_episode: item.season_unlock_episode || '',
+            aesthetic_tags: Array.isArray(item.aesthetic_tags) ? item.aesthetic_tags.join(', ') : '',
+            event_types: Array.isArray(item.event_types) ? item.event_types.join(', ') : '',
+            lala_reaction_own: item.lala_reaction_own || '',
+            lala_reaction_locked: item.lala_reaction_locked || '',
+            lala_reaction_reject: item.lala_reaction_reject || '',
+          });
+        };
+
+        const saveWardrobeItem = async () => {
+          if (!editingWardrobeItem) return;
+          setSavingWardrobe(true); setError(null);
+          try {
+            const payload = {
+              ...wardrobeForm,
+              aesthetic_tags: wardrobeForm.aesthetic_tags ? wardrobeForm.aesthetic_tags.split(',').map(s => s.trim()).filter(Boolean) : [],
+              event_types: wardrobeForm.event_types ? wardrobeForm.event_types.split(',').map(s => s.trim()).filter(Boolean) : [],
+              coin_cost: parseInt(wardrobeForm.coin_cost) || 0,
+              reputation_required: parseInt(wardrobeForm.reputation_required) || 0,
+              influence_required: parseInt(wardrobeForm.influence_required) || 0,
+              outfit_match_weight: parseInt(wardrobeForm.outfit_match_weight) || 5,
+              season_unlock_episode: wardrobeForm.season_unlock_episode ? parseInt(wardrobeForm.season_unlock_episode) : null,
+            };
+            const res = await api.put(`/api/v1/wardrobe/${editingWardrobeItem.id}`, payload);
+            if (res.data.success) {
+              setWardrobeItems(prev => prev.map(i => i.id === editingWardrobeItem.id ? { ...i, ...res.data.data } : i));
+              setEditingWardrobeItem(null);
+              setSuccessMsg('✅ Wardrobe item updated!');
+              setToast('✅ Item saved!'); setTimeout(() => setToast(null), 2500);
+            }
+          } catch (err) { setError(err.response?.data?.error || err.message); }
+          finally { setSavingWardrobe(false); }
+        };
+
+        const toggleOwnership = async (item) => {
+          try {
+            const res = await api.put(`/api/v1/wardrobe/${item.id}`, { is_owned: !item.is_owned });
+            if (res.data.success) {
+              setWardrobeItems(prev => prev.map(i => i.id === item.id ? { ...i, is_owned: !item.is_owned } : i));
+              setToast(item.is_owned ? '🔒 Item locked' : '✅ Item unlocked!'); setTimeout(() => setToast(null), 2500);
+            }
+          } catch (err) { setError(err.response?.data?.error || err.message); }
+        };
+
+        const deleteWardrobeItem = async (item) => {
+          if (!window.confirm(`Delete "${item.name}"? This will soft-delete it.`)) return;
+          try {
+            const res = await api.delete(`/api/v1/wardrobe/${item.id}`);
+            if (res.data.success) {
+              setWardrobeItems(prev => prev.filter(i => i.id !== item.id));
+              setEditingWardrobeItem(null);
+              setSuccessMsg('🗑️ Item deleted');
+            }
+          } catch (err) { setError(err.response?.data?.error || err.message); }
+        };
+
+        const wf = wardrobeForm;
+        const setWf = (key, val) => setWardrobeForm(prev => ({ ...prev, [key]: val }));
+
         return (
           <div style={S.content}>
             {/* Header */}
@@ -902,7 +981,6 @@ function WorldAdmin() {
 
             {/* Filter Bar */}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
-              {/* Ownership filter */}
               {['all', 'owned', 'locked'].map(f => (
                 <button key={f} onClick={() => setWardrobeFilter(f)}
                   style={{
@@ -915,7 +993,6 @@ function WorldAdmin() {
                 </button>
               ))}
               <div style={{ width: 1, height: 24, background: '#e2e8f0', alignSelf: 'center' }} />
-              {/* Category filter */}
               {WARDROBE_CATEGORIES.map(cat => (
                 <button key={cat} onClick={() => setWardrobeCatFilter(cat)}
                   style={{
@@ -929,6 +1006,154 @@ function WorldAdmin() {
               ))}
             </div>
 
+            {/* ─── Edit Panel (slide-in) ─── */}
+            {editingWardrobeItem && (
+              <div style={{
+                background: '#fff', border: '2px solid #6366f1', borderRadius: 14, padding: 24, marginBottom: 16,
+                boxShadow: '0 8px 32px rgba(99,102,241,0.15)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+                  <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#1a1a2e' }}>
+                    ✏️ Editing: {editingWardrobeItem.name}
+                  </h3>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => deleteWardrobeItem(editingWardrobeItem)} style={S.smBtnDanger}>🗑️ Delete</button>
+                    <button onClick={() => setEditingWardrobeItem(null)} style={S.smBtn}>✕ Close</button>
+                  </div>
+                </div>
+
+                {/* Row 1: Name, Category, Color, Season */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+                  <div>
+                    <label style={S.fLabel}>Name</label>
+                    <input value={wf.name} onChange={e => setWf('name', e.target.value)} style={S.inp} />
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Category</label>
+                    <select value={wf.clothing_category} onChange={e => setWf('clothing_category', e.target.value)} style={S.sel}>
+                      {['dress', 'top', 'bottom', 'shoes', 'accessories', 'jewelry', 'perfume'].map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Color</label>
+                    <input value={wf.color} onChange={e => setWf('color', e.target.value)} style={S.inp} />
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Season</label>
+                    <select value={wf.season} onChange={e => setWf('season', e.target.value)} style={S.sel}>
+                      {['all-season', 'spring', 'summer', 'fall', 'winter'].map(s => (
+                        <option key={s} value={s}>{s}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Row 2: Tier, Lock Type, Era, Brand */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+                  <div>
+                    <label style={S.fLabel}>Tier</label>
+                    <select value={wf.tier} onChange={e => setWf('tier', e.target.value)} style={S.sel}>
+                      {['basic', 'mid', 'luxury', 'elite'].map(t => (
+                        <option key={t} value={t}>{WARDROBE_TIER_ICONS[t]} {t}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Lock Type</label>
+                    <select value={wf.lock_type} onChange={e => setWf('lock_type', e.target.value)} style={S.sel}>
+                      {['none', 'coin', 'reputation', 'influence', 'season_drop', 'brand_exclusive', 'story_unlock', 'achievement'].map(l => (
+                        <option key={l} value={l}>{l.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Era</label>
+                    <select value={wf.era_alignment} onChange={e => setWf('era_alignment', e.target.value)} style={S.sel}>
+                      {['foundation', 'glow_up', 'luxury', 'prime', 'legacy'].map(e => (
+                        <option key={e} value={e}>{e.replace(/_/g, ' ')}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Brand</label>
+                    <input value={wf.brand} onChange={e => setWf('brand', e.target.value)} style={S.inp} placeholder="Maison Belle..." />
+                  </div>
+                </div>
+
+                {/* Row 3: Ownership toggles + numeric costs */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 14 }}>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={S.fLabel}>Owned</label>
+                    <button onClick={() => setWf('is_owned', !wf.is_owned)}
+                      style={{ ...S.smBtn, background: wf.is_owned ? '#f0fdf4' : '#fef2f2', borderColor: wf.is_owned ? '#bbf7d0' : '#fecaca', color: wf.is_owned ? '#16a34a' : '#dc2626', fontWeight: 700,  padding: '6px 10px' }}>
+                      {wf.is_owned ? '✅ Yes' : '🔒 No'}
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <label style={S.fLabel}>Visible</label>
+                    <button onClick={() => setWf('is_visible', !wf.is_visible)}
+                      style={{ ...S.smBtn, background: wf.is_visible ? '#eef2ff' : '#f1f5f9', borderColor: wf.is_visible ? '#c7d2fe' : '#e2e8f0', color: wf.is_visible ? '#4338ca' : '#94a3b8', fontWeight: 700, padding: '6px 10px' }}>
+                      {wf.is_visible ? '👁️ Yes' : '🚫 No'}
+                    </button>
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>🪙 Coin Cost</label>
+                    <input type="number" value={wf.coin_cost} onChange={e => setWf('coin_cost', e.target.value)} style={S.inp} min="0" />
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>⭐ Rep Req</label>
+                    <input type="number" value={wf.reputation_required} onChange={e => setWf('reputation_required', e.target.value)} style={S.inp} min="0" max="10" />
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>📣 Inf Req</label>
+                    <input type="number" value={wf.influence_required} onChange={e => setWf('influence_required', e.target.value)} style={S.inp} min="0" max="10" />
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>🎯 Match Wt</label>
+                    <input type="number" value={wf.outfit_match_weight} onChange={e => setWf('outfit_match_weight', e.target.value)} style={S.inp} min="1" max="10" />
+                  </div>
+                </div>
+
+                {/* Row 4: Tags & Events */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+                  <div>
+                    <label style={S.fLabel}>Aesthetic Tags <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated)</span></label>
+                    <input value={wf.aesthetic_tags} onChange={e => setWf('aesthetic_tags', e.target.value)} style={S.inp} placeholder="bold, elegant, modern" />
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>Event Types <span style={{ fontWeight: 400, color: '#94a3b8' }}>(comma-separated)</span></label>
+                    <input value={wf.event_types} onChange={e => setWf('event_types', e.target.value)} style={S.inp} placeholder="gala, awards, brunch" />
+                  </div>
+                </div>
+
+                {/* Row 5: Lala Reactions */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+                  <div>
+                    <label style={S.fLabel}>💬 Lala Reaction (Owned)</label>
+                    <textarea value={wf.lala_reaction_own} onChange={e => setWf('lala_reaction_own', e.target.value)} style={{ ...S.tArea, minHeight: 50 }} placeholder="Love this piece!" />
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>🔒 Lala Reaction (Locked)</label>
+                    <textarea value={wf.lala_reaction_locked} onChange={e => setWf('lala_reaction_locked', e.target.value)} style={{ ...S.tArea, minHeight: 50 }} placeholder="One day..." />
+                  </div>
+                  <div>
+                    <label style={S.fLabel}>❌ Lala Reaction (Reject)</label>
+                    <textarea value={wf.lala_reaction_reject} onChange={e => setWf('lala_reaction_reject', e.target.value)} style={{ ...S.tArea, minHeight: 50 }} placeholder="Not today." />
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+                  <button onClick={() => setEditingWardrobeItem(null)} style={S.secBtn}>Cancel</button>
+                  <button onClick={saveWardrobeItem} disabled={savingWardrobe} style={S.primaryBtn}>
+                    {savingWardrobe ? '⏳ Saving...' : '💾 Save Changes'}
+                  </button>
+                </div>
+              </div>
+            )}
+
             {/* Item Grid */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
               {filteredItems.map(item => {
@@ -936,14 +1161,20 @@ function WorldAdmin() {
                 const tags = Array.isArray(item.aesthetic_tags) ? item.aesthetic_tags : [];
                 const events = Array.isArray(item.event_types) ? item.event_types : [];
                 const matchPct = Math.min(100, (item.outfit_match_weight || 5) * 10);
+                const isSelected = editingWardrobeItem?.id === item.id;
 
                 return (
-                  <div key={item.id} style={{
-                    background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
-                    padding: 16, position: 'relative', overflow: 'hidden',
-                    borderTop: `3px solid ${tierColor}`,
-                    opacity: item.is_owned ? 1 : 0.75,
-                  }}>
+                  <div key={item.id} onClick={() => openEditItem(item)}
+                    style={{
+                      background: '#fff', border: isSelected ? '2px solid #6366f1' : '1px solid #e2e8f0', borderRadius: 12,
+                      padding: 16, position: 'relative', overflow: 'hidden', cursor: 'pointer',
+                      borderTop: `3px solid ${tierColor}`,
+                      opacity: item.is_owned ? 1 : 0.75,
+                      transition: 'all 0.2s', boxShadow: isSelected ? '0 4px 16px rgba(99,102,241,0.2)' : 'none',
+                    }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.boxShadow = '0 2px 12px rgba(0,0,0,0.08)'; }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.boxShadow = 'none'; }}
+                  >
                     {/* Tier badge */}
                     <div style={{
                       position: 'absolute', top: 8, right: 8,
@@ -1001,19 +1232,35 @@ function WorldAdmin() {
                       {item.influence_required > 0 && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca' }}>📣 Inf {item.influence_required}+</span>}
                     </div>
 
-                    {/* Lock Status + Lala Reaction */}
+                    {/* Lock Status + Quick Toggle + Lala Reaction */}
                     <div style={{
                       padding: '8px 12px', borderRadius: 8, fontSize: 12,
                       background: item.is_owned ? '#f0fdf4' : '#fef2f2',
                       border: item.is_owned ? '1px solid #bbf7d0' : '1px solid #fecaca',
                       color: item.is_owned ? '#16a34a' : '#dc2626',
                     }}>
-                      <div style={{ fontWeight: 700, marginBottom: 2 }}>
-                        {item.is_owned ? '✅ Owned' : `🔒 ${(item.lock_type || 'locked').replace(/_/g, ' ')}`}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                        <span style={{ fontWeight: 700 }}>
+                          {item.is_owned ? '✅ Owned' : `🔒 ${(item.lock_type || 'locked').replace(/_/g, ' ')}`}
+                        </span>
+                        <button onClick={e => { e.stopPropagation(); toggleOwnership(item); }}
+                          style={{
+                            padding: '2px 8px', borderRadius: 4, fontSize: 10, fontWeight: 600, cursor: 'pointer',
+                            background: item.is_owned ? '#fef2f2' : '#f0fdf4',
+                            border: item.is_owned ? '1px solid #fecaca' : '1px solid #bbf7d0',
+                            color: item.is_owned ? '#dc2626' : '#16a34a',
+                          }}>
+                          {item.is_owned ? '🔒 Lock' : '🔓 Unlock'}
+                        </button>
                       </div>
                       <div style={{ fontSize: 11, fontStyle: 'italic', color: item.is_owned ? '#15803d' : '#b91c1c' }}>
                         "{item.is_owned ? (item.lala_reaction_own || 'Love this piece!') : (item.lala_reaction_locked || 'One day this will be mine...')}"
                       </div>
+                    </div>
+
+                    {/* Edit hint */}
+                    <div style={{ textAlign: 'center', marginTop: 8, fontSize: 10, color: '#94a3b8' }}>
+                      Click to edit
                     </div>
                   </div>
                 );

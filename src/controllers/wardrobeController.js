@@ -347,24 +347,28 @@ module.exports = {
         updates.s3_url = `https://${BUCKET_NAME}.s3.amazonaws.com/${s3Key}`;
       }
 
-      // Map camelCase to snake_case
+      // Map camelCase to snake_case (original fields)
       const updateData = {
         name: updates.name,
         character: updates.character,
-        clothing_category: updates.clothingCategory,
+        clothing_category: updates.clothing_category ?? updates.clothingCategory,
         brand: updates.brand,
-        price: updates.price ? parseFloat(updates.price) : null,
-        purchase_link: updates.purchaseLink,
+        price: updates.price != null ? parseFloat(updates.price) : undefined,
+        purchase_link: updates.purchase_link ?? updates.purchaseLink,
         website: updates.website,
         color: updates.color,
         size: updates.size,
         season: updates.season,
         occasion: updates.occasion,
-        outfit_set_id: updates.outfitSetId,
-        outfit_set_name: updates.outfitSetName,
-        scene_description: updates.sceneDescription,
-        outfit_notes: updates.outfitNotes,
-        is_favorite: updates.isFavorite === 'true' || updates.isFavorite === true,
+        outfit_set_id: updates.outfit_set_id ?? updates.outfitSetId,
+        outfit_set_name: updates.outfit_set_name ?? updates.outfitSetName,
+        scene_description: updates.scene_description ?? updates.sceneDescription,
+        outfit_notes: updates.outfit_notes ?? updates.outfitNotes,
+        is_favorite: updates.is_favorite != null
+          ? (updates.is_favorite === 'true' || updates.is_favorite === true)
+          : updates.isFavorite != null
+            ? (updates.isFavorite === 'true' || updates.isFavorite === true)
+            : undefined,
         tags: updates.tags
           ? typeof updates.tags === 'string'
             ? JSON.parse(updates.tags)
@@ -372,6 +376,31 @@ module.exports = {
           : undefined,
         s3_key: updates.s3_key,
         s3_url: updates.s3_url,
+        // Game-layer fields
+        tier: updates.tier,
+        lock_type: updates.lock_type,
+        unlock_requirement: updates.unlock_requirement,
+        is_owned: updates.is_owned != null ? (updates.is_owned === 'true' || updates.is_owned === true) : undefined,
+        is_visible: updates.is_visible != null ? (updates.is_visible === 'true' || updates.is_visible === true) : undefined,
+        era_alignment: updates.era_alignment,
+        aesthetic_tags: updates.aesthetic_tags
+          ? typeof updates.aesthetic_tags === 'string'
+            ? JSON.parse(updates.aesthetic_tags)
+            : updates.aesthetic_tags
+          : undefined,
+        event_types: updates.event_types
+          ? typeof updates.event_types === 'string'
+            ? JSON.parse(updates.event_types)
+            : updates.event_types
+          : undefined,
+        outfit_match_weight: updates.outfit_match_weight != null ? parseInt(updates.outfit_match_weight) : undefined,
+        coin_cost: updates.coin_cost != null ? parseInt(updates.coin_cost) : undefined,
+        reputation_required: updates.reputation_required != null ? parseInt(updates.reputation_required) : undefined,
+        influence_required: updates.influence_required != null ? parseInt(updates.influence_required) : undefined,
+        season_unlock_episode: updates.season_unlock_episode != null ? parseInt(updates.season_unlock_episode) : undefined,
+        lala_reaction_own: updates.lala_reaction_own,
+        lala_reaction_locked: updates.lala_reaction_locked,
+        lala_reaction_reject: updates.lala_reaction_reject,
         updated_at: new Date(),
       };
 
