@@ -41,6 +41,7 @@ import DecisionAnalyticsDashboard from './pages/DecisionAnalyticsDashboard';
 import TimelineEditor from './pages/TimelineEditor';
 import EvaluateEpisode from './pages/EvaluateEpisode';
 import WorldAdmin from './pages/WorldAdmin';
+import ShowSettings from './pages/ShowSettings';
 import ExportPage from './pages/ExportPage';
 import AssetLibrary from './pages/AssetLibrary';
 
@@ -194,6 +195,7 @@ function AppContent() {
           <Route path="/shows/:id" element={<ShowDetail />} />
           <Route path="/shows/:id/edit" element={<EditShow />} />
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
+          <Route path="/shows/:id/settings" element={<ShowSettings />} />
           {/* Scene Composer */}
           <Route path="/episodes/:episodeId/scene-composer" element={<SceneComposerFull />} />
           

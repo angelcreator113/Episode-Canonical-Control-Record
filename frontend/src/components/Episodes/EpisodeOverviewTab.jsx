@@ -189,17 +189,19 @@ function EpisodeOverviewTab({ episode, show, onUpdate }) {
             </div>
           )}
           
-          <div className="meta-card">
-            <span className="meta-label">Show</span>
-            <div className="meta-value show">
-              <button
-                className="show-link"
-                onClick={() => navigate(`/shows/${show.id}`)}
-              >
-                🎬 {show.name}
-              </button>
+          {show && (
+            <div className="meta-card">
+              <span className="meta-label">Show</span>
+              <div className="meta-value show">
+                <button
+                  className="show-link"
+                  onClick={() => navigate(`/shows/${show.id}`)}
+                >
+                  🎬 {show.name}
+                </button>
+              </div>
             </div>
-          </div>
+          )}
         </div>
         
         {/* Episode Intent */}

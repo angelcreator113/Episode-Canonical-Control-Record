@@ -3,18 +3,20 @@
  * 
  * Route: /shows/:id/world
  * 
- * 5 Tabs:
+ * 7 Tabs:
  *   1. Overview — Stats, tier distribution, canon timeline
  *   2. Episode Ledger — All episodes with tier/score/deltas
  *   3. Events Library — Reusable event catalog (create, edit, inject)
- *   4. Characters — View/edit Lala stats, character rules, stat ledger
- *   5. Decision Log — Training data from creative decisions
+ *   4. Career Goals — Track progression goals
+ *   5. Wardrobe — Tier cards, filters, item grid with Lala reactions
+ *   6. Characters — View/edit Lala stats, character rules, stat ledger
+ *   7. Decision Log — Training data from creative decisions
  * 
  * Location: frontend/src/pages/WorldAdmin.jsx
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
@@ -23,6 +25,10 @@ const TIER_EMOJIS = { slay: '👑', pass: '✨', mid: '😐', fail: '💔' };
 const EVENT_TYPE_ICONS = { invite: '💌', upgrade: '⬆️', guest: '🌟', fail_test: '💔', deliverable: '📦', brand_deal: '🤝' };
 const EVENT_TYPES = ['invite', 'upgrade', 'guest', 'fail_test', 'deliverable', 'brand_deal'];
 const BIAS_OPTIONS = ['balanced', 'glam', 'cozy', 'couture', 'trendy', 'romantic'];
+const WARDROBE_TIER_COLORS = { basic: '#94a3b8', mid: '#6366f1', luxury: '#eab308', elite: '#ec4899' };
+const WARDROBE_TIER_ICONS = { basic: '👟', mid: '👠', luxury: '💎', elite: '👑' };
+const WARDROBE_CATEGORIES = ['all', 'dress', 'top', 'bottom', 'shoes', 'accessories', 'jewelry', 'perfume'];
+const CAT_ICONS = { all: '🏷️', dress: '👗', top: '👚', bottom: '👖', shoes: '👟', accessories: '🎀', jewelry: '💍', perfume: '🌸' };
 
 const EMPTY_EVENT = {
   name: '', event_type: 'invite', host_brand: '', description: '',
@@ -39,12 +45,15 @@ const TABS = [
   { key: 'episodes', icon: '📋', label: 'Episode Ledger' },
   { key: 'events', icon: '💌', label: 'Events Library' },
   { key: 'goals', icon: '🎯', label: 'Career Goals' },
+  { key: 'wardrobe', icon: '👗', label: 'Wardrobe' },
   { key: 'characters', icon: '👑', label: 'Characters' },
   { key: 'decisions', icon: '🧠', label: 'Decision Log' },
 ];
 
 function WorldAdmin() {
   const { id: showId } = useParams();
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'overview';
 
   const [show, setShow] = useState(null);
   const [charState, setCharState] = useState(null);
@@ -53,8 +62,13 @@ function WorldAdmin() {
   const [decisions, setDecisions] = useState([]);
   const [worldEvents, setWorldEvents] = useState([]);
   const [goals, setGoals] = useState([]);
+  const [wardrobeItems, setWardrobeItems] = useState([]);
+  const [wardrobeFilter, setWardrobeFilter] = useState('all');       // all | owned | locked
+  const [wardrobeTierFilter, setWardrobeTierFilter] = useState('all'); // all | basic | mid | luxury | elite
+  const [wardrobeCatFilter, setWardrobeCatFilter] = useState('all');   // all | dress | top | ...
+  const [seedingWardrobe, setSeedingWardrobe] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [expandedEpisode, setExpandedEpisode] = useState(null);
 
   // Event editor state
@@ -103,6 +117,7 @@ function WorldAdmin() {
         api.get(`/api/v1/world/${showId}/decisions`).then(r => setDecisions(r.data?.decisions || [])).catch(() => setDecisions([])),
         api.get(`/api/v1/world/${showId}/events`).then(r => setWorldEvents(r.data?.events || [])).catch(() => setWorldEvents([])),
         api.get(`/api/v1/world/${showId}/goals`).then(r => setGoals(r.data?.goals || [])).catch(() => setGoals([])),
+        api.get(`/api/v1/wardrobe?show_id=${showId}&limit=200`).then(r => setWardrobeItems(r.data?.data || [])).catch(() => setWardrobeItems([])),
       ]);
     } finally { setLoading(false); }
   };
@@ -820,6 +835,213 @@ function WorldAdmin() {
           )}
         </div>
       )}
+
+      {/* ════════════════════════ WARDROBE ════════════════════════ */}
+      {activeTab === 'wardrobe' && (() => {
+        // Derived wardrobe data
+        const tierGroups = { basic: [], mid: [], luxury: [], elite: [] };
+        wardrobeItems.forEach(item => { if (tierGroups[item.tier]) tierGroups[item.tier].push(item); });
+
+        const filteredItems = wardrobeItems.filter(item => {
+          if (wardrobeFilter === 'owned' && !item.is_owned) return false;
+          if (wardrobeFilter === 'locked' && item.is_owned) return false;
+          if (wardrobeTierFilter !== 'all' && item.tier !== wardrobeTierFilter) return false;
+          if (wardrobeCatFilter !== 'all' && item.clothing_category !== wardrobeCatFilter) return false;
+          return true;
+        });
+
+        const seedWardrobe = async () => {
+          setSeedingWardrobe(true); setError(null);
+          try {
+            const res = await api.post(`/api/v1/wardrobe/seed`, { show_id: showId });
+            if (res.data.success) {
+              setSuccessMsg(`🌱 Seeded ${res.data.created} items! (${res.data.skipped} already existed) — ${res.data.owned} owned, ${res.data.total - res.data.owned} locked`);
+              setToast(`🌱 ${res.data.created} wardrobe items seeded!`);
+              setTimeout(() => setToast(null), 3000);
+              loadData();
+            }
+          } catch (err) { setError(err.response?.data?.error || err.message); }
+          finally { setSeedingWardrobe(false); }
+        };
+
+        return (
+          <div style={S.content}>
+            {/* Header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+              <h2 style={{ ...S.cardTitle, margin: 0 }}>👗 Wardrobe</h2>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <span style={{ fontSize: 12, color: '#94a3b8', alignSelf: 'center' }}>{wardrobeItems.length} items</span>
+                <button onClick={seedWardrobe} disabled={seedingWardrobe} style={S.secBtn}>
+                  {seedingWardrobe ? '⏳ Seeding...' : '🌱 Seed 40 Items'}
+                </button>
+              </div>
+            </div>
+
+            {/* Tier Summary Cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+              {['basic', 'mid', 'luxury', 'elite'].map(tier => {
+                const items = tierGroups[tier] || [];
+                const owned = items.filter(i => i.is_owned).length;
+                const isActive = wardrobeTierFilter === tier;
+                return (
+                  <div key={tier} onClick={() => setWardrobeTierFilter(isActive ? 'all' : tier)}
+                    style={{
+                      padding: 16, borderRadius: 12, textAlign: 'center', cursor: 'pointer',
+                      background: isActive ? WARDROBE_TIER_COLORS[tier] + '18' : '#fff',
+                      border: isActive ? `2px solid ${WARDROBE_TIER_COLORS[tier]}` : '1px solid #e2e8f0',
+                      transition: 'all 0.2s',
+                    }}>
+                    <div style={{ fontSize: 24 }}>{WARDROBE_TIER_ICONS[tier]}</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: WARDROBE_TIER_COLORS[tier] }}>{items.length}</div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.5px', color: WARDROBE_TIER_COLORS[tier] }}>{tier}</div>
+                    <div style={{ fontSize: 10, color: '#94a3b8', marginTop: 4 }}>{owned} owned · {items.length - owned} locked</div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Filter Bar */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
+              {/* Ownership filter */}
+              {['all', 'owned', 'locked'].map(f => (
+                <button key={f} onClick={() => setWardrobeFilter(f)}
+                  style={{
+                    padding: '5px 14px', borderRadius: 20, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    background: wardrobeFilter === f ? '#6366f1' : '#fff',
+                    color: wardrobeFilter === f ? '#fff' : '#64748b',
+                    border: wardrobeFilter === f ? '1px solid #6366f1' : '1px solid #e2e8f0',
+                  }}>
+                  {f === 'all' ? '🏷️ All' : f === 'owned' ? '✅ Owned' : '🔒 Locked'}
+                </button>
+              ))}
+              <div style={{ width: 1, height: 24, background: '#e2e8f0', alignSelf: 'center' }} />
+              {/* Category filter */}
+              {WARDROBE_CATEGORIES.map(cat => (
+                <button key={cat} onClick={() => setWardrobeCatFilter(cat)}
+                  style={{
+                    padding: '5px 12px', borderRadius: 20, fontSize: 11, fontWeight: 600, cursor: 'pointer',
+                    background: wardrobeCatFilter === cat ? '#6366f1' : '#fff',
+                    color: wardrobeCatFilter === cat ? '#fff' : '#64748b',
+                    border: wardrobeCatFilter === cat ? '1px solid #6366f1' : '1px solid #e2e8f0',
+                  }}>
+                  {CAT_ICONS[cat]} {cat}
+                </button>
+              ))}
+            </div>
+
+            {/* Item Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 12 }}>
+              {filteredItems.map(item => {
+                const tierColor = WARDROBE_TIER_COLORS[item.tier] || '#94a3b8';
+                const tags = Array.isArray(item.aesthetic_tags) ? item.aesthetic_tags : [];
+                const events = Array.isArray(item.event_types) ? item.event_types : [];
+                const matchPct = Math.min(100, (item.outfit_match_weight || 5) * 10);
+
+                return (
+                  <div key={item.id} style={{
+                    background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12,
+                    padding: 16, position: 'relative', overflow: 'hidden',
+                    borderTop: `3px solid ${tierColor}`,
+                    opacity: item.is_owned ? 1 : 0.75,
+                  }}>
+                    {/* Tier badge */}
+                    <div style={{
+                      position: 'absolute', top: 8, right: 8,
+                      padding: '2px 10px', borderRadius: 20,
+                      background: tierColor + '18', color: tierColor,
+                      fontSize: 10, fontWeight: 700, textTransform: 'uppercase',
+                    }}>
+                      {WARDROBE_TIER_ICONS[item.tier]} {item.tier}
+                    </div>
+
+                    {/* Name & Category */}
+                    <div style={{ marginBottom: 8, paddingRight: 70 }}>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#1a1a2e' }}>{item.name}</div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>
+                        {CAT_ICONS[item.clothing_category] || '🏷️'} {item.clothing_category}
+                        {item.color && <span style={{ marginLeft: 6 }}>· {item.color}</span>}
+                        {item.era_alignment && <span style={{ marginLeft: 6 }}>· {item.era_alignment}</span>}
+                      </div>
+                    </div>
+
+                    {/* Aesthetic Tags */}
+                    {tags.length > 0 && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {tags.map((tag, i) => (
+                          <span key={i} style={{ padding: '2px 8px', background: '#f3e8ff', borderRadius: 4, fontSize: 10, color: '#7c3aed' }}>{tag}</span>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Event Compatibility */}
+                    {events.length > 0 && (
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {events.slice(0, 4).map((ev, i) => (
+                          <span key={i} style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, color: '#4338ca' }}>{ev}</span>
+                        ))}
+                        {events.length > 4 && <span style={{ fontSize: 10, color: '#94a3b8' }}>+{events.length - 4}</span>}
+                      </div>
+                    )}
+
+                    {/* Match Weight Bar */}
+                    <div style={{ marginBottom: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: '#64748b', marginBottom: 2 }}>
+                        <span>Match Weight</span>
+                        <span>{item.outfit_match_weight || 5}/10</span>
+                      </div>
+                      <div style={{ height: 5, background: '#f1f5f9', borderRadius: 3, overflow: 'hidden' }}>
+                        <div style={{ height: '100%', width: `${matchPct}%`, background: tierColor, borderRadius: 3, transition: 'width 0.3s' }} />
+                      </div>
+                    </div>
+
+                    {/* Cost & Requirements */}
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                      {item.coin_cost > 0 && <span style={{ padding: '2px 8px', background: '#fef3c7', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#92400e' }}>🪙 {item.coin_cost}</span>}
+                      {item.reputation_required > 0 && <span style={{ padding: '2px 8px', background: '#fef2f2', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#dc2626' }}>⭐ Rep {item.reputation_required}+</span>}
+                      {item.influence_required > 0 && <span style={{ padding: '2px 8px', background: '#eef2ff', borderRadius: 4, fontSize: 10, fontWeight: 600, color: '#4338ca' }}>📣 Inf {item.influence_required}+</span>}
+                    </div>
+
+                    {/* Lock Status + Lala Reaction */}
+                    <div style={{
+                      padding: '8px 12px', borderRadius: 8, fontSize: 12,
+                      background: item.is_owned ? '#f0fdf4' : '#fef2f2',
+                      border: item.is_owned ? '1px solid #bbf7d0' : '1px solid #fecaca',
+                      color: item.is_owned ? '#16a34a' : '#dc2626',
+                    }}>
+                      <div style={{ fontWeight: 700, marginBottom: 2 }}>
+                        {item.is_owned ? '✅ Owned' : `🔒 ${(item.lock_type || 'locked').replace(/_/g, ' ')}`}
+                      </div>
+                      <div style={{ fontSize: 11, fontStyle: 'italic', color: item.is_owned ? '#15803d' : '#b91c1c' }}>
+                        "{item.is_owned ? (item.lala_reaction_own || 'Love this piece!') : (item.lala_reaction_locked || 'One day this will be mine...')}"
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Empty state */}
+            {filteredItems.length === 0 && (
+              <div style={{ textAlign: 'center', padding: 40, background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+                <div style={{ fontSize: 40, marginBottom: 12 }}>👗</div>
+                <div style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>
+                  {wardrobeItems.length === 0 ? 'No wardrobe items yet' : 'No items match your filters'}
+                </div>
+                <div style={{ fontSize: 13, color: '#94a3b8', marginBottom: 16 }}>
+                  {wardrobeItems.length === 0
+                    ? 'Seed the wardrobe to populate Lala\'s closet with 40 starter items.'
+                    : 'Try changing your tier, category, or ownership filters.'}
+                </div>
+                {wardrobeItems.length === 0 && (
+                  <button onClick={seedWardrobe} disabled={seedingWardrobe} style={S.primaryBtn}>
+                    {seedingWardrobe ? '⏳ Seeding...' : '🌱 Seed 40 Items'}
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* ════════════════════════ CHARACTERS ════════════════════════ */}
       {activeTab === 'characters' && (
