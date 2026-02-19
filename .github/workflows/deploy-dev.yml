@@ -224,7 +224,16 @@ jobs:
 
             # Install production dependencies
             cd \$APP_DIR
-            npm ci --production --ignore-scripts 2>&1 | tail -5
+            
+            # Check available disk before installing  
+            AVAIL_KB=\$(df / | tail -1 | awk '{print \$4}')
+            echo \"Disk available before npm install: \${AVAIL_KB}KB\"
+            
+            # Clean deploy temp to free space BEFORE npm install
+            rm -rf /tmp/deploy 2>/dev/null || true
+            
+            # Use npm install (not ci) to avoid full wipe+redownload cycle
+            npm install --production --ignore-scripts --prefer-offline 2>&1 | tail -10
 
             # Rebuild native modules (sharp, canvas, etc.) for the server architecture
             npm rebuild sharp 2>&1 | tail -3 || echo '⚠️ sharp rebuild skipped'
