@@ -995,7 +995,7 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
 
 
 // ═══════════════════════════════════════════
-// POST /api/v1/wardrobe/select
+// POST /api/v1/wardrobe/select  (FIXED)
 // ═══════════════════════════════════════════
 
 router.post('/select', optionalAuth, async (req, res) => {
@@ -1006,95 +1006,58 @@ router.post('/select', optionalAuth, async (req, res) => {
     }
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // 1. Verify item exists and is owned
-    const [item] = await models.sequelize.query(
+    const [items] = await models.sequelize.query(
       `SELECT * FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
       { replacements: { wardrobe_id } }
     );
-    if (!item?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
-    if (!item[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
+    if (!items?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
+    if (!items[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
 
-    // 2. Ensure episode_wardrobe table exists (may not if sync/migration hasn't run)
-    const [ewTables] = await models.sequelize.query(
-      `SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'episode_wardrobe' LIMIT 1`
+    // 2. Check if already linked
+    const [existing] = await models.sequelize.query(
+      `SELECT id FROM episode_wardrobe WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
+      { replacements: { episode_id, wardrobe_id } }
     );
-    if (!ewTables?.length) {
-      // Create the table on the fly so select works
-      await models.sequelize.query(`
-        CREATE TABLE IF NOT EXISTS episode_wardrobe (
-          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          episode_id UUID NOT NULL,
-          wardrobe_id UUID NOT NULL,
-          scene_id UUID,
-          scene VARCHAR(255),
-          worn_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          notes TEXT,
-          approval_status VARCHAR(50) DEFAULT 'pending',
-          approved_by VARCHAR(255),
-          approved_at TIMESTAMPTZ,
-          rejection_reason TEXT,
-          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-        )
-      `);
-      await models.sequelize.query(`
-        CREATE UNIQUE INDEX IF NOT EXISTS unique_episode_wardrobe ON episode_wardrobe (episode_id, wardrobe_id)
-      `);
-    }
 
-    // 3. Link to episode — check existing first, then insert or update
-    try {
-      const [existing] = await models.sequelize.query(
-        `SELECT id FROM episode_wardrobe WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
+    if (existing?.length > 0) {
+      // Already linked — just update approval status
+      await models.sequelize.query(
+        `UPDATE episode_wardrobe SET approval_status = 'approved', updated_at = NOW()
+         WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
         { replacements: { episode_id, wardrobe_id } }
       );
-      if (existing?.length) {
-        await models.sequelize.query(
-          `UPDATE episode_wardrobe SET approval_status = 'approved', worn_at = NOW(), updated_at = NOW()
-           WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
-          { replacements: { episode_id, wardrobe_id } }
-        );
-      } else {
-        await models.sequelize.query(
-          `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, worn_at, created_at, updated_at)
-           VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW(), NOW())`,
-          { replacements: { episode_id, wardrobe_id } }
-        );
-      }
-    } catch (linkErr) {
-      console.error('episode_wardrobe link error:', linkErr.message);
-      // If it's a unique constraint violation, the row already exists — that's fine
-      if (!linkErr.message?.includes('unique_episode_wardrobe') && !linkErr.message?.includes('duplicate key')) {
-        throw linkErr;
-      }
+    } else {
+      // Insert new link — let DB handle the id (SERIAL or UUID default)
+      await models.sequelize.query(
+        `INSERT INTO episode_wardrobe (episode_id, wardrobe_id, approval_status, created_at, updated_at)
+         VALUES (:episode_id, :wardrobe_id, 'approved', NOW(), NOW())`,
+        { replacements: { episode_id, wardrobe_id } }
+      );
     }
 
-    // 4. Increment times_worn (non-fatal — columns might not exist on older schemas)
-    try {
-      await models.sequelize.query(
-        `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, last_worn_date = NOW(), updated_at = NOW() WHERE id = :wardrobe_id`,
-        { replacements: { wardrobe_id } }
-      );
-    } catch (twErr) {
-      console.error('times_worn update skipped:', twErr.message);
-    }
+    // 3. Increment times_worn
+    await models.sequelize.query(
+      `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, last_worn_date = NOW(), updated_at = NOW()
+       WHERE id = :wardrobe_id`,
+      { replacements: { wardrobe_id } }
+    );
 
     return res.json({
       success: true,
-      message: `Selected: ${item[0].name}`,
-      item: item[0],
+      message: `Selected: ${items[0].name}`,
+      item: items[0],
     });
   } catch (error) {
-    console.error('Wardrobe select error:', error.message, { episode_id: req.body?.episode_id, wardrobe_id: req.body?.wardrobe_id });
-    return res.status(500).json({ error: 'Failed to select wardrobe item', message: error.message });
+    console.error('Wardrobe select error:', error);
+    return res.status(500).json({ error: 'Failed to select wardrobe item', detail: error.message });
   }
 });
 
 
 // ═══════════════════════════════════════════
-// POST /api/v1/wardrobe/purchase
+// POST /api/v1/wardrobe/purchase  (FIXED)
 // ═══════════════════════════════════════════
 
 router.post('/purchase', optionalAuth, async (req, res) => {
@@ -1105,7 +1068,6 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     }
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
 
     // 1. Get item
     const [items] = await models.sequelize.query(
@@ -1115,18 +1077,16 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     if (!items?.length) return res.status(404).json({ error: 'Item not found' });
     const item = items[0];
 
-    if (item.lock_type !== 'coin' && !item.is_owned) return res.status(400).json({ error: `Cannot purchase — lock type is ${item.lock_type}` });
+    if (item.is_owned) return res.json({ success: true, already_owned: true, message: 'Already owned', item, cost: 0 });
+    if (item.lock_type !== 'coin') return res.status(400).json({ error: `Cannot purchase — lock type is ${item.lock_type}` });
 
     // 2. Get Lala's coins
     const [states] = await models.sequelize.query(
-      `SELECT * FROM character_state WHERE show_id = :show_id AND character_key = 'lala' ORDER BY updated_at DESC LIMIT 1`,
+      `SELECT * FROM character_state WHERE show_id = :show_id AND character_name = 'lala' ORDER BY updated_at DESC LIMIT 1`,
       { replacements: { show_id } }
     );
     const currentCoins = states?.[0]?.coins ?? 0;
     const cost = item.coin_cost || 0;
-
-    // Already owned — return success with current coins so frontend can update
-    if (item.is_owned) return res.json({ success: true, already_owned: true, message: 'Already owned', item, cost: 0, coins_after: currentCoins });
 
     if (currentCoins < cost) {
       return res.status(400).json({
@@ -1140,7 +1100,8 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     // 3. Deduct coins
     const newCoins = currentCoins - cost;
     await models.sequelize.query(
-      `UPDATE character_state SET coins = :newCoins, updated_at = NOW() WHERE show_id = :show_id AND character_key = 'lala'`,
+      `UPDATE character_state SET coins = :newCoins, updated_at = NOW()
+       WHERE show_id = :show_id AND character_name = 'lala'`,
       { replacements: { newCoins, show_id } }
     );
 
@@ -1150,23 +1111,36 @@ router.post('/purchase', optionalAuth, async (req, res) => {
       { replacements: { wardrobe_id } }
     );
 
-    // 5. Log the purchase in state history (non-fatal — purchase already succeeded)
+    // 5. Log purchase in state history (non-fatal — purchase already succeeded)
     try {
-      // Try with TEXT cast on source to bypass ENUM restrictions
       await models.sequelize.query(
-        `INSERT INTO character_state_history (id, show_id, character_key, deltas_json, source, notes, created_at)
-         VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'manual', :notes, NOW())`,
+        `INSERT INTO character_state_history (id, show_id, character_name, deltas_json, source, notes, created_at)
+         VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'wardrobe_purchase', :notes, NOW())`,
         {
           replacements: {
             show_id,
             deltas: JSON.stringify({ coins: -cost }),
-            notes: `Wardrobe purchase: ${item.name} (${cost} coins)`,
+            notes: `Purchased: ${item.name} (${cost} coins)`,
           },
         }
       );
-    } catch (historyErr) {
-      // History logging is non-fatal — purchase already completed
-      console.warn('Purchase history insert failed (non-fatal):', historyErr.message);
+    } catch (histErr) {
+      // If history table doesn't exist or source ENUM rejects — try without UUID
+      try {
+        await models.sequelize.query(
+          `INSERT INTO character_state_history (show_id, character_name, deltas_json, source, notes, created_at)
+           VALUES (:show_id, 'lala', :deltas, 'manual', :notes, NOW())`,
+          {
+            replacements: {
+              show_id,
+              deltas: JSON.stringify({ coins: -cost }),
+              notes: `Purchased: ${item.name} (${cost} coins)`,
+            },
+          }
+        );
+      } catch (e) {
+        console.warn('Could not log purchase history:', e.message);
+      }
     }
 
     return res.json({
@@ -1179,7 +1153,7 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Wardrobe purchase error:', error);
-    return res.status(500).json({ error: 'Failed to purchase', message: error.message });
+    return res.status(500).json({ error: 'Failed to purchase', detail: error.message });
   }
 });
 
