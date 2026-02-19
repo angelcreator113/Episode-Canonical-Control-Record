@@ -9,6 +9,7 @@ import ScriptEditor from '../components/ScriptEditor';
 import EpisodeSceneComposerTab from '../components/Episodes/EpisodeSceneComposerTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
+import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
 import useOrientation from '../hooks/useOrientation';
@@ -87,6 +88,10 @@ const EpisodeDetail = () => {
   const [showMoreActions, setShowMoreActions] = useState(false);
   const [showOtherSteps, setShowOtherSteps] = useState(false);
   const [primaryScript, setPrimaryScript] = useState(null);
+  const [wardrobeMode, setWardrobeMode] = useState('inventory'); // inventory | gameplay
+  const [episodeEvents, setEpisodeEvents] = useState([]);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [characterState, setCharacterState] = useState({});
 
   // Fetch episode data - extracted for reuse
   const fetchEpisode = useCallback(async () => {
@@ -189,6 +194,41 @@ const EpisodeDetail = () => {
 
     fetchEpisodeWardrobe();
   }, [episodeId, activeTab]);
+
+  // Load events + character state for wardrobe gameplay
+  useEffect(() => {
+    if (!episode || activeTab !== 'wardrobe') return;
+    const showId = episode.show_id || episode.showId;
+    if (!showId) return;
+
+    // Fetch events injected into this episode
+    const fetchEvents = async () => {
+      try {
+        const res = await fetch(`/api/v1/world/${showId}/events`);
+        const data = await res.json();
+        const allEvents = data.events || [];
+        const linked = allEvents.filter(e => e.used_in_episode_id === episodeId);
+        setEpisodeEvents(linked);
+        if (linked.length > 0 && !selectedEvent) setSelectedEvent(linked[0]);
+      } catch (err) {
+        console.error('Failed to load episode events:', err);
+      }
+    };
+
+    // Fetch Lala's character state
+    const fetchCharState = async () => {
+      try {
+        const res = await fetch(`/api/v1/characters/lala/state?show_id=${showId}`);
+        const data = await res.json();
+        setCharacterState(data.state || {});
+      } catch (err) {
+        console.error('Failed to load character state:', err);
+      }
+    };
+
+    fetchEvents();
+    fetchCharState();
+  }, [episode, activeTab, episodeId]);
 
   // Handle scene selection from library
   const handleSceneSelect = async (libraryScene) => {
@@ -622,7 +662,7 @@ const EpisodeDetail = () => {
         {activeTab === 'overview' && (
           <EpisodeOverviewTab 
             episode={episode} 
-            show={episode.show || show}
+            show={episode.show}
             onUpdate={handleUpdateEpisode}
           />
         )}
@@ -704,10 +744,95 @@ const EpisodeDetail = () => {
 
         {/* Wardrobe Tab */}
         {activeTab === 'wardrobe' && (
-          <EpisodeWardrobeTab
-            episodeId={episodeId}
-            episode={episode}
-          />
+          <div>
+            {/* Mode toggle */}
+            <div style={{ display: 'flex', gap: 6, marginBottom: 16, padding: '4px', background: '#f1f5f9', borderRadius: 10, width: 'fit-content' }}>
+              <button
+                onClick={() => setWardrobeMode('inventory')}
+                style={{
+                  padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  border: 'none', transition: 'all 0.15s',
+                  background: wardrobeMode === 'inventory' ? '#fff' : 'transparent',
+                  color: wardrobeMode === 'inventory' ? '#6366f1' : '#64748b',
+                  boxShadow: wardrobeMode === 'inventory' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                }}
+              >
+                📋 Assigned Items
+              </button>
+              <button
+                onClick={() => setWardrobeMode('gameplay')}
+                style={{
+                  padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                  border: 'none', transition: 'all 0.15s',
+                  background: wardrobeMode === 'gameplay' ? '#fff' : 'transparent',
+                  color: wardrobeMode === 'gameplay' ? '#ec4899' : '#64748b',
+                  boxShadow: wardrobeMode === 'gameplay' ? '0 1px 3px rgba(0,0,0,0.1)' : 'none',
+                }}
+              >
+                🎮 Browse & Select
+              </button>
+            </div>
+
+            {/* Inventory mode — existing tab */}
+            {wardrobeMode === 'inventory' && (
+              <EpisodeWardrobeTab episodeId={episodeId} episode={episode} />
+            )}
+
+            {/* Gameplay mode */}
+            {wardrobeMode === 'gameplay' && (
+              <div>
+                {/* Event picker */}
+                {episodeEvents.length > 0 ? (
+                  <div style={{ marginBottom: 16 }}>
+                    {episodeEvents.length > 1 && (
+                      <div style={{ marginBottom: 10 }}>
+                        <label style={{ fontSize: 12, fontWeight: 600, color: '#64748b', display: 'block', marginBottom: 4 }}>
+                          SELECT EVENT TO STYLE FOR
+                        </label>
+                        <select
+                          value={selectedEvent?.id || ''}
+                          onChange={(e) => {
+                            const ev = episodeEvents.find(ev => ev.id === e.target.value);
+                            setSelectedEvent(ev || null);
+                          }}
+                          style={{
+                            padding: '8px 14px', borderRadius: 8, border: '1px solid #e2e8f0',
+                            fontSize: 13, color: '#1a1a2e', background: '#fff', width: '100%', maxWidth: 400,
+                          }}
+                        >
+                          {episodeEvents.map(ev => (
+                            <option key={ev.id} value={ev.id}>
+                              {ev.name} — {ev.dress_code || 'No dress code'} (Prestige {ev.prestige || '?'})
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    {selectedEvent && (
+                      <EpisodeWardrobeGameplay
+                        episodeId={episodeId}
+                        showId={episode?.show_id || episode?.showId}
+                        event={selectedEvent}
+                        characterState={characterState}
+                        onSelect={(item) => {
+                          console.log('Outfit selected:', item.name);
+                        }}
+                      />
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>
+                    <div style={{ fontSize: 40, marginBottom: 8 }}>💌</div>
+                    <div style={{ fontSize: 16, fontWeight: 600, color: '#64748b' }}>No events linked to this episode</div>
+                    <div style={{ fontSize: 13, marginTop: 4 }}>
+                      Inject an event from the Events Library in Producer Mode first,<br />
+                      then come back here to browse & select outfits.
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         )}
 
         {/* Distribution Tab */}
