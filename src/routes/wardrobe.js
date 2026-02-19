@@ -41,6 +41,56 @@ const upload = multer({
 // Get staging items (unassigned wardrobe items)
 router.get('/staging', asyncHandler(wardrobeController.getStagingItems));
 
+// ═══════════════════════════════════════════
+// GET /api/v1/wardrobe/outfit/:episode_id
+// Returns wardrobe items linked (locked) to an episode
+// ═══════════════════════════════════════════
+router.get('/outfit/:episode_id', optionalAuth, async (req, res) => {
+  try {
+    const { episode_id } = req.params;
+    if (!episode_id) return res.status(400).json({ error: 'episode_id is required' });
+
+    const models = await getModels();
+    if (!models) return res.json({ items: [] }); // graceful — no models = empty outfit
+
+    // Check if episode_wardrobe table exists
+    const [tables] = await models.sequelize.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe' LIMIT 1`
+    );
+    if (!tables?.length) return res.json({ items: [] });
+
+    const [items] = await models.sequelize.query(`
+      SELECT w.*, ew.approval_status
+      FROM episode_wardrobe ew
+      JOIN wardrobe w ON w.id = ew.wardrobe_id
+      WHERE ew.episode_id = :episode_id
+        AND (ew.approval_status = 'approved' OR ew.approval_status IS NULL)
+        AND (w.deleted_at IS NULL)
+      ORDER BY ew.created_at ASC
+    `, { replacements: { episode_id } });
+
+    // Parse JSON fields so frontend gets arrays/objects
+    const safeParseJSON = (val, fallback) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'object' && val !== null) return val;
+      if (typeof val === 'string') { try { return JSON.parse(val); } catch { return fallback; } }
+      return fallback;
+    };
+    const parsed = (items || []).map(item => ({
+      ...item,
+      aesthetic_tags: safeParseJSON(item.aesthetic_tags, []),
+      event_types: safeParseJSON(item.event_types, []),
+      dress_code_keywords: safeParseJSON(item.dress_code_keywords, []),
+    }));
+
+    return res.json({ items: parsed });
+  } catch (error) {
+    console.error('Load outfit error:', error.message);
+    // Return empty array instead of 500 — outfit loading should never block gameplay
+    return res.json({ items: [] });
+  }
+});
+
 // List all wardrobe items
 router.get('/', asyncHandler(wardrobeController.listWardrobeItems));
 
@@ -705,5 +755,421 @@ router.post('/seed', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to seed wardrobe', message: error.message });
   }
 });
+
+// ─── helper ───
+function parseJSON(val, fallback) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'object' && val !== null) return val;
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return fallback; }
+  }
+  return fallback;
+}
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/wardrobe/browse-pool
+// ═══════════════════════════════════════════
+
+router.post('/browse-pool', optionalAuth, async (req, res) => {
+  try {
+    const {
+      show_id,
+      event_name = '',
+      dress_code = '',
+      dress_code_keywords = [],
+      event_type = '',
+      prestige = 5,
+      strictness = 5,
+      host_brand = '',
+      // Lala's current state
+      character_state = {},
+    } = req.body;
+
+    if (!show_id) return res.status(400).json({ error: 'show_id is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // 1. Fetch all visible wardrobe items for this show
+    const [allItems] = await models.sequelize.query(
+      `SELECT * FROM wardrobe 
+       WHERE show_id = :show_id 
+       AND deleted_at IS NULL 
+       AND (is_visible = true OR is_owned = true)
+       ORDER BY tier, name`,
+      { replacements: { show_id } }
+    );
+
+    if (allItems.length === 0) {
+      return res.json({ success: true, pool: [], message: 'No wardrobe items found. Seed items first.' });
+    }
+
+    // 2. Parse dress code into keywords
+    const dressCodeWords = [
+      ...dress_code.toLowerCase().split(/[\s,]+/).filter(Boolean),
+      ...(Array.isArray(dress_code_keywords) ? dress_code_keywords : []).map(k => k.toLowerCase()),
+    ];
+    const eventTypeLower = event_type.toLowerCase();
+    const brandLower = (host_brand || '').toLowerCase();
+
+    // 3. Score each item
+    const scored = allItems.map(item => {
+      const aesthetics = parseJSON(item.aesthetic_tags, []);
+      const eventTypes = parseJSON(item.event_types, []);
+      let score = 0;
+      const reasons = [];
+      let riskLevel = 'safe';
+
+      // ── Dress code match (0-30 pts) ──
+      const aestheticLower = aesthetics.map(a => a.toLowerCase());
+      let dressCodeHits = 0;
+      for (const kw of dressCodeWords) {
+        if (aestheticLower.some(a => a.includes(kw) || kw.includes(a))) {
+          dressCodeHits++;
+        }
+      }
+      if (dressCodeHits > 0) {
+        const dressScore = Math.min(30, dressCodeHits * 10);
+        score += dressScore;
+        reasons.push(`Dress code match (${dressCodeHits} keywords)`);
+      }
+
+      // ── Event type match (0-20 pts) ──
+      const eventTypeLowerArr = eventTypes.map(e => e.toLowerCase());
+      if (eventTypeLowerArr.includes(eventTypeLower) || eventTypeLowerArr.some(e => eventTypeLower.includes(e))) {
+        score += 20;
+        reasons.push('Event type compatible');
+      }
+
+      // ── Tier alignment (0-15 pts) ──
+      const TIER_VALS = { basic: 1, mid: 2, luxury: 3, elite: 4 };
+      const itemTierVal = TIER_VALS[item.tier] || 1;
+      const eventTierVal = prestige <= 3 ? 1 : prestige <= 5 ? 2 : prestige <= 8 ? 3 : 4;
+      const tierDiff = Math.abs(itemTierVal - eventTierVal);
+      if (tierDiff === 0) { score += 15; reasons.push('Perfect tier match'); }
+      else if (tierDiff === 1) { score += 8; reasons.push('Close tier'); }
+      else if (tierDiff >= 2) { score -= 5; reasons.push('Tier mismatch'); }
+
+      // ── Match weight bonus ──
+      score += (item.outfit_match_weight || 5);
+
+      // ── Brand alignment (0-10 pts) ──
+      if (brandLower && aestheticLower.some(a => a.includes(brandLower))) {
+        score += 10;
+        reasons.push('Brand compatible');
+      }
+
+      // ── Ownership bonus/penalty ──
+      if (item.is_owned) {
+        score += 5;
+        reasons.push('Owned ✅');
+      } else {
+        if (item.lock_type === 'brand_exclusive') {
+          riskLevel = 'locked_tease';
+          reasons.push('Brand exclusive 🏛️');
+        } else if (item.lock_type === 'season_drop') {
+          riskLevel = 'locked_tease';
+          reasons.push(`Drops Ep ${item.season_unlock_episode} 🕒`);
+        } else if (item.lock_type === 'reputation') {
+          const rep = character_state.reputation || 1;
+          if (rep >= (item.reputation_required || 0)) {
+            score += 3;
+            reasons.push('Reputation unlockable');
+            riskLevel = 'stretch';
+          } else {
+            riskLevel = 'locked_tease';
+            reasons.push(`Needs Rep ${item.reputation_required}`);
+          }
+        } else if (item.lock_type === 'coin') {
+          const coins = character_state.coins || 0;
+          if (coins >= (item.coin_cost || 0)) {
+            score += 3;
+            reasons.push('Affordable');
+            riskLevel = 'stretch';
+          } else {
+            riskLevel = 'stretch';
+            reasons.push(`Needs ${item.coin_cost} coins`);
+          }
+        }
+      }
+
+      // ── Risky detection ──
+      if (item.is_owned && dressCodeHits === 0 && tierDiff >= 2) {
+        riskLevel = 'risky';
+        reasons.push('Wrong vibe for this event');
+      }
+
+      // ── Determine Lala reaction ──
+      let lala_reaction = '';
+      if (!item.is_owned) {
+        lala_reaction = item.lala_reaction_locked || 'I can\'t have this yet...';
+      } else if (riskLevel === 'risky') {
+        lala_reaction = item.lala_reaction_reject || 'This isn\'t right for today.';
+      } else if (score >= 40) {
+        lala_reaction = item.lala_reaction_own || 'This could work.';
+      } else {
+        lala_reaction = item.lala_reaction_reject || 'Maybe... but not today.';
+      }
+
+      return {
+        ...item,
+        aesthetic_tags: aesthetics,
+        event_types: eventTypes,
+        unlock_requirement: parseJSON(item.unlock_requirement, {}),
+        match_score: Math.max(0, score),
+        match_reasons: reasons,
+        risk_level: riskLevel,
+        lala_reaction,
+        can_select: item.is_owned,
+        can_purchase: !item.is_owned && item.lock_type === 'coin' && (character_state.coins || 0) >= (item.coin_cost || 0),
+      };
+    });
+
+    // 4. Build the curated pool
+    const owned = scored.filter(i => i.is_owned).sort((a, b) => b.match_score - a.match_score);
+    const stretch = scored.filter(i => i.risk_level === 'stretch').sort((a, b) => b.match_score - a.match_score);
+    const risky = owned.filter(i => i.risk_level === 'risky').sort((a, b) => a.match_score - b.match_score);
+    const locked = scored.filter(i => i.risk_level === 'locked_tease').sort((a, b) => b.match_score - a.match_score);
+
+    const pool = [];
+    const addedIds = new Set();
+
+    const addToPool = (item, role) => {
+      if (!item || addedIds.has(item.id)) return false;
+      addedIds.add(item.id);
+      pool.push({ ...item, pool_role: role });
+      return true;
+    };
+
+    // 3-4 owned safe picks
+    const safeOwned = owned.filter(i => i.risk_level !== 'risky');
+    for (let i = 0; i < Math.min(4, safeOwned.length); i++) addToPool(safeOwned[i], 'safe');
+
+    // 2 stretch items
+    for (let i = 0; i < Math.min(2, stretch.length); i++) addToPool(stretch[i], 'stretch');
+
+    // 1 risky item
+    if (risky.length > 0) addToPool(risky[0], 'risky');
+
+    // 1 locked tease
+    if (locked.length > 0) addToPool(locked[0], 'locked_tease');
+
+    // Fill to at least 6
+    const remaining = scored.filter(i => !addedIds.has(i.id)).sort((a, b) => b.match_score - a.match_score);
+    let idx = 0;
+    while (pool.length < 6 && idx < remaining.length) {
+      addToPool(remaining[idx], remaining[idx].is_owned ? 'safe' : 'stretch');
+      idx++;
+    }
+
+    // 5. Shuffle with slight randomness
+    const shuffled = pool.sort((a, b) => {
+      if (a.is_owned && !b.is_owned) return -1;
+      if (!a.is_owned && b.is_owned) return 1;
+      return (b.match_score + Math.random() * 10) - (a.match_score + Math.random() * 10);
+    });
+
+    return res.json({
+      success: true,
+      event_context: { event_name, dress_code, dress_code_keywords: dressCodeWords, event_type, prestige, strictness, host_brand },
+      pool: shuffled,
+      pool_breakdown: {
+        total: shuffled.length,
+        safe: shuffled.filter(i => i.pool_role === 'safe').length,
+        stretch: shuffled.filter(i => i.pool_role === 'stretch').length,
+        risky: shuffled.filter(i => i.pool_role === 'risky').length,
+        locked_tease: shuffled.filter(i => i.pool_role === 'locked_tease').length,
+      },
+      scoring_summary: {
+        highest_score: Math.max(...shuffled.map(i => i.match_score)),
+        avg_score: Math.round(shuffled.reduce((s, i) => s + i.match_score, 0) / (shuffled.length || 1)),
+        selectable: shuffled.filter(i => i.can_select).length,
+      },
+    });
+  } catch (error) {
+    console.error('Browse pool error:', error);
+    return res.status(500).json({ error: 'Failed to generate browse pool', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/wardrobe/select
+// ═══════════════════════════════════════════
+
+router.post('/select', optionalAuth, async (req, res) => {
+  try {
+    const { episode_id, wardrobe_id, show_id } = req.body;
+    if (!episode_id || !wardrobe_id) {
+      return res.status(400).json({ error: 'episode_id and wardrobe_id are required' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // 1. Verify item exists and is owned
+    const [item] = await models.sequelize.query(
+      `SELECT * FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
+      { replacements: { wardrobe_id } }
+    );
+    if (!item?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
+    if (!item[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
+
+    // 2. Ensure episode_wardrobe table exists (may not if sync/migration hasn't run)
+    const [ewTables] = await models.sequelize.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe' LIMIT 1`
+    );
+    if (!ewTables?.length) {
+      // Create the table on the fly so select works
+      await models.sequelize.query(`
+        CREATE TABLE IF NOT EXISTS episode_wardrobe (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          episode_id UUID NOT NULL,
+          wardrobe_id UUID NOT NULL,
+          scene_id UUID,
+          scene VARCHAR(255),
+          worn_at TIMESTAMPTZ DEFAULT NOW(),
+          notes TEXT,
+          approval_status VARCHAR(50) DEFAULT 'pending',
+          approved_by VARCHAR(255),
+          approved_at TIMESTAMPTZ,
+          rejection_reason TEXT,
+          created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+          updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        )
+      `);
+      await models.sequelize.query(`
+        CREATE UNIQUE INDEX IF NOT EXISTS unique_episode_wardrobe ON episode_wardrobe (episode_id, wardrobe_id)
+      `);
+    }
+
+    // 3. Link to episode — check existing first, then insert or update
+    const [existing] = await models.sequelize.query(
+      `SELECT id FROM episode_wardrobe WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
+      { replacements: { episode_id, wardrobe_id } }
+    );
+    if (existing?.length) {
+      await models.sequelize.query(
+        `UPDATE episode_wardrobe SET approval_status = 'approved', updated_at = NOW()
+         WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
+        { replacements: { episode_id, wardrobe_id } }
+      );
+    } else {
+      await models.sequelize.query(
+        `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
+         VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW())`,
+        { replacements: { episode_id, wardrobe_id } }
+      );
+    }
+
+    // 4. Increment times_worn
+    await models.sequelize.query(
+      `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, last_worn_date = NOW(), updated_at = NOW() WHERE id = :wardrobe_id`,
+      { replacements: { wardrobe_id } }
+    );
+
+    return res.json({
+      success: true,
+      message: `Selected: ${item[0].name}`,
+      item: item[0],
+    });
+  } catch (error) {
+    console.error('Wardrobe select error:', error.message, { episode_id: req.body?.episode_id, wardrobe_id: req.body?.wardrobe_id });
+    return res.status(500).json({ error: 'Failed to select wardrobe item', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/wardrobe/purchase
+// ═══════════════════════════════════════════
+
+router.post('/purchase', optionalAuth, async (req, res) => {
+  try {
+    const { wardrobe_id, show_id } = req.body;
+    if (!wardrobe_id || !show_id) {
+      return res.status(400).json({ error: 'wardrobe_id and show_id required' });
+    }
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // 1. Get item
+    const [items] = await models.sequelize.query(
+      `SELECT * FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
+      { replacements: { wardrobe_id } }
+    );
+    if (!items?.length) return res.status(404).json({ error: 'Item not found' });
+    const item = items[0];
+
+    if (item.lock_type !== 'coin' && !item.is_owned) return res.status(400).json({ error: `Cannot purchase — lock type is ${item.lock_type}` });
+
+    // 2. Get Lala's coins
+    const [states] = await models.sequelize.query(
+      `SELECT * FROM character_state WHERE show_id = :show_id AND character_key = 'lala' ORDER BY updated_at DESC LIMIT 1`,
+      { replacements: { show_id } }
+    );
+    const currentCoins = states?.[0]?.coins ?? 0;
+    const cost = item.coin_cost || 0;
+
+    // Already owned — return success with current coins so frontend can update
+    if (item.is_owned) return res.json({ success: true, already_owned: true, message: 'Already owned', item, cost: 0, coins_after: currentCoins });
+
+    if (currentCoins < cost) {
+      return res.status(400).json({
+        error: 'Not enough coins',
+        current: currentCoins,
+        needed: cost,
+        deficit: cost - currentCoins,
+      });
+    }
+
+    // 3. Deduct coins
+    const newCoins = currentCoins - cost;
+    await models.sequelize.query(
+      `UPDATE character_state SET coins = :newCoins, updated_at = NOW() WHERE show_id = :show_id AND character_key = 'lala'`,
+      { replacements: { newCoins, show_id } }
+    );
+
+    // 4. Mark item as owned
+    await models.sequelize.query(
+      `UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id = :wardrobe_id`,
+      { replacements: { wardrobe_id } }
+    );
+
+    // 5. Log the purchase in state history (non-fatal — purchase already succeeded)
+    try {
+      // Try with TEXT cast on source to bypass ENUM restrictions
+      await models.sequelize.query(
+        `INSERT INTO character_state_history (id, show_id, character_key, deltas_json, source, notes, created_at)
+         VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'manual', :notes, NOW())`,
+        {
+          replacements: {
+            show_id,
+            deltas: JSON.stringify({ coins: -cost }),
+            notes: `Wardrobe purchase: ${item.name} (${cost} coins)`,
+          },
+        }
+      );
+    } catch (historyErr) {
+      // History logging is non-fatal — purchase already completed
+      console.warn('Purchase history insert failed (non-fatal):', historyErr.message);
+    }
+
+    return res.json({
+      success: true,
+      message: `Purchased "${item.name}" for ${cost} coins`,
+      item: { ...item, is_owned: true },
+      coins_before: currentCoins,
+      coins_after: newCoins,
+      cost,
+    });
+  } catch (error) {
+    console.error('Wardrobe purchase error:', error);
+    return res.status(500).json({ error: 'Failed to purchase', message: error.message });
+  }
+});
+
 
 module.exports = router;
