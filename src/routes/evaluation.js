@@ -139,17 +139,19 @@ router.post('/admin/reset-character-stats', async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
     const { sequelize } = models;
 
-    // Debug: find the show
+    // List ALL shows so we can see what's in the DB
     const shows = await sequelize.query(
-      `SELECT id, title FROM shows LIMIT 5`,
+      `SELECT id, name FROM shows ORDER BY created_at`,
       { type: sequelize.QueryTypes.SELECT }
     );
     if (!shows.length) {
-      return res.json({ success: false, error: 'No shows found in database', shows: [] });
+      return res.json({ success: false, error: 'No shows found in database' });
     }
-    const showId = shows[0].id;
 
-    // Debug: count existing rows
+    // Use request body showId, or fall back to known Styling Adventures ID, or first show
+    const showId = req.body?.showId || '9bd0655f-0426-4da4-95b8-44cdfd608b2b';
+
+    // Debug: count existing rows for THIS show
     const csCount = await sequelize.query(
       `SELECT COUNT(*) as cnt FROM character_state WHERE show_id = :showId`,
       { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
@@ -160,7 +162,7 @@ router.post('/admin/reset-character-stats', async (req, res) => {
     );
 
     // Step 1: Reset character_state
-    await sequelize.query(`
+    const [, csMeta] = await sequelize.query(`
       UPDATE character_state 
       SET coins = 500, 
           reputation = 0, 
@@ -173,7 +175,7 @@ router.post('/admin/reset-character-stats', async (req, res) => {
     `, { replacements: { showId } });
 
     // Step 2: Clear episode evaluations
-    await sequelize.query(`
+    const [, epMeta] = await sequelize.query(`
       UPDATE episodes 
       SET evaluation_json = NULL, 
           evaluation_status = NULL, 
@@ -185,13 +187,36 @@ router.post('/admin/reset-character-stats', async (req, res) => {
 
     res.json({
       success: true,
-      show: { id: showId, title: shows[0].title },
-      character_state_found: parseInt(csCount[0]?.cnt || 0),
-      episodes_found: parseInt(epCount[0]?.cnt || 0),
+      target_show_id: showId,
+      all_shows: shows,
+      character_state_before: parseInt(csCount[0]?.cnt || 0),
+      episodes_before: parseInt(epCount[0]?.cnt || 0),
+      character_state_updated: csMeta?.rowCount ?? 0,
+      episodes_updated: epMeta?.rowCount ?? 0,
       message: 'Character stats reset and episode evaluations cleared'
     });
   } catch (err) {
     console.error('Admin reset error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /api/v1/admin/query  — Run a read-only SQL query (dev only)
+// ═══════════════════════════════════════════
+
+router.post('/admin/query', async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    const { sequelize } = models;
+    const { sql } = req.body;
+    if (!sql) return res.status(400).json({ error: 'sql field required' });
+
+    const rows = await sequelize.query(sql, { type: sequelize.QueryTypes.SELECT });
+    res.json({ success: true, count: rows.length, rows });
+  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
