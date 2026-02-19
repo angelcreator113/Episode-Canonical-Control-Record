@@ -291,13 +291,21 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       if (res.data.success) {
         // Update local coin balance immediately
         if (res.data.coins_after != null) setLocalCoins(res.data.coins_after);
-        else setLocalCoins(prev => (prev ?? coins) - (res.data.cost || 0));
 
-        setSuccess(`Purchased "${item.name}" for ${res.data.cost} coins!`);
-        setInspecting(null); // close modal so user sees the updated grid
+        // Close modal first so user sees the grid
+        setInspecting(null);
 
-        // Refresh pool, then auto-equip the purchased item
+        if (res.data.already_owned) {
+          // Item was already owned — just equip it
+          setSuccess(`"${item.name}" is already yours!`);
+        } else {
+          setSuccess(`Purchased "${item.name}" for ${res.data.cost} coins!`);
+        }
+
+        // Refresh pool to get updated ownership flags
         await loadPool();
+
+        // Auto-equip the purchased/owned item into the active slot
         const ownedItem = { ...item, is_owned: true, can_select: true, can_purchase: false };
         assignToSlot(ownedItem);
       }

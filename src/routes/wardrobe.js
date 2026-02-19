@@ -1075,8 +1075,7 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     if (!items?.length) return res.status(404).json({ error: 'Item not found' });
     const item = items[0];
 
-    if (item.is_owned) return res.json({ success: true, message: 'Already owned', item });
-    if (item.lock_type !== 'coin') return res.status(400).json({ error: `Cannot purchase — lock type is ${item.lock_type}` });
+    if (item.lock_type !== 'coin' && !item.is_owned) return res.status(400).json({ error: `Cannot purchase — lock type is ${item.lock_type}` });
 
     // 2. Get Lala's coins
     const [states] = await models.sequelize.query(
@@ -1085,6 +1084,9 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     );
     const currentCoins = states?.[0]?.coins ?? 0;
     const cost = item.coin_cost || 0;
+
+    // Already owned — return success with current coins so frontend can update
+    if (item.is_owned) return res.json({ success: true, already_owned: true, message: 'Already owned', item, cost: 0, coins_after: currentCoins });
 
     if (currentCoins < cost) {
       return res.status(400).json({
