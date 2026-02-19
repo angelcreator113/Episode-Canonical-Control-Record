@@ -64,6 +64,8 @@ function WorldAdmin() {
   const [injectTarget, setInjectTarget] = useState(null);
   const [injecting, setInjecting] = useState(false);
   const [injectError, setInjectError] = useState(null);
+  const [injectSuccess, setInjectSuccess] = useState(null); // { eventId, message }
+  const [toast, setToast] = useState(null);
   const [generateTarget, setGenerateTarget] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [lastGeneratedEpisodeId, setLastGeneratedEpisodeId] = useState(null);
@@ -134,8 +136,17 @@ function WorldAdmin() {
     try {
       const res = await api.post(`/api/v1/world/${showId}/events/${eventId}/inject`, { episode_id: episodeId });
       if (res.data.success) {
-        setSuccessMsg(`Injected! ${res.data.event_tag}`);
-        setInjectTarget(null);
+        const ep = episodes.find(e => e.id === episodeId);
+        const epLabel = ep ? `${ep.episode_number || '?'}. ${ep.title || 'Untitled'}` : 'episode';
+        const msg = `✅ Injected into ${epLabel}`;
+        setSuccessMsg(msg);
+        // Show inline success in the inject panel briefly
+        setInjectSuccess({ eventId, message: msg });
+        // Show floating toast (visible regardless of scroll)
+        setToast(msg);
+        setTimeout(() => { setToast(null); }, 4000);
+        // Close inject panel after a brief delay so user sees the confirmation
+        setTimeout(() => { setInjectTarget(null); setInjectSuccess(null); }, 1500);
         // Update local event status to 'used'
         setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'used', times_used: (ev.times_used || 0) + 1, used_in_episode_id: episodeId } : ev));
       } else {
@@ -598,16 +609,22 @@ function WorldAdmin() {
                   <button onClick={() => deleteEvent(ev.id)} style={S.smBtnDanger}>🗑️</button>
                 </div>
                 {injectTarget === ev.id && (
-                  <div style={{ marginTop: 8, padding: 10, background: '#f8fafc', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Inject into which episode?</div>
-                    {injecting && <div style={{ fontSize: 12, color: '#6366f1', padding: '6px 0', fontWeight: 600 }}>⏳ Injecting...</div>}
-                    {injectError && <div style={{ fontSize: 12, color: '#dc2626', padding: '6px 10px', background: '#fef2f2', borderRadius: 6, marginBottom: 6, border: '1px solid #fecaca' }}>❌ {injectError}</div>}
-                    {!injecting && episodes.map(ep => (
-                      <button key={ep.id} onClick={() => injectEvent(ev.id, ep.id)} disabled={injecting} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', marginBottom: 4, color: '#1a1a2e' }}>
-                        {ep.episode_number || '?'}. {ep.title || 'Untitled'}
-                      </button>
-                    ))}
-                    {!injecting && episodes.length === 0 && <span style={S.muted}>No episodes yet — create an episode first</span>}
+                  <div style={{ marginTop: 8, padding: 10, background: injectSuccess?.eventId === ev.id ? '#f0fdf4' : '#f8fafc', borderRadius: 8, border: injectSuccess?.eventId === ev.id ? '2px solid #22c55e' : '1px solid #e2e8f0', transition: 'all 0.3s' }}>
+                    {injectSuccess?.eventId === ev.id ? (
+                      <div style={{ fontSize: 14, color: '#16a34a', fontWeight: 700, padding: '8px 0', textAlign: 'center' }}>{injectSuccess.message}</div>
+                    ) : (
+                      <>
+                        <div style={{ fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 6 }}>Inject into which episode?</div>
+                        {injecting && <div style={{ fontSize: 12, color: '#6366f1', padding: '6px 0', fontWeight: 600 }}>⏳ Injecting...</div>}
+                        {injectError && <div style={{ fontSize: 12, color: '#dc2626', padding: '6px 10px', background: '#fef2f2', borderRadius: 6, marginBottom: 6, border: '1px solid #fecaca' }}>❌ {injectError}</div>}
+                        {!injecting && episodes.map(ep => (
+                          <button key={ep.id} onClick={() => injectEvent(ev.id, ep.id)} disabled={injecting} style={{ display: 'block', width: '100%', textAlign: 'left', padding: '6px 10px', background: '#fff', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 12, cursor: 'pointer', marginBottom: 4, color: '#1a1a2e' }}>
+                            {ep.episode_number || '?'}. {ep.title || 'Untitled'}
+                          </button>
+                        ))}
+                        {!injecting && episodes.length === 0 && <span style={S.muted}>No episodes yet — create an episode first</span>}
+                      </>
+                    )}
                   </div>
                 )}
                 {generateTarget === ev.id && (
@@ -943,6 +960,10 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
       ) : (
         <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} style={S.inp} placeholder={placeholder} min={min} max={max} />
       )}
+      {/* ─── FLOATING TOAST ─── */}
+      {toast && (
+        <div style={S.toast}>{toast}</div>
+      )}
     </div>
   );
 }
@@ -986,6 +1007,7 @@ const S = {
   statusPill: (s) => ({ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s === 'accepted' ? '#f0fdf4' : s === 'computed' ? '#eef2ff' : s === 'ready' ? '#f0fdf4' : s === 'used' ? '#eef2ff' : '#f1f5f9', color: s === 'accepted' || s === 'ready' ? '#16a34a' : s === 'computed' || s === 'used' ? '#6366f1' : '#94a3b8' }),
   sourceBadge: (s) => ({ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s === 'override' ? '#fef3c7' : s === 'manual' ? '#fef2f2' : '#eef2ff', color: s === 'override' ? '#92400e' : s === 'manual' ? '#dc2626' : '#4338ca' }),
   deltaBadge: (v) => ({ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 11, fontWeight: 600, background: v > 0 ? '#f0fdf4' : '#fef2f2', color: v > 0 ? '#16a34a' : '#dc2626' }),
+  toast: { position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', padding: '12px 28px', background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: '#fff', borderRadius: 12, fontSize: 14, fontWeight: 700, boxShadow: '0 8px 24px rgba(22,163,74,0.35)', zIndex: 9999, animation: 'fadeInUp 0.3s ease-out', whiteSpace: 'nowrap' },
   evCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 },
   eTag: { padding: '2px 8px', background: '#f3e8ff', borderRadius: 4, fontSize: 11, color: '#7c3aed' },
   fLabel: { display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' },
