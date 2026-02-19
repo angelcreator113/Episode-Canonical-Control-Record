@@ -141,7 +141,7 @@ router.post('/admin/reset-character-stats', async (req, res) => {
 
     // Debug: find the show
     const shows = await sequelize.query(
-      `SELECT id, title FROM shows LIMIT 5`,
+      `SELECT id, name FROM shows LIMIT 5`,
       { type: sequelize.QueryTypes.SELECT }
     );
     if (!shows.length) {
@@ -185,7 +185,7 @@ router.post('/admin/reset-character-stats', async (req, res) => {
 
     res.json({
       success: true,
-      show: { id: showId, title: shows[0].title },
+      show: { id: showId, name: shows[0].name },
       character_state_found: parseInt(csCount[0]?.cnt || 0),
       episodes_found: parseInt(epCount[0]?.cnt || 0),
       message: 'Character stats reset and episode evaluations cleared'
