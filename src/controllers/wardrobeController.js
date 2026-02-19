@@ -151,6 +151,7 @@ module.exports = {
   async listWardrobeItems(req, res) {
     try {
       const {
+        show_id,
         character,
         category,
         favorite,
@@ -162,6 +163,11 @@ module.exports = {
       } = req.query;
 
       const where = { deleted_at: null };
+
+      // Filter by show
+      if (show_id) {
+        where.show_id = show_id;
+      }
 
       // Filter by character
       if (character) {
@@ -189,12 +195,50 @@ module.exports = {
 
       const offset = (page - 1) * limit;
 
-      const { count, rows } = await Wardrobe.findAndCountAll({
-        where,
-        limit: parseInt(limit),
-        offset,
-        order: [[sortBy, sortOrder.toUpperCase()]],
-      });
+      // Whitelist sortBy to prevent invalid column errors
+      const validSortCols = ['created_at', 'updated_at', 'name', 'clothing_category', 'tier', 'brand', 'color'];
+      const safeSortBy = validSortCols.includes(sortBy) ? sortBy : 'created_at';
+      const safeSortOrder = sortOrder.toUpperCase() === 'ASC' ? 'ASC' : 'DESC';
+
+      let count, rows;
+      try {
+        ({ count, rows } = await Wardrobe.findAndCountAll({
+          where,
+          limit: parseInt(limit),
+          offset,
+          order: [[safeSortBy, safeSortOrder]],
+        }));
+      } catch (ormError) {
+        // Fallback to raw SQL if ORM fails (model/DB column mismatch)
+        console.warn('⚠️ ORM query failed, using raw SQL fallback:', ormError.message);
+
+        // Check which columns actually exist in the table
+        const [cols] = await sequelize.query(
+          `SELECT column_name FROM information_schema.columns WHERE table_name = 'wardrobe'`
+        );
+        const colNames = new Set(cols.map(c => c.column_name));
+
+        const conditions = [];
+        const replacements = {};
+        if (colNames.has('deleted_at')) conditions.push('deleted_at IS NULL');
+        if (show_id && colNames.has('show_id')) { conditions.push('show_id = :show_id'); replacements.show_id = show_id; }
+        if (character && colNames.has('character')) { conditions.push('"character" = :character'); replacements.character = character; }
+        if (category && colNames.has('clothing_category')) { conditions.push('clothing_category = :category'); replacements.category = category; }
+        if (search) { conditions.push('(name ILIKE :search OR brand ILIKE :search OR color ILIKE :search)'); replacements.search = `%${search}%`; }
+
+        const realSortBy = colNames.has(safeSortBy) ? safeSortBy : 'created_at';
+        const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+        const [countResult] = await sequelize.query(
+          `SELECT COUNT(*) as total FROM wardrobe ${whereClause}`,
+          { replacements }
+        );
+        count = parseInt(countResult[0].total);
+        const [rawRows] = await sequelize.query(
+          `SELECT * FROM wardrobe ${whereClause} ORDER BY ${realSortBy} ${safeSortOrder} LIMIT :limit OFFSET :offset`,
+          { replacements: { ...replacements, limit: parseInt(limit), offset } }
+        );
+        rows = rawRows;
+      }
 
       res.json({
         success: true,
