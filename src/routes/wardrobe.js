@@ -1059,17 +1059,33 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     );
 
     // 5. Log the purchase in state history
-    await models.sequelize.query(
-      `INSERT INTO character_state_history (id, show_id, character_key, deltas_json, source, notes, created_at)
-       VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'wardrobe_purchase', :notes, NOW())`,
-      {
-        replacements: {
-          show_id,
-          deltas: JSON.stringify({ coins: -cost }),
-          notes: `Purchased: ${item.name} (${cost} coins)`,
-        },
-      }
-    );
+    try {
+      await models.sequelize.query(
+        `INSERT INTO character_state_history (id, show_id, character_key, deltas_json, source, notes, created_at)
+         VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'wardrobe_purchase', :notes, NOW())`,
+        {
+          replacements: {
+            show_id,
+            deltas: JSON.stringify({ coins: -cost }),
+            notes: `Purchased: ${item.name} (${cost} coins)`,
+          },
+        }
+      );
+    } catch (historyErr) {
+      // Fallback: ENUM may not have 'wardrobe_purchase' yet — use 'manual'
+      console.warn('History insert with wardrobe_purchase failed, falling back to manual:', historyErr.message);
+      await models.sequelize.query(
+        `INSERT INTO character_state_history (id, show_id, character_key, deltas_json, source, notes, created_at)
+         VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'manual', :notes, NOW())`,
+        {
+          replacements: {
+            show_id,
+            deltas: JSON.stringify({ coins: -cost }),
+            notes: `Wardrobe purchase: ${item.name} (${cost} coins)`,
+          },
+        }
+      );
+    }
 
     return res.json({
       success: true,
