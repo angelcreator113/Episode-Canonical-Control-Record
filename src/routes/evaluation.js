@@ -129,6 +129,54 @@ function parseIntentTag(scriptContent) {
 
 
 // ═══════════════════════════════════════════
+// POST /api/v1/admin/reset-character-stats
+// One-time admin endpoint: reset Lala's stats + clear evaluations
+// ═══════════════════════════════════════════
+
+router.post('/admin/reset-character-stats', async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    const { sequelize } = models;
+
+    // Step 1: Reset character_state
+    const [, csMeta] = await sequelize.query(`
+      UPDATE character_state 
+      SET coins = 500, 
+          reputation = 0, 
+          brand_trust = 0, 
+          influence = 0, 
+          stress = 0,
+          last_episode_applied = NULL,
+          updated_at = NOW()
+      WHERE show_id = (SELECT id FROM shows LIMIT 1)
+    `);
+
+    // Step 2: Clear episode evaluations
+    const [, epMeta] = await sequelize.query(`
+      UPDATE episodes 
+      SET evaluation_json = NULL, 
+          evaluation_status = NULL, 
+          formula_version = NULL,
+          status = 'draft',
+          updated_at = NOW()
+      WHERE show_id = (SELECT id FROM shows LIMIT 1)
+    `);
+
+    res.json({
+      success: true,
+      character_state_rows: csMeta?.rowCount ?? 0,
+      episodes_rows: epMeta?.rowCount ?? 0,
+      message: 'Character stats reset and episode evaluations cleared'
+    });
+  } catch (err) {
+    console.error('Admin reset error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
 // GET /api/v1/characters/:key/state
 // ═══════════════════════════════════════════
 
