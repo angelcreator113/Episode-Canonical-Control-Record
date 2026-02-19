@@ -1018,7 +1018,7 @@ router.post('/select', optionalAuth, async (req, res) => {
 
     // 2. Ensure episode_wardrobe table exists (may not if sync/migration hasn't run)
     const [ewTables] = await models.sequelize.query(
-      `SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe' LIMIT 1`
+      `SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'episode_wardrobe' LIMIT 1`
     );
     if (!ewTables?.length) {
       // Create the table on the fly so select works
@@ -1029,7 +1029,7 @@ router.post('/select', optionalAuth, async (req, res) => {
           wardrobe_id UUID NOT NULL,
           scene_id UUID,
           scene VARCHAR(255),
-          worn_at TIMESTAMPTZ DEFAULT NOW(),
+          worn_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
           notes TEXT,
           approval_status VARCHAR(50) DEFAULT 'pending',
           approved_by VARCHAR(255),
@@ -1045,29 +1045,41 @@ router.post('/select', optionalAuth, async (req, res) => {
     }
 
     // 3. Link to episode — check existing first, then insert or update
-    const [existing] = await models.sequelize.query(
-      `SELECT id FROM episode_wardrobe WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
-      { replacements: { episode_id, wardrobe_id } }
-    );
-    if (existing?.length) {
-      await models.sequelize.query(
-        `UPDATE episode_wardrobe SET approval_status = 'approved', updated_at = NOW()
-         WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
+    try {
+      const [existing] = await models.sequelize.query(
+        `SELECT id FROM episode_wardrobe WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
         { replacements: { episode_id, wardrobe_id } }
       );
-    } else {
-      await models.sequelize.query(
-        `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
-         VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW())`,
-        { replacements: { episode_id, wardrobe_id } }
-      );
+      if (existing?.length) {
+        await models.sequelize.query(
+          `UPDATE episode_wardrobe SET approval_status = 'approved', worn_at = NOW(), updated_at = NOW()
+           WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
+          { replacements: { episode_id, wardrobe_id } }
+        );
+      } else {
+        await models.sequelize.query(
+          `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, worn_at, created_at, updated_at)
+           VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW(), NOW())`,
+          { replacements: { episode_id, wardrobe_id } }
+        );
+      }
+    } catch (linkErr) {
+      console.error('episode_wardrobe link error:', linkErr.message);
+      // If it's a unique constraint violation, the row already exists — that's fine
+      if (!linkErr.message?.includes('unique_episode_wardrobe') && !linkErr.message?.includes('duplicate key')) {
+        throw linkErr;
+      }
     }
 
-    // 4. Increment times_worn
-    await models.sequelize.query(
-      `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, last_worn_date = NOW(), updated_at = NOW() WHERE id = :wardrobe_id`,
-      { replacements: { wardrobe_id } }
-    );
+    // 4. Increment times_worn (non-fatal — columns might not exist on older schemas)
+    try {
+      await models.sequelize.query(
+        `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, last_worn_date = NOW(), updated_at = NOW() WHERE id = :wardrobe_id`,
+        { replacements: { wardrobe_id } }
+      );
+    } catch (twErr) {
+      console.error('times_worn update skipped:', twErr.message);
+    }
 
     return res.json({
       success: true,
