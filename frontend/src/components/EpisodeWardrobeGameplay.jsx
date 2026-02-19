@@ -144,6 +144,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const [confirming, setConfirming] = useState(false);
   const [purchasing, setPurchasing] = useState(null);
   const [outfitLocked, setOutfitLocked] = useState(false);
+  const [slotsReady, setSlotsReady] = useState(false); // true after initial load/restore
 
   // Smart detection: dress vs top+bottom
   const bodyMode = useMemo(() => {
@@ -198,6 +199,62 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   useEffect(() => { loadPool(); }, [loadPool]);
   useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t); } }, [success]);
 
+  // ─── Restore slot picks (backend locked outfit OR localStorage draft) ───
+  useEffect(() => {
+    if (!episodeId || !showId) { setSlotsReady(true); return; }
+    let cancelled = false;
+    (async () => {
+      try {
+        // 1. Try loading a locked outfit from the backend
+        const res = await api.get(`/api/v1/wardrobe/outfit/${episodeId}`);
+        const backendItems = res.data?.items || [];
+        if (!cancelled && backendItems.length > 0) {
+          const restored = {};
+          backendItems.forEach(item => {
+            const cat = (item.clothing_category || '').toLowerCase();
+            if (cat === 'dress') restored.body = item;
+            else if (cat === 'top') restored.top = item;
+            else if (cat === 'bottom') restored.bottom = item;
+            else if (cat === 'shoes') restored.shoes = item;
+            else if (cat === 'accessories') restored.accessories = item;
+            else if (cat === 'jewelry') restored.jewelry = item;
+            else if (cat === 'perfume') restored.perfume = item;
+          });
+          setFilledSlots(restored);
+          setOutfitLocked(true);
+          setSlotsReady(true);
+          return;
+        }
+      } catch { /* backend outfit not available — fall through */ }
+
+      // 2. Fall back to localStorage draft
+      if (!cancelled) {
+        try {
+          const key = `wardrobe_draft_${episodeId}`;
+          const saved = localStorage.getItem(key);
+          if (saved) {
+            const draft = JSON.parse(saved);
+            if (draft && typeof draft === 'object') setFilledSlots(draft);
+          }
+        } catch { /* ignore parse errors */ }
+        setSlotsReady(true);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [episodeId, showId]);
+
+  // ─── Persist slot picks to localStorage whenever they change ───
+  useEffect(() => {
+    if (!episodeId || !slotsReady) return; // skip until initial restore is done
+    const key = `wardrobe_draft_${episodeId}`;
+    const filled = Object.entries(filledSlots).filter(([, v]) => v);
+    if (filled.length === 0) {
+      localStorage.removeItem(key);
+    } else {
+      localStorage.setItem(key, JSON.stringify(filledSlots));
+    }
+  }, [filledSlots, episodeId, slotsReady]);
+
   // ─── Assign item to slot ───
   const assignToSlot = (item) => {
     if (!item.is_owned) { setError('Cannot equip a locked item — purchase it first'); return; }
@@ -244,6 +301,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
       }
       setOutfitLocked(true);
       setSuccess('Outfit locked! 🔒✨');
+      // Clear localStorage draft — outfit is now persisted on backend
+      try { localStorage.removeItem(`wardrobe_draft_${episodeId}`); } catch {}
       if (onOutfitComplete) onOutfitComplete({ slots: filledSlots, synergy });
     } catch (err) { setError(err.response?.data?.error || 'Failed to lock outfit'); }
     finally { setConfirming(false); }

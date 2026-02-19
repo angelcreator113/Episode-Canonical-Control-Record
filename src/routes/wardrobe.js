@@ -41,6 +41,43 @@ const upload = multer({
 // Get staging items (unassigned wardrobe items)
 router.get('/staging', asyncHandler(wardrobeController.getStagingItems));
 
+// ═══════════════════════════════════════════
+// GET /api/v1/wardrobe/outfit/:episode_id
+// Returns wardrobe items linked (locked) to an episode
+// ═══════════════════════════════════════════
+router.get('/outfit/:episode_id', optionalAuth, async (req, res) => {
+  try {
+    const { episode_id } = req.params;
+    if (!episode_id) return res.status(400).json({ error: 'episode_id is required' });
+
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    const [items] = await models.sequelize.query(`
+      SELECT w.*, ew.approval_status
+      FROM episode_wardrobe ew
+      JOIN wardrobe w ON w.id = ew.wardrobe_id
+      WHERE ew.episode_id = :episode_id
+        AND ew.approval_status = 'approved'
+        AND w.deleted_at IS NULL
+      ORDER BY ew.created_at ASC
+    `, { replacements: { episode_id } });
+
+    // Parse JSON fields so frontend gets arrays/objects
+    const parsed = (items || []).map(item => ({
+      ...item,
+      aesthetic_tags: parseJSON(item.aesthetic_tags, []),
+      event_types: parseJSON(item.event_types, []),
+      dress_code_keywords: parseJSON(item.dress_code_keywords, []),
+    }));
+
+    return res.json({ items: parsed });
+  } catch (error) {
+    console.error('Load outfit error:', error.message);
+    return res.status(500).json({ error: 'Failed to load outfit' });
+  }
+});
+
 // List all wardrobe items
 router.get('/', asyncHandler(wardrobeController.listWardrobeItems));
 
