@@ -190,7 +190,7 @@ export default function QuickEpisodeCreator() {
 
         // Get character state
         try {
-          const csRes = await api.get(`/api/v1/character-state/${showId}/lala`);
+          const csRes = await api.get(`/api/v1/characters/lala/state?show_id=${showId}`);
           setCharState(csRes.data?.state || csRes.data);
         } catch { setCharState({ coins: 0, reputation: 1, stress: 0 }); }
 
