@@ -136,6 +136,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [success, setSuccess] = useState(null);
+  const [localCoins, setLocalCoins] = useState(null); // tracks coins after purchases
+  const coins = localCoins ?? characterState.coins ?? 0;
 
   // Slot state
   const [filledSlots, setFilledSlots] = useState({});
@@ -187,14 +189,14 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         prestige: event.prestige || 5,
         strictness: event.strictness || 5,
         host_brand: event.host_brand || '',
-        character_state: characterState,
+        character_state: { ...characterState, coins: localCoins ?? characterState.coins ?? 0 },
       });
       setPool(res.data.pool || []);
       setPoolBreakdown(res.data.pool_breakdown || {});
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load wardrobe');
     } finally { setLoading(false); }
-  }, [showId, event, characterState]);
+  }, [showId, event, characterState, localCoins]);
 
   useEffect(() => { loadPool(); }, [loadPool]);
   useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t); } }, [success]);
@@ -286,7 +288,19 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     setPurchasing(item.id);
     try {
       const res = await api.post('/api/v1/wardrobe/purchase', { wardrobe_id: item.id, show_id: showId });
-      if (res.data.success) { setSuccess(`Purchased "${item.name}" for ${res.data.cost} coins!`); loadPool(); }
+      if (res.data.success) {
+        // Update local coin balance immediately
+        if (res.data.coins_after != null) setLocalCoins(res.data.coins_after);
+        else setLocalCoins(prev => (prev ?? coins) - (res.data.cost || 0));
+
+        setSuccess(`Purchased "${item.name}" for ${res.data.cost} coins!`);
+        setInspecting(null); // close modal so user sees the updated grid
+
+        // Refresh pool, then auto-equip the purchased item
+        await loadPool();
+        const ownedItem = { ...item, is_owned: true, can_select: true, can_purchase: false };
+        assignToSlot(ownedItem);
+      }
     } catch (err) { setError(err.response?.data?.error || 'Purchase failed'); }
     finally { setPurchasing(null); }
   };
@@ -346,7 +360,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
         </div>
         <div style={{ textAlign: 'right' }}>
           <div style={{ fontSize: 9, color: '#880e4f', letterSpacing: 1, fontWeight: 600 }}>COINS</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: (characterState.coins || 0) < 100 ? '#dc2626' : '#4a1942' }}>🪙 {characterState.coins || 0}</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: coins < 100 ? '#dc2626' : '#4a1942' }}>🪙 {coins}</div>
         </div>
       </div>
 
