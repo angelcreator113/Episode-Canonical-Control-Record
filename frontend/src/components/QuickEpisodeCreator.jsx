@@ -14,9 +14,11 @@
  * Route: /shows/:showId/quick-episode
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+
+const STORAGE_KEY_PREFIX = 'quick_episode_draft_';
 
 // ─── PRESET EVENT TEMPLATES ───
 const EVENT_PRESETS = [
@@ -104,6 +106,78 @@ export default function QuickEpisodeCreator() {
   const [narrativeStakes, setNarrativeStakes] = useState('');
   const [inviteType, setInviteType] = useState('invite');
   const [isFree, setIsFree] = useState(false);
+
+  // Auto-save state
+  const [saveStatus, setSaveStatus] = useState(null); // null | 'saving' | 'saved' | 'restored'
+  const saveTimerRef = useRef(null);
+  const isRestoringRef = useRef(false);
+  const storageKey = `${STORAGE_KEY_PREFIX}${showId}`;
+
+  // ─── Restore draft from localStorage on mount ───
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem(storageKey);
+      if (saved) {
+        const draft = JSON.parse(saved);
+        isRestoringRef.current = true;
+        if (draft.title) setTitle(draft.title);
+        if (draft.description) setDescription(draft.description);
+        if (draft.selectedPreset) setSelectedPreset(draft.selectedPreset);
+        if (draft.eventName) setEventName(draft.eventName);
+        if (draft.eventType) setEventType(draft.eventType);
+        if (draft.dressCode) setDressCode(draft.dressCode);
+        if (draft.dressCodeKeywords) setDressCodeKeywords(draft.dressCodeKeywords);
+        if (draft.prestige != null) setPrestige(draft.prestige);
+        if (draft.strictness != null) setStrictness(draft.strictness);
+        if (draft.cost != null) setCost(draft.cost);
+        if (draft.hostBrand) setHostBrand(draft.hostBrand);
+        if (draft.narrativeStakes) setNarrativeStakes(draft.narrativeStakes);
+        if (draft.inviteType) setInviteType(draft.inviteType);
+        if (draft.isFree) setIsFree(draft.isFree);
+        // Don't restore episodeNumber/season — those come from API
+        setSaveStatus('restored');
+        setTimeout(() => {
+          isRestoringRef.current = false;
+          setSaveStatus(null);
+        }, 2000);
+      }
+    } catch { /* corrupted storage — ignore */ }
+  }, [storageKey]);
+
+  // ─── Auto-save to localStorage (debounced 800ms) ───
+  const saveDraft = useCallback(() => {
+    if (isRestoringRef.current) return;
+    const draft = {
+      title, description, selectedPreset, eventName, eventType,
+      dressCode, dressCodeKeywords, prestige, strictness, cost,
+      hostBrand, narrativeStakes, inviteType, isFree,
+      savedAt: new Date().toISOString(),
+    };
+    // Only save if there's meaningful content
+    if (title || eventName || description || dressCode) {
+      setSaveStatus('saving');
+      try {
+        localStorage.setItem(storageKey, JSON.stringify(draft));
+      } catch { /* storage full — ignore */ }
+      setTimeout(() => setSaveStatus('saved'), 300);
+      setTimeout(() => setSaveStatus(null), 2500);
+    }
+  }, [title, description, selectedPreset, eventName, eventType, dressCode,
+      dressCodeKeywords, prestige, strictness, cost, hostBrand,
+      narrativeStakes, inviteType, isFree, storageKey]);
+
+  useEffect(() => {
+    if (isRestoringRef.current) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(saveDraft, 800);
+    return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
+  }, [saveDraft]);
+
+  // ─── Clear draft ───
+  const clearDraft = () => {
+    localStorage.removeItem(storageKey);
+    setSaveStatus(null);
+  };
 
   // ─── Load show + character state + last episode number ───
   useEffect(() => {
@@ -221,7 +295,8 @@ export default function QuickEpisodeCreator() {
         });
       } catch { /* script save failed — not fatal */ }
 
-      // 5. Navigate to episode detail
+      // 5. Clear draft and navigate to episode detail
+      clearDraft();
       navigate(`/episodes/${episodeId}`);
     } catch (err) {
       setError(err.response?.data?.error || err.response?.data?.message || 'Failed to create episode');
@@ -282,6 +357,32 @@ Lala arrives at ${evName}.
             <div style={S.statItem}>⭐ <strong>{charState.reputation ?? 1}</strong></div>
             <div style={S.statItem}>😤 <strong>{charState.stress ?? 0}</strong></div>
           </div>
+        )}
+      </div>
+
+      {/* Save status indicator */}
+      <div style={S.saveBar}>
+        {saveStatus === 'restored' && (
+          <span style={{ color: '#6366f1' }}>Draft restored</span>
+        )}
+        {saveStatus === 'saving' && (
+          <span style={{ color: '#94a3b8' }}>Saving...</span>
+        )}
+        {saveStatus === 'saved' && (
+          <span style={{ color: '#22c55e' }}>Draft saved</span>
+        )}
+        {!saveStatus && localStorage.getItem(storageKey) && (
+          <span style={{ color: '#94a3b8' }}>Draft auto-saved</span>
+        )}
+        {localStorage.getItem(storageKey) && (
+          <button onClick={() => {
+            clearDraft();
+            setTitle(''); setDescription(''); setSelectedPreset(null);
+            setEventName(''); setEventType(''); setDressCode('');
+            setDressCodeKeywords([]); setPrestige(5); setStrictness(5);
+            setCost(50); setHostBrand(''); setNarrativeStakes('');
+            setInviteType('invite'); setIsFree(false);
+          }} style={S.clearBtn}>Clear Draft</button>
         )}
       </div>
 
@@ -509,6 +610,16 @@ const S = {
   headerSub: { fontSize: 12, color: '#e2e8f0', marginTop: 2 },
   statsBox: { display: 'flex', gap: 14, fontSize: 13, color: '#e2e8f0' },
   statItem: { display: 'flex', alignItems: 'center', gap: 4 },
+
+  saveBar: {
+    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+    fontSize: 11, fontWeight: 600, marginBottom: 8, minHeight: 20, padding: '0 4px',
+  },
+  clearBtn: {
+    background: 'none', border: '1px solid #e2e8f0', borderRadius: 6,
+    padding: '2px 10px', fontSize: 10, color: '#94a3b8', cursor: 'pointer',
+    fontWeight: 600,
+  },
 
   errorBanner: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
