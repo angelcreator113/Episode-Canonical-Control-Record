@@ -219,7 +219,7 @@ router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
       try {
         const [weRows] = await models.sequelize.query(
           `SELECT event_type, dress_code, dress_code_keywords, prestige, strictness, host_brand
-           FROM world_events WHERE episode_id = :episodeId LIMIT 1`,
+           FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
           { replacements: { episodeId: id } }
         );
         if (weRows?.[0]) {

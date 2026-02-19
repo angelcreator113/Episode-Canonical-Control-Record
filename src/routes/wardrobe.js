@@ -105,7 +105,7 @@ router.get('/outfit-score/:episodeId', optionalAuth, async (req, res) => {
       `SELECT e.*, we.name as event_name, we.event_type, we.dress_code,
               we.dress_code_keywords, we.prestige, we.strictness, we.host_brand
        FROM episodes e
-       LEFT JOIN world_events we ON we.episode_id = e.id
+       LEFT JOIN world_events we ON we.used_in_episode_id = e.id
        WHERE e.id = :episodeId`,
       { replacements: { episodeId } }
     );
