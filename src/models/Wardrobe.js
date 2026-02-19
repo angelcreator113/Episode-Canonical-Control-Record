@@ -152,6 +152,102 @@ module.exports = (sequelize) => {
         comment: 'Primary show ownership',
       },
 
+      // ═══════════════════════════════════════
+      // GAME LAYER FIELDS
+      // ═══════════════════════════════════════
+
+      tier: {
+        type: DataTypes.STRING(20),
+        allowNull: true,
+        defaultValue: 'basic',
+        comment: 'basic | mid | luxury | elite',
+      },
+      lock_type: {
+        type: DataTypes.STRING(30),
+        allowNull: true,
+        defaultValue: 'none',
+        comment: 'none | coin | reputation | brand_exclusive | season_drop',
+      },
+      unlock_requirement: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: {},
+        comment: 'JSON with unlock conditions (brand_trust_min, event_completed, etc)',
+      },
+      is_owned: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: false,
+        comment: 'Whether LáLá currently owns this item',
+      },
+      is_visible: {
+        type: DataTypes.BOOLEAN,
+        allowNull: true,
+        defaultValue: true,
+        comment: 'Whether item is visible in closet (hidden elite items)',
+      },
+      era_alignment: {
+        type: DataTypes.STRING(50),
+        allowNull: true,
+        comment: 'foundation | glow_up | luxury | prime | legacy',
+      },
+      aesthetic_tags: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: [],
+        comment: 'Style tags: casual, elegant, bold, romantic, etc',
+      },
+      event_types: {
+        type: DataTypes.JSONB,
+        allowNull: true,
+        defaultValue: [],
+        comment: 'Events this item suits: gala, brunch, meetup, etc',
+      },
+      outfit_match_weight: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 5,
+        comment: 'Priority weight for outfit matching (1-10)',
+      },
+      coin_cost: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+        comment: 'In-game coin cost to unlock',
+      },
+      reputation_required: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+        comment: 'Min reputation tier to unlock',
+      },
+      influence_required: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        defaultValue: 0,
+        comment: 'Min influence score to unlock',
+      },
+      season_unlock_episode: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        comment: 'Episode number when item drops',
+      },
+      lala_reaction_own: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'LáLá reaction when she owns this item',
+      },
+      lala_reaction_locked: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'LáLá reaction when item is locked',
+      },
+      lala_reaction_reject: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'LáLá reaction when item doesn\'t suit the event',
+      },
+
       // Timestamps
       created_at: {
         type: DataTypes.DATE,
@@ -185,6 +281,18 @@ module.exports = (sequelize) => {
         },
         {
           fields: ['deleted_at'],
+        },
+        {
+          fields: ['tier'],
+        },
+        {
+          fields: ['lock_type'],
+        },
+        {
+          fields: ['is_owned'],
+        },
+        {
+          fields: ['era_alignment'],
         },
       ],
     }
