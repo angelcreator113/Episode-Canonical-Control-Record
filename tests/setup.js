@@ -5,13 +5,22 @@
 
 // Setup test environment
 process.env.NODE_ENV = 'test';
-process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || 'postgresql://postgres:Ayanna123@localhost:5432/episode_metadata_test';
+process.env.DATABASE_URL = process.env.TEST_DATABASE_URL || process.env.DATABASE_URL || 'postgresql://postgres:Ayanna123@localhost:5432/episode_metadata_test';
 process.env.LOG_LEVEL = 'error';
 process.env.AWS_REGION = 'us-east-1';
 process.env.COGNITO_USER_POOL_ID = 'us-east-1_test123';
 process.env.JWT_SECRET = 'test-secret-key-that-is-at-least-32-characters-long-for-security';
 process.env.TOKEN_ISSUER = 'episode-metadata-api';
 process.env.TOKEN_AUDIENCE = 'episode-metadata-app';
+
+// Mock uuid to avoid ESM parse errors (uuid v10+ is ESM-only)
+jest.mock('uuid', () => ({
+  v4: jest.fn(() => 'test-uuid-' + Math.random().toString(36).substr(2, 9)),
+  v1: jest.fn(() => 'test-uuid-v1'),
+  v5: jest.fn(() => 'test-uuid-v5'),
+  validate: jest.fn(() => true),
+  NIL: '00000000-0000-0000-0000-000000000000',
+}));
 
 // Mock AWS SDK before any imports
 jest.mock('aws-sdk', () => ({
