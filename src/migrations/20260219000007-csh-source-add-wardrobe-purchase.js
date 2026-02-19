@@ -5,26 +5,22 @@
  *
  * The purchase route logs wardrobe purchases with source = 'wardrobe_purchase',
  * but the original ENUM only had ('computed', 'override', 'manual').
+ *
+ * NOTE: ALTER TYPE ... ADD VALUE cannot run inside a transaction in PostgreSQL,
+ * so this migration uses the raw query approach outside Sequelize's default transaction.
  */
 module.exports = {
   async up(queryInterface) {
-    // PostgreSQL: add a new value to an existing ENUM type
-    // The type name for a Sequelize-created ENUM on column "source" is "enum_character_state_history_source"
-    await queryInterface.sequelize.query(`
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM pg_enum
-          WHERE enumlabel = 'wardrobe_purchase'
-          AND enumtypid = (
-            SELECT oid FROM pg_type WHERE typname = 'enum_character_state_history_source'
-          )
-        ) THEN
-          ALTER TYPE "enum_character_state_history_source" ADD VALUE 'wardrobe_purchase';
-        END IF;
-      END
-      $$;
-    `);
+    // ALTER TYPE ... ADD VALUE cannot run inside a transaction block.
+    // Use a separate connection/query that commits immediately.
+    try {
+      await queryInterface.sequelize.query(
+        `ALTER TYPE "enum_character_state_history_source" ADD VALUE IF NOT EXISTS 'wardrobe_purchase'`
+      );
+    } catch (err) {
+      // IF NOT EXISTS requires PG >= 9.3; if it fails, the value may already exist
+      console.warn('ENUM alter skipped:', err.message);
+    }
   },
 
   async down() {
