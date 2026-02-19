@@ -995,7 +995,7 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
 
 
 // ═══════════════════════════════════════════
-// POST /api/v1/wardrobe/select  (ORM-based)
+// POST /api/v1/wardrobe/select
 // ═══════════════════════════════════════════
 
 router.post('/select', optionalAuth, async (req, res) => {
@@ -1018,26 +1018,14 @@ router.post('/select', optionalAuth, async (req, res) => {
     if (!items?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
     if (!items[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
 
-    // 2. Upsert link using ORM (handles UUID, defaults, and missing columns gracefully)
-    if (models.EpisodeWardrobe) {
-      await models.EpisodeWardrobe.findOrCreate({
-        where: { episode_id, wardrobe_id },
-        defaults: { approval_status: 'approved' },
-      });
-      // Ensure approval_status is 'approved' (in case row existed with different status)
-      await models.EpisodeWardrobe.update(
-        { approval_status: 'approved' },
-        { where: { episode_id, wardrobe_id } }
-      );
-    } else {
-      // Fallback: minimal raw SQL — only columns guaranteed to exist
-      await models.sequelize.query(
-        `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
-         VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW())
-         ON CONFLICT (episode_id, wardrobe_id) DO UPDATE SET approval_status = 'approved', updated_at = NOW()`,
-        { replacements: { episode_id, wardrobe_id } }
-      );
-    }
+    // 2. Upsert link — use ONLY guaranteed columns (id, episode_id, wardrobe_id, created_at, updated_at)
+    //    The RDS table may have been created from a simpler migration that lacks approval_status, worn_at, etc.
+    await models.sequelize.query(
+      `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, created_at, updated_at)
+       VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, NOW(), NOW())
+       ON CONFLICT (episode_id, wardrobe_id) DO UPDATE SET updated_at = NOW()`,
+      { replacements: { episode_id, wardrobe_id } }
+    );
 
     // 3. Increment times_worn (non-fatal)
     try {
