@@ -649,9 +649,9 @@ router.post('/seed', optionalAuth, async (req, res) => {
           lala_reaction_own, lala_reaction_locked, lala_reaction_reject,
           created_at, updated_at)
          VALUES
-         (:id, :show_id, :name, :clothing_category, :color, :season, :tags,
-          :tier, :lock_type, :unlock_requirement, :is_owned, :is_visible,
-          :era_alignment, :aesthetic_tags, :event_types, :outfit_match_weight,
+         (:id, :show_id, :name, :clothing_category, :color, :season, CAST(:tags AS JSONB),
+          :tier, :lock_type, CAST(:unlock_requirement AS JSONB), :is_owned, :is_visible,
+          :era_alignment, CAST(:aesthetic_tags AS JSONB), CAST(:event_types AS JSONB), :outfit_match_weight,
           :coin_cost, :reputation_required, :influence_required, :season_unlock_episode,
           :lala_reaction_own, :lala_reaction_locked, :lala_reaction_reject,
           NOW(), NOW())`,
