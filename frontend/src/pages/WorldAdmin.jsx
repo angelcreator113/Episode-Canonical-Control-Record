@@ -16,7 +16,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
@@ -52,6 +52,8 @@ const TABS = [
 
 function WorldAdmin() {
   const { id: showId } = useParams();
+  const [searchParams] = useSearchParams();
+  const initialTab = searchParams.get('tab') || 'overview';
 
   const [show, setShow] = useState(null);
   const [charState, setCharState] = useState(null);
@@ -66,7 +68,7 @@ function WorldAdmin() {
   const [wardrobeCatFilter, setWardrobeCatFilter] = useState('all');   // all | dress | top | ...
   const [seedingWardrobe, setSeedingWardrobe] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState('overview');
+  const [activeTab, setActiveTab] = useState(initialTab);
   const [expandedEpisode, setExpandedEpisode] = useState(null);
 
   // Event editor state
