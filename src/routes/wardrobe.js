@@ -51,30 +51,43 @@ router.get('/outfit/:episode_id', optionalAuth, async (req, res) => {
     if (!episode_id) return res.status(400).json({ error: 'episode_id is required' });
 
     const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    if (!models) return res.json({ items: [] }); // graceful — no models = empty outfit
+
+    // Check if episode_wardrobe table exists
+    const [tables] = await models.sequelize.query(
+      `SELECT 1 FROM information_schema.tables WHERE table_name = 'episode_wardrobe' LIMIT 1`
+    );
+    if (!tables?.length) return res.json({ items: [] });
 
     const [items] = await models.sequelize.query(`
       SELECT w.*, ew.approval_status
       FROM episode_wardrobe ew
       JOIN wardrobe w ON w.id = ew.wardrobe_id
       WHERE ew.episode_id = :episode_id
-        AND ew.approval_status = 'approved'
-        AND w.deleted_at IS NULL
+        AND (ew.approval_status = 'approved' OR ew.approval_status IS NULL)
+        AND (w.deleted_at IS NULL)
       ORDER BY ew.created_at ASC
     `, { replacements: { episode_id } });
 
     // Parse JSON fields so frontend gets arrays/objects
+    const safeParseJSON = (val, fallback) => {
+      if (Array.isArray(val)) return val;
+      if (typeof val === 'object' && val !== null) return val;
+      if (typeof val === 'string') { try { return JSON.parse(val); } catch { return fallback; } }
+      return fallback;
+    };
     const parsed = (items || []).map(item => ({
       ...item,
-      aesthetic_tags: parseJSON(item.aesthetic_tags, []),
-      event_types: parseJSON(item.event_types, []),
-      dress_code_keywords: parseJSON(item.dress_code_keywords, []),
+      aesthetic_tags: safeParseJSON(item.aesthetic_tags, []),
+      event_types: safeParseJSON(item.event_types, []),
+      dress_code_keywords: safeParseJSON(item.dress_code_keywords, []),
     }));
 
     return res.json({ items: parsed });
   } catch (error) {
     console.error('Load outfit error:', error.message);
-    return res.status(500).json({ error: 'Failed to load outfit' });
+    // Return empty array instead of 500 — outfit loading should never block gameplay
+    return res.json({ items: [] });
   }
 });
 
