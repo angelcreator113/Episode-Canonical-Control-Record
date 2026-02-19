@@ -83,6 +83,10 @@ function EvaluateEpisode() {
   const [overrideNarrative, setOverrideNarrative] = useState('');
   const [overriding, setOverriding] = useState(false);
 
+  // Outfit data
+  const [outfitData, setOutfitData] = useState(null);
+  const [outfitLoading, setOutfitLoading] = useState(false);
+
   // ─── LOAD DATA ───
   useEffect(() => {
     loadData();
@@ -111,6 +115,25 @@ function EvaluateEpisode() {
       setLoading(false);
     }
   };
+
+  // ─── FETCH OUTFIT SCORE ───
+  useEffect(() => {
+    if (!episodeId) return;
+    const fetchOutfit = async () => {
+      setOutfitLoading(true);
+      try {
+        const res = await api.get(`/api/v1/wardrobe/outfit-score/${episodeId}`);
+        if (res.data?.success) {
+          setOutfitData(res.data);
+        }
+      } catch (err) {
+        console.warn('Could not fetch outfit score:', err.message);
+      } finally {
+        setOutfitLoading(false);
+      }
+    };
+    fetchOutfit();
+  }, [episodeId]);
 
   // ─── EVALUATE ───
   const handleEvaluate = useCallback(async () => {
@@ -269,13 +292,110 @@ function EvaluateEpisode() {
           {/* Step 2: Wardrobe */}
           <div style={S.stepCard}>
             <div style={S.stepHeader}>
-              <span style={S.stepIcon(true)}>2</span>
+              <span style={S.stepIcon(outfitData?.hasOutfit)}>2</span>
               <h3 style={S.stepTitle}>Wardrobe</h3>
-              <span style={S.stepStatus(true)}>~</span>
+              {outfitData?.hasOutfit && (
+                <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: outfitData.confidence?.color || '#6366f1' }}>
+                  {outfitData.confidence?.emoji} {outfitData.score}/100
+                </span>
+              )}
             </div>
             <div style={S.stepBody}>
-              <div style={S.stepHint}>Wardrobe scoring uses neutral defaults if no items are assigned. Assign wardrobe items for accurate style matching.</div>
-              <Link to={`/episodes/${episodeId}?tab=wardrobe`} style={S.stepLink}>→ Assign Wardrobe</Link>
+              {outfitLoading ? (
+                <div style={{ padding: 20, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Loading outfit data...</div>
+              ) : outfitData?.hasOutfit ? (
+                <div>
+                  {/* Synergy Score Bar */}
+                  <div style={{ padding: 14, background: '#f8fafc', borderRadius: 10, marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>Outfit Synergy</span>
+                      <span style={{ fontSize: 18, fontWeight: 800, color: outfitData.confidence?.color || '#6366f1' }}>
+                        {outfitData.confidence?.emoji} {outfitData.score}
+                      </span>
+                    </div>
+                    <div style={{ height: 8, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                      <div style={{
+                        height: '100%',
+                        width: `${outfitData.score}%`,
+                        borderRadius: 4,
+                        background: `linear-gradient(90deg, ${outfitData.confidence?.color || '#6366f1'}80, ${outfitData.confidence?.color || '#6366f1'})`,
+                        transition: 'width 0.5s ease',
+                      }} />
+                    </div>
+                    <div style={{ fontSize: 12, color: outfitData.confidence?.color || '#6366f1', fontWeight: 600, marginTop: 4 }}>
+                      {outfitData.confidence?.label}
+                    </div>
+
+                    {/* Breakdown badges */}
+                    {outfitData.breakdown && (
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                        {Object.entries(outfitData.breakdown).filter(([, v]) => v > 0).map(([key, val]) => (
+                          <span key={key} style={{
+                            padding: '2px 8px', background: '#eef2ff', borderRadius: 4,
+                            fontSize: 10, color: '#4338ca', fontWeight: 600,
+                          }}>
+                            +{val} {key.replace(/_/g, ' ')}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Outfit Items */}
+                  <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', letterSpacing: 0.5, marginBottom: 8 }}>
+                    LOCKED OUTFIT ({outfitData.item_count} items)
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {(outfitData.items || []).map((item, idx) => {
+                      const catIcons = { dress: '👗', top: '👚', bottom: '👖', shoes: '👠', accessories: '👜', jewelry: '💍', perfume: '🌸' };
+                      const tierColors = {
+                        basic: { bg: '#f1f5f9', color: '#64748b' },
+                        mid: { bg: '#eef2ff', color: '#6366f1' },
+                        luxury: { bg: '#fef3c7', color: '#92400e' },
+                        elite: { bg: '#fef3c7', color: '#78350f' },
+                      };
+                      const tc = tierColors[item.tier] || tierColors.basic;
+
+                      return (
+                        <div key={item.id || idx} style={{
+                          display: 'flex', alignItems: 'center', gap: 10,
+                          padding: '8px 12px', background: '#f0fdf4', border: '1px solid #bbf7d0',
+                          borderRadius: 8,
+                        }}>
+                          <span style={{ fontSize: 18 }}>{catIcons[item.category] || '👕'}</span>
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: 13, fontWeight: 600, color: '#1a1a2e' }}>{item.name}</div>
+                            <div style={{ display: 'flex', gap: 4, marginTop: 2 }}>
+                              <span style={{
+                                padding: '1px 6px', borderRadius: 3, fontSize: 9, fontWeight: 600,
+                                background: tc.bg, color: tc.color,
+                              }}>
+                                {item.tier}
+                              </span>
+                              {(item.aesthetic_tags || []).slice(0, 3).map((tag, ti) => (
+                                <span key={ti} style={{
+                                  padding: '1px 5px', background: '#f1f5f9', borderRadius: 3,
+                                  fontSize: 9, color: '#64748b',
+                                }}>
+                                  {tag}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                          <div style={{ fontSize: 12, fontWeight: 700, color: '#16a34a' }}>
+                            {item.individual_score}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <div style={S.stepHint}>Wardrobe scoring uses neutral defaults if no items are assigned. Assign wardrobe items for accurate style matching.</div>
+                  <Link to={`/episodes/${episodeId}?tab=wardrobe`} style={S.stepLink}>→ Assign Wardrobe</Link>
+                </div>
+              )}
             </div>
           </div>
 

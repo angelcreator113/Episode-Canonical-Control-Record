@@ -316,6 +316,13 @@ function ShowDetail() {
                 </div>
                 
                 <button 
+                  onClick={() => navigate(`/shows/${showId}/quick-episode`)}
+                  className="btn-primary"
+                  style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
+                >
+                  ⚡ Quick Create
+                </button>
+                <button 
                   onClick={handleCreateEpisode}
                   className="btn-primary"
                 >
@@ -329,6 +336,13 @@ function ShowDetail() {
                 <div className="empty-icon">📺</div>
                 <h3>No episodes yet</h3>
                 <p>Create your first episode to get started</p>
+                <button 
+                  onClick={() => navigate(`/shows/${showId}/quick-episode`)}
+                  className="btn-primary"
+                  style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
+                >
+                  ⚡ Quick Create
+                </button>
                 <button 
                   onClick={handleCreateEpisode}
                   className="btn-primary"

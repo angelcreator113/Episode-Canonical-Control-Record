@@ -44,6 +44,7 @@ import WorldAdmin from './pages/WorldAdmin';
 import ShowSettings from './pages/ShowSettings';
 import ExportPage from './pages/ExportPage';
 import AssetLibrary from './pages/AssetLibrary';
+import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
 import Sidebar from './components/layout/Sidebar';
@@ -195,6 +196,7 @@ function AppContent() {
           <Route path="/shows/:id" element={<ShowDetail />} />
           <Route path="/shows/:id/edit" element={<EditShow />} />
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
+          <Route path="/shows/:showId/quick-episode" element={<QuickEpisodeCreator />} />
           <Route path="/shows/:id/settings" element={<ShowSettings />} />
           {/* Scene Composer */}
           <Route path="/episodes/:episodeId/scene-composer" element={<SceneComposerFull />} />
