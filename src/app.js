@@ -1050,7 +1050,8 @@ if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
   );
 
   // Handle React Router - serve index.html for all non-API/file routes (MUST be last)
-  app.get('*', (req, res, next) => {
+  // Express 5 requires named wildcard syntax instead of bare '*'
+  app.get('/{*splat}', (req, res, next) => {
     try {
       console.log(`📄 Catch-all route: ${req.path}`);
 
