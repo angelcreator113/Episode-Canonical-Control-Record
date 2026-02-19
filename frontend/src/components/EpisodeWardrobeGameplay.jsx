@@ -159,8 +159,8 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
           </div>
         </div>
         <div style={W.eventBannerRight}>
-          <div style={{ fontSize: 11, color: '#94a3b8', marginBottom: 4 }}>LALA'S COINS</div>
-          <div style={{ fontSize: 22, fontWeight: 800, color: (characterState.coins || 0) < 100 ? '#dc2626' : '#1a1a2e' }}>
+          <div style={{ fontSize: 11, color: '#880e4f', marginBottom: 4, fontWeight: 600 }}>LALA'S COINS</div>
+          <div style={{ fontSize: 22, fontWeight: 800, color: (characterState.coins || 0) < 100 ? '#dc2626' : '#4a1942' }}>
             🪙 {characterState.coins || 0}
           </div>
         </div>
@@ -371,15 +371,15 @@ const W = {
   // Event banner
   eventBanner: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '16px 20px', background: 'linear-gradient(135deg, #1a1a2e, #2d1b4e)',
-    borderRadius: 14, marginBottom: 12, color: '#fff',
+    padding: '16px 20px', background: 'linear-gradient(135deg, #fce4ec, #f8bbd0)',
+    borderRadius: 14, marginBottom: 12, color: '#4a1942',
   },
   eventBannerLeft: {},
   eventBannerRight: { textAlign: 'right' },
-  eventLabel: { fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: '#a78bfa', marginBottom: 4 },
-  eventName: { fontSize: 18, fontWeight: 800, marginBottom: 6 },
+  eventLabel: { fontSize: 10, fontWeight: 700, letterSpacing: 1.5, color: '#c2185b', marginBottom: 4 },
+  eventName: { fontSize: 18, fontWeight: 800, marginBottom: 6, color: '#4a1942' },
   eventTags: { display: 'flex', gap: 6, flexWrap: 'wrap' },
-  eventTag: { padding: '3px 10px', background: 'rgba(255,255,255,0.12)', borderRadius: 6, fontSize: 11, color: '#e2e8f0' },
+  eventTag: { padding: '3px 10px', background: 'rgba(194,24,91,0.1)', borderRadius: 6, fontSize: 11, color: '#880e4f' },
 
   // Breakdown
   breakdownRow: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 14, fontSize: 12, color: '#64748b' },
