@@ -1029,10 +1029,10 @@ router.post('/select', optionalAuth, async (req, res) => {
         { replacements: { episode_id, wardrobe_id } }
       );
     } else {
-      // Insert new link — let DB handle the id (SERIAL or UUID default)
+      // Insert new link — must supply id (Sequelize UUIDV4 default is JS-only, not DB-level)
       await models.sequelize.query(
-        `INSERT INTO episode_wardrobe (episode_id, wardrobe_id, approval_status, created_at, updated_at)
-         VALUES (:episode_id, :wardrobe_id, 'approved', NOW(), NOW())`,
+        `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, worn_at, created_at, updated_at)
+         VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW(), NOW())`,
         { replacements: { episode_id, wardrobe_id } }
       );
     }
@@ -1082,7 +1082,7 @@ router.post('/purchase', optionalAuth, async (req, res) => {
 
     // 2. Get Lala's coins
     const [states] = await models.sequelize.query(
-      `SELECT * FROM character_state WHERE show_id = :show_id AND character_name = 'lala' ORDER BY updated_at DESC LIMIT 1`,
+      `SELECT * FROM character_state WHERE show_id = :show_id AND character_key = 'lala' ORDER BY updated_at DESC LIMIT 1`,
       { replacements: { show_id } }
     );
     const currentCoins = states?.[0]?.coins ?? 0;
@@ -1101,7 +1101,7 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     const newCoins = currentCoins - cost;
     await models.sequelize.query(
       `UPDATE character_state SET coins = :newCoins, updated_at = NOW()
-       WHERE show_id = :show_id AND character_name = 'lala'`,
+       WHERE show_id = :show_id AND character_key = 'lala'`,
       { replacements: { newCoins, show_id } }
     );
 
@@ -1114,7 +1114,7 @@ router.post('/purchase', optionalAuth, async (req, res) => {
     // 5. Log purchase in state history (non-fatal — purchase already succeeded)
     try {
       await models.sequelize.query(
-        `INSERT INTO character_state_history (id, show_id, character_name, deltas_json, source, notes, created_at)
+        `INSERT INTO character_state_history (id, show_id, character_key, deltas_json, source, notes, created_at)
          VALUES (gen_random_uuid(), :show_id, 'lala', :deltas, 'wardrobe_purchase', :notes, NOW())`,
         {
           replacements: {
@@ -1128,7 +1128,7 @@ router.post('/purchase', optionalAuth, async (req, res) => {
       // If history table doesn't exist or source ENUM rejects — try without UUID
       try {
         await models.sequelize.query(
-          `INSERT INTO character_state_history (show_id, character_name, deltas_json, source, notes, created_at)
+          `INSERT INTO character_state_history (show_id, character_key, deltas_json, source, notes, created_at)
            VALUES (:show_id, 'lala', :deltas, 'manual', :notes, NOW())`,
           {
             replacements: {
