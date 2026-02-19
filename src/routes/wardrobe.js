@@ -60,11 +60,10 @@ router.get('/outfit/:episode_id', optionalAuth, async (req, res) => {
     if (!tables?.length) return res.json({ items: [] });
 
     const [items] = await models.sequelize.query(`
-      SELECT w.*, ew.approval_status
+      SELECT w.*
       FROM episode_wardrobe ew
       JOIN wardrobe w ON w.id = ew.wardrobe_id
       WHERE ew.episode_id = :episode_id
-        AND (ew.approval_status = 'approved' OR ew.approval_status IS NULL)
         AND (w.deleted_at IS NULL)
       ORDER BY ew.created_at ASC
     `, { replacements: { episode_id } });
@@ -88,6 +87,45 @@ router.get('/outfit/:episode_id', optionalAuth, async (req, res) => {
     console.error('Load outfit error:', error.message);
     // Return empty array instead of 500 — outfit loading should never block gameplay
     return res.json({ items: [] });
+  }
+});
+
+// ═══════════════════════════════════════════
+// GET /api/v1/wardrobe/outfit-score/:episodeId
+// Returns synergy score for the locked outfit
+// ═══════════════════════════════════════════
+router.get('/outfit-score/:episodeId', optionalAuth, async (req, res) => {
+  try {
+    const { episodeId } = req.params;
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not available' });
+
+    // Get the episode's event context from world_events
+    const [episodes] = await models.sequelize.query(
+      `SELECT e.*, we.name as event_name, we.event_type, we.dress_code,
+              we.dress_code_keywords, we.prestige, we.strictness, we.host_brand
+       FROM episodes e
+       LEFT JOIN world_events we ON we.episode_id = e.id
+       WHERE e.id = :episodeId`,
+      { replacements: { episodeId } }
+    );
+
+    const ep = episodes?.[0];
+    const event = ep ? {
+      name: ep.event_name,
+      event_type: ep.event_type,
+      dress_code: ep.dress_code,
+      dress_code_keywords: _parseJSON(ep.dress_code_keywords, []),
+      prestige: ep.prestige,
+      strictness: ep.strictness,
+      host_brand: ep.host_brand,
+    } : {};
+
+    const result = await getOutfitScore(models, episodeId, event);
+    return res.json({ success: true, ...result });
+  } catch (error) {
+    console.error('Outfit score endpoint error:', error);
+    return res.status(500).json({ error: 'Failed to compute outfit score', detail: error.message });
   }
 });
 
@@ -1149,4 +1187,187 @@ router.post('/purchase', optionalAuth, async (req, res) => {
 });
 
 
+// ═══════════════════════════════════════════
+// OUTFIT SCORING HELPER
+// ═══════════════════════════════════════════
+
+function _parseJSON(val, fallback) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === 'object' && val !== null) return val;
+  if (typeof val === 'string') {
+    try { return JSON.parse(val); } catch { return fallback; }
+  }
+  return fallback;
+}
+
+/**
+ * getOutfitScore - Fetches locked outfit for an episode and computes synergy
+ * 
+ * @param {object} models - Sequelize models
+ * @param {string} episodeId - Episode UUID
+ * @param {object} event - Event object with dress_code, prestige, event_type, etc.
+ * @returns {object} { score, items, breakdown, confidence, hasOutfit }
+ */
+async function getOutfitScore(models, episodeId, event = {}) {
+  try {
+    // 1. Fetch all wardrobe items linked to this episode
+    //    NOTE: episode_wardrobe on RDS only has: id, episode_id, wardrobe_id, scene, worn_at, notes, created_at, updated_at
+    const [rows] = await models.sequelize.query(
+      `SELECT w.*
+       FROM episode_wardrobe ew
+       JOIN wardrobe w ON w.id = ew.wardrobe_id
+       WHERE ew.episode_id = :episodeId
+       AND w.deleted_at IS NULL
+       ORDER BY w.clothing_category`,
+      { replacements: { episodeId } }
+    );
+
+    if (!rows || rows.length === 0) {
+      return {
+        hasOutfit: false,
+        score: 0,
+        items: [],
+        breakdown: {},
+        confidence: { label: 'No outfit', emoji: '❌', color: '#94a3b8' },
+        message: 'No wardrobe items assigned to this episode',
+      };
+    }
+
+    // 2. Parse JSON fields
+    const items = rows.map(item => ({
+      ...item,
+      aesthetic_tags: _parseJSON(item.aesthetic_tags, []),
+      event_types: _parseJSON(item.event_types, []),
+    }));
+
+    // 3. Calculate synergy
+    const TIER_VALS = { basic: 1, mid: 2, luxury: 3, elite: 4 };
+
+    const dressCodeWords = [
+      ...(event.dress_code || '').toLowerCase().split(/[\s,]+/).filter(Boolean),
+      ...(event.dress_code_keywords || []).map(k => k.toLowerCase()),
+    ];
+    const eventTypeLower = (event.event_type || '').toLowerCase();
+    const prestige = event.prestige || 5;
+
+    let totalItemScore = 0;
+    const scoredItems = items.map(item => {
+      const aestheticLower = (item.aesthetic_tags || []).map(a => a.toLowerCase());
+      const eventTypesLower = (item.event_types || []).map(e => e.toLowerCase());
+      let itemScore = 0;
+
+      // Dress code match
+      let dressCodeHits = 0;
+      for (const kw of dressCodeWords) {
+        if (aestheticLower.some(a => a.includes(kw) || kw.includes(a))) dressCodeHits++;
+      }
+      if (dressCodeHits > 0) itemScore += Math.min(30, dressCodeHits * 10);
+
+      // Event type match
+      if (eventTypesLower.some(e => e.includes(eventTypeLower) || eventTypeLower.includes(e))) {
+        itemScore += 20;
+      }
+
+      // Tier alignment
+      const itemTierVal = TIER_VALS[item.tier] || 1;
+      const eventTierVal = prestige <= 3 ? 1 : prestige <= 5 ? 2 : prestige <= 8 ? 3 : 4;
+      const tierDiff = Math.abs(itemTierVal - eventTierVal);
+      if (tierDiff === 0) itemScore += 15;
+      else if (tierDiff === 1) itemScore += 8;
+
+      // Match weight
+      itemScore += (item.outfit_match_weight || 5);
+
+      totalItemScore += itemScore;
+      return { ...item, individual_score: itemScore };
+    });
+
+    const baseAvg = totalItemScore / items.length;
+    const baseScore = Math.min(35, baseAvg * 0.6);
+
+    // Aesthetic synergy — shared tags between items
+    let aestheticBonus = 0;
+    if (items.length >= 2) {
+      const tagSets = items.map(i => new Set((i.aesthetic_tags || []).map(t => t.toLowerCase())));
+      let sharedCount = 0;
+      let pairs = 0;
+      for (let a = 0; a < tagSets.length; a++) {
+        for (let b = a + 1; b < tagSets.length; b++) {
+          pairs++;
+          for (const tag of tagSets[a]) {
+            if (tagSets[b].has(tag)) sharedCount++;
+          }
+        }
+      }
+      aestheticBonus = Math.min(25, (sharedCount / Math.max(1, pairs)) * 15);
+    }
+
+    // Tier harmony
+    const tiers = items.map(i => TIER_VALS[i.tier] || 1);
+    const avgTier = tiers.reduce((a, b) => a + b, 0) / tiers.length;
+    const tierVariance = tiers.reduce((s, t) => s + Math.abs(t - avgTier), 0) / tiers.length;
+    const tierBonus = Math.max(0, 15 - tierVariance * 8);
+
+    // Event alignment
+    let eventHits = 0;
+    items.forEach(i => {
+      const et = (i.event_types || []).map(e => e.toLowerCase());
+      if (et.some(e => e.includes(eventTypeLower) || eventTypeLower.includes(e))) eventHits++;
+    });
+    const eventBonus = items.length > 0 ? Math.min(15, (eventHits / items.length) * 15) : 0;
+
+    // Slot coverage
+    const slotBonus = Math.min(10, items.length * 1.5);
+
+    const total = Math.round(Math.min(100, baseScore + aestheticBonus + tierBonus + eventBonus + slotBonus));
+
+    // Confidence level
+    const CONFIDENCE_LEVELS = [
+      { min: 0, label: 'Nervous', emoji: '😰', color: '#dc2626' },
+      { min: 30, label: 'Unsure', emoji: '😕', color: '#eab308' },
+      { min: 50, label: 'Okay', emoji: '🙂', color: '#22c55e' },
+      { min: 70, label: 'Confident', emoji: '😊', color: '#6366f1' },
+      { min: 85, label: 'Slaying', emoji: '👑', color: '#8b5cf6' },
+    ];
+    let confidence = CONFIDENCE_LEVELS[0];
+    for (let i = CONFIDENCE_LEVELS.length - 1; i >= 0; i--) {
+      if (total >= CONFIDENCE_LEVELS[i].min) { confidence = CONFIDENCE_LEVELS[i]; break; }
+    }
+
+    return {
+      hasOutfit: true,
+      score: total,
+      items: scoredItems.map(i => ({
+        id: i.id,
+        name: i.name,
+        category: i.clothing_category,
+        tier: i.tier,
+        individual_score: i.individual_score,
+        aesthetic_tags: i.aesthetic_tags,
+      })),
+      breakdown: {
+        base: Math.round(baseScore),
+        aesthetic: Math.round(aestheticBonus),
+        tier_harmony: Math.round(tierBonus),
+        event_alignment: Math.round(eventBonus),
+        coverage: Math.round(slotBonus),
+      },
+      confidence,
+      item_count: items.length,
+    };
+  } catch (err) {
+    console.error('getOutfitScore error:', err);
+    return {
+      hasOutfit: false,
+      score: 0,
+      items: [],
+      breakdown: {},
+      confidence: { label: 'Error', emoji: '⚠️', color: '#dc2626' },
+      message: err.message,
+    };
+  }
+}
+
+
 module.exports = router;
+module.exports.getOutfitScore = getOutfitScore;

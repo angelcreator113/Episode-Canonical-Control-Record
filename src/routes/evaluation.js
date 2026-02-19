@@ -209,38 +209,53 @@ router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
     const seasonId = null; // TODO: derive from episode.season_id when available
     const state = await getOrCreateCharacterState(models.sequelize, showId, seasonId, character_key);
 
-    // Get wardrobe items for style scoring
+    // Get wardrobe items for style scoring — uses real outfit synergy
     let styleScores = { outfit_match: null, accessory_match: null, deadline_penalty: null };
+    let outfitData = null;
     try {
-      const [wardrobeItems] = await models.sequelize.query(
-        `SELECT w.* FROM wardrobe w
-         JOIN episode_wardrobe ew ON ew.wardrobe_id = w.id
-         WHERE ew.episode_id = :episodeId`,
-        { replacements: { episodeId: id }, type: models.sequelize.QueryTypes.SELECT }
-      ).then(rows => [rows]).catch(() => [[]]);
-
-      if (wardrobeItems && wardrobeItems.length > 0) {
-        // Find outfit (dress, top, bottom)
-        const outfitItem = wardrobeItems.find(w =>
-          ['dress', 'top', 'bottom', 'outfit'].includes((w.clothing_category || '').toLowerCase())
+      const { getOutfitScore } = require('./wardrobe');
+      // Build event context from parsed script event + world_events if available
+      let eventContext = { ...event };
+      try {
+        const [weRows] = await models.sequelize.query(
+          `SELECT event_type, dress_code, dress_code_keywords, prestige, strictness, host_brand
+           FROM world_events WHERE episode_id = :episodeId LIMIT 1`,
+          { replacements: { episodeId: id } }
         );
-        const accessoryItems = wardrobeItems.filter(w =>
-          ['accessories', 'jewelry', 'hat', 'scarf'].includes((w.clothing_category || '').toLowerCase())
-        );
+        if (weRows?.[0]) {
+          const we = weRows[0];
+          eventContext.event_type = eventContext.event_type || we.event_type;
+          eventContext.dress_code = eventContext.dress_code || we.dress_code;
+          eventContext.dress_code_keywords = we.dress_code_keywords || [];
+          if (typeof eventContext.dress_code_keywords === 'string') {
+            try { eventContext.dress_code_keywords = JSON.parse(eventContext.dress_code_keywords); } catch { eventContext.dress_code_keywords = []; }
+          }
+          eventContext.prestige = eventContext.prestige || we.prestige;
+          eventContext.strictness = eventContext.strictness || we.strictness;
+          eventContext.host_brand = we.host_brand;
+        }
+      } catch (weErr) { /* world_events join optional */ }
 
-        if (outfitItem) {
-          const tags = typeof outfitItem.tags === 'string' ? JSON.parse(outfitItem.tags) : outfitItem.tags;
-          styleScores.outfit_match = computeOutfitMatch(event, { tags });
-        }
-        if (accessoryItems.length > 0) {
-          const parsedItems = accessoryItems.map(a => ({
-            tags: typeof a.tags === 'string' ? JSON.parse(a.tags) : a.tags,
-          }));
-          styleScores.accessory_match = computeAccessoryMatch(event, parsedItems);
-        }
+      const outfitResult = await getOutfitScore(models, id, eventContext);
+
+      if (outfitResult.hasOutfit) {
+        // Scale synergy 0-100 → outfit_match 0-25 eval points
+        styleScores.outfit_match = Math.round(outfitResult.score * 0.25);
+        // aesthetic + coverage → accessory_match 0-15
+        styleScores.accessory_match = Math.round(
+          Math.min(15, ((outfitResult.breakdown.aesthetic || 0) + (outfitResult.breakdown.coverage || 0)) * 0.5)
+        );
+        outfitData = {
+          synergy_score: outfitResult.score,
+          confidence: outfitResult.confidence,
+          items: outfitResult.items,
+          breakdown: outfitResult.breakdown,
+          item_count: outfitResult.item_count,
+        };
       }
+      // If no outfit, styleScores stay null → evaluate() uses neutral defaults (15/8)
     } catch (e) {
-      console.log('Wardrobe query skipped:', e.message);
+      console.log('Outfit scoring skipped:', e.message);
     }
 
     // Compute evaluation
@@ -273,6 +288,7 @@ router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
       intent,
       character_key,
       scope,
+      outfit_data: outfitData,
       evaluated_at: new Date().toISOString(),
       warnings: [],
     };
