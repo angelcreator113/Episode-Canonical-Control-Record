@@ -72,7 +72,30 @@ jobs:
           cache: 'npm'
 
       - name: Install backend dependencies
-        run: npm ci --production
+        run: |
+          npm ci --production
+          # Also need sequelize-cli for DB migrations during deploy
+          npm install --no-save sequelize-cli
+
+      - name: Prune node_modules for deployment
+        run: |
+          echo "node_modules size before prune: $(du -sh node_modules | cut -f1)"
+          # Remove documentation files
+          find node_modules -type f \( \
+            -name "*.md" -o -name "*.d.ts" -o -name "*.map" -o \
+            -name "LICENSE*" -o -name "LICENCE*" -o -name "CHANGELOG*" -o \
+            -name "CHANGES*" -o -name "HISTORY*" -o -name "README*" -o \
+            -name "AUTHORS*" -o -name ".npmignore" -o -name ".gitignore" -o \
+            -name ".eslintrc*" -o -name ".prettierrc*" -o -name ".babelrc*" -o \
+            -name "*.flow" -o -name "Makefile" \
+          \) -delete 2>/dev/null || true
+          # Remove test/doc/example directories
+          find node_modules -maxdepth 3 -type d \( \
+            -name "__tests__" -o -name "test" -o -name "tests" -o \
+            -name "spec" -o -name "docs" -o -name "doc" -o \
+            -name "example" -o -name "examples" -o -name ".github" \
+          \) -exec rm -rf {} + 2>/dev/null || true
+          echo "node_modules size after prune: $(du -sh node_modules | cut -f1)"
 
       - name: Build frontend
         run: |
@@ -93,7 +116,10 @@ jobs:
           cp package-lock.json deploy/
           cp ecosystem.config.js deploy/
           cp .sequelizerc deploy/
+          # Include pre-built node_modules (avoids npm install on disk-constrained EC2)
+          mv node_modules deploy/
           tar -czf episode-metadata-${{ github.sha }}.tar.gz deploy/
+          echo "Artifact size: $(du -sh episode-metadata-${{ github.sha }}.tar.gz | cut -f1)"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -143,52 +169,29 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
             echo '🧹 Cleaning up disk space...'
             echo \"Disk BEFORE: \$(df -h / | tail -1 | awk '{print \$4}')\"
-            # Stop PM2 so node_modules can be deleted cleanly
+            # Stop PM2 so files can be safely replaced
             pm2 stop all 2>/dev/null || true
-            # Remove node_modules (biggest space consumer — npm ci recreates it)
+            # Remove old node_modules + source (biggest space consumers)
             rm -rf ~/episode-metadata/node_modules 2>/dev/null || true
-            # Remove npm cache
+            rm -rf ~/episode-metadata/src ~/episode-metadata/scripts 2>/dev/null || true
+            # Remove npm cache + temp + logs
             npm cache clean --force 2>/dev/null || true
             rm -rf ~/.npm/_cacache ~/.npm/_logs 2>/dev/null || true
-            # Remove old deploy artifacts
-            rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz /tmp/*.tar.gz 2>/dev/null || true
-            # Remove old PM2 logs, app logs
+            rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz /tmp/*.tar.gz /tmp/deploy-tmp 2>/dev/null || true
             rm -rf ~/episode-metadata/logs/*.log 2>/dev/null || true
             rm -rf ~/.pm2/logs/*.log 2>/dev/null || true
-            # System-level cleanup
             sudo journalctl --vacuum-size=10M 2>/dev/null || true
             sudo apt-get clean 2>/dev/null || true
-            sudo rm -rf /var/cache/apt/archives/*.deb 2>/dev/null || true
-            sudo rm -rf /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true
-            echo \"Disk AFTER: \$(df -h / | tail -1 | awk '{print \$4}')\"
+            sudo rm -rf /var/cache/apt/archives/*.deb /var/log/*.gz /var/log/*.1 /var/log/*.old 2>/dev/null || true
+            echo \"Disk AFTER cleanup: \$(df -h / | tail -1 | awk '{print \$4}')\"
           "
 
-          # Upload build artifact
+          # Upload build artifact (includes pre-built node_modules from CI)
           scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no \
             episode-metadata-${{ github.sha }}.tar.gz \
             ubuntu@$EC2_HOST:/tmp/dev-deploy.tar.gz
 
-          # ─── Deploy frontend (static files → Nginx) ───
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
-            set -e
-            echo '📦 Extracting build artifact...'
-            cd /tmp
-            tar -xzf dev-deploy.tar.gz
-
-            echo '🎨 Deploying frontend...'
-            sudo rm -rf /var/www/html/*
-            sudo cp -r deploy/dist/* /var/www/html/
-            sudo chown -R www-data:www-data /var/www/html
-            sudo chmod 755 /var/www/html /var/www/html/assets
-
-            echo '🔧 Deploying nginx config...'
-            sudo cp deploy/nginx/episode-dev.conf /etc/nginx/sites-enabled/episode
-            sudo nginx -t
-            sudo systemctl restart nginx
-            echo '✅ Frontend + Nginx deployed'
-          "
-
-          # ─── Deploy backend (code + deps + migrations + PM2 restart) ───
+          # ─── Deploy everything in a single SSH session ───
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
             set -e
 
@@ -207,37 +210,44 @@ jobs:
             echo \"pm2: \$(pm2 -v)\"
 
             APP_DIR=\$HOME/episode-metadata
-
-            echo '🔧 Deploying backend...'
-
-            # Ensure app directory and logs dir exist (first-time deploy)
             mkdir -p \$APP_DIR/logs
 
-            # Update backend source from the build artifact
-            rm -rf \$APP_DIR/src \$APP_DIR/scripts
-            cp -r /tmp/deploy/src \$APP_DIR/src
-            cp -r /tmp/deploy/scripts \$APP_DIR/scripts
-            cp /tmp/deploy/package.json \$APP_DIR/package.json
-            cp /tmp/deploy/package-lock.json \$APP_DIR/package-lock.json
-            cp /tmp/deploy/ecosystem.config.js \$APP_DIR/ecosystem.config.js
-            cp /tmp/deploy/.sequelizerc \$APP_DIR/.sequelizerc
+            echo \"Disk before extraction: \$(df -h / | tail -1 | awk '{print \$4}')\"
 
-            # Install production dependencies
+            # ─── Deploy frontend (extract only dist + nginx from tarball) ───
+            echo '🎨 Deploying frontend...'
+            mkdir -p /tmp/deploy-tmp
+            cd /tmp/deploy-tmp
+            tar -xzf /tmp/dev-deploy.tar.gz --strip-components=1 deploy/dist deploy/nginx
+            sudo rm -rf /var/www/html/*
+            sudo cp -r dist/* /var/www/html/
+            sudo chown -R www-data:www-data /var/www/html
+            sudo chmod 755 /var/www/html /var/www/html/assets
+            echo '🔧 Deploying nginx config...'
+            sudo cp nginx/episode-dev.conf /etc/nginx/sites-enabled/episode
+            sudo nginx -t
+            sudo systemctl restart nginx
+            rm -rf /tmp/deploy-tmp
+            echo '✅ Frontend + Nginx deployed'
+
+            # ─── Deploy backend (extract pre-built node_modules + source) ───
+            echo '🔧 Deploying backend...'
+            # Ensure old files are gone (cleanup should have done this)
+            rm -rf \$APP_DIR/src \$APP_DIR/scripts \$APP_DIR/node_modules
+
+            # Extract backend files directly into app dir (no intermediate copy)
             cd \$APP_DIR
-            
-            # Check available disk before installing  
-            AVAIL_KB=\$(df / | tail -1 | awk '{print \$4}')
-            echo \"Disk available before npm install: \${AVAIL_KB}KB\"
-            
-            # Clean deploy temp to free space BEFORE npm install
-            rm -rf /tmp/deploy 2>/dev/null || true
-            
-            # Use npm install (not ci) to avoid full wipe+redownload cycle
-            npm install --production --ignore-scripts --prefer-offline 2>&1 | tail -10
+            tar -xzf /tmp/dev-deploy.tar.gz --strip-components=1 \
+              deploy/src deploy/scripts deploy/node_modules \
+              deploy/package.json deploy/package-lock.json \
+              deploy/ecosystem.config.js deploy/.sequelizerc
 
-            # Rebuild native modules (sharp, canvas, etc.) for the server architecture
-            npm rebuild sharp 2>&1 | tail -3 || echo '⚠️ sharp rebuild skipped'
-            npm rebuild canvas 2>&1 | tail -3 || echo '⚠️ canvas rebuild skipped'
+            # Delete tarball immediately to free disk space
+            rm -f /tmp/dev-deploy.tar.gz
+
+            echo \"Disk after backend deploy: \$(df -h / | tail -1 | awk '{print \$4}')\"
+
+            # NO npm install — node_modules is pre-built from CI ✅
 
             # Set DB env vars for RDS (from GitHub Secrets)
             export DB_HOST='$DEV_DB_HOST'
@@ -288,8 +298,22 @@ jobs:
               exit 1
             fi
 
+            # Route verification — check critical routes load
+            echo '🔍 Route verification...'
+            SHOWS_OK=false
+            EPISODES_OK=false
+            curl -sf http://localhost:3002/api/v1/shows > /dev/null 2>&1 && SHOWS_OK=true
+            curl -sf http://localhost:3002/api/v1/episodes > /dev/null 2>&1 && EPISODES_OK=true
+            echo \"  Shows route: \$SHOWS_OK\"
+            echo \"  Episodes route: \$EPISODES_OK\"
+            if [ \"\$EPISODES_OK\" != \"true\" ]; then
+              echo '⚠️ Episodes route not loading — dumping PM2 error logs:'
+              pm2 logs episode-api --lines 50 --nostream 2>&1 | grep -i 'error\|fail\|cannot\|module' | head -20
+            fi
+
             # Cleanup
             rm -rf /tmp/deploy /tmp/dev-deploy.tar.gz
+            echo \"Disk final: \$(df -h / | tail -1 | awk '{print \$4}')\"
             echo '✅ Full deployment complete'
           "
 
