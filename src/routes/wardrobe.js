@@ -995,83 +995,66 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
 
 
 // ═══════════════════════════════════════════
-// POST /api/v1/wardrobe/select  (DIAGNOSTIC)
+// POST /api/v1/wardrobe/select  (ORM-based)
 // ═══════════════════════════════════════════
 
 router.post('/select', optionalAuth, async (req, res) => {
-  let step = 'init';
   try {
-    step = 'parse body';
     const { episode_id, wardrobe_id, show_id } = req.body;
-    console.log('[SELECT] body:', JSON.stringify({ episode_id, wardrobe_id, show_id }));
     if (!episode_id || !wardrobe_id) {
       return res.status(400).json({ error: 'episode_id and wardrobe_id are required' });
     }
 
-    step = 'getModels';
     const models = await getModels();
     if (!models || !models.sequelize) {
-      return res.status(500).json({ error: 'Models not available', step });
+      return res.status(500).json({ error: 'Models not available' });
     }
 
     // 1. Verify item exists and is owned
-    step = 'query wardrobe item';
     const [items] = await models.sequelize.query(
       `SELECT id, name, is_owned, lock_type, coin_cost FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
       { replacements: { wardrobe_id } }
     );
-    console.log('[SELECT] item found:', items?.length, items?.[0]?.name);
-    if (!items?.length) return res.status(404).json({ error: 'Wardrobe item not found', step });
-    if (!items[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item', step });
+    if (!items?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
+    if (!items[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
 
-    // 2. Check if already linked
-    step = 'check existing link';
-    const [existing] = await models.sequelize.query(
-      `SELECT id FROM episode_wardrobe WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
-      { replacements: { episode_id, wardrobe_id } }
-    );
-    console.log('[SELECT] existing link:', existing?.length);
-
-    if (existing?.length > 0) {
-      step = 'update existing link';
-      await models.sequelize.query(
-        `UPDATE episode_wardrobe SET approval_status = 'approved', updated_at = NOW()
-         WHERE episode_id = :episode_id AND wardrobe_id = :wardrobe_id`,
-        { replacements: { episode_id, wardrobe_id } }
+    // 2. Upsert link using ORM (handles UUID, defaults, and missing columns gracefully)
+    if (models.EpisodeWardrobe) {
+      await models.EpisodeWardrobe.findOrCreate({
+        where: { episode_id, wardrobe_id },
+        defaults: { approval_status: 'approved' },
+      });
+      // Ensure approval_status is 'approved' (in case row existed with different status)
+      await models.EpisodeWardrobe.update(
+        { approval_status: 'approved' },
+        { where: { episode_id, wardrobe_id } }
       );
     } else {
-      step = 'insert new link';
+      // Fallback: minimal raw SQL — only columns guaranteed to exist
       await models.sequelize.query(
-        `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, worn_at, created_at, updated_at)
-         VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW(), NOW())
+        `INSERT INTO episode_wardrobe (id, episode_id, wardrobe_id, approval_status, created_at, updated_at)
+         VALUES (gen_random_uuid(), :episode_id, :wardrobe_id, 'approved', NOW(), NOW())
          ON CONFLICT (episode_id, wardrobe_id) DO UPDATE SET approval_status = 'approved', updated_at = NOW()`,
         { replacements: { episode_id, wardrobe_id } }
       );
     }
-    console.log('[SELECT] link saved');
 
     // 3. Increment times_worn (non-fatal)
-    step = 'increment times_worn';
     try {
       await models.sequelize.query(
-        `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, last_worn_date = NOW(), updated_at = NOW()
-         WHERE id = :wardrobe_id`,
+        `UPDATE wardrobe SET times_worn = COALESCE(times_worn, 0) + 1, updated_at = NOW() WHERE id = :wardrobe_id`,
         { replacements: { wardrobe_id } }
       );
-    } catch (twErr) {
-      console.warn('[SELECT] times_worn update failed (non-fatal):', twErr.message);
-    }
+    } catch (e) { /* non-fatal */ }
 
-    console.log('[SELECT] SUCCESS:', items[0].name);
     return res.json({
       success: true,
       message: `Selected: ${items[0].name}`,
       item: items[0],
     });
   } catch (error) {
-    console.error(`[SELECT] FAILED at step "${step}":`, error.message);
-    console.error('[SELECT] Full error:', error);
-    return res.status(500).json({ error: 'Failed to select wardrobe item', detail: error.message, step });
+    console.error('[SELECT] error:', error);
+    return res.status(500).json({ error: 'Failed to select wardrobe item', detail: error.message });
   }
 });
 
