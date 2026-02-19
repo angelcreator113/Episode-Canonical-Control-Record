@@ -647,14 +647,14 @@ router.post('/seed', optionalAuth, async (req, res) => {
           era_alignment, aesthetic_tags, event_types, outfit_match_weight,
           coin_cost, reputation_required, influence_required, season_unlock_episode,
           lala_reaction_own, lala_reaction_locked, lala_reaction_reject,
-          is_favorite, times_worn, created_at, updated_at)
+          created_at, updated_at)
          VALUES
          (:id, :show_id, :name, :clothing_category, :color, :season, :tags,
           :tier, :lock_type, :unlock_requirement, :is_owned, :is_visible,
           :era_alignment, :aesthetic_tags, :event_types, :outfit_match_weight,
           :coin_cost, :reputation_required, :influence_required, :season_unlock_episode,
           :lala_reaction_own, :lala_reaction_locked, :lala_reaction_reject,
-          false, 0, NOW(), NOW())`,
+          NOW(), NOW())`,
         {
           replacements: {
             id, show_id,
