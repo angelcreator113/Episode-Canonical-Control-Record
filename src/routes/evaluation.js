@@ -129,6 +129,75 @@ function parseIntentTag(scriptContent) {
 
 
 // ═══════════════════════════════════════════
+// POST /api/v1/admin/reset-character-stats
+// One-time admin endpoint: reset Lala's stats + clear evaluations
+// ═══════════════════════════════════════════
+
+router.post('/admin/reset-character-stats', async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models) return res.status(500).json({ error: 'Models not loaded' });
+    const { sequelize } = models;
+
+    // Debug: find the show
+    const shows = await sequelize.query(
+      `SELECT id, title FROM shows LIMIT 5`,
+      { type: sequelize.QueryTypes.SELECT }
+    );
+    if (!shows.length) {
+      return res.json({ success: false, error: 'No shows found in database', shows: [] });
+    }
+    const showId = shows[0].id;
+
+    // Debug: count existing rows
+    const csCount = await sequelize.query(
+      `SELECT COUNT(*) as cnt FROM character_state WHERE show_id = :showId`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    const epCount = await sequelize.query(
+      `SELECT COUNT(*) as cnt FROM episodes WHERE show_id = :showId`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+
+    // Step 1: Reset character_state
+    await sequelize.query(`
+      UPDATE character_state 
+      SET coins = 500, 
+          reputation = 0, 
+          brand_trust = 0, 
+          influence = 0, 
+          stress = 0,
+          last_applied_episode_id = NULL,
+          updated_at = NOW()
+      WHERE show_id = :showId
+    `, { replacements: { showId } });
+
+    // Step 2: Clear episode evaluations
+    await sequelize.query(`
+      UPDATE episodes 
+      SET evaluation_json = NULL, 
+          evaluation_status = NULL, 
+          formula_version = NULL,
+          status = 'draft',
+          updated_at = NOW()
+      WHERE show_id = :showId
+    `, { replacements: { showId } });
+
+    res.json({
+      success: true,
+      show: { id: showId, title: shows[0].title },
+      character_state_found: parseInt(csCount[0]?.cnt || 0),
+      episodes_found: parseInt(epCount[0]?.cnt || 0),
+      message: 'Character stats reset and episode evaluations cleared'
+    });
+  } catch (err) {
+    console.error('Admin reset error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
 // GET /api/v1/characters/:key/state
 // ═══════════════════════════════════════════
 
@@ -219,7 +288,7 @@ router.post('/episodes/:id/evaluate', optionalAuth, async (req, res) => {
       try {
         const [weRows] = await models.sequelize.query(
           `SELECT event_type, dress_code, dress_code_keywords, prestige, strictness, host_brand
-           FROM world_events WHERE episode_id = :episodeId LIMIT 1`,
+           FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
           { replacements: { episodeId: id } }
         );
         if (weRows?.[0]) {
