@@ -139,8 +139,28 @@ router.post('/admin/reset-character-stats', async (req, res) => {
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
     const { sequelize } = models;
 
+    // Debug: find the show
+    const shows = await sequelize.query(
+      `SELECT id, title FROM shows LIMIT 5`,
+      { type: sequelize.QueryTypes.SELECT }
+    );
+    if (!shows.length) {
+      return res.json({ success: false, error: 'No shows found in database', shows: [] });
+    }
+    const showId = shows[0].id;
+
+    // Debug: count existing rows
+    const csCount = await sequelize.query(
+      `SELECT COUNT(*) as cnt FROM character_state WHERE show_id = :showId`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+    const epCount = await sequelize.query(
+      `SELECT COUNT(*) as cnt FROM episodes WHERE show_id = :showId`,
+      { replacements: { showId }, type: sequelize.QueryTypes.SELECT }
+    );
+
     // Step 1: Reset character_state
-    const [, csMeta] = await sequelize.query(`
+    await sequelize.query(`
       UPDATE character_state 
       SET coins = 500, 
           reputation = 0, 
@@ -149,24 +169,25 @@ router.post('/admin/reset-character-stats', async (req, res) => {
           stress = 0,
           last_applied_episode_id = NULL,
           updated_at = NOW()
-      WHERE show_id = (SELECT id FROM shows LIMIT 1)
-    `);
+      WHERE show_id = :showId
+    `, { replacements: { showId } });
 
     // Step 2: Clear episode evaluations
-    const [, epMeta] = await sequelize.query(`
+    await sequelize.query(`
       UPDATE episodes 
       SET evaluation_json = NULL, 
           evaluation_status = NULL, 
           formula_version = NULL,
           status = 'draft',
           updated_at = NOW()
-      WHERE show_id = (SELECT id FROM shows LIMIT 1)
-    `);
+      WHERE show_id = :showId
+    `, { replacements: { showId } });
 
     res.json({
       success: true,
-      character_state_rows: csMeta?.rowCount ?? 0,
-      episodes_rows: epMeta?.rowCount ?? 0,
+      show: { id: showId, title: shows[0].title },
+      character_state_found: parseInt(csCount[0]?.cnt || 0),
+      episodes_found: parseInt(epCount[0]?.cnt || 0),
       message: 'Character stats reset and episode evaluations cleared'
     });
   } catch (err) {
