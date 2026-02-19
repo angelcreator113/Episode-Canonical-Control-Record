@@ -144,9 +144,9 @@ function WorldAdmin() {
         setInjectSuccess({ eventId, message: msg });
         // Show floating toast (visible regardless of scroll)
         setToast(msg);
-        setTimeout(() => { setToast(null); }, 4000);
+        setTimeout(() => { setToast(null); }, 3000);
         // Close inject panel after a brief delay so user sees the confirmation
-        setTimeout(() => { setInjectTarget(null); setInjectSuccess(null); }, 1500);
+        setTimeout(() => { setInjectTarget(null); setInjectSuccess(null); }, 2000);
         // Update local event status to 'used'
         setWorldEvents(prev => prev.map(ev => ev.id === eventId ? { ...ev, status: 'used', times_used: (ev.times_used || 0) + 1, used_in_episode_id: episodeId } : ev));
       } else {
@@ -232,6 +232,18 @@ function WorldAdmin() {
 
   return (
     <div style={S.page}>
+      {/* Inject keyframes for toast animation */}
+      <style>{`
+        @keyframes toastPop {
+          0% { transform: scale(0.5); opacity: 0; }
+          70% { transform: scale(1.05); opacity: 1; }
+          100% { transform: scale(1); opacity: 1; }
+        }
+        @keyframes toastFade {
+          0% { opacity: 1; transform: scale(1); }
+          100% { opacity: 0; transform: scale(0.9); }
+        }
+      `}</style>
       {/* ─── HEADER ─── */}
       <div style={S.header}>
         <div>
@@ -945,6 +957,17 @@ function WorldAdmin() {
           </div>
         </div>
       )}
+
+      {/* ═══ FLOATING TOAST NOTIFICATION ═══ */}
+      {toast && (
+        <div style={S.toastOverlay}>
+          <div style={S.toastBox}>
+            <div style={{ fontSize: 32, marginBottom: 6 }}>💉✅</div>
+            <div style={{ fontSize: 16, fontWeight: 800, letterSpacing: '0.3px' }}>{toast}</div>
+            <div style={{ fontSize: 11, marginTop: 4, opacity: 0.8 }}>Event tag injected into script</div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -959,10 +982,6 @@ function FG({ label, value, onChange, placeholder, type = 'text', textarea, full
         <textarea value={value || ''} onChange={e => onChange(e.target.value)} style={S.tArea} rows={2} placeholder={placeholder} />
       ) : (
         <input type={type} value={value || ''} onChange={e => onChange(e.target.value)} style={S.inp} placeholder={placeholder} min={min} max={max} />
-      )}
-      {/* ─── FLOATING TOAST ─── */}
-      {toast && (
-        <div style={S.toast}>{toast}</div>
       )}
     </div>
   );
@@ -1007,7 +1026,8 @@ const S = {
   statusPill: (s) => ({ padding: '3px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s === 'accepted' ? '#f0fdf4' : s === 'computed' ? '#eef2ff' : s === 'ready' ? '#f0fdf4' : s === 'used' ? '#eef2ff' : '#f1f5f9', color: s === 'accepted' || s === 'ready' ? '#16a34a' : s === 'computed' || s === 'used' ? '#6366f1' : '#94a3b8' }),
   sourceBadge: (s) => ({ padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 600, background: s === 'override' ? '#fef3c7' : s === 'manual' ? '#fef2f2' : '#eef2ff', color: s === 'override' ? '#92400e' : s === 'manual' ? '#dc2626' : '#4338ca' }),
   deltaBadge: (v) => ({ display: 'inline-block', padding: '1px 6px', borderRadius: 3, fontSize: 11, fontWeight: 600, background: v > 0 ? '#f0fdf4' : '#fef2f2', color: v > 0 ? '#16a34a' : '#dc2626' }),
-  toast: { position: 'fixed', bottom: 24, left: '50%', transform: 'translateX(-50%)', padding: '12px 28px', background: 'linear-gradient(135deg, #16a34a, #22c55e)', color: '#fff', borderRadius: 12, fontSize: 14, fontWeight: 700, boxShadow: '0 8px 24px rgba(22,163,74,0.35)', zIndex: 9999, animation: 'fadeInUp 0.3s ease-out', whiteSpace: 'nowrap' },
+  toastOverlay: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 10000, pointerEvents: 'none' },
+  toastBox: { padding: '24px 48px', background: 'linear-gradient(135deg, #16a34a, #059669)', color: '#fff', borderRadius: 16, fontSize: 16, fontWeight: 700, boxShadow: '0 12px 40px rgba(22,163,74,0.45), 0 0 0 4px rgba(22,163,74,0.15)', textAlign: 'center', animation: 'toastPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1)', pointerEvents: 'auto' },
   evCard: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 16 },
   eTag: { padding: '2px 8px', background: '#f3e8ff', borderRadius: 4, fontSize: 11, color: '#7c3aed' },
   fLabel: { display: 'block', fontSize: 11, fontWeight: 600, color: '#64748b', marginBottom: 4, textTransform: 'uppercase', letterSpacing: '0.3px' },
