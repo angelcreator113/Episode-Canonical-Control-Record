@@ -182,7 +182,7 @@ export default function QuickEpisodeCreator() {
       const episodeId = episode.id;
 
       // 2. Create Event
-      const evRes = await api.post('/api/v1/world-events', {
+      const evRes = await api.post(`/api/v1/world/${showId}/events`, {
         show_id: showId,
         name: eventName.trim(),
         event_type: eventType,
@@ -201,13 +201,13 @@ export default function QuickEpisodeCreator() {
 
       // 3. Inject event into episode
       try {
-        await api.post(`/api/v1/world-events/${event.id}/inject`, {
+        await api.post(`/api/v1/world/${showId}/events/${event.id}/inject`, {
           episode_id: episodeId,
         });
       } catch (injectErr) {
         // Try alternate inject method
         try {
-          await api.put(`/api/v1/world-events/${event.id}`, {
+          await api.put(`/api/v1/world/${showId}/events/${event.id}`, {
             episode_id: episodeId,
           });
         } catch { /* event created but not injected — not fatal */ }
