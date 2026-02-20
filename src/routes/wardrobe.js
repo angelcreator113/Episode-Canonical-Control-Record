@@ -982,7 +982,7 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
         match_reasons: reasons,
         risk_level: riskLevel,
         lala_reaction,
-        can_select: item.is_owned,
+        can_select: item.is_owned || (item.lock_type === 'reputation' && (character_state.reputation || 1) >= (item.reputation_required || 0)) || (item.lock_type === 'coin' && (character_state.coins || 0) >= (item.coin_cost || 0)),
         can_purchase: !item.is_owned && item.lock_type === 'coin' && (character_state.coins || 0) >= (item.coin_cost || 0),
       };
     });
