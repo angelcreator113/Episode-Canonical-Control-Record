@@ -449,10 +449,17 @@ Lala arrives at ${evName}.
     <div style={S.page}>
       {/* Header */}
       <div style={S.header}>
-        <div>
-          <div style={S.headerLabel}>{isEditMode ? 'EDIT EPISODE' : 'QUICK CREATE'}</div>
-          <div style={S.headerTitle}>{isEditMode ? title || 'Edit Episode' : 'New Episode'}</div>
-          <div style={S.headerSub}>{show?.title || show?.name || 'Show'} · Season {season}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={() => navigate(isEditMode ? `/episodes/${editEpisodeId}` : `/shows/${resolvedShowId || showId}`)}
+            style={S.backBtn}
+            title="Go back"
+          >←</button>
+          <div>
+            <div style={S.headerLabel}>{isEditMode ? 'EDIT EPISODE' : 'QUICK CREATE'}</div>
+            <div style={S.headerTitle}>{isEditMode ? title || 'Edit Episode' : 'New Episode'}</div>
+            <div style={S.headerSub}>{show?.title || show?.name || 'Show'} · Season {season}</div>
+          </div>
         </div>
         {charState && (
           <div style={S.statsBox}>
@@ -714,6 +721,12 @@ const S = {
   headerSub: { fontSize: 12, color: '#6a1b4d', marginTop: 2 },
   statsBox: { display: 'flex', gap: 14, fontSize: 13, color: '#4a1a3a' },
   statItem: { display: 'flex', alignItems: 'center', gap: 4 },
+  backBtn: {
+    width: 36, height: 36, borderRadius: '50%', border: '1px solid rgba(194,24,91,0.25)',
+    background: 'rgba(255,255,255,0.6)', color: '#c2185b', fontSize: 18, fontWeight: 700,
+    cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center',
+    transition: 'all 0.15s', flexShrink: 0,
+  },
 
   saveBar: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
