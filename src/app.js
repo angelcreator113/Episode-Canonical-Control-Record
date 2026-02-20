@@ -242,6 +242,9 @@ app.get('/health', async (req, res) => {
   res.status(200).json(health);
 });
 
+// Alias so /api/v1/health also works (nginx only proxies /api to backend)
+app.get('/api/v1/health', (req, res) => res.redirect('/health'));
+
 // Debug endpoint to check environment (should be removed in production)
 app.get('/api/v1/debug/env', (req, res) => {
   res.json({
