@@ -1072,13 +1072,17 @@ router.post('/select', optionalAuth, async (req, res) => {
       return res.status(500).json({ error: 'Models not available' });
     }
 
-    // 1. Verify item exists and is owned
+    // 1. Verify item exists and is selectable (owned or rep-unlockable)
     const [items] = await models.sequelize.query(
-      `SELECT id, name, is_owned, lock_type, coin_cost FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
+      `SELECT id, name, is_owned, lock_type, coin_cost, reputation_required FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
       { replacements: { wardrobe_id } }
     );
     if (!items?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
-    if (!items[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
+    const item = items[0];
+    const repOk = item.lock_type === 'reputation' && (req.body.reputation || 0) >= (item.reputation_required || 0);
+    if (!item.is_owned && !repOk) {
+      return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
+    }
 
     // 2. Upsert link — use ONLY guaranteed columns (id, episode_id, wardrobe_id, created_at, updated_at)
     //    The RDS table may have been created from a simpler migration that lacks approval_status, worn_at, etc.

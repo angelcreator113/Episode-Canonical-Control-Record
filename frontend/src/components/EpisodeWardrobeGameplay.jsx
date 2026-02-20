@@ -317,10 +317,10 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
   const lockOutfit = async () => {
     setConfirming(true);
     try {
-      const items = Object.entries(filledSlots).filter(([, v]) => v && v.is_owned).map(([slot, item]) => ({ slot, item }));
-      if (items.length === 0) { setError('No owned items in outfit'); setConfirming(false); return; }
+      const items = Object.entries(filledSlots).filter(([, v]) => v && v.can_select).map(([slot, item]) => ({ slot, item }));
+      if (items.length === 0) { setError('No selectable items in outfit'); setConfirming(false); return; }
       for (const { item } of items) {
-        await api.post('/api/v1/wardrobe/select', { episode_id: episodeId, wardrobe_id: item.id, show_id: showId });
+        await api.post('/api/v1/wardrobe/select', { episode_id: episodeId, wardrobe_id: item.id, show_id: showId, reputation: characterState?.reputation ?? 0 });
       }
       setOutfitLocked(true);
       setSuccess('Outfit locked! 🔒✨');
