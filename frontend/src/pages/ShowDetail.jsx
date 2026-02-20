@@ -320,7 +320,7 @@ function ShowDetail() {
                   className="btn-primary"
                   style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
                 >
-                  + New Episode
+                  ⚡ New Episode
                 </button>
               </div>
             </div>
@@ -335,7 +335,7 @@ function ShowDetail() {
                   className="btn-primary"
                   style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
                 >
-                  + Create First Episode
+                  ⚡ Create First Episode
                 </button>
               </div>
             ) : episodeView === 'kanban' ? (

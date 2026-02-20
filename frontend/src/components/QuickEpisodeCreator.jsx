@@ -581,7 +581,7 @@ Lala arrives at ${evName}.
           ...S.createBtn,
           opacity: creating || !title.trim() || !eventName.trim() ? 0.5 : 1,
         }}>
-        {creating ? '⏳ Creating...' : '⚡ Create Episode + Event'}
+        {creating ? '⏳ Creating...' : '⚡ Create Episode'}
       </button>
 
       <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>
