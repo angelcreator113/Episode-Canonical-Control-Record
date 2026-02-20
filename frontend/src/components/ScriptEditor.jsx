@@ -29,6 +29,7 @@
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import api from '../services/api';
+import useOrientation from '../hooks/useOrientation';
 import './ScriptEditor.css';
 
 // ─── BEAT TYPES ───
@@ -233,8 +234,12 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
   const [error, setError] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
 
-  // Outline
-  const [outlineCollapsed, setOutlineCollapsed] = useState(false);
+  // Responsive
+  const { isMobile, width: viewportWidth } = useOrientation();
+  const isTablet = !isMobile && viewportWidth < 1024;
+
+  // Outline — auto-collapse on mobile/tablet
+  const [outlineCollapsed, setOutlineCollapsed] = useState(isMobile || viewportWidth < 768);
   const [outlineSearch, setOutlineSearch] = useState('');
   const [selectedBeatId, setSelectedBeatId] = useState(null);
 
@@ -494,6 +499,11 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
     return () => document.removeEventListener('click', h);
   }, [overflowOpen]);
 
+  // Auto-collapse outline when viewport shrinks below mobile breakpoint
+  useEffect(() => {
+    if (isMobile || viewportWidth < 768) setOutlineCollapsed(true);
+  }, [isMobile, viewportWidth]);
+
   // ─── COMMAND PALETTE ITEMS ───
   const cmdItems = useMemo(() => {
     const items = [
@@ -624,7 +634,12 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
       )}
 
       {/* ─── MAIN BODY ─── */}
-      <div className="se-body">
+      <div className={`se-body ${isMobile ? 'se-body-mobile' : ''}`}>
+
+        {/* Mobile overlay backdrop when outline is open */}
+        {isMobile && !outlineCollapsed && (
+          <div className="se-outline-backdrop" onClick={() => setOutlineCollapsed(true)} />
+        )}
 
         {/* ─── LEFT: STORY OUTLINE ─── */}
         <div className={`se-outline ${outlineCollapsed ? 'collapsed' : ''}`}>
@@ -801,9 +816,11 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
 
           {/* Script textarea with line numbers */}
           <div className="se-editor-textarea-wrap">
-            <div className="se-line-numbers-gutter">
-              <LineNumbers content={scriptContent || '\n'} scrollTop={editorScrollTop} />
-            </div>
+            {!isMobile && (
+              <div className="se-line-numbers-gutter">
+                <LineNumbers content={scriptContent || '\n'} scrollTop={editorScrollTop} />
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               className="se-editor-textarea"
