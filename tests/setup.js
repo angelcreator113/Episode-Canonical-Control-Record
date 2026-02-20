@@ -13,7 +13,7 @@ process.env.JWT_SECRET = 'test-secret-key-that-is-at-least-32-characters-long-fo
 process.env.TOKEN_ISSUER = 'episode-metadata-api';
 process.env.TOKEN_AUDIENCE = 'episode-metadata-app';
 
-// Mock uuid to avoid ESM parse errors (uuid v10+ is ESM-only)
+// Mock uuid for deterministic test values (uuid v9 is CJS-compatible)
 jest.mock('uuid', () => ({
   v4: jest.fn(() => 'test-uuid-' + Math.random().toString(36).substr(2, 9)),
   v1: jest.fn(() => 'test-uuid-v1'),
