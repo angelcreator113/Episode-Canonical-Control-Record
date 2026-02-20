@@ -1025,15 +1025,16 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
       idx++;
     }
 
-    // Ensure required categories always have at least one item in the pool
+    // Ensure required categories have at least 3 items in pool
     const REQUIRED_CATEGORIES = ['shoes', 'dress'];
     for (const cat of REQUIRED_CATEGORIES) {
-      const alreadyHas = pool.some(i => i.clothing_category === cat);
-      if (!alreadyHas) {
+      const alreadyHas = pool.filter(i => i.clothing_category === cat).length;
+      if (alreadyHas < 2) {
         const best = scored
           .filter(i => i.clothing_category === cat && !addedIds.has(i.id))
-          .sort((a, b) => b.match_score - a.match_score)[0];
-        if (best) addToPool(best, best.is_owned ? 'safe' : 'stretch');
+          .sort((a, b) => b.match_score - a.match_score)
+          .slice(0, 3 - alreadyHas);
+        best.forEach(item => addToPool(item, item.is_owned ? 'safe' : 'stretch'));
       }
     }
 
