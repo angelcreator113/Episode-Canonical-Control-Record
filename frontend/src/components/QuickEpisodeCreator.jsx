@@ -603,13 +603,13 @@ const S = {
 
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '16px 20px', background: 'linear-gradient(135deg, #1a1a2e, #2d1b4e)',
-    borderRadius: 14, marginBottom: 20, color: '#fff',
+    padding: '16px 20px', background: 'linear-gradient(135deg, #fce4ec, #f8bbd0)',
+    borderRadius: 14, marginBottom: 20, color: '#1a1a2e',
   },
-  headerLabel: { fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: '#a78bfa', marginBottom: 2 },
+  headerLabel: { fontSize: 9, fontWeight: 700, letterSpacing: 1.5, color: '#c2185b', marginBottom: 2 },
   headerTitle: { fontSize: 22, fontWeight: 800 },
-  headerSub: { fontSize: 12, color: '#e2e8f0', marginTop: 2 },
-  statsBox: { display: 'flex', gap: 14, fontSize: 13, color: '#e2e8f0' },
+  headerSub: { fontSize: 12, color: '#6a1b4d', marginTop: 2 },
+  statsBox: { display: 'flex', gap: 14, fontSize: 13, color: '#4a1a3a' },
   statItem: { display: 'flex', alignItems: 'center', gap: 4 },
 
   saveBar: {
