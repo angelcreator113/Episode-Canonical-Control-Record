@@ -811,23 +811,46 @@ function parseJSON(val, fallback) {
 
 router.post('/browse-pool', optionalAuth, async (req, res) => {
   try {
-    const {
-      show_id,
-      event_name = '',
-      dress_code = '',
-      dress_code_keywords = [],
-      event_type = '',
-      prestige = 5,
-      strictness = 5,
-      host_brand = '',
-      // Lala's current state
-      character_state = {},
-    } = req.body;
+    const { show_id, episode_id, character_state = {} } = req.body;
+
+    // Auto-load event context from episode if not provided
+    let { event_name, dress_code, dress_code_keywords, event_type, prestige, strictness, host_brand } = req.body;
 
     if (!show_id) return res.status(400).json({ error: 'show_id is required' });
 
     const models = await getModels();
     if (!models) return res.status(500).json({ error: 'Models not loaded' });
+
+    // Auto-lookup event from episode if caller didn't supply prestige
+    if (episode_id && !prestige) {
+      const [evRows] = await models.sequelize.query(`
+        SELECT we.name, we.event_type, we.dress_code, we.dress_code_keywords,
+               we.prestige, we.strictness, we.host_brand
+        FROM world_events we
+        WHERE we.used_in_episode_id = :episode_id
+        LIMIT 1
+      `, { replacements: { episode_id } });
+
+      if (evRows?.[0]) {
+        const ev = evRows[0];
+        event_name = event_name || ev.name || '';
+        event_type = event_type || ev.event_type || '';
+        dress_code = dress_code || ev.dress_code || '';
+        dress_code_keywords = dress_code_keywords?.length ? dress_code_keywords : (ev.dress_code_keywords || []);
+        prestige = prestige || ev.prestige || 5;
+        strictness = strictness || ev.strictness || 5;
+        host_brand = host_brand || ev.host_brand || '';
+      }
+    }
+
+    // Defaults after lookup
+    event_name = event_name || '';
+    dress_code = dress_code || '';
+    dress_code_keywords = dress_code_keywords || [];
+    event_type = event_type || '';
+    prestige = prestige || 5;
+    strictness = strictness || 5;
+    host_brand = host_brand || '';
 
     // 1. Fetch all visible wardrobe items for this show
     const [allItems] = await models.sequelize.query(
