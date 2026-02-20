@@ -613,6 +613,19 @@
   flex-direction: column;
   min-width: 0;
   position: relative;
+  z-index: 1;
+}
+
+/* Backdrop overlay (rendered via JSX only on mobile/small screens) */
+.se-outline-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.3);
+  cursor: pointer;
 }
 
 /*  Beat Context Header  */
@@ -1674,9 +1687,10 @@
 
 /* ── Mobile + small tablet (<768px) ── */
 @media (max-width: 768px) {
-  /* Root */
+  /* Root — fill available viewport */
   .se-root {
-    min-height: 400px;
+    min-height: calc(100vh - 260px);
+    min-height: calc(100dvh - 260px);
     border-radius: 8px;
   }
 
@@ -1685,7 +1699,12 @@
     position: relative;
   }
 
-  /* Outline: slides over as overlay */
+  /* Editor pane stays behind overlays */
+  .se-editor-pane {
+    z-index: 1;
+  }
+
+  /* Outline: slides over as overlay — no transition */
   .se-outline {
     position: absolute;
     left: 0;
@@ -1696,22 +1715,17 @@
     box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
     width: 280px;
     min-width: 280px;
+    transition: none;
   }
 
   .se-outline.collapsed {
     display: none;
   }
 
-  /* Backdrop behind outline */
+  /* Backdrop overlay */
   .se-outline-backdrop {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 55;
-    background: rgba(0, 0, 0, 0.25);
-    animation: se-overlay-in 0.2s ease;
+    z-index: 50;
+    background: rgba(0, 0, 0, 0.3);
   }
 
   /* Analysis: full width overlay */

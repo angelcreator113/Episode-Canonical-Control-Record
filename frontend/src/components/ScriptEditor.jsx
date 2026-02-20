@@ -636,8 +636,8 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
       {/* ─── MAIN BODY ─── */}
       <div className={`se-body ${isMobile ? 'se-body-mobile' : ''}`}>
 
-        {/* Mobile overlay backdrop when outline is open */}
-        {isMobile && !outlineCollapsed && (
+        {/* Overlay backdrop when outline is open on small screens */}
+        {(isMobile || viewportWidth < 768) && !outlineCollapsed && (
           <div className="se-outline-backdrop" onClick={() => setOutlineCollapsed(true)} />
         )}
 
