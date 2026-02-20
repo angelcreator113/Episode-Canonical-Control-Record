@@ -1085,7 +1085,7 @@ router.post('/select', optionalAuth, async (req, res) => {
       return res.status(500).json({ error: 'Models not available' });
     }
 
-    // 1. Verify item exists and is selectable (owned or rep-unlockable)
+    // 1. Verify item exists and is selectable (owned, rep-unlockable, or coin-purchasable)
     const [items] = await models.sequelize.query(
       `SELECT id, name, is_owned, lock_type, coin_cost, reputation_required FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
       { replacements: { wardrobe_id } }
@@ -1093,6 +1093,35 @@ router.post('/select', optionalAuth, async (req, res) => {
     if (!items?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
     const item = items[0];
     const repOk = item.lock_type === 'reputation' && (req.body.reputation || 0) >= (item.reputation_required || 0);
+
+    // Auto-purchase coin-locked items inline during select
+    let coinPurchased = false;
+    if (!item.is_owned && !repOk && item.lock_type === 'coin' && show_id) {
+      const cost = item.coin_cost || 0;
+      const [states] = await models.sequelize.query(
+        `SELECT id, coins FROM character_state WHERE show_id = :show_id AND character_key = 'lala' ORDER BY updated_at DESC LIMIT 1`,
+        { replacements: { show_id } }
+      );
+      const currentCoins = states?.[0]?.coins ?? 0;
+      if (currentCoins >= cost) {
+        // Deduct coins
+        await models.sequelize.query(
+          `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
+          { replacements: { cost, id: states[0].id } }
+        );
+        // Mark item as owned
+        await models.sequelize.query(
+          `UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id = :wardrobe_id`,
+          { replacements: { wardrobe_id } }
+        );
+        coinPurchased = true;
+        item.is_owned = true;
+        console.log(`[SELECT] Auto-purchased "${item.name}" for ${cost} coins`);
+      } else {
+        return res.status(400).json({ error: `Not enough coins — need ${cost}, have ${currentCoins}` });
+      }
+    }
+
     if (!item.is_owned && !repOk) {
       return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
     }
@@ -1114,11 +1143,13 @@ router.post('/select', optionalAuth, async (req, res) => {
       );
     } catch (e) { /* non-fatal */ }
 
-    return res.json({
+    const resp = {
       success: true,
-      message: `Selected: ${items[0].name}`,
-      item: items[0],
-    });
+      message: coinPurchased ? `Purchased & selected: ${item.name}` : `Selected: ${item.name}`,
+      item,
+    };
+    if (coinPurchased) resp.coin_purchased = true;
+    return res.json(resp);
   } catch (error) {
     console.error('[SELECT] error:', error);
     return res.status(500).json({ error: 'Failed to select wardrobe item', detail: error.message });
