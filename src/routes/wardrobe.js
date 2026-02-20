@@ -1025,6 +1025,18 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
       idx++;
     }
 
+    // Ensure required categories always have at least one item in the pool
+    const REQUIRED_CATEGORIES = ['shoes', 'dress'];
+    for (const cat of REQUIRED_CATEGORIES) {
+      const alreadyHas = pool.some(i => i.clothing_category === cat);
+      if (!alreadyHas) {
+        const best = scored
+          .filter(i => i.clothing_category === cat && !addedIds.has(i.id))
+          .sort((a, b) => b.match_score - a.match_score)[0];
+        if (best) addToPool(best, best.is_owned ? 'safe' : 'stretch');
+      }
+    }
+
     // 5. Shuffle with slight randomness
     const shuffled = pool.sort((a, b) => {
       if (a.is_owned && !b.is_owned) return -1;
