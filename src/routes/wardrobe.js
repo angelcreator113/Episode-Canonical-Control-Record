@@ -1003,12 +1003,13 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
       return true;
     };
 
-    // 3-4 owned safe picks
+    // Prestige-aware slot counts: high-prestige events offer more stretch options
     const safeOwned = owned.filter(i => i.risk_level !== 'risky');
-    for (let i = 0; i < Math.min(4, safeOwned.length); i++) addToPool(safeOwned[i], 'safe');
+    const safeCount = prestige >= 7 ? 2 : 4;
+    const stretchCount = prestige >= 7 ? 5 : 2;
+    for (let i = 0; i < Math.min(safeCount, safeOwned.length); i++) addToPool(safeOwned[i], 'safe');
 
-    // 2 stretch items
-    for (let i = 0; i < Math.min(2, stretch.length); i++) addToPool(stretch[i], 'stretch');
+    for (let i = 0; i < Math.min(stretchCount, stretch.length); i++) addToPool(stretch[i], 'stretch');
 
     // 1 risky item
     if (risky.length > 0) addToPool(risky[0], 'risky');
