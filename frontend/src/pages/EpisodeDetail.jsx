@@ -670,6 +670,7 @@ const EpisodeDetail = () => {
         {/* Scripts Tab */}
         {activeTab === 'scripts' && (
           <ScriptEditor 
+            key={episode.id}
             episodeId={episode.id}
             episode={episode}
             onScriptSaved={(newScript) => {

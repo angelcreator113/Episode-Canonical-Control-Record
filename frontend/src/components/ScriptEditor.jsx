@@ -259,24 +259,48 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
 
   const textareaRef = useRef(null);
   const initialLoadDone = useRef(false);
+  const loadedEpisodeId = useRef(null);   // tracks which episode is loaded
   const cmdInputRef = useRef(null);
 
-  // ─── LOAD ───
+  // ─── LOAD (single effect — prevents bleed between episodes) ───
   useEffect(() => {
-    if (initialLoadDone.current) return;
-    if (episode?.script_content) {
+    // Reset everything when episodeId changes
+    setScriptContent('');
+    setHasUnsavedChanges(false);
+    setSaveStatus('');
+    setError(null);
+    setSelectedBeatId(null);
+    setShowAnalysis(false);
+    setAnalysis(null);
+    initialLoadDone.current = false;
+    loadedEpisodeId.current = episodeId || null;
+
+    if (!episodeId) return;
+
+    const controller = new AbortController();
+
+    // Prefer the prop if it matches
+    if (episode?.script_content && (episode.id === episodeId)) {
       setScriptContent(episode.script_content);
       initialLoadDone.current = true;
-    } else if (episodeId) {
-      api.get(`/api/v1/episodes/${episodeId}`).then(res => {
-        const ep = res.data?.data || res.data;
-        if (ep?.script_content) setScriptContent(ep.script_content);
-        initialLoadDone.current = true;
-      }).catch(() => {});
+    } else {
+      api.get(`/api/v1/episodes/${episodeId}`, { signal: controller.signal })
+        .then(res => {
+          // Guard: only apply if this is still the active episode
+          if (loadedEpisodeId.current !== episodeId) return;
+          const ep = res.data?.data || res.data;
+          if (ep?.script_content) setScriptContent(ep.script_content);
+          initialLoadDone.current = true;
+        })
+        .catch(err => {
+          if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
+            console.error('Script load error:', err);
+          }
+        });
     }
-  }, [episode, episodeId]);
 
-  useEffect(() => { initialLoadDone.current = false; }, [episodeId]);
+    return () => controller.abort();   // cancel in-flight fetch on unmount / re-run
+  }, [episodeId]);  // only episodeId — episode object changes must NOT re-trigger
 
   // ─── PARSED BEATS ───
   const beats = useMemo(() => parseBeatsFromScript(scriptContent), [scriptContent]);
@@ -330,6 +354,11 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
 
   const handleSave = useCallback(async () => {
     if (!episodeId) return;
+    // Guard: refuse to save if the loaded episode doesn't match the current prop
+    if (loadedEpisodeId.current !== episodeId) {
+      console.warn('Save aborted — episode mismatch (loaded:', loadedEpisodeId.current, 'current:', episodeId, ')');
+      return;
+    }
     setIsSaving(true); setSaveStatus('Saving…'); setError(null);
     try {
       await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptContent });
