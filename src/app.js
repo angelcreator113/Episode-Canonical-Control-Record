@@ -255,17 +255,36 @@ app.get('/debug/env', (req, res) => {
   });
 });
 
+// Route load diagnostics tracker
+const routeLoadResults = {};
+function trackRouteLoad(name, loadFn) {
+  try {
+    const mod = loadFn();
+    routeLoadResults[name] = { status: 'ok' };
+    console.log(`✓ ${name} loaded`);
+    return mod;
+  } catch (e) {
+    routeLoadResults[name] = { status: 'error', message: e.message, code: e.code };
+    console.error(`✗ Failed to load ${name}:`, e.message);
+    return (req, res) => res.status(500).json({ error: 'Routes not available', route: name, reason: e.message });
+  }
+}
+
+app.get('/debug/routes', (req, res) => {
+  const failed = Object.entries(routeLoadResults).filter(([,v]) => v.status === 'error');
+  res.json({
+    total: Object.keys(routeLoadResults).length,
+    loaded: Object.keys(routeLoadResults).length - failed.length,
+    failed: failed.length,
+    details: routeLoadResults,
+  });
+});
+
 // ============================================================================
 // AUTHENTICATION ROUTES
 // ============================================================================
 let authRoutes;
-try {
-  authRoutes = require('./routes/auth');
-  console.log('✓ Auth routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load auth routes:', e.message);
-  authRoutes = (req, res) => res.status(500).json({ error: 'Auth routes not available' });
-}
+authRoutes = trackRouteLoad('auth', () => require('./routes/auth'));
 app.use('/api/v1/auth', authRoutes);
 
 // ============================================================================
@@ -278,214 +297,69 @@ let sceneRoutes, scenesFixedRoutes, wardrobeRoutes;
 
 // Characters routes
 let characterRoutes;
-try {
-  characterRoutes = require('./routes/characters');
-  console.log('✓ Characters routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load characters routes:', e.message);
-  characterRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+characterRoutes = trackRouteLoad('characters', () => require('./routes/characters'));
 
-try {
-  episodeRoutes = require('./routes/episodes');
-  console.log('✓ Episodes routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load episodes routes:', e.message);
-  episodeRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+episodeRoutes = trackRouteLoad('episodes', () => require('./routes/episodes'));
 
-try {
-  thumbnailRoutes = require('./routes/thumbnails');
-  console.log('✓ Thumbnails routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load thumbnails routes:', e.message);
-  thumbnailRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+thumbnailRoutes = trackRouteLoad('thumbnails', () => require('./routes/thumbnails'));
 
-try {
-  metadataRoutes = require('./routes/metadata');
-  console.log('✓ Metadata routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load metadata routes:', e.message);
-  metadataRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+metadataRoutes = trackRouteLoad('metadata', () => require('./routes/metadata'));
 
-try {
-  processingRoutes = require('./routes/processing');
-  console.log('✓ Processing routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load processing routes:', e.message);
-  processingRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+processingRoutes = trackRouteLoad('processing', () => require('./routes/processing'));
 
 // Phase 2 routes (file storage, search, job management)
-try {
-  filesRoutes = require('./routes/files');
-  console.log('✓ Files routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load files routes:', e.message);
-  filesRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+filesRoutes = trackRouteLoad('files', () => require('./routes/files'));
 
-try {
-  searchRoutes = require('./routes/search');
-  console.log('✓ Search routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load search routes:', e.message);
-  searchRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+searchRoutes = trackRouteLoad('search', () => require('./routes/search'));
 
-try {
-  jobsRoutes = require('./routes/jobs');
-  console.log('✓ Jobs routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load jobs routes:', e.message);
-  jobsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+jobsRoutes = trackRouteLoad('jobs', () => require('./routes/jobs'));
 
 // Phase 2.5 routes (composite thumbnails)
-try {
-  assetRoutes = require('./routes/assets');
-  console.log('✓ Assets routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load assets routes:', e.message);
-  assetRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+assetRoutes = trackRouteLoad('assets', () => require('./routes/assets'));
 
 // Asset roles routes
 let rolesRoutes;
-try {
-  rolesRoutes = require('./routes/roles');
-  console.log('✓ Asset roles routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load asset roles routes:', e.message);
-  rolesRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+rolesRoutes = trackRouteLoad('roles', () => require('./routes/roles'));
 
-try {
-  compositionRoutes = require('./routes/compositions');
-  console.log('✓ Compositions routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load compositions routes:', e.message);
-  console.error('Full error:', e);
-  compositionRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+compositionRoutes = trackRouteLoad('compositions', () => require('./routes/compositions'));
 
-try {
-  templateRoutes = require('./routes/templates');
-  console.log('✓ Templates routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load templates routes:', e.message);
-  templateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+templateRoutes = trackRouteLoad('templates', () => require('./routes/templates'));
 
-// Scene routes [CACHE CLEARED 2026-02-10 03:59]
-try {
+// Scene routes
+sceneRoutes = trackRouteLoad('scenes', () => {
   delete require.cache[require.resolve('./routes/scenes')];
-  sceneRoutes = require('./routes/scenes');
-  console.log('✓ Scenes routes loaded (cache cleared)');
-} catch (e) {
-  console.error('✗ Failed to load scenes routes:', e.message);
-  sceneRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+  return require('./routes/scenes');
+});
 
 // FIXED Scene routes (temporary workaround)
-try {
-  console.log('Attempting to load scenes-fixed routes...');
-  scenesFixedRoutes = require('./routes/scenes-fixed');
-  console.log('✓ FIXED Scenes routes loaded successfully!');
-  console.log('  Routes object:', typeof scenesFixedRoutes, scenesFixedRoutes.name);
-  console.log('  Is Router?', scenesFixedRoutes && scenesFixedRoutes.stack);
-} catch (e) {
-  console.error('✗ Failed to load fixed scenes routes:', e.message);
-  console.error('  Stack:', e.stack);
-  scenesFixedRoutes = (req, res) => res.status(500).json({ error: 'FALLBACK - Routes not available' });
-}
+scenesFixedRoutes = trackRouteLoad('scenes-fixed', () => require('./routes/scenes-fixed'));
 
-// Scene template routes
 let sceneTemplateRoutes;
-try {
-  sceneTemplateRoutes = require('./routes/sceneTemplates');
-  console.log('✓ Scene templates routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load scene templates routes:', e.message);
-  sceneTemplateRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+sceneTemplateRoutes = trackRouteLoad('sceneTemplates', () => require('./routes/sceneTemplates'));
 
-// Scene Library routes (new system)
 let sceneLibraryRoutes;
-try {
-  sceneLibraryRoutes = require('./routes/sceneLibrary');
-  console.log('✓ Scene Library routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load scene library routes:', e.message);
-  sceneLibraryRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+sceneLibraryRoutes = trackRouteLoad('sceneLibrary', () => require('./routes/sceneLibrary'));
 
 // Wardrobe routes
-try {
-  wardrobeRoutes = require('./routes/wardrobe');
-  console.log('✓ Wardrobe routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load wardrobe routes:', e.message);
-  wardrobeRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+wardrobeRoutes = trackRouteLoad('wardrobe', () => require('./routes/wardrobe'));
 
-// Wardrobe Library routes
 let wardrobeLibraryRoutes;
-try {
-  wardrobeLibraryRoutes = require('./routes/wardrobeLibrary');
-  console.log('✓ Wardrobe Library routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load wardrobe library routes:', e.message);
-  wardrobeLibraryRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+wardrobeLibraryRoutes = trackRouteLoad('wardrobeLibrary', () => require('./routes/wardrobeLibrary'));
 
-// Outfit sets routes
 let outfitSetsRoutes;
-try {
-  outfitSetsRoutes = require('./routes/outfitSets');
-  console.log('✓ Outfit sets routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load outfit sets routes:', e.message);
-  outfitSetsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+outfitSetsRoutes = trackRouteLoad('outfitSets', () => require('./routes/outfitSets'));
 
 let scriptsRoutes;
-try {
-  scriptsRoutes = require('./routes/scripts');
-  console.log('✓ Scripts routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load scripts routes:', e.message);
-  scriptsRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+scriptsRoutes = trackRouteLoad('scripts', () => require('./routes/scripts'));
 
 let footageRoutes;
-try {
-  footageRoutes = require('./routes/footage');
-  console.log('✓ Footage routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load footage routes:', e.message);
-  footageRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+footageRoutes = trackRouteLoad('footage', () => require('./routes/footage'));
 
 let sceneLinksRoutes;
-try {
-  sceneLinksRoutes = require('./routes/sceneLinks');
-  console.log('✓ Scene links routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load scene links routes:', e.message);
-  sceneLinksRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+sceneLinksRoutes = trackRouteLoad('sceneLinks', () => require('./routes/sceneLinks'));
 
 let scriptAnalysisRoutes;
-try {
-  scriptAnalysisRoutes = require('./routes/scriptAnalysis');
-  console.log('✓ Script analysis routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load script analysis routes:', e.message);
-  scriptAnalysisRoutes = (req, res) => res.status(500).json({ error: 'Routes not available' });
-}
+scriptAnalysisRoutes = trackRouteLoad('scriptAnalysis', () => require('./routes/scriptAnalysis'));
 
 // Phase 3A controllers (real-time notifications)
 let notificationController, activityController, presenceController, socketController;
@@ -640,26 +514,16 @@ try {
 app.use('/api/v1/episodes', episodeRoutes);
 
 // Timeline Data routes (scene composer & timeline editor)
-try {
-  const timelineDataRoutes = require('./routes/timelineData');
-  app.use('/api/v1/episodes', timelineDataRoutes);
-  console.log('✓ Timeline Data routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load Timeline Data routes:', e.message);
-}
+const timelineDataRoutes = trackRouteLoad('timelineData', () => require('./routes/timelineData'));
+app.use('/api/v1/episodes', timelineDataRoutes);
 
 app.use('/api/v1/thumbnails', thumbnailRoutes);
 app.use('/api/v1/metadata', metadataRoutes);
 app.use('/api/v1/processing-queue', processingRoutes);
 
 // Admin routes for migrations/setup
-try {
-  const adminRoutes = require('./routes/admin');
-  app.use('/api/v1/admin', adminRoutes);
-  console.log('✓ Admin routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load admin routes:', e.message);
-}
+const adminRoutes = trackRouteLoad('admin', () => require('./routes/admin'));
+app.use('/api/v1/admin', adminRoutes);
 
 // Phase 2 routes
 app.use('/api/v1/files', filesRoutes);
@@ -748,31 +612,16 @@ try {
 }
 
 // Evaluation routes (scoring engine)
-try {
-  const evaluationRoutes = require('./routes/evaluation');
-  app.use('/api/v1', evaluationRoutes);
-  console.log('✓ Evaluation routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load evaluation routes:', e.message);
-}
+const evaluationRoutes = trackRouteLoad('evaluation', () => require('./routes/evaluation'));
+app.use('/api/v1', evaluationRoutes);
 
 // World Admin routes (dashboard, decisions, browse-pool)
-try {
-  const worldRoutes = require('./routes/world');
-  app.use('/api/v1', worldRoutes);
-  console.log('✓ World routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load world routes:', e.message);
-}
+const worldRoutes = trackRouteLoad('world', () => require('./routes/world'));
+app.use('/api/v1', worldRoutes);
 
 // World Events routes (event library CRUD + inject)
-try {
-  const worldEventRoutes = require('./routes/worldEvents');
-  app.use('/api/v1', worldEventRoutes);
-  console.log('✓ World event routes loaded');
-} catch (e) {
-  console.error('✗ Failed to load world event routes:', e.message);
-}
+const worldEventRoutes = trackRouteLoad('worldEvents', () => require('./routes/worldEvents'));
+app.use('/api/v1', worldEventRoutes);
 
 // Career Goals routes (goal CRUD + sync + suggest-events)
 try {
