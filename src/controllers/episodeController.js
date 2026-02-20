@@ -73,6 +73,7 @@ module.exports = {
         attributes: [
           'id',
           'episode_number',
+          'season_number',
           'title',
           'description',
           'air_date',
@@ -190,6 +191,7 @@ module.exports = {
         // New field names (from frontend form)
         title,
         episode_number,
+        season_number,
         description,
         air_date,
         status,
@@ -217,11 +219,14 @@ module.exports = {
         episodeTitle,
         airDate,
         plotSummary,
+        // Accept "season" as alias for season_number (frontend compat)
+        season,
       } = req.body;
 
       // Use new field names if provided, otherwise fall back to old ones
       const finalTitle = title || episodeTitle || showName;
       const finalEpisodeNumber = episode_number || episodeNumber;
+      const finalSeasonNumber = season_number ?? season ?? null;
       const finalDescription = description || plotSummary;
       const finalAirDate = air_date || airDate;
       const finalStatus = status || 'draft';
@@ -252,6 +257,7 @@ module.exports = {
       const episodeData = {
         title: finalTitle,
         episode_number: finalEpisodeNumber ? parseInt(finalEpisodeNumber) : null,
+        season_number: finalSeasonNumber != null ? parseInt(finalSeasonNumber) : null,
         description: finalDescription || null,
         air_date: finalAirDate ? new Date(finalAirDate) : null,
         status: finalStatus,
@@ -458,6 +464,7 @@ module.exports = {
     const allowedFields = {
       title: true,
       episode_number: true,
+      season_number: true,
       description: true,
       air_date: true,
       status: true,
@@ -472,8 +479,8 @@ module.exports = {
     Object.keys(updates).forEach((field) => {
       if (allowedFields[field]) {
         // Handle type conversions
-        if (field === 'episode_number') {
-          updateData.episode_number = parseInt(updates[field]);
+        if (field === 'episode_number' || field === 'season_number') {
+          updateData[field] = parseInt(updates[field]);
         } else if (field === 'air_date') {
           updateData.air_date = updates[field] ? new Date(updates[field]) : null;
         } else {

@@ -144,7 +144,7 @@ function ShowDetail() {
   };
 
   const handleCreateEpisode = () => {
-    navigate(`/episodes/create?show_id=${showId}`);
+    navigate(`/shows/${showId}/quick-episode`);
   };
   
   const handleUpdateShow = async (updates) => {
@@ -320,12 +320,6 @@ function ShowDetail() {
                   className="btn-primary"
                   style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
                 >
-                  ⚡ Quick Create
-                </button>
-                <button 
-                  onClick={handleCreateEpisode}
-                  className="btn-primary"
-                >
                   + New Episode
                 </button>
               </div>
@@ -341,12 +335,6 @@ function ShowDetail() {
                   className="btn-primary"
                   style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none' }}
                 >
-                  ⚡ Quick Create
-                </button>
-                <button 
-                  onClick={handleCreateEpisode}
-                  className="btn-primary"
-                >
                   + Create First Episode
                 </button>
               </div>
@@ -354,7 +342,7 @@ function ShowDetail() {
               <EpisodeKanbanBoard
                 episodes={episodes}
                 onStatusChange={handleStatusChange}
-                onCreateEpisode={handleCreateEpisode}
+                onCreateEpisode={() => navigate(`/shows/${showId}/quick-episode`)}
               />
             ) : (
               <div className="episodes-grid">

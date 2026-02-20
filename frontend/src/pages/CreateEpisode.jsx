@@ -183,7 +183,7 @@ const CreateEpisode = () => {
         setFormData({
           title: episode.title || '',
           episodeNumber: episode.episode_number || '',
-          season: episode.season || '',
+          season: episode.season_number ?? episode.season ?? '',
           status: episode.status || 'draft',
           description: episode.description || '',
           airDate: episode.air_date ? episode.air_date.split('T')[0] : '',
@@ -412,7 +412,7 @@ const CreateEpisode = () => {
       const episodeData = {
         title: formData.title.trim(),
         episode_number: formData.episodeNumber !== '' ? Number(formData.episodeNumber) : null,
-        season: formData.season !== '' ? Number(formData.season) : null,
+        season_number: formData.season !== '' ? Number(formData.season) : null,
         status: formData.status,
         description: formData.description,
         air_date: formData.airDate || null,
