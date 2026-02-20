@@ -103,14 +103,14 @@ function evaluate({ state, event, style = {}, intent = null, bonuses = {} }) {
   breakdown.stress_penalty = { value: -stressPenalty, max: -20, detail: `Stress ${s.stress} × 2` };
 
   // Outfit match: 0-25
-  const outfitMatch = clamp(st.outfit_match || 15, 0, 25); // default 15 if no wardrobe
+  const outfitMatch = clamp(st.outfit_match ?? 0, 0, 25); // no outfit = 0, not a free bonus
   score += outfitMatch;
-  breakdown.outfit_match = { value: outfitMatch, max: 25, detail: st.outfit_match != null ? 'From wardrobe tags' : 'Neutral (no wardrobe assigned)' };
+  breakdown.outfit_match = { value: outfitMatch, max: 25, detail: st.outfit_match != null ? 'From wardrobe tags' : 'No outfit assigned (0 points)' };
 
   // Accessories match: 0-15
-  const accessoryMatch = clamp(st.accessory_match || 8, 0, 15); // default 8 if no wardrobe
+  const accessoryMatch = clamp(st.accessory_match ?? 0, 0, 15); // no accessories = 0, not a free bonus
   score += accessoryMatch;
-  breakdown.accessory_match = { value: accessoryMatch, max: 15, detail: st.accessory_match != null ? 'From wardrobe tags' : 'Neutral (no wardrobe assigned)' };
+  breakdown.accessory_match = { value: accessoryMatch, max: 15, detail: st.accessory_match != null ? 'From wardrobe tags' : 'No accessories assigned (0 points)' };
 
   // Deadline penalty: 0-15
   const deadlinePenalty = clamp(st.deadline_penalty || computeDeadlinePenalty(e), 0, 15);
