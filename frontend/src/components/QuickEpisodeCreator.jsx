@@ -75,8 +75,9 @@ const STAKES_PRESETS = [
 ];
 
 export default function QuickEpisodeCreator() {
-  const { showId } = useParams();
+  const { showId, episodeId: editEpisodeId } = useParams();
   const navigate = useNavigate();
+  const isEditMode = Boolean(editEpisodeId);
 
   // ─── State ───
   const [show, setShow] = useState(null);
@@ -85,6 +86,8 @@ export default function QuickEpisodeCreator() {
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState(null);
   const [lastEpisode, setLastEpisode] = useState(null);
+  const [resolvedShowId, setResolvedShowId] = useState(showId || null);
+  const [existingEvent, setExistingEvent] = useState(null);
 
   // Episode fields
   const [title, setTitle] = useState('');
@@ -115,6 +118,7 @@ export default function QuickEpisodeCreator() {
 
   // ─── Restore draft from localStorage on mount ───
   useEffect(() => {
+    if (isEditMode) return; // Skip draft restore in edit mode — data comes from API
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) {
@@ -167,7 +171,7 @@ export default function QuickEpisodeCreator() {
       narrativeStakes, inviteType, isFree, storageKey]);
 
   useEffect(() => {
-    if (isRestoringRef.current) return;
+    if (isRestoringRef.current || isEditMode) return;
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(saveDraft, 800);
     return () => { if (saveTimerRef.current) clearTimeout(saveTimerRef.current); };
@@ -179,39 +183,81 @@ export default function QuickEpisodeCreator() {
     setSaveStatus(null);
   };
 
-  // ─── Load show + character state + last episode number ───
+  // ─── Load show + character state + last episode number (or existing episode in edit mode) ───
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
+        let effectiveShowId = showId;
+
+        // ─── EDIT MODE: Load existing episode first ───
+        if (isEditMode) {
+          const epRes = await api.get(`/api/v1/episodes/${editEpisodeId}`);
+          const ep = epRes.data?.data || epRes.data?.episode || epRes.data;
+          if (!ep) throw new Error('Episode not found');
+          effectiveShowId = ep.show_id;
+          setResolvedShowId(effectiveShowId);
+
+          // Populate episode fields
+          setTitle(ep.title || '');
+          setEpisodeNumber(String(ep.episode_number || ''));
+          setSeason(ep.season_number || 1);
+          setDescription(ep.description || '');
+
+          // Try to load the event linked to this episode
+          try {
+            const evRes = await api.get(`/api/v1/world/${effectiveShowId}/events?episode_id=${editEpisodeId}`);
+            const events = evRes.data?.events || evRes.data?.data || evRes.data || [];
+            const ev = Array.isArray(events) ? events.find(e => e.used_in_episode_id === editEpisodeId) || events[0] : null;
+            if (ev) {
+              setExistingEvent(ev);
+              setEventName(ev.name || '');
+              setEventType(ev.event_type || '');
+              setDressCode(ev.dress_code || '');
+              setDressCodeKeywords(ev.dress_code_keywords || []);
+              setPrestige(ev.prestige ?? 5);
+              setStrictness(ev.strictness ?? 5);
+              setCost(ev.cost ?? 50);
+              setIsFree((ev.cost ?? 50) === 0);
+              setHostBrand(ev.host_brand || '');
+              setNarrativeStakes(ev.narrative_stakes || '');
+              setInviteType(ev.invite_type || 'invite');
+            }
+          } catch { /* no event found — that's ok */ }
+        }
+
+        if (!effectiveShowId) throw new Error('No show ID available');
+
         // Get show
-        const showRes = await api.get(`/api/v1/shows/${showId}`);
+        const showRes = await api.get(`/api/v1/shows/${effectiveShowId}`);
         setShow(showRes.data?.show || showRes.data);
 
         // Get character state
         try {
-          const csRes = await api.get(`/api/v1/characters/lala/state?show_id=${showId}`);
+          const csRes = await api.get(`/api/v1/characters/lala/state?show_id=${effectiveShowId}`);
           setCharState(csRes.data?.state || csRes.data);
         } catch { setCharState({ coins: 0, reputation: 1, stress: 0 }); }
 
-        // Get last episode number
-        try {
-          const epsRes = await api.get(`/api/v1/episodes?show_id=${showId}&limit=1&sort=episode_number&order=DESC`);
-          const eps = epsRes.data?.episodes || epsRes.data?.rows || [];
-          if (eps.length > 0) {
-            setLastEpisode(eps[0]);
-            setEpisodeNumber(String((eps[0].episode_number || 0) + 1));
-            setSeason(eps[0].season_number || eps[0].season || 1);
-          } else {
-            setEpisodeNumber('1');
-          }
-        } catch { setEpisodeNumber('1'); }
+        // Get last episode number (only in create mode)
+        if (!isEditMode) {
+          try {
+            const epsRes = await api.get(`/api/v1/episodes?show_id=${effectiveShowId}&limit=1&sort=episode_number&order=DESC`);
+            const eps = epsRes.data?.episodes || epsRes.data?.rows || [];
+            if (eps.length > 0) {
+              setLastEpisode(eps[0]);
+              setEpisodeNumber(String((eps[0].episode_number || 0) + 1));
+              setSeason(eps[0].season_number || eps[0].season || 1);
+            } else {
+              setEpisodeNumber('1');
+            }
+          } catch { setEpisodeNumber('1'); }
+        }
       } catch (err) {
-        setError('Failed to load show data');
+        setError(isEditMode ? 'Failed to load episode data' : 'Failed to load show data');
       } finally { setLoading(false); }
     };
     load();
-  }, [showId]);
+  }, [showId, editEpisodeId, isEditMode]);
 
   // ─── Apply preset ───
   const applyPreset = (preset) => {
@@ -233,74 +279,130 @@ export default function QuickEpisodeCreator() {
     setKeywordInput('');
   };
 
-  // ─── CREATE EVERYTHING ───
+  // ─── CREATE OR UPDATE ───
   const handleCreate = async () => {
     if (!title.trim()) { setError('Episode title is required'); return; }
-    if (!eventName.trim()) { setError('Event name is required'); return; }
+    if (!isEditMode && !eventName.trim()) { setError('Event name is required'); return; }
 
     setCreating(true);
     setError(null);
+    const effectiveShowId = resolvedShowId || showId;
 
     try {
-      // 1. Create Episode
-      const epRes = await api.post('/api/v1/episodes', {
-        title: title.trim(),
-        show_id: showId,
-        season_number: season,
-        episode_number: parseInt(episodeNumber) || 1,
-        description: description.trim(),
-        status: 'draft',
-        episode_type: 'regular',
-      });
-      const episode = epRes.data?.data || epRes.data?.episode || epRes.data;
-      const episodeId = episode?.id;
-      if (!episodeId) throw new Error('Episode created but no ID returned');
+      let episodeId;
 
-      // 2. Create Event
-      const evRes = await api.post(`/api/v1/world/${showId}/events`, {
-        show_id: showId,
-        name: eventName.trim(),
-        event_type: eventType,
-        invite_type: inviteType,
-        dress_code: dressCode,
-        dress_code_keywords: dressCodeKeywords,
-        prestige: prestige,
-        strictness: strictness,
-        cost: isFree ? 0 : cost,
-        is_paid: false,
-        host_brand: hostBrand,
-        narrative_stakes: narrativeStakes,
-        location: '',
-      });
-      const event = evRes.data?.event || evRes.data;
-
-      // 3. Inject event into episode
-      try {
-        await api.post(`/api/v1/world/${showId}/events/${event.id}/inject`, {
-          episode_id: episodeId,
+      if (isEditMode) {
+        // ─── UPDATE existing episode ───
+        await api.put(`/api/v1/episodes/${editEpisodeId}`, {
+          title: title.trim(),
+          season_number: season,
+          episode_number: parseInt(episodeNumber) || 1,
+          description: description.trim(),
         });
-      } catch (injectErr) {
-        // Try alternate inject method
+        episodeId = editEpisodeId;
+
+        // Update existing event if we have one
+        if (existingEvent?.id && eventName.trim()) {
+          try {
+            await api.put(`/api/v1/world/${effectiveShowId}/events/${existingEvent.id}`, {
+              name: eventName.trim(),
+              event_type: eventType,
+              invite_type: inviteType,
+              dress_code: dressCode,
+              dress_code_keywords: dressCodeKeywords,
+              prestige: prestige,
+              strictness: strictness,
+              cost: isFree ? 0 : cost,
+              host_brand: hostBrand,
+              narrative_stakes: narrativeStakes,
+            });
+          } catch { /* event update failed — not fatal */ }
+        } else if (!existingEvent && eventName.trim()) {
+          // No existing event — create one and inject
+          try {
+            const evRes = await api.post(`/api/v1/world/${effectiveShowId}/events`, {
+              show_id: effectiveShowId,
+              name: eventName.trim(),
+              event_type: eventType,
+              invite_type: inviteType,
+              dress_code: dressCode,
+              dress_code_keywords: dressCodeKeywords,
+              prestige: prestige,
+              strictness: strictness,
+              cost: isFree ? 0 : cost,
+              is_paid: false,
+              host_brand: hostBrand,
+              narrative_stakes: narrativeStakes,
+              location: '',
+            });
+            const event = evRes.data?.event || evRes.data;
+            try {
+              await api.post(`/api/v1/world/${effectiveShowId}/events/${event.id}/inject`, { episode_id: episodeId });
+            } catch {
+              try { await api.put(`/api/v1/world/${effectiveShowId}/events/${event.id}`, { episode_id: episodeId }); } catch {}
+            }
+          } catch { /* event creation failed — not fatal in edit mode */ }
+        }
+      } else {
+        // ─── CREATE new episode + event ───
+        const epRes = await api.post('/api/v1/episodes', {
+          title: title.trim(),
+          show_id: effectiveShowId,
+          season_number: season,
+          episode_number: parseInt(episodeNumber) || 1,
+          description: description.trim(),
+          status: 'draft',
+          episode_type: 'regular',
+        });
+        const episode = epRes.data?.data || epRes.data?.episode || epRes.data;
+        episodeId = episode?.id;
+        if (!episodeId) throw new Error('Episode created but no ID returned');
+
+        // Create Event
+        const evRes = await api.post(`/api/v1/world/${effectiveShowId}/events`, {
+          show_id: effectiveShowId,
+          name: eventName.trim(),
+          event_type: eventType,
+          invite_type: inviteType,
+          dress_code: dressCode,
+          dress_code_keywords: dressCodeKeywords,
+          prestige: prestige,
+          strictness: strictness,
+          cost: isFree ? 0 : cost,
+          is_paid: false,
+          host_brand: hostBrand,
+          narrative_stakes: narrativeStakes,
+          location: '',
+        });
+        const event = evRes.data?.event || evRes.data;
+
+        // Inject event into episode
         try {
-          await api.put(`/api/v1/world/${showId}/events/${event.id}`, {
+          await api.post(`/api/v1/world/${effectiveShowId}/events/${event.id}/inject`, {
             episode_id: episodeId,
           });
-        } catch { /* event created but not injected — not fatal */ }
+        } catch (injectErr) {
+          try {
+            await api.put(`/api/v1/world/${effectiveShowId}/events/${event.id}`, {
+              episode_id: episodeId,
+            });
+          } catch { /* event created but not injected — not fatal */ }
+        }
+
+        // Generate script skeleton with [EVENT:] tag
+        const scriptContent = generateScriptSkeleton(title, eventName, dressCode, narrativeStakes);
+        try {
+          await api.put(`/api/v1/episodes/${episodeId}`, {
+            script_content: scriptContent,
+          });
+        } catch { /* script save failed — not fatal */ }
       }
 
-      // 4. Generate script skeleton with [EVENT:] tag
-      const scriptContent = generateScriptSkeleton(title, eventName, dressCode, narrativeStakes);
-      try {
-        await api.put(`/api/v1/episodes/${episodeId}`, {
-          script_content: scriptContent,
-        });
-      } catch { /* script save failed — not fatal */ }
-
-      // 5. Clear draft and navigate to episode detail
+      // Clear draft and navigate to episode detail
       clearDraft();
       navigate(`/episodes/${episodeId}`);
     } catch (err) {
-      setError(err.response?.data?.error || err.response?.data?.message || 'Failed to create episode');
+      setError(err.response?.data?.error || err.response?.data?.message || (isEditMode ? 'Failed to update episode' : 'Failed to create episode'));
     } finally {
       setCreating(false);
     }
@@ -348,8 +450,8 @@ Lala arrives at ${evName}.
       {/* Header */}
       <div style={S.header}>
         <div>
-          <div style={S.headerLabel}>QUICK CREATE</div>
-          <div style={S.headerTitle}>New Episode</div>
+          <div style={S.headerLabel}>{isEditMode ? 'EDIT EPISODE' : 'QUICK CREATE'}</div>
+          <div style={S.headerTitle}>{isEditMode ? title || 'Edit Episode' : 'New Episode'}</div>
           <div style={S.headerSub}>{show?.title || show?.name || 'Show'} · Season {season}</div>
         </div>
         {charState && (
@@ -576,17 +678,18 @@ Lala arrives at ${evName}.
       </div>
 
       {/* ═══ CREATE BUTTON ═══ */}
-      <button onClick={handleCreate} disabled={creating || !title.trim() || !eventName.trim()}
+      <button onClick={handleCreate} disabled={creating || !title.trim() || (!isEditMode && !eventName.trim())}
         style={{
           ...S.createBtn,
-          opacity: creating || !title.trim() || !eventName.trim() ? 0.5 : 1,
+          opacity: creating || !title.trim() || (!isEditMode && !eventName.trim()) ? 0.5 : 1,
         }}>
-        {creating ? '⏳ Creating...' : '⚡ Create Episode'}
+        {creating ? '⏳ Saving...' : isEditMode ? '💾 Save Changes' : '⚡ Create Episode'}
       </button>
 
       <div style={{ fontSize: 11, color: '#94a3b8', textAlign: 'center', marginTop: 8 }}>
-        Creates episode, event, injects event, and generates script skeleton — all in one click.
-        You'll land on the episode detail page ready for wardrobe + evaluation.
+        {isEditMode
+          ? 'Updates episode details and event settings. Returns to episode detail page.'
+          : 'Creates episode, event, injects event, and generates script skeleton — all in one click.'}
       </div>
     </div>
   );

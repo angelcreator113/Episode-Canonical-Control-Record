@@ -183,7 +183,7 @@ function AppContent() {
           {/* Episodes */}
 
           <Route path="/episodes/create" element={<CreateEpisode />} />
-          <Route path="/episodes/:episodeId/edit" element={<CreateEpisode />} />
+          <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
           <Route path="/episodes/:episodeId" element={<EpisodeDetail />} />
           
