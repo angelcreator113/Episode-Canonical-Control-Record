@@ -260,7 +260,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
 
   // ─── Assign item to slot ───
   const assignToSlot = (item) => {
-    if (!item.is_owned) { setError('Cannot equip a locked item — purchase it first'); return; }
+    if (!item.can_select) { setError('Cannot equip a locked item — purchase or unlock it first'); return; }
     const cat = (item.clothing_category || '').toLowerCase();
     let slotKey = activeSlot;
     if (cat === 'dress') slotKey = 'body';
@@ -524,8 +524,21 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
                       </div>
                       <span style={{ fontSize: 10, fontWeight: 700 }}>{item.match_score}</span>
                     </div>
-                    <div style={{ fontSize: 9, marginTop: 3, color: isLocked ? '#dc2626' : '#16a34a', fontWeight: 600 }}>
-                      {isUsed ? '✓ In outfit' : isLocked ? (item.lock_type === 'coin' ? `🪙 ${item.coin_cost}` : `🔒 ${item.lock_type}`) : '✅ Tap to equip'}
+                    <div style={{ fontSize: 9, marginTop: 3, fontWeight: 600,
+                      color: isUsed ? '#6366f1' : item.can_select ? '#16a34a' : item.can_purchase ? '#eab308' : '#dc2626' }}>
+                      {isUsed ? '✓ In outfit'
+                        : item.can_select ? '✅ Tap to equip'
+                        : item.can_purchase ? (
+                          <span onClick={(e) => { e.stopPropagation(); purchaseItem(item); }}
+                            style={{ cursor: 'pointer', color: '#eab308' }}>
+                            🪙 Buy for {item.coin_cost} coins
+                          </span>
+                        )
+                        : item.lock_type === 'reputation' ? `🔒 Rep ${item.reputation_required}+`
+                        : item.lock_type === 'coin' ? `🪙 Need ${item.coin_cost} coins`
+                        : item.lock_type === 'brand_exclusive' ? '🏛️ Brand Exclusive'
+                        : item.lock_type === 'season_drop' ? `🕒 Drops Ep ${item.season_unlock_episode}`
+                        : '🔒 Locked'}
                     </div>
                   </div>
                 );
