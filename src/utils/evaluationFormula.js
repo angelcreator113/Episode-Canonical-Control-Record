@@ -1,16 +1,22 @@
 /**
- * Episode Evaluation Formula v1.0
+ * Episode Evaluation Formula v1.1
  * 
  * Deterministic scoring engine for Styling Adventures with Lala.
  * Computes a 0-100 score based on character stats, outfit match,
  * and event attributes. Tier thresholds determine SLAY/PASS/MID/FAIL.
+ * 
+ * v1.1 changes:
+ *  - Rep contribution capped at 15 (was 40). Multiplier ×1.5 (was ×4).
+ *  - SLAY deltas reduced: rep +2/trust +1/influ +1 (was +3/+2/+2).
+ *  - Diminishing returns: stats ≥7 gain max +1, stats ≥4 gains halved.
+ *  - No-outfit/accessory defaults 0 (was 15/8 free points). [v1.0 hotfix]
  * 
  * Location: src/utils/evaluationFormula.js
  */
 
 'use strict';
 
-const FORMULA_VERSION = 'v1.0';
+const FORMULA_VERSION = 'v1.1';
 
 // ─── TIER THRESHOLDS ───
 const TIERS = {
@@ -92,10 +98,10 @@ function evaluate({ state, event, style = {}, intent = null, bonuses = {} }) {
   let score = 50;
   const breakdown = {};
 
-  // Reputation contribution: 0-40
-  const repContrib = clamp(s.reputation, 0, 10) * 4;
+  // Reputation contribution: 0-15 (rep × 1.5, capped)
+  const repContrib = clamp(Math.round(s.reputation * 1.5), 0, 15);
   score += repContrib;
-  breakdown.reputation_contribution = { value: repContrib, max: 40, detail: `Reputation ${s.reputation} × 4` };
+  breakdown.reputation_contribution = { value: repContrib, max: 15, detail: `Reputation ${s.reputation} × 1.5` };
 
   // Stress penalty: 0-20
   const stressPenalty = clamp(s.stress, 0, 10) * 2;
@@ -103,14 +109,14 @@ function evaluate({ state, event, style = {}, intent = null, bonuses = {} }) {
   breakdown.stress_penalty = { value: -stressPenalty, max: -20, detail: `Stress ${s.stress} × 2` };
 
   // Outfit match: 0-25
-  const outfitMatch = clamp(st.outfit_match || 15, 0, 25); // default 15 if no wardrobe
+  const outfitMatch = clamp(st.outfit_match ?? 0, 0, 25); // no outfit = 0, not a free bonus
   score += outfitMatch;
-  breakdown.outfit_match = { value: outfitMatch, max: 25, detail: st.outfit_match != null ? 'From wardrobe tags' : 'Neutral (no wardrobe assigned)' };
+  breakdown.outfit_match = { value: outfitMatch, max: 25, detail: st.outfit_match != null ? 'From wardrobe tags' : 'No outfit assigned (0 points)' };
 
   // Accessories match: 0-15
-  const accessoryMatch = clamp(st.accessory_match || 8, 0, 15); // default 8 if no wardrobe
+  const accessoryMatch = clamp(st.accessory_match ?? 0, 0, 15); // no accessories = 0, not a free bonus
   score += accessoryMatch;
-  breakdown.accessory_match = { value: accessoryMatch, max: 15, detail: st.accessory_match != null ? 'From wardrobe tags' : 'Neutral (no wardrobe assigned)' };
+  breakdown.accessory_match = { value: accessoryMatch, max: 15, detail: st.accessory_match != null ? 'From wardrobe tags' : 'No accessories assigned (0 points)' };
 
   // Deadline penalty: 0-15
   const deadlinePenalty = clamp(st.deadline_penalty || computeDeadlinePenalty(e), 0, 15);
@@ -271,9 +277,9 @@ function computeStatDeltas(evaluation, event, overrides = []) {
   // Tier-based stat changes
   switch (tier) {
     case 'slay':
-      deltas.reputation = 3;
-      deltas.brand_trust = 2;
-      deltas.influence = 2;
+      deltas.reputation = 2;
+      deltas.brand_trust = 1;
+      deltas.influence = 1;
       deltas.stress = -1;
       break;
     case 'pass':
@@ -324,10 +330,20 @@ function applyDeltas(state, deltas) {
   // Coins can go negative (debt) but floor at -9999
   newState.coins = Math.max(newState.coins, -9999);
 
-  // Capped stats: 0-10
+  // Capped stats: 0-10 with diminishing returns for growth stats
   for (const key of ['reputation', 'brand_trust', 'influence', 'stress']) {
     if (deltas[key] !== undefined) {
-      newState[key] = clamp((newState[key] || 0) + deltas[key], 0, 10);
+      const current = newState[key] || 0;
+      let delta = deltas[key];
+
+      // Diminishing returns: positive gains shrink at higher stat levels
+      // (stress is excluded — penalties should always hit hard)
+      if (delta > 0 && key !== 'stress') {
+        if (current >= 7) delta = Math.min(delta, 1);       // Near cap: max +1
+        else if (current >= 4) delta = Math.ceil(delta / 2); // Mid range: halved
+      }
+
+      newState[key] = clamp(current + delta, 0, 10);
     }
   }
 

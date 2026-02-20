@@ -20,6 +20,11 @@ module.exports = (sequelize) => {
         type: DataTypes.INTEGER,
         allowNull: true,
       },
+      season_number: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+        field: 'season_number',
+      },
       title: {
         type: DataTypes.STRING(255),
         allowNull: false,

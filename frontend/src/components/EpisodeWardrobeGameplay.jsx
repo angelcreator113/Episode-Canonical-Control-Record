@@ -182,6 +182,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     try {
       const res = await api.post('/api/v1/wardrobe/browse-pool', {
         show_id: showId,
+        episode_id: episodeId,
         event_name: event.name || '',
         dress_code: event.dress_code || '',
         dress_code_keywords: event.dress_code_keywords || [],
@@ -196,7 +197,7 @@ export default function EpisodeWardrobeGameplay({ episodeId, showId, event = {},
     } catch (err) {
       setError(err.response?.data?.error || 'Failed to load wardrobe');
     } finally { setLoading(false); }
-  }, [showId, event, characterState, localCoins]);
+  }, [showId, episodeId, event, characterState, localCoins]);
 
   useEffect(() => { loadPool(); }, [loadPool]);
   useEffect(() => { if (success) { const t = setTimeout(() => setSuccess(null), 3000); return () => clearTimeout(t); } }, [success]);

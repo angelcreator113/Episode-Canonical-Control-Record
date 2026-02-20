@@ -202,24 +202,7 @@ router.post('/admin/reset-character-stats', async (req, res) => {
 });
 
 
-// ═══════════════════════════════════════════
-// POST /api/v1/admin/query  — Run a read-only SQL query (dev only)
-// ═══════════════════════════════════════════
-
-router.post('/admin/query', async (req, res) => {
-  try {
-    const models = await getModels();
-    if (!models) return res.status(500).json({ error: 'Models not loaded' });
-    const { sequelize } = models;
-    const { sql } = req.body;
-    if (!sql) return res.status(400).json({ error: 'sql field required' });
-
-    const rows = await sequelize.query(sql, { type: sequelize.QueryTypes.SELECT });
-    res.json({ success: true, count: rows.length, rows });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+// NOTE: /admin/query moved to src/routes/admin.js (mounted at /api/v1/admin)
 
 
 // ═══════════════════════════════════════════
