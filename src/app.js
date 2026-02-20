@@ -243,7 +243,7 @@ app.get('/health', async (req, res) => {
 });
 
 // Debug endpoint to check environment (should be removed in production)
-app.get('/debug/env', (req, res) => {
+app.get('/api/v1/debug/env', (req, res) => {
   res.json({
     NODE_ENV: process.env.NODE_ENV,
     PORT: process.env.PORT,
@@ -270,7 +270,7 @@ function trackRouteLoad(name, loadFn) {
   }
 }
 
-app.get('/debug/routes', (req, res) => {
+app.get('/api/v1/debug/routes', (req, res) => {
   const failed = Object.entries(routeLoadResults).filter(([,v]) => v.status === 'error');
   res.json({
     total: Object.keys(routeLoadResults).length,
