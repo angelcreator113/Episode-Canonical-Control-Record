@@ -13,7 +13,7 @@
  *   - Current Lala stats display
  *   - Evaluate button → compute score
  *   - Score breakdown with contribution bars
- *   - Tier badge (SLAY/PASS/MID/FAIL)
+ *   - Tier badge (SLAY/PASS/SAFE/FAIL)
  *   - Narrative result line (short/dramatic/comedic + regenerate)
  *   - Style match sliders (hybrid override)
  *   - Override modal (tier bump + reason + cost + narrative)
@@ -31,7 +31,7 @@ import api from '../services/api';
 const TIER_CONFIG = {
   slay: { emoji: '👑', label: 'SLAY', color: '#FFD700', bg: 'linear-gradient(135deg, #FFD700 0%, #FFA500 100%)' },
   pass: { emoji: '✨', label: 'PASS', color: '#22c55e', bg: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)' },
-  mid:  { emoji: '😐', label: 'MID',  color: '#eab308', bg: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)' },
+  safe: { emoji: '😐', label: 'SAFE', color: '#eab308', bg: 'linear-gradient(135deg, #eab308 0%, #ca8a04 100%)' },
   fail: { emoji: '💔', label: 'FAIL', color: '#dc2626', bg: 'linear-gradient(135deg, #dc2626 0%, #b91c1c 100%)' },
 };
 
@@ -82,6 +82,9 @@ function EvaluateEpisode() {
   const [overrideCostIdx, setOverrideCostIdx] = useState(0);
   const [overrideNarrative, setOverrideNarrative] = useState('');
   const [overriding, setOverriding] = useState(false);
+
+  // Canon freeze — admin unlock
+  const [canonUnlocked, setCanonUnlocked] = useState(false);
 
   // Outfit data
   const [outfitData, setOutfitData] = useState(null);
@@ -217,7 +220,7 @@ function EvaluateEpisode() {
   const beatCount = (episode?.script_content?.match(/##\s*BEAT:/gi) || []).length;
   const isComputed = episode?.evaluation_status === 'computed' || evaluation?.score != null;
   const isAccepted = episode?.evaluation_status === 'accepted';
-  const tierConfig = evaluation ? TIER_CONFIG[evaluation.tier_final] || TIER_CONFIG.mid : null;
+  const tierConfig = evaluation ? TIER_CONFIG[evaluation.tier_final] || TIER_CONFIG.safe : null;
 
   const availableTiers = evaluation ? getAllTiers(evaluation.tier_final) : [];
   const hasOverrides = (evaluation?.overrides || []).filter(o => o.type === 'tier_change').length > 0;
@@ -255,9 +258,29 @@ function EvaluateEpisode() {
               {accepting ? '⏳...' : '✅ Accept Result'}
             </button>
           )}
-          {isComputed && (
+          {isComputed && !isAccepted && (
             <button onClick={handleEvaluate} disabled={evaluating} style={S.secondaryBtn}>
               🔄 Re-evaluate
+            </button>
+          )}
+          {isAccepted && !canonUnlocked && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, color: '#16a34a', fontWeight: 600 }}>🔒 Canon Locked</span>
+              <button
+                onClick={() => {
+                  if (window.confirm('Admin Override: Unlock this episode for re-evaluation?\n\nThis will allow modifying an accepted result. Stat corruption may occur if episodes are re-evaluated out of order.')) {
+                    setCanonUnlocked(true);
+                  }
+                }}
+                style={{ padding: '4px 10px', background: 'none', border: '1px solid #e2e8f0', borderRadius: 4, color: '#94a3b8', fontSize: 11, cursor: 'pointer' }}
+              >
+                Admin Unlock
+              </button>
+            </div>
+          )}
+          {isAccepted && canonUnlocked && (
+            <button onClick={handleEvaluate} disabled={evaluating} style={{ ...S.secondaryBtn, border: '1px solid #fbbf24', background: '#fffbeb' }}>
+              ⚠️ Re-evaluate (Unlocked)
             </button>
           )}
         </div>
@@ -350,7 +373,7 @@ function EvaluateEpisode() {
                       const catIcons = { dress: '👗', top: '👚', bottom: '👖', shoes: '👠', accessories: '👜', jewelry: '💍', perfume: '🌸' };
                       const tierColors = {
                         basic: { bg: '#f1f5f9', color: '#64748b' },
-                        mid: { bg: '#eef2ff', color: '#6366f1' },
+                        safe: { bg: '#eef2ff', color: '#6366f1' },
                         luxury: { bg: '#fef3c7', color: '#92400e' },
                         elite: { bg: '#fef3c7', color: '#78350f' },
                       };
@@ -581,7 +604,7 @@ function EvaluateEpisode() {
             <div style={S.formGroup}>
               <label style={S.formLabel}>Target Tier</label>
               <select value={overrideTier} onChange={e => setOverrideTier(e.target.value)} style={S.select}>
-                {['fail', 'mid', 'pass', 'slay'].filter(t => t !== evaluation.tier_final).map(t => (
+                {['fail', 'safe', 'pass', 'slay'].filter(t => t !== evaluation.tier_final).map(t => (
                   <option key={t} value={t}>{t.toUpperCase()}</option>
                 ))}
               </select>
@@ -638,7 +661,7 @@ function EvaluateEpisode() {
 // ─── HELPERS ───
 
 function getAllTiers(current) {
-  return ['fail', 'mid', 'pass', 'slay'].filter(t => t !== current);
+  return ['fail', 'safe', 'pass', 'slay'].filter(t => t !== current);
 }
 
 

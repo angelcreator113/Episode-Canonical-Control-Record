@@ -1,9 +1,15 @@
 /**
- * Episode Evaluation Formula v1.1
+ * Episode Evaluation Formula v1.2
  * 
  * Deterministic scoring engine for Styling Adventures with Lala.
  * Computes a 0-100 score based on character stats, outfit match,
- * and event attributes. Tier thresholds determine SLAY/PASS/MID/FAIL.
+ * and event attributes. Tier thresholds determine SLAY/PASS/SAFE/FAIL.
+ * 
+ * v1.2 changes:
+ *  - Renamed MID tier → SAFE across engine + UI.
+ *  - Coin economy: tier rewards SLAY +150, PASS +75, SAFE +25, FAIL -25.
+ *  - Paid event bonus: SLAY +50, PASS +25 extra coins for paid events.
+ *  - Stat caps: 0-4 full, 5-7 ×0.5, 8-9 ×0.25, 10 no gain.
  * 
  * v1.1 changes:
  *  - Rep contribution capped at 15 (was 40). Multiplier ×1.5 (was ×4).
@@ -16,13 +22,13 @@
 
 'use strict';
 
-const FORMULA_VERSION = 'v1.1';
+const FORMULA_VERSION = 'v1.2';
 
 // ─── TIER THRESHOLDS ───
 const TIERS = {
   SLAY: { min: 85, label: 'slay', emoji: '👑', color: '#FFD700' },
   PASS: { min: 65, label: 'pass', emoji: '✨', color: '#22c55e' },
-  MID:  { min: 45, label: 'mid',  emoji: '😐', color: '#eab308' },
+  SAFE: { min: 45, label: 'safe', emoji: '😐', color: '#eab308' },
   FAIL: { min: 0,  label: 'fail', emoji: '💔', color: '#dc2626' },
 };
 
@@ -59,7 +65,7 @@ const OVERRIDE_REASONS = {
 };
 
 // ─── TIER ORDER (for bump validation) ───
-const TIER_ORDER = ['fail', 'mid', 'pass', 'slay'];
+const TIER_ORDER = ['fail', 'safe', 'pass', 'slay'];
 
 function clamp(val, min, max) {
   return Math.max(min, Math.min(max, val));
@@ -68,7 +74,7 @@ function clamp(val, min, max) {
 function toTier(score) {
   if (score >= TIERS.SLAY.min) return 'slay';
   if (score >= TIERS.PASS.min) return 'pass';
-  if (score >= TIERS.MID.min) return 'mid';
+  if (score >= TIERS.SAFE.min) return 'safe';
   return 'fail';
 }
 
@@ -271,8 +277,16 @@ function computeStatDeltas(evaluation, event, overrides = []) {
   const e = event || {};
   const deltas = {};
 
-  // Base coin cost
-  deltas.coins = -(e.cost || 0);
+  // ─── COIN ECONOMY ───
+  // Tier-based coin rewards
+  const tierCoinRewards = { slay: 150, pass: 75, safe: 25, fail: -25 };
+  deltas.coins = (tierCoinRewards[tier] || 0) - (e.cost || 0);
+
+  // Paid event bonus: extra coins for attending expensive events
+  if (e.cost > 0) {
+    const paidBonus = tier === 'slay' ? 50 : tier === 'pass' ? 25 : 0;
+    deltas.coins += paidBonus;
+  }
 
   // Tier-based stat changes
   switch (tier) {
@@ -288,7 +302,7 @@ function computeStatDeltas(evaluation, event, overrides = []) {
       deltas.influence = 1;
       deltas.stress = 0;
       break;
-    case 'mid':
+    case 'safe':
       deltas.reputation = 0;
       deltas.brand_trust = 0;
       deltas.influence = 0;
@@ -331,6 +345,7 @@ function applyDeltas(state, deltas) {
   newState.coins = Math.max(newState.coins, -9999);
 
   // Capped stats: 0-10 with diminishing returns for growth stats
+  // 0-4: full delta | 5-7: ×0.5 | 8-9: ×0.25 | 10: no gain
   for (const key of ['reputation', 'brand_trust', 'influence', 'stress']) {
     if (deltas[key] !== undefined) {
       const current = newState[key] || 0;
@@ -339,8 +354,10 @@ function applyDeltas(state, deltas) {
       // Diminishing returns: positive gains shrink at higher stat levels
       // (stress is excluded — penalties should always hit hard)
       if (delta > 0 && key !== 'stress') {
-        if (current >= 7) delta = Math.min(delta, 1);       // Near cap: max +1
-        else if (current >= 4) delta = Math.ceil(delta / 2); // Mid range: halved
+        if (current >= 10) delta = 0;                        // At ceiling: no gain
+        else if (current >= 8) delta = Math.ceil(delta * 0.25); // Near cap: quarter
+        else if (current >= 5) delta = Math.ceil(delta * 0.5);  // Mid range: halved
+        // 0-4: full delta applies
       }
 
       newState[key] = clamp(current + delta, 0, 10);
@@ -367,7 +384,7 @@ function generateNarrativeLine(evaluation) {
       `Not perfect, but she held her own. ${score} points. Respect earned.`,
       `The look landed. The room noticed. ${score}. A good day.`,
     ],
-    mid: [
+    safe: [
       `It was... fine. Not embarrassing, not memorable. Score: ${score}.`,
       `She showed up. The room was polite. ${score}. Room to grow.`,
       `Close, bestie. But 'almost' doesn't get invites back. ${score}.`,
@@ -379,7 +396,7 @@ function generateNarrativeLine(evaluation) {
     ],
   };
 
-  const tierLines = lines[tier_final] || lines.mid;
+  const tierLines = lines[tier_final] || lines.safe;
   return {
     short: tierLines[0],
     dramatic: tierLines[1],

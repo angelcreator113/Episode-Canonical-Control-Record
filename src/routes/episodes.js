@@ -851,4 +851,132 @@ router.delete('/:id/wardrobe-defaults/:character', async (req, res) => {
   }
 });
 
+
+// ═══════════════════════════════════════════
+// POST /api/v1/episodes/:id/generate-beats
+// Generate a fresh script skeleton with canonical beat headers
+// Uses linked world_event if available, otherwise basic 9-beat template
+// ═══════════════════════════════════════════
+
+let scriptSkeletonGenerator;
+try { scriptSkeletonGenerator = require('../utils/scriptSkeletonGenerator'); } catch (e) { scriptSkeletonGenerator = null; }
+
+router.post('/:id/generate-beats', asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { models, sequelize } = require('../models');
+  const { Episode } = models;
+
+  const episode = await Episode.findByPk(id);
+  if (!episode) return res.status(404).json({ success: false, error: 'Episode not found' });
+
+  const showId = episode.show_id;
+
+  // Look up linked world_event for this episode
+  let worldEvent = null;
+  try {
+    const [weRows] = await sequelize.query(
+      `SELECT * FROM world_events WHERE used_in_episode_id = :episodeId LIMIT 1`,
+      { replacements: { episodeId: id } }
+    );
+    if (weRows && weRows.length > 0) worldEvent = weRows[0];
+  } catch (e) { /* no world_events table or no match */ }
+
+  // Get character state for context-aware generation
+  let characterState = {};
+  try {
+    const [states] = await sequelize.query(
+      `SELECT * FROM character_state WHERE show_id = :showId AND character_key = 'lala' LIMIT 1`,
+      { replacements: { showId } }
+    );
+    if (states && states.length > 0) {
+      characterState = {
+        coins: states[0].coins,
+        reputation: states[0].reputation,
+        brand_trust: states[0].brand_trust,
+        influence: states[0].influence,
+        stress: states[0].stress,
+      };
+    }
+  } catch (e) { /* no state yet */ }
+
+  let script;
+
+  if (worldEvent && scriptSkeletonGenerator) {
+    // Full skeleton from linked world event
+    script = scriptSkeletonGenerator.generateScriptSkeleton(worldEvent, {
+      characterState,
+      intent: null,
+      includeNarration: true,
+      includeAnimations: true,
+    });
+  } else {
+    // Basic 9-beat skeleton with placeholder content
+    const title = episode.title || 'Untitled Episode';
+    script = [
+      `## BEAT: OPENING_RITUAL`,
+      `Lala: "Bestie, come style me — I'm ready for something new."`,
+      ``,
+      `## BEAT: CREATOR_WELCOME`,
+      `[UI:OPEN LoginWindow]`,
+      `[UI:TYPE Username "JustAWomanInHerPrime"]`,
+      `[UI:TYPE Password "••••••••"]`,
+      `[UI:CLICK LoginConfirm]`,
+      `[UI:CLOSE LoginWindow]`,
+      `Prime: "Welcome back, besties!"`,
+      ``,
+      `## BEAT: INTERRUPTION #1`,
+      `[UI:NOTIFICATION MailDing]`,
+      `Prime: "Oh. Lala's got mail."`,
+      `[UI:CLICK MailIcon]`,
+      `[UI:OPEN MailPanel]`,
+      ``,
+      `## BEAT: REVEAL #1`,
+      `[UI:DISPLAY InviteLetterOverlay]`,
+      `[MAIL: type=invite from="EVENT_NAME" prestige=5 cost=100]`,
+      `Prime: "(Reads invite out loud.)"`,
+      ``,
+      `## BEAT: STAKES_INTENTION`,
+      `[EVENT: name="${title}" prestige=5 cost=100 strictness=5 deadline="medium"]`,
+      `[UI:DISPLAY ToDoListOverlay]`,
+      `[UI:CLICK VoiceIcon]`,
+      `[UI:VOICE_ACTIVATE Lala]`,
+      `Lala: "This is my moment."`,
+      ``,
+      `## BEAT: TRANSFORMATION`,
+      `[UI:OPEN ClosetCategory Outfit]`,
+      `[UI:SCROLL ClosetItems x5]`,
+      `(Browse and select outfit items here)`,
+      ``,
+      `## BEAT: INTERRUPTION #2`,
+      `[UI:NOTIFICATION EventReminder]`,
+      `Prime: "The event is tonight. Let's not waste time."`,
+      ``,
+      `## BEAT: EVENT_TRAVEL`,
+      `[UI:CLICK DestinationIcon]`,
+      `[SCENE:LOAD Location "elegant venue"]`,
+      `Lala: "Bestie... they're staring."`,
+      `Prime: "They should be."`,
+      ``,
+      `## BEAT: CLIFFHANGER`,
+      `Prime: "Besties... did she slay? Rate this look from one to ten."`,
+      `Lala: "Wait... who is that watching me?"`,
+      `[UI:NOTIFICATION MysteriousDM]`,
+      `Text: "To Be Continued..."`,
+    ].join('\n');
+  }
+
+  // Save to episode
+  await episode.update({ script_content: script });
+
+  return res.json({
+    success: true,
+    script,
+    source: worldEvent ? 'world_event' : 'basic_template',
+    event_name: worldEvent?.name || null,
+    beat_count: (script.match(/## BEAT:/g) || []).length,
+    line_count: script.split('\n').length,
+  });
+}));
+
+
 module.exports = router;

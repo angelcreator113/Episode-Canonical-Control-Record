@@ -321,6 +321,33 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
     } catch (err) { setError('Failed: ' + (err.response?.data?.error || err.message)); }
   }, [episodeId, analysis, scriptContent]);
 
+  // ─── GENERATE BEAT STRUCTURE ───
+  const [isGenerating, setIsGenerating] = useState(false);
+  const handleGenerateBeats = useCallback(async () => {
+    if (!episodeId) return;
+    if (!window.confirm('This will replace your entire script with a fresh beat skeleton. Continue?')) return;
+    setIsGenerating(true);
+    setError(null);
+    try {
+      const res = await api.post(`/api/v1/episodes/${episodeId}/generate-beats`);
+      if (res.data.success) {
+        setScriptContent(res.data.script);
+        setHasUnsavedChanges(false); // already saved server-side
+        setSelectedBeatId(null); // reset selection so first beat is auto-selected
+        const src = res.data.source === 'world_event'
+          ? `Generated from event: ${res.data.event_name}`
+          : 'Generated basic 9-beat template';
+        alert(`✅ ${res.data.beat_count} beats generated!\n${src}`);
+      } else {
+        setError(res.data.error || 'Generation failed');
+      }
+    } catch (err) {
+      setError('Generate failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [episodeId]);
+
   const handleAutofix = useCallback((w) => {
     if (!w.autofix?.available) return;
     let applied = false;
@@ -397,6 +424,7 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
       ...BEAT_OPTIONS.map(b => ({ icon: b.icon, label: `Add beat: ${b.label}`, action: () => insertAtCursor(`\n## BEAT: ${b.value}\n`) })),
       ...TEMPLATES.map(t => ({ icon: '📋', label: `Template: ${t.label}`, action: () => insertAtCursor(t.text) })),
       { icon: '✨', label: 'Format Script', shortcut: '', action: handleFormatScript },
+      { icon: '🎬', label: 'Generate Beat Structure', action: handleGenerateBeats },
       { icon: '💾', label: 'Save', shortcut: 'Ctrl+S', action: handleSave },
       { icon: '🔍', label: 'Analyze Script', action: handleAnalyze },
       { icon: '🧰', label: 'Open Tools Panel', action: () => { setDrawerOpen(true); setCmdOpen(false); } },
@@ -433,6 +461,9 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
           <span className={`se-status-badge ${episodeStatus}`}>{episodeStatus}</span>
         </div>
         <div className="se-toolbar-right">
+          <button className="se-btn-subtle" onClick={handleGenerateBeats} disabled={isGenerating} title="Replace script with fresh beat skeleton">
+            {isGenerating ? '⏳…' : '🎬 Generate Beats'}
+          </button>
           <button className="se-btn-subtle" onClick={handleFormatScript}>Format</button>
           <div className={`se-save-indicator ${hasUnsavedChanges ? 'unsaved' : saveStatus ? 'saved' : ''}`}>
             {hasUnsavedChanges ? '● Unsaved' : saveStatus || 'Saved'}

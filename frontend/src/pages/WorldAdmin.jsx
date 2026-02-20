@@ -20,8 +20,8 @@ import { useParams, Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
-const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', mid: '#eab308', fail: '#dc2626' };
-const TIER_EMOJIS = { slay: '👑', pass: '✨', mid: '😐', fail: '💔' };
+const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
+const TIER_EMOJIS = { slay: '👑', pass: '✨', safe: '😐', fail: '💔' };
 const EVENT_TYPE_ICONS = { invite: '💌', upgrade: '⬆️', guest: '🌟', fail_test: '💔', deliverable: '📦', brand_deal: '🤝' };
 const EVENT_TYPES = ['invite', 'upgrade', 'guest', 'fail_test', 'deliverable', 'brand_deal'];
 const BIAS_OPTIONS = ['balanced', 'glam', 'cozy', 'couture', 'trendy', 'romantic'];
@@ -337,7 +337,7 @@ function WorldAdmin() {
             <div style={S.card}>
               <h2 style={S.cardTitle}>🏆 Tier Distribution</h2>
               <div style={{ display: 'flex', gap: 12 }}>
-                {['slay', 'pass', 'mid', 'fail'].map(tier => (
+                {['slay', 'pass', 'safe', 'fail'].map(tier => (
                   <div key={tier} style={{ flex: 1, padding: 14, borderRadius: 10, textAlign: 'center', background: TIER_COLORS[tier] + '12', border: `2px solid ${TIER_COLORS[tier]}30` }}>
                     <div style={{ fontSize: 22 }}>{TIER_EMOJIS[tier]}</div>
                     <div style={{ fontSize: 26, fontWeight: 800 }}>{tierCounts[tier] || 0}</div>
