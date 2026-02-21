@@ -460,52 +460,37 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   // ── Render ─────────────────────────────────
 
   return (
-    <div style={{ display: 'flex', gap: 0, minHeight: '100vh' }}>
-    <div className="st-editor" style={{ flex: 1, minWidth: 0 }}>
-      {/* Top bar */}
+    <div className="st-editor-layout">
+    <div className="st-editor">
+      {/* Compact top bar — title + stats + actions in one row */}
       <div className="st-editor-topbar">
         <button className="st-back-btn" onClick={onBack} title="Back to books">←</button>
-        <h2>PNOS Book Editor</h2>
-      </div>
-
-      {/* Header */}
-      <div className="st-book-header">
-        <h1>{book.character_name}</h1>
-        <p className="st-subtitle">
-          {book.subtitle || [book.season_label, book.week_label].filter(Boolean).join(' · ')}
-        </p>
-        <div className="st-stat-row">
-          <span className="st-stat">
-            <span className="st-dot st-dot-pending" /> {pendingCount} Pending
-          </span>
-          <span className="st-stat">
-            <span className="st-dot st-dot-approved" /> {approvedCount} Approved
-          </span>
-          <span className="st-stat">
-            <span className="st-dot st-dot-edited" /> {editedCount} Edited
+        <div className="st-topbar-info">
+          <h2>{book.character_name}</h2>
+          <span className="st-topbar-sub">
+            {book.subtitle || [book.season_label, book.week_label].filter(Boolean).join(' · ')}
           </span>
         </div>
-      </div>
-
-      {/* Legend */}
-      <div className="st-legend">
-        <span><span className="st-dot st-dot-pending" /> Pending Review</span>
-        <span><span className="st-dot st-dot-approved" /> Approved</span>
-        <span><span className="st-dot st-dot-edited" /> Edited</span>
-        <span><span className="st-dot st-dot-rejected" /> Rejected</span>
-      </div>
-
-      {/* Action bar */}
-      <div className="st-action-bar">
-        <div className="st-action-bar-left">
+        <div className="st-topbar-stats">
+          <span className="st-stat">
+            <span className="st-dot st-dot-pending" /> {pendingCount}
+          </span>
+          <span className="st-stat">
+            <span className="st-dot st-dot-approved" /> {approvedCount}
+          </span>
+          <span className="st-stat">
+            <span className="st-dot st-dot-edited" /> {editedCount}
+          </span>
+        </div>
+        <div className="st-topbar-actions">
           <button className="st-btn st-btn-gold st-btn-sm" onClick={approveAll}>
-            ✓ Approve All Pending ({pendingCount})
+            ✓ Approve All ({pendingCount})
           </button>
           <button
             className="st-btn st-btn-ghost st-btn-sm"
             onClick={() => setShowAddChapter(!showAddChapter)}
           >
-            + Add Chapter
+            + Chapter
           </button>
         </div>
       </div>
@@ -569,12 +554,11 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                 {chapter.badge && (
                   <span className="st-chapter-badge">{chapter.badge}</span>
                 )}
-                <span style={{ fontSize: 12, color: '#8b7e6a' }}>
+                <span className="st-chapter-count">
                   {lines.length} line{lines.length !== 1 ? 's' : ''}
                 </span>
                 <button
-                  className="st-btn st-btn-danger st-btn-sm"
-                  style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 10, padding: '3px 8px' }}
+                  className="st-chapter-delete"
                   onClick={e => { e.stopPropagation(); deleteChapter(chapter.id); }}
                   title="Delete chapter"
                 >
@@ -700,44 +684,24 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       )}
     </div>
 
-    {/* ── Right Panel: Memory Bank ── */}
-    <div style={{ width: 280, borderLeft: '1px solid rgba(26,21,16,0.08)', background: '#0d0b09', flexShrink: 0, overflowY: 'auto' }}>
-      <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(245,240,232,0.06)', display: 'flex', gap: 8 }}>
+    {/* ── Right Panel ── */}
+    <div className="st-right-panel">
+      <div className="st-right-tabs">
         <button
+          className={`st-right-tab ${activeRightTab === 'memories' ? 'active' : ''}`}
           onClick={() => setActiveRightTab('memories')}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: 'DM Mono, monospace', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
-            color: activeRightTab === 'memories' ? '#C9A84C' : 'rgba(245,240,232,0.3)',
-            borderBottom: activeRightTab === 'memories' ? '1px solid #C9A84C' : '1px solid transparent',
-            padding: '4px 8px',
-          }}
         >
-          Memory Bank
+          Memory
         </button>
         <button
+          className={`st-right-tab ${activeRightTab === 'toc' ? 'active' : ''}`}
           onClick={() => setActiveRightTab('toc')}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: 'DM Mono, monospace', fontSize: 10,
-            letterSpacing: '0.1em', textTransform: 'uppercase',
-            color: activeRightTab === 'toc' ? '#C9A84C' : 'rgba(245,240,232,0.3)',
-            borderBottom: activeRightTab === 'toc' ? '1px solid #C9A84C' : '1px solid transparent',
-            padding: '4px 8px',
-          }}
         >
           TOC
         </button>
         <button
+          className={`st-right-tab ${activeRightTab === 'scenes' ? 'active' : ''}`}
           onClick={() => setActiveRightTab('scenes')}
-          style={{
-            background: 'none', border: 'none', cursor: 'pointer',
-            fontFamily: 'DM Mono, monospace', fontSize: 10,
-            letterSpacing: '0.1em', textTransform: 'uppercase',
-            color: activeRightTab === 'scenes' ? '#C9A84C' : 'rgba(245,240,232,0.3)',
-            borderBottom: activeRightTab === 'scenes' ? '1px solid #C9A84C' : '1px solid transparent',
-            padding: '4px 8px',
-          }}
         >
           Scenes
         </button>
