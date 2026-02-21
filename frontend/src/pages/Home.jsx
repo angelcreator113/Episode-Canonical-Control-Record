@@ -99,22 +99,23 @@ function Home() {
 
         {/* ─── Universe ─── */}
         <section className="hp-section">
-          {primaryUniverse ? (
+          {primaryUniverse ? (() => {
+            const desc = primaryUniverse.description || 'A vast narrative universe ready to be shaped.';
+            const shortDesc = desc.length > 120 ? desc.slice(0, 120).trimEnd() + '…' : desc;
+            return (
             <div className="hp-universe-card" onClick={() => navigate('/universe')} style={{ cursor: 'pointer' }}>
               <div className="hp-universe-header">
                 <div>
                   <div className="hp-universe-label">🌌 Your Universe</div>
                   <h3 className="hp-universe-name">{primaryUniverse.name}</h3>
-                  <p className="hp-universe-desc">
-                    {primaryUniverse.description || 'A vast narrative universe ready to be shaped.'}
-                  </p>
+                  <p className="hp-universe-desc">{shortDesc}</p>
                 </div>
                 <button className="hp-btn-open" onClick={(e) => { e.stopPropagation(); navigate('/universe'); }}>
-                  Open Universe →
+                  View More →
                 </button>
               </div>
 
-              {/* Theme chips — pull from core_themes JSON or fallback */}
+              {/* Theme chips */}
               <div className="hp-universe-themes">
                 {(primaryUniverse.core_themes || ['Identity', 'Power', 'Legacy']).slice(0, 5).map((t, i) => (
                   <span key={i} className={`hp-theme-chip hp-theme-chip--${CHIP_COLORS[i % 3]}`}>
@@ -142,7 +143,8 @@ function Home() {
                 </div>
               </div>
             </div>
-          ) : (
+            );
+          })() : (
             <div className="hp-universe-card">
               <div className="hp-empty">
                 <div className="hp-empty__icon">🌌</div>
