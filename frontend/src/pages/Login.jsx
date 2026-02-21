@@ -33,7 +33,22 @@ export default function Login() {
     } catch (err) {
       console.error('[Login] Login error:', err);
       console.error('[Login] Error response:', err.response);
-      const errorMsg = err.response?.data?.message || err.message || 'Login failed. Please try again.';
+      const status = err.response?.status;
+      const serverMsg = err.response?.data?.message;
+      let errorMsg;
+      if (serverMsg) {
+        errorMsg = serverMsg;
+      } else if (!err.response && (err.code === 'ERR_NETWORK' || err.message === 'Network Error')) {
+        errorMsg = 'Unable to reach the server. Please check your connection and try again.';
+      } else if (status === 401) {
+        errorMsg = 'Invalid email or password. Please try again.';
+      } else if (status === 429) {
+        errorMsg = 'Too many attempts. Please wait a moment and try again.';
+      } else if (status >= 500) {
+        errorMsg = 'Server error. Please try again in a few moments.';
+      } else {
+        errorMsg = 'Login failed. Please check your credentials and try again.';
+      }
       console.log('[Login] Error message:', errorMsg);
       setError(errorMsg);
     } finally {

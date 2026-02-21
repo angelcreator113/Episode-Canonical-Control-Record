@@ -29,21 +29,14 @@ export const AuthProvider = ({ children }) => {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        // TEMP: Skip auth check, always authenticate
-        setUser({ id: 'dev-user', email: 'dev@example.com', name: 'Dev User' });
-        setIsAuthenticated(true);
-        setLoading(false);
-        return;
-        
-        // Original code:
-        // if (authService.isAuthenticated()) {
-        //   const profile = await authService.getProfile();
-        //   setUser(profile);
-        //   setIsAuthenticated(true);
-        // } else {
-        //   setUser(null);
-        //   setIsAuthenticated(false);
-        // }
+        if (authService.isAuthenticated()) {
+          const profile = authService.getProfile();
+          setUser(profile || { email: 'user' });
+          setIsAuthenticated(true);
+        } else {
+          setUser(null);
+          setIsAuthenticated(false);
+        }
       } catch (err) {
         console.error('[AuthContext] Check auth error:', err);
         setError(err.message);
