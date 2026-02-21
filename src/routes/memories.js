@@ -38,6 +38,7 @@ try {
 // Adjust path to match your models/index.js export pattern
 const db = require('../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
+const { buildUniverseContext } = require('../utils/universeContext');
 
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
@@ -161,8 +162,13 @@ router.post('/lines/:lineId/extract', optionalAuth, async (req, res) => {
       });
     }
 
+    // Build universe context for richer extraction
+    const chapter = await StorytellerChapter.findOne({ where: { id: line.chapter_id } });
+    const bookId = chapter ? chapter.book_id : null;
+    const universeContext = bookId ? await buildUniverseContext(bookId, db) : '';
+
     // Call Claude API
-    const prompt = buildExtractionPrompt(line.text, character_context || null);
+    const prompt = universeContext + buildExtractionPrompt(line.text, character_context || null);
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
@@ -543,8 +549,9 @@ router.get('/books/:bookId/scenes', optionalAuth, async (req, res) => {
       approvedCount: (c.lines || []).filter(l => l.status === 'approved' || l.status === 'edited').length,
     }));
 
-    // ── 5. Build the prompt ───────────────────────────────────────────────
-    const prompt = buildScenesPrompt({
+    // ── 5. Build universe context + prompt ────────────────────────────────
+    const universeContext = await buildUniverseContext(bookId, db);
+    const prompt = universeContext + buildScenesPrompt({
       bookTitle: book.title || book.character_name,
       chapters: chapterList,
       approvedLines,

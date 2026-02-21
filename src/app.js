@@ -808,6 +808,15 @@ try {
   console.error('✗ Failed to load Memories routes:', e.message);
 }
 
+// Universe routes (PNOS world-building layer)
+try {
+  const universeRoutes = require('./routes/universe');
+  app.use('/api/v1/universe', universeRoutes);
+  console.log('✓ Universe routes loaded at /api/v1/universe');
+} catch (e) {
+  console.error('✗ Failed to load Universe routes:', e.message);
+}
+
 // Continuity Engine routes
 try {
   const continuityEngineRoutes = require('./routes/continuityEngine');

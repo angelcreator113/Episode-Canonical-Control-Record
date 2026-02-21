@@ -70,6 +70,7 @@ let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration
 let StorytellerBook, StorytellerChapter, StorytellerLine; // StoryTeller Book Editor models
 let StorytellerMemory; // StoryTeller Memory Bank model
+let Universe, BookSeries; // Universe + Book Series models
 let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
 let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter; // Continuity Engine models
 
@@ -199,6 +200,10 @@ try {
   // StoryTeller Memory Bank model
   StorytellerMemory = require('./StorytellerMemory')(sequelize);
 
+  // Universe + Book Series models
+  Universe = require('./Universe')(sequelize);
+  BookSeries = require('./BookSeries')(sequelize);
+
   // PNOS Character Registry models
   CharacterRegistry = require('./CharacterRegistry')(sequelize);
   RegistryCharacter = require('./RegistryCharacter')(sequelize);
@@ -273,6 +278,8 @@ const requiredModels = {
   StorytellerChapter,
   StorytellerLine,
   StorytellerMemory,
+  Universe,
+  BookSeries,
   CharacterRegistry,
   RegistryCharacter,
   ContinuityTimeline,
@@ -311,6 +318,14 @@ if (AudioClip && AudioClip.associate) {
 }
 if (Character && Character.associate) {
   Character.associate(requiredModels);
+}
+
+// Universe + BookSeries associations
+if (Universe && Universe.associate) {
+  Universe.associate(requiredModels);
+}
+if (BookSeries && BookSeries.associate) {
+  BookSeries.associate(requiredModels);
 }
 
 // StoryTeller associations
@@ -1426,6 +1441,8 @@ module.exports.StorytellerBook = StorytellerBook;
 module.exports.StorytellerChapter = StorytellerChapter;
 module.exports.StorytellerLine = StorytellerLine;
 module.exports.StorytellerMemory = StorytellerMemory;
+module.exports.Universe = Universe;
+module.exports.BookSeries = BookSeries;
 module.exports.CharacterRegistry = CharacterRegistry;
 module.exports.RegistryCharacter = RegistryCharacter;
 module.exports.ContinuityTimeline = ContinuityTimeline;

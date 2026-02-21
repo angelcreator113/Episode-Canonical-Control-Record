@@ -11,7 +11,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
 import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
-import TOCPanel from './TOCPanel';
 import ScenesPanel from './ScenesPanel';
 
 const API = '/api/v1/storyteller';
@@ -295,14 +294,19 @@ function CreateBookModal({ onSubmit, onClose }) {
 }
 
 // ══════════════════════════════════════════════════
-// Book Editor — The full PNOS Book Editor view
+// Book Editor — 2-Column Calm Author-First Layout
+// [ Left Nav ] | [ Center Content ]
+// View toggle replaces right sidebar
 // ══════════════════════════════════════════════════
 
 function BookEditor({ book, onBack, toast, onRefresh }) {
   const [chapters, setChapters] = useState(book.chapters || []);
-  const [collapsed, setCollapsed] = useState({});
-  const [activeRightTab, setActiveRightTab] = useState('memories');
+  const [activeChapterId, setActiveChapterId] = useState(
+    () => (book.chapters || [])[0]?.id || null
+  );
+  const [activeView, setActiveView] = useState('book'); // book | memory | scenes
   const [registryCharacters, setRegistryCharacters] = useState([]);
+  const [pendingOpen, setPendingOpen] = useState(false);
 
   // Inject Memory keyframe styles
   useEffect(() => {
@@ -322,8 +326,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
         const chars = data.registries?.flatMap(r => r.characters || []) || [];
         setRegistryCharacters(chars);
       })
-      .catch(() => { /* registry fetch optional */ });
+      .catch(() => {});
   }, [book.show_id]);
+
   const [editingLine, setEditingLine] = useState(null);
   const [editText, setEditText] = useState('');
   const [showAddChapter, setShowAddChapter] = useState(false);
@@ -332,11 +337,32 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [addingLineTo, setAddingLineTo] = useState(null);
   const [newLineText, setNewLineText] = useState('');
 
+  // Active chapter
+  const activeChapter = chapters.find(c => c.id === activeChapterId) || null;
+  const lines = activeChapter?.lines || [];
+
   // Compute stats
   const allLines = chapters.flatMap(c => c.lines || []);
   const pendingCount = allLines.filter(l => l.status === 'pending').length;
-  const approvedCount = allLines.filter(l => l.status === 'approved').length;
-  const editedCount = allLines.filter(l => l.status === 'edited').length;
+
+  // Separate approved/edited lines from pending for the active chapter
+  const approvedLines = lines.filter(l => l.status === 'approved' || l.status === 'edited');
+  const pendingLines = lines.filter(l => l.status === 'pending');
+
+  // Group lines by group_label
+  const groupLines = (lineList) => {
+    const groups = [];
+    let currentGroup = null;
+    for (const line of lineList) {
+      const label = line.group_label || '';
+      if (!currentGroup || currentGroup.label !== label) {
+        currentGroup = { label, lines: [] };
+        groups.push(currentGroup);
+      }
+      currentGroup.lines.push(line);
+    }
+    return groups;
+  };
 
   // ── Line actions ───────────────────────────
 
@@ -383,7 +409,6 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
     try {
       const data = await api(`/books/${book.id}/approve-all`, { method: 'POST' });
       toast(`${data.approved_count} lines approved`);
-      // Refresh from server for accuracy
       const refreshed = await api(`/books/${book.id}`);
       setChapters(refreshed.book.chapters || []);
     } catch (err) { toast(err.message, 'error'); }
@@ -398,7 +423,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
         method: 'POST',
         body: { title: newChapterTitle, badge: newChapterBadge || undefined },
       });
-      setChapters(prev => [...prev, { ...data.chapter, lines: data.chapter.lines || [] }]);
+      const newChap = { ...data.chapter, lines: data.chapter.lines || [] };
+      setChapters(prev => [...prev, newChap]);
+      setActiveChapterId(newChap.id);
       setNewChapterTitle('');
       setNewChapterBadge('');
       setShowAddChapter(false);
@@ -412,7 +439,13 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
     if (!window.confirm('Delete this chapter and all its lines?')) return;
     try {
       await api(`/chapters/${chapterId}`, { method: 'DELETE' });
-      setChapters(prev => prev.filter(c => c.id !== chapterId));
+      setChapters(prev => {
+        const next = prev.filter(c => c.id !== chapterId);
+        if (activeChapterId === chapterId) {
+          setActiveChapterId(next[0]?.id || null);
+        }
+        return next;
+      });
       toast('Chapter deleted');
     } catch (err) { toast(err.message, 'error'); }
   };
@@ -453,288 +486,281 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
     })));
   };
 
-  const toggleChapter = (id) => {
-    setCollapsed(prev => ({ ...prev, [id]: !prev[id] }));
-  };
+  // ── Render a single line ───────────────────
+
+  const renderLine = (line) => (
+    <React.Fragment key={line.id}>
+      <div className={`st-line ${editingLine === line.id ? 'st-line-editing' : ''}`}>
+        <div className="st-line-content">
+          {editingLine === line.id ? (
+            <>
+              <textarea
+                className="st-edit-area"
+                value={editText}
+                onChange={e => setEditText(e.target.value)}
+                autoFocus
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && e.metaKey) saveEdit();
+                  if (e.key === 'Escape') cancelEdit();
+                }}
+              />
+              <div className="st-edit-actions">
+                <button className="st-edit-save" onClick={saveEdit}>Save</button>
+                <button className="st-edit-cancel" onClick={cancelEdit}>Cancel</button>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className={`st-line-text ${line.status === 'pending' ? 'pending' : ''}`}>
+                {line.text}
+              </div>
+              {(line.source_tags || []).length > 0 && (
+                <div className="st-line-meta">
+                  {line.source_tags.map((tag, ti) => (
+                    <span key={ti} className="st-source-tag">{tag}</span>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {editingLine !== line.id && (
+          <div className="st-line-actions">
+            {line.status !== 'approved' && (
+              <button
+                className="st-line-action st-action-approve"
+                onClick={() => approveLine(line.id)}
+                title="Approve"
+              >✓</button>
+            )}
+            <button
+              className="st-line-action st-action-edit"
+              onClick={() => startEdit(line)}
+              title="Edit"
+            >✎</button>
+            <button
+              className="st-line-action st-action-reject"
+              onClick={() => rejectLine(line.id)}
+              title="Remove"
+            >✕</button>
+          </div>
+        )}
+      </div>
+      {(line.status === 'approved' || line.status === 'edited') && (
+        <MemoryCard
+          lineId={line.id}
+          characters={registryCharacters}
+          onConfirmed={(memory) => {
+            toast(`Memory confirmed → ${memory.character?.display_name || 'Registry'}`);
+          }}
+          onDismissed={() => {}}
+        />
+      )}
+    </React.Fragment>
+  );
 
   // ── Render ─────────────────────────────────
 
   return (
     <div className="st-editor-layout">
-    <div className="st-editor">
-      {/* Compact top bar — title + stats + actions in one row */}
-      <div className="st-editor-topbar">
-        <button className="st-back-btn" onClick={onBack} title="Back to books">←</button>
-        <div className="st-topbar-info">
-          <h2>{book.character_name}</h2>
-          <span className="st-topbar-sub">
-            {book.subtitle || [book.season_label, book.week_label].filter(Boolean).join(' · ')}
-          </span>
-        </div>
-        <div className="st-topbar-stats">
-          <span className="st-stat">
-            <span className="st-dot st-dot-pending" /> {pendingCount}
-          </span>
-          <span className="st-stat">
-            <span className="st-dot st-dot-approved" /> {approvedCount}
-          </span>
-          <span className="st-stat">
-            <span className="st-dot st-dot-edited" /> {editedCount}
-          </span>
-        </div>
-        <div className="st-topbar-actions">
-          <button className="st-btn st-btn-gold st-btn-sm" onClick={approveAll}>
-            ✓ Approve All ({pendingCount})
-          </button>
-          <button
-            className="st-btn st-btn-ghost st-btn-sm"
-            onClick={() => setShowAddChapter(!showAddChapter)}
-          >
-            + Chapter
-          </button>
-        </div>
-      </div>
 
-      {/* Add chapter form */}
-      {showAddChapter && (
-        <div className="st-add-chapter-form">
-          <div className="st-form-group">
-            <label>Chapter Title</label>
-            <input
-              autoFocus
-              value={newChapterTitle}
-              onChange={e => setNewChapterTitle(e.target.value)}
-              placeholder="e.g. Core Identity"
-              onKeyDown={e => e.key === 'Enter' && addChapter()}
-            />
+      {/* ── Left Nav ── */}
+      <nav className="st-nav">
+        <div className="st-nav-header">
+          <button className="st-nav-back" onClick={onBack}>← Books</button>
+          <div className="st-nav-character">{book.character_name}</div>
+          <div className="st-nav-subtitle">
+            {book.subtitle || book.title || [book.season_label, book.week_label].filter(Boolean).join(' · ')}
           </div>
-          <div className="st-form-group">
-            <label>Badge (optional)</label>
-            <input
-              value={newChapterBadge}
-              onChange={e => setNewChapterBadge(e.target.value)}
-              placeholder="e.g. VOICE"
-            />
-          </div>
-          <button className="st-btn st-btn-gold st-btn-sm" onClick={addChapter}>Add</button>
-          <button className="st-btn st-btn-ghost st-btn-sm" onClick={() => setShowAddChapter(false)}>Cancel</button>
         </div>
-      )}
 
-      {/* Chapters */}
-      {chapters.length === 0 ? (
-        <div className="st-empty">
-          <span className="st-empty-icon">📝</span>
-          <p>No chapters yet. Add one to get started.</p>
-        </div>
-      ) : (
-        chapters.map((chapter) => {
-          const isOpen = !collapsed[chapter.id];
-          const lines = chapter.lines || [];
-
-          // Group lines by group_label
-          const groups = [];
-          let currentGroup = null;
-          for (const line of lines) {
-            const label = line.group_label || '';
-            if (!currentGroup || currentGroup.label !== label) {
-              currentGroup = { label, lines: [] };
-              groups.push(currentGroup);
-            }
-            currentGroup.lines.push(line);
-          }
-
-          return (
-            <div key={chapter.id} id={`chapter-${chapter.id}`} className="st-chapter">
-              <div className="st-chapter-header" onClick={() => toggleChapter(chapter.id)}>
-                <span className={`st-chapter-toggle ${isOpen ? 'open' : ''}`}>▶</span>
-                <span className="st-chapter-title">
-                  Chapter {chapter.chapter_number}: {chapter.title}
-                </span>
-                {chapter.badge && (
-                  <span className="st-chapter-badge">{chapter.badge}</span>
-                )}
-                <span className="st-chapter-count">
-                  {lines.length} line{lines.length !== 1 ? 's' : ''}
-                </span>
-                <button
-                  className="st-chapter-delete"
-                  onClick={e => { e.stopPropagation(); deleteChapter(chapter.id); }}
-                  title="Delete chapter"
-                >
-                  ✕
-                </button>
-              </div>
-
-              {isOpen && (
-                <div className="st-chapter-body">
-                  {groups.map((group, gi) => (
-                    <div key={gi} className="st-line-group">
-                      {group.label && (
-                        <div className="st-line-group-label">{group.label}</div>
-                      )}
-                      {group.lines.map((line) => (
-                        <React.Fragment key={line.id}>
-                        <div
-                          className={`st-line ${editingLine === line.id ? 'st-line-editing' : ''}`}
-                        >
-                          <div className="st-line-dot">
-                            <span className={`st-dot st-dot-${line.status}`} />
-                          </div>
-
-                          <div className="st-line-content">
-                            {editingLine === line.id ? (
-                              <>
-                                <textarea
-                                  className="st-edit-area"
-                                  value={editText}
-                                  onChange={e => setEditText(e.target.value)}
-                                  autoFocus
-                                  onKeyDown={e => {
-                                    if (e.key === 'Enter' && e.metaKey) saveEdit();
-                                    if (e.key === 'Escape') cancelEdit();
-                                  }}
-                                />
-                                <div className="st-edit-actions">
-                                  <button className="st-edit-save" onClick={saveEdit}>Save</button>
-                                  <button className="st-edit-cancel" onClick={cancelEdit}>Cancel</button>
-                                </div>
-                              </>
-                            ) : (
-                              <>
-                                <div className="st-line-text">{line.text}</div>
-                                <div className="st-line-meta">
-                                  {(line.source_tags || []).map((tag, ti) => (
-                                    <span key={ti} className="st-source-tag">{tag}</span>
-                                  ))}
-                                </div>
-                              </>
-                            )}
-                          </div>
-
-                          {editingLine !== line.id && (
-                            <div className="st-line-actions">
-                              {line.status !== 'approved' && (
-                                <button
-                                  className="st-line-action st-action-approve"
-                                  onClick={() => approveLine(line.id)}
-                                  title="Approve"
-                                >✓</button>
-                              )}
-                              <button
-                                className="st-line-action st-action-edit"
-                                onClick={() => startEdit(line)}
-                                title="Edit"
-                              >✎</button>
-                              <button
-                                className="st-line-action st-action-reject"
-                                onClick={() => rejectLine(line.id)}
-                                title="Reject / Remove"
-                              >✕</button>
-                            </div>
-                          )}
-                        </div>
-                        {(line.status === 'approved' || line.status === 'edited') && (
-                          <MemoryCard
-                            lineId={line.id}
-                            characters={registryCharacters}
-                            onConfirmed={(memory) => {
-                              toast(`Memory confirmed → ${memory.character?.display_name || 'Registry'}`);
-                            }}
-                            onDismissed={(memoryId) => {
-                              // Optional: update local state if tracking dismissed count
-                            }}
-                          />
-                        )}
-                        </React.Fragment>
-                      ))}
-                    </div>
-                  ))}
-
-                  {/* Add line */}
-                  {addingLineTo === chapter.id ? (
-                    <div className="st-add-line">
-                      <input
-                        autoFocus
-                        value={newLineText}
-                        onChange={e => setNewLineText(e.target.value)}
-                        placeholder="Enter line text…"
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') addLine(chapter.id);
-                          if (e.key === 'Escape') { setAddingLineTo(null); setNewLineText(''); }
-                        }}
-                      />
-                      <button className="st-btn st-btn-gold st-btn-sm" onClick={() => addLine(chapter.id)}>Add</button>
-                      <button className="st-btn st-btn-ghost st-btn-sm" onClick={() => { setAddingLineTo(null); setNewLineText(''); }}>Cancel</button>
-                    </div>
-                  ) : (
-                    <button
-                      className="st-btn st-btn-ghost st-btn-sm"
-                      style={{ marginTop: 6 }}
-                      onClick={() => { setAddingLineTo(chapter.id); setNewLineText(''); }}
-                    >
-                      + Add Line
-                    </button>
-                  )}
-                </div>
-              )}
+        <div className="st-nav-chapters">
+          {chapters.map((ch, i) => (
+            <div
+              key={ch.id}
+              className={`st-nav-chapter ${ch.id === activeChapterId ? 'active' : ''}`}
+              onClick={() => setActiveChapterId(ch.id)}
+            >
+              <span className="st-nav-num">
+                {String(ch.chapter_number || i + 1).padStart(2, '0')}
+              </span>
+              <span className="st-nav-chapter-title">{ch.title}</span>
             </div>
-          );
-        })
-      )}
-    </div>
+          ))}
+        </div>
 
-    {/* ── Right Panel ── */}
-    <div className="st-right-panel">
-      <div className="st-right-tabs">
-        <button
-          className={`st-right-tab ${activeRightTab === 'memories' ? 'active' : ''}`}
-          onClick={() => setActiveRightTab('memories')}
-        >
-          Memory
-        </button>
-        <button
-          className={`st-right-tab ${activeRightTab === 'toc' ? 'active' : ''}`}
-          onClick={() => setActiveRightTab('toc')}
-        >
-          TOC
-        </button>
-        <button
-          className={`st-right-tab ${activeRightTab === 'scenes' ? 'active' : ''}`}
-          onClick={() => setActiveRightTab('scenes')}
-        >
-          Scenes
-        </button>
+        <div className="st-nav-add">
+          <button onClick={() => setShowAddChapter(!showAddChapter)}>
+            + Add Chapter
+          </button>
+        </div>
+      </nav>
+
+      {/* ── Center Content ── */}
+      <div className="st-editor">
+
+        {/* View toggle: Book | Memory | Scenes */}
+        <div className="st-view-bar">
+          {['book', 'memory', 'scenes'].map(v => (
+            <button
+              key={v}
+              className={`st-view-tab ${activeView === v ? 'active' : ''}`}
+              onClick={() => setActiveView(v)}
+            >
+              {v === 'book' ? 'Book' : v === 'memory' ? 'Memory' : 'Scenes'}
+            </button>
+          ))}
+          <div className="st-view-spacer" />
+          {activeView === 'book' && (
+            <div className="st-view-actions">
+              {pendingCount > 0 && (
+                <button className="st-btn st-btn-secondary st-btn-sm" onClick={approveAll}>
+                  Approve All ({pendingCount})
+                </button>
+              )}
+              <button className="st-btn st-btn-primary st-btn-sm" onClick={onRefresh}>
+                Compile
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Add chapter form (shared) */}
+        {showAddChapter && (
+          <div className="st-add-chapter-form">
+            <div className="st-form-group">
+              <label>Chapter Title</label>
+              <input
+                autoFocus
+                value={newChapterTitle}
+                onChange={e => setNewChapterTitle(e.target.value)}
+                placeholder="e.g. Core Identity"
+                onKeyDown={e => e.key === 'Enter' && addChapter()}
+              />
+            </div>
+            <div className="st-form-group">
+              <label>Badge (optional)</label>
+              <input
+                value={newChapterBadge}
+                onChange={e => setNewChapterBadge(e.target.value)}
+                placeholder="e.g. VOICE"
+              />
+            </div>
+            <button className="st-btn st-btn-primary st-btn-sm" onClick={addChapter}>Add</button>
+            <button className="st-btn st-btn-ghost st-btn-sm" onClick={() => setShowAddChapter(false)}>Cancel</button>
+          </div>
+        )}
+
+        {/* ── Book View ── */}
+        {activeView === 'book' && (
+          <>
+            {!activeChapter ? (
+              <div className="st-no-selection">
+                {chapters.length === 0
+                  ? 'Add a chapter to get started.'
+                  : 'Select a chapter from the left.'}
+              </div>
+            ) : (
+              <>
+                {/* Chapter heading */}
+                <div className="st-chapter-heading">
+                  <h1>{activeChapter.title}</h1>
+                  <div className="st-chapter-meta">
+                    Generated from {lines.length} {lines.length === 1 ? 'entry' : 'entries'}
+                    {pendingLines.length > 0 && ` · ${pendingLines.length} pending`}
+                  </div>
+                </div>
+
+                {/* Approved / edited lines — the book content */}
+                {approvedLines.length > 0 && (
+                  <div className="st-section">
+                    {groupLines(approvedLines).map((group, gi) => (
+                      <div key={gi}>
+                        {group.label && (
+                          <div className="st-section-label">{group.label}</div>
+                        )}
+                        {group.lines.map(renderLine)}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Pending lines — collapsed by default */}
+                {pendingLines.length > 0 && (
+                  <div className="st-section">
+                    <button
+                      className="st-pending-toggle"
+                      onClick={() => setPendingOpen(!pendingOpen)}
+                    >
+                      <span className={`arrow ${pendingOpen ? 'open' : ''}`}>▶</span>
+                      {pendingLines.length} Pending Memory Detection{pendingLines.length !== 1 ? 's' : ''}
+                    </button>
+                    {pendingOpen && (
+                      <div className="st-pending-body">
+                        {groupLines(pendingLines).map((group, gi) => (
+                          <div key={gi}>
+                            {group.label && (
+                              <div className="st-section-label">{group.label}</div>
+                            )}
+                            {group.lines.map(renderLine)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Add line */}
+                {addingLineTo === activeChapter.id ? (
+                  <div className="st-add-line">
+                    <input
+                      autoFocus
+                      value={newLineText}
+                      onChange={e => setNewLineText(e.target.value)}
+                      placeholder="Write a new line…"
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') addLine(activeChapter.id);
+                        if (e.key === 'Escape') { setAddingLineTo(null); setNewLineText(''); }
+                      }}
+                    />
+                    <button className="st-btn st-btn-primary st-btn-sm" onClick={() => addLine(activeChapter.id)}>Add</button>
+                    <button className="st-btn st-btn-ghost st-btn-sm" onClick={() => { setAddingLineTo(null); setNewLineText(''); }}>Cancel</button>
+                  </div>
+                ) : (
+                  <button
+                    className="st-add-line-trigger"
+                    onClick={() => { setAddingLineTo(activeChapter.id); setNewLineText(''); }}
+                  >
+                    + Add line
+                  </button>
+                )}
+              </>
+            )}
+          </>
+        )}
+
+        {/* ── Memory View (replaces right panel) ── */}
+        {activeView === 'memory' && (
+          <MemoryBankPanel bookId={book.id} />
+        )}
+
+        {/* ── Scenes View (replaces right panel) ── */}
+        {activeView === 'scenes' && (
+          <ScenesPanel
+            bookId={book.id}
+            chapters={chapters}
+            onLineAdded={(chapterId, line) => {
+              setChapters(prev => prev.map(c =>
+                c.id === chapterId
+                  ? { ...c, lines: [...(c.lines || []), line] }
+                  : c
+              ));
+              toast('Scene added as pending line');
+            }}
+          />
+        )}
       </div>
-      {activeRightTab === 'memories' && <MemoryBankPanel bookId={book.id} />}
-      {activeRightTab === 'toc' && (
-        <TOCPanel
-          book={book}
-          chapters={chapters}
-          onChapterClick={(chapterId) => {
-            setCollapsed(prev => ({ ...prev, [chapterId]: false }));
-            setTimeout(() => {
-              document.getElementById(`chapter-${chapterId}`)
-                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 50);
-          }}
-        />
-      )}
-      {activeRightTab === 'scenes' && (
-        <ScenesPanel
-          bookId={book.id}
-          chapters={chapters}
-          onLineAdded={(chapterId, line) => {
-            setChapters(prev => prev.map(c =>
-              c.id === chapterId
-                ? { ...c, lines: [...(c.lines || []), line] }
-                : c
-            ));
-            toast('Scene added as pending line');
-          }}
-        />
-      )}
-    </div>
     </div>
   );
 }

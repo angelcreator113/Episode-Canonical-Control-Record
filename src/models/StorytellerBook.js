@@ -40,6 +40,18 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: true,
     },
+    series_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    era_name: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    era_description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   }, {
     tableName: 'storyteller_books',
     timestamps: true,
@@ -49,6 +61,9 @@ module.exports = (sequelize) => {
   StorytellerBook.associate = (models) => {
     StorytellerBook.belongsTo(models.Show, { foreignKey: 'show_id', as: 'show' });
     StorytellerBook.hasMany(models.StorytellerChapter, { foreignKey: 'book_id', as: 'chapters', onDelete: 'CASCADE' });
+    if (models.BookSeries) {
+      StorytellerBook.belongsTo(models.BookSeries, { foreignKey: 'series_id', as: 'series' });
+    }
   };
 
   return StorytellerBook;
