@@ -97,6 +97,76 @@ If nothing to extract:
 // ── Routes ─────────────────────────────────────────────────────────────────
 
 /**
+ * POST /structure-universe
+ * Takes raw pasted universe notes and uses Claude to structure them
+ * into the five universe fields: description, pnos_beliefs, world_rules,
+ * narrative_economy, core_themes.
+ * Does NOT save anything — returns structured data for review.
+ */
+router.post('/structure-universe', optionalAuth, async (req, res) => {
+  try {
+    const { raw_text } = req.body;
+    if (!raw_text?.trim()) {
+      return res.status(400).json({ error: 'raw_text is required' });
+    }
+
+    const prompt = `You are a narrative architect. A creator has pasted raw world-building notes for their fictional universe. Structure these notes into the five canonical fields below.
+
+RAW NOTES:
+${raw_text}
+
+Extract and structure into these five fields:
+
+1. description — A single cohesive paragraph describing the universe's philosophy and purpose. What is this world about at its core?
+
+2. pnos_beliefs — The narrative laws that govern this world. Format as numbered beliefs, each with a name and explanation. These are not themes — they are operating principles.
+
+3. world_rules — The mechanical and narrative rules. Format as numbered rules with titles and explanations.
+
+4. narrative_economy — The currency, reputation, and progression systems. How do characters advance? What does access cost?
+
+5. core_themes — A JSON array of 5-8 short theme strings.
+
+Respond with ONLY valid JSON. No preamble, no markdown fences.
+
+{
+  "description": "...",
+  "pnos_beliefs": "...",
+  "world_rules": "...",
+  "narrative_economy": "...",
+  "core_themes": ["theme1", "theme2"]
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 2000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    let structured;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      structured = JSON.parse(clean);
+    } catch (parseErr) {
+      return res.status(500).json({
+        error: 'Claude returned unparseable response',
+        raw: rawText.slice(0, 400),
+      });
+    }
+
+    res.json({ structured });
+  } catch (err) {
+    console.error('POST /structure-universe error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
  * GET /lines/:lineId/memories
  * Returns all memories (confirmed + inferred) for a given line.
  * Used to show the memory card inline in the Book Editor when a line is approved.

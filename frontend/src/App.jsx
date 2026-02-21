@@ -47,6 +47,7 @@ import AssetLibrary from './pages/AssetLibrary';
 import StorytellerPage from './pages/StorytellerPage';
 import CharacterRegistryPage from './pages/CharacterRegistryPage';
 import ContinuityEnginePage from './pages/ContinuityEnginePage';
+import UniversePage from './pages/UniversePage';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -182,6 +183,9 @@ function AppContent() {
           <Routes>
           {/* ===== DASHBOARD ===== */}
           <Route path="/" element={<Home />} />
+          
+          {/* Universe */}
+          <Route path="/universe" element={<UniversePage />} />
           
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
           
