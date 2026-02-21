@@ -144,6 +144,37 @@
   opacity: 0.6;
 }
 
+/* Password eye toggle */
+.password-wrapper {
+  position: relative;
+}
+
+.password-wrapper input {
+  padding-right: 42px;
+}
+
+.password-eye {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 16px;
+  color: rgba(26,21,16,0.35);
+  transition: color 0.2s;
+  padding: 0;
+}
+
+.password-eye:hover {
+  color: #C9A84C;
+}
+
 .btn {
   padding: 12px 16px;
   border: none;
