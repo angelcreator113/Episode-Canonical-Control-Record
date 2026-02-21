@@ -219,6 +219,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [activeView, setActiveView] = useState('book'); // book | memory | scenes
   const [registryCharacters, setRegistryCharacters] = useState([]);
   const [pendingOpen, setPendingOpen] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
 
   // Inject Memory keyframe styles
   useEffect(() => {
@@ -459,7 +460,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           </div>
         )}
       </div>
-      {(line.status === 'approved' || line.status === 'edited') && (
+      {(line.status === 'approved' || line.status === 'edited') && reviewMode && (
         <MemoryCard
           lineId={line.id}
           characters={registryCharacters}
@@ -481,9 +482,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       <nav className="st-nav">
         <div className="st-nav-header">
           <button className="st-nav-back" onClick={onBack}>← Books</button>
-          <div className="st-nav-character">{book.character_name}</div>
+          <div className="st-nav-character">{book.title || book.character_name}</div>
           <div className="st-nav-subtitle">
-            {book.subtitle || book.title || [book.season_label, book.week_label].filter(Boolean).join(' · ')}
+            {book.subtitle || [book.era_name, book.timeline_position].filter(Boolean).join(' · ') || ''}
           </div>
         </div>
 
@@ -579,8 +580,18 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                 <div className="st-chapter-heading">
                   <h1>{activeChapter.title}</h1>
                   <div className="st-chapter-meta">
-                    Generated from {lines.length} {lines.length === 1 ? 'entry' : 'entries'}
+                    {approvedLines.length} {approvedLines.length === 1 ? 'line' : 'lines'}
                     {pendingLines.length > 0 && ` · ${pendingLines.length} pending`}
+                    <button
+                      className={`st-review-indicator ${reviewMode ? 'active' : ''}`}
+                      onClick={() => setReviewMode(r => !r)}
+                      title={reviewMode ? 'Exit review mode' : 'Enter review mode'}
+                    >
+                      <span className="st-review-dot" />
+                      <span className="st-review-count">
+                        {reviewMode ? 'Reviewing' : 'Review'}
+                      </span>
+                    </button>
                   </div>
                 </div>
 

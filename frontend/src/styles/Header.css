@@ -1,9 +1,9 @@
 /* Header Styles - Fully Responsive */
 .header {
-  background-color: white;
-  border-bottom: 1px solid var(--border);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  height: 60px;
+  background: linear-gradient(180deg, #FAFAFE 0%, #F8F9FE 100%);
+  border-bottom: 1px solid rgba(99, 102, 241, 0.08);
+  box-shadow: none;
+  height: 56px;
   width: 100%;
   flex-shrink: 0;
   z-index: 100;
