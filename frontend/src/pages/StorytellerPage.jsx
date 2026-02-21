@@ -12,6 +12,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
 import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
 import ScenesPanel from './ScenesPanel';
+import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
 
 const API = '/api/v1/storyteller';
@@ -271,7 +272,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [activeChapterId, setActiveChapterId] = useState(
     () => (book.chapters || [])[0]?.id || null
   );
-  const [activeView, setActiveView] = useState('book'); // book | memory | scenes
+  const [activeView, setActiveView] = useState('book'); // book | toc | memory | scenes
   const [registryCharacters, setRegistryCharacters] = useState([]);
   const [pendingOpen, setPendingOpen] = useState(false);
   const [reviewMode, setReviewMode] = useState(false);
@@ -635,13 +636,13 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           {/* Top toolbar */}
           <div className="st-toolbar">
             <div className="st-toolbar-left">
-              {['book', 'memory', 'scenes'].map(v => (
+              {['book', 'toc', 'memory', 'scenes'].map(v => (
                 <button
                   key={v}
                   className={`st-view-tab ${activeView === v ? 'active' : ''}`}
                   onClick={() => setActiveView(v)}
                 >
-                  {v === 'book' ? 'Manuscript' : v === 'memory' ? 'Memory Bank' : 'Scenes'}
+                  {v === 'book' ? 'Manuscript' : v === 'toc' ? 'TOC' : v === 'memory' ? 'Memory Bank' : 'Scenes'}
                 </button>
               ))}
             </div>
@@ -871,6 +872,18 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
               </aside>
             )}
           </div>
+        )}
+
+        {/* ── TOC View ── */}
+        {activeView === 'toc' && (
+          <TOCPanel
+            book={book}
+            chapters={chapters}
+            onChapterClick={(chId) => {
+              setActiveChapterId(chId);
+              setActiveView('book');
+            }}
+          />
         )}
 
         {/* ── Memory View ── */}
