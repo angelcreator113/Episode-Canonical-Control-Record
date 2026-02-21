@@ -362,20 +362,55 @@
 }
 
 /* ══════════════════════════════════════════════════
-   Book Editor — 2-Column Layout
-   [ Left Nav ] | [ Center Content ]
+   Book Editor — Cinematic Writing Room
+   Ambient layers, era theming, literary gravity
    ══════════════════════════════════════════════════ */
+
+/* ── Era Ambient Palettes ────────────────────── */
+.st-editor-layout[data-era="pre-prime"] {
+  --st-ambient-bg: #f5f2ec;
+  --st-ambient-ink: #3a332a;
+  --st-ambient-accent: rgba(160, 138, 92, 0.15);
+  --st-ambient-vignette: radial-gradient(ellipse at center, transparent 60%, rgba(58, 51, 42, 0.04) 100%);
+  --st-ambient-rule: #c8b98a;
+}
+.st-editor-layout[data-era="prime"] {
+  --st-ambient-bg: #f0eef5;
+  --st-ambient-ink: #2a2a3a;
+  --st-ambient-accent: rgba(99, 102, 241, 0.08);
+  --st-ambient-vignette: radial-gradient(ellipse at center, transparent 60%, rgba(42, 42, 58, 0.04) 100%);
+  --st-ambient-rule: #8a8ab8;
+}
+.st-editor-layout[data-era="default"] {
+  --st-ambient-bg: #f7f6f3;
+  --st-ambient-ink: #2c2c2c;
+  --st-ambient-accent: rgba(0, 0, 0, 0.03);
+  --st-ambient-vignette: radial-gradient(ellipse at center, transparent 60%, rgba(0, 0, 0, 0.02) 100%);
+  --st-ambient-rule: #ccc;
+}
 
 .st-editor-layout {
   display: flex;
   min-height: 100vh;
+  background: var(--st-ambient-bg, #f7f6f3);
+  color: var(--st-ambient-ink, var(--st-ink));
+  position: relative;
+}
+/* Subtle vignette overlay */
+.st-editor-layout::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  background: var(--st-ambient-vignette);
+  z-index: 0;
 }
 
-/* ── Left Navigation (minimal, borderless) ──── */
+/* ── Left Navigation (minimal chapter list) ──── */
 .st-nav {
   width: var(--st-nav-w);
   flex-shrink: 0;
-  border-right: none;
+  border-right: 1px solid var(--st-ambient-accent, rgba(0,0,0,0.04));
   background: transparent;
   display: flex;
   flex-direction: column;
@@ -383,10 +418,12 @@
   top: 0;
   height: 100vh;
   overflow-y: auto;
+  z-index: 1;
+  transition: opacity 0.4s, width 0.4s;
 }
 
 .st-nav-header {
-  padding: 28px 20px 20px;
+  padding: 24px 20px 16px;
   border-bottom: none;
 }
 .st-nav-back {
@@ -397,32 +434,16 @@
   color: var(--st-muted);
   cursor: pointer;
   padding: 0;
-  margin-bottom: 12px;
   display: flex;
   align-items: center;
   gap: 4px;
 }
 .st-nav-back:hover { color: var(--st-ink); }
 
-.st-nav-character {
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--st-ink);
-  margin: 0 0 2px;
-  line-height: 1.3;
-  letter-spacing: -0.01em;
-}
-.st-nav-subtitle {
-  font-size: 11px;
-  color: var(--st-muted);
-  font-style: italic;
-  margin-top: 2px;
-}
-
 /* Chapter list in nav */
 .st-nav-chapters {
   flex: 1;
-  padding: 12px 0;
+  padding: 8px 0;
   list-style: none;
   margin: 0;
 }
@@ -431,7 +452,7 @@
   display: flex;
   align-items: baseline;
   gap: 8px;
-  padding: 7px 20px;
+  padding: 8px 20px;
   cursor: pointer;
   transition: all 0.12s;
   border-left: 2px solid transparent;
@@ -442,21 +463,20 @@
 }
 .st-nav-chapter:hover {
   color: var(--st-ink);
-  background: transparent;
 }
 .st-nav-chapter.active {
-  color: var(--st-ink);
-  border-left-color: var(--st-ink);
+  color: var(--st-ambient-ink, var(--st-ink));
+  border-left-color: var(--st-ambient-rule, var(--st-ink));
   font-weight: 600;
-  background: transparent;
 }
 
 .st-nav-num {
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 10px;
   color: var(--st-muted);
   flex-shrink: 0;
   min-width: 18px;
+  opacity: 0.6;
 }
 
 .st-nav-chapter-title {
@@ -468,8 +488,7 @@
 }
 
 .st-nav-add {
-  padding: 8px 20px;
-  margin-top: 4px;
+  padding: 8px 20px 20px;
 }
 .st-nav-add button {
   background: none;
@@ -486,23 +505,74 @@
 .st-editor {
   flex: 1;
   min-width: 0;
-  max-width: 680px;
-  padding: 0 48px 80px;
-  margin: 0;
+  padding: 0 40px 80px;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
 }
 
-/* ── View toggle (Book | Memory | Scenes) ──── */
-.st-view-bar {
-  display: flex;
-  align-items: center;
-  gap: 0;
-  padding: 24px 0 0;
-  margin-bottom: 32px;
-  border-bottom: 1px solid var(--st-border-light);
+/* ═══════════════════════════════════════
+   Crown — Book Identity Panel
+   ═══════════════════════════════════════ */
+.st-crown {
+  padding: 40px 0 0;
+  margin-bottom: 8px;
   position: sticky;
   top: 0;
-  background: var(--st-bg);
+  background: var(--st-ambient-bg, #f7f6f3);
   z-index: 10;
+}
+.st-crown-inner {
+  text-align: center;
+  margin-bottom: 20px;
+}
+.st-crown-title {
+  font-size: 28px;
+  font-weight: 400;
+  font-family: var(--st-serif);
+  color: var(--st-ambient-ink, var(--st-ink));
+  margin: 0 0 10px;
+  letter-spacing: 0.02em;
+  line-height: 1.25;
+}
+.st-crown-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  font-family: var(--st-sans);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--st-muted);
+}
+.st-crown-era { font-weight: 600; color: var(--st-ambient-rule, var(--st-muted)); }
+.st-crown-pov { font-style: italic; text-transform: none; letter-spacing: 0; }
+.st-crown-theme { font-style: italic; text-transform: none; letter-spacing: 0; }
+.st-crown-divider {
+  width: 60px;
+  height: 1px;
+  background: var(--st-ambient-rule, var(--st-border));
+  margin: 16px auto 0;
+  opacity: 0.5;
+}
+
+/* ── Toolbar (tabs + writing mode + canon) ──── */
+.st-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--st-ambient-accent, rgba(0,0,0,0.04));
+}
+.st-toolbar-left {
+  display: flex;
+  gap: 0;
+}
+.st-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .st-view-tab {
@@ -510,47 +580,229 @@
   border: none;
   cursor: pointer;
   font-family: var(--st-sans);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--st-muted);
-  padding: 10px 16px;
+  padding: 8px 14px;
   border-bottom: 2px solid transparent;
   transition: all 0.15s;
   margin-bottom: -1px;
 }
 .st-view-tab:hover { color: var(--st-ink); }
 .st-view-tab.active {
-  color: var(--st-ink);
-  border-bottom-color: var(--st-ink);
+  color: var(--st-ambient-ink, var(--st-ink));
+  border-bottom-color: var(--st-ambient-rule, var(--st-ink));
 }
 
-.st-view-spacer { flex: 1; }
+/* Writing Mode toggle */
+.st-mode-toggle {
+  background: none;
+  border: 1px solid var(--st-border);
+  border-radius: 20px;
+  padding: 5px 14px;
+  font-family: var(--st-sans);
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--st-muted);
+  cursor: pointer;
+  transition: all 0.3s;
+  letter-spacing: 0.02em;
+}
+.st-mode-toggle:hover {
+  border-color: var(--st-ambient-rule, var(--st-gold));
+  color: var(--st-ink);
+}
+.st-mode-toggle.active {
+  background: var(--st-ambient-ink, var(--st-ink));
+  color: #fff;
+  border-color: var(--st-ambient-ink, var(--st-ink));
+}
 
-.st-view-actions {
+/* Canon toggle */
+.st-canon-toggle {
+  background: none;
+  border: 1px solid var(--st-border);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.15s;
+  line-height: 1;
+}
+.st-canon-toggle:hover {
+  border-color: var(--st-ambient-rule, var(--st-gold));
+  background: var(--st-ambient-accent);
+}
+
+/* ═══════════════════════════════════════
+   Manuscript Wrapper (center + optional canon panel)
+   ═══════════════════════════════════════ */
+.st-manuscript-wrapper {
   display: flex;
-  gap: 8px;
-  padding-bottom: 8px;
+  gap: 32px;
+  flex: 1;
 }
 
-/* ── Chapter heading in editor ───────────────── */
-.st-chapter-heading {
-  margin-bottom: 40px;
+.st-manuscript {
+  flex: 1;
+  max-width: 680px;
+  min-width: 0;
 }
-.st-chapter-heading h1 {
-  font-size: 22px;
+
+/* ── Chapter heading in manuscript ───────────── */
+.st-chapter-heading {
+  margin: 32px 0 36px;
+}
+.st-chapter-heading h2 {
+  font-size: 26px;
   font-weight: 400;
-  color: var(--st-ink);
+  font-family: var(--st-serif);
+  color: var(--st-ambient-ink, var(--st-ink));
   margin: 0 0 8px;
-  line-height: 1.35;
-  letter-spacing: -0.01em;
+  line-height: 1.3;
+  letter-spacing: 0.01em;
 }
 .st-chapter-meta {
   font-family: var(--st-sans);
   font-size: 11px;
   color: var(--st-muted);
   letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Review indicator (pill) ─────────────────── */
+.st-review-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid var(--st-border);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
+  font-family: var(--st-sans);
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--st-muted);
+  margin-left: 8px;
+  transition: all 0.15s;
+}
+.st-review-indicator:hover { border-color: var(--st-gold); color: var(--st-gold); }
+.st-review-indicator.active {
+  background: rgba(160, 138, 92, 0.08);
+  border-color: var(--st-gold);
+  color: var(--st-gold-dim);
+}
+.st-review-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--st-muted);
+}
+.st-review-indicator.active .st-review-dot { background: var(--st-gold); }
+.st-review-count { letter-spacing: 0.03em; }
+
+/* ── Manuscript actions (bottom) ─────────────── */
+.st-manuscript-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 32px;
+  padding-top: 20px;
+  border-top: 1px solid var(--st-ambient-accent, rgba(0,0,0,0.04));
+}
+
+/* ═══════════════════════════════════════
+   Canon Anchor Panel (right side)
+   ═══════════════════════════════════════ */
+.st-canon-panel {
+  width: 240px;
+  flex-shrink: 0;
+  padding: 32px 0 0;
+}
+.st-canon-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-family: var(--st-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--st-ambient-ink, var(--st-ink));
+  letter-spacing: 0.03em;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--st-ambient-accent, rgba(0,0,0,0.06));
+  margin-bottom: 16px;
+}
+.st-canon-close {
+  background: none;
+  border: none;
+  color: var(--st-muted);
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px;
+}
+.st-canon-close:hover { color: var(--st-ink); }
+
+.st-canon-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.st-canon-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.st-canon-label {
+  font-family: var(--st-sans);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--st-muted);
+}
+.st-canon-value {
+  font-family: var(--st-serif);
+  font-size: 13px;
+  color: var(--st-ambient-ink, var(--st-ink));
+  line-height: 1.45;
+}
+
+/* ═══════════════════════════════════════
+   Writing Mode — Immersive Focus State
+   ═══════════════════════════════════════ */
+.st-writing-mode .st-nav {
+  width: 0;
+  opacity: 0;
+  overflow: hidden;
+  border-right: none;
+  padding: 0;
+}
+.st-writing-mode .st-crown-inner {
+  transform: scale(0.85);
+  opacity: 0.6;
+  transition: all 0.4s;
+}
+.st-writing-mode .st-crown-meta { display: none; }
+.st-writing-mode .st-crown-divider { display: none; }
+.st-writing-mode .st-manuscript {
+  max-width: 620px;
+  margin: 0 auto;
+}
+.st-writing-mode .st-editor {
+  padding: 0 60px 80px;
+}
+
+/* Ambient shift in writing mode — slightly darker, more focus */
+.st-writing-mode {
+  background: color-mix(in srgb, var(--st-ambient-bg, #f7f6f3), #000 3%);
+}
+.st-writing-mode .st-line-text {
+  font-size: 17px;
+  line-height: 1.95;
 }
 
 /* ── Section dividers ────────────────────────── */
@@ -559,29 +811,27 @@
 }
 .st-section-label {
   font-family: var(--st-sans);
-  font-size: 10px;
-  font-weight: 500;
+  font-size: 9px;
+  font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
-  color: #bbb;
+  letter-spacing: 0.12em;
+  color: var(--st-muted);
   margin-bottom: 16px;
-  padding-bottom: 0;
-  border-bottom: none;
+  opacity: 0.7;
 }
 
-/* ── Line in book view ───────────────────────── */
+/* ── Line in manuscript ──────────────────────── */
 .st-line {
-  padding: 8px 0;
   display: flex;
   align-items: flex-start;
   gap: 0;
   border-radius: 3px;
   margin: 0 -8px;
-  padding: 8px 8px;
-  transition: background 0.1s;
+  padding: 10px 8px;
+  transition: background 0.15s;
 }
 .st-line:hover {
-  background: rgba(0, 0, 0, 0.015);
+  background: var(--st-ambient-accent, rgba(0, 0, 0, 0.015));
 }
 
 .st-line-content {
@@ -592,13 +842,14 @@
 .st-line-text {
   font-size: 16px;
   line-height: 1.85;
-  color: var(--st-ink);
+  color: var(--st-ambient-ink, var(--st-ink));
   word-wrap: break-word;
   letter-spacing: 0.01em;
+  font-family: var(--st-serif);
 }
 .st-line-text.pending {
-  color: var(--st-ink-light);
-  opacity: 0.7;
+  color: var(--st-muted);
+  opacity: 0.65;
 }
 
 .st-line-meta {
@@ -846,9 +1097,15 @@
 @keyframes st-spin { to { transform: rotate(360deg); } }
 
 /* ── Responsive ──────────────────────────────── */
+@media (max-width: 1100px) {
+  .st-canon-panel { width: 200px; }
+}
+
 @media (max-width: 900px) {
-  :root { --st-nav-w: 200px; }
+  :root { --st-nav-w: 180px; }
   .st-editor { padding: 0 24px 40px; }
+  .st-canon-panel { display: none; }
+  .st-crown-title { font-size: 24px; }
 }
 
 @media (max-width: 700px) {
@@ -858,12 +1115,15 @@
     height: auto;
     position: static;
     border-right: none;
-    border-bottom: 1px solid var(--st-border);
+    border-bottom: 1px solid var(--st-ambient-accent, rgba(0,0,0,0.04));
   }
   .st-nav-chapters { display: flex; overflow-x: auto; padding: 8px 0; }
   .st-nav-chapter { white-space: nowrap; border-left: none; border-bottom: 2px solid transparent; }
-  .st-nav-chapter.active { border-bottom-color: var(--st-gold); border-left-color: transparent; }
+  .st-nav-chapter.active { border-bottom-color: var(--st-ambient-rule); border-left-color: transparent; }
   .st-editor { padding: 0 16px 30px; }
+  .st-crown { padding: 24px 0 0; }
+  .st-crown-title { font-size: 22px; }
+  .st-toolbar { flex-direction: column; gap: 8px; align-items: flex-start; }
 }
 
 @media (max-width: 480px) {
