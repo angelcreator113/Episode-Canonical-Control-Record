@@ -1,29 +1,29 @@
 /* ============================================================
-   PNOS Character Registry — Dark Parchment Theme
+   PNOS Character Registry — Light Parchment Theme
    Location: frontend/src/pages/CharacterRegistryPage.css
    ============================================================ */
 
 /* ---------- CSS custom props ---------- */
 .cr-page {
-  --bg:       #0d0b09;
-  --surface:  #131009;
-  --surface2: #1a1510;
-  --surface3: #221c14;
-  --border:   #2a2318;
-  --border2:  #3a3120;
-  --gold:     #c9a84c;
+  --bg:       #faf8f5;
+  --surface:  #ffffff;
+  --surface2: #f5f2ed;
+  --surface3: #ede8e0;
+  --border:   #e0d8cc;
+  --border2:  #d0c5b5;
+  --gold:     #b8963a;
   --gold-dim: #8a7535;
-  --gold-bg:  rgba(201, 168, 76, 0.08);
-  --ink:      #e8e0d0;
-  --ink-dim:  #9a9080;
-  --ink-faint:#6a6258;
-  --white:    #f5f0e8;
-  --red:      #e05c3a;
-  --green:    #5aab72;
-  --blue:     #7b8de8;
-  --purple:   #a05cc8;
-  --cyan:     #4cc9c0;
-  --orange:   #d4914a;
+  --gold-bg:  rgba(201, 168, 76, 0.1);
+  --ink:      #1a1510;
+  --ink-dim:  #6b6050;
+  --ink-faint:#9a9080;
+  --white:    #1a1510;
+  --red:      #d43a2a;
+  --green:    #3d9e42;
+  --blue:     #5570d2;
+  --purple:   #8b45b5;
+  --cyan:     #2fa8a0;
+  --orange:   #c07830;
 
   /* role type palette */
   --role-protagonist: var(--gold);
@@ -51,7 +51,7 @@
   content: '';
   position: fixed;
   inset: 0;
-  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.015'/%3E%3C/svg%3E");
   pointer-events: none;
   z-index: 0;
 }
@@ -202,7 +202,7 @@
 
 .cr-sidebar-btn.primary {
   background: var(--gold);
-  color: var(--bg);
+  color: #ffffff;
   border-color: var(--gold);
   font-weight: 600;
 }
@@ -347,7 +347,7 @@
 .cr-card:hover {
   border-color: var(--border2);
   transform: translateY(-2px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.08);
 }
 
 .cr-card::before {
@@ -397,14 +397,14 @@
 
 .cr-card-status.accepted {
   color: var(--green);
-  border-color: rgba(90, 171, 114, 0.3);
-  background: rgba(90, 171, 114, 0.08);
+  border-color: rgba(61, 158, 66, 0.3);
+  background: rgba(61, 158, 66, 0.08);
 }
 
 .cr-card-status.declined {
   color: var(--red);
-  border-color: rgba(224, 92, 58, 0.3);
-  background: rgba(224, 92, 58, 0.08);
+  border-color: rgba(212, 58, 42, 0.3);
+  background: rgba(212, 58, 42, 0.08);
 }
 
 .cr-card-status.finalized {
@@ -438,12 +438,12 @@
   margin-bottom: 10px;
 }
 
-.cr-card-role.protagonist { color: var(--role-protagonist); background: rgba(201,168,76,0.1); }
-.cr-card-role.pressure    { color: var(--role-pressure);    background: rgba(224,92,58,0.1); }
-.cr-card-role.mirror      { color: var(--role-mirror);      background: rgba(123,141,232,0.1); }
-.cr-card-role.support     { color: var(--role-support);     background: rgba(90,171,114,0.1); }
-.cr-card-role.shadow      { color: var(--role-shadow);      background: rgba(160,92,200,0.1); }
-.cr-card-role.special     { color: var(--role-special);     background: rgba(76,201,192,0.1); }
+.cr-card-role.protagonist { color: var(--role-protagonist); background: rgba(184,150,58,0.1); }
+.cr-card-role.pressure    { color: var(--role-pressure);    background: rgba(212,58,42,0.08); }
+.cr-card-role.mirror      { color: var(--role-mirror);      background: rgba(85,112,210,0.08); }
+.cr-card-role.support     { color: var(--role-support);     background: rgba(61,158,66,0.08); }
+.cr-card-role.shadow      { color: var(--role-shadow);      background: rgba(139,69,181,0.08); }
+.cr-card-role.special     { color: var(--role-special);     background: rgba(47,168,160,0.08); }
 
 .cr-card-quote {
   font-size: 12px;
@@ -525,12 +525,12 @@
   border: 1px solid;
 }
 
-.cr-badge.role-protagonist { color: var(--role-protagonist); border-color: rgba(201,168,76,0.3); background: rgba(201,168,76,0.08); }
-.cr-badge.role-pressure    { color: var(--role-pressure);    border-color: rgba(224,92,58,0.3);  background: rgba(224,92,58,0.08); }
-.cr-badge.role-mirror      { color: var(--role-mirror);      border-color: rgba(123,141,232,0.3);background: rgba(123,141,232,0.08); }
-.cr-badge.role-support     { color: var(--role-support);     border-color: rgba(90,171,114,0.3); background: rgba(90,171,114,0.08); }
-.cr-badge.role-shadow      { color: var(--role-shadow);      border-color: rgba(160,92,200,0.3); background: rgba(160,92,200,0.08); }
-.cr-badge.role-special     { color: var(--role-special);     border-color: rgba(76,201,192,0.3); background: rgba(76,201,192,0.08); }
+.cr-badge.role-protagonist { color: var(--role-protagonist); border-color: rgba(184,150,58,0.3); background: rgba(184,150,58,0.06); }
+.cr-badge.role-pressure    { color: var(--role-pressure);    border-color: rgba(212,58,42,0.3);  background: rgba(212,58,42,0.06); }
+.cr-badge.role-mirror      { color: var(--role-mirror);      border-color: rgba(85,112,210,0.3);background: rgba(85,112,210,0.06); }
+.cr-badge.role-support     { color: var(--role-support);     border-color: rgba(61,158,66,0.3); background: rgba(61,158,66,0.06); }
+.cr-badge.role-shadow      { color: var(--role-shadow);      border-color: rgba(139,69,181,0.3); background: rgba(139,69,181,0.06); }
+.cr-badge.role-special     { color: var(--role-special);     border-color: rgba(47,168,160,0.3); background: rgba(47,168,160,0.06); }
 
 .cr-badge.mode {
   color: var(--ink-dim);
@@ -603,7 +603,7 @@
 
 .cr-name-btn.selected {
   background: var(--gold);
-  color: var(--bg);
+  color: #ffffff;
   border-color: var(--gold);
   font-weight: 600;
 }
@@ -687,25 +687,25 @@
 }
 
 .cr-action-btn.accept {
-  background: rgba(90, 171, 114, 0.12);
+  background: rgba(61, 158, 66, 0.08);
   border-color: var(--green);
   color: var(--green);
 }
 
 .cr-action-btn.accept:hover {
   background: var(--green);
-  color: var(--bg);
+  color: #ffffff;
 }
 
 .cr-action-btn.decline {
-  background: rgba(224, 92, 58, 0.08);
+  background: rgba(212, 58, 42, 0.06);
   border-color: var(--red);
   color: var(--red);
 }
 
 .cr-action-btn.decline:hover {
   background: var(--red);
-  color: var(--white);
+  color: #ffffff;
 }
 
 .cr-action-btn.finalize {
@@ -716,7 +716,7 @@
 
 .cr-action-btn.finalize:hover {
   background: var(--gold);
-  color: var(--bg);
+  color: #ffffff;
 }
 
 .cr-action-btn:disabled {
@@ -729,8 +729,8 @@
   position: fixed;
   bottom: 32px;
   right: 32px;
-  background: var(--surface2);
-  border: 1px solid var(--border2);
+  background: #ffffff;
+  border: 1px solid var(--border);
   border-left: 3px solid var(--gold);
   padding: 14px 20px;
   border-radius: 4px;
@@ -738,7 +738,7 @@
   font-size: 13px;
   z-index: 9999;
   animation: cr-toast-in 0.3s ease;
-  box-shadow: 0 8px 32px rgba(0,0,0,0.4);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.1);
 }
 
 .cr-toast.success { border-left-color: var(--green); }

@@ -7,22 +7,22 @@
   --st-ink: #1a1510;
   --st-parchment: #f5f0e8;
   --st-parchment-dark: #e8e0d0;
-  --st-gold: #c9a84c;
-  --st-gold-dim: #b8963a;
-  --st-green: #4caf50;
-  --st-blue: #2196f3;
-  --st-orange: #ff9800;
-  --st-red: #e74c3c;
-  --st-muted: #8b7e6a;
+  --st-gold: #b8963a;
+  --st-gold-dim: #a07e28;
+  --st-green: #3d9e42;
+  --st-blue: #1976d2;
+  --st-orange: #e68900;
+  --st-red: #d43a2a;
+  --st-muted: #7a6e5a;
   --st-border: #d4c9b5;
-  --st-shadow: rgba(26, 21, 16, 0.15);
+  --st-shadow: rgba(26, 21, 16, 0.1);
   --st-radius: 8px;
 }
 
 /* ── Page container ────────────────────────────── */
 .storyteller-page {
   min-height: 100vh;
-  background: #1a1510;
+  background: #faf8f5;
   color: var(--st-ink);
   font-family: 'Georgia', 'Times New Roman', serif;
   padding: 20px;
@@ -42,7 +42,7 @@
 }
 
 .st-book-list-header h1 {
-  color: var(--st-gold);
+  color: var(--st-ink);
   font-size: 28px;
   margin: 0;
   letter-spacing: 1px;
@@ -101,19 +101,19 @@
 }
 
 .st-book-card {
-  background: var(--st-parchment);
+  background: #ffffff;
   border-radius: var(--st-radius);
   padding: 20px;
   cursor: pointer;
   transition: all 0.25s;
-  border: 2px solid transparent;
+  border: 1px solid #e0d8cc;
   position: relative;
   overflow: hidden;
 }
 .st-book-card:hover {
   border-color: var(--st-gold);
   transform: translateY(-2px);
-  box-shadow: 0 6px 20px var(--st-shadow);
+  box-shadow: 0 6px 24px rgba(26, 21, 16, 0.08);
 }
 .st-book-card::before {
   content: '';
@@ -190,7 +190,7 @@
 }
 
 .st-modal {
-  background: var(--st-parchment);
+  background: #ffffff;
   border-radius: 12px;
   padding: 28px;
   width: 100%;
@@ -198,6 +198,8 @@
   max-height: 90vh;
   overflow-y: auto;
   position: relative;
+  border: 1px solid #e0d8cc;
+  box-shadow: 0 16px 48px rgba(26, 21, 16, 0.15);
 }
 .st-modal h2 {
   margin: 0 0 20px;
@@ -259,7 +261,7 @@
 .st-back-btn {
   background: none;
   border: none;
-  color: var(--st-gold);
+  color: var(--st-ink);
   font-size: 20px;
   cursor: pointer;
   padding: 6px;
@@ -267,11 +269,11 @@
   transition: background 0.2s;
 }
 .st-back-btn:hover {
-  background: rgba(201, 168, 76, 0.15);
+  background: rgba(26, 21, 16, 0.06);
 }
 
 .st-editor-topbar h2 {
-  color: var(--st-gold);
+  color: var(--st-ink);
   margin: 0;
   font-size: 14px;
   text-transform: uppercase;
@@ -280,12 +282,14 @@
 
 /* ── Header section ───────────────────────────── */
 .st-book-header {
-  background: var(--st-parchment);
+  background: #ffffff;
   border-radius: var(--st-radius);
   padding: 28px;
   margin-bottom: 20px;
   text-align: center;
   position: relative;
+  border-bottom: 3px solid var(--st-gold);
+  border: 1px solid #e0d8cc;
   border-bottom: 3px solid var(--st-gold);
 }
 
@@ -363,11 +367,11 @@
 
 /* ── Chapter block ────────────────────────────── */
 .st-chapter {
-  background: var(--st-parchment);
+  background: #ffffff;
   border-radius: var(--st-radius);
   margin-bottom: 16px;
   overflow: hidden;
-  border: 1px solid var(--st-border);
+  border: 1px solid #e0d8cc;
 }
 
 .st-chapter-header {
@@ -375,13 +379,13 @@
   align-items: center;
   gap: 10px;
   padding: 14px 20px;
-  background: var(--st-parchment-dark);
-  border-bottom: 1px solid var(--st-border);
+  background: #f5f2ed;
+  border-bottom: 1px solid #e0d8cc;
   cursor: pointer;
   user-select: none;
 }
 .st-chapter-header:hover {
-  background: #ddd6c4;
+  background: #ede8e0;
 }
 
 .st-chapter-toggle {
@@ -591,7 +595,7 @@
   font-size: 14px;
   color: #fff;
   animation: st-toast-in 0.3s ease;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
   min-width: 200px;
 }
 .st-toast-success { background: var(--st-green); }
@@ -605,8 +609,8 @@
 
 /* ── Add chapter inline ──────────────────────── */
 .st-add-chapter-form {
-  background: var(--st-parchment);
-  border: 2px dashed var(--st-border);
+  background: #ffffff;
+  border: 2px dashed #d4c9b5;
   border-radius: var(--st-radius);
   padding: 16px 20px;
   margin-bottom: 16px;
@@ -648,7 +652,7 @@
   align-items: center;
   justify-content: center;
   padding: 60px;
-  color: var(--st-gold);
+  color: var(--st-muted);
   font-size: 18px;
 }
 

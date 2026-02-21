@@ -6,23 +6,23 @@
 @import url('https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700&family=DM+Mono:wght@300;400&family=Crimson+Pro:ital,wght@0,300;0,400;1,300;1,400&display=swap');
 
 .continuity-engine {
-  --bg: #0a0c10;
-  --grid: rgba(255,255,255,0.03);
-  --surface: #11141a;
-  --surface2: #181c24;
-  --border: rgba(100,140,255,0.12);
-  --border-bright: rgba(100,140,255,0.28);
-  --accent: #5b7fff;
-  --accent-soft: rgba(91,127,255,0.1);
-  --conflict: #ff4d6d;
-  --conflict-soft: rgba(255,77,109,0.1);
-  --ok: #3ecf8e;
-  --ok-soft: rgba(62,207,142,0.1);
-  --warn: #f5a623;
-  --warn-soft: rgba(245,166,35,0.1);
-  --text: #e2e8f8;
-  --text-dim: rgba(226,232,248,0.45);
-  --text-muted: rgba(226,232,248,0.22);
+  --bg: #f5f7fc;
+  --grid: rgba(0,0,0,0.03);
+  --surface: #ffffff;
+  --surface2: #eef1f8;
+  --border: rgba(80,110,200,0.16);
+  --border-bright: rgba(80,110,200,0.32);
+  --accent: #4060dd;
+  --accent-soft: rgba(64,96,221,0.08);
+  --conflict: #e03050;
+  --conflict-soft: rgba(224,48,80,0.08);
+  --ok: #2aad6e;
+  --ok-soft: rgba(42,173,110,0.08);
+  --warn: #d49020;
+  --warn-soft: rgba(212,144,32,0.08);
+  --text: #1a1e2e;
+  --text-dim: rgba(26,30,46,0.55);
+  --text-muted: rgba(26,30,46,0.35);
 
   font-family: 'DM Mono', monospace;
   color: var(--text);
@@ -39,7 +39,7 @@
 
 /* ── Topbar ────────────────────────────────────────────── */
 .ce-topbar {
-  background: rgba(10,12,16,0.92);
+  background: rgba(245,247,252,0.92);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border);
   padding: 14px 28px;
@@ -69,7 +69,7 @@
 }
 .ce-conflict-counter {
   background: var(--conflict-soft);
-  border: 1px solid rgba(255,77,109,0.25);
+  border: 1px solid rgba(224,48,80,0.2);
   color: var(--conflict);
   font-size: 10px;
   letter-spacing: 0.1em;
@@ -78,7 +78,7 @@
 }
 .ce-conflict-counter.none {
   background: var(--ok-soft);
-  border-color: rgba(62,207,142,0.25);
+  border-color: rgba(42,173,110,0.2);
   color: var(--ok);
 }
 
@@ -166,14 +166,14 @@
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  color: #0a0c10;
+  color: #ffffff;
   flex-shrink: 0;
 }
 .ce-conflict-flag {
   position: absolute;
   top: 12px; right: 12px;
   background: var(--conflict);
-  color: #0a0c10;
+  color: #ffffff;
   font-size: 8px;
   font-weight: 700;
   letter-spacing: 0.1em;
@@ -219,7 +219,7 @@
 }
 .ce-create-btn {
   background: var(--accent);
-  color: #0a0c10;
+  color: #ffffff;
   border: none;
   border-radius: 2px;
   padding: 9px 20px;
@@ -282,7 +282,7 @@
 /* ── Conflict / OK alerts ──────────────────────────────── */
 .ce-conflict-alert {
   background: var(--conflict-soft);
-  border: 1px solid rgba(255,77,109,0.3);
+  border: 1px solid rgba(224,48,80,0.2);
   border-radius: 3px;
   padding: 16px 20px;
   margin-bottom: 24px;
@@ -304,14 +304,14 @@
   color: var(--text-dim);
   padding: 4px 0;
   line-height: 1.5;
-  border-bottom: 1px solid rgba(255,77,109,0.1);
+  border-bottom: 1px solid rgba(224,48,80,0.08);
 }
 .ce-conflict-list li:last-child { border-bottom: none; }
 .ce-conflict-list li strong { color: var(--conflict); font-style: normal; font-weight: 400; }
 
 .ce-ok-alert {
   background: var(--ok-soft);
-  border: 1px solid rgba(62,207,142,0.2);
+  border: 1px solid rgba(42,173,110,0.16);
   border-radius: 3px;
   padding: 12px 20px;
   margin-bottom: 24px;
@@ -338,11 +338,11 @@
   transition: border-color 0.15s;
 }
 .ce-char-location-card.conflict-char {
-  border-color: rgba(255,77,109,0.4);
-  background: rgba(255,77,109,0.04);
+  border-color: rgba(224,48,80,0.3);
+  background: rgba(224,48,80,0.03);
 }
 .ce-char-location-card.confirmed {
-  border-color: rgba(62,207,142,0.25);
+  border-color: rgba(42,173,110,0.2);
 }
 .ce-clf-top { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
 .ce-clf-avatar {
@@ -350,7 +350,7 @@
   display: flex; align-items: center; justify-content: center;
   font-family: 'Syne', sans-serif;
   font-size: 12px; font-weight: 700;
-  color: #0a0c10;
+  color: #ffffff;
   flex-shrink: 0;
 }
 .ce-clf-name { font-size: 11px; color: var(--text); letter-spacing: 0.06em; }
@@ -455,7 +455,7 @@
   align-items: center;
   justify-content: center;
   font-size: 9px;
-  color: rgba(10,12,16,0.8);
+  color: #ffffff;
   font-weight: 500;
   letter-spacing: 0.04em;
   white-space: nowrap;
@@ -468,7 +468,7 @@
 }
 .ce-trace-cell:hover { opacity: 0.8; }
 .ce-trace-cell.empty {
-  background: rgba(255,255,255,0.03);
+  background: rgba(0,0,0,0.03);
   color: var(--text-muted);
   font-size: 8px;
 }
@@ -564,7 +564,7 @@
 /* ── Delete beat button ────────────────────────────────── */
 .ce-delete-beat-btn {
   background: none;
-  border: 1px solid rgba(255,77,109,0.25);
+  border: 1px solid rgba(224,48,80,0.2);
   color: var(--conflict);
   font-family: 'DM Mono', monospace;
   font-size: 9px;
@@ -581,7 +581,7 @@
 /* ── Toast ─────────────────────────────────────────────── */
 .ce-toast {
   position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(8px);
-  background: var(--surface2);
+  background: #ffffff;
   border: 1px solid var(--border-bright);
   color: var(--text);
   font-size: 11px;
@@ -596,7 +596,7 @@
   font-family: 'DM Mono', monospace;
 }
 .ce-toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
-.ce-toast.conflict { border-color: rgba(255,77,109,0.5); color: var(--conflict); }
+.ce-toast.conflict { border-color: rgba(224,48,80,0.4); color: var(--conflict); }
 
 /* ── Empty / loading ───────────────────────────────────── */
 .ce-empty-state {
