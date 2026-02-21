@@ -44,6 +44,11 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING(50),
       allowNull: true,
     },
+    canon_status: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      defaultValue: 'draft',
+    },
     status: {
       type: DataTypes.ENUM('draft', 'in_review', 'locked'),
       defaultValue: 'draft',

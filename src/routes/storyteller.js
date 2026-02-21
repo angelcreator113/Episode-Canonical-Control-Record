@@ -108,6 +108,7 @@ router.post('/books', optionalAuth, async (req, res) => {
       era_description,
       primary_pov,
       timeline_position,
+      canon_status,
       status: reqStatus,
       chapters = [],
     } = req.body;
@@ -128,6 +129,7 @@ router.post('/books', optionalAuth, async (req, res) => {
       era_description: era_description || null,
       primary_pov: primary_pov || null,
       timeline_position: timeline_position || null,
+      canon_status: canon_status || 'draft',
       status: reqStatus || 'draft',
       compiled_at: new Date(),
     });
@@ -221,7 +223,7 @@ router.put('/books/:id', optionalAuth, async (req, res) => {
     const book = await models.StorytellerBook.findByPk(req.params.id);
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
-    const allowed = ['character_name', 'season_label', 'week_label', 'title', 'subtitle', 'status', 'description', 'series_id', 'era_name', 'era_description', 'primary_pov', 'timeline_position'];
+    const allowed = ['character_name', 'season_label', 'week_label', 'title', 'subtitle', 'status', 'description', 'series_id', 'era_name', 'era_description', 'primary_pov', 'timeline_position', 'canon_status'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];

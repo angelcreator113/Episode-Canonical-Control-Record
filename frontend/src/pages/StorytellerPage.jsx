@@ -12,6 +12,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
 import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
 import ScenesPanel from './ScenesPanel';
+import NewBookModal from './NewBookModal';
 
 const API = '/api/v1/storyteller';
 
@@ -97,19 +98,6 @@ export default function StorytellerPage() {
     loadBooks();
   };
 
-  // ── Create book ─────────────────────────────
-
-  const createBook = async (form) => {
-    try {
-      const data = await api('/books', { method: 'POST', body: form });
-      toast('Book created');
-      setShowCreate(false);
-      setActiveBook(data.book);
-    } catch (err) {
-      toast(err.message, 'error');
-    }
-  };
-
   // ── Delete book ─────────────────────────────
 
   const deleteBook = async (id) => {
@@ -152,12 +140,16 @@ export default function StorytellerPage() {
         />
       )}
 
-      {showCreate && (
-        <CreateBookModal
-          onSubmit={createBook}
-          onClose={() => setShowCreate(false)}
-        />
-      )}
+      <NewBookModal
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        showId={null}
+        onBookCreated={(book) => {
+          toast('Book created');
+          setShowCreate(false);
+          setActiveBook(book);
+        }}
+      />
 
       <ToastContainer toasts={toasts} />
     </div>
@@ -209,127 +201,6 @@ function BookList({ books, onOpen, onDelete, onCreate }) {
           ))}
         </div>
       )}
-    </div>
-  );
-}
-
-// ══════════════════════════════════════════════════
-// Create Book Modal
-// ══════════════════════════════════════════════════
-
-function CreateBookModal({ onSubmit, onClose }) {
-  const [form, setForm] = useState({
-    title: '',
-    series_id: '',
-    primary_pov: '',
-    era_name: '',
-    timeline_position: '',
-    status: 'draft',
-    description: '',
-  });
-  const [seriesList, setSeriesList] = useState([]);
-
-  // Fetch book series for dropdown
-  useEffect(() => {
-    fetch('/api/v1/universe/series')
-      .then(r => r.json())
-      .then(data => setSeriesList(data.series || []))
-      .catch(() => {});
-  }, []);
-
-  const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!form.title.trim()) return;
-    onSubmit({
-      ...form,
-      series_id: form.series_id || null,
-    });
-  };
-
-  return (
-    <div className="st-modal-backdrop" onClick={onClose}>
-      <div className="st-modal st-modal-literary" onClick={e => e.stopPropagation()}>
-        <h2>New Book</h2>
-        <form onSubmit={handleSubmit}>
-          <div className="st-form-group">
-            <label>Book Title *</label>
-            <input
-              autoFocus
-              value={form.title}
-              onChange={e => set('title', e.target.value)}
-              placeholder="e.g. Before Lala"
-            />
-          </div>
-
-          <div className="st-form-row">
-            <div className="st-form-group">
-              <label>Series</label>
-              <select value={form.series_id} onChange={e => set('series_id', e.target.value)}>
-                <option value="">— No series —</option>
-                {seriesList.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="st-form-group">
-              <label>Primary POV</label>
-              <select value={form.primary_pov} onChange={e => set('primary_pov', e.target.value)}>
-                <option value="">— Select —</option>
-                <option value="First Person">First Person</option>
-                <option value="Close Third">Close Third</option>
-                <option value="Multi">Multi</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="st-form-row">
-            <div className="st-form-group">
-              <label>Era Name</label>
-              <input
-                value={form.era_name}
-                onChange={e => set('era_name', e.target.value)}
-                placeholder="e.g. Soft Luxury Era"
-              />
-            </div>
-            <div className="st-form-group">
-              <label>Timeline Position</label>
-              <select value={form.timeline_position} onChange={e => set('timeline_position', e.target.value)}>
-                <option value="">— Select —</option>
-                <option value="Pre-Show">Pre-Show</option>
-                <option value="Early Show">Early Show</option>
-                <option value="Prime Era">Prime Era</option>
-                <option value="Legacy">Legacy</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="st-form-group">
-            <label>Canon Status</label>
-            <select value={form.status} onChange={e => set('status', e.target.value)}>
-              <option value="draft">Draft</option>
-              <option value="in_review">Active</option>
-              <option value="locked">Locked</option>
-            </select>
-          </div>
-
-          <div className="st-form-group">
-            <label>Book Description</label>
-            <textarea
-              value={form.description}
-              onChange={e => set('description', e.target.value)}
-              placeholder="What is this book about? Who is the central character and what arc does it cover?"
-              rows={3}
-            />
-          </div>
-
-          <div className="st-modal-actions">
-            <button type="button" className="st-btn st-btn-ghost" onClick={onClose}>Cancel</button>
-            <button type="submit" className="st-btn st-btn-gold">Create Book</button>
-          </div>
-        </form>
-      </div>
     </div>
   );
 }
