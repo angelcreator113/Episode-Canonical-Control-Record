@@ -34,7 +34,22 @@ export default function LandingPage() {
       await login(email, password);
       setSuccess('Welcome.');
     } catch (err) {
-      const msg = err.response?.data?.message || err.message || 'Authentication failed.';
+      const status = err.response?.status;
+      const serverMsg = err.response?.data?.message;
+      let msg;
+      if (serverMsg) {
+        msg = serverMsg;
+      } else if (!err.response && (err.code === 'ERR_NETWORK' || err.message === 'Network Error')) {
+        msg = 'Unable to reach the server. Please check your connection and try again.';
+      } else if (status === 401) {
+        msg = 'Invalid email or password. Please try again.';
+      } else if (status === 429) {
+        msg = 'Too many attempts. Please wait a moment and try again.';
+      } else if (status >= 500) {
+        msg = 'Server error. Please try again in a few moments.';
+      } else {
+        msg = 'Login failed. Please check your credentials and try again.';
+      }
       setError(msg);
     } finally {
       setLoading(false);
