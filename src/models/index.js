@@ -68,6 +68,7 @@ let EditMap, CharacterProfile, RawFootage;
 let Character; // Characters model
 let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration
+let StorytellerBook, StorytellerChapter, StorytellerLine; // StoryTeller Book Editor models
 
 try {
   // Core models
@@ -187,6 +188,11 @@ try {
   // Scene Composer & Timeline Editor integration
   TimelineData = require('./TimelineData')(sequelize);
 
+  // StoryTeller Book Editor models
+  StorytellerBook = require('./StorytellerBook')(sequelize);
+  StorytellerChapter = require('./StorytellerChapter')(sequelize);
+  StorytellerLine = require('./StorytellerLine')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -247,6 +253,9 @@ const requiredModels = {
   EditMap,
   CharacterProfile,
   Character,
+  StorytellerBook,
+  StorytellerChapter,
+  StorytellerLine,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -279,6 +288,17 @@ if (AudioClip && AudioClip.associate) {
 }
 if (Character && Character.associate) {
   Character.associate(requiredModels);
+}
+
+// StoryTeller associations
+if (StorytellerBook && StorytellerBook.associate) {
+  StorytellerBook.associate(requiredModels);
+}
+if (StorytellerChapter && StorytellerChapter.associate) {
+  StorytellerChapter.associate(requiredModels);
+}
+if (StorytellerLine && StorytellerLine.associate) {
+  StorytellerLine.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1345,3 +1365,6 @@ module.exports.EpisodeWardrobeDefault = EpisodeWardrobeDefault;
 module.exports.AssetUsageLog = AssetUsageLog;
 module.exports.TimelineData = TimelineData;
 module.exports.Character = Character;
+module.exports.StorytellerBook = StorytellerBook;
+module.exports.StorytellerChapter = StorytellerChapter;
+module.exports.StorytellerLine = StorytellerLine;

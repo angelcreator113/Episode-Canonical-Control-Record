@@ -44,6 +44,7 @@ import WorldAdmin from './pages/WorldAdmin';
 import ShowSettings from './pages/ShowSettings';
 import ExportPage from './pages/ExportPage';
 import AssetLibrary from './pages/AssetLibrary';
+import StorytellerPage from './pages/StorytellerPage';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -262,6 +263,9 @@ function AppContent() {
           } />
           
           {/* ===== MANAGEMENT ROUTES ===== */}
+          
+          {/* StoryTeller Book Editor */}
+          <Route path="/storyteller" element={<StorytellerPage />} />
           
           {/* Search */}
           <Route path="/search" element={<SearchResults />} />
