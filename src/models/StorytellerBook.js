@@ -14,7 +14,7 @@ module.exports = (sequelize) => {
     },
     character_name: {
       type: DataTypes.STRING(255),
-      allowNull: false,
+      allowNull: true,
     },
     season_label: {
       type: DataTypes.STRING(100),
@@ -26,11 +26,28 @@ module.exports = (sequelize) => {
     },
     title: {
       type: DataTypes.STRING(500),
-      allowNull: true,
+      allowNull: false,
     },
     subtitle: {
       type: DataTypes.STRING(500),
       allowNull: true,
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    primary_pov: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    timeline_position: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    canon_status: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      defaultValue: 'draft',
     },
     status: {
       type: DataTypes.ENUM('draft', 'in_review', 'locked'),
