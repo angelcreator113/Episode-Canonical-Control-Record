@@ -460,7 +460,8 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
   const renderLine = (line) => (
     <React.Fragment key={line.id}>
-      <div className={`st-line ${editingLine === line.id ? 'st-line-editing' : ''}`}>
+      <div className={`st-line st-line-${line.status || 'pending'} ${editingLine === line.id ? 'st-line-editing' : ''}`}>
+        <div className="st-line-dot" />
         <div className="st-line-content">
           {editingLine === line.id ? (
             <>
@@ -498,22 +499,10 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
         {editingLine !== line.id && (
           <div className="st-line-actions">
             {line.status !== 'approved' && (
-              <button
-                className="st-line-action st-action-approve"
-                onClick={() => approveLine(line.id)}
-                title="Approve"
-              >✓</button>
+              <button className="st-line-action st-action-approve" onClick={() => approveLine(line.id)} title="Approve">✓ Approve</button>
             )}
-            <button
-              className="st-line-action st-action-edit"
-              onClick={() => startEdit(line)}
-              title="Edit"
-            >✎</button>
-            <button
-              className="st-line-action st-action-reject"
-              onClick={() => rejectLine(line.id)}
-              title="Remove"
-            >✕</button>
+            <button className="st-line-action st-action-edit" onClick={() => startEdit(line)} title="Edit">Edit</button>
+            <button className="st-line-action st-action-reject" onClick={() => rejectLine(line.id)} title="Remove">✕</button>
           </div>
         )}
       </div>
@@ -548,29 +537,75 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
       {/* ── Left Nav ── */}
       <nav className="st-nav">
-        <div className="st-nav-header">
+        <div className="st-nav-brand">
           <button className="st-nav-back" onClick={onBack}>← Archives</button>
+          <div className="st-nav-brand-label">PNOS</div>
+          <h2 className="st-nav-brand-title">{book.character_name || book.title}</h2>
+          <div className="st-nav-brand-sub">
+            {[book.era_name, book.timeline_position].filter(Boolean).join(' · ') || book.subtitle || ''}
+          </div>
         </div>
 
-        <div className="st-nav-chapters">
-          {chapters.map((ch, i) => (
-            <div
-              key={ch.id}
-              className={`st-nav-chapter ${ch.id === activeChapterId ? 'active' : ''}`}
-              onClick={() => setActiveChapterId(ch.id)}
-            >
-              <span className="st-nav-num">
-                {String(ch.chapter_number || i + 1).padStart(2, '0')}
-              </span>
-              <span className="st-nav-chapter-title">{ch.title}</span>
-            </div>
-          ))}
+        <div className="st-nav-section">
+          <div className="st-nav-section-label">Chapters</div>
+          <div className="st-nav-chapters">
+            {chapters.map((ch, i) => {
+              const chLines = ch.lines || [];
+              const chPending = chLines.filter(l => l.status === 'pending').length;
+              const chApproved = chLines.filter(l => l.status === 'approved').length;
+              const chEdited = chLines.filter(l => l.status === 'edited').length;
+              return (
+                <button
+                  key={ch.id}
+                  className={`st-nav-chapter ${ch.id === activeChapterId ? 'active' : ''}`}
+                  onClick={() => setActiveChapterId(ch.id)}
+                >
+                  <span className="st-nav-num">
+                    {String(ch.chapter_number || i + 1).padStart(2, '0')}
+                  </span>
+                  <div className="st-nav-chapter-info">
+                    <div className="st-nav-chapter-title">{ch.title}</div>
+                    <div className="st-nav-chapter-meta">
+                      {chLines.length} line{chLines.length !== 1 ? 's' : ''}{ch.badge ? ` · ${ch.badge}` : ''}
+                    </div>
+                    <div className="st-nav-dots">
+                      {Array(Math.min(chApproved, 5)).fill(null).map((_, di) => (
+                        <div key={`a${di}`} className="st-cnav-dot st-cnav-dot-a" />
+                      ))}
+                      {Array(Math.min(chPending, 5)).fill(null).map((_, di) => (
+                        <div key={`p${di}`} className="st-cnav-dot st-cnav-dot-p" />
+                      ))}
+                      {Array(Math.min(chEdited, 5)).fill(null).map((_, di) => (
+                        <div key={`e${di}`} className="st-cnav-dot st-cnav-dot-e" />
+                      ))}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="st-nav-add">
+            <button onClick={() => setShowAddChapter(!showAddChapter)}>
+              + Add Chapter
+            </button>
+          </div>
         </div>
 
-        <div className="st-nav-add">
-          <button onClick={() => setShowAddChapter(!showAddChapter)}>
-            + Add Chapter
-          </button>
+        <div className="st-nav-stats">
+          <div className="st-nav-section-label">Book Progress</div>
+          <div className="st-stat-row">
+            <span className="st-stat-label">Pending</span>
+            <span className="st-stat-val st-stat-pending">{allLines.filter(l => l.status === 'pending').length}</span>
+          </div>
+          <div className="st-stat-row">
+            <span className="st-stat-label">Approved</span>
+            <span className="st-stat-val st-stat-approved">{allLines.filter(l => l.status === 'approved').length}</span>
+          </div>
+          <div className="st-stat-row">
+            <span className="st-stat-label">Edited</span>
+            <span className="st-stat-val st-stat-edited">{allLines.filter(l => l.status === 'edited').length}</span>
+          </div>
         </div>
       </nav>
 
@@ -669,99 +704,114 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                 </div>
               ) : (
                 <>
-                  {/* Chapter heading */}
-                  <div className="st-chapter-heading">
-                    <h2>{activeChapter.title}</h2>
-                    <div className="st-chapter-meta">
-                      {approvedLines.length} {approvedLines.length === 1 ? 'line' : 'lines'}
-                      {pendingLines.length > 0 && ` · ${pendingLines.length} pending`}
-                      <button
-                        className={`st-review-indicator ${reviewMode ? 'active' : ''}`}
-                        onClick={() => setReviewMode(r => !r)}
-                        title={reviewMode ? 'Exit review mode' : 'Enter review mode'}
-                      >
-                        <span className="st-review-dot" />
-                        <span className="st-review-count">
-                          {reviewMode ? 'Reviewing' : 'Review'}
-                        </span>
-                      </button>
-                    </div>
+                  {/* Chapter header bar */}
+                  <div className="st-chapter-bar">
+                    <span className="st-ch-num">
+                      Chapter {String(activeChapter.chapter_number || (chapters.indexOf(activeChapter) + 1)).padStart(2, '0')}
+                    </span>
+                    <span className="st-ch-title">{activeChapter.title}</span>
+                    {activeChapter.badge && (
+                      <span className="st-ch-badge">{activeChapter.badge}</span>
+                    )}
+                    <span className={`st-ch-status ${pendingLines.length === 0 ? 'all-approved' : 'has-pending'}`}>
+                      {pendingLines.length === 0 ? 'Complete' : `${pendingLines.length} pending`}
+                    </span>
+                    <button
+                      className={`st-review-indicator ${reviewMode ? 'active' : ''}`}
+                      onClick={() => setReviewMode(r => !r)}
+                      title={reviewMode ? 'Exit review mode' : 'Enter review mode'}
+                    >
+                      <span className="st-review-dot" />
+                      <span className="st-review-count">
+                        {reviewMode ? 'Reviewing' : 'Review'}
+                      </span>
+                    </button>
                   </div>
 
-                  {/* Approved / edited lines — the manuscript body */}
-                  {approvedLines.length > 0 && (
-                    <div className="st-section">
-                      {groupLines(approvedLines).map((group, gi) => (
-                        <div key={gi}>
-                          {group.label && (
-                            <div className="st-section-label">{group.label}</div>
-                          )}
-                          {group.lines.map(renderLine)}
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                  {/* Book page content */}
+                  <div className="st-book-page">
+                    {/* Approved / edited lines — the manuscript body */}
+                    {approvedLines.length > 0 && (
+                      <div className="st-section">
+                        {groupLines(approvedLines).map((group, gi) => (
+                          <div key={gi}>
+                            {group.label && (
+                              <div className="st-group-label">{group.label}</div>
+                            )}
+                            {group.lines.map(renderLine)}
+                          </div>
+                        ))}
+                      </div>
+                    )}
 
-                  {/* Pending lines — collapsed by default */}
-                  {pendingLines.length > 0 && (
-                    <div className="st-section">
+                    {/* Pending lines — collapsed by default */}
+                    {pendingLines.length > 0 && (
+                      <div className="st-section">
+                        <button
+                          className="st-pending-toggle"
+                          onClick={() => setPendingOpen(!pendingOpen)}
+                        >
+                          <span className={`arrow ${pendingOpen ? 'open' : ''}`}>▶</span>
+                          {pendingLines.length} Pending Memory Detection{pendingLines.length !== 1 ? 's' : ''}
+                        </button>
+                        {pendingOpen && (
+                          <div className="st-pending-body">
+                            {groupLines(pendingLines).map((group, gi) => (
+                              <div key={gi}>
+                                {group.label && (
+                                  <div className="st-group-label">{group.label}</div>
+                                )}
+                                {group.lines.map(renderLine)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Add line */}
+                    {addingLineTo === activeChapter.id ? (
+                      <div className="st-add-line">
+                        <input
+                          autoFocus
+                          value={newLineText}
+                          onChange={e => setNewLineText(e.target.value)}
+                          placeholder="Write a new line…"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') addLine(activeChapter.id);
+                            if (e.key === 'Escape') { setAddingLineTo(null); setNewLineText(''); }
+                          }}
+                        />
+                        <button className="st-btn st-btn-primary st-btn-sm" onClick={() => addLine(activeChapter.id)}>Add</button>
+                        <button className="st-btn st-btn-ghost st-btn-sm" onClick={() => { setAddingLineTo(null); setNewLineText(''); }}>Cancel</button>
+                      </div>
+                    ) : (
                       <button
-                        className="st-pending-toggle"
-                        onClick={() => setPendingOpen(!pendingOpen)}
+                        className="st-add-line-trigger"
+                        onClick={() => { setAddingLineTo(activeChapter.id); setNewLineText(''); }}
                       >
-                        <span className={`arrow ${pendingOpen ? 'open' : ''}`}>▶</span>
-                        {pendingLines.length} Pending Memory Detection{pendingLines.length !== 1 ? 's' : ''}
-                      </button>
-                      {pendingOpen && (
-                        <div className="st-pending-body">
-                          {groupLines(pendingLines).map((group, gi) => (
-                            <div key={gi}>
-                              {group.label && (
-                                <div className="st-section-label">{group.label}</div>
-                              )}
-                              {group.lines.map(renderLine)}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Add line */}
-                  {addingLineTo === activeChapter.id ? (
-                    <div className="st-add-line">
-                      <input
-                        autoFocus
-                        value={newLineText}
-                        onChange={e => setNewLineText(e.target.value)}
-                        placeholder="Write a new line…"
-                        onKeyDown={e => {
-                          if (e.key === 'Enter') addLine(activeChapter.id);
-                          if (e.key === 'Escape') { setAddingLineTo(null); setNewLineText(''); }
-                        }}
-                      />
-                      <button className="st-btn st-btn-primary st-btn-sm" onClick={() => addLine(activeChapter.id)}>Add</button>
-                      <button className="st-btn st-btn-ghost st-btn-sm" onClick={() => { setAddingLineTo(null); setNewLineText(''); }}>Cancel</button>
-                    </div>
-                  ) : (
-                    <button
-                      className="st-add-line-trigger"
-                      onClick={() => { setAddingLineTo(activeChapter.id); setNewLineText(''); }}
-                    >
-                      + Add line
-                    </button>
-                  )}
-
-                  {/* Bottom actions */}
-                  <div className="st-manuscript-actions">
-                    {pendingCount > 0 && (
-                      <button className="st-btn st-btn-secondary st-btn-sm" onClick={approveAll}>
-                        Approve All ({pendingCount})
+                        + Add line
                       </button>
                     )}
-                    <button className="st-btn st-btn-ghost st-btn-sm" onClick={onRefresh}>
-                      Preview Manuscript
-                    </button>
+
+                    {/* Action bar */}
+                    <div className="st-action-bar">
+                      <span className="st-action-hint">
+                        {pendingLines.length === 0
+                          ? 'Chapter complete ✓'
+                          : `${pendingLines.length} item${pendingLines.length !== 1 ? 's' : ''} awaiting review`}
+                      </span>
+                      <div className="st-action-bar-btns">
+                        {pendingCount > 0 && (
+                          <button className="st-btn st-btn-gold st-btn-sm" onClick={approveAll}>
+                            Approve All ({pendingCount})
+                          </button>
+                        )}
+                        <button className="st-btn st-btn-ghost st-btn-sm" onClick={onRefresh}>
+                          Compile Book ↗
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 </>
               )}
