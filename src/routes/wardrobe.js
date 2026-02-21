@@ -982,7 +982,7 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
         match_reasons: reasons,
         risk_level: riskLevel,
         lala_reaction,
-        can_select: item.is_owned,
+        can_select: item.is_owned || (item.lock_type === 'reputation' && (character_state.reputation || 1) >= (item.reputation_required || 0)) || (item.lock_type === 'coin' && (character_state.coins || 0) >= (item.coin_cost || 0)),
         can_purchase: !item.is_owned && item.lock_type === 'coin' && (character_state.coins || 0) >= (item.coin_cost || 0),
       };
     });
@@ -1003,12 +1003,13 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
       return true;
     };
 
-    // 3-4 owned safe picks
+    // Prestige-aware slot counts: high-prestige events offer more stretch options
     const safeOwned = owned.filter(i => i.risk_level !== 'risky');
-    for (let i = 0; i < Math.min(4, safeOwned.length); i++) addToPool(safeOwned[i], 'safe');
+    const safeCount = prestige >= 7 ? 2 : 4;
+    const stretchCount = prestige >= 7 ? 5 : 2;
+    for (let i = 0; i < Math.min(safeCount, safeOwned.length); i++) addToPool(safeOwned[i], 'safe');
 
-    // 2 stretch items
-    for (let i = 0; i < Math.min(2, stretch.length); i++) addToPool(stretch[i], 'stretch');
+    for (let i = 0; i < Math.min(stretchCount, stretch.length); i++) addToPool(stretch[i], 'stretch');
 
     // 1 risky item
     if (risky.length > 0) addToPool(risky[0], 'risky');
@@ -1022,6 +1023,19 @@ router.post('/browse-pool', optionalAuth, async (req, res) => {
     while (pool.length < 6 && idx < remaining.length) {
       addToPool(remaining[idx], remaining[idx].is_owned ? 'safe' : 'stretch');
       idx++;
+    }
+
+    // Ensure required categories have at least 3 items in pool
+    const REQUIRED_CATEGORIES = ['shoes', 'dress'];
+    for (const cat of REQUIRED_CATEGORIES) {
+      const alreadyHas = pool.filter(i => i.clothing_category === cat).length;
+      if (alreadyHas < 2) {
+        const best = scored
+          .filter(i => i.clothing_category === cat && !addedIds.has(i.id))
+          .sort((a, b) => b.match_score - a.match_score)
+          .slice(0, 3 - alreadyHas);
+        best.forEach(item => addToPool(item, item.is_owned ? 'safe' : 'stretch'));
+      }
     }
 
     // 5. Shuffle with slight randomness
@@ -1071,13 +1085,46 @@ router.post('/select', optionalAuth, async (req, res) => {
       return res.status(500).json({ error: 'Models not available' });
     }
 
-    // 1. Verify item exists and is owned
+    // 1. Verify item exists and is selectable (owned, rep-unlockable, or coin-purchasable)
     const [items] = await models.sequelize.query(
-      `SELECT id, name, is_owned, lock_type, coin_cost FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
+      `SELECT id, name, is_owned, lock_type, coin_cost, reputation_required FROM wardrobe WHERE id = :wardrobe_id AND deleted_at IS NULL`,
       { replacements: { wardrobe_id } }
     );
     if (!items?.length) return res.status(404).json({ error: 'Wardrobe item not found' });
-    if (!items[0].is_owned) return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
+    const item = items[0];
+    const repOk = item.lock_type === 'reputation' && (req.body.reputation || 0) >= (item.reputation_required || 0);
+
+    // Auto-purchase coin-locked items inline during select
+    let coinPurchased = false;
+    if (!item.is_owned && !repOk && item.lock_type === 'coin' && show_id) {
+      const cost = item.coin_cost || 0;
+      const [states] = await models.sequelize.query(
+        `SELECT id, coins FROM character_state WHERE show_id = :show_id AND character_key = 'lala' ORDER BY updated_at DESC LIMIT 1`,
+        { replacements: { show_id } }
+      );
+      const currentCoins = states?.[0]?.coins ?? 0;
+      if (currentCoins >= cost) {
+        // Deduct coins
+        await models.sequelize.query(
+          `UPDATE character_state SET coins = coins - :cost, updated_at = NOW() WHERE id = :id`,
+          { replacements: { cost, id: states[0].id } }
+        );
+        // Mark item as owned
+        await models.sequelize.query(
+          `UPDATE wardrobe SET is_owned = true, updated_at = NOW() WHERE id = :wardrobe_id`,
+          { replacements: { wardrobe_id } }
+        );
+        coinPurchased = true;
+        item.is_owned = true;
+        console.log(`[SELECT] Auto-purchased "${item.name}" for ${cost} coins`);
+      } else {
+        return res.status(400).json({ error: `Not enough coins — need ${cost}, have ${currentCoins}` });
+      }
+    }
+
+    if (!item.is_owned && !repOk) {
+      return res.status(400).json({ error: 'Item is not owned — cannot select a locked item' });
+    }
 
     // 2. Upsert link — use ONLY guaranteed columns (id, episode_id, wardrobe_id, created_at, updated_at)
     //    The RDS table may have been created from a simpler migration that lacks approval_status, worn_at, etc.
@@ -1096,11 +1143,13 @@ router.post('/select', optionalAuth, async (req, res) => {
       );
     } catch (e) { /* non-fatal */ }
 
-    return res.json({
+    const resp = {
       success: true,
-      message: `Selected: ${items[0].name}`,
-      item: items[0],
-    });
+      message: coinPurchased ? `Purchased & selected: ${item.name}` : `Selected: ${item.name}`,
+      item,
+    };
+    if (coinPurchased) resp.coin_purchased = true;
+    return res.json(resp);
   } catch (error) {
     console.error('[SELECT] error:', error);
     return res.status(500).json({ error: 'Failed to select wardrobe item', detail: error.message });

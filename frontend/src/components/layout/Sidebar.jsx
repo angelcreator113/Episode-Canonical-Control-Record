@@ -113,6 +113,7 @@ function Sidebar({ isOpen, onClose }) {
       <nav className="sidebar-nav">
         {/* Home */}
         <NavItem icon="🏠" label="Home" path="/" />
+        <NavItem icon="📖" label="StoryTeller" path="/storyteller" />
         
         {/* Shows */}
         <div className="nav-group">

@@ -1,28 +1,35 @@
 /**
- * ScriptEditor v4 — Calm, Structured, Story-First
+ * ScriptEditor v5 — Refined, Writer-Friendly, Story-First
  * 
  * Layout:
- *   ┌─────────────────────────────────────────────────────┐
- *   │ Script Toolbar (beat selector, status, save, tools) │
- *   ├───────────────┬─────────────────────────────────────┤
- *   │  OUTLINE      │  SCRIPT EDITOR                     │
- *   │  (left pane)  │  + collapsible UI Actions / Meta   │
- *   └───────────────┴─────────────────────────────────────┘
+ *   ┌──────────────────────────────────────────────────────────┐
+ *   │ Toolbar: [beat ▾] [status] ── [Format] [Beats] │ [Save] │
+ *   ├───────────────┬──────────────────────────────────────────┤
+ *   │  OUTLINE      │  Beat Header (prev/next nav)            │
+ *   │  • by act     │  Quick Insert Chips                     │
+ *   │  • progress   │  ┌──── Line Numbers + Editor ────┐      │
+ *   │  • colors     │  │ 1  ## BEAT: OPENING_RITUAL    │      │
+ *   │               │  │ 2  Lala: "Bestie…"            │      │
+ *   │               │  └───────────────────────────────┘      │
+ *   │               │  Status Bar + Keyboard Hints            │
+ *   └───────────────┴──────────────────────────────────────────┘
  * 
- * Features:
- *   - Story Outline (left pane, collapsible, grouped by act)
- *   - Clean editor with beat context header
- *   - Collapsible UI Actions & Event Metadata sections
- *   - Tools slide-over drawer (UI Tags, Templates, Variables)
- *   - Command Palette (Ctrl+K)
- *   - Keyboard navigation (Ctrl+↑/↓ to switch beats)
- *   - Auto-save indicator
+ * v5 Improvements:
+ *   - Line numbers gutter alongside editor
+ *   - Quick-insert chips for common dialogue / tags
+ *   - Beat navigation (prev/next arrows)
+ *   - Act-colored outline with progress dots
+ *   - Prominent save button when unsaved
+ *   - Empty state onboarding card
+ *   - Keyboard shortcut hints in status bar
+ *   - Overall visual polish + warmth
  * 
- * Replaces: ScriptEditor v3
+ * Replaces: ScriptEditor v4
  */
 
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import api from '../services/api';
+import useOrientation from '../hooks/useOrientation';
 import './ScriptEditor.css';
 
 // ─── BEAT TYPES ───
@@ -41,8 +48,47 @@ const BEAT_OPTIONS = [
   { value: 'EVENT_OUTCOME', label: 'Event Outcome', icon: '🏆', act: 'RESOLUTION' },
 ];
 
+// ─── ACT COLORS ───
+const ACT_COLORS = {
+  SETUP: '#6366f1',
+  CONFLICT: '#f59e0b',
+  CLIMAX: '#ec4899',
+  RESOLUTION: '#10b981',
+};
+
+const ACT_LABELS = {
+  SETUP: '🟣 Setup',
+  CONFLICT: '🟡 Conflict',
+  CLIMAX: '🩷 Climax',
+  RESOLUTION: '🟢 Resolution',
+};
+
+// ─── QUICK INSERT CHIPS (inline bar) ───
+const QUICK_INSERTS = [
+  { label: 'Lala:', insert: 'Lala: ""', cursorOffset: -1 },
+  { label: 'Prime:', insert: 'Prime: ""', cursorOffset: -1 },
+  { label: 'Guest:', insert: 'Guest: ""', cursorOffset: -1 },
+  { label: '[UI]', insert: '[UI:OPEN ]', cursorOffset: -1 },
+  { label: '[MAIL]', insert: '[MAIL: type=invite from="" prestige=4 cost=150]', cursorOffset: -30 },
+  { label: '[SFX]', insert: '[UI:SFX ]', cursorOffset: -1 },
+  { label: '## BEAT', insert: '\n## BEAT: ', cursorOffset: 0 },
+  { label: '(Action)', insert: '()', cursorOffset: -1 },
+];
+
 const BEAT_MAP = Object.fromEntries(BEAT_OPTIONS.map(b => [b.value, b]));
 const ACT_ORDER = ['SETUP', 'CONFLICT', 'CLIMAX', 'RESOLUTION'];
+
+// ─── LINE NUMBERS COMPONENT ───
+function LineNumbers({ content, scrollTop }) {
+  const lines = content.split('\n');
+  return (
+    <div className="se-line-numbers" style={{ transform: `translateY(-${scrollTop}px)` }}>
+      {lines.map((_, i) => (
+        <div key={i} className="se-line-number">{i + 1}</div>
+      ))}
+    </div>
+  );
+}
 
 // ─── QUICK TEMPLATES ───
 const TEMPLATES = [
@@ -188,8 +234,12 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
   const [error, setError] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
 
-  // Outline
-  const [outlineCollapsed, setOutlineCollapsed] = useState(false);
+  // Responsive
+  const { isMobile, width: viewportWidth } = useOrientation();
+  const isTablet = !isMobile && viewportWidth < 1024;
+
+  // Outline — auto-collapse on mobile/tablet
+  const [outlineCollapsed, setOutlineCollapsed] = useState(isMobile || viewportWidth < 768);
   const [outlineSearch, setOutlineSearch] = useState('');
   const [selectedBeatId, setSelectedBeatId] = useState(null);
 
@@ -209,26 +259,53 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
   // Overflow menu
   const [overflowOpen, setOverflowOpen] = useState(false);
 
+  // Line numbers sync
+  const [editorScrollTop, setEditorScrollTop] = useState(0);
+
   const textareaRef = useRef(null);
   const initialLoadDone = useRef(false);
+  const loadedEpisodeId = useRef(null);   // tracks which episode is loaded
   const cmdInputRef = useRef(null);
 
-  // ─── LOAD ───
+  // ─── LOAD (single effect — prevents bleed between episodes) ───
   useEffect(() => {
-    if (initialLoadDone.current) return;
-    if (episode?.script_content) {
+    // Reset everything when episodeId changes
+    setScriptContent('');
+    setHasUnsavedChanges(false);
+    setSaveStatus('');
+    setError(null);
+    setSelectedBeatId(null);
+    setShowAnalysis(false);
+    setAnalysis(null);
+    initialLoadDone.current = false;
+    loadedEpisodeId.current = episodeId || null;
+
+    if (!episodeId) return;
+
+    const controller = new AbortController();
+
+    // Prefer the prop if it matches
+    if (episode?.script_content && (episode.id === episodeId)) {
       setScriptContent(episode.script_content);
       initialLoadDone.current = true;
-    } else if (episodeId) {
-      api.get(`/api/v1/episodes/${episodeId}`).then(res => {
-        const ep = res.data?.data || res.data;
-        if (ep?.script_content) setScriptContent(ep.script_content);
-        initialLoadDone.current = true;
-      }).catch(() => {});
+    } else {
+      api.get(`/api/v1/episodes/${episodeId}`, { signal: controller.signal })
+        .then(res => {
+          // Guard: only apply if this is still the active episode
+          if (loadedEpisodeId.current !== episodeId) return;
+          const ep = res.data?.data || res.data;
+          if (ep?.script_content) setScriptContent(ep.script_content);
+          initialLoadDone.current = true;
+        })
+        .catch(err => {
+          if (err.name !== 'CanceledError' && err.name !== 'AbortError') {
+            console.error('Script load error:', err);
+          }
+        });
     }
-  }, [episode, episodeId]);
 
-  useEffect(() => { initialLoadDone.current = false; }, [episodeId]);
+    return () => controller.abort();   // cancel in-flight fetch on unmount / re-run
+  }, [episodeId]);  // only episodeId — episode object changes must NOT re-trigger
 
   // ─── PARSED BEATS ───
   const beats = useMemo(() => parseBeatsFromScript(scriptContent), [scriptContent]);
@@ -282,6 +359,11 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
 
   const handleSave = useCallback(async () => {
     if (!episodeId) return;
+    // Guard: refuse to save if the loaded episode doesn't match the current prop
+    if (loadedEpisodeId.current !== episodeId) {
+      console.warn('Save aborted — episode mismatch (loaded:', loadedEpisodeId.current, 'current:', episodeId, ')');
+      return;
+    }
     setIsSaving(true); setSaveStatus('Saving…'); setError(null);
     try {
       await api.put(`/api/v1/episodes/${episodeId}`, { script_content: scriptContent });
@@ -320,6 +402,33 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
       if (res.data.success) alert(`✅ ${res.data.scenesCreated} scenes created! Open Scene Composer to build visuals.`);
     } catch (err) { setError('Failed: ' + (err.response?.data?.error || err.message)); }
   }, [episodeId, analysis, scriptContent]);
+
+  // ─── GENERATE BEAT STRUCTURE ───
+  const [isGenerating, setIsGenerating] = useState(false);
+  const handleGenerateBeats = useCallback(async () => {
+    if (!episodeId) return;
+    if (!window.confirm('This will replace your entire script with a fresh beat skeleton. Continue?')) return;
+    setIsGenerating(true);
+    setError(null);
+    try {
+      const res = await api.post(`/api/v1/episodes/${episodeId}/generate-beats`);
+      if (res.data.success) {
+        setScriptContent(res.data.script);
+        setHasUnsavedChanges(false); // already saved server-side
+        setSelectedBeatId(null); // reset selection so first beat is auto-selected
+        const src = res.data.source === 'world_event'
+          ? `Generated from event: ${res.data.event_name}`
+          : 'Generated basic 9-beat template';
+        alert(`✅ ${res.data.beat_count} beats generated!\n${src}`);
+      } else {
+        setError(res.data.error || 'Generation failed');
+      }
+    } catch (err) {
+      setError('Generate failed: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [episodeId]);
 
   const handleAutofix = useCallback((w) => {
     if (!w.autofix?.available) return;
@@ -390,6 +499,11 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
     return () => document.removeEventListener('click', h);
   }, [overflowOpen]);
 
+  // Auto-collapse outline when viewport shrinks below mobile breakpoint
+  useEffect(() => {
+    if (isMobile || viewportWidth < 768) setOutlineCollapsed(true);
+  }, [isMobile, viewportWidth]);
+
   // ─── COMMAND PALETTE ITEMS ───
   const cmdItems = useMemo(() => {
     const items = [
@@ -397,6 +511,7 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
       ...BEAT_OPTIONS.map(b => ({ icon: b.icon, label: `Add beat: ${b.label}`, action: () => insertAtCursor(`\n## BEAT: ${b.value}\n`) })),
       ...TEMPLATES.map(t => ({ icon: '📋', label: `Template: ${t.label}`, action: () => insertAtCursor(t.text) })),
       { icon: '✨', label: 'Format Script', shortcut: '', action: handleFormatScript },
+      { icon: '🎬', label: 'Generate Beat Structure', action: handleGenerateBeats },
       { icon: '💾', label: 'Save', shortcut: 'Ctrl+S', action: handleSave },
       { icon: '🔍', label: 'Analyze Script', action: handleAnalyze },
       { icon: '🧰', label: 'Open Tools Panel', action: () => { setDrawerOpen(true); setCmdOpen(false); } },
@@ -411,6 +526,17 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
   const wordCount = scriptContent.trim() ? scriptContent.trim().split(/\s+/).length : 0;
   const beatCount = beats.length;
   const episodeStatus = episode?.status || 'draft';
+  const charCount = scriptContent.length;
+  const estDuration = Math.ceil(wordCount / 2.2);
+
+  // Beat navigation helpers
+  const currentBeatIndex = beats.findIndex(b => b.id === selectedBeatId);
+  const hasPrevBeat = currentBeatIndex > 0;
+  const hasNextBeat = currentBeatIndex < beats.length - 1;
+
+  // Outline progress
+  const completedBeats = beats.filter(b => getBeatStatus(b) === 'complete' || getBeatStatus(b) === 'has-actions').length;
+  const progressPercent = beats.length > 0 ? Math.round((completedBeats / beats.length) * 100) : 0;
 
   // ═══════════════════════════════════════════
   // RENDER
@@ -421,6 +547,14 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
       {/* ─── TOP TOOLBAR ─── */}
       <div className="se-toolbar">
         <div className="se-toolbar-left">
+          <button
+            className="se-outline-toggle-btn"
+            onClick={() => setOutlineCollapsed(!outlineCollapsed)}
+            title={outlineCollapsed ? 'Show outline' : 'Hide outline'}
+          >
+            {outlineCollapsed ? '☰' : '◁'}
+          </button>
+          <div className="se-toolbar-divider" />
           <select
             className="se-beat-select"
             value={selectedBeatId || ''}
@@ -432,17 +566,40 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
           </select>
           <span className={`se-status-badge ${episodeStatus}`}>{episodeStatus}</span>
         </div>
+
+        <div className="se-toolbar-center">
+          <button className="se-btn-subtle" onClick={handleFormatScript} title="Auto-format and detect beats">
+            ✨ Format
+          </button>
+          <button
+            className="se-btn-accent"
+            onClick={handleGenerateBeats}
+            disabled={isGenerating}
+            title="Replace script with fresh beat skeleton from world event"
+          >
+            {isGenerating ? '⏳ Generating…' : '🎬 Generate Beats'}
+          </button>
+        </div>
         <div className="se-toolbar-right">
-          <button className="se-btn-subtle" onClick={handleFormatScript}>Format</button>
-          <div className={`se-save-indicator ${hasUnsavedChanges ? 'unsaved' : saveStatus ? 'saved' : ''}`}>
-            {hasUnsavedChanges ? '● Unsaved' : saveStatus || 'Saved'}
-            <span className="se-shortcut">Ctrl+S</span>
+          <div className={`se-save-group ${hasUnsavedChanges ? 'unsaved' : ''}`}>
+            <div className={`se-save-indicator ${hasUnsavedChanges ? 'unsaved' : saveStatus ? 'saved' : ''}`}>
+              {hasUnsavedChanges ? '● Unsaved changes' : saveStatus || '✓ Saved'}
+            </div>
+            <button
+              className={`se-btn-save ${hasUnsavedChanges ? 'pulse' : ''}`}
+              onClick={handleSave}
+              disabled={isSaving || !hasUnsavedChanges}
+              title="Save script (Ctrl+S)"
+            >
+              {isSaving ? '⏳' : '💾'} Save
+            </button>
           </div>
+          <div className="se-toolbar-divider" />
           <button className="se-btn-primary" onClick={handleAnalyze} disabled={isAnalyzing}>
-            {isAnalyzing ? '⏳ Analyzing…' : 'Analyze'}
+            {isAnalyzing ? '⏳ Analyzing…' : '🔍 Analyze'}
           </button>
           <div style={{ position: 'relative' }}>
-            <button className="se-btn-overflow" onClick={(e) => { e.stopPropagation(); setOverflowOpen(!overflowOpen); }}>⋯</button>
+            <button className="se-btn-overflow" onClick={(e) => { e.stopPropagation(); setOverflowOpen(!overflowOpen); }} title="More tools">⋯</button>
             {overflowOpen && (
               <div className="se-overflow-menu">
                 <button className="se-overflow-item" onClick={() => { setDrawerOpen(true); setDrawerTab('ui'); setOverflowOpen(false); }}>
@@ -454,12 +611,13 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
                 <button className="se-overflow-item" onClick={() => { setDrawerOpen(true); setDrawerTab('variables'); setOverflowOpen(false); }}>
                   <span className="se-overflow-icon">🔤</span> Variables
                 </button>
+                <div className="se-overflow-divider" />
                 <button className="se-overflow-item" onClick={() => { setCmdOpen(true); setOverflowOpen(false); }}>
                   <span className="se-overflow-icon">⌨️</span> Command Palette
-                  <span style={{ marginLeft: 'auto', fontSize: 10, color: '#94a3b8', fontFamily: 'monospace' }}>Ctrl+K</span>
+                  <span className="se-overflow-shortcut">Ctrl+K</span>
                 </button>
-                <button className="se-overflow-item" onClick={() => { handleSave(); setOverflowOpen(false); }}>
-                  <span className="se-overflow-icon">💾</span> Save
+                <button className="se-overflow-item" onClick={() => { handleSendToSceneComposer(); setOverflowOpen(false); }}>
+                  <span className="se-overflow-icon">🎬</span> Send to Scene Composer
                 </button>
               </div>
             )}
@@ -476,14 +634,30 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
       )}
 
       {/* ─── MAIN BODY ─── */}
-      <div className="se-body">
+      <div className={`se-body ${isMobile ? 'se-body-mobile' : ''}`}>
+
+        {/* Overlay backdrop when outline is open on small screens */}
+        {(isMobile || viewportWidth < 768) && !outlineCollapsed && (
+          <div className="se-outline-backdrop" onClick={() => setOutlineCollapsed(true)} />
+        )}
 
         {/* ─── LEFT: STORY OUTLINE ─── */}
         <div className={`se-outline ${outlineCollapsed ? 'collapsed' : ''}`}>
           <div className="se-outline-header">
             <span className="se-outline-title">Story Outline</span>
-            <button className="se-outline-collapse-btn" onClick={() => setOutlineCollapsed(true)} title="Collapse outline">◀</button>
+            <span className="se-outline-beat-count">{beats.length} beats</span>
           </div>
+
+          {/* Progress bar */}
+          {beats.length > 0 && (
+            <div className="se-outline-progress">
+              <div className="se-outline-progress-bar">
+                <div className="se-outline-progress-fill" style={{ width: `${progressPercent}%` }} />
+              </div>
+              <span className="se-outline-progress-label">{progressPercent}% complete</span>
+            </div>
+          )}
+
           <input
             className="se-outline-search"
             placeholder="Search beats…"
@@ -499,6 +673,7 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
                   className={`se-outline-beat ${selectedBeatId === b.id ? 'active' : ''}`}
                   onClick={() => scrollToBeat(b.id)}
                 >
+                  <span className="se-outline-beat-dot" style={{ background: ACT_COLORS[b.act] || '#94a3b8' }} />
                   <span className="se-outline-beat-icon">{b.icon}</span>
                   <span className="se-outline-beat-label">{b.label}</span>
                   <span className={`se-outline-indicator ${getBeatStatus(b)}`}>
@@ -507,19 +682,24 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
                 </div>
               )) : <div className="se-outline-empty">No beats match "{outlineSearch}"</div>
             ) : (
-              // Grouped by act
+              // Grouped by act with act colors
               ACT_ORDER.map(act => {
                 const actBeats = groupedBeats[act] || [];
                 if (actBeats.length === 0) return null;
                 return (
-                  <div key={act}>
-                    <div className="se-outline-group">{act}</div>
+                  <div key={act} className="se-outline-act-group">
+                    <div className="se-outline-group" style={{ borderLeftColor: ACT_COLORS[act] }}>
+                      {ACT_LABELS[act] || act}
+                      <span className="se-outline-group-count">{actBeats.length}</span>
+                    </div>
                     {actBeats.map(b => (
                       <div
                         key={b.id}
                         className={`se-outline-beat ${selectedBeatId === b.id ? 'active' : ''}`}
                         onClick={() => scrollToBeat(b.id)}
+                        style={selectedBeatId === b.id ? { borderLeftColor: ACT_COLORS[act] } : {}}
                       >
+                        <span className="se-outline-beat-dot" style={{ background: ACT_COLORS[b.act] || '#94a3b8' }} />
                         <span className="se-outline-beat-icon">{b.icon}</span>
                         <span className="se-outline-beat-label">{b.label}</span>
                         <span className={`se-outline-indicator ${getBeatStatus(b)}`}>
@@ -533,27 +713,44 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
             )}
             {beats.length === 0 && !outlineSearch.trim() && (
               <div className="se-outline-empty">
+                <span style={{ fontSize: 28, display: 'block', marginBottom: 8 }}>📝</span>
                 No beats detected yet.<br />
-                Paste your script and click <strong>Format</strong> to auto-detect beats.
+                Click <strong>Generate Beats</strong> or paste your script and click <strong>Format</strong>.
               </div>
             )}
           </div>
         </div>
 
-        {/* Expand button when collapsed */}
-        {outlineCollapsed && (
-          <button className="se-outline-expand-btn" onClick={() => setOutlineCollapsed(false)} title="Show outline">▶</button>
-        )}
-
         {/* ─── CENTER: EDITOR ─── */}
         <div className="se-editor-pane">
-          {/* Beat context header */}
+          {/* Beat context header with navigation */}
           {selectedBeat && selectedBeat.raw !== 'SCRIPT' && (
             <div className="se-editor-beat-header">
-              <h2 className="se-editor-beat-title">
-                <span>{selectedBeat.icon}</span>
-                {selectedBeat.label}
-              </h2>
+              <div className="se-editor-beat-nav-row">
+                <button
+                  className="se-beat-nav-btn"
+                  onClick={() => navigateBeat(-1)}
+                  disabled={!hasPrevBeat}
+                  title="Previous beat (Ctrl+↑)"
+                >
+                  ◂ Prev
+                </button>
+                <h2 className="se-editor-beat-title">
+                  <span className="se-beat-title-icon">{selectedBeat.icon}</span>
+                  {selectedBeat.label}
+                  <span className="se-beat-act-tag" style={{ background: ACT_COLORS[selectedBeat.act] + '18', color: ACT_COLORS[selectedBeat.act] }}>
+                    {selectedBeat.act}
+                  </span>
+                </h2>
+                <button
+                  className="se-beat-nav-btn"
+                  onClick={() => navigateBeat(1)}
+                  disabled={!hasNextBeat}
+                  title="Next beat (Ctrl+↓)"
+                >
+                  Next ▸
+                </button>
+              </div>
               <div className="se-editor-beat-meta">
                 <span className="se-editor-meta-item">
                   <strong>{selectedBeat.lines.filter(l => l.trim() && !l.startsWith('##')).length}</strong> lines
@@ -564,22 +761,73 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
                 <span className="se-editor-meta-item">
                   <strong>{selectedBeat.lines.filter(l => /^(Lala|Prime|Guest):/.test(l.trim())).length}</strong> dialogue
                 </span>
-                <span className="se-editor-meta-item" style={{ color: '#cbd5e1' }}>•</span>
-                <span className="se-editor-meta-item" style={{ fontStyle: 'italic', color: '#cbd5e1' }}>
-                  {selectedBeat.act}
-                </span>
               </div>
             </div>
           )}
 
-          {/* Script textarea */}
+          {/* Quick insert chips */}
+          <div className="se-quick-insert-bar">
+            <span className="se-quick-insert-label">Insert:</span>
+            {QUICK_INSERTS.map((chip, i) => (
+              <button
+                key={i}
+                className="se-quick-insert-chip"
+                onClick={() => insertAtCursor(chip.insert)}
+                title={`Insert ${chip.label}`}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Empty state onboarding */}
+          {!scriptContent.trim() && (
+            <div className="se-empty-state">
+              <div className="se-empty-icon">📝</div>
+              <h3 className="se-empty-title">Start Writing Your Episode</h3>
+              <p className="se-empty-desc">
+                Choose how you'd like to begin:
+              </p>
+              <div className="se-empty-actions">
+                <button className="se-empty-action-btn primary" onClick={handleGenerateBeats}>
+                  <span className="se-empty-action-icon">🎬</span>
+                  <span>
+                    <strong>Generate Beats</strong>
+                    <small>Auto-create beat structure from the linked world event</small>
+                  </span>
+                </button>
+                <button className="se-empty-action-btn" onClick={() => setDrawerOpen(true)}>
+                  <span className="se-empty-action-icon">📋</span>
+                  <span>
+                    <strong>Use a Template</strong>
+                    <small>Start from a pre-built scene template</small>
+                  </span>
+                </button>
+                <button className="se-empty-action-btn" onClick={() => textareaRef.current?.focus()}>
+                  <span className="se-empty-action-icon">✍️</span>
+                  <span>
+                    <strong>Write from Scratch</strong>
+                    <small>Paste or type your script directly</small>
+                  </span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Script textarea with line numbers */}
           <div className="se-editor-textarea-wrap">
+            {!isMobile && (
+              <div className="se-line-numbers-gutter">
+                <LineNumbers content={scriptContent || '\n'} scrollTop={editorScrollTop} />
+              </div>
+            )}
             <textarea
               ref={textareaRef}
               className="se-editor-textarea"
               value={scriptContent}
               onChange={(e) => { setScriptContent(e.target.value); setHasUnsavedChanges(true); }}
-              placeholder={`Paste your full script here, or use the toolbar above.\n\nTip: Paste messy scripts → click "Format" to auto-organize.\n\nExample:\n\n## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me — Parisian tea party edition!"\n\n## BEAT: CREATOR_WELCOME\n[UI:OPEN LoginWindow]\nPrime: "Welcome back, besties!"`}
+              onScroll={(e) => setEditorScrollTop(e.target.scrollTop)}
+              placeholder={`Start writing your episode script here…\n\nTip: Use "Generate Beats" above to auto-create structure,\nor paste your script and click "Format" to organize it.\n\nExample:\n\n## BEAT: OPENING_RITUAL\nLala: "Bestie, come style me — Parisian tea party edition!"\n\n## BEAT: CREATOR_WELCOME\n[UI:OPEN LoginWindow]\nPrime: "Welcome back, besties!"`}
               spellCheck={false}
             />
           </div>
@@ -628,12 +876,22 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
             </div>
           )}
 
-          {/* Status bar */}
+          {/* Status bar with keyboard hints */}
           <div className="se-status-bar">
-            <span>{lineCount} lines</span>
-            <span>{wordCount} words</span>
-            <span>{beatCount} beats</span>
-            <span>~{Math.ceil(wordCount / 2.2)}s est.</span>
+            <div className="se-status-left">
+              <span>{lineCount} lines</span>
+              <span className="se-status-sep">·</span>
+              <span>{wordCount} words</span>
+              <span className="se-status-sep">·</span>
+              <span>{beatCount} beats</span>
+              <span className="se-status-sep">·</span>
+              <span>~{estDuration}s est.</span>
+            </div>
+            <div className="se-status-right">
+              <span className="se-shortcut-hint"><kbd>Ctrl</kbd>+<kbd>S</kbd> Save</span>
+              <span className="se-shortcut-hint"><kbd>Ctrl</kbd>+<kbd>K</kbd> Commands</span>
+              <span className="se-shortcut-hint"><kbd>Ctrl</kbd>+<kbd>↑↓</kbd> Nav beats</span>
+            </div>
           </div>
         </div>
 

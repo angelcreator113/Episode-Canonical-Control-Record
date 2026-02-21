@@ -781,6 +781,15 @@ app.use('/api/v1/episodes', productionPackageRoutes);
 app.use('/api/v1/icon-slots', iconSlotRoutes); // Global icon slot mappings
 console.log('✓ Icon Cue Timeline System routes registered');
 
+// StoryTeller Book Editor routes
+try {
+  const storytellerRoutes = require('./routes/storyteller');
+  app.use('/api/v1/storyteller', storytellerRoutes);
+  console.log('✓ StoryTeller routes loaded at /api/v1/storyteller');
+} catch (e) {
+  console.error('✗ Failed to load StoryTeller routes:', e.message);
+}
+
 // Export Queue Monitor (Bull Board dashboard + stats API)
 let queueMonitorRoutes;
 try {
