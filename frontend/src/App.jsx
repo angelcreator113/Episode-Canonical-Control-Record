@@ -47,6 +47,7 @@ import AssetLibrary from './pages/AssetLibrary';
 import StorytellerPage from './pages/StorytellerPage';
 import CharacterRegistryPage from './pages/CharacterRegistryPage';
 import ContinuityEnginePage from './pages/ContinuityEnginePage';
+import PnosBookEditor from './pages/PnosBookEditor';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -274,6 +275,9 @@ function AppContent() {
           
           {/* PNOS Continuity Engine */}
           <Route path="/continuity" element={<ContinuityEnginePage />} />
+          
+          {/* PNOS Book Editor V2 */}
+          <Route path="/pnos-editor" element={<PnosBookEditor />} />
           
           {/* Search */}
           <Route path="/search" element={<SearchResults />} />
