@@ -799,6 +799,15 @@ try {
   console.error('✗ Failed to load Character Registry routes:', e.message);
 }
 
+// Memory Bank routes (PNOS Storyteller Memories — Phase 1)
+try {
+  const memoriesRoutes = require('./routes/memories');
+  app.use('/api/v1/memories', memoriesRoutes);
+  console.log('✓ Memories routes loaded at /api/v1/memories');
+} catch (e) {
+  console.error('✗ Failed to load Memories routes:', e.message);
+}
+
 // Continuity Engine routes
 try {
   const continuityEngineRoutes = require('./routes/continuityEngine');

@@ -10,6 +10,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
+import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
+import TOCPanel from './TOCPanel';
 
 const API = '/api/v1/storyteller';
 
@@ -298,6 +300,29 @@ function CreateBookModal({ onSubmit, onClose }) {
 function BookEditor({ book, onBack, toast, onRefresh }) {
   const [chapters, setChapters] = useState(book.chapters || []);
   const [collapsed, setCollapsed] = useState({});
+  const [activeRightTab, setActiveRightTab] = useState('memories');
+  const [registryCharacters, setRegistryCharacters] = useState([]);
+
+  // Inject Memory keyframe styles
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = MEMORY_STYLES;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
+  // Fetch registry characters for the MemoryCard confirm step
+  useEffect(() => {
+    const showId = book.show_id;
+    if (!showId) return;
+    fetch(`/api/v1/character-registry/registries?show_id=${showId}`)
+      .then(r => r.json())
+      .then(data => {
+        const chars = data.registries?.flatMap(r => r.characters || []) || [];
+        setRegistryCharacters(chars);
+      })
+      .catch(() => { /* registry fetch optional */ });
+  }, [book.show_id]);
   const [editingLine, setEditingLine] = useState(null);
   const [editText, setEditText] = useState('');
   const [showAddChapter, setShowAddChapter] = useState(false);
@@ -434,7 +459,8 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   // ── Render ─────────────────────────────────
 
   return (
-    <div className="st-editor">
+    <div style={{ display: 'flex', gap: 0, minHeight: '100vh' }}>
+    <div className="st-editor" style={{ flex: 1, minWidth: 0 }}>
       {/* Top bar */}
       <div className="st-editor-topbar">
         <button className="st-back-btn" onClick={onBack} title="Back to books">←</button>
@@ -533,7 +559,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           }
 
           return (
-            <div key={chapter.id} className="st-chapter">
+            <div key={chapter.id} id={`chapter-${chapter.id}`} className="st-chapter">
               <div className="st-chapter-header" onClick={() => toggleChapter(chapter.id)}>
                 <span className={`st-chapter-toggle ${isOpen ? 'open' : ''}`}>▶</span>
                 <span className="st-chapter-title">
@@ -563,8 +589,8 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                         <div className="st-line-group-label">{group.label}</div>
                       )}
                       {group.lines.map((line) => (
+                        <React.Fragment key={line.id}>
                         <div
-                          key={line.id}
                           className={`st-line ${editingLine === line.id ? 'st-line-editing' : ''}`}
                         >
                           <div className="st-line-dot">
@@ -623,6 +649,19 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                             </div>
                           )}
                         </div>
+                        {(line.status === 'approved' || line.status === 'edited') && (
+                          <MemoryCard
+                            lineId={line.id}
+                            characters={registryCharacters}
+                            onConfirmed={(memory) => {
+                              toast(`Memory confirmed → ${memory.character?.display_name || 'Registry'}`);
+                            }}
+                            onDismissed={(memoryId) => {
+                              // Optional: update local state if tracking dismissed count
+                            }}
+                          />
+                        )}
+                        </React.Fragment>
                       ))}
                     </div>
                   ))}
@@ -658,6 +697,52 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           );
         })
       )}
+    </div>
+
+    {/* ── Right Panel: Memory Bank ── */}
+    <div style={{ width: 280, borderLeft: '1px solid rgba(26,21,16,0.08)', background: '#0d0b09', flexShrink: 0, overflowY: 'auto' }}>
+      <div style={{ padding: '12px 14px', borderBottom: '1px solid rgba(245,240,232,0.06)', display: 'flex', gap: 8 }}>
+        <button
+          onClick={() => setActiveRightTab('memories')}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'DM Mono, monospace', fontSize: 10, letterSpacing: '0.1em', textTransform: 'uppercase',
+            color: activeRightTab === 'memories' ? '#C9A84C' : 'rgba(245,240,232,0.3)',
+            borderBottom: activeRightTab === 'memories' ? '1px solid #C9A84C' : '1px solid transparent',
+            padding: '4px 8px',
+          }}
+        >
+          Memory Bank
+        </button>
+        <button
+          onClick={() => setActiveRightTab('toc')}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'DM Mono, monospace', fontSize: 10,
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            color: activeRightTab === 'toc' ? '#C9A84C' : 'rgba(245,240,232,0.3)',
+            borderBottom: activeRightTab === 'toc' ? '1px solid #C9A84C' : '1px solid transparent',
+            padding: '4px 8px',
+          }}
+        >
+          TOC
+        </button>
+      </div>
+      {activeRightTab === 'memories' && <MemoryBankPanel bookId={book.id} />}
+      {activeRightTab === 'toc' && (
+        <TOCPanel
+          book={book}
+          chapters={chapters}
+          onChapterClick={(chapterId) => {
+            setCollapsed(prev => ({ ...prev, [chapterId]: false }));
+            setTimeout(() => {
+              document.getElementById(`chapter-${chapterId}`)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
+          }}
+        />
+      )}
+    </div>
     </div>
   );
 }

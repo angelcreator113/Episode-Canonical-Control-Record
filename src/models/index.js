@@ -69,6 +69,7 @@ let Character; // Characters model
 let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration
 let StorytellerBook, StorytellerChapter, StorytellerLine; // StoryTeller Book Editor models
+let StorytellerMemory; // StoryTeller Memory Bank model
 let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
 let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter; // Continuity Engine models
 
@@ -195,6 +196,9 @@ try {
   StorytellerChapter = require('./StorytellerChapter')(sequelize);
   StorytellerLine = require('./StorytellerLine')(sequelize);
 
+  // StoryTeller Memory Bank model
+  StorytellerMemory = require('./StorytellerMemory')(sequelize);
+
   // PNOS Character Registry models
   CharacterRegistry = require('./CharacterRegistry')(sequelize);
   RegistryCharacter = require('./RegistryCharacter')(sequelize);
@@ -268,6 +272,7 @@ const requiredModels = {
   StorytellerBook,
   StorytellerChapter,
   StorytellerLine,
+  StorytellerMemory,
   CharacterRegistry,
   RegistryCharacter,
   ContinuityTimeline,
@@ -318,6 +323,21 @@ if (StorytellerChapter && StorytellerChapter.associate) {
 if (StorytellerLine && StorytellerLine.associate) {
   StorytellerLine.associate(requiredModels);
 }
+if (StorytellerMemory && StorytellerMemory.associate) {
+  StorytellerMemory.associate(requiredModels);
+}
+
+// StorytellerLine → StorytellerMemory (1:N) — line has many memories
+StorytellerLine.hasMany(StorytellerMemory, {
+  foreignKey: 'line_id',
+  as: 'memories',
+});
+
+// RegistryCharacter → StorytellerMemory (1:N) — character has many memories
+RegistryCharacter.hasMany(StorytellerMemory, {
+  foreignKey: 'character_id',
+  as: 'memories',
+});
 
 // Character Registry associations
 if (CharacterRegistry && CharacterRegistry.associate) {
@@ -1405,6 +1425,7 @@ module.exports.Character = Character;
 module.exports.StorytellerBook = StorytellerBook;
 module.exports.StorytellerChapter = StorytellerChapter;
 module.exports.StorytellerLine = StorytellerLine;
+module.exports.StorytellerMemory = StorytellerMemory;
 module.exports.CharacterRegistry = CharacterRegistry;
 module.exports.RegistryCharacter = RegistryCharacter;
 module.exports.ContinuityTimeline = ContinuityTimeline;
