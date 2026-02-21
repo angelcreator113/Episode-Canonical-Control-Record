@@ -97,23 +97,19 @@ function Home() {
           </div>
         </header>
 
-        {/* ─── Universe Overview ─── */}
+        {/* ─── Universe ─── */}
         <section className="hp-section">
-          <div className="hp-section__head">
-            <h2 className="hp-section__title"><span className="s-icon">🌌</span> Universe Overview</h2>
-            <button className="hp-section__link" onClick={() => navigate('/universe')}>Open Universe →</button>
-          </div>
-
           {primaryUniverse ? (
-            <div className="hp-universe-card">
+            <div className="hp-universe-card" onClick={() => navigate('/universe')} style={{ cursor: 'pointer' }}>
               <div className="hp-universe-header">
                 <div>
+                  <div className="hp-universe-label">🌌 Your Universe</div>
                   <h3 className="hp-universe-name">{primaryUniverse.name}</h3>
                   <p className="hp-universe-desc">
                     {primaryUniverse.description || 'A vast narrative universe ready to be shaped.'}
                   </p>
                 </div>
-                <button className="hp-btn-open" onClick={() => navigate('/universe')}>
+                <button className="hp-btn-open" onClick={(e) => { e.stopPropagation(); navigate('/universe'); }}>
                   Open Universe →
                 </button>
               </div>

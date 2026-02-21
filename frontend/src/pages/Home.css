@@ -134,6 +134,15 @@
   box-shadow: 0 4px 18px rgba(232,160,180,0.07);
 }
 
+.hp-universe-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #7a6d62;
+  margin-bottom: 6px;
+}
+
 .hp-universe-header {
   display: flex;
   align-items: flex-start;
