@@ -189,9 +189,9 @@ function BookList({ books, onOpen, onDelete, onCreate }) {
           {books.map(book => (
             <div key={book.id} className="st-book-card" onClick={() => onOpen(book.id)}>
               <span className={`st-badge st-status-${book.status}`}>{book.status}</span>
-              <h3>{book.character_name}</h3>
+              <h3>{book.title || book.character_name}</h3>
               <div className="st-book-sub">
-                {[book.season_label, book.week_label].filter(Boolean).join(' · ') || book.title}
+                {[book.era_name, book.timeline_position, book.primary_pov].filter(Boolean).join(' · ') || book.subtitle || ''}
               </div>
               <div className="st-book-stats">
                 <span><span className="st-dot st-dot-pending" /> {book.pending_count || 0} pending</span>
@@ -219,70 +219,111 @@ function BookList({ books, onOpen, onDelete, onCreate }) {
 
 function CreateBookModal({ onSubmit, onClose }) {
   const [form, setForm] = useState({
-    character_name: '',
-    season_label: '',
-    week_label: '',
     title: '',
-    subtitle: '',
+    series_id: '',
+    primary_pov: '',
+    era_name: '',
+    timeline_position: '',
+    status: 'draft',
+    description: '',
   });
+  const [seriesList, setSeriesList] = useState([]);
+
+  // Fetch book series for dropdown
+  useEffect(() => {
+    fetch('/api/v1/universe/series')
+      .then(r => r.json())
+      .then(data => setSeriesList(data.series || []))
+      .catch(() => {});
+  }, []);
 
   const set = (k, v) => setForm(prev => ({ ...prev, [k]: v }));
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!form.character_name.trim()) return;
+    if (!form.title.trim()) return;
     onSubmit({
       ...form,
-      title: form.title || form.character_name,
+      series_id: form.series_id || null,
     });
   };
 
   return (
     <div className="st-modal-backdrop" onClick={onClose}>
-      <div className="st-modal" onClick={e => e.stopPropagation()}>
-        <h2>New Character Book</h2>
+      <div className="st-modal st-modal-literary" onClick={e => e.stopPropagation()}>
+        <h2>New Book</h2>
         <form onSubmit={handleSubmit}>
           <div className="st-form-group">
-            <label>Character Name *</label>
+            <label>Book Title *</label>
             <input
               autoFocus
-              value={form.character_name}
-              onChange={e => set('character_name', e.target.value)}
-              placeholder="e.g. Frankie Moreau"
-            />
-          </div>
-          <div className="st-form-group">
-            <label>Season Label</label>
-            <input
-              value={form.season_label}
-              onChange={e => set('season_label', e.target.value)}
-              placeholder="e.g. Season 01"
-            />
-          </div>
-          <div className="st-form-group">
-            <label>Week Label</label>
-            <input
-              value={form.week_label}
-              onChange={e => set('week_label', e.target.value)}
-              placeholder="e.g. Week 6 Draft"
-            />
-          </div>
-          <div className="st-form-group">
-            <label>Title</label>
-            <input
               value={form.title}
               onChange={e => set('title', e.target.value)}
-              placeholder="Auto-filled from character name"
+              placeholder="e.g. Before Lala"
             />
           </div>
+
+          <div className="st-form-row">
+            <div className="st-form-group">
+              <label>Series</label>
+              <select value={form.series_id} onChange={e => set('series_id', e.target.value)}>
+                <option value="">— No series —</option>
+                {seriesList.map(s => (
+                  <option key={s.id} value={s.id}>{s.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="st-form-group">
+              <label>Primary POV</label>
+              <select value={form.primary_pov} onChange={e => set('primary_pov', e.target.value)}>
+                <option value="">— Select —</option>
+                <option value="First Person">First Person</option>
+                <option value="Close Third">Close Third</option>
+                <option value="Multi">Multi</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="st-form-row">
+            <div className="st-form-group">
+              <label>Era Name</label>
+              <input
+                value={form.era_name}
+                onChange={e => set('era_name', e.target.value)}
+                placeholder="e.g. Soft Luxury Era"
+              />
+            </div>
+            <div className="st-form-group">
+              <label>Timeline Position</label>
+              <select value={form.timeline_position} onChange={e => set('timeline_position', e.target.value)}>
+                <option value="">— Select —</option>
+                <option value="Pre-Show">Pre-Show</option>
+                <option value="Early Show">Early Show</option>
+                <option value="Prime Era">Prime Era</option>
+                <option value="Legacy">Legacy</option>
+              </select>
+            </div>
+          </div>
+
           <div className="st-form-group">
-            <label>Subtitle</label>
-            <input
-              value={form.subtitle}
-              onChange={e => set('subtitle', e.target.value)}
-              placeholder="e.g. A Canonical Personality Reference"
+            <label>Canon Status</label>
+            <select value={form.status} onChange={e => set('status', e.target.value)}>
+              <option value="draft">Draft</option>
+              <option value="in_review">Active</option>
+              <option value="locked">Locked</option>
+            </select>
+          </div>
+
+          <div className="st-form-group">
+            <label>Book Description</label>
+            <textarea
+              value={form.description}
+              onChange={e => set('description', e.target.value)}
+              placeholder="What is this book about? Who is the central character and what arc does it cover?"
+              rows={3}
             />
           </div>
+
           <div className="st-modal-actions">
             <button type="button" className="st-btn st-btn-ghost" onClick={onClose}>Cancel</button>
             <button type="submit" className="st-btn st-btn-gold">Create Book</button>

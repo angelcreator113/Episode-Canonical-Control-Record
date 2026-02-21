@@ -218,9 +218,29 @@
   box-sizing: border-box;
 }
 .st-form-group input:focus,
-.st-form-group select:focus {
+.st-form-group select:focus,
+.st-form-group textarea:focus {
   outline: none;
   border-color: var(--st-ink);
+}
+.st-form-group textarea {
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius);
+  background: var(--st-surface);
+  font-family: var(--st-sans);
+  font-size: 14px;
+  color: var(--st-ink);
+  box-sizing: border-box;
+  resize: vertical;
+  min-height: 60px;
+}
+.st-modal-literary { max-width: 520px; }
+.st-form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
 }
 .st-modal-actions {
   display: flex;

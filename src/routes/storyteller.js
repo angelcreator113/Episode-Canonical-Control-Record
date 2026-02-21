@@ -102,20 +102,33 @@ router.post('/books', optionalAuth, async (req, res) => {
       week_label,
       title,
       subtitle,
+      description,
+      series_id,
+      era_name,
+      era_description,
+      primary_pov,
+      timeline_position,
+      status: reqStatus,
       chapters = [],
     } = req.body;
 
-    if (!character_name) return res.status(400).json({ error: 'character_name is required' });
+    if (!title && !character_name) return res.status(400).json({ error: 'title is required' });
 
     const book = await models.StorytellerBook.create({
       id: uuidv4(),
       show_id: show_id || null,
-      character_name,
-      season_label,
-      week_label,
+      character_name: character_name || null,
+      season_label: season_label || null,
+      week_label: week_label || null,
       title: title || character_name,
-      subtitle,
-      status: 'draft',
+      subtitle: subtitle || null,
+      description: description || null,
+      series_id: series_id || null,
+      era_name: era_name || null,
+      era_description: era_description || null,
+      primary_pov: primary_pov || null,
+      timeline_position: timeline_position || null,
+      status: reqStatus || 'draft',
       compiled_at: new Date(),
     });
 
@@ -208,7 +221,7 @@ router.put('/books/:id', optionalAuth, async (req, res) => {
     const book = await models.StorytellerBook.findByPk(req.params.id);
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
-    const allowed = ['character_name', 'season_label', 'week_label', 'title', 'subtitle', 'status'];
+    const allowed = ['character_name', 'season_label', 'week_label', 'title', 'subtitle', 'status', 'description', 'series_id', 'era_name', 'era_description', 'primary_pov', 'timeline_position'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
