@@ -1,349 +1,321 @@
-// frontend/src/pages/Home.jsx
+// frontend/src/pages/Home.jsx — Creator Command Center
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { episodeService } from '../services/episodeService';
+import { showService } from '../services/showService';
+import universeService from '../services/universeService';
+import storytellerService from '../services/storytellerService';
 import './Home.css';
 
-/**
- * Home - Momentum Dashboard
- * 
- * Priority Flow:
- * 1. 🔥 In Progress (dominant)
- * 2. ✅ Recently Completed
- * 3. ⚠️ Needs Attention
- * 4. 📊 Small stats
- */
+const CHIP_COLORS = ['pink', 'purple', 'blue'];
+const BOOK_ICONS = ['📖', '📕', '📗', '📘', '📙'];
 
 function Home() {
   const navigate = useNavigate();
-  const [dashboard, setDashboard] = useState(null);
+  const { user } = useAuth();
   const [loading, setLoading] = useState(true);
-  
-  useEffect(() => {
-    loadDashboard();
-  }, []);
-  
-  const loadDashboard = async () => {
+  const [universes, setUniverses] = useState([]);
+  const [series, setSeries] = useState([]);
+  const [books, setBooks] = useState([]);
+  const [shows, setShows] = useState([]);
+  const [episodes, setEpisodes] = useState([]);
+
+  useEffect(() => { loadAll(); }, []);
+
+  const loadAll = async () => {
     setLoading(true);
-    try {
-      // Fetch real episodes from API
-      const response = await episodeService.getEpisodes(1, 50);
-      const episodes = response?.data || [];
-      
-      // Calculate days since last update
-      const daysSince = (dateStr) => {
-        if (!dateStr) return 999;
-        const diff = Date.now() - new Date(dateStr).getTime();
-        return Math.floor(diff / (1000 * 60 * 60 * 24));
-      };
-      
-      // Format relative time
-      const formatRelativeTime = (dateStr) => {
-        if (!dateStr) return 'Unknown';
-        const days = daysSince(dateStr);
-        if (days === 0) return 'Today';
-        if (days === 1) return 'Yesterday';
-        if (days < 7) return `${days} days ago`;
-        if (days < 30) return `${Math.floor(days / 7)} weeks ago`;
-        return `${Math.floor(days / 30)} months ago`;
-      };
-      
-      // Categorize episodes
-      const inProgress = episodes
-        .filter(ep => ['in_build', 'in_progress', 'editing'].includes(ep.status))
-        .map(ep => ({
-          id: ep.id,
-          title: ep.title,
-          episodeNumber: ep.episode_number,
-          status: ep.status,
-          progress: 65, // Could calculate based on assets/scripts
-          lastEdited: formatRelativeTime(ep.updated_at),
-          nextStep: 'Continue editing',
-          showName: ep.show?.name || 'Unknown Show'
-        }));
-      
-      const recentlyCompleted = episodes
-        .filter(ep => ['published', 'complete', 'completed'].includes(ep.status))
-        .map(ep => ({
-          id: ep.id,
-          title: ep.title,
-          episodeNumber: ep.episode_number,
-          publishedDate: formatRelativeTime(ep.air_date || ep.updated_at),
-          platforms: { youtube: 'live' },
-          views: 0,
-          showName: ep.show?.name || 'Unknown Show'
-        }));
-      
-      const needsAttention = episodes
-        .filter(ep => {
-          const days = daysSince(ep.updated_at);
-          return ['draft', 'review'].includes(ep.status) && days > 7;
-        })
-        .map(ep => ({
-          id: ep.id,
-          title: ep.title,
-          episodeNumber: ep.episode_number,
-          status: ep.status,
-          daysStalled: daysSince(ep.updated_at),
-          showName: ep.show?.name || 'Unknown Show'
-        }));
-      
-      // If no in-progress, show recent drafts
-      const drafts = episodes
-        .filter(ep => ep.status === 'draft')
-        .slice(0, 3)
-        .map(ep => ({
-          id: ep.id,
-          title: ep.title,
-          episodeNumber: ep.episode_number,
-          status: ep.status,
-          progress: 25,
-          lastEdited: formatRelativeTime(ep.updated_at),
-          nextStep: 'Continue working',
-          showName: ep.show?.name || 'Unknown Show'
-        }));
-      
-      setDashboard({
-        inProgress: inProgress.length > 0 ? inProgress : drafts,
-        recentlyCompleted,
-        needsAttention,
-        stats: {
-          totalEpisodes: episodes.length,
-          avgViews: 0,
-          cadence: 'Weekly'
-        }
-      });
-    } catch (error) {
-      console.error('Error loading dashboard:', error);
-      setDashboard({
-        inProgress: [],
-        recentlyCompleted: [],
-        needsAttention: [],
-        stats: { totalEpisodes: 0, avgViews: 0, cadence: 'N/A' }
-      });
-    } finally {
-      setLoading(false);
-    }
+    // Fire all in parallel, swallow individual errors
+    const [uniRes, seriesRes, booksRes, showsRes, epRes] = await Promise.allSettled([
+      universeService.getUniverses(),
+      universeService.getSeries(),
+      storytellerService.getBooks(),
+      showService.getAllShows(),
+      episodeService.getEpisodes(1, 50).then(r => r?.data || []),
+    ]);
+
+    if (uniRes.status === 'fulfilled') setUniverses(Array.isArray(uniRes.value) ? uniRes.value : []);
+    if (seriesRes.status === 'fulfilled') setSeries(Array.isArray(seriesRes.value) ? seriesRes.value : []);
+    if (booksRes.status === 'fulfilled') setBooks(Array.isArray(booksRes.value) ? booksRes.value : []);
+    if (showsRes.status === 'fulfilled') setShows(Array.isArray(showsRes.value) ? showsRes.value : []);
+    if (epRes.status === 'fulfilled') setEpisodes(Array.isArray(epRes.value) ? epRes.value : []);
+    setLoading(false);
   };
-  
-  const getProgressColor = (progress) => {
-    if (progress >= 80) return '#10b981';
-    if (progress >= 50) return '#f59e0b';
-    return '#667eea';
+
+  /* ── helpers ── */
+  const userName = user?.name || user?.email?.split('@')[0] || 'Creator';
+  const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+
+  const primaryUniverse = universes[0]; // show the first universe on the card
+
+  const daysSince = (d) => { if (!d) return 999; return Math.floor((Date.now() - new Date(d).getTime()) / 864e5); };
+  const relTime = (d) => {
+    const n = daysSince(d);
+    if (n === 0) return 'Today';
+    if (n === 1) return 'Yesterday';
+    if (n < 7) return `${n}d ago`;
+    if (n < 30) return `${Math.floor(n / 7)}w ago`;
+    return `${Math.floor(n / 30)}mo ago`;
   };
-  
-  const getPlatformIcon = (status) => {
-    if (status === 'live') return '✅';
-    if (status === 'scheduled') return '📅';
-    return '⏸️';
+
+  const epStatusClass = (s) => {
+    if (['in_build', 'in_progress', 'editing'].includes(s)) return 'progress';
+    if (['published', 'complete', 'completed'].includes(s)) return 'complete';
+    if (s === 'review') return 'review';
+    return 'draft';
   };
-  
+
+  const bookApprovalPct = (b) => {
+    const total = b.line_count || 0;
+    if (!total) return 0;
+    return Math.round(((b.approved_count || 0) / total) * 100);
+  };
+
+  /* ── Loading ── */
   if (loading) {
     return (
       <div className="home-loading">
-        <div className="loading-spinner"></div>
-        <p>Loading your workspace...</p>
+        <div className="loading-spinner" />
+        <p>Loading your workspace…</p>
       </div>
     );
   }
-  
-  const hasInProgress = dashboard?.inProgress?.length > 0;
-  const hasCompleted = dashboard?.recentlyCompleted?.length > 0;
-  const hasStalled = dashboard?.needsAttention?.length > 0;
-  
+
+  /* ══════════ RENDER ══════════ */
   return (
     <div className="home-page">
       <div className="home-container">
-        {/* Welcome */}
-        <div className="home-welcome">
-          <h1>Welcome back! 👋</h1>
-          <p>Let's keep the momentum going</p>
-        </div>
-      
-        {/* 1. IN PROGRESS */}
-        <section className="home-section in-progress-section">
-          <div className="section-header">
-            <span>🔥</span>
-            <h2 className="section-title">In Progress</h2>
+
+        {/* ─── Welcome Hero Strip ─── */}
+        <header className="home-hero">
+          <div className="home-hero__inner">
+            <div>
+              <h1>Welcome back, {userName}</h1>
+              <p className="home-hero__tagline">Your universe is waiting.</p>
+            </div>
+            <span className="home-hero__date">{today}</span>
           </div>
-        
-          {hasInProgress ? (
-            <div className="in-progress-grid">
-              {dashboard.inProgress.slice(0, 3).map(episode => (
-                <div key={episode.id} className="in-progress-card">
-                <div className="card-header">
-                  <div className="episode-info">
-                      <span className="episode-number">Episode {episode.episodeNumber}</span>
-                      <h3 className="episode-title">{episode.title}</h3>
-                      <span className="show-name">{episode.showName}</span>
-                    </div>
-                    <div className="status-badge in-build">
-                      {episode.status.replace('_', ' ')}
-                    </div>
-                  </div>
-                  
-                  <div className="progress-section">
-                    <div className="progress-header">
-                      <span className="progress-label">Progress</span>
-                      <span className="progress-value">{episode.progress}%</span>
-                    </div>
-                    <div className="progress-bar">
-                      <div
-                        className="progress-fill"
-                        style={{
-                          width: `${episode.progress}%`,
-                          backgroundColor: getProgressColor(episode.progress)
-                        }}
-                      ></div>
-                    </div>
-                  </div>
-                  
-                  <div className="card-meta">
-                    <span className="last-edited">Last edited: {episode.lastEdited}</span>
-                  </div>
-                  
-                  <div className="next-step">
-                    <span className="next-step-label">Next Step:</span>
-                    <span className="next-step-action">{episode.nextStep}</span>
-                  </div>
-                  
-                  <button
-                    className="continue-btn"
-                    onClick={() => navigate(`/episodes/${episode.id}`)}
-                  >
-                    Continue Working →
-                  </button>
+        </header>
+
+        {/* ─── Universe Overview ─── */}
+        <section className="hp-section">
+          <div className="hp-section__head">
+            <h2 className="hp-section__title"><span className="s-icon">🌌</span> Universe Overview</h2>
+            <button className="hp-section__link" onClick={() => navigate('/universe')}>Open Universe →</button>
+          </div>
+
+          {primaryUniverse ? (
+            <div className="hp-universe-card">
+              <div className="hp-universe-header">
+                <div>
+                  <h3 className="hp-universe-name">{primaryUniverse.name}</h3>
+                  <p className="hp-universe-desc">
+                    {primaryUniverse.description || 'A vast narrative universe ready to be shaped.'}
+                  </p>
                 </div>
-              ))}
+                <button className="hp-btn-open" onClick={() => navigate('/universe')}>
+                  Open Universe →
+                </button>
+              </div>
+
+              {/* Theme chips — pull from core_themes JSON or fallback */}
+              <div className="hp-universe-themes">
+                {(primaryUniverse.core_themes || ['Identity', 'Power', 'Legacy']).slice(0, 5).map((t, i) => (
+                  <span key={i} className={`hp-theme-chip hp-theme-chip--${CHIP_COLORS[i % 3]}`}>
+                    {typeof t === 'string' ? t : t.name || t}
+                  </span>
+                ))}
+              </div>
+
+              <div className="hp-universe-stats">
+                <div className="hp-universe-stat">
+                  <span className="hp-universe-stat__val">{series.length}</span>
+                  <span className="hp-universe-stat__label">Series</span>
+                </div>
+                <div className="hp-universe-stat">
+                  <span className="hp-universe-stat__val">{books.length}</span>
+                  <span className="hp-universe-stat__label">Books</span>
+                </div>
+                <div className="hp-universe-stat">
+                  <span className="hp-universe-stat__val">{shows.length}</span>
+                  <span className="hp-universe-stat__label">Shows</span>
+                </div>
+                <div className="hp-universe-stat">
+                  <span className="hp-universe-stat__val">{episodes.length}</span>
+                  <span className="hp-universe-stat__label">Episodes</span>
+                </div>
+              </div>
             </div>
           ) : (
-            <div className="empty-state">
-              <div className="empty-icon">📝</div>
-              <p className="empty-message">You have no active episodes.</p>
-              <button
-                className="btn-primary"
-                onClick={() => navigate('/episodes/create')}
-              >
-                Start New Episode →
-              </button>
+            <div className="hp-universe-card">
+              <div className="hp-empty">
+                <div className="hp-empty__icon">🌌</div>
+                <p className="hp-empty__text">No universe created yet</p>
+                <button className="hp-empty__btn" onClick={() => navigate('/universe')}>Create Universe →</button>
+              </div>
             </div>
           )}
         </section>
-        
-        {/* 2. RECENTLY COMPLETED */}
-        {hasCompleted && (
-          <section className="home-section completed-section">
-            <div className="section-header">
-              <span>✅</span>
-              <h2 className="section-title">Recently Published</h2>
+
+        {/* ─── Two-Column: StoryTeller + Shows ─── */}
+        <div className="hp-two-col">
+
+          {/* — StoryTeller Books — */}
+          <section className="hp-st-card">
+            <div className="hp-section__head">
+              <h2 className="hp-section__title"><span className="s-icon">📖</span> StoryTeller</h2>
+              <button className="hp-section__link" onClick={() => navigate('/storyteller')}>View All →</button>
             </div>
-            
-            <div className="completed-list">
-              {dashboard.recentlyCompleted.slice(0, 2).map(episode => (
-                <div key={episode.id} className="completed-card">
-                <div className="card-header">
-                    <div className="episode-info">
-                      <span className="episode-number">Episode {episode.episodeNumber}</span>
-                      <h3 className="episode-title">{episode.title}</h3>
-                    </div>
-                    <div className="published-badge">
-                      Published: {episode.publishedDate}
-                    </div>
-                  </div>
-                  
-                  <div className="platforms-status">
-                  <div className="platform-item">
-                      <span className="platform-icon">{getPlatformIcon(episode.platforms.youtube)}</span>
-                      <span className="platform-name">YouTube</span>
-                      <span className="platform-status">{episode.platforms.youtube}</span>
-                    </div>
-                    <div className="platform-item">
-                      <span className="platform-icon">{getPlatformIcon(episode.platforms.tiktok)}</span>
-                      <span className="platform-name">TikTok</span>
-                      <span className="platform-status">{episode.platforms.tiktok}</span>
-                    </div>
-                    <div className="platform-item">
-                      <span className="platform-icon">{getPlatformIcon(episode.platforms.instagram)}</span>
-                      <span className="platform-name">Instagram</span>
-                      <span className="platform-status">{episode.platforms.instagram}</span>
-                    </div>
-                  </div>
-                  
-                  <div className="views-count">
-                    Views so far: <strong>{episode.views.toLocaleString()}</strong>
-                  </div>
-                </div>
-              ))}
-            </div>
+
+            {books.length > 0 ? (
+              <ul className="hp-st-list">
+                {books.slice(0, 5).map((book, idx) => {
+                  const pct = bookApprovalPct(book);
+                  const colorKey = CHIP_COLORS[idx % 3];
+                  return (
+                    <li key={book.id} className="hp-st-item" onClick={() => navigate(`/storyteller`)}>
+                      <div className={`hp-book-icon hp-book-icon--${colorKey}`}>
+                        {BOOK_ICONS[idx % BOOK_ICONS.length]}
+                      </div>
+                      <div className="hp-st-info">
+                        <div className="hp-st-title">{book.title}</div>
+                        <div className="hp-st-meta">
+                          {book.chapter_count || 0} chapters · {book.line_count || 0} lines
+                        </div>
+                      </div>
+                      <div className="hp-st-progress">
+                        <div
+                          className={`hp-st-progress__fill hp-st-progress__fill--${pct >= 80 ? 'green' : colorKey}`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="hp-empty">
+                <div className="hp-empty__icon">📖</div>
+                <p className="hp-empty__text">No books yet</p>
+                <button className="hp-empty__btn" onClick={() => navigate('/storyteller')}>Create a Book →</button>
+              </div>
+            )}
           </section>
-        )}
-        
-        {/* 3. NEEDS ATTENTION */}
-        {hasStalled && (
-          <section className="home-section attention-section">
-            <div className="section-header">
-              <span>⚠️</span>
-              <h2 className="section-title">Needs Attention</h2>
+
+          {/* — Shows — */}
+          <section className="hp-shows-card">
+            <div className="hp-section__head">
+              <h2 className="hp-section__title"><span className="s-icon">📺</span> Shows</h2>
+              <button className="hp-section__link" onClick={() => navigate('/shows')}>View All →</button>
             </div>
-            
-            <div className="attention-list">
-              {dashboard.needsAttention.map(episode => (
-                <div key={episode.id} className="attention-card">
-                  <div className="attention-icon">⚠️</div>
-                  <div className="attention-content">
-                    <p className="attention-message">
-                      <strong>Episode {episode.episodeNumber}: "{episode.title}"</strong> has been in {episode.status} for {episode.daysStalled} days.
-                    </p>
-                    <button
-                      className="btn-secondary"
-                      onClick={() => navigate(`/episodes/${episode.id}`)}
-                    >
-                      Review Episode
+
+            {shows.length > 0 ? (
+              <ul className="hp-show-list">
+                {shows.slice(0, 5).map((show) => {
+                  const epCount = episodes.filter(ep => ep.show_id === show.id).length;
+                  return (
+                    <li key={show.id} className="hp-show-item" onClick={() => navigate('/shows')}>
+                      <div className="hp-show-icon">📺</div>
+                      <div className="hp-show-info">
+                        <div className="hp-show-title">{show.name || show.title}</div>
+                        <div className="hp-show-meta">{show.genre || 'Series'}</div>
+                      </div>
+                      <span className="hp-show-count">{epCount} ep{epCount !== 1 ? 's' : ''}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <div className="hp-empty">
+                <div className="hp-empty__icon">📺</div>
+                <p className="hp-empty__text">No shows yet</p>
+                <button className="hp-empty__btn" onClick={() => navigate('/shows')}>Create a Show →</button>
+              </div>
+            )}
+          </section>
+        </div>
+
+        {/* ─── Quick Actions ─── */}
+        <section className="hp-actions">
+          <div className="hp-action-card hp-action-card--pink" onClick={() => navigate('/storyteller')}>
+            <div className="hp-action-icon hp-action-icon--pink">📖</div>
+            <span className="hp-action-label">New Book</span>
+          </div>
+          <div className="hp-action-card hp-action-card--purple" onClick={() => navigate('/episodes/create')}>
+            <div className="hp-action-icon hp-action-icon--purple">📺</div>
+            <span className="hp-action-label">New Episode</span>
+          </div>
+          <div className="hp-action-card hp-action-card--blue" onClick={() => navigate('/continuity')}>
+            <div className="hp-action-icon hp-action-icon--blue">🧠</div>
+            <span className="hp-action-label">Memory Bank</span>
+          </div>
+        </section>
+
+        {/* ─── In-Progress Episodes ─── */}
+        {(() => {
+          const active = episodes.filter(ep =>
+            ['in_build', 'in_progress', 'editing', 'draft'].includes(ep.status)
+          ).slice(0, 6);
+          if (!active.length) return null;
+          return (
+            <section className="hp-section">
+              <div className="hp-section__head">
+                <h2 className="hp-section__title"><span className="s-icon">🔥</span> In Progress</h2>
+                <button className="hp-section__link" onClick={() => navigate('/episodes')}>All Episodes →</button>
+              </div>
+              <div className="hp-ep-grid">
+                {active.map(ep => (
+                  <div key={ep.id} className="hp-ep-card">
+                    <div className="hp-ep-head">
+                      <div>
+                        <div className="hp-ep-num">Episode {ep.episode_number}</div>
+                        <div className="hp-ep-title">{ep.title}</div>
+                        <div className="hp-ep-show">{ep.show?.name || 'Unknown Show'}</div>
+                      </div>
+                      <span className={`hp-ep-status hp-ep-status--${epStatusClass(ep.status)}`}>
+                        {(ep.status || 'draft').replace('_', ' ')}
+                      </span>
+                    </div>
+                    <div className="hp-ep-progress">
+                      <div className="hp-ep-pbar">
+                        <div className="hp-ep-pfill" style={{ width: '55%' }} />
+                      </div>
+                    </div>
+                    <div className="hp-ep-meta">Last edited {relTime(ep.updated_at)}</div>
+                    <button className="hp-ep-btn" onClick={() => navigate(`/episodes/${ep.id}`)}>
+                      Continue Working →
                     </button>
                   </div>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-        
-        {/* 4. MOMENTUM SNAPSHOT */}
-        <section className="home-section stats-section">
-          <div className="section-header">
-            <span>📊</span>
-            <h2 className="section-title">Show Momentum</h2>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* ─── Stats Summary ─── */}
+        <section className="hp-stats-row">
+          <div className="hp-stat-card">
+            <div className="hp-stat-val">{episodes.length}</div>
+            <div className="hp-stat-label">Episodes</div>
           </div>
-          
-          <div className="stats-grid">
-          <div className="stat-card">
-              <div className="stat-value">{dashboard.stats.totalEpisodes}</div>
-              <div className="stat-label">Total Episodes</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{dashboard.stats.avgViews.toLocaleString()}</div>
-              <div className="stat-label">Avg Views</div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-value">{dashboard.stats.cadence}</div>
-              <div className="stat-label">Cadence</div>
-            </div>
+          <div className="hp-stat-card">
+            <div className="hp-stat-val">{books.length}</div>
+            <div className="hp-stat-label">Books</div>
           </div>
-        </section>
-        
-        {/* Quick Actions */}
-        <section className="home-section quick-actions-section">
-          <div className="quick-actions">
-            <button className="quick-action-btn" onClick={() => navigate('/episodes/create')}>
-              ➕ New Episode
-            </button>
-            <button className="quick-action-btn" onClick={() => navigate('/shows')}>
-              🎬 Manage Shows
-            </button>
-            <button className="quick-action-btn" onClick={() => navigate('/assets')}>
-              📁 Upload Assets
-            </button>
+          <div className="hp-stat-card">
+            <div className="hp-stat-val">
+              {books.reduce((a, b) => a + (b.chapter_count || 0), 0)}
+            </div>
+            <div className="hp-stat-label">Chapters</div>
+          </div>
+          <div className="hp-stat-card">
+            <div className="hp-stat-val">
+              {books.reduce((a, b) => a + (b.approved_count || 0), 0)}
+            </div>
+            <div className="hp-stat-label">Approved Lines</div>
           </div>
         </section>
+
       </div>
     </div>
   );
