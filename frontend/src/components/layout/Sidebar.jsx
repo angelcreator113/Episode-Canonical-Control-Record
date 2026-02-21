@@ -16,12 +16,20 @@ function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
   const [shows, setShows] = useState([]);
   const [showsExpanded, setShowsExpanded] = useState(true);
+  const [storyExpanded, setStoryExpanded] = useState(false);
   const [currentShowId, setCurrentShowId] = useState(null);
   
   useEffect(() => {
     loadShows();
   }, []);
   
+  // Auto-expand StoryTeller group when on its sub-routes
+  useEffect(() => {
+    if (location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry')) {
+      setStoryExpanded(true);
+    }
+  }, [location.pathname]);
+
   // Detect if we're on an episode page and get its parent show
   useEffect(() => {
     const checkEpisodeRoute = async () => {
@@ -113,8 +121,45 @@ function Sidebar({ isOpen, onClose }) {
       <nav className="sidebar-nav">
         {/* Home */}
         <NavItem icon="🏠" label="Home" path="/" />
-        <NavItem icon="📖" label="StoryTeller" path="/storyteller" />
-        <NavItem icon="◈" label="Characters" path="/character-registry" />
+        
+        {/* StoryTeller group */}
+        <div className="nav-group">
+          <button
+            className={`nav-item ${isActive('/storyteller') || isActive('/character-registry') ? 'active' : ''}`}
+            onClick={() => {
+              setStoryExpanded(!storyExpanded);
+              if (!storyExpanded) {
+                navigate('/storyteller');
+                if (onClose) onClose();
+              }
+            }}
+          >
+            <span className="nav-icon">📖</span>
+            <span className="nav-label">StoryTeller</span>
+            <span className={`expand-icon ${storyExpanded ? 'expanded' : ''}`}>
+              ▼
+            </span>
+          </button>
+          
+          {storyExpanded && (
+            <div className="nav-subgroup">
+              <button
+                className={`nav-subitem ${isActive('/storyteller') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/storyteller')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Book Editor</span>
+              </button>
+              <button
+                className={`nav-subitem ${isActive('/character-registry') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/character-registry')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Characters</span>
+              </button>
+            </div>
+          )}
+        </div>
         
         {/* Shows */}
         <div className="nav-group">
