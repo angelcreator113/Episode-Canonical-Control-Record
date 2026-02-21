@@ -62,7 +62,8 @@ export default function UniversePage() {
       try {
         const shRes = await fetch(`${SHOWS_API}`);
         const shData = await shRes.json();
-        setShows(shData.shows || shData || []);
+        const showsList = shData.shows || shData;
+        setShows(Array.isArray(showsList) ? showsList : []);
       } catch (_) {}
 
     } catch (err) {
@@ -644,8 +645,9 @@ function ShowsTab({ shows, universeId, onChanged, showToast }) {
   const [editForm, setEditForm]     = useState({});
   const [saving, setSaving]         = useState(false);
 
-  const linkedShows = shows.filter(sh =>
-    sh.universe_id === universeId || shows.length <= 3 // show all if few
+  const safeShows = Array.isArray(shows) ? shows : [];
+  const linkedShows = safeShows.filter(sh =>
+    sh.universe_id === universeId || safeShows.length <= 3 // show all if few
   );
 
   function startEdit(show) {
