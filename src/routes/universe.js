@@ -57,32 +57,7 @@ router.post('/', optionalAuth, async (req, res) => {
   }
 });
 
-// ── Get universe with series ───────────────────────────────────────────────
-router.get('/:id', optionalAuth, async (req, res) => {
-  try {
-    const universe = await Universe.findByPk(req.params.id, {
-      include: [{ model: BookSeries, as: 'series', order: [['order_index', 'ASC']] }],
-    });
-    if (!universe) return res.status(404).json({ error: 'Universe not found' });
-    res.json({ universe });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── Update universe ────────────────────────────────────────────────────────
-router.put('/:id', optionalAuth, async (req, res) => {
-  try {
-    const universe = await Universe.findByPk(req.params.id);
-    if (!universe) return res.status(404).json({ error: 'Universe not found' });
-    await universe.update(req.body);
-    res.json({ universe });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ── List book series ───────────────────────────────────────────────────────
+// ── List book series (MUST be before /:id to avoid param conflict) ─────────
 router.get('/series', optionalAuth, async (req, res) => {
   try {
     const where = req.query.universe_id ? { universe_id: req.query.universe_id } : {};
@@ -127,6 +102,31 @@ router.delete('/series/:id', optionalAuth, async (req, res) => {
     if (!series) return res.status(404).json({ error: 'Series not found' });
     await series.destroy();
     res.json({ deleted: true });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Get universe with series ───────────────────────────────────────────────
+router.get('/:id', optionalAuth, async (req, res) => {
+  try {
+    const universe = await Universe.findByPk(req.params.id, {
+      include: [{ model: BookSeries, as: 'series', order: [['order_index', 'ASC']] }],
+    });
+    if (!universe) return res.status(404).json({ error: 'Universe not found' });
+    res.json({ universe });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ── Update universe ────────────────────────────────────────────────────────
+router.put('/:id', optionalAuth, async (req, res) => {
+  try {
+    const universe = await Universe.findByPk(req.params.id);
+    if (!universe) return res.status(404).json({ error: 'Universe not found' });
+    await universe.update(req.body);
+    res.json({ universe });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
