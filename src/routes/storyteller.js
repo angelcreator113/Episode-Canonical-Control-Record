@@ -54,11 +54,11 @@ router.get('/books', optionalAuth, async (req, res) => {
         {
           model: models.StorytellerChapter,
           as: 'chapters',
-          attributes: ['id'],
+          attributes: ['id', 'title'],
           include: [{
             model: models.StorytellerLine,
             as: 'lines',
-            attributes: ['id', 'status'],
+            attributes: ['id', 'status', 'text', 'updated_at'],
           }],
         },
       ],
@@ -68,13 +68,27 @@ router.get('/books', optionalAuth, async (req, res) => {
     const result = books.map(b => {
       const bj = b.toJSON();
       const allLines = (bj.chapters || []).flatMap(c => c.lines || []);
+      const approvedLines = allLines.filter(l => l.status === 'approved');
+      const pendingLines = allLines.filter(l => l.status === 'pending');
+      const editedLines = allLines.filter(l => l.status === 'edited');
+
+      // Find most recently updated approved line as "recent insight"
+      const recentInsight = approvedLines
+        .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))[0];
+
+      // Find the last chapter with content
+      const chaptersWithLines = (bj.chapters || []).filter(c => (c.lines || []).length > 0);
+      const lastChapter = chaptersWithLines[chaptersWithLines.length - 1];
+
       return {
         ...bj,
         chapter_count: (bj.chapters || []).length,
         line_count: allLines.length,
-        pending_count: allLines.filter(l => l.status === 'pending').length,
-        approved_count: allLines.filter(l => l.status === 'approved').length,
-        edited_count: allLines.filter(l => l.status === 'edited').length,
+        pending_count: pendingLines.length,
+        approved_count: approvedLines.length,
+        edited_count: editedLines.length,
+        recent_insight: recentInsight ? recentInsight.text : null,
+        last_chapter_title: lastChapter ? lastChapter.title : null,
         chapters: undefined, // Strip nested chapters from list
       };
     });

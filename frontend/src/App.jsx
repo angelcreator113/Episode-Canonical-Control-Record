@@ -47,6 +47,7 @@ import AssetLibrary from './pages/AssetLibrary';
 import StorytellerPage from './pages/StorytellerPage';
 import CharacterRegistryPage from './pages/CharacterRegistryPage';
 import ContinuityEnginePage from './pages/ContinuityEnginePage';
+import UniversePage from './pages/UniversePage';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -159,7 +160,9 @@ function AppContent() {
   const isTimelineEditor = location.pathname.includes('/timeline');
   const isSceneComposer = location.pathname.includes('/scene-composer');
   const isExportPage = location.pathname.includes('/export');
+  const isStorytellerPage = location.pathname.includes('/storyteller');
   const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage;
+  const hideFooter = isFullScreen || isStorytellerPage;
 
   return (
     <div className="app-layout">
@@ -180,6 +183,9 @@ function AppContent() {
           <Routes>
           {/* ===== DASHBOARD ===== */}
           <Route path="/" element={<Home />} />
+          
+          {/* Universe */}
+          <Route path="/universe" element={<UniversePage />} />
           
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
           
@@ -306,7 +312,7 @@ function AppContent() {
       </main>
 
       {/* Hide footer on editor routes for immersive experience */}
-      {!isFullScreen && (
+      {!hideFooter && (
         <footer className="app-footer">
           <p>&copy; 2026 Episode Control System. Built with React + Vite</p>
         </footer>

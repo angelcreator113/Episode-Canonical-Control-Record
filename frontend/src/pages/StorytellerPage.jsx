@@ -12,6 +12,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
 import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
 import ScenesPanel from './ScenesPanel';
+import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
 
 const API = '/api/v1/storyteller';
@@ -160,45 +161,100 @@ export default function StorytellerPage() {
 // Book List
 // ══════════════════════════════════════════════════
 
+function timeAgo(dateStr) {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+function archiveState(book) {
+  const pending = book.pending_count || 0;
+  const edited = book.edited_count || 0;
+  if (pending > 0) return { label: `${pending} Insight${pending > 1 ? 's' : ''} Awaiting Review`, tone: 'warm' };
+  if (edited > 0) return { label: `${edited} Chapter${edited > 1 ? 's' : ''} Updated`, tone: 'active' };
+  return { label: 'Archive Clean', tone: 'clean' };
+}
+
 function BookList({ books, onOpen, onDelete, onCreate }) {
   return (
     <div className="st-book-list">
       <div className="st-book-list-header">
-        <h1>📖 StoryTeller</h1>
-        <button className="st-btn st-btn-gold" onClick={onCreate}>
-          + New Book
-        </button>
+        <div>
+          <h1>StoryTeller</h1>
+          <p className="st-book-list-subtitle">Curate evolving character archives and narrative intelligence.</p>
+        </div>
       </div>
 
-      {books.length === 0 ? (
-        <div className="st-empty">
-          <span className="st-empty-icon">📖</span>
-          <p><strong>No character books yet.</strong></p>
-          <p>Create your first book to start reviewing lines.</p>
-        </div>
-      ) : (
-        <div className="st-book-grid">
-          {books.map(book => (
+      <div className="st-book-grid">
+        {books.map(book => {
+          const state = archiveState(book);
+          const totalLines = book.line_count || 0;
+          const approved = book.approved_count || 0;
+          const progress = totalLines > 0 ? Math.round((approved / totalLines) * 100) : 0;
+
+          return (
             <div key={book.id} className="st-book-card" onClick={() => onOpen(book.id)}>
-              <span className={`st-badge st-status-${book.status}`}>{book.status}</span>
-              <h3>{book.title || book.character_name}</h3>
-              <div className="st-book-sub">
+              <div className="st-card-top">
+                <span className={`st-card-status st-tone-${state.tone}`}>{state.label}</span>
+                {book.updated_at && (
+                  <span className="st-card-age">{timeAgo(book.updated_at)}</span>
+                )}
+              </div>
+
+              <h2 className="st-card-title">{book.title || book.character_name}</h2>
+              <p className="st-card-sub">
                 {[book.era_name, book.timeline_position, book.primary_pov].filter(Boolean).join(' · ') || book.subtitle || ''}
+              </p>
+
+              <div className="st-card-meta">
+                <span>{book.chapter_count || 0} Chapter{(book.chapter_count || 0) !== 1 ? 's' : ''}</span>
+                <span className="st-meta-sep">·</span>
+                <span>{approved} Confirmed</span>
+                {(book.pending_count || 0) > 0 && (
+                  <>
+                    <span className="st-meta-sep">·</span>
+                    <span className="st-meta-pending">{book.pending_count} Pending</span>
+                  </>
+                )}
               </div>
-              <div className="st-book-stats">
-                <span><span className="st-dot st-dot-pending" /> {book.pending_count || 0} pending</span>
-                <span><span className="st-dot st-dot-approved" /> {book.approved_count || 0} approved</span>
-                <span><span className="st-dot st-dot-edited" /> {book.edited_count || 0} edited</span>
+
+              {/* Progress arc */}
+              <div className="st-card-progress">
+                <div className="st-card-progress-bar" style={{ width: `${progress}%` }} />
               </div>
-              <button
-                className="st-btn st-btn-danger st-btn-sm"
-                style={{ position: 'absolute', bottom: 10, right: 10, opacity: 0.7 }}
-                onClick={e => { e.stopPropagation(); onDelete(book.id); }}
-              >
-                ✕
-              </button>
+
+              {book.recent_insight && (
+                <p className="st-card-insight">"{book.recent_insight.length > 80 ? book.recent_insight.slice(0, 80) + '…' : book.recent_insight}"</p>
+              )}
+
+              <div className="st-card-foot">
+                <span className="st-card-open">Open Archive →</span>
+                <button
+                  className="st-card-delete"
+                  onClick={e => { e.stopPropagation(); onDelete(book.id); }}
+                  title="Delete book"
+                >✕</button>
+              </div>
             </div>
-          ))}
+          );
+        })}
+
+        {/* New Archive tile */}
+        <div className="st-book-card st-card-new" onClick={onCreate}>
+          <span className="st-card-new-icon">+</span>
+          <span className="st-card-new-label">Create New Archive</span>
+        </div>
+      </div>
+
+      {books.length === 0 && (
+        <div className="st-empty">
+          <p>No archives yet. Create your first to start curating narrative intelligence.</p>
         </div>
       )}
     </div>
@@ -216,9 +272,12 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [activeChapterId, setActiveChapterId] = useState(
     () => (book.chapters || [])[0]?.id || null
   );
-  const [activeView, setActiveView] = useState('book'); // book | memory | scenes
+  const [activeView, setActiveView] = useState('book'); // book | toc | memory | scenes
   const [registryCharacters, setRegistryCharacters] = useState([]);
   const [pendingOpen, setPendingOpen] = useState(false);
+  const [reviewMode, setReviewMode] = useState(false);
+  const [writingMode, setWritingMode] = useState(false);
+  const [canonOpen, setCanonOpen] = useState(false);
 
   // Inject Memory keyframe styles
   useEffect(() => {
@@ -402,7 +461,8 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
   const renderLine = (line) => (
     <React.Fragment key={line.id}>
-      <div className={`st-line ${editingLine === line.id ? 'st-line-editing' : ''}`}>
+      <div className={`st-line st-line-${line.status || 'pending'} ${editingLine === line.id ? 'st-line-editing' : ''}`}>
+        <div className="st-line-dot" />
         <div className="st-line-content">
           {editingLine === line.id ? (
             <>
@@ -440,26 +500,14 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
         {editingLine !== line.id && (
           <div className="st-line-actions">
             {line.status !== 'approved' && (
-              <button
-                className="st-line-action st-action-approve"
-                onClick={() => approveLine(line.id)}
-                title="Approve"
-              >✓</button>
+              <button className="st-line-action st-action-approve" onClick={() => approveLine(line.id)} title="Approve">✓ Approve</button>
             )}
-            <button
-              className="st-line-action st-action-edit"
-              onClick={() => startEdit(line)}
-              title="Edit"
-            >✎</button>
-            <button
-              className="st-line-action st-action-reject"
-              onClick={() => rejectLine(line.id)}
-              title="Remove"
-            >✕</button>
+            <button className="st-line-action st-action-edit" onClick={() => startEdit(line)} title="Edit">Edit</button>
+            <button className="st-line-action st-action-reject" onClick={() => rejectLine(line.id)} title="Remove">✕</button>
           </div>
         )}
       </div>
-      {(line.status === 'approved' || line.status === 'edited') && (
+      {(line.status === 'approved' || line.status === 'edited') && reviewMode && (
         <MemoryCard
           lineId={line.id}
           characters={registryCharacters}
@@ -472,70 +520,151 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
     </React.Fragment>
   );
 
+  // ── Era detection for ambient theming ───────
+  const eraSlug = (book.era_name || '').toLowerCase();
+  const eraTheme = eraSlug.includes('pre-prime') || eraSlug.includes('before') || eraSlug.includes('pre prime')
+    ? 'pre-prime'
+    : eraSlug.includes('prime') || eraSlug.includes('peak') || eraSlug.includes('jewel')
+      ? 'prime'
+      : 'default';
+
   // ── Render ─────────────────────────────────
 
   return (
-    <div className="st-editor-layout">
+    <div
+      className={`st-editor-layout ${writingMode ? 'st-writing-mode' : ''}`}
+      data-era={eraTheme}
+    >
 
       {/* ── Left Nav ── */}
       <nav className="st-nav">
-        <div className="st-nav-header">
-          <button className="st-nav-back" onClick={onBack}>← Books</button>
-          <div className="st-nav-character">{book.character_name}</div>
-          <div className="st-nav-subtitle">
-            {book.subtitle || book.title || [book.season_label, book.week_label].filter(Boolean).join(' · ')}
+        <div className="st-nav-brand">
+          <button className="st-nav-back" onClick={onBack}>← Archives</button>
+          <div className="st-nav-brand-label">PNOS</div>
+          <h2 className="st-nav-brand-title">{book.character_name || book.title}</h2>
+          <div className="st-nav-brand-sub">
+            {[book.era_name, book.timeline_position].filter(Boolean).join(' · ') || book.subtitle || ''}
           </div>
         </div>
 
-        <div className="st-nav-chapters">
-          {chapters.map((ch, i) => (
-            <div
-              key={ch.id}
-              className={`st-nav-chapter ${ch.id === activeChapterId ? 'active' : ''}`}
-              onClick={() => setActiveChapterId(ch.id)}
-            >
-              <span className="st-nav-num">
-                {String(ch.chapter_number || i + 1).padStart(2, '0')}
-              </span>
-              <span className="st-nav-chapter-title">{ch.title}</span>
-            </div>
-          ))}
+        <div className="st-nav-section">
+          <div className="st-nav-section-label">Chapters</div>
+          <div className="st-nav-chapters">
+            {chapters.map((ch, i) => {
+              const chLines = ch.lines || [];
+              const chPending = chLines.filter(l => l.status === 'pending').length;
+              const chApproved = chLines.filter(l => l.status === 'approved').length;
+              const chEdited = chLines.filter(l => l.status === 'edited').length;
+              return (
+                <button
+                  key={ch.id}
+                  className={`st-nav-chapter ${ch.id === activeChapterId ? 'active' : ''}`}
+                  onClick={() => setActiveChapterId(ch.id)}
+                >
+                  <span className="st-nav-num">
+                    {String(ch.chapter_number || i + 1).padStart(2, '0')}
+                  </span>
+                  <div className="st-nav-chapter-info">
+                    <div className="st-nav-chapter-title">{ch.title}</div>
+                    <div className="st-nav-chapter-meta">
+                      {chLines.length} line{chLines.length !== 1 ? 's' : ''}{ch.badge ? ` · ${ch.badge}` : ''}
+                    </div>
+                    <div className="st-nav-dots">
+                      {Array(Math.min(chApproved, 5)).fill(null).map((_, di) => (
+                        <div key={`a${di}`} className="st-cnav-dot st-cnav-dot-a" />
+                      ))}
+                      {Array(Math.min(chPending, 5)).fill(null).map((_, di) => (
+                        <div key={`p${di}`} className="st-cnav-dot st-cnav-dot-p" />
+                      ))}
+                      {Array(Math.min(chEdited, 5)).fill(null).map((_, di) => (
+                        <div key={`e${di}`} className="st-cnav-dot st-cnav-dot-e" />
+                      ))}
+                    </div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="st-nav-add">
+            <button onClick={() => setShowAddChapter(!showAddChapter)}>
+              + Add Chapter
+            </button>
+          </div>
         </div>
 
-        <div className="st-nav-add">
-          <button onClick={() => setShowAddChapter(!showAddChapter)}>
-            + Add Chapter
-          </button>
+        <div className="st-nav-stats">
+          <div className="st-nav-section-label">Book Progress</div>
+          <div className="st-stat-row">
+            <span className="st-stat-label">Pending</span>
+            <span className="st-stat-val st-stat-pending">{allLines.filter(l => l.status === 'pending').length}</span>
+          </div>
+          <div className="st-stat-row">
+            <span className="st-stat-label">Approved</span>
+            <span className="st-stat-val st-stat-approved">{allLines.filter(l => l.status === 'approved').length}</span>
+          </div>
+          <div className="st-stat-row">
+            <span className="st-stat-label">Edited</span>
+            <span className="st-stat-val st-stat-edited">{allLines.filter(l => l.status === 'edited').length}</span>
+          </div>
         </div>
       </nav>
 
       {/* ── Center Content ── */}
       <div className="st-editor">
 
-        {/* View toggle: Book | Memory | Scenes */}
-        <div className="st-view-bar">
-          {['book', 'memory', 'scenes'].map(v => (
-            <button
-              key={v}
-              className={`st-view-tab ${activeView === v ? 'active' : ''}`}
-              onClick={() => setActiveView(v)}
-            >
-              {v === 'book' ? 'Book' : v === 'memory' ? 'Memory' : 'Scenes'}
-            </button>
-          ))}
-          <div className="st-view-spacer" />
-          {activeView === 'book' && (
-            <div className="st-view-actions">
-              {pendingCount > 0 && (
-                <button className="st-btn st-btn-secondary st-btn-sm" onClick={approveAll}>
-                  Approve All ({pendingCount})
+        {/* ── Book Identity Panel (Crown) ── */}
+        <div className="st-crown">
+          <div className="st-crown-inner">
+            <h1 className="st-crown-title">{book.title || book.character_name}</h1>
+            <div className="st-crown-meta">
+              {[book.era_name, book.timeline_position].filter(Boolean).length > 0 && (
+                <span className="st-crown-era">
+                  {[book.era_name, book.timeline_position].filter(Boolean).join(' · ')}
+                </span>
+              )}
+              {book.primary_pov && (
+                <span className="st-crown-pov">POV: {book.primary_pov}</span>
+              )}
+              {book.subtitle && (
+                <span className="st-crown-theme">{book.subtitle}</span>
+              )}
+            </div>
+            <div className="st-crown-divider" />
+          </div>
+
+          {/* Top toolbar */}
+          <div className="st-toolbar">
+            <div className="st-toolbar-left">
+              {['book', 'toc', 'memory', 'scenes'].map(v => (
+                <button
+                  key={v}
+                  className={`st-view-tab ${activeView === v ? 'active' : ''}`}
+                  onClick={() => setActiveView(v)}
+                >
+                  {v === 'book' ? 'Manuscript' : v === 'toc' ? 'TOC' : v === 'memory' ? 'Memory Bank' : 'Scenes'}
+                </button>
+              ))}
+            </div>
+            <div className="st-toolbar-right">
+              <button
+                className={`st-mode-toggle ${writingMode ? 'active' : ''}`}
+                onClick={() => setWritingMode(w => !w)}
+                title={writingMode ? 'Exit Writing Mode' : 'Enter Writing Mode'}
+              >
+                {writingMode ? '◉ Writing Mode' : '○ Enter Writing Mode'}
+              </button>
+              {activeView === 'book' && !writingMode && (
+                <button
+                  className="st-canon-toggle"
+                  onClick={() => setCanonOpen(c => !c)}
+                  title="Canon Anchor"
+                >
+                  📜
                 </button>
               )}
-              <button className="st-btn st-btn-primary st-btn-sm" onClick={onRefresh}>
-                Compile
-              </button>
             </div>
-          )}
+          </div>
         </div>
 
         {/* Add chapter form (shared) */}
@@ -564,100 +693,205 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           </div>
         )}
 
-        {/* ── Book View ── */}
+        {/* ── Book / Manuscript View ── */}
         {activeView === 'book' && (
-          <>
-            {!activeChapter ? (
-              <div className="st-no-selection">
-                {chapters.length === 0
-                  ? 'Add a chapter to get started.'
-                  : 'Select a chapter from the left.'}
-              </div>
-            ) : (
-              <>
-                {/* Chapter heading */}
-                <div className="st-chapter-heading">
-                  <h1>{activeChapter.title}</h1>
-                  <div className="st-chapter-meta">
-                    Generated from {lines.length} {lines.length === 1 ? 'entry' : 'entries'}
-                    {pendingLines.length > 0 && ` · ${pendingLines.length} pending`}
-                  </div>
+          <div className="st-manuscript-wrapper">
+            <div className="st-manuscript">
+              {!activeChapter ? (
+                <div className="st-no-selection">
+                  {chapters.length === 0
+                    ? 'Add a chapter to begin writing.'
+                    : 'Select a chapter from the left.'}
                 </div>
-
-                {/* Approved / edited lines — the book content */}
-                {approvedLines.length > 0 && (
-                  <div className="st-section">
-                    {groupLines(approvedLines).map((group, gi) => (
-                      <div key={gi}>
-                        {group.label && (
-                          <div className="st-section-label">{group.label}</div>
-                        )}
-                        {group.lines.map(renderLine)}
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Pending lines — collapsed by default */}
-                {pendingLines.length > 0 && (
-                  <div className="st-section">
+              ) : (
+                <>
+                  {/* Chapter header bar */}
+                  <div className="st-chapter-bar">
+                    <span className="st-ch-num">
+                      Chapter {String(activeChapter.chapter_number || (chapters.indexOf(activeChapter) + 1)).padStart(2, '0')}
+                    </span>
+                    <span className="st-ch-title">{activeChapter.title}</span>
+                    {activeChapter.badge && (
+                      <span className="st-ch-badge">{activeChapter.badge}</span>
+                    )}
+                    <span className={`st-ch-status ${pendingLines.length === 0 ? 'all-approved' : 'has-pending'}`}>
+                      {pendingLines.length === 0 ? 'Complete' : `${pendingLines.length} pending`}
+                    </span>
                     <button
-                      className="st-pending-toggle"
-                      onClick={() => setPendingOpen(!pendingOpen)}
+                      className={`st-review-indicator ${reviewMode ? 'active' : ''}`}
+                      onClick={() => setReviewMode(r => !r)}
+                      title={reviewMode ? 'Exit review mode' : 'Enter review mode'}
                     >
-                      <span className={`arrow ${pendingOpen ? 'open' : ''}`}>▶</span>
-                      {pendingLines.length} Pending Memory Detection{pendingLines.length !== 1 ? 's' : ''}
+                      <span className="st-review-dot" />
+                      <span className="st-review-count">
+                        {reviewMode ? 'Reviewing' : 'Review'}
+                      </span>
                     </button>
-                    {pendingOpen && (
-                      <div className="st-pending-body">
-                        {groupLines(pendingLines).map((group, gi) => (
+                  </div>
+
+                  {/* Book page content */}
+                  <div className="st-book-page">
+                    {/* Approved / edited lines — the manuscript body */}
+                    {approvedLines.length > 0 && (
+                      <div className="st-section">
+                        {groupLines(approvedLines).map((group, gi) => (
                           <div key={gi}>
                             {group.label && (
-                              <div className="st-section-label">{group.label}</div>
+                              <div className="st-group-label">{group.label}</div>
                             )}
                             {group.lines.map(renderLine)}
                           </div>
                         ))}
                       </div>
                     )}
-                  </div>
-                )}
 
-                {/* Add line */}
-                {addingLineTo === activeChapter.id ? (
-                  <div className="st-add-line">
-                    <input
-                      autoFocus
-                      value={newLineText}
-                      onChange={e => setNewLineText(e.target.value)}
-                      placeholder="Write a new line…"
-                      onKeyDown={e => {
-                        if (e.key === 'Enter') addLine(activeChapter.id);
-                        if (e.key === 'Escape') { setAddingLineTo(null); setNewLineText(''); }
-                      }}
-                    />
-                    <button className="st-btn st-btn-primary st-btn-sm" onClick={() => addLine(activeChapter.id)}>Add</button>
-                    <button className="st-btn st-btn-ghost st-btn-sm" onClick={() => { setAddingLineTo(null); setNewLineText(''); }}>Cancel</button>
+                    {/* Pending lines — collapsed by default */}
+                    {pendingLines.length > 0 && (
+                      <div className="st-section">
+                        <button
+                          className="st-pending-toggle"
+                          onClick={() => setPendingOpen(!pendingOpen)}
+                        >
+                          <span className={`arrow ${pendingOpen ? 'open' : ''}`}>▶</span>
+                          {pendingLines.length} Pending Memory Detection{pendingLines.length !== 1 ? 's' : ''}
+                        </button>
+                        {pendingOpen && (
+                          <div className="st-pending-body">
+                            {groupLines(pendingLines).map((group, gi) => (
+                              <div key={gi}>
+                                {group.label && (
+                                  <div className="st-group-label">{group.label}</div>
+                                )}
+                                {group.lines.map(renderLine)}
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Add line */}
+                    {addingLineTo === activeChapter.id ? (
+                      <div className="st-add-line">
+                        <input
+                          autoFocus
+                          value={newLineText}
+                          onChange={e => setNewLineText(e.target.value)}
+                          placeholder="Write a new line…"
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') addLine(activeChapter.id);
+                            if (e.key === 'Escape') { setAddingLineTo(null); setNewLineText(''); }
+                          }}
+                        />
+                        <button className="st-btn st-btn-primary st-btn-sm" onClick={() => addLine(activeChapter.id)}>Add</button>
+                        <button className="st-btn st-btn-ghost st-btn-sm" onClick={() => { setAddingLineTo(null); setNewLineText(''); }}>Cancel</button>
+                      </div>
+                    ) : (
+                      <button
+                        className="st-add-line-trigger"
+                        onClick={() => { setAddingLineTo(activeChapter.id); setNewLineText(''); }}
+                      >
+                        + Add line
+                      </button>
+                    )}
+
+                    {/* Action bar */}
+                    <div className="st-action-bar">
+                      <span className="st-action-hint">
+                        {pendingLines.length === 0
+                          ? 'Chapter complete ✓'
+                          : `${pendingLines.length} item${pendingLines.length !== 1 ? 's' : ''} awaiting review`}
+                      </span>
+                      <div className="st-action-bar-btns">
+                        {pendingCount > 0 && (
+                          <button className="st-btn st-btn-gold st-btn-sm" onClick={approveAll}>
+                            Approve All ({pendingCount})
+                          </button>
+                        )}
+                        <button className="st-btn st-btn-ghost st-btn-sm" onClick={onRefresh}>
+                          Compile Book ↗
+                        </button>
+                      </div>
+                    </div>
                   </div>
-                ) : (
-                  <button
-                    className="st-add-line-trigger"
-                    onClick={() => { setAddingLineTo(activeChapter.id); setNewLineText(''); }}
-                  >
-                    + Add line
-                  </button>
-                )}
-              </>
+                </>
+              )}
+            </div>
+
+            {/* ── Canon Anchor Panel (right side, collapsible) ── */}
+            {canonOpen && !writingMode && (
+              <aside className="st-canon-panel">
+                <div className="st-canon-header">
+                  <span>📜 Canon Anchor</span>
+                  <button className="st-canon-close" onClick={() => setCanonOpen(false)}>✕</button>
+                </div>
+                <div className="st-canon-body">
+                  {book.era_name && (
+                    <div className="st-canon-row">
+                      <span className="st-canon-label">Era</span>
+                      <span className="st-canon-value">{book.era_name}</span>
+                    </div>
+                  )}
+                  {book.era_description && (
+                    <div className="st-canon-row">
+                      <span className="st-canon-label">Era Rule</span>
+                      <span className="st-canon-value">{book.era_description}</span>
+                    </div>
+                  )}
+                  {book.primary_pov && (
+                    <div className="st-canon-row">
+                      <span className="st-canon-label">POV</span>
+                      <span className="st-canon-value">{book.primary_pov}</span>
+                    </div>
+                  )}
+                  {book.subtitle && (
+                    <div className="st-canon-row">
+                      <span className="st-canon-label">Theme</span>
+                      <span className="st-canon-value">{book.subtitle}</span>
+                    </div>
+                  )}
+                  {book.description && (
+                    <div className="st-canon-row">
+                      <span className="st-canon-label">Narrative Function</span>
+                      <span className="st-canon-value">{book.description}</span>
+                    </div>
+                  )}
+                  <div className="st-canon-row">
+                    <span className="st-canon-label">Canon Status</span>
+                    <span className="st-canon-value">{book.canon_status || book.status || 'draft'}</span>
+                  </div>
+                  <div className="st-canon-row">
+                    <span className="st-canon-label">Chapters</span>
+                    <span className="st-canon-value">{chapters.length}</span>
+                  </div>
+                  <div className="st-canon-row">
+                    <span className="st-canon-label">Total Lines</span>
+                    <span className="st-canon-value">{allLines.length}</span>
+                  </div>
+                </div>
+              </aside>
             )}
-          </>
+          </div>
         )}
 
-        {/* ── Memory View (replaces right panel) ── */}
+        {/* ── TOC View ── */}
+        {activeView === 'toc' && (
+          <TOCPanel
+            book={book}
+            chapters={chapters}
+            onChapterClick={(chId) => {
+              setActiveChapterId(chId);
+              setActiveView('book');
+            }}
+          />
+        )}
+
+        {/* ── Memory View ── */}
         {activeView === 'memory' && (
           <MemoryBankPanel bookId={book.id} />
         )}
 
-        {/* ── Scenes View (replaces right panel) ── */}
+        {/* ── Scenes View ── */}
         {activeView === 'scenes' && (
           <ScenesPanel
             bookId={book.id}

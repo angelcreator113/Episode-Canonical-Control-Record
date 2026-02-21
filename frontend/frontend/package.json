@@ -1,7 +1,0 @@
-{
-  "dependencies": {
-    "konva": "^10.2.0",
-    "react-konva": "^18.2.14",
-    "react-quill": "^2.0.0"
-  }
-}

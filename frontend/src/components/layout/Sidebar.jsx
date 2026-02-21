@@ -25,7 +25,7 @@ function Sidebar({ isOpen, onClose }) {
   
   // Auto-expand StoryTeller group when on its sub-routes
   useEffect(() => {
-    if (location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/pnos-editor')) {
+    if (location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity')) {
       setStoryExpanded(true);
     }
   }, [location.pathname]);
@@ -122,6 +122,9 @@ function Sidebar({ isOpen, onClose }) {
         {/* Home */}
         <NavItem icon="🏠" label="Home" path="/" />
         
+        {/* Universe */}
+        <NavItem icon="◈" label="Universe" path="/universe" />
+        
         {/* StoryTeller group */}
         <div className="nav-group">
           <button
@@ -163,13 +166,6 @@ function Sidebar({ isOpen, onClose }) {
               >
                 <span className="subitem-indicator">└─</span>
                 <span className="subitem-label">Continuity</span>
-              </button>
-              <button
-                className={`nav-subitem ${isActive('/pnos-editor') ? 'active' : ''}`}
-                onClick={() => handleNavigate('/pnos-editor')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">PNOS Editor</span>
               </button>
             </div>
           )}

@@ -10,7 +10,7 @@ html, body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: #f1f5f9;
+  background: #F8F9FE;
 }
 
 /* Allow pull-to-refresh and native scroll on mobile */
@@ -27,7 +27,7 @@ html, body {
 .app-layout {
   display: flex;
   height: 100dvh; /* better on mobile than 100vh */
-  background-color: #f1f5f9;
+  background-color: #F8F9FE;
   width: 100%;
   overflow: hidden;
   position: relative;
@@ -94,7 +94,7 @@ html, body {
   overflow-y: auto; /* main scroll lives here */
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;
-  background-color: #f8f9fa; /* subtle background */
+  background-color: #FAFBFE;
   box-sizing: border-box;
   position: relative;
 }
@@ -159,11 +159,11 @@ html, body {
 
 .app-footer {
   flex-shrink: 0;
-  background-color: #1e293b;
-  color: #cbd5e1;
+  background: linear-gradient(180deg, #F8F9FE 0%, #FAFAFE 100%);
+  color: #94a3b8;
   text-align: center;
-  border-top: 1px solid #334155;
-  padding: 1rem;
+  border-top: 1px solid rgba(99, 102, 241, 0.08);
+  padding: 0.625rem 1rem;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -172,7 +172,8 @@ html, body {
 
 .app-footer p {
   margin: 0;
-  font-size: 0.875rem;
+  font-size: 0.75rem;
+  letter-spacing: 0.02em;
 }
 
 /* ============================================

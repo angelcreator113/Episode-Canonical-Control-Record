@@ -57,25 +57,33 @@ async function apiFetch(path, options = {}) {
   return data;
 }
 
-// ── Confidence bar ─────────────────────────────────────────────────────────
+// ── Confidence label (word instead of bar) ────────────────────────────────
 
+function ConfidenceLabel({ value }) {
+  const pct = Math.round((value || 0) * 100);
+  const label = pct >= 80 ? 'High' : pct >= 60 ? 'Medium' : 'Low';
+  const color = pct >= 80 ? '#5a9a5a' : pct >= 60 ? '#a08a5c' : '#b05040';
+  return (
+    <span style={{
+      fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+      fontSize: 10, color, fontWeight: 500, letterSpacing: '0.04em',
+    }}>
+      {label} confidence
+    </span>
+  );
+}
+
+// Keep ConfidenceBar for panel view
 function ConfidenceBar({ value }) {
   const pct = Math.round((value || 0) * 100);
-  const color = pct >= 80 ? '#4A7C59' : pct >= 60 ? '#C9A84C' : '#B85C38';
+  const color = pct >= 80 ? '#5a9a5a' : pct >= 60 ? '#a08a5c' : '#b05040';
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-      <div style={{
-        flex: 1, height: 3, background: 'rgba(26,21,16,0.08)', borderRadius: 2, overflow: 'hidden',
-      }}>
-        <div style={{
-          width: `${pct}%`, height: '100%', background: color, borderRadius: 2,
-          transition: 'width 0.4s ease',
-        }} />
-      </div>
-      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color, fontWeight: 500, minWidth: 32 }}>
-        {pct}%
-      </span>
-    </div>
+    <span style={{
+      fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
+      fontSize: 10, color, fontWeight: 500, letterSpacing: '0.04em',
+    }}>
+      {pct >= 80 ? 'High' : pct >= 60 ? 'Medium' : 'Low'}
+    </span>
   );
 }
 
@@ -290,21 +298,17 @@ export function MemoryCard({ lineId, characters = [], onConfirmed, onDismissed }
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                     <TypeBadge type={memory.type} />
                     {memory.confirmed && (
-                      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#4A7C59', letterSpacing: '0.1em' }}>
-                        ✓ CONFIRMED
-                      </span>
+                      <span style={{ fontSize: 10, color: '#5a9a5a' }}>✓</span>
                     )}
                     {memory.protected && (
-                      <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#7B5EA7', letterSpacing: '0.1em' }}>
-                        🔒 PROTECTED
-                      </span>
+                      <span style={{ fontSize: 10, color: '#999', opacity: 0.6 }}>🔒</span>
                     )}
                   </div>
                   <p style={styles.memoryStatement}>{memory.statement}</p>
-                  <ConfidenceBar value={memory.confidence} />
+                  <ConfidenceLabel value={memory.confidence} />
                   {memory.tags?.length > 0 && (
                     <div style={{ display: 'flex', gap: 4, marginTop: 5, flexWrap: 'wrap' }}>
-                      {memory.tags.map(tag => (
+                      {memory.tags.slice(0, 3).map(tag => (
                         <span key={tag} style={styles.tag}>{tag}</span>
                       ))}
                     </div>
@@ -327,9 +331,7 @@ export function MemoryCard({ lineId, characters = [], onConfirmed, onDismissed }
                 )}
                 {memory.confirmed && (
                   <div style={styles.memoryActions}>
-                    <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#4A7C59' }}>
-                      Saved to Registry
-                    </span>
+                    <span style={{ fontSize: 10, color: '#5a9a5a' }}>✓</span>
                   </div>
                 )}
               </div>
@@ -590,9 +592,9 @@ function LoadingDots() {
 
 const styles = {
   cardShell: {
-    margin: '4px 16px 8px 40px',
-    borderLeft: '2px solid rgba(201,168,76,0.3)',
-    paddingLeft: 14,
+    margin: '4px 0 8px 0',
+    borderLeft: '2px solid rgba(0,0,0,0.08)',
+    paddingLeft: 16,
     paddingTop: 10,
     paddingBottom: 10,
   },
@@ -600,17 +602,17 @@ const styles = {
     display: 'flex', alignItems: 'center', gap: 7, marginBottom: 10,
   },
   cardHeaderDot: {
-    width: 7, height: 7, borderRadius: '50%', background: '#C9A84C', flexShrink: 0,
+    width: 5, height: 5, borderRadius: '50%', background: '#a08a5c', flexShrink: 0,
   },
   cardHeaderLabel: {
-    fontFamily: 'DM Mono, monospace', fontSize: 9,
-    color: '#C9A84C', letterSpacing: '0.14em', textTransform: 'uppercase',
+    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 10,
+    color: '#999', letterSpacing: '0.06em', textTransform: 'uppercase',
   },
   cardHeaderBadge: {
-    marginLeft: 'auto', background: 'rgba(201,168,76,0.12)',
-    border: '1px solid rgba(201,168,76,0.2)', borderRadius: 2,
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
-    color: '#C9A84C', padding: '2px 6px', letterSpacing: '0.08em',
+    marginLeft: 'auto', background: 'rgba(0,0,0,0.04)',
+    border: '1px solid rgba(0,0,0,0.08)', borderRadius: 2,
+    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 9,
+    color: '#999', padding: '2px 6px', letterSpacing: '0.04em',
   },
   memoryRow: {
     display: 'flex', gap: 12, padding: '10px 10px 10px 0',
