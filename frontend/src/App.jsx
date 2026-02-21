@@ -45,6 +45,7 @@ import ShowSettings from './pages/ShowSettings';
 import ExportPage from './pages/ExportPage';
 import AssetLibrary from './pages/AssetLibrary';
 import StorytellerPage from './pages/StorytellerPage';
+import CharacterRegistryPage from './pages/CharacterRegistryPage';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -266,6 +267,9 @@ function AppContent() {
           
           {/* StoryTeller Book Editor */}
           <Route path="/storyteller" element={<StorytellerPage />} />
+          
+          {/* PNOS Character Registry */}
+          <Route path="/character-registry" element={<CharacterRegistryPage />} />
           
           {/* Search */}
           <Route path="/search" element={<SearchResults />} />

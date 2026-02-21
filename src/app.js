@@ -790,6 +790,15 @@ try {
   console.error('✗ Failed to load StoryTeller routes:', e.message);
 }
 
+// Character Registry routes
+try {
+  const characterRegistryRoutes = require('./routes/characterRegistry');
+  app.use('/api/v1/character-registry', characterRegistryRoutes);
+  console.log('✓ Character Registry routes loaded at /api/v1/character-registry');
+} catch (e) {
+  console.error('✗ Failed to load Character Registry routes:', e.message);
+}
+
 // Export Queue Monitor (Bull Board dashboard + stats API)
 let queueMonitorRoutes;
 try {

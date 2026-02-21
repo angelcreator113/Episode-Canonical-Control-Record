@@ -69,6 +69,7 @@ let Character; // Characters model
 let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration
 let StorytellerBook, StorytellerChapter, StorytellerLine; // StoryTeller Book Editor models
+let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
 
 try {
   // Core models
@@ -193,6 +194,10 @@ try {
   StorytellerChapter = require('./StorytellerChapter')(sequelize);
   StorytellerLine = require('./StorytellerLine')(sequelize);
 
+  // PNOS Character Registry models
+  CharacterRegistry = require('./CharacterRegistry')(sequelize);
+  RegistryCharacter = require('./RegistryCharacter')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -256,6 +261,8 @@ const requiredModels = {
   StorytellerBook,
   StorytellerChapter,
   StorytellerLine,
+  CharacterRegistry,
+  RegistryCharacter,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -299,6 +306,14 @@ if (StorytellerChapter && StorytellerChapter.associate) {
 }
 if (StorytellerLine && StorytellerLine.associate) {
   StorytellerLine.associate(requiredModels);
+}
+
+// Character Registry associations
+if (CharacterRegistry && CharacterRegistry.associate) {
+  CharacterRegistry.associate(requiredModels);
+}
+if (RegistryCharacter && RegistryCharacter.associate) {
+  RegistryCharacter.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1368,3 +1383,5 @@ module.exports.Character = Character;
 module.exports.StorytellerBook = StorytellerBook;
 module.exports.StorytellerChapter = StorytellerChapter;
 module.exports.StorytellerLine = StorytellerLine;
+module.exports.CharacterRegistry = CharacterRegistry;
+module.exports.RegistryCharacter = RegistryCharacter;
