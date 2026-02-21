@@ -799,6 +799,15 @@ try {
   console.error('✗ Failed to load Character Registry routes:', e.message);
 }
 
+// Continuity Engine routes
+try {
+  const continuityEngineRoutes = require('./routes/continuityEngine');
+  app.use('/api/v1/continuity', continuityEngineRoutes);
+  console.log('✓ Continuity Engine routes loaded at /api/v1/continuity');
+} catch (e) {
+  console.error('✗ Failed to load Continuity Engine routes:', e.message);
+}
+
 // Export Queue Monitor (Bull Board dashboard + stats API)
 let queueMonitorRoutes;
 try {

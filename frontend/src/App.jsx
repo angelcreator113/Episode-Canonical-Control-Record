@@ -46,6 +46,7 @@ import ExportPage from './pages/ExportPage';
 import AssetLibrary from './pages/AssetLibrary';
 import StorytellerPage from './pages/StorytellerPage';
 import CharacterRegistryPage from './pages/CharacterRegistryPage';
+import ContinuityEnginePage from './pages/ContinuityEnginePage';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -270,6 +271,9 @@ function AppContent() {
           
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
+          
+          {/* PNOS Continuity Engine */}
+          <Route path="/continuity" element={<ContinuityEnginePage />} />
           
           {/* Search */}
           <Route path="/search" element={<SearchResults />} />

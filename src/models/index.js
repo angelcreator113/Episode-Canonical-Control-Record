@@ -70,6 +70,7 @@ let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration
 let StorytellerBook, StorytellerChapter, StorytellerLine; // StoryTeller Book Editor models
 let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
+let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter; // Continuity Engine models
 
 try {
   // Core models
@@ -198,6 +199,12 @@ try {
   CharacterRegistry = require('./CharacterRegistry')(sequelize);
   RegistryCharacter = require('./RegistryCharacter')(sequelize);
 
+  // Continuity Engine models
+  ContinuityTimeline = require('./ContinuityTimeline')(sequelize);
+  ContinuityCharacter = require('./ContinuityCharacter')(sequelize);
+  ContinuityBeat = require('./ContinuityBeat')(sequelize);
+  ContinuityBeatCharacter = require('./ContinuityBeatCharacter')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -263,6 +270,10 @@ const requiredModels = {
   StorytellerLine,
   CharacterRegistry,
   RegistryCharacter,
+  ContinuityTimeline,
+  ContinuityCharacter,
+  ContinuityBeat,
+  ContinuityBeatCharacter,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -314,6 +325,17 @@ if (CharacterRegistry && CharacterRegistry.associate) {
 }
 if (RegistryCharacter && RegistryCharacter.associate) {
   RegistryCharacter.associate(requiredModels);
+}
+
+// Continuity Engine associations
+if (ContinuityTimeline && ContinuityTimeline.associate) {
+  ContinuityTimeline.associate(requiredModels);
+}
+if (ContinuityCharacter && ContinuityCharacter.associate) {
+  ContinuityCharacter.associate(requiredModels);
+}
+if (ContinuityBeat && ContinuityBeat.associate) {
+  ContinuityBeat.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1385,3 +1407,7 @@ module.exports.StorytellerChapter = StorytellerChapter;
 module.exports.StorytellerLine = StorytellerLine;
 module.exports.CharacterRegistry = CharacterRegistry;
 module.exports.RegistryCharacter = RegistryCharacter;
+module.exports.ContinuityTimeline = ContinuityTimeline;
+module.exports.ContinuityCharacter = ContinuityCharacter;
+module.exports.ContinuityBeat = ContinuityBeat;
+module.exports.ContinuityBeatCharacter = ContinuityBeatCharacter;
