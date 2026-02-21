@@ -62,7 +62,7 @@ export default function UniversePage() {
       try {
         const shRes = await fetch(`${SHOWS_API}`);
         const shData = await shRes.json();
-        const showsList = shData.shows || shData;
+        const showsList = shData.data || shData.shows || shData;
         setShows(Array.isArray(showsList) ? showsList : []);
       } catch (_) {}
 
