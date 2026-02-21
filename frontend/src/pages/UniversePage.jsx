@@ -441,6 +441,23 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
   const [saving, setSaving]       = useState(false);
   const [editingEra, setEditingEra] = useState(null); // bookId
   const [eraValues, setEraValues]   = useState({});
+  const [assigning, setAssigning]   = useState(null); // bookId being assigned
+
+  async function assignToSeries(bookId, seriesId) {
+    try {
+      const res = await fetch(`${STORYTELLER_API}/books/${bookId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ series_id: seriesId || null }),
+      });
+      if (!res.ok) throw new Error('Failed to assign');
+      setAssigning(null);
+      showToast('Book assigned to series');
+      onChanged();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
 
   async function createSeries() {
     if (!newName.trim()) return;
@@ -583,8 +600,8 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
                       </div>
                     </div>
 
-                    {/* Era inline edit */}
-                    <div style={s.bookRowRight}>
+                    {/* Era + reassign */}
+                    <div style={{ ...s.bookRowRight, display: 'flex', gap: 8, alignItems: 'center' }}>
                       {editingEra === book.id ? (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <input
@@ -607,6 +624,21 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
                           {book.era_name || '+ Set Era'}
                         </button>
                       )}
+
+                      {/* Move to different series */}
+                      <select
+                        style={s.assignSelect}
+                        value={ser.id}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val !== ser.id) assignToSeries(book.id, val || null);
+                        }}
+                      >
+                        {series.map(sr => (
+                          <option key={sr.id} value={sr.id}>{sr.name}</option>
+                        ))}
+                        <option value=''>— Unassign —</option>
+                      </select>
                     </div>
                   </div>
                 ))}
@@ -623,9 +655,29 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
           <div style={s.bookList}>
             {unassigned.map(book => (
               <div key={book.id} style={s.bookRow}>
-                <div style={s.bookRowTitle}>{book.title}</div>
-                <div style={s.bookRowMeta}>
-                  <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.3)' }}>no series</span>
+                <div style={s.bookRowLeft}>
+                  <div style={s.bookRowTitle}>{book.title}</div>
+                  <div style={s.bookRowMeta}>
+                    <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.3)' }}>no series</span>
+                  </div>
+                </div>
+                <div style={s.bookRowRight}>
+                  {series.length > 0 ? (
+                    <select
+                      style={s.assignSelect}
+                      value=''
+                      onChange={e => {
+                        if (e.target.value) assignToSeries(book.id, e.target.value);
+                      }}
+                    >
+                      <option value=''>Assign to series…</option>
+                      {series.map(sr => (
+                        <option key={sr.id} value={sr.id}>{sr.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.25)' }}>Create a series first</span>
+                  )}
                 </div>
               </div>
             ))}
@@ -1099,6 +1151,29 @@ const s = {
     color: 'rgba(26,21,16,0.35)',
     paddingTop: 10,
     letterSpacing: '0.04em',
+  },
+  assignSelect: {
+    background: '#f5f0e8',
+    border: '1px solid rgba(201,168,76,0.3)',
+    borderRadius: 3,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 12,
+    color: 'rgba(26,21,16,0.65)',
+    padding: '6px 10px',
+    cursor: 'pointer',
+    letterSpacing: '0.04em',
+    outline: 'none',
+  },
+  moveBtn: {
+    background: 'none',
+    border: '1px solid rgba(26,21,16,0.1)',
+    borderRadius: 3,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 14,
+    color: 'rgba(26,21,16,0.35)',
+    padding: '4px 8px',
+    cursor: 'pointer',
+    transition: 'all 0.12s',
   },
   // Shows tab
   showCard: {
