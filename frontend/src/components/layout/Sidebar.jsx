@@ -173,13 +173,8 @@ function Sidebar({ isOpen, onClose }) {
           <button
             className={`nav-item ${isActive('/shows') ? 'active' : ''}`}
             onClick={() => {
-              if (showsExpanded) {
-                // Already expanded - navigate to shows and close sidebar
-                navigate('/shows');
-                if (onClose) onClose();
-              } else {
-                // Expand the sub-items and navigate
-                setShowsExpanded(true);
+              setShowsExpanded(!showsExpanded);
+              if (!showsExpanded) {
                 navigate('/shows');
                 if (onClose) onClose();
               }
@@ -192,8 +187,15 @@ function Sidebar({ isOpen, onClose }) {
             </span>
           </button>
           
-          {showsExpanded && shows.length > 0 && (
+          {showsExpanded && (
             <div className="nav-subgroup">
+              <button
+                className={`nav-subitem ${location.pathname === '/shows' ? 'active' : ''}`}
+                onClick={() => handleNavigate('/shows')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Shows</span>
+              </button>
               {shows.map(show => (
                 <button
                   key={show.id}
@@ -205,12 +207,6 @@ function Sidebar({ isOpen, onClose }) {
                   <span className="subitem-count">{show.episodeCount}</span>
                 </button>
               ))}
-            </div>
-          )}
-          
-          {showsExpanded && shows.length === 0 && (
-            <div className="nav-empty-state">
-              <span className="empty-text">No shows yet</span>
             </div>
           )}
         </div>
