@@ -154,34 +154,59 @@ export default function ScenesPanel({ bookId, chapters = [], onLineAdded }) {
       {/* Scene cards */}
       {scenes.length > 0 && (
         <div style={s.sceneList}>
-          {scenes.map((scene, idx) => (
-            <div key={idx} style={s.sceneCard}>
+          {scenes.map((scene, idx) => {
+            const isAdded = !!added[idx];
+            return (
+            <div key={idx} style={{
+              ...s.sceneCard,
+              opacity: isAdded ? 0.4 : 1,
+              transition: 'opacity 0.3s ease, max-height 0.4s ease',
+            }}>
 
-              {/* Chapter label */}
-              <div style={s.chapterLabel}>{scene.chapter_hint || 'Scene Suggestion'}</div>
-
-              {/* Title */}
-              <div style={s.sceneTitle}>{scene.title}</div>
-
-              {/* Description */}
-              <div style={s.sceneDesc}>{scene.description}</div>
-
-              {/* Characters */}
-              {scene.characters?.length > 0 && (
-                <div style={s.charRow}>
-                  {scene.characters.map(char => (
-                    <span key={char} style={s.charChip}>{char}</span>
-                  ))}
+              {/* Added confirmation banner */}
+              {isAdded && (
+                <div style={s.addedBanner}>
+                  <span style={{ fontSize: 12 }}>✓</span>
+                  <span>Added to {chapters.find(c => c.id === selectedChapter[idx])?.title || 'chapter'}</span>
                 </div>
               )}
 
-              {/* Reason */}
-              {scene.reason && (
-                <div style={s.reason}>{scene.reason}</div>
+              {/* Chapter label */}
+              <div style={{
+                ...s.chapterLabel,
+                textDecoration: isAdded ? 'line-through' : 'none',
+              }}>{scene.chapter_hint || 'Scene Suggestion'}</div>
+
+              {/* Title */}
+              <div style={{
+                ...s.sceneTitle,
+                textDecoration: isAdded ? 'line-through' : 'none',
+              }}>{scene.title}</div>
+
+              {/* Collapse description/characters/reason when added */}
+              {!isAdded && (
+                <>
+                  {/* Description */}
+                  <div style={s.sceneDesc}>{scene.description}</div>
+
+                  {/* Characters */}
+                  {scene.characters?.length > 0 && (
+                    <div style={s.charRow}>
+                      {scene.characters.map(char => (
+                        <span key={char} style={s.charChip}>{char}</span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Reason */}
+                  {scene.reason && (
+                    <div style={s.reason}>{scene.reason}</div>
+                  )}
+                </>
               )}
 
               {/* Add to chapter controls */}
-              {!added[idx] ? (
+              {!isAdded ? (
                 <div style={s.addRow}>
                   <select
                     value={selectedChapter[idx] || ''}
@@ -204,13 +229,10 @@ export default function ScenesPanel({ bookId, chapters = [], onLineAdded }) {
                     {adding[idx] ? 'Adding…' : 'Add →'}
                   </button>
                 </div>
-              ) : (
-                <div style={s.addedConfirm}>
-                  ✓ Added as pending line
-                </div>
-              )}
+              ) : null}
             </div>
-          ))}
+            );
+          }))
         </div>
       )}
     </div>
@@ -390,5 +412,19 @@ const s = {
     color: '#4A7C59',
     letterSpacing: '0.08em',
     marginTop: 4,
+  },
+  addedBanner: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 6,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 9,
+    letterSpacing: '0.08em',
+    color: '#4A7C59',
+    background: 'rgba(74,124,89,0.12)',
+    border: '1px solid rgba(74,124,89,0.25)',
+    borderRadius: 2,
+    padding: '6px 10px',
+    marginBottom: 6,
   },
 };
