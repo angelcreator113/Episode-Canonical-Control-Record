@@ -118,10 +118,12 @@ module.exports = (sequelize) => {
     });
 
     // A memory may belong to a character (can be null pre-assignment)
-    StorytellerMemory.belongsTo(models.RegistryCharacter, {
-      foreignKey: 'character_id',
-      as: 'character',
-    });
+    if (models.RegistryCharacter) {
+      StorytellerMemory.belongsTo(models.RegistryCharacter, {
+        foreignKey: 'character_id',
+        as: 'character',
+      });
+    }
   };
 
   return StorytellerMemory;
