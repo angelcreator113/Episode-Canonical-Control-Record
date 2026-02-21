@@ -790,6 +790,24 @@
   gap: 8px;
 }
 
+/* ── Import button ───────────────────────────── */
+.st-import-btn {
+  background: none;
+  border: 1px solid rgba(201,168,76,0.35);
+  border-radius: 3px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  color: #8B6914;
+  padding: 3px 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.st-import-btn:hover {
+  background: rgba(201,168,76,0.1);
+  border-color: #C9A84C;
+}
+
 /* ── Review indicator (pill) ─────────────────── */
 .st-review-indicator {
   display: inline-flex;

@@ -601,7 +601,7 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
                     </div>
 
                     {/* Era + reassign */}
-                    <div style={{ ...s.bookRowRight, display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <div style={s.bookRowRight}>
                       {editingEra === book.id ? (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <input
@@ -1107,13 +1107,20 @@ const s = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '8px 0',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   bookRowLeft: {
     flex: 1,
   },
   bookRowRight: {
-    flexShrink: 0,
-    marginLeft: 16,
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
+    flex: '1 1 180px',
+    justifyContent: 'flex-end',
+    minWidth: 0,
   },
   bookRowTitle: {
     fontFamily: "'Playfair Display', serif",
@@ -1139,11 +1146,13 @@ const s = {
     border: '1px solid rgba(26,21,16,0.12)',
     borderRadius: 3,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(26,21,16,0.45)',
-    padding: '6px 12px',
+    padding: '5px 10px',
     cursor: 'pointer',
     letterSpacing: '0.04em',
+    whiteSpace: 'nowrap',
+    flex: '0 1 auto',
   },
   emptyBooks: {
     fontFamily: 'DM Mono, monospace',
@@ -1157,12 +1166,15 @@ const s = {
     border: '1px solid rgba(201,168,76,0.3)',
     borderRadius: 3,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
+    fontSize: 11,
     color: 'rgba(26,21,16,0.65)',
-    padding: '6px 10px',
+    padding: '5px 8px',
     cursor: 'pointer',
     letterSpacing: '0.04em',
     outline: 'none',
+    maxWidth: 160,
+    minWidth: 0,
+    flex: '1 1 auto',
   },
   moveBtn: {
     background: 'none',

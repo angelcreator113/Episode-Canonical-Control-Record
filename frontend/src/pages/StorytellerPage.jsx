@@ -14,6 +14,7 @@ import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation
 import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
+import ImportDraftModal from './ImportDraftModal';
 
 const API = '/api/v1/storyteller';
 
@@ -307,6 +308,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [newChapterBadge, setNewChapterBadge] = useState('');
   const [addingLineTo, setAddingLineTo] = useState(null);
   const [newLineText, setNewLineText] = useState('');
+  const [importTarget, setImportTarget] = useState(null);
 
   // Active chapter
   const activeChapter = chapters.find(c => c.id === activeChapterId) || null;
@@ -718,6 +720,13 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                       {pendingLines.length === 0 ? 'Complete' : `${pendingLines.length} pending`}
                     </span>
                     <button
+                      className="st-import-btn"
+                      onClick={() => setImportTarget(activeChapter.id)}
+                      title="Import draft lines"
+                    >
+                      Import
+                    </button>
+                    <button
                       className={`st-review-indicator ${reviewMode ? 'active' : ''}`}
                       onClick={() => setReviewMode(r => !r)}
                       title={reviewMode ? 'Exit review mode' : 'Enter review mode'}
@@ -906,6 +915,23 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
             }}
           />
         )}
+
+        {/* ── Import Draft Modal ── */}
+        <ImportDraftModal
+          chapterId={importTarget}
+          chapterTitle={chapters.find(c => c.id === importTarget)?.title}
+          open={!!importTarget}
+          onClose={() => setImportTarget(null)}
+          onImported={(lines) => {
+            setChapters(prev => prev.map(c =>
+              c.id === importTarget
+                ? { ...c, lines: [...(c.lines || []), ...lines] }
+                : c
+            ));
+            setImportTarget(null);
+            toast(`Lines imported successfully`);
+          }}
+        />
       </div>
     </div>
   );
