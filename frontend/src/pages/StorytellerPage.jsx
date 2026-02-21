@@ -160,45 +160,100 @@ export default function StorytellerPage() {
 // Book List
 // ══════════════════════════════════════════════════
 
+function timeAgo(dateStr) {
+  if (!dateStr) return null;
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return `${Math.floor(days / 30)}mo ago`;
+}
+
+function archiveState(book) {
+  const pending = book.pending_count || 0;
+  const edited = book.edited_count || 0;
+  if (pending > 0) return { label: `${pending} Insight${pending > 1 ? 's' : ''} Awaiting Review`, tone: 'warm' };
+  if (edited > 0) return { label: `${edited} Chapter${edited > 1 ? 's' : ''} Updated`, tone: 'active' };
+  return { label: 'Archive Clean', tone: 'clean' };
+}
+
 function BookList({ books, onOpen, onDelete, onCreate }) {
   return (
     <div className="st-book-list">
       <div className="st-book-list-header">
-        <h1>📖 StoryTeller</h1>
-        <button className="st-btn st-btn-gold" onClick={onCreate}>
-          + New Book
-        </button>
+        <div>
+          <h1>StoryTeller</h1>
+          <p className="st-book-list-subtitle">Curate evolving character archives and narrative intelligence.</p>
+        </div>
       </div>
 
-      {books.length === 0 ? (
-        <div className="st-empty">
-          <span className="st-empty-icon">📖</span>
-          <p><strong>No character books yet.</strong></p>
-          <p>Create your first book to start reviewing lines.</p>
-        </div>
-      ) : (
-        <div className="st-book-grid">
-          {books.map(book => (
+      <div className="st-book-grid">
+        {books.map(book => {
+          const state = archiveState(book);
+          const totalLines = book.line_count || 0;
+          const approved = book.approved_count || 0;
+          const progress = totalLines > 0 ? Math.round((approved / totalLines) * 100) : 0;
+
+          return (
             <div key={book.id} className="st-book-card" onClick={() => onOpen(book.id)}>
-              <span className={`st-badge st-status-${book.status}`}>{book.status}</span>
-              <h3>{book.title || book.character_name}</h3>
-              <div className="st-book-sub">
+              <div className="st-card-top">
+                <span className={`st-card-status st-tone-${state.tone}`}>{state.label}</span>
+                {book.updated_at && (
+                  <span className="st-card-age">{timeAgo(book.updated_at)}</span>
+                )}
+              </div>
+
+              <h2 className="st-card-title">{book.title || book.character_name}</h2>
+              <p className="st-card-sub">
                 {[book.era_name, book.timeline_position, book.primary_pov].filter(Boolean).join(' · ') || book.subtitle || ''}
+              </p>
+
+              <div className="st-card-meta">
+                <span>{book.chapter_count || 0} Chapter{(book.chapter_count || 0) !== 1 ? 's' : ''}</span>
+                <span className="st-meta-sep">·</span>
+                <span>{approved} Confirmed</span>
+                {(book.pending_count || 0) > 0 && (
+                  <>
+                    <span className="st-meta-sep">·</span>
+                    <span className="st-meta-pending">{book.pending_count} Pending</span>
+                  </>
+                )}
               </div>
-              <div className="st-book-stats">
-                <span><span className="st-dot st-dot-pending" /> {book.pending_count || 0} pending</span>
-                <span><span className="st-dot st-dot-approved" /> {book.approved_count || 0} approved</span>
-                <span><span className="st-dot st-dot-edited" /> {book.edited_count || 0} edited</span>
+
+              {/* Progress arc */}
+              <div className="st-card-progress">
+                <div className="st-card-progress-bar" style={{ width: `${progress}%` }} />
               </div>
-              <button
-                className="st-btn st-btn-danger st-btn-sm"
-                style={{ position: 'absolute', bottom: 10, right: 10, opacity: 0.7 }}
-                onClick={e => { e.stopPropagation(); onDelete(book.id); }}
-              >
-                ✕
-              </button>
+
+              {book.recent_insight && (
+                <p className="st-card-insight">"{book.recent_insight.length > 80 ? book.recent_insight.slice(0, 80) + '…' : book.recent_insight}"</p>
+              )}
+
+              <div className="st-card-foot">
+                <span className="st-card-open">Open Archive →</span>
+                <button
+                  className="st-card-delete"
+                  onClick={e => { e.stopPropagation(); onDelete(book.id); }}
+                  title="Delete book"
+                >✕</button>
+              </div>
             </div>
-          ))}
+          );
+        })}
+
+        {/* New Archive tile */}
+        <div className="st-book-card st-card-new" onClick={onCreate}>
+          <span className="st-card-new-icon">+</span>
+          <span className="st-card-new-label">Create New Archive</span>
+        </div>
+      </div>
+
+      {books.length === 0 && (
+        <div className="st-empty">
+          <p>No archives yet. Create your first to start curating narrative intelligence.</p>
         </div>
       )}
     </div>

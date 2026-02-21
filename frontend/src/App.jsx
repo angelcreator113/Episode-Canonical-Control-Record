@@ -159,7 +159,9 @@ function AppContent() {
   const isTimelineEditor = location.pathname.includes('/timeline');
   const isSceneComposer = location.pathname.includes('/scene-composer');
   const isExportPage = location.pathname.includes('/export');
+  const isStorytellerPage = location.pathname.includes('/storyteller');
   const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage;
+  const hideFooter = isFullScreen || isStorytellerPage;
 
   return (
     <div className="app-layout">
@@ -306,7 +308,7 @@ function AppContent() {
       </main>
 
       {/* Hide footer on editor routes for immersive experience */}
-      {!isFullScreen && (
+      {!hideFooter && (
         <footer className="app-footer">
           <p>&copy; 2026 Episode Control System. Built with React + Vite</p>
         </footer>
