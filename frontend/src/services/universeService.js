@@ -3,7 +3,7 @@ import api from './api';
 const universeService = {
   async getUniverses() {
     const res = await api.get('/api/v1/universe');
-    return res.data?.data || res.data || [];
+    return res.data?.universes || res.data?.data || res.data || [];
   },
 
   async getUniverse(id) {
@@ -16,7 +16,7 @@ const universeService = {
       ? `/api/v1/universe/series?universe_id=${universeId}`
       : '/api/v1/universe/series';
     const res = await api.get(url);
-    return res.data?.data || res.data || [];
+    return res.data?.series || res.data?.data || res.data || [];
   },
 };
 
