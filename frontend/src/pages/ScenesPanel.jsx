@@ -232,7 +232,7 @@ export default function ScenesPanel({ bookId, chapters = [], onLineAdded }) {
               ) : null}
             </div>
             );
-          }))
+          })}
         </div>
       )}
     </div>
