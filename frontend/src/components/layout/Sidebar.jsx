@@ -16,12 +16,20 @@ function Sidebar({ isOpen, onClose }) {
   const location = useLocation();
   const [shows, setShows] = useState([]);
   const [showsExpanded, setShowsExpanded] = useState(true);
+  const [storyExpanded, setStoryExpanded] = useState(false);
   const [currentShowId, setCurrentShowId] = useState(null);
   
   useEffect(() => {
     loadShows();
   }, []);
   
+  // Auto-expand StoryTeller group when on its sub-routes
+  useEffect(() => {
+    if (location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/pnos-editor')) {
+      setStoryExpanded(true);
+    }
+  }, [location.pathname]);
+
   // Detect if we're on an episode page and get its parent show
   useEffect(() => {
     const checkEpisodeRoute = async () => {
@@ -113,20 +121,67 @@ function Sidebar({ isOpen, onClose }) {
       <nav className="sidebar-nav">
         {/* Home */}
         <NavItem icon="🏠" label="Home" path="/" />
-        <NavItem icon="📖" label="StoryTeller" path="/storyteller" />
+        
+        {/* StoryTeller group */}
+        <div className="nav-group">
+          <button
+            className={`nav-item ${isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') ? 'active' : ''}`}
+            onClick={() => {
+              setStoryExpanded(!storyExpanded);
+              if (!storyExpanded) {
+                navigate('/storyteller');
+                if (onClose) onClose();
+              }
+            }}
+          >
+            <span className="nav-icon">📖</span>
+            <span className="nav-label">StoryTeller</span>
+            <span className={`expand-icon ${storyExpanded ? 'expanded' : ''}`}>
+              ▼
+            </span>
+          </button>
+          
+          {storyExpanded && (
+            <div className="nav-subgroup">
+              <button
+                className={`nav-subitem ${isActive('/storyteller') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/storyteller')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Book Editor</span>
+              </button>
+              <button
+                className={`nav-subitem ${isActive('/character-registry') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/character-registry')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Characters</span>
+              </button>
+              <button
+                className={`nav-subitem ${isActive('/continuity') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/continuity')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Continuity</span>
+              </button>
+              <button
+                className={`nav-subitem ${isActive('/pnos-editor') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/pnos-editor')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">PNOS Editor</span>
+              </button>
+            </div>
+          )}
+        </div>
         
         {/* Shows */}
         <div className="nav-group">
           <button
             className={`nav-item ${isActive('/shows') ? 'active' : ''}`}
             onClick={() => {
-              if (showsExpanded) {
-                // Already expanded - navigate to shows and close sidebar
-                navigate('/shows');
-                if (onClose) onClose();
-              } else {
-                // Expand the sub-items and navigate
-                setShowsExpanded(true);
+              setShowsExpanded(!showsExpanded);
+              if (!showsExpanded) {
                 navigate('/shows');
                 if (onClose) onClose();
               }
@@ -139,8 +194,15 @@ function Sidebar({ isOpen, onClose }) {
             </span>
           </button>
           
-          {showsExpanded && shows.length > 0 && (
+          {showsExpanded && (
             <div className="nav-subgroup">
+              <button
+                className={`nav-subitem ${location.pathname === '/shows' ? 'active' : ''}`}
+                onClick={() => handleNavigate('/shows')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Shows</span>
+              </button>
               {shows.map(show => (
                 <button
                   key={show.id}
@@ -152,12 +214,6 @@ function Sidebar({ isOpen, onClose }) {
                   <span className="subitem-count">{show.episodeCount}</span>
                 </button>
               ))}
-            </div>
-          )}
-          
-          {showsExpanded && shows.length === 0 && (
-            <div className="nav-empty-state">
-              <span className="empty-text">No shows yet</span>
             </div>
           )}
         </div>

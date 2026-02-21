@@ -10,6 +10,9 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
+import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
+import TOCPanel from './TOCPanel';
+import ScenesPanel from './ScenesPanel';
 
 const API = '/api/v1/storyteller';
 
@@ -298,6 +301,29 @@ function CreateBookModal({ onSubmit, onClose }) {
 function BookEditor({ book, onBack, toast, onRefresh }) {
   const [chapters, setChapters] = useState(book.chapters || []);
   const [collapsed, setCollapsed] = useState({});
+  const [activeRightTab, setActiveRightTab] = useState('memories');
+  const [registryCharacters, setRegistryCharacters] = useState([]);
+
+  // Inject Memory keyframe styles
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = MEMORY_STYLES;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
+
+  // Fetch registry characters for the MemoryCard confirm step
+  useEffect(() => {
+    const showId = book.show_id;
+    if (!showId) return;
+    fetch(`/api/v1/character-registry/registries?show_id=${showId}`)
+      .then(r => r.json())
+      .then(data => {
+        const chars = data.registries?.flatMap(r => r.characters || []) || [];
+        setRegistryCharacters(chars);
+      })
+      .catch(() => { /* registry fetch optional */ });
+  }, [book.show_id]);
   const [editingLine, setEditingLine] = useState(null);
   const [editText, setEditText] = useState('');
   const [showAddChapter, setShowAddChapter] = useState(false);
@@ -434,51 +460,37 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   // ── Render ─────────────────────────────────
 
   return (
+    <div className="st-editor-layout">
     <div className="st-editor">
-      {/* Top bar */}
+      {/* Compact top bar — title + stats + actions in one row */}
       <div className="st-editor-topbar">
         <button className="st-back-btn" onClick={onBack} title="Back to books">←</button>
-        <h2>PNOS Book Editor</h2>
-      </div>
-
-      {/* Header */}
-      <div className="st-book-header">
-        <h1>{book.character_name}</h1>
-        <p className="st-subtitle">
-          {book.subtitle || [book.season_label, book.week_label].filter(Boolean).join(' · ')}
-        </p>
-        <div className="st-stat-row">
-          <span className="st-stat">
-            <span className="st-dot st-dot-pending" /> {pendingCount} Pending
-          </span>
-          <span className="st-stat">
-            <span className="st-dot st-dot-approved" /> {approvedCount} Approved
-          </span>
-          <span className="st-stat">
-            <span className="st-dot st-dot-edited" /> {editedCount} Edited
+        <div className="st-topbar-info">
+          <h2>{book.character_name}</h2>
+          <span className="st-topbar-sub">
+            {book.subtitle || [book.season_label, book.week_label].filter(Boolean).join(' · ')}
           </span>
         </div>
-      </div>
-
-      {/* Legend */}
-      <div className="st-legend">
-        <span><span className="st-dot st-dot-pending" /> Pending Review</span>
-        <span><span className="st-dot st-dot-approved" /> Approved</span>
-        <span><span className="st-dot st-dot-edited" /> Edited</span>
-        <span><span className="st-dot st-dot-rejected" /> Rejected</span>
-      </div>
-
-      {/* Action bar */}
-      <div className="st-action-bar">
-        <div className="st-action-bar-left">
+        <div className="st-topbar-stats">
+          <span className="st-stat">
+            <span className="st-dot st-dot-pending" /> {pendingCount}
+          </span>
+          <span className="st-stat">
+            <span className="st-dot st-dot-approved" /> {approvedCount}
+          </span>
+          <span className="st-stat">
+            <span className="st-dot st-dot-edited" /> {editedCount}
+          </span>
+        </div>
+        <div className="st-topbar-actions">
           <button className="st-btn st-btn-gold st-btn-sm" onClick={approveAll}>
-            ✓ Approve All Pending ({pendingCount})
+            ✓ Approve All ({pendingCount})
           </button>
           <button
             className="st-btn st-btn-ghost st-btn-sm"
             onClick={() => setShowAddChapter(!showAddChapter)}
           >
-            + Add Chapter
+            + Chapter
           </button>
         </div>
       </div>
@@ -533,7 +545,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           }
 
           return (
-            <div key={chapter.id} className="st-chapter">
+            <div key={chapter.id} id={`chapter-${chapter.id}`} className="st-chapter">
               <div className="st-chapter-header" onClick={() => toggleChapter(chapter.id)}>
                 <span className={`st-chapter-toggle ${isOpen ? 'open' : ''}`}>▶</span>
                 <span className="st-chapter-title">
@@ -542,12 +554,11 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                 {chapter.badge && (
                   <span className="st-chapter-badge">{chapter.badge}</span>
                 )}
-                <span style={{ fontSize: 12, color: '#8b7e6a' }}>
+                <span className="st-chapter-count">
                   {lines.length} line{lines.length !== 1 ? 's' : ''}
                 </span>
                 <button
-                  className="st-btn st-btn-danger st-btn-sm"
-                  style={{ marginLeft: 'auto', opacity: 0.6, fontSize: 10, padding: '3px 8px' }}
+                  className="st-chapter-delete"
                   onClick={e => { e.stopPropagation(); deleteChapter(chapter.id); }}
                   title="Delete chapter"
                 >
@@ -563,8 +574,8 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                         <div className="st-line-group-label">{group.label}</div>
                       )}
                       {group.lines.map((line) => (
+                        <React.Fragment key={line.id}>
                         <div
-                          key={line.id}
                           className={`st-line ${editingLine === line.id ? 'st-line-editing' : ''}`}
                         >
                           <div className="st-line-dot">
@@ -623,6 +634,19 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                             </div>
                           )}
                         </div>
+                        {(line.status === 'approved' || line.status === 'edited') && (
+                          <MemoryCard
+                            lineId={line.id}
+                            characters={registryCharacters}
+                            onConfirmed={(memory) => {
+                              toast(`Memory confirmed → ${memory.character?.display_name || 'Registry'}`);
+                            }}
+                            onDismissed={(memoryId) => {
+                              // Optional: update local state if tracking dismissed count
+                            }}
+                          />
+                        )}
+                        </React.Fragment>
                       ))}
                     </div>
                   ))}
@@ -658,6 +682,59 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           );
         })
       )}
+    </div>
+
+    {/* ── Right Panel ── */}
+    <div className="st-right-panel">
+      <div className="st-right-tabs">
+        <button
+          className={`st-right-tab ${activeRightTab === 'memories' ? 'active' : ''}`}
+          onClick={() => setActiveRightTab('memories')}
+        >
+          Memory
+        </button>
+        <button
+          className={`st-right-tab ${activeRightTab === 'toc' ? 'active' : ''}`}
+          onClick={() => setActiveRightTab('toc')}
+        >
+          TOC
+        </button>
+        <button
+          className={`st-right-tab ${activeRightTab === 'scenes' ? 'active' : ''}`}
+          onClick={() => setActiveRightTab('scenes')}
+        >
+          Scenes
+        </button>
+      </div>
+      {activeRightTab === 'memories' && <MemoryBankPanel bookId={book.id} />}
+      {activeRightTab === 'toc' && (
+        <TOCPanel
+          book={book}
+          chapters={chapters}
+          onChapterClick={(chapterId) => {
+            setCollapsed(prev => ({ ...prev, [chapterId]: false }));
+            setTimeout(() => {
+              document.getElementById(`chapter-${chapterId}`)
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 50);
+          }}
+        />
+      )}
+      {activeRightTab === 'scenes' && (
+        <ScenesPanel
+          bookId={book.id}
+          chapters={chapters}
+          onLineAdded={(chapterId, line) => {
+            setChapters(prev => prev.map(c =>
+              c.id === chapterId
+                ? { ...c, lines: [...(c.lines || []), line] }
+                : c
+            ));
+            toast('Scene added as pending line');
+          }}
+        />
+      )}
+    </div>
     </div>
   );
 }

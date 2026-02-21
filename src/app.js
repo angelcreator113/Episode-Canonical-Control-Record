@@ -790,6 +790,33 @@ try {
   console.error('✗ Failed to load StoryTeller routes:', e.message);
 }
 
+// Character Registry routes
+try {
+  const characterRegistryRoutes = require('./routes/characterRegistry');
+  app.use('/api/v1/character-registry', characterRegistryRoutes);
+  console.log('✓ Character Registry routes loaded at /api/v1/character-registry');
+} catch (e) {
+  console.error('✗ Failed to load Character Registry routes:', e.message);
+}
+
+// Memory Bank routes (PNOS Storyteller Memories — Phase 1)
+try {
+  const memoriesRoutes = require('./routes/memories');
+  app.use('/api/v1/memories', memoriesRoutes);
+  console.log('✓ Memories routes loaded at /api/v1/memories');
+} catch (e) {
+  console.error('✗ Failed to load Memories routes:', e.message);
+}
+
+// Continuity Engine routes
+try {
+  const continuityEngineRoutes = require('./routes/continuityEngine');
+  app.use('/api/v1/continuity', continuityEngineRoutes);
+  console.log('✓ Continuity Engine routes loaded at /api/v1/continuity');
+} catch (e) {
+  console.error('✗ Failed to load Continuity Engine routes:', e.message);
+}
+
 // Export Queue Monitor (Bull Board dashboard + stats API)
 let queueMonitorRoutes;
 try {
