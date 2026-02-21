@@ -12,6 +12,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
 import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
 import TOCPanel from './TOCPanel';
+import ScenesPanel from './ScenesPanel';
 
 const API = '/api/v1/storyteller';
 
@@ -727,6 +728,19 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
         >
           TOC
         </button>
+        <button
+          onClick={() => setActiveRightTab('scenes')}
+          style={{
+            background: 'none', border: 'none', cursor: 'pointer',
+            fontFamily: 'DM Mono, monospace', fontSize: 10,
+            letterSpacing: '0.1em', textTransform: 'uppercase',
+            color: activeRightTab === 'scenes' ? '#C9A84C' : 'rgba(245,240,232,0.3)',
+            borderBottom: activeRightTab === 'scenes' ? '1px solid #C9A84C' : '1px solid transparent',
+            padding: '4px 8px',
+          }}
+        >
+          Scenes
+        </button>
       </div>
       {activeRightTab === 'memories' && <MemoryBankPanel bookId={book.id} />}
       {activeRightTab === 'toc' && (
@@ -739,6 +753,20 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
               document.getElementById(`chapter-${chapterId}`)
                 ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
             }, 50);
+          }}
+        />
+      )}
+      {activeRightTab === 'scenes' && (
+        <ScenesPanel
+          bookId={book.id}
+          chapters={chapters}
+          onLineAdded={(chapterId, line) => {
+            setChapters(prev => prev.map(c =>
+              c.id === chapterId
+                ? { ...c, lines: [...(c.lines || []), line] }
+                : c
+            ));
+            toast('Scene added as pending line');
           }}
         />
       )}

@@ -37,7 +37,7 @@ try {
 // ── Models ─────────────────────────────────────────────────────────────────
 // Adjust path to match your models/index.js export pattern
 const db = require('../models');
-const { StorytellerMemory, StorytellerLine, RegistryCharacter } = db;
+const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
@@ -463,6 +463,208 @@ router.get('/books/:bookId/memories/pending', optionalAuth, async (req, res) => 
     res.status(500).json({ error: 'Failed to fetch book memories', details: err.message });
   }
 });
+
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GET /books/:bookId/scenes
+// Generates 3-5 scene suggestions via Claude API.
+// Uses confirmed memories + approved/edited lines as context.
+// Results are NOT stored — generated fresh on each request.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.get('/books/:bookId/scenes', optionalAuth, async (req, res) => {
+  try {
+    const { bookId } = req.params;
+
+    // ── 1. Fetch the book with chapters + lines ──────────────────────────
+    const book = await StorytellerBook.findByPk(bookId, {
+      include: [{
+        model: StorytellerChapter,
+        as: 'chapters',
+        include: [{
+          model: StorytellerLine,
+          as: 'lines',
+        }],
+      }],
+    });
+
+    if (!book) return res.status(404).json({ error: 'Book not found' });
+
+    // ── 2. Collect approved/edited lines ─────────────────────────────────
+    const approvedLines = [];
+    for (const chapter of book.chapters || []) {
+      for (const line of chapter.lines || []) {
+        if (line.status === 'approved' || line.status === 'edited') {
+          approvedLines.push({
+            chapter: chapter.title,
+            content: line.text,
+          });
+        }
+      }
+    }
+
+    // ── 3. Fetch confirmed memories for this book ─────────────────────────
+    const confirmedMemories = [];
+    for (const chapter of book.chapters || []) {
+      for (const line of chapter.lines || []) {
+        const memories = await StorytellerMemory.findAll({
+          where: { line_id: line.id, confirmed: true },
+          include: [{
+            model: RegistryCharacter,
+            as: 'character',
+            attributes: ['id', 'display_name', 'role_type'],
+            required: false,
+          }],
+        });
+        for (const memory of memories) {
+          confirmedMemories.push({
+            type: memory.type,
+            statement: memory.statement,
+            character: memory.character?.display_name || null,
+            tags: memory.tags || [],
+          });
+        }
+      }
+    }
+
+    if (approvedLines.length === 0 && confirmedMemories.length === 0) {
+      return res.status(400).json({
+        error: 'No approved lines or confirmed memories found. Approve some lines and confirm memories before generating scene suggestions.',
+      });
+    }
+
+    // ── 4. Build chapter list for Claude to reference ─────────────────────
+    const chapterList = (book.chapters || []).map((c, i) => ({
+      index: i + 1,
+      id: c.id,
+      title: c.title,
+      lineCount: (c.lines || []).length,
+      approvedCount: (c.lines || []).filter(l => l.status === 'approved' || l.status === 'edited').length,
+    }));
+
+    // ── 5. Build the prompt ───────────────────────────────────────────────
+    const prompt = buildScenesPrompt({
+      bookTitle: book.title || book.character_name,
+      chapters: chapterList,
+      approvedLines,
+      confirmedMemories,
+    });
+
+    // ── 6. Call Claude ────────────────────────────────────────────────────
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    // ── 7. Parse response ─────────────────────────────────────────────────
+    let scenes = [];
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      scenes = JSON.parse(clean);
+      if (!Array.isArray(scenes)) scenes = [];
+    } catch (parseErr) {
+      console.error('Scene suggestion parse error:', parseErr, '\nRaw:', rawText);
+      return res.status(500).json({
+        error: 'Claude returned an unparseable response.',
+        raw: rawText.slice(0, 300),
+      });
+    }
+
+    // ── 8. Resolve chapter_id from chapter_hint ───────────────────────────
+    const resolvedScenes = scenes.map(scene => {
+      let chapter_id = null;
+      if (scene.chapter_index) {
+        const match = chapterList.find(c => c.index === scene.chapter_index);
+        chapter_id = match?.id || null;
+      }
+      return {
+        title: scene.title || 'Untitled Scene',
+        description: scene.description || '',
+        chapter_hint: scene.chapter_hint || '',
+        chapter_id,
+        characters: Array.isArray(scene.characters) ? scene.characters : [],
+        reason: scene.reason || '',
+      };
+    });
+
+    res.json({
+      scenes: resolvedScenes,
+      generated_at: new Date().toISOString(),
+      context_used: {
+        memories: confirmedMemories.length,
+        lines: approvedLines.length,
+      },
+    });
+  } catch (err) {
+    console.error('GET /books/:bookId/scenes error:', err);
+    res.status(500).json({ error: 'Scene generation failed', details: err.message });
+  }
+});
+
+
+// ── Scene suggestion prompt ────────────────────────────────────────────────
+
+function buildScenesPrompt({ bookTitle, chapters, approvedLines, confirmedMemories }) {
+  const chapterListStr = chapters
+    .map(c => `  Chapter ${c.index}: "${c.title}" (${c.approvedCount}/${c.lineCount} lines approved)`)
+    .join('\n');
+
+  const memoriesStr = confirmedMemories.length > 0
+    ? confirmedMemories.map(m =>
+        `  [${m.type.toUpperCase()}] ${m.character ? `${m.character}: ` : ''}${m.statement}`
+      ).join('\n')
+    : '  (none yet)';
+
+  const linesStr = approvedLines.length > 0
+    ? approvedLines.slice(-20).map(l =>
+        `  [${l.chapter}] ${l.content}`
+      ).join('\n')
+    : '  (none yet)';
+
+  return `You are a narrative scene architect for the PNOS (Personal Narrative Operating System).
+
+Your job is to suggest 3-5 concrete scene beats that would strengthen the book's narrative arc.
+
+BOOK: "${bookTitle}"
+
+CHAPTERS:
+${chapterListStr}
+
+CONFIRMED CHARACTER MEMORIES:
+${memoriesStr}
+
+APPROVED NARRATIVE LINES (most recent):
+${linesStr}
+
+INSTRUCTIONS:
+- Suggest scenes that FILL GAPS — missing character appearances, unresolved threads, needed transitions
+- Each scene should feel necessary, not decorative
+- Scenes should emerge from what is already confirmed — do not invent new characters or facts
+- Keep descriptions concrete and specific — a scene is a moment, not a theme
+- chapter_hint should be one of the chapter titles above, or "Chapter N-M Bridge" for transitions
+- chapter_index must match the chapter number (1, 2, 3...) or null for bridge scenes
+- characters should only include names that appear in the memories or approved lines
+
+Respond with ONLY a valid JSON array. No preamble, no explanation, no markdown fences.
+
+[
+  {
+    "title": "Short evocative scene title",
+    "description": "One or two sentences. The actual scene — what happens, who is there, what shifts.",
+    "chapter_hint": "Chapter 01",
+    "chapter_index": 1,
+    "characters": ["Character Name", "Other Character"],
+    "reason": "One sentence explaining why this scene is needed for the arc."
+  }
+]`;
+}
 
 
 module.exports = router;
