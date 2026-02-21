@@ -7,8 +7,9 @@ import '../styles/Login.css';
 export default function Login() {
   const navigate = useNavigate();
   const { login, isAuthenticated } = useAuth();
-  const [email, setEmail] = useState('test@example.com');
-  const [password, setPassword] = useState('password123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -43,8 +44,8 @@ export default function Login() {
   return (
     <div className="login-container">
       <div className="login-box">
-        <h1>Episode Canonical Control Record</h1>
-        <h2>Login</h2>
+        <h1>Episode Canonical<br />Control Record</h1>
+        <h2>Sign In</h2>
 
         {error && <div className="alert alert-error">{error}</div>}
         {success && <div className="alert alert-success">{success}</div>}
@@ -57,7 +58,7 @@ export default function Login() {
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              placeholder="test@example.com"
+              placeholder="you@example.com"
               required
               disabled={loading}
             />
@@ -65,15 +66,26 @@ export default function Login() {
 
           <div className="form-group">
             <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="At least 6 characters"
-              required
-              disabled={loading}
-            />
+            <div className="password-wrapper">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="At least 6 characters"
+                required
+                disabled={loading}
+              />
+              <button
+                type="button"
+                className="password-eye"
+                onClick={() => setShowPassword(v => !v)}
+                tabIndex={-1}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
+              >
+                {showPassword ? '◉' : '○'}
+              </button>
+            </div>
           </div>
 
           <button
@@ -81,12 +93,12 @@ export default function Login() {
             className="btn btn-primary btn-block"
             disabled={loading}
           >
-            {loading ? 'Logging in...' : 'Login'}
+            {loading ? 'Signing in…' : 'Sign In'}
           </button>
         </form>
 
         <p className="help-text">
-          For testing, use any email and password (minimum 6 characters)
+          Enter your credentials to access the canonical record
         </p>
       </div>
     </div>

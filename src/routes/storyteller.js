@@ -13,6 +13,7 @@
  * PUT    /api/v1/storyteller/lines/:id            — Update a line (text, status)
  * DELETE /api/v1/storyteller/lines/:id            — Delete (reject) a line
  * POST   /api/v1/storyteller/books/:id/approve-all — Approve all pending lines
+ * POST   /api/v1/storyteller/chapters/:id/import   — Bulk import lines from LINE-marked draft
  *
  * Location: src/routes/storyteller.js
  */
@@ -499,6 +500,124 @@ router.post('/books/:id/approve-all', optionalAuth, async (req, res) => {
     return res.status(500).json({ error: 'Failed to approve all', message: error.message });
   }
 });
+
+
+// ═══════════════════════════════════════════
+// POST /chapters/:chapterId/import — Bulk import lines from LINE-marked draft
+// ═══════════════════════════════════════════
+router.post('/chapters/:chapterId/import', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StorytellerLine || !models?.StorytellerChapter) {
+      return res.status(500).json({ error: 'Models not loaded' });
+    }
+
+    const { chapterId } = req.params;
+    const { raw_text, mode = 'append' } = req.body;
+
+    if (!raw_text?.trim()) {
+      return res.status(400).json({ error: 'raw_text is required' });
+    }
+
+    // Verify chapter exists
+    const chapter = await models.StorytellerChapter.findByPk(chapterId);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+
+    // Parse lines from raw text
+    const parsedLines = parseImportText(raw_text);
+    if (parsedLines.length === 0) {
+      return res.status(400).json({
+        error: 'No lines found. Make sure your text contains LINE NNN markers.',
+      });
+    }
+
+    // Replace mode: delete existing lines
+    if (mode === 'replace') {
+      await models.StorytellerLine.destroy({ where: { chapter_id: chapterId } });
+    }
+
+    // Get current max sort_order for append mode
+    let startIndex = 0;
+    if (mode === 'append') {
+      const maxLine = await models.StorytellerLine.findOne({
+        where: { chapter_id: chapterId },
+        order: [['sort_order', 'DESC']],
+      });
+      startIndex = maxLine ? maxLine.sort_order + 1 : 0;
+    }
+
+    // Bulk create lines
+    const toCreate = parsedLines.map((line, i) => ({
+      id: uuidv4(),
+      chapter_id: chapterId,
+      text: line.content,
+      group_label: line.label || null,
+      status: 'pending',
+      sort_order: startIndex + i,
+    }));
+
+    const created = await models.StorytellerLine.bulkCreate(toCreate, {
+      returning: true,
+    });
+
+    return res.status(201).json({
+      imported: created.length,
+      skipped: 0,
+      lines: created,
+    });
+  } catch (err) {
+    console.error('POST /chapters/:chapterId/import error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ── Import parser ──────────────────────────────────────────────────────────
+
+function parseImportText(rawText) {
+  const lines = rawText.split('\n');
+  const results = [];
+
+  const lineMarker = /^LINE\s+(\d+)(?:\s+\[([^\]]*)\])?\s*$/i;
+  const skipPatterns = [
+    /^---+$/,
+    /^CHAPTER\s+/i,
+    /^END\s+CHAPTER/i,
+    /^Theme:/i,
+    /^POV:/i,
+    /^Era:/i,
+    /^Status:/i,
+    /^Word count/i,
+    /^Lines:/i,
+    /^Memory candidates/i,
+    /^POV breakdown/i,
+    /^\s*$/,
+  ];
+
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    if (skipPatterns.some(p => p.test(line))) { i++; continue; }
+
+    const match = line.match(lineMarker);
+    if (match) {
+      const label = `line-${match[1]}`;
+      i++;
+      while (i < lines.length && lines[i].trim() === '') i++;
+      if (i < lines.length) {
+        const content = lines[i].trim();
+        if (content && !skipPatterns.some(p => p.test(content))) {
+          results.push({ label, content });
+        }
+      }
+      i++;
+      continue;
+    }
+    i++;
+  }
+
+  return results;
+}
 
 
 module.exports = router;

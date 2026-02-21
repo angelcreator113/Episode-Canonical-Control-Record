@@ -9,6 +9,7 @@ import { SearchFiltersProvider } from './contexts/SearchFiltersContext';
 
 // Pages
 import Login from './pages/Login';
+import LandingPage from './pages/LandingPage';
 import Home from './pages/Home';
 import EpisodeDetail from './pages/EpisodeDetail';
 import CreateEpisode from './pages/CreateEpisode';
@@ -120,10 +121,10 @@ function AppContent() {
   // Only redirect to login if not authenticated AND not currently loading auth state
   // This preserves deep links on page refresh
   React.useEffect(() => {
-    if (!loading && !isAuthenticated && location.pathname !== '/login' && !isNavigatingRef.current) {
-      console.log('[AppContent] User not authenticated, redirecting to login...');
+    if (!loading && !isAuthenticated && location.pathname !== '/login' && location.pathname !== '/' && !isNavigatingRef.current) {
+      console.log('[AppContent] User not authenticated, redirecting to landing...');
       isNavigatingRef.current = true;
-      navigate('/login', { replace: true });
+      navigate('/', { replace: true });
       setTimeout(() => { isNavigatingRef.current = false; }, 100);
     }
   }, [isAuthenticated, loading, location.pathname, navigate]);
@@ -150,8 +151,9 @@ function AppContent() {
   if (!isAuthenticated) {
     return (
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<Login />} />
-        <Route path="*" element={<Navigate to="/login" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
   }

@@ -106,6 +106,7 @@ module.exports = (sequelize) => {
       tableName: 'storyteller_memories',
       timestamps: true,
       underscored: true, // maps createdAt → created_at, updatedAt → updated_at
+      paranoid: false, // No soft deletes — table has no deleted_at column
     }
   );
 

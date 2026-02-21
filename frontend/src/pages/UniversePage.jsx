@@ -441,6 +441,23 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
   const [saving, setSaving]       = useState(false);
   const [editingEra, setEditingEra] = useState(null); // bookId
   const [eraValues, setEraValues]   = useState({});
+  const [assigning, setAssigning]   = useState(null); // bookId being assigned
+
+  async function assignToSeries(bookId, seriesId) {
+    try {
+      const res = await fetch(`${STORYTELLER_API}/books/${bookId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ series_id: seriesId || null }),
+      });
+      if (!res.ok) throw new Error('Failed to assign');
+      setAssigning(null);
+      showToast('Book assigned to series');
+      onChanged();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
 
   async function createSeries() {
     if (!newName.trim()) return;
@@ -583,12 +600,12 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
                       </div>
                     </div>
 
-                    {/* Era inline edit */}
+                    {/* Era + reassign */}
                     <div style={s.bookRowRight}>
                       {editingEra === book.id ? (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <input
-                            style={{ ...s.input, padding: '4px 8px', fontSize: 11, width: 140 }}
+                            style={{ ...s.input, padding: '6px 10px', fontSize: 13, width: 160 }}
                             value={eraValues[book.id] ?? book.era_name ?? ''}
                             onChange={e => setEraValues(prev => ({ ...prev, [book.id]: e.target.value }))}
                             autoFocus
@@ -607,6 +624,21 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
                           {book.era_name || '+ Set Era'}
                         </button>
                       )}
+
+                      {/* Move to different series */}
+                      <select
+                        style={s.assignSelect}
+                        value={ser.id}
+                        onChange={e => {
+                          const val = e.target.value;
+                          if (val !== ser.id) assignToSeries(book.id, val || null);
+                        }}
+                      >
+                        {series.map(sr => (
+                          <option key={sr.id} value={sr.id}>{sr.name}</option>
+                        ))}
+                        <option value=''>— Unassign —</option>
+                      </select>
                     </div>
                   </div>
                 ))}
@@ -623,9 +655,29 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
           <div style={s.bookList}>
             {unassigned.map(book => (
               <div key={book.id} style={s.bookRow}>
-                <div style={s.bookRowTitle}>{book.title}</div>
-                <div style={s.bookRowMeta}>
-                  <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.3)' }}>no series</span>
+                <div style={s.bookRowLeft}>
+                  <div style={s.bookRowTitle}>{book.title}</div>
+                  <div style={s.bookRowMeta}>
+                    <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.3)' }}>no series</span>
+                  </div>
+                </div>
+                <div style={s.bookRowRight}>
+                  {series.length > 0 ? (
+                    <select
+                      style={s.assignSelect}
+                      value=''
+                      onChange={e => {
+                        if (e.target.value) assignToSeries(book.id, e.target.value);
+                      }}
+                    >
+                      <option value=''>Assign to series…</option>
+                      {series.map(sr => (
+                        <option key={sr.id} value={sr.id}>{sr.name}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.25)' }}>Create a series first</span>
+                  )}
                 </div>
               </div>
             ))}
@@ -787,7 +839,7 @@ function LoadingDots() {
 function LoadingState() {
   return (
     <div style={{ padding: 60, textAlign: 'center', fontFamily: 'DM Mono, monospace',
-      fontSize: 11, color: 'rgba(26,21,16,0.3)', letterSpacing: '0.1em' }}>
+      fontSize: 14, color: 'rgba(26,21,16,0.4)', letterSpacing: '0.08em' }}>
       Loading universe…
     </div>
   );
@@ -796,7 +848,7 @@ function LoadingState() {
 function ErrorState({ onRetry }) {
   return (
     <div style={{ padding: 60, textAlign: 'center' }}>
-      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11,
+      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 14,
         color: '#B85C38', marginBottom: 12 }}>
         Could not load universe data.
       </div>
@@ -823,14 +875,14 @@ const s = {
   },
   pageLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     letterSpacing: '0.22em',
     color: '#C9A84C',
     marginBottom: 6,
   },
   pageTitle: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 32,
+    fontSize: 36,
     fontStyle: 'italic',
     color: 'rgba(26,21,16,0.92)',
     fontWeight: 400,
@@ -839,8 +891,8 @@ const s = {
   },
   pageSlug: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
-    color: 'rgba(26,21,16,0.25)',
+    fontSize: 13,
+    color: 'rgba(26,21,16,0.35)',
     letterSpacing: '0.1em',
   },
   tabBar: {
@@ -853,9 +905,9 @@ const s = {
     background: 'none',
     border: 'none',
     fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
+    fontSize: 14,
     letterSpacing: '0.1em',
-    padding: '16px 20px',
+    padding: '16px 24px',
     cursor: 'pointer',
     transition: 'color 0.15s',
   },
@@ -882,7 +934,7 @@ const s = {
   },
   previewTitle: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 26,
+    fontSize: 28,
     fontStyle: 'italic',
     color: '#C9A84C',
     fontWeight: 400,
@@ -893,49 +945,49 @@ const s = {
   },
   previewLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     letterSpacing: '0.18em',
-    color: 'rgba(26,21,16,0.35)',
+    color: 'rgba(26,21,16,0.45)',
     marginBottom: 8,
     textTransform: 'uppercase',
   },
   previewBody: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 15,
+    fontSize: 16,
     lineHeight: 1.75,
     color: 'rgba(26,21,16,0.75)',
     whiteSpace: 'pre-wrap',
   },
   themeChip: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: 'rgba(161,128,46,0.85)',
     background: 'rgba(201,168,76,0.12)',
-    borderRadius: 2,
-    padding: '3px 8px',
+    borderRadius: 3,
+    padding: '4px 10px',
     letterSpacing: '0.06em',
   },
   fieldLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
-    letterSpacing: '0.16em',
-    color: 'rgba(26,21,16,0.4)',
+    fontSize: 12,
+    letterSpacing: '0.14em',
+    color: 'rgba(26,21,16,0.5)',
     textTransform: 'uppercase',
   },
   fieldHint: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
-    color: 'rgba(26,21,16,0.25)',
+    fontSize: 11,
+    color: 'rgba(26,21,16,0.35)',
     letterSpacing: '0.06em',
   },
   input: {
     background: '#f5f0e8',
     border: '1px solid rgba(26,21,16,0.1)',
-    borderRadius: 2,
+    borderRadius: 3,
     fontFamily: "'Playfair Display', serif",
-    fontSize: 14,
+    fontSize: 15,
     color: 'rgba(26,21,16,0.85)',
-    padding: '10px 12px',
+    padding: '12px 14px',
     outline: 'none',
     width: '100%',
     boxSizing: 'border-box',
@@ -943,11 +995,11 @@ const s = {
   textarea: {
     background: '#f5f0e8',
     border: '1px solid rgba(26,21,16,0.1)',
-    borderRadius: 2,
+    borderRadius: 3,
     fontFamily: "'Playfair Display', serif",
-    fontSize: 13,
+    fontSize: 15,
     color: 'rgba(26,21,16,0.8)',
-    padding: '10px 12px',
+    padding: '12px 14px',
     outline: 'none',
     width: '100%',
     boxSizing: 'border-box',
@@ -957,53 +1009,53 @@ const s = {
   primaryBtn: {
     background: '#C9A84C',
     border: 'none',
-    borderRadius: 2,
+    borderRadius: 3,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
-    letterSpacing: '0.12em',
+    fontSize: 13,
+    letterSpacing: '0.1em',
     color: '#14100c',
     fontWeight: 600,
-    padding: '9px 20px',
+    padding: '10px 22px',
     cursor: 'pointer',
     transition: 'opacity 0.15s',
   },
   secondaryBtn: {
     background: 'none',
-    border: '1px solid rgba(26,21,16,0.15)',
-    borderRadius: 2,
+    border: '1px solid rgba(26,21,16,0.18)',
+    borderRadius: 3,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
-    letterSpacing: '0.1em',
-    color: 'rgba(26,21,16,0.5)',
-    padding: '8px 16px',
+    fontSize: 13,
+    letterSpacing: '0.08em',
+    color: 'rgba(26,21,16,0.55)',
+    padding: '10px 18px',
     cursor: 'pointer',
     transition: 'all 0.12s',
   },
   deleteBtn: {
     background: 'none',
     border: '1px solid rgba(184,92,56,0.25)',
-    borderRadius: 2,
-    color: 'rgba(184,92,56,0.6)',
-    padding: '4px 8px',
+    borderRadius: 3,
+    color: 'rgba(184,92,56,0.65)',
+    padding: '6px 10px',
     cursor: 'pointer',
-    fontSize: 10,
+    fontSize: 13,
     fontFamily: 'DM Mono, monospace',
   },
   microBtn: {
     background: 'none',
     border: '1px solid rgba(26,21,16,0.15)',
-    borderRadius: 2,
-    color: 'rgba(26,21,16,0.5)',
-    padding: '3px 7px',
+    borderRadius: 3,
+    color: 'rgba(26,21,16,0.55)',
+    padding: '5px 9px',
     cursor: 'pointer',
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
+    fontSize: 13,
   },
   sectionLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
-    letterSpacing: '0.2em',
-    color: 'rgba(26,21,16,0.3)',
+    fontSize: 12,
+    letterSpacing: '0.18em',
+    color: 'rgba(26,21,16,0.4)',
     textTransform: 'uppercase',
     marginBottom: 12,
   },
@@ -1030,18 +1082,18 @@ const s = {
   },
   seriesName: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 18,
+    fontSize: 22,
     fontStyle: 'italic',
     color: 'rgba(26,21,16,0.88)',
     marginBottom: 4,
   },
   seriesDesc: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
-    color: 'rgba(26,21,16,0.35)',
-    letterSpacing: '0.04em',
-    lineHeight: 1.5,
-    maxWidth: 520,
+    fontSize: 13,
+    color: 'rgba(26,21,16,0.45)',
+    letterSpacing: '0.02em',
+    lineHeight: 1.6,
+    maxWidth: 560,
   },
   bookList: {
     display: 'flex',
@@ -1055,17 +1107,24 @@ const s = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '8px 0',
+    flexWrap: 'wrap',
+    gap: 8,
   },
   bookRowLeft: {
     flex: 1,
   },
   bookRowRight: {
-    flexShrink: 0,
-    marginLeft: 16,
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 8,
+    alignItems: 'center',
+    flex: '1 1 180px',
+    justifyContent: 'flex-end',
+    minWidth: 0,
   },
   bookRowTitle: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 14,
+    fontSize: 16,
     color: 'rgba(26,21,16,0.78)',
     marginBottom: 3,
   },
@@ -1075,30 +1134,58 @@ const s = {
   },
   metaChip: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
-    letterSpacing: '0.06em',
+    fontSize: 11,
+    letterSpacing: '0.04em',
     color: '#C9A84C',
     background: 'rgba(201,168,76,0.1)',
-    borderRadius: 2,
-    padding: '2px 6px',
+    borderRadius: 3,
+    padding: '3px 8px',
   },
   eraBtn: {
     background: 'none',
-    border: '1px solid rgba(26,21,16,0.1)',
-    borderRadius: 2,
+    border: '1px solid rgba(26,21,16,0.12)',
+    borderRadius: 3,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
-    color: 'rgba(26,21,16,0.4)',
-    padding: '4px 10px',
+    fontSize: 11,
+    color: 'rgba(26,21,16,0.45)',
+    padding: '5px 10px',
     cursor: 'pointer',
-    letterSpacing: '0.06em',
+    letterSpacing: '0.04em',
+    whiteSpace: 'nowrap',
+    flex: '0 1 auto',
   },
   emptyBooks: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
-    color: 'rgba(26,21,16,0.25)',
+    fontSize: 13,
+    color: 'rgba(26,21,16,0.35)',
     paddingTop: 10,
-    letterSpacing: '0.06em',
+    letterSpacing: '0.04em',
+  },
+  assignSelect: {
+    background: '#f5f0e8',
+    border: '1px solid rgba(201,168,76,0.3)',
+    borderRadius: 3,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 11,
+    color: 'rgba(26,21,16,0.65)',
+    padding: '5px 8px',
+    cursor: 'pointer',
+    letterSpacing: '0.04em',
+    outline: 'none',
+    maxWidth: 160,
+    minWidth: 0,
+    flex: '1 1 auto',
+  },
+  moveBtn: {
+    background: 'none',
+    border: '1px solid rgba(26,21,16,0.1)',
+    borderRadius: 3,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 14,
+    color: 'rgba(26,21,16,0.35)',
+    padding: '4px 8px',
+    cursor: 'pointer',
+    transition: 'all 0.12s',
   },
   // Shows tab
   showCard: {
@@ -1115,24 +1202,24 @@ const s = {
   },
   showName: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 18,
+    fontSize: 22,
     fontStyle: 'italic',
     color: 'rgba(26,21,16,0.88)',
     marginBottom: 4,
   },
   showEra: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: '#4A7C59',
-    letterSpacing: '0.08em',
+    letterSpacing: '0.06em',
   },
   showDesc: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
-    color: 'rgba(26,21,16,0.4)',
-    lineHeight: 1.6,
+    fontSize: 14,
+    color: 'rgba(26,21,16,0.5)',
+    lineHeight: 1.7,
     marginTop: 10,
-    letterSpacing: '0.04em',
+    letterSpacing: '0.02em',
   },
   emptyState: {
     paddingTop: 40,
@@ -1140,16 +1227,16 @@ const s = {
   },
   emptyTitle: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 16,
+    fontSize: 20,
     fontStyle: 'italic',
-    color: 'rgba(26,21,16,0.45)',
-    marginBottom: 8,
+    color: 'rgba(26,21,16,0.5)',
+    marginBottom: 10,
   },
   emptyHint: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
-    color: 'rgba(26,21,16,0.25)',
-    letterSpacing: '0.06em',
+    fontSize: 13,
+    color: 'rgba(26,21,16,0.35)',
+    letterSpacing: '0.04em',
   },
   // Timeline
   timelineBlock: {
@@ -1181,7 +1268,7 @@ const s = {
   },
   timelineItemLabel: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 12,
+    fontSize: 14,
     fontStyle: 'italic',
     color: 'rgba(26,21,16,0.7)',
     textAlign: 'center',
@@ -1189,15 +1276,15 @@ const s = {
   },
   timelineItemEra: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     color: '#C9A84C',
-    letterSpacing: '0.06em',
+    letterSpacing: '0.04em',
     textAlign: 'center',
   },
   timelineItemPos: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
-    color: 'rgba(26,21,16,0.25)',
+    fontSize: 11,
+    color: 'rgba(26,21,16,0.3)',
     letterSpacing: '0.04em',
     textAlign: 'center',
   },
@@ -1234,14 +1321,14 @@ const s = {
   },
   modalLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
-    letterSpacing: '0.2em',
+    fontSize: 12,
+    letterSpacing: '0.18em',
     color: '#C9A84C',
     marginBottom: 4,
   },
   modalTitle: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 18,
+    fontSize: 22,
     fontStyle: 'italic',
     color: 'rgba(26,21,16,0.88)',
   },
@@ -1252,10 +1339,10 @@ const s = {
   },
   modalHint: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
-    color: 'rgba(26,21,16,0.35)',
-    letterSpacing: '0.04em',
-    lineHeight: 1.6,
+    fontSize: 13,
+    color: 'rgba(26,21,16,0.45)',
+    letterSpacing: '0.02em',
+    lineHeight: 1.7,
     marginBottom: 14,
   },
   modalFooter: {
@@ -1281,8 +1368,8 @@ const s = {
     transform: 'translateX(-50%)',
     color: 'white',
     fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
-    padding: '10px 20px',
+    fontSize: 14,
+    padding: '12px 24px',
     borderRadius: 3,
     letterSpacing: '0.06em',
     zIndex: 500,
