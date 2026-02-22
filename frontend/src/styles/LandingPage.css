@@ -154,13 +154,18 @@
   }
 
   .lp-nav__login-li {
-    margin-left: 2px;
+    margin-left: auto;
     flex-shrink: 0;
+    position: sticky;
+    right: 0;
+    z-index: 2;
+    background: linear-gradient(90deg, transparent 0%, rgba(26,21,16,0.97) 20%);
+    padding-left: 16px;
   }
 
   .lp-nav__login-btn {
     font-size: 11px;
-    padding: 6px 18px;
+    padding: 8px 20px;
   }
 
   /* Hide hero eyebrow — nav brand already shows it */

@@ -295,7 +295,8 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
     fetch('/api/v1/character-registry/registries')
       .then(r => r.json())
       .then(data => {
-        const chars = data.registries?.flatMap(r => r.characters || []) || [];
+        const chars = (data.registries?.flatMap(r => r.characters || []) || [])
+          .map(c => ({ id: c.id, name: c.display_name || c.name || c.character_key, type: c.role_type || c.type }));
         setRegistryCharacters(chars);
       })
       .catch(() => {});
