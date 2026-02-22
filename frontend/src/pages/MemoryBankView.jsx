@@ -146,15 +146,14 @@ export default function MemoryBankView({ bookId, showId }) {
   // ── Load registry characters ───────────────────────────────────
 
   useEffect(() => {
-    if (!showId) return;
-    fetch(`/api/v1/character-registry/registries?show_id=${showId}`)
+    fetch('/api/v1/character-registry/registries')
       .then(r => r.json())
       .then(d => {
         const chars = d.registries?.flatMap(r => r.characters || []) || [];
         setRegistryCharacters(chars.map(c => ({ id: c.id, name: c.display_name || c.name, type: c.role_type || c.type })));
       })
       .catch(() => {});
-  }, [showId]);
+  }, []);
 
   // ── Load memories ──────────────────────────────────────────────
 
