@@ -792,6 +792,28 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                     >
                       ✎ Interview
                     </button>
+                    {(activeChapter.lines || []).length > 0 && (
+                      <button
+                        className="st-import-btn"
+                        onClick={async () => {
+                          const count = (activeChapter.lines || []).length;
+                          if (!window.confirm(`Clear all ${count} line${count !== 1 ? 's' : ''} from this chapter? This cannot be undone.`)) return;
+                          try {
+                            const res = await fetch(`${STORYTELLER_API}/chapters/${activeChapter.id}/lines`, { method: 'DELETE' });
+                            if (!res.ok) throw new Error('Failed to clear');
+                            setChapters(prev => prev.map(c =>
+                              c.id === activeChapter.id ? { ...c, lines: [] } : c
+                            ));
+                          } catch (err) {
+                            console.error('Clear chapter error:', err);
+                          }
+                        }}
+                        title="Remove all lines from this chapter"
+                        style={{ marginLeft: 4, color: '#B85C38' }}
+                      >
+                        ✕ Clear
+                      </button>
+                    )}
                   </div>
 
                   {/* Scene Interview — auto-pops when chapter has no lines and no prior interview, or on redo */}
