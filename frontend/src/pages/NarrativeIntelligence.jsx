@@ -137,9 +137,9 @@ export default function NarrativeIntelligence({
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            content:     suggestion.line_suggestion,
-            source_type: 'narrative_intelligence',
-            source_ref:  `AI suggestion after line ${lineIndex + 1}`,
+            text:        suggestion.line_suggestion,
+            source_tags: 'narrative_intelligence',
+            group_label: `AI suggestion after line ${lineIndex + 1}`,
             status:      'pending',
           }),
         }
