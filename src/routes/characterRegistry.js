@@ -225,6 +225,14 @@ router.put('/characters/:id', async (req, res) => {
       'appearance_mode', 'status', 'core_belief', 'pressure_type', 'pressure_quote',
       'personality', 'job_options', 'description', 'name_options', 'selected_name',
       'personality_matrix', 'extra_fields', 'sort_order',
+      // Section 1: Core Identity
+      'canon_tier', 'first_appearance', 'era_introduced', 'creator',
+      // Section 2: Essence Profile
+      'core_desire', 'core_fear', 'core_wound', 'mask_persona',
+      'truth_persona', 'character_archetype', 'signature_trait', 'emotional_baseline',
+      // Sections 3-8: JSONB
+      'aesthetic_dna', 'career_status', 'relationships_map',
+      'story_presence', 'voice_signature', 'evolution_tracking',
     ];
     allowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     await character.save();

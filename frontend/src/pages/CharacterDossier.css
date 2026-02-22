@@ -1,0 +1,736 @@
+/* ==============================================================
+   CHARACTER DOSSIER — Classified Canon Archive Styles
+   A protected canon archive. A fashion house portfolio.
+   A classified dossier. Clean. Intentional. Elevated.
+   Location: frontend/src/pages/CharacterDossier.css
+   ============================================================== */
+
+/* ─── Design Tokens (inherit from registry page, extend here) ── */
+.dossier {
+  --d-bg:          #faf8f5;
+  --d-surface:     #ffffff;
+  --d-surface2:    #f5f2ed;
+  --d-surface3:    #ede8e0;
+  --d-border:      #e0d8cc;
+  --d-border2:     #d0c5b5;
+  --d-gold:        #b8963a;
+  --d-gold-dim:    #8a7535;
+  --d-gold-bg:     rgba(201, 168, 76, 0.08);
+  --d-ink:         #1a1510;
+  --d-ink-dim:     #6b6050;
+  --d-ink-faint:   #9a9080;
+  --d-red:         #d43a2a;
+  --d-green:       #3d9e42;
+  --d-blue:        #5570d2;
+  --d-purple:      #8b45b5;
+  --d-cyan:        #2fa8a0;
+
+  --d-serif:       'Cormorant Garamond', 'Georgia', serif;
+  --d-sans:        'DM Sans', 'Inter', -apple-system, sans-serif;
+  --d-mono:        'DM Mono', 'JetBrains Mono', monospace;
+
+  font-family: var(--d-sans);
+  color: var(--d-ink);
+  max-width: 100%;
+}
+
+
+/* ═══════════════════════════════════════
+   HEADER BANNER
+   ═══════════════════════════════════════ */
+.dossier-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 20px;
+  padding: 32px 32px 24px;
+  background:
+    linear-gradient(135deg, rgba(201,168,76,0.06) 0%, transparent 60%),
+    var(--d-surface);
+  border-bottom: 1px solid var(--d-border);
+  border-radius: 2px 2px 0 0;
+  position: relative;
+}
+
+.dossier-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, var(--d-gold), var(--d-gold-dim), transparent);
+}
+
+.dossier-header-icon {
+  font-size: 40px;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--d-surface2);
+  border: 1px solid var(--d-border);
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.dossier-header-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dossier-classification {
+  font-family: var(--d-mono);
+  font-size: 10px;
+  letter-spacing: 2.5px;
+  color: var(--d-gold-dim);
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+
+.dossier-name {
+  font-family: var(--d-serif);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--d-ink);
+  margin: 0 0 4px;
+  line-height: 1.2;
+}
+
+.dossier-subtitle {
+  font-size: 14px;
+  color: var(--d-ink-dim);
+  margin: 0 0 10px;
+  font-style: italic;
+}
+
+.dossier-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.dossier-badge {
+  font-family: var(--d-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  padding: 3px 10px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  border: 1px solid var(--d-border2);
+  color: var(--d-ink-dim);
+  background: var(--d-surface2);
+}
+.dossier-badge.role-protagonist { color: var(--d-gold);   border-color: var(--d-gold); }
+.dossier-badge.role-pressure    { color: var(--d-red);    border-color: var(--d-red); }
+.dossier-badge.role-mirror      { color: var(--d-blue);   border-color: var(--d-blue); }
+.dossier-badge.role-support     { color: var(--d-green);  border-color: var(--d-green); }
+.dossier-badge.role-shadow      { color: var(--d-purple); border-color: var(--d-purple); }
+.dossier-badge.role-special     { color: var(--d-cyan);   border-color: var(--d-cyan); }
+
+.dossier-badge.tier {
+  color: var(--d-gold);
+  border-color: var(--d-gold-dim);
+  background: var(--d-gold-bg);
+}
+
+.dossier-badge.status-draft     { color: var(--d-ink-faint); }
+.dossier-badge.status-accepted  { color: var(--d-green); border-color: var(--d-green); }
+.dossier-badge.status-declined  { color: var(--d-red);   border-color: var(--d-red); }
+.dossier-badge.status-finalized {
+  color: var(--d-gold);
+  border-color: var(--d-gold);
+  background: var(--d-gold-bg);
+}
+
+.dossier-header-actions {
+  flex-shrink: 0;
+  display: flex;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+
+/* ═══════════════════════════════════════
+   SECTION NAV (quick jump bar)
+   ═══════════════════════════════════════ */
+.dossier-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--d-border);
+  background: var(--d-surface2);
+  overflow-x: auto;
+}
+
+.dossier-nav-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 10px 16px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  position: relative;
+  min-width: 56px;
+}
+
+.dossier-nav-btn:hover {
+  background: var(--d-gold-bg);
+}
+
+.dossier-nav-btn:hover::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 24px;
+  height: 2px;
+  background: var(--d-gold);
+}
+
+.dossier-nav-icon {
+  font-size: 16px;
+  line-height: 1;
+}
+
+.dossier-nav-num {
+  font-family: var(--d-mono);
+  font-size: 9px;
+  letter-spacing: 1px;
+  color: var(--d-ink-faint);
+}
+
+
+/* ═══════════════════════════════════════
+   SECTIONS
+   ═══════════════════════════════════════ */
+.dossier-body {
+  padding: 0;
+}
+
+.dossier-section {
+  border-bottom: 1px solid var(--d-border);
+  background: var(--d-surface);
+  transition: background 0.2s;
+}
+
+.dossier-section.editing {
+  background: linear-gradient(180deg, rgba(201,168,76,0.04) 0%, var(--d-surface) 100%);
+}
+
+.dossier-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+
+.dossier-section-header:hover {
+  background: rgba(0,0,0,0.015);
+}
+
+.dossier-section-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dossier-section-num {
+  font-family: var(--d-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  color: var(--d-ink-faint);
+  width: 22px;
+}
+
+.dossier-section-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+
+.dossier-section-label {
+  font-family: var(--d-mono);
+  font-size: 11px;
+  letter-spacing: 2px;
+  color: var(--d-gold-dim);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.dossier-section-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dossier-empty-tag {
+  font-family: var(--d-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  color: var(--d-ink-faint);
+  border: 1px dashed var(--d-border2);
+  padding: 2px 8px;
+  border-radius: 2px;
+}
+
+.dossier-edit-btn {
+  border: 1px solid var(--d-border2);
+  background: var(--d-surface2);
+  color: var(--d-ink-dim);
+  width: 28px;
+  height: 28px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.dossier-edit-btn:hover {
+  border-color: var(--d-gold-dim);
+  color: var(--d-gold);
+  background: var(--d-gold-bg);
+}
+
+.dossier-edit-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.dossier-chevron {
+  color: var(--d-ink-faint);
+  font-size: 12px;
+  width: 16px;
+  text-align: center;
+}
+
+.dossier-section-body {
+  padding: 4px 32px 28px 66px;
+  animation: dossier-reveal 0.2s ease;
+}
+
+@keyframes dossier-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ═══════════════════════════════════════
+   READ MODE — Data rows
+   ═══════════════════════════════════════ */
+.dossier-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.dossier-row {
+  display: flex;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  gap: 16px;
+}
+
+.dossier-row:last-child {
+  border-bottom: none;
+}
+
+.dossier-row-label {
+  font-family: var(--d-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--d-ink-faint);
+  text-transform: uppercase;
+  min-width: 140px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dossier-row-icon {
+  font-size: 13px;
+}
+
+.dossier-row-value {
+  font-size: 14px;
+  color: var(--d-ink);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.dossier-row-value.accent {
+  color: var(--d-gold);
+  font-weight: 500;
+}
+
+
+/* ── Essence: Triad (Desire / Fear / Wound) ── */
+.dossier-triad {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.dossier-triad-item {
+  padding: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--d-border);
+  background: var(--d-surface2);
+  position: relative;
+}
+
+.dossier-triad-item::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 3px;
+  height: 100%;
+  border-radius: 4px 0 0 4px;
+}
+
+.dossier-triad-item.desire::before { background: var(--d-gold); }
+.dossier-triad-item.fear::before   { background: var(--d-red); }
+.dossier-triad-item.wound::before  { background: var(--d-purple); }
+
+.triad-label {
+  font-family: var(--d-mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.dossier-triad-item.desire .triad-label { color: var(--d-gold); }
+.dossier-triad-item.fear   .triad-label { color: var(--d-red); }
+.dossier-triad-item.wound  .triad-label { color: var(--d-purple); }
+
+.dossier-triad-item p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--d-ink);
+}
+
+
+/* ── Essence: Duality (Mask / Truth) ── */
+.dossier-duality {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.dossier-duality-item {
+  padding: 16px;
+  border-radius: 4px;
+  border: 1px solid var(--d-border);
+}
+
+.dossier-duality-item.mask {
+  background: rgba(0,0,0,0.02);
+  border-left: 3px solid var(--d-ink-faint);
+}
+
+.dossier-duality-item.truth {
+  background: var(--d-gold-bg);
+  border-left: 3px solid var(--d-gold);
+}
+
+.dual-label {
+  font-family: var(--d-mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  display: block;
+  margin-bottom: 8px;
+}
+
+.dossier-duality-item.mask  .dual-label { color: var(--d-ink-faint); }
+.dossier-duality-item.truth .dual-label { color: var(--d-gold); }
+
+.dossier-duality-item p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--d-ink);
+}
+
+
+/* ── Pills (personality traits) ── */
+.dossier-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dossier-pill {
+  font-family: var(--d-mono);
+  font-size: 11px;
+  padding: 3px 10px;
+  border: 1px solid var(--d-border2);
+  border-radius: 2px;
+  color: var(--d-ink-dim);
+  background: var(--d-surface2);
+}
+
+
+/* ── Divider ── */
+.dossier-divider {
+  height: 1px;
+  background: var(--d-border);
+  margin: 16px 0;
+}
+
+
+/* ═══════════════════════════════════════
+   EDIT MODE — Form fields
+   ═══════════════════════════════════════ */
+.dossier-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dossier-edit-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.dossier-edit-label {
+  font-family: var(--d-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--d-gold-dim);
+  text-transform: uppercase;
+}
+
+.dossier-edit-input {
+  font-family: var(--d-sans);
+  font-size: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--d-border2);
+  border-radius: 3px;
+  background: var(--d-surface);
+  color: var(--d-ink);
+  outline: none;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.dossier-edit-input:focus {
+  border-color: var(--d-gold);
+  box-shadow: 0 0 0 2px var(--d-gold-bg);
+}
+
+.dossier-edit-input::placeholder {
+  color: var(--d-ink-faint);
+  font-style: italic;
+}
+
+.dossier-edit-textarea {
+  resize: vertical;
+  min-height: 48px;
+  line-height: 1.55;
+}
+
+.dossier-edit-select {
+  cursor: pointer;
+  appearance: none;
+  background-image:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M3 5l3 3 3-3' fill='none' stroke='%236b6050' stroke-width='1.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 32px;
+}
+
+.dossier-edit-hint {
+  font-size: 11px;
+  color: var(--d-ink-faint);
+  font-style: italic;
+}
+
+
+/* ═══════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════ */
+.dossier-btn {
+  font-family: var(--d-mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  padding: 7px 16px;
+  border: 1px solid var(--d-border2);
+  border-radius: 3px;
+  cursor: pointer;
+  transition: all 0.15s;
+  background: var(--d-surface);
+  color: var(--d-ink-dim);
+  text-transform: uppercase;
+}
+
+.dossier-btn:hover {
+  background: var(--d-surface2);
+}
+
+.dossier-btn.interview {
+  color: var(--d-gold);
+  border-color: var(--d-gold-dim);
+}
+.dossier-btn.interview:hover {
+  background: var(--d-gold-bg);
+}
+
+.dossier-btn.save {
+  color: var(--d-gold);
+  border-color: var(--d-gold);
+  background: var(--d-gold-bg);
+}
+.dossier-btn.save:hover {
+  background: var(--d-gold);
+  color: #fff;
+}
+.dossier-btn.save:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dossier-btn.cancel {
+  color: var(--d-ink-faint);
+}
+
+.dossier-btn.accept {
+  color: var(--d-green);
+  border-color: var(--d-green);
+}
+.dossier-btn.accept:hover {
+  background: rgba(61,158,66,0.08);
+}
+
+.dossier-btn.decline {
+  color: var(--d-red);
+  border-color: var(--d-red);
+}
+.dossier-btn.decline:hover {
+  background: rgba(212,58,42,0.08);
+}
+
+.dossier-btn.finalize {
+  color: var(--d-gold);
+  border-color: var(--d-gold);
+  background: var(--d-gold-bg);
+}
+.dossier-btn.finalize:hover {
+  background: var(--d-gold);
+  color: #fff;
+}
+
+.dossier-btn.revert {
+  color: var(--d-ink-faint);
+  border-style: dashed;
+}
+
+
+/* ═══════════════════════════════════════
+   FOOTER (status actions bar)
+   ═══════════════════════════════════════ */
+.dossier-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 32px;
+  border-top: 1px solid var(--d-border);
+  background: var(--d-surface2);
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+
+.dossier-footer-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dossier-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--d-ink-faint);
+}
+
+.dossier-status-dot.accepted  { background: var(--d-green); }
+.dossier-status-dot.declined  { background: var(--d-red); }
+.dossier-status-dot.finalized { background: var(--d-gold); }
+
+.dossier-status-label {
+  font-family: var(--d-mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  color: var(--d-ink-faint);
+}
+
+.dossier-footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.dossier-finalized-label {
+  font-family: var(--d-mono);
+  font-size: 11px;
+  letter-spacing: 1.5px;
+  color: var(--d-gold);
+}
+
+
+/* ═══════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════ */
+@media (max-width: 768px) {
+  .dossier-header {
+    flex-direction: column;
+    padding: 24px 20px;
+  }
+
+  .dossier-section-header {
+    padding: 14px 20px;
+  }
+
+  .dossier-section-body {
+    padding: 4px 20px 24px 40px;
+  }
+
+  .dossier-row {
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  .dossier-row-label {
+    min-width: unset;
+  }
+
+  .dossier-triad {
+    grid-template-columns: 1fr;
+  }
+
+  .dossier-duality {
+    grid-template-columns: 1fr;
+  }
+
+  .dossier-footer {
+    padding: 14px 20px;
+    flex-direction: column;
+    gap: 12px;
+  }
+}

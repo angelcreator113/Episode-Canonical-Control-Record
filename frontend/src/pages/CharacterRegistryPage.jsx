@@ -8,6 +8,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './CharacterRegistryPage.css';
 import CharacterVoiceInterview from './CharacterVoiceInterview';
+import CharacterDossier from './CharacterDossier';
 
 const API = '/api/v1/character-registry';
 
@@ -228,6 +229,22 @@ export default function CharacterRegistryPage() {
     }
   };
 
+  /* ---------- dossier save (section-level) ---------- */
+  const saveDossierSection = useCallback(async (charId, fields) => {
+    const res = await fetch(`${API}/characters/${charId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(fields),
+    });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Section saved', 'success');
+    } else {
+      showToast(data.error || 'Save failed', 'error');
+      throw new Error(data.error);
+    }
+  }, [showToast]);
+
   /* ---------- derived ---------- */
   const characters = activeRegistry?.characters || [];
   const sorted = [...characters].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
@@ -425,231 +442,14 @@ export default function CharacterRegistryPage() {
               )}
             </>
           ) : activeChar ? (
-            /* ---------- CHARACTER DETAIL ---------- */
-            <div className="cr-detail">
-              {editingChar ? (
-                /* ===== EDIT MODE ===== */
-                <>
-                  <div className="cr-edit-header">
-                    <h2>Edit Character</h2>
-                    <div className="cr-edit-header-actions">
-                      <button className="cr-action-btn" onClick={cancelEdit}>Cancel</button>
-                      <button className="cr-action-btn accept" onClick={() => saveEdit(activeChar.id)} disabled={saving}>
-                        {saving ? 'Saving…' : '✓ Save'}
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="cr-edit-form">
-                    <div className="cr-edit-row">
-                      <CrField label="Display Name" value={editForm.display_name} onChange={v => setEditForm(f => ({ ...f, display_name: v }))} />
-                      <CrField label="Icon" value={editForm.icon} onChange={v => setEditForm(f => ({ ...f, icon: v }))} small />
-                    </div>
-                    <CrField label="Subtitle" value={editForm.subtitle} onChange={v => setEditForm(f => ({ ...f, subtitle: v }))} />
-
-                    <div className="cr-edit-row">
-                      <CrSelect label="Role Type" value={editForm.role_type} onChange={v => setEditForm(f => ({ ...f, role_type: v }))}
-                        options={[
-                          { value: 'pressure', label: 'Pressure' },
-                          { value: 'mirror', label: 'Mirror' },
-                          { value: 'support', label: 'Support' },
-                          { value: 'shadow', label: 'Shadow' },
-                          { value: 'special', label: 'Special' },
-                        ]}
-                      />
-                      <CrField label="Role Label" value={editForm.role_label} onChange={v => setEditForm(f => ({ ...f, role_label: v }))} />
-                    </div>
-
-                    <CrSelect label="Appearance Mode" value={editForm.appearance_mode} onChange={v => setEditForm(f => ({ ...f, appearance_mode: v }))}
-                      options={[
-                        { value: 'on_page', label: 'On Page' },
-                        { value: 'composite', label: 'Composite' },
-                        { value: 'observed', label: 'Observed' },
-                        { value: 'invisible', label: 'Invisible' },
-                        { value: 'brief', label: 'Brief' },
-                      ]}
-                    />
-
-                    <CrTextArea label="Core Belief" value={editForm.core_belief} onChange={v => setEditForm(f => ({ ...f, core_belief: v }))} rows={2} />
-                    <CrField label="Pressure Type" value={editForm.pressure_type} onChange={v => setEditForm(f => ({ ...f, pressure_type: v }))} />
-                    <CrTextArea label="Pressure Quote" value={editForm.pressure_quote} onChange={v => setEditForm(f => ({ ...f, pressure_quote: v }))} rows={2} />
-                    <CrField label="Personality" value={editForm.personality} onChange={v => setEditForm(f => ({ ...f, personality: v }))} hint="Comma-separated traits" />
-                    <CrField label="Job Options" value={editForm.job_options} onChange={v => setEditForm(f => ({ ...f, job_options: v }))} />
-                    <CrTextArea label="Description" value={editForm.description} onChange={v => setEditForm(f => ({ ...f, description: v }))} rows={4} />
-                  </div>
-                </>
-              ) : (
-                /* ===== READ MODE ===== */
-                <>
-              <div className="cr-detail-header">
-                <div className="cr-detail-icon">{activeChar.icon || '○'}</div>
-                <div className="cr-detail-meta">
-                  <h2>{activeChar.display_name}</h2>
-                  <p className="cr-subtitle">{activeChar.subtitle}</p>
-                  <div className="cr-detail-badges">
-                    <span className={`cr-badge role-${activeChar.role_type}`}>
-                      {activeChar.role_label || activeChar.role_type}
-                    </span>
-                    <span className="cr-badge mode">
-                      {MODE_LABELS[activeChar.appearance_mode] || activeChar.appearance_mode}
-                    </span>
-                    <span className={`cr-card-status ${activeChar.status}`} style={{ marginLeft: 4 }}>
-                      {activeChar.status}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  className="cr-action-btn interview"
-                  onClick={() => setInterviewTarget(activeChar)}
-                  style={{ marginLeft: 'auto', marginRight: 8 }}
-                  title="Voice Interview — build profile from conversation"
-                >
-                  ✦ Voice Interview
-                </button>
-                <button className="cr-action-btn edit" onClick={() => startEdit(activeChar)}>
-                  ✎ Edit
-                </button>
-              </div>
-
-              {/* Core Belief */}
-              {activeChar.core_belief && (
-                <div className="cr-section">
-                  <div className="cr-section-label">Core Belief</div>
-                  <div className="cr-section-content">
-                    <p>{activeChar.core_belief}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Pressure Quote */}
-              {activeChar.pressure_quote && (
-                <div className="cr-section">
-                  <div className="cr-section-label">Pressure / Quote</div>
-                  <div className="cr-quote">{activeChar.pressure_quote}</div>
-                </div>
-              )}
-
-              {/* Pressure Type */}
-              {activeChar.pressure_type && (
-                <div className="cr-section">
-                  <div className="cr-section-label">Pressure Type</div>
-                  <div className="cr-section-content">
-                    <p>{activeChar.pressure_type}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Personality */}
-              {activeChar.personality && (
-                <div className="cr-section">
-                  <div className="cr-section-label">Personality</div>
-                  <div className="cr-pills">
-                    {activeChar.personality.split(',').map((trait, i) => (
-                      <span key={i} className="cr-pill">{trait.trim()}</span>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Job Options */}
-              {activeChar.job_options && (
-                <div className="cr-section">
-                  <div className="cr-section-label">Job Options</div>
-                  <div className="cr-section-content">
-                    <p>{activeChar.job_options}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Description */}
-              {activeChar.description && (
-                <div className="cr-section">
-                  <div className="cr-section-label">Description</div>
-                  <div className="cr-section-content">
-                    <p>{activeChar.description}</p>
-                  </div>
-                </div>
-              )}
-
-              {/* Name Selection */}
-              {activeChar.name_options && Array.isArray(activeChar.name_options) && activeChar.name_options.length > 0 && (
-                <div className="cr-section">
-                  <div className="cr-section-label">Name Selection</div>
-                  <div className="cr-name-options">
-                    {activeChar.name_options.map((name, i) => (
-                      <button
-                        key={i}
-                        className={`cr-name-btn ${activeChar.selected_name === name ? 'selected' : ''} ${activeChar.status === 'finalized' ? 'disabled' : ''}`}
-                        onClick={() => {
-                          if (activeChar.status !== 'finalized') selectName(activeChar.id, name);
-                        }}
-                        disabled={activeChar.status === 'finalized'}
-                      >
-                        {name}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Personality Matrix */}
-              {activeChar.personality_matrix && Array.isArray(activeChar.personality_matrix) && activeChar.personality_matrix.length > 0 && (
-                <div className="cr-section">
-                  <div className="cr-section-label">Personality Matrix</div>
-                  <table className="cr-matrix">
-                    <thead>
-                      <tr>
-                        <th>Dimension</th>
-                        <th>Value</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {activeChar.personality_matrix.map((row, i) => (
-                        <tr key={i}>
-                          <td>{row.dimension}</td>
-                          <td>{row.value}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              {/* Actions */}
-              <div className="cr-actions">
-                {activeChar.status !== 'finalized' && (
-                  <>
-                    {activeChar.status !== 'accepted' && (
-                      <button className="cr-action-btn accept" onClick={() => setCharStatus(activeChar.id, 'accepted')}>
-                        ✓ Accept
-                      </button>
-                    )}
-                    {activeChar.status !== 'declined' && (
-                      <button className="cr-action-btn decline" onClick={() => setCharStatus(activeChar.id, 'declined')}>
-                        ✗ Decline
-                      </button>
-                    )}
-                    {activeChar.status === 'accepted' && (
-                      <button className="cr-action-btn finalize" onClick={() => setCharStatus(activeChar.id, 'finalized')}>
-                        ◆ Finalize
-                      </button>
-                    )}
-                  </>
-                )}
-                {activeChar.status === 'finalized' && (
-                  <>
-                    <span style={{ color: 'var(--gold)', fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: 1 }}>
-                      ◆ FINALIZED
-                    </span>
-                    <button className="cr-action-btn revert" onClick={() => setCharStatus(activeChar.id, 'draft')}>
-                      ↺ Revert to Draft
-                    </button>
-                  </>
-                )}
-              </div>
-                </>
-              )}
-            </div>
+            /* ---------- CHARACTER DOSSIER (8-section classified archive) ---------- */
+            <CharacterDossier
+              character={activeChar}
+              onSave={saveDossierSection}
+              onStatusChange={setCharStatus}
+              onInterview={(char) => setInterviewTarget(char)}
+              onRefresh={() => activeRegistry?.id && fetchRegistry(activeRegistry.id)}
+            />
           ) : (
             <div className="cr-empty">
               <p>Character not found</p>
