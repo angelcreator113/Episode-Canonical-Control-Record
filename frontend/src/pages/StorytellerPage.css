@@ -616,6 +616,42 @@
   margin-top: 3px;
 }
 
+/* ── Inline edit inputs ──────────────────────── */
+.st-inline-edit {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid var(--st-gold);
+  border-radius: 3px;
+  outline: none;
+  color: var(--st-ink);
+  box-sizing: border-box;
+}
+.st-inline-edit:focus {
+  box-shadow: 0 0 0 2px rgba(198,168,94,0.2);
+}
+.st-inline-edit-book {
+  font-family: var(--st-serif);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 2px 6px;
+  width: 100%;
+  margin: 0;
+}
+.st-inline-edit-chapter {
+  font-family: var(--st-serif);
+  font-size: 13px;
+  font-weight: 500;
+  font-style: italic;
+  padding: 1px 4px;
+  width: 100%;
+}
+.st-inline-edit-chapter-bar {
+  font-family: var(--st-serif);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 2px 6px;
+  min-width: 120px;
+}
+
 /* ── Nav Section ──────────────────────────────── */
 .st-nav-section {
   padding: 12px 0;

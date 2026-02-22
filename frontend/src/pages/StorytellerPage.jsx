@@ -307,6 +307,10 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
   const [editingLine, setEditingLine] = useState(null);
   const [editText, setEditText] = useState('');
+  const [editingBookTitle, setEditingBookTitle] = useState(false);
+  const [bookTitleDraft, setBookTitleDraft] = useState('');
+  const [editingChapterId, setEditingChapterId] = useState(null);
+  const [chapterTitleDraft, setChapterTitleDraft] = useState('');
   const [showAddChapter, setShowAddChapter] = useState(false);
   const [newChapterTitle, setNewChapterTitle] = useState('');
   const [newChapterBadge, setNewChapterBadge] = useState('');
@@ -316,6 +320,50 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [interviewDone, setInterviewDone] = useState({});
   const [redoInterview, setRedoInterview] = useState(false);
   const [lastApprovedLine, setLastApprovedLine] = useState(null);
+
+  // ── Inline rename helpers ──
+  async function saveBookTitle() {
+    const trimmed = bookTitleDraft.trim();
+    if (!trimmed || trimmed === (book.title || book.character_name)) {
+      setEditingBookTitle(false);
+      return;
+    }
+    try {
+      const res = await fetch(`${STORYTELLER_API}/books/${book.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (!res.ok) throw new Error('Failed to rename book');
+      onRefresh();
+    } catch (err) {
+      console.error('Rename book error:', err);
+    }
+    setEditingBookTitle(false);
+  }
+
+  async function saveChapterTitle(chId) {
+    const trimmed = chapterTitleDraft.trim();
+    const ch = chapters.find(c => c.id === chId);
+    if (!trimmed || trimmed === ch?.title) {
+      setEditingChapterId(null);
+      return;
+    }
+    try {
+      const res = await fetch(`${STORYTELLER_API}/chapters/${chId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: trimmed }),
+      });
+      if (!res.ok) throw new Error('Failed to rename chapter');
+      setChapters(prev => prev.map(c =>
+        c.id === chId ? { ...c, title: trimmed } : c
+      ));
+    } catch (err) {
+      console.error('Rename chapter error:', err);
+    }
+    setEditingChapterId(null);
+  }
 
   // Active chapter
   const activeChapter = chapters.find(c => c.id === activeChapterId) || null;
@@ -645,7 +693,25 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       <nav className="st-nav">
         <div className="st-nav-brand">
           <div className="st-nav-brand-label">PNOS</div>
-          <h2 className="st-nav-brand-title">{book.character_name || book.title}</h2>
+          {editingBookTitle ? (
+            <input
+              className="st-inline-edit st-inline-edit-book"
+              value={bookTitleDraft}
+              onChange={e => setBookTitleDraft(e.target.value)}
+              onBlur={saveBookTitle}
+              onKeyDown={e => { if (e.key === 'Enter') saveBookTitle(); if (e.key === 'Escape') setEditingBookTitle(false); }}
+              autoFocus
+            />
+          ) : (
+            <h2
+              className="st-nav-brand-title"
+              onDoubleClick={() => { setEditingBookTitle(true); setBookTitleDraft(book.title || book.character_name || ''); }}
+              title="Double-click to rename"
+              style={{ cursor: 'text' }}
+            >
+              {book.character_name || book.title}
+            </h2>
+          )}
           <div className="st-nav-brand-sub">
             {[book.era_name, book.timeline_position].filter(Boolean).join(' · ') || book.subtitle || ''}
           </div>
@@ -669,7 +735,25 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                       {String(ch.chapter_number || i + 1).padStart(2, '0')}
                     </span>
                     <div className="st-nav-chapter-info">
-                      <div className="st-nav-chapter-title">{ch.title}</div>
+                      {editingChapterId === ch.id ? (
+                        <input
+                          className="st-inline-edit st-inline-edit-chapter"
+                          value={chapterTitleDraft}
+                          onChange={e => setChapterTitleDraft(e.target.value)}
+                          onBlur={() => saveChapterTitle(ch.id)}
+                          onKeyDown={e => { if (e.key === 'Enter') saveChapterTitle(ch.id); if (e.key === 'Escape') setEditingChapterId(null); }}
+                          onClick={e => e.stopPropagation()}
+                          autoFocus
+                        />
+                      ) : (
+                        <div
+                          className="st-nav-chapter-title"
+                          onDoubleClick={(e) => { e.stopPropagation(); setEditingChapterId(ch.id); setChapterTitleDraft(ch.title || ''); }}
+                          title="Double-click to rename"
+                        >
+                          {ch.title}
+                        </div>
+                      )}
                       <div className="st-nav-chapter-meta">
                         {chLines.length} line{chLines.length !== 1 ? 's' : ''}{ch.badge ? ` · ${ch.badge}` : ''}
                       </div>
@@ -790,7 +874,25 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                     <span className="st-ch-num">
                       Chapter {String(activeChapter.chapter_number || (chapters.indexOf(activeChapter) + 1)).padStart(2, '0')}
                     </span>
-                    <span className="st-ch-title">{activeChapter.title}</span>
+                    {editingChapterId === activeChapter.id ? (
+                      <input
+                        className="st-inline-edit st-inline-edit-chapter-bar"
+                        value={chapterTitleDraft}
+                        onChange={e => setChapterTitleDraft(e.target.value)}
+                        onBlur={() => saveChapterTitle(activeChapter.id)}
+                        onKeyDown={e => { if (e.key === 'Enter') saveChapterTitle(activeChapter.id); if (e.key === 'Escape') setEditingChapterId(null); }}
+                        autoFocus
+                      />
+                    ) : (
+                      <span
+                        className="st-ch-title"
+                        onDoubleClick={() => { setEditingChapterId(activeChapter.id); setChapterTitleDraft(activeChapter.title || ''); }}
+                        title="Double-click to rename"
+                        style={{ cursor: 'text' }}
+                      >
+                        {activeChapter.title}
+                      </span>
+                    )}
                     {activeChapter.badge && (
                       <span className="st-ch-badge">{activeChapter.badge}</span>
                     )}
