@@ -10,7 +10,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
-import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
+import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
+import MemoryBankView from './MemoryBankView';
 import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
@@ -344,6 +345,12 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       await api(`/lines/${lineId}`, { method: 'PUT', body: { status: 'approved' } });
       updateLineLocal(lineId, { status: 'approved' });
       toast('Line approved');
+      // Fire memory extraction in background (don't block approval)
+      fetch(`/api/v1/memories/lines/${lineId}/extract`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ character_context: `Book: ${book.title || book.character_name}` }),
+      }).catch(() => {}); // silent — extraction is best-effort
     } catch (err) { toast(err.message, 'error'); }
   };
 
@@ -383,7 +390,22 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       const data = await api(`/books/${book.id}/approve-all`, { method: 'POST' });
       toast(`${data.approved_count} lines approved`);
       const refreshed = await api(`/books/${book.id}`);
-      setChapters(refreshed.book.chapters || []);
+      const newChaps = refreshed.book.chapters || [];
+      setChapters(newChaps);
+      // Fire memory extraction for all newly approved lines in background
+      const approvedLineIds = [];
+      for (const ch of newChaps) {
+        for (const ln of (ch.lines || [])) {
+          if (ln.status === 'approved') approvedLineIds.push(ln.id);
+        }
+      }
+      approvedLineIds.forEach(lid => {
+        fetch(`/api/v1/memories/lines/${lid}/extract`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ character_context: `Book: ${book.title || book.character_name}` }),
+        }).catch(() => {});
+      });
     } catch (err) { toast(err.message, 'error'); }
   };
 
@@ -638,7 +660,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           {/* Top toolbar */}
           <div className="st-toolbar">
             <div className="st-toolbar-left">
-              {['book', 'toc', 'memory', 'scenes'].map(v => (
+              {['toc', 'book', 'memory', 'scenes'].map(v => (
                 <button
                   key={v}
                   className={`st-view-tab ${activeView === v ? 'active' : ''}`}
@@ -897,7 +919,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
         {/* ── Memory View ── */}
         {activeView === 'memory' && (
-          <MemoryBankPanel bookId={book.id} />
+          <MemoryBankView bookId={book.id} />
         )}
 
         {/* ── Scenes View ── */}

@@ -298,6 +298,136 @@ router.post('/lines/:lineId/extract', optionalAuth, async (req, res) => {
 
 
 /**
+ * POST /books/:bookId/extract-all
+ * Batch-extracts memories from ALL approved lines in a book that don't
+ * already have memories. Calls Claude once per eligible line (sequentially
+ * to avoid rate limits). Returns a summary of results.
+ *
+ * This is designed for retroactive extraction — e.g., lines approved before
+ * the auto-extract feature was added, or lines where extraction silently failed.
+ *
+ * Idempotent: lines that already have memories are skipped.
+ */
+router.post('/books/:bookId/extract-all', optionalAuth, async (req, res) => {
+  try {
+    const { bookId } = req.params;
+
+    // Verify book exists
+    const book = await StorytellerBook.findByPk(bookId);
+    if (!book) {
+      return res.status(404).json({ error: 'Book not found' });
+    }
+
+    // Find all approved/edited lines in this book that have NO memories yet
+    const chapters = await StorytellerChapter.findAll({
+      where: { book_id: bookId },
+      include: [{
+        model: StorytellerLine,
+        as: 'lines',
+        where: { status: ['approved', 'edited'] },
+        required: false,
+      }],
+    });
+
+    // Collect eligible lines (approved/edited with zero memories)
+    const eligibleLines = [];
+    for (const chapter of chapters) {
+      if (!chapter.lines) continue;
+      for (const line of chapter.lines) {
+        const memCount = await StorytellerMemory.count({ where: { line_id: line.id } });
+        if (memCount === 0) {
+          eligibleLines.push(line);
+        }
+      }
+    }
+
+    if (eligibleLines.length === 0) {
+      return res.json({
+        message: 'No eligible lines found — all approved lines already have memories.',
+        extracted: 0,
+        skipped: 0,
+        failed: 0,
+        results: [],
+      });
+    }
+
+    // Build universe context once (shared across all extractions)
+    const universeContext = await buildUniverseContext(bookId, db);
+
+    // Extract sequentially to avoid Claude rate limits
+    const results = [];
+    let extracted = 0;
+    let failed = 0;
+
+    for (const line of eligibleLines) {
+      try {
+        const prompt = universeContext + buildExtractionPrompt(line.text, null);
+
+        const response = await anthropic.messages.create({
+          model: 'claude-sonnet-4-6',
+          max_tokens: 1024,
+          messages: [{ role: 'user', content: prompt }],
+        });
+
+        const rawText = response.content
+          .filter(block => block.type === 'text')
+          .map(block => block.text)
+          .join('');
+
+        let candidates = [];
+        try {
+          candidates = JSON.parse(rawText);
+          if (!Array.isArray(candidates)) candidates = [];
+        } catch (parseErr) {
+          console.error(`Batch extract parse error for line ${line.id}:`, parseErr);
+          results.push({ line_id: line.id, status: 'parse_error', extracted: 0 });
+          failed++;
+          continue;
+        }
+
+        // Write candidates to DB
+        const created = await Promise.all(
+          candidates.map(candidate =>
+            StorytellerMemory.create({
+              line_id: line.id,
+              character_id: null,
+              type: candidate.type,
+              statement: candidate.statement,
+              confidence: Math.min(1, Math.max(0, parseFloat(candidate.confidence) || 0)),
+              confirmed: false,
+              protected: false,
+              source_type: line.source_type || 'text',
+              source_ref: line.source_ref || null,
+              tags: Array.isArray(candidate.tags) ? candidate.tags : [],
+              confirmed_at: null,
+            })
+          )
+        );
+
+        results.push({ line_id: line.id, status: 'ok', extracted: created.length });
+        extracted += created.length;
+      } catch (lineErr) {
+        console.error(`Batch extract failed for line ${line.id}:`, lineErr.message);
+        results.push({ line_id: line.id, status: 'error', error: lineErr.message });
+        failed++;
+      }
+    }
+
+    res.json({
+      message: `Batch extraction complete. ${extracted} memories from ${eligibleLines.length} lines.`,
+      total_lines: eligibleLines.length,
+      extracted,
+      failed,
+      results,
+    });
+  } catch (err) {
+    console.error('POST /books/:bookId/extract-all error:', err);
+    res.status(500).json({ error: 'Batch extraction failed', details: err.message });
+  }
+});
+
+
+/**
  * POST /memories/:memoryId/confirm
  * Confirms a memory:
  *   1. Sets confirmed=true, confirmed_at=now on the memory row

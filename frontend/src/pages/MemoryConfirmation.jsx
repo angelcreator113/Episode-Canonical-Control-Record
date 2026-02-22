@@ -66,7 +66,7 @@ function ConfidenceLabel({ value }) {
   return (
     <span style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
-      fontSize: 10, color, fontWeight: 500, letterSpacing: '0.04em',
+      fontSize: 11, color, fontWeight: 500, letterSpacing: '0.04em',
     }}>
       {label} confidence
     </span>
@@ -80,7 +80,7 @@ function ConfidenceBar({ value }) {
   return (
     <span style={{
       fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
-      fontSize: 10, color, fontWeight: 500, letterSpacing: '0.04em',
+      fontSize: 11, color, fontWeight: 500, letterSpacing: '0.04em',
     }}>
       {pct >= 80 ? 'High' : pct >= 60 ? 'Medium' : 'Low'}
     </span>
@@ -99,7 +99,7 @@ function TypeBadge({ type, size = 'sm' }) {
       border: `1px solid ${meta.color}33`,
       borderRadius: 2,
       fontFamily: 'DM Mono, monospace',
-      fontSize: size === 'sm' ? 9 : 10,
+      fontSize: size === 'sm' ? 11 : 12,
       fontWeight: 500,
       letterSpacing: '0.12em',
       textTransform: 'uppercase',
@@ -298,10 +298,10 @@ export function MemoryCard({ lineId, characters = [], onConfirmed, onDismissed }
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
                     <TypeBadge type={memory.type} />
                     {memory.confirmed && (
-                      <span style={{ fontSize: 10, color: '#5a9a5a' }}>✓</span>
+                      <span style={{ fontSize: 12, color: '#5a9a5a' }}>✓</span>
                     )}
                     {memory.protected && (
-                      <span style={{ fontSize: 10, color: '#999', opacity: 0.6 }}>🔒</span>
+                      <span style={{ fontSize: 12, color: '#666' }}>🔒</span>
                     )}
                   </div>
                   <p style={styles.memoryStatement}>{memory.statement}</p>
@@ -331,7 +331,7 @@ export function MemoryCard({ lineId, characters = [], onConfirmed, onDismissed }
                 )}
                 {memory.confirmed && (
                   <div style={styles.memoryActions}>
-                    <span style={{ fontSize: 10, color: '#5a9a5a' }}>✓</span>
+                    <span style={{ fontSize: 12, color: '#5a9a5a' }}>✓</span>
                   </div>
                 )}
               </div>
@@ -379,7 +379,7 @@ function ConfirmPanel({ memory, state, characters, onUpdate, onConfirm, onCancel
           rows={3}
         />
         {state.editedStatement !== memory.statement && (
-          <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: '#7B5EA7', margin: '4px 0 0', letterSpacing: '0.08em' }}>
+          <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#7B5EA7', margin: '4px 0 0', letterSpacing: '0.08em' }}>
             🔒 Your edit will be protected — the system won't overwrite it
           </p>
         )}
@@ -532,7 +532,7 @@ function PanelMemoryItem({ memory }) {
       <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 4 }}>
         <TypeBadge type={memory.type} size="xs" />
         <span style={{
-          fontFamily: 'DM Mono, monospace', fontSize: 8,
+          fontFamily: 'DM Mono, monospace', fontSize: 11,
           color: memory.confirmed ? '#4A7C59' : '#C9A84C',
           letterSpacing: '0.1em', marginLeft: 'auto', flexShrink: 0,
         }}>
@@ -549,7 +549,7 @@ function PanelMemoryItem({ memory }) {
             {memory.tags?.map(t => <span key={t} style={styles.tagDark}>{t}</span>)}
           </div>
           {memory.chapter_title && (
-            <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 8, color: 'rgba(245,240,232,0.2)', marginTop: 5 }}>
+            <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'rgba(245,240,232,0.35)', marginTop: 5 }}>
               from: {memory.chapter_title}
             </p>
           )}
@@ -567,7 +567,7 @@ function PanelShell({ children }) {
 
 function PanelLoading() {
   return (
-    <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 10, color: 'rgba(245,240,232,0.3)', letterSpacing: '0.1em' }}>
+    <p style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, color: 'rgba(245,240,232,0.4)', letterSpacing: '0.1em' }}>
       Loading memories…
     </p>
   );
@@ -605,14 +605,14 @@ const styles = {
     width: 5, height: 5, borderRadius: '50%', background: '#a08a5c', flexShrink: 0,
   },
   cardHeaderLabel: {
-    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 10,
-    color: '#999', letterSpacing: '0.06em', textTransform: 'uppercase',
+    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 11,
+    color: '#666', letterSpacing: '0.06em', textTransform: 'uppercase',
   },
   cardHeaderBadge: {
     marginLeft: 'auto', background: 'rgba(0,0,0,0.04)',
     border: '1px solid rgba(0,0,0,0.08)', borderRadius: 2,
-    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 9,
-    color: '#999', padding: '2px 6px', letterSpacing: '0.04em',
+    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: 11,
+    color: '#666', padding: '2px 6px', letterSpacing: '0.04em',
   },
   memoryRow: {
     display: 'flex', gap: 12, padding: '10px 10px 10px 0',
@@ -628,14 +628,14 @@ const styles = {
     flexShrink: 0, alignItems: 'flex-end', paddingTop: 2,
   },
   tag: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8, letterSpacing: '0.06em',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.06em',
     background: 'rgba(26,21,16,0.06)', borderRadius: 2,
-    color: 'rgba(26,21,16,0.4)', padding: '1px 5px',
+    color: 'rgba(26,21,16,0.5)', padding: '1px 5px',
   },
   tagDark: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8, letterSpacing: '0.06em',
-    background: 'rgba(245,240,232,0.06)', borderRadius: 2,
-    color: 'rgba(245,240,232,0.3)', padding: '1px 5px',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.06em',
+    background: 'rgba(245,240,232,0.08)', borderRadius: 2,
+    color: 'rgba(245,240,232,0.45)', padding: '1px 5px',
     display: 'inline-block', marginRight: 3,
   },
 
@@ -651,13 +651,13 @@ const styles = {
   confirmPanelInner: { padding: '14px 16px 16px' },
   confirmStep: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 },
   confirmStepNum: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8, letterSpacing: '0.16em',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.16em',
     textTransform: 'uppercase', color: '#C9A84C',
     background: 'rgba(201,168,76,0.12)', borderRadius: 2,
     padding: '2px 6px',
   },
   confirmStepLabel: {
-    fontFamily: 'DM Mono, monospace', fontSize: 10, color: 'rgba(26,21,16,0.5)',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'rgba(26,21,16,0.5)',
     letterSpacing: '0.06em',
   },
   statementEditor: {
@@ -671,42 +671,42 @@ const styles = {
   charChip: {
     display: 'inline-flex', alignItems: 'center', gap: 5,
     border: '1px solid', borderRadius: 2,
-    fontFamily: 'DM Mono, monospace', fontSize: 10, letterSpacing: '0.06em',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.06em',
     padding: '4px 10px', cursor: 'pointer', background: 'transparent',
     transition: 'all 0.12s',
   },
   confirmActions: { display: 'flex', gap: 8, marginTop: 14, alignItems: 'center' },
   confirmNote: {
-    fontFamily: 'DM Mono, monospace', fontSize: 9,
-    color: 'rgba(26,21,16,0.3)', lineHeight: 1.5, marginTop: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 11,
+    color: 'rgba(26,21,16,0.4)', lineHeight: 1.5, marginTop: 10,
     letterSpacing: '0.04em',
   },
 
   // Buttons
   btnConfirm: {
     border: '1px solid rgba(201,168,76,0.3)', background: 'rgba(201,168,76,0.08)',
-    borderRadius: 2, fontFamily: 'DM Mono, monospace', fontSize: 9,
+    borderRadius: 2, fontFamily: 'DM Mono, monospace', fontSize: 11,
     letterSpacing: '0.1em', textTransform: 'uppercase',
     color: '#C9A84C', padding: '4px 10px', cursor: 'pointer',
     whiteSpace: 'nowrap', transition: 'all 0.12s',
   },
   btnDismiss: {
     border: 'none', background: 'none',
-    fontFamily: 'DM Mono, monospace', fontSize: 9, letterSpacing: '0.08em',
-    color: 'rgba(26,21,16,0.3)', cursor: 'pointer', padding: '4px 6px',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.08em',
+    color: 'rgba(26,21,16,0.4)', cursor: 'pointer', padding: '4px 6px',
     transition: 'color 0.12s',
   },
   btnPrimary: {
     background: '#C9A84C', color: '#1A1510',
     border: 'none', borderRadius: 2,
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 11,
     fontWeight: 500, letterSpacing: '0.1em', textTransform: 'uppercase',
     padding: '8px 16px', transition: 'opacity 0.15s',
   },
   btnGhost: {
-    background: 'rgba(26,21,16,0.06)', color: 'rgba(26,21,16,0.45)',
+    background: 'rgba(26,21,16,0.06)', color: 'rgba(26,21,16,0.5)',
     border: '1px solid rgba(26,21,16,0.1)', borderRadius: 2,
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 11,
     letterSpacing: '0.08em', padding: '8px 14px', cursor: 'pointer',
   },
 
@@ -718,12 +718,12 @@ const styles = {
   },
   panelMeta: {
     display: 'flex', gap: 6, alignItems: 'center',
-    fontFamily: 'DM Mono, monospace', fontSize: 9, letterSpacing: '0.08em',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.08em',
   },
   filterTabs: { display: 'flex', gap: 0, marginBottom: 12 },
   filterTab: {
     background: 'none', border: 'none', borderBottom: '1px solid transparent',
-    fontFamily: 'DM Mono, monospace', fontSize: 9, letterSpacing: '0.12em',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.12em',
     textTransform: 'uppercase', padding: '4px 10px 4px 0',
     cursor: 'pointer', transition: 'all 0.12s',
   },
@@ -732,15 +732,15 @@ const styles = {
     cursor: 'pointer', transition: 'background 0.12s',
   },
   panelItemStatement: {
-    fontFamily: "'Playfair Display', serif", fontSize: 12,
-    color: 'rgba(245,240,232,0.72)', lineHeight: 1.5, margin: '3px 0 0',
+    fontFamily: "'Playfair Display', serif", fontSize: 13,
+    color: 'rgba(245,240,232,0.78)', lineHeight: 1.5, margin: '3px 0 0',
   },
   panelEmpty: {
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
-    color: 'rgba(245,240,232,0.25)', letterSpacing: '0.06em', lineHeight: 1.6,
+    fontFamily: 'DM Mono, monospace', fontSize: 11,
+    color: 'rgba(245,240,232,0.35)', letterSpacing: '0.06em', lineHeight: 1.6,
   },
   panelError: {
-    fontFamily: 'DM Mono, monospace', fontSize: 10, color: '#B85C38',
+    fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#B85C38',
   },
 };
 
