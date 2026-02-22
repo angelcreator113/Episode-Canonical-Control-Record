@@ -390,19 +390,22 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const approveAll = async () => {
     if (pendingCount === 0) return toast('No pending lines', 'info');
     try {
+      // Capture IDs of lines that are currently pending — only these need extraction
+      const pendingLineIds = new Set();
+      for (const ch of chapters) {
+        for (const ln of (ch.lines || [])) {
+          if (ln.status === 'pending') pendingLineIds.add(ln.id);
+        }
+      }
+
       const data = await api(`/books/${book.id}/approve-all`, { method: 'POST' });
       toast(`${data.approved_count} lines approved`);
       const refreshed = await api(`/books/${book.id}`);
       const newChaps = refreshed.book.chapters || [];
       setChapters(newChaps);
-      // Fire memory extraction for all newly approved lines in background
-      const approvedLineIds = [];
-      for (const ch of newChaps) {
-        for (const ln of (ch.lines || [])) {
-          if (ln.status === 'approved') approvedLineIds.push(ln.id);
-        }
-      }
-      approvedLineIds.forEach(lid => {
+
+      // Only fire extraction for lines that were just changed from pending → approved
+      pendingLineIds.forEach(lid => {
         fetch(`/api/v1/memories/lines/${lid}/extract`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
