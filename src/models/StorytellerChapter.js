@@ -28,6 +28,38 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       defaultValue: 0,
     },
+    primary_character_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
+    characters_present: {
+      type: DataTypes.JSONB,
+      defaultValue: [],
+    },
+    pov: {
+      type: DataTypes.STRING,
+      defaultValue: 'first_person',
+    },
+    scene_goal: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    emotional_state_start: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    emotional_state_end: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    theme: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    chapter_notes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   }, {
     tableName: 'storyteller_chapters',
     timestamps: true,

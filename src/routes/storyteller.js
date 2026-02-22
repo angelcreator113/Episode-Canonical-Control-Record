@@ -336,7 +336,10 @@ router.put('/chapters/:id', optionalAuth, async (req, res) => {
     const chapter = await models.StorytellerChapter.findByPk(req.params.id);
     if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
 
-    const allowed = ['chapter_number', 'title', 'badge', 'sort_order'];
+    const allowed = ['chapter_number', 'title', 'badge', 'sort_order',
+      'primary_character_id', 'characters_present', 'pov',
+      'scene_goal', 'emotional_state_start', 'emotional_state_end',
+      'theme', 'chapter_notes'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];

@@ -605,6 +605,41 @@
   border-color: #4A7C59;
 }
 
+/* ── Confirm Flow Character Picker ───────────────────────────── */
+.mb-confirm-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mb-confirm-char-picker {
+  margin-bottom: 2px;
+}
+.mb-confirm-char-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.mb-confirm-char-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border: 1px solid rgba(26,21,16,0.12);
+  border-radius: 3px;
+  font-family: var(--st-mono, 'DM Mono', monospace);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: all 0.12s;
+  background: transparent;
+}
+.mb-confirm-char-chip:hover {
+  border-color: var(--st-gold, #a08a5c);
+}
+.mb-confirm-char-chip.selected {
+  font-weight: 600;
+}
+
 /* ── Evolution Timeline ──────────────────────────────────────── */
 .mb-evolution {
   display: flex;

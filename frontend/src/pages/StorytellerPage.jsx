@@ -12,6 +12,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
 import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
 import MemoryBankView from './MemoryBankView';
+import ChapterBrief from './ChapterBrief';
 import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
@@ -760,6 +761,17 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                     </button>
                   </div>
 
+                  {/* Chapter Brief — writing context above lines */}
+                  <ChapterBrief
+                    chapter={activeChapter}
+                    characters={registryCharacters}
+                    onUpdated={(updated) => {
+                      setChapters(prev => prev.map(c =>
+                        c.id === updated.id ? { ...updated, lines: c.lines } : c
+                      ));
+                    }}
+                  />
+
                   {/* Book page content */}
                   <div className="st-book-page">
                     {/* Approved / edited lines — the manuscript body */}
@@ -919,7 +931,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
         {/* ── Memory View ── */}
         {activeView === 'memory' && (
-          <MemoryBankView bookId={book.id} />
+          <MemoryBankView bookId={book.id} showId={book.show_id} />
         )}
 
         {/* ── Scenes View ── */}

@@ -126,7 +126,7 @@ function detectTensions(memories) {
 //  Main Component
 // ═══════════════════════════════════════════════════════════════════════════
 
-export default function MemoryBankView({ bookId }) {
+export default function MemoryBankView({ bookId, showId }) {
   const [data, setData]               = useState(null);
   const [loading, setLoading]         = useState(true);
   const [error, setError]             = useState(null);
@@ -140,6 +140,21 @@ export default function MemoryBankView({ bookId }) {
   const [saving, setSaving]               = useState(false);
   const [extracting, setExtracting]       = useState(false);
   const [extractMsg, setExtractMsg]       = useState('');
+  const [registryCharacters, setRegistryCharacters] = useState([]);
+  const [confirmCharId, setConfirmCharId] = useState(null);
+
+  // ── Load registry characters ───────────────────────────────────
+
+  useEffect(() => {
+    if (!showId) return;
+    fetch(`/api/v1/character-registry/registries?show_id=${showId}`)
+      .then(r => r.json())
+      .then(d => {
+        const chars = d.registries?.flatMap(r => r.characters || []) || [];
+        setRegistryCharacters(chars.map(c => ({ id: c.id, name: c.display_name || c.name, type: c.role_type || c.type })));
+      })
+      .catch(() => {});
+  }, [showId]);
 
   // ── Load memories ──────────────────────────────────────────────
 
@@ -252,15 +267,20 @@ export default function MemoryBankView({ bookId }) {
 
   // ── Actions ────────────────────────────────────────────────────
 
-  const handleConfirm = async (memoryId) => {
+  const handleConfirm = async (memoryId, characterId) => {
     if (saving) return;
+    const charId = characterId || confirmCharId;
+    if (!charId) {
+      console.error('Confirm failed: no character selected');
+      return;
+    }
     setSaving(true);
     try {
-      const mem = memories.find(m => m.id === memoryId);
       await apiFetch(`/memories/${memoryId}/confirm`, {
         method: 'POST',
-        body: JSON.stringify({ character_id: mem?.character_id || null }),
+        body: JSON.stringify({ character_id: charId }),
       });
+      setConfirmCharId(null);
       await load();
     } catch (err) {
       console.error('Confirm failed:', err);
@@ -582,9 +602,12 @@ export default function MemoryBankView({ bookId }) {
               onStartEdit={startEdit}
               onSaveEdit={handleSaveEdit}
               onCancelEdit={() => setEditing(false)}
-              onConfirm={() => handleConfirm(selected.id)}
+              onConfirm={() => handleConfirm(selected.id, confirmCharId)}
               onDismiss={() => handleDismiss(selected.id)}
               onProtect={() => handleProtect(selected.id)}
+              registryCharacters={registryCharacters}
+              confirmCharId={confirmCharId}
+              setConfirmCharId={setConfirmCharId}
             />
           )}
         </div>
@@ -642,6 +665,7 @@ function DetailPanel({
   memory, editing, editText, setEditText, saving,
   onStartEdit, onSaveEdit, onCancelEdit,
   onConfirm, onDismiss, onProtect,
+  registryCharacters, confirmCharId, setConfirmCharId,
 }) {
   const status = STATUS_META[memory._status];
   const typeMeta = TYPE_META[memory.type] || { label: memory.type, color: '#888' };
@@ -750,13 +774,46 @@ function DetailPanel({
               </button>
 
               {!memory.confirmed && (
-                <button
-                  className="mb-action-btn primary"
-                  onClick={onConfirm}
-                  disabled={saving}
-                >
-                  {saving ? '…' : '✓ Confirm'}
-                </button>
+                <div className="mb-confirm-flow">
+                  {/* Character picker */}
+                  {registryCharacters.length > 0 && (
+                    <div className="mb-confirm-char-picker">
+                      <div className="mb-detail-section-label" style={{ marginBottom: 6 }}>Assign to character</div>
+                      <div className="mb-confirm-char-grid">
+                        {registryCharacters.map(char => {
+                          const typeColor = CHARACTER_TYPE_COLORS[char.type] || '#888';
+                          const isSelected = confirmCharId === char.id;
+                          return (
+                            <button
+                              key={char.id}
+                              className={`mb-confirm-char-chip ${isSelected ? 'selected' : ''}`}
+                              style={{
+                                borderColor: isSelected ? typeColor : 'rgba(26,21,16,0.12)',
+                                background: isSelected ? `${typeColor}14` : 'transparent',
+                                color: isSelected ? typeColor : 'rgba(26,21,16,0.55)',
+                              }}
+                              onClick={() => setConfirmCharId(char.id)}
+                            >
+                              <span style={{
+                                width: 6, height: 6, borderRadius: '50%',
+                                background: typeColor, display: 'inline-block', flexShrink: 0,
+                              }} />
+                              {char.name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  <button
+                    className="mb-action-btn primary"
+                    onClick={onConfirm}
+                    disabled={saving || !confirmCharId}
+                    style={{ opacity: !confirmCharId ? 0.5 : 1 }}
+                  >
+                    {saving ? '…' : `✓ Confirm${confirmCharId ? '' : ' (select character)'}`}
+                  </button>
+                </div>
               )}
 
               {memory.confirmed && !memory.protected && (
