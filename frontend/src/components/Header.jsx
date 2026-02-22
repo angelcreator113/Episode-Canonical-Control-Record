@@ -15,14 +15,12 @@ const Header = ({ navOpen, onNavToggle }) => {
   const handleLogout = async () => {
     try {
       console.log('[Header] Logging out...');
-      // Call logout which clears auth state and localStorage
       await logout();
       console.log('[Header] Logout complete');
-      // Note: Navigation will happen automatically via App.jsx useEffect
-      // when isAuthenticated changes to false
+      navigate('/');
     } catch (err) {
       console.error('[Header] Logout error:', err);
-      // Navigation will still happen via App.jsx
+      navigate('/');
     }
   };
 
