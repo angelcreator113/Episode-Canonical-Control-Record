@@ -73,6 +73,9 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
   const [brief, setBrief]       = useState(null);
   const [error, setError]       = useState(null);
   const [saving, setSaving]     = useState(false);
+  const [openingCopied, setOpeningCopied] = useState(false);
+  const [addingOpening, setAddingOpening] = useState(false);
+  const [openingAdded, setOpeningAdded]   = useState(false);
 
   const questionIndex = step - 1; // step 1 = question 0
   const totalQuestions = QUESTIONS.length;
@@ -276,6 +279,47 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
                 "{brief.opening_suggestion}"
               </div>
               <div style={s.openingHint}>Use it, rewrite it, or ignore it — it's just a door in.</div>
+              <div style={s.openingActions}>
+                <button
+                  style={s.openingCopyBtn}
+                  type='button'
+                  onClick={() => {
+                    navigator.clipboard.writeText(brief.opening_suggestion).then(() => {
+                      setOpeningCopied(true);
+                      setTimeout(() => setOpeningCopied(false), 2000);
+                    });
+                  }}
+                >
+                  {openingCopied ? '✓ Copied' : 'Copy'}
+                </button>
+                <button
+                  style={{ ...s.openingUseBtn, opacity: addingOpening ? 0.6 : 1 }}
+                  type='button'
+                  disabled={addingOpening || openingAdded}
+                  onClick={async () => {
+                    setAddingOpening(true);
+                    try {
+                      const res = await fetch(`${STORYTELLER_API}/chapters/${chapter.id}/lines`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          text: brief.opening_suggestion,
+                          group_label: 'Scene Interview opening',
+                          status: 'pending',
+                        }),
+                      });
+                      if (!res.ok) throw new Error('Failed to add line');
+                      setOpeningAdded(true);
+                    } catch (err) {
+                      console.error('Add opening line error:', err);
+                    } finally {
+                      setAddingOpening(false);
+                    }
+                  }}
+                >
+                  {openingAdded ? '✓ Added as pending' : addingOpening ? 'Adding…' : '+ Use as first line'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -610,6 +654,35 @@ const s = {
     color: 'rgba(30,25,20,0.25)',
     letterSpacing: '0.06em',
     marginTop: 4,
+  },
+  openingActions: {
+    display: 'flex',
+    gap: 8,
+    marginTop: 10,
+  },
+  openingCopyBtn: {
+    background: 'none',
+    border: '1px solid rgba(30,25,20,0.15)',
+    borderRadius: 2,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 11,
+    letterSpacing: '0.08em',
+    color: 'rgba(30,25,20,0.45)',
+    padding: '5px 12px',
+    cursor: 'pointer',
+    transition: 'all 0.12s',
+  },
+  openingUseBtn: {
+    background: '#7A9B7E',
+    border: 'none',
+    borderRadius: 2,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 11,
+    letterSpacing: '0.08em',
+    color: 'white',
+    padding: '5px 12px',
+    cursor: 'pointer',
+    transition: 'opacity 0.12s',
   },
   reviewActions: {
     display: 'flex',
