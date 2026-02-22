@@ -463,14 +463,7 @@ router.post('/memories/:memoryId/confirm', optionalAuth, async (req, res) => {
       return res.status(404).json({ error: 'Character not found in registry' });
     }
 
-    // Finalized characters cannot receive new memories
-    if (character.status === 'finalized') {
-      return res.status(403).json({
-        error: 'Character is finalized. Confirmed memories cannot be added to finalized characters.',
-        character_id,
-        character_status: 'finalized',
-      });
-    }
+    // Allow confirming memories to any character, including finalized ones
 
     // If user edited the statement in the confirmation card, mark it protected
     const finalStatement = statement && statement.trim() ? statement.trim() : memory.statement;
