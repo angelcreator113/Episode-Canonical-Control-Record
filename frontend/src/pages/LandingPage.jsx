@@ -23,7 +23,6 @@ export default function LandingPage() {
 
   const [activeSection, setActiveSection] = useState('');
   const [navScrolled, setNavScrolled]     = useState(false);
-  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   const navLinks = [
     { id: 'hero',        label: 'Home' },
@@ -60,7 +59,6 @@ export default function LandingPage() {
   const scrollTo = useCallback((id) => {
     const el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth' });
-    setMobileNavOpen(false);
   }, []);
 
   const scrollToCta = () => {
@@ -114,15 +112,7 @@ export default function LandingPage() {
             Prime Studios
           </button>
 
-          <button
-            className={`lp-nav__burger${mobileNavOpen ? ' open' : ''}`}
-            onClick={() => setMobileNavOpen(v => !v)}
-            aria-label="Toggle navigation"
-          >
-            <span /><span /><span />
-          </button>
-
-          <ul className={`lp-nav__links${mobileNavOpen ? ' lp-nav__links--open' : ''}`}>
+          <ul className="lp-nav__links">
             {navLinks.map(({ id, label }) => (
               <li key={id}>
                 <button
@@ -133,6 +123,14 @@ export default function LandingPage() {
                 </button>
               </li>
             ))}
+            <li className="lp-nav__login-li">
+              <button
+                className="lp-nav__login-btn"
+                onClick={() => scrollTo('get-started')}
+              >
+                Log In
+              </button>
+            </li>
           </ul>
         </div>
       </nav>

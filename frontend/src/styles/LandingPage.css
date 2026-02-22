@@ -110,74 +110,92 @@
   background: rgba(232,160,180,0.08);
 }
 
-/* Hamburger (mobile) */
+/* Hamburger (mobile) — hidden, using scroll nav instead */
 .lp-nav__burger {
   display: none;
-  flex-direction: column;
-  gap: 5px;
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 6px;
-  z-index: 1001;
 }
 
-.lp-nav__burger span {
-  display: block;
-  width: 22px;
-  height: 2px;
-  background: rgba(26,21,16,0.45);
-  border-radius: 2px;
-  transition: all 0.3s ease;
-}
-
-.lp-nav__burger.open span:nth-child(1) {
-  transform: translateY(7px) rotate(45deg);
-}
-
-.lp-nav__burger.open span:nth-child(2) {
-  opacity: 0;
-}
-
-.lp-nav__burger.open span:nth-child(3) {
-  transform: translateY(-7px) rotate(-45deg);
-}
-
-/* Mobile nav breakpoint */
+/* Mobile / Tablet: horizontal scrollable nav */
 @media (max-width: 900px) {
-  .lp-nav__burger {
-    display: flex;
+  .lp-nav {
+    padding: 12px 0 0;
+  }
+
+  .lp-nav--scrolled {
+    padding: 8px 0 0;
+  }
+
+  .lp-nav__inner {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+  }
+
+  .lp-nav__brand {
+    padding: 0 20px 10px;
   }
 
   .lp-nav__links {
-    position: fixed;
-    top: 0;
-    right: 0;
-    width: 260px;
-    height: 100vh;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 0;
-    padding: 80px 24px 32px;
-    background: rgba(250,248,246,0.97);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    box-shadow: -4px 0 24px rgba(0,0,0,0.06);
-    transform: translateX(100%);
-    transition: transform 0.35s ease;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;          /* Firefox */
+    gap: 2px;
+    padding: 0 16px 10px;
+    border-top: 1px solid rgba(26,21,16,0.04);
+    flex-wrap: nowrap;
   }
 
-  .lp-nav__links--open {
-    transform: translateX(0);
+  .lp-nav__links::-webkit-scrollbar {
+    display: none;                  /* Chrome/Safari */
   }
 
   .lp-nav__link {
-    font-size: 14px;
-    padding: 10px 16px;
-    width: 100%;
-    text-align: left;
-    border-radius: 8px;
+    font-size: 12px;
+    padding: 6px 14px;
+    flex-shrink: 0;
   }
+
+  .lp-nav__login-li {
+    margin-left: 2px;
+    flex-shrink: 0;
+  }
+
+  .lp-nav__login-btn {
+    font-size: 11px;
+    padding: 6px 18px;
+  }
+
+  /* Hide hero eyebrow — nav brand already shows it */
+  .lp-hero .lp-eyebrow {
+    display: none;
+  }
+}
+
+/* Nav Login Button */
+.lp-nav__login-li {
+  margin-left: 8px;
+}
+
+.lp-nav__login-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: #e8a0b4;
+  border: none;
+  cursor: pointer;
+  padding: 8px 20px;
+  border-radius: 100px;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+
+.lp-nav__login-btn:hover {
+  background: #d4879c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(232,160,180,0.3);
 }
 
 .lp *,
@@ -1030,7 +1048,7 @@
   }
 
   .lp-hero {
-    padding: 100px 24px;
+    padding: 110px 24px 80px;
     min-height: auto;
   }
 
@@ -1050,7 +1068,7 @@
   }
 
   .lp-hero {
-    padding: 80px 20px;
+    padding: 100px 20px 64px;
   }
 
   .lp-hero__cta {
