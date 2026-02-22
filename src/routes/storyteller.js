@@ -447,6 +447,26 @@ router.put('/lines/:id', optionalAuth, async (req, res) => {
 
 
 // ═══════════════════════════════════════════
+// DELETE /chapters/:id/lines — Clear all lines from a chapter
+// ═══════════════════════════════════════════
+router.delete('/chapters/:id/lines', optionalAuth, async (req, res) => {
+  try {
+    const models = await getModels();
+    if (!models?.StorytellerLine || !models?.StorytellerChapter) return res.status(500).json({ error: 'Models not loaded' });
+
+    const chapter = await models.StorytellerChapter.findByPk(req.params.id);
+    if (!chapter) return res.status(404).json({ error: 'Chapter not found' });
+
+    const count = await models.StorytellerLine.destroy({ where: { chapter_id: chapter.id } });
+    return res.json({ success: true, message: `Cleared ${count} lines from chapter`, count });
+  } catch (error) {
+    console.error('StoryTeller clear chapter error:', error);
+    return res.status(500).json({ error: 'Failed to clear chapter', message: error.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
 // DELETE /lines/:id — Reject/remove a line
 // ═══════════════════════════════════════════
 router.delete('/lines/:id', optionalAuth, async (req, res) => {

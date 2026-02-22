@@ -225,6 +225,14 @@ router.put('/characters/:id', async (req, res) => {
       'appearance_mode', 'status', 'core_belief', 'pressure_type', 'pressure_quote',
       'personality', 'job_options', 'description', 'name_options', 'selected_name',
       'personality_matrix', 'extra_fields', 'sort_order',
+      // Section 1: Core Identity
+      'canon_tier', 'first_appearance', 'era_introduced', 'creator',
+      // Section 2: Essence Profile
+      'core_desire', 'core_fear', 'core_wound', 'mask_persona',
+      'truth_persona', 'character_archetype', 'signature_trait', 'emotional_baseline',
+      // Sections 3-8: JSONB
+      'aesthetic_dna', 'career_status', 'relationships_map',
+      'story_presence', 'voice_signature', 'evolution_tracking',
     ];
     allowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     await character.save();
@@ -296,6 +304,40 @@ router.post('/characters/:id/set-status', async (req, res) => {
 
     character.status = status;
     await character.save();
+
+    // Auto-promote to LalaVerse canon when finalized
+    if (status === 'finalized') {
+      const LALAVERSE_ID = 'a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e';
+      try {
+        const db = getModels();
+        const canonTier = ['special'].includes(character.role_type)
+          ? 'core_canon'
+          : ['pressure', 'mirror'].includes(character.role_type)
+          ? 'supporting_canon'
+          : 'minor_canon';
+
+        const existing = await db.UniverseCharacter?.findOne({
+          where: { registry_character_id: req.params.id, universe_id: LALAVERSE_ID },
+        });
+
+        if (!existing && db.UniverseCharacter) {
+          await db.UniverseCharacter.create({
+            universe_id:           LALAVERSE_ID,
+            registry_character_id: req.params.id,
+            name:                  character.selected_name || character.display_name,
+            type:                  character.role_type,
+            canon_tier:            canonTier,
+            role:                  character.description,
+            first_appeared:        new Date(),
+            status:                'active',
+          });
+          console.log(`✓ Character ${character.display_name} promoted to LalaVerse canon`);
+        }
+      } catch (promoteErr) {
+        // Log but don't fail the finalize
+        console.error('Auto-promote error (non-fatal):', promoteErr);
+      }
+    }
 
     return res.json({ success: true, character });
   } catch (err) {
@@ -503,6 +545,61 @@ router.post('/registries/:id/seed-book1', async (req, res) => {
   } catch (err) {
     console.error('[CharacterRegistry] seed-book1 error:', err);
     return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /characters/:charId/promote-to-canon
+ * Manually promotes a character to LalaVerse universe level.
+ * Creates a universe_characters record linking them to the universe.
+ *
+ * Body: { universe_id: string }
+ */
+router.post('/characters/:charId/promote-to-canon', async (req, res) => {
+  try {
+    const { charId } = req.params;
+    const { universe_id } = req.body;
+    const db = getModels();
+
+    if (!universe_id) {
+      return res.status(400).json({ error: 'universe_id is required' });
+    }
+
+    const character = await db.RegistryCharacter.findByPk(charId);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+
+    // Determine canon tier from role_type
+    const canonTier = ['special'].includes(character.role_type)
+      ? 'core_canon'
+      : ['pressure', 'mirror'].includes(character.role_type)
+      ? 'supporting_canon'
+      : 'minor_canon';
+
+    // Check if already promoted
+    const existing = await db.UniverseCharacter?.findOne({
+      where: { registry_character_id: charId, universe_id },
+    });
+
+    if (existing) {
+      return res.json({ promoted: true, universe_character_id: existing.id, already_existed: true });
+    }
+
+    // Create universe character record
+    const universeChar = await db.UniverseCharacter.create({
+      universe_id,
+      registry_character_id: charId,
+      name:           character.selected_name || character.display_name,
+      type:           character.role_type,
+      canon_tier:     canonTier,
+      role:           character.description,
+      first_appeared: new Date(),
+      status:         'active',
+    });
+
+    res.json({ promoted: true, universe_character_id: universeChar.id });
+  } catch (err) {
+    console.error('POST /promote-to-canon error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 

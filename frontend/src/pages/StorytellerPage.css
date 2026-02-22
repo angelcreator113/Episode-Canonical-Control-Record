@@ -616,6 +616,42 @@
   margin-top: 3px;
 }
 
+/* ── Inline edit inputs ──────────────────────── */
+.st-inline-edit {
+  background: rgba(255,255,255,0.9);
+  border: 1px solid var(--st-gold);
+  border-radius: 3px;
+  outline: none;
+  color: var(--st-ink);
+  box-sizing: border-box;
+}
+.st-inline-edit:focus {
+  box-shadow: 0 0 0 2px rgba(198,168,94,0.2);
+}
+.st-inline-edit-book {
+  font-family: var(--st-serif);
+  font-size: 15px;
+  font-weight: 500;
+  padding: 2px 6px;
+  width: 100%;
+  margin: 0;
+}
+.st-inline-edit-chapter {
+  font-family: var(--st-serif);
+  font-size: 13px;
+  font-weight: 500;
+  font-style: italic;
+  padding: 1px 4px;
+  width: 100%;
+}
+.st-inline-edit-chapter-bar {
+  font-family: var(--st-serif);
+  font-size: 15px;
+  font-weight: 600;
+  padding: 2px 6px;
+  min-width: 120px;
+}
+
 /* ── Nav Section ──────────────────────────────── */
 .st-nav-section {
   padding: 12px 0;
@@ -695,6 +731,29 @@
   color: var(--st-muted);
   margin-top: 2px;
   opacity: 0.7;
+}
+
+.st-nav-chapter-delete {
+  position: absolute;
+  top: 6px;
+  right: 4px;
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: rgba(47,42,38,0.2);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 3px;
+  line-height: 1;
+  opacity: 0;
+  transition: opacity 0.15s, color 0.15s, background 0.15s;
+}
+div:hover > .st-nav-chapter-delete {
+  opacity: 1;
+}
+.st-nav-chapter-delete:hover {
+  color: #B85C38;
+  background: rgba(184,92,56,0.08);
 }
 
 /* Nav chapter dots — hidden in new design */
