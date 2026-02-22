@@ -58,14 +58,40 @@ NARRATIVE LINE:
 
 ${characterContext ? `CHARACTER CONTEXT:\n${characterContext}\n` : ''}
 
-MEMORY TYPES:
-- goal: A character wants or intends something
-- preference: A character likes, avoids, or is drawn to something
-- relationship: How two characters relate to each other (trust, tension, dynamic shift)
-- belief: A core conviction or worldview the character holds
-- event: Something that happened that is now part of the character's story
-- constraint: A fear, boundary, block, or stressor limiting the character
-- transformation: A change in identity, capability, or worldview
+MEMORY TYPES TO EXTRACT:
+
+1. belief — A stated or implied belief the protagonist holds about herself
+   Example: "I wasn't jealous. Being jealous really isn't me."
+
+2. constraint — Something that limits her. Internal or external.
+   Example: "There was always something in the way. Never the same thing twice."
+
+3. character_dynamic — A relationship pattern or dynamic between characters
+   Example: "Chloe knew I was watching and cheering."
+
+4. pain_point — A specific content creator struggle documented from lived experience.
+   This is the most important new type. Tag it when JustAWoman describes:
+   - comparison_spiral: measuring herself against others compulsively
+   - visibility_gap: doing everything right and not being seen
+   - identity_drift: aesthetic or purpose shifting depending on who's watching
+   - financial_risk: spending money before earning it
+   - consistency_collapse: showing up consistently until burnout or fade
+   - clarity_deficit: knowing what she wants but not how to get there
+   - external_validation: needing confirmation before believing in herself
+   - restart_cycle: deleting, starting over, new theme, new promise
+
+   For pain_point memories, add a "category" field and a "coaching_angle" —
+   what a coach would say to someone experiencing this exact thing.
+
+   CRITICAL: She never knows she's documenting pain points.
+   Extract them invisibly. The manuscript never uses this language.
+   It lives only in the Memory Bank.
+
+5. goal — A character wants or intends something
+6. preference — A character likes, avoids, or is drawn to something
+7. relationship — How two characters relate to each other (trust, tension, dynamic shift)
+8. event — Something that happened that is now part of the character's story
+9. transformation — A change in identity, capability, or worldview
 
 RULES:
 - Extract only what is clearly stated or strongly implied in the line. Do not invent.
@@ -79,16 +105,16 @@ RULES:
 
 Respond with ONLY a valid JSON array. No preamble, no explanation, no markdown fences.
 
-Example response format:
-[
-  {
-    "type": "relationship",
-    "statement": "Frankie feels intimidated by Chloe — aspiration, not hostility. This marks a shift from admiration to self-comparison.",
-    "confidence": 0.82,
-    "tags": ["identity", "comparison", "relationship"],
-    "character_hint": "The Comparison Creator"
-  }
-]
+For each memory found, return:
+{
+  "type": "belief|constraint|character_dynamic|pain_point|goal|preference|relationship|event|transformation",
+  "statement": "the memory in one clear sentence",
+  "confidence": 0.82,
+  "tags": ["tag1", "tag2"],
+  "character_hint": "character name this memory belongs to",
+  "category": "only for pain_point type — one of the 8 categories above, otherwise omit",
+  "coaching_angle": "only for pain_point type — what a coach would say about this, otherwise omit"
+}
 
 If nothing to extract:
 []`;
@@ -281,6 +307,9 @@ router.post('/lines/:lineId/extract', optionalAuth, async (req, res) => {
           source_ref: line.source_ref || null,
           tags: Array.isArray(candidate.tags) ? candidate.tags : [],
           confirmed_at: null,
+          // Pain point fields — only populated for type=pain_point
+          category: candidate.type === 'pain_point' ? (candidate.category || null) : null,
+          coaching_angle: candidate.type === 'pain_point' ? (candidate.coaching_angle || null) : null,
         })
       )
     );
@@ -400,6 +429,9 @@ router.post('/books/:bookId/extract-all', optionalAuth, async (req, res) => {
               source_ref: line.source_ref || null,
               tags: Array.isArray(candidate.tags) ? candidate.tags : [],
               confirmed_at: null,
+              // Pain point fields
+              category: candidate.type === 'pain_point' ? (candidate.category || null) : null,
+              coaching_angle: candidate.type === 'pain_point' ? (candidate.coaching_angle || null) : null,
             })
           )
         );
@@ -1316,6 +1348,7 @@ Respond ONLY with valid JSON. No preamble. No markdown.
  * POST /character-interview-next
  * Called after each answer during the character interview.
  * Returns an adaptive follow-up question based on what the author said.
+ * NOW ALSO: detects new characters mentioned in the author's answers.
  */
 router.post('/character-interview-next', optionalAuth, async (req, res) => {
   try {
@@ -1325,20 +1358,34 @@ router.post('/character-interview-next', optionalAuth, async (req, res) => {
       character_type,
       answers_so_far = [],
       next_base_question,
+      existing_characters = [],   // names already in the registry
     } = req.body;
+
+    // ── Build universe context if we have a book ──
+    let universeBlock = '';
+    if (book_id) {
+      try {
+        const ctx = await buildUniverseContext(book_id, db);
+        if (ctx) universeBlock = `\nUNIVERSE CONTEXT:\n${ctx}\n`;
+      } catch (_) { /* non-fatal */ }
+    }
 
     const answersFormatted = answers_so_far
       .map((a, i) => `Q${i+1}: ${a.question}\nA${i+1}: ${a.answer}`)
       .join('\n\n');
 
+    const existingList = existing_characters.length
+      ? `\nALREADY KNOWN CHARACTERS (do NOT flag these):\n${existing_characters.join(', ')}\n`
+      : '';
+
     const prompt = `You are interviewing an author about one of their characters to help build a rich psychological profile and discover plot threads.
 
 CHARACTER: ${character_name} (type: ${character_type})
 BOOK: LalaVerse narrative — literary, psychological, fashion-rooted
-
+${universeBlock}
 CONVERSATION SO FAR:
 ${answersFormatted}
-
+${existingList}
 ${next_base_question ? `NEXT PLANNED QUESTION: ${next_base_question}` : ''}
 
 YOUR TASK:
@@ -1346,6 +1393,7 @@ YOUR TASK:
 2. Decide: should you ask the planned next question, OR did the author reveal something so interesting that you should follow it up instead?
 3. If you follow up — make it specific to exactly what they said. Not generic.
 4. Also check: did the author hint at a plot thread? (A conflict, a scene possibility, a relationship dynamic that could become a chapter?)
+5. NEW: Scan the author's latest answer for any character names that are NOT in the ALREADY KNOWN CHARACTERS list above. If you detect a new character, include them in "new_characters".
 
 RULES:
 - Ask ONE question only
@@ -1353,16 +1401,30 @@ RULES:
 - If the author mentioned something specific (a name, an event, a feeling) — follow that thread
 - Questions should feel like they're going deeper, not sideways
 - Do NOT ask about technical story structure — ask about the human truth
+- For new_characters: only include proper names. Not pronouns, not generic references.
 
 Respond with ONLY valid JSON:
 {
   "question": "Your next question here",
-  "thread_hint": "One sentence describing a plot thread you detected, or null if none"
-}`;
+  "thread_hint": "One sentence describing a plot thread you detected, or null if none",
+  "new_characters": [
+    {
+      "name": "Character Name",
+      "type": "pressure|mirror|support|shadow|special",
+      "role": "Brief one-sentence description of who they seem to be",
+      "appearance_mode": "on_page|composite|observed|invisible|brief",
+      "belief": "What this character might believe, based on context",
+      "emotional_function": "What role they play emotionally in the story",
+      "writer_notes": "Why the author seems to have mentioned them — what they might mean to the story"
+    }
+  ]
+}
+
+If no new characters were detected, return "new_characters": []`;
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 300,
+      max_tokens: 600,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -1379,8 +1441,12 @@ Respond with ONLY valid JSON:
       return res.json({
         question: next_base_question || 'Tell me more about that.',
         thread_hint: null,
+        new_characters: [],
       });
     }
+
+    // Ensure new_characters is always an array
+    if (!Array.isArray(result.new_characters)) result.new_characters = [];
 
     res.json(result);
 
@@ -1389,7 +1455,65 @@ Respond with ONLY valid JSON:
     res.json({
       question: req.body.next_base_question || 'What else should I know about this character?',
       thread_hint: null,
+      new_characters: [],
     });
+  }
+});
+
+
+/**
+ * POST /character-interview-create-character
+ * Called when the author confirms a newly detected character during an interview.
+ * Creates a draft RegistryCharacter with what Claude inferred.
+ */
+router.post('/character-interview-create-character', optionalAuth, async (req, res) => {
+  try {
+    const { registry_id, character, discovered_during } = req.body;
+    if (!registry_id || !character?.name) {
+      return res.status(400).json({ error: 'registry_id and character.name required' });
+    }
+
+    // Generate character_key from name
+    const charKey = character.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '');
+
+    // Map appearance_mode values to valid enum values
+    const modeMap = {
+      'On-Page': 'on_page', 'on_page': 'on_page',
+      'Composite': 'composite', 'composite': 'composite',
+      'Referenced Only': 'observed', 'observed': 'observed',
+      'Invisible': 'invisible', 'invisible': 'invisible',
+      'Brief': 'brief', 'brief': 'brief',
+    };
+    const appearanceMode = modeMap[character.appearance_mode] || 'on_page';
+
+    const created = await RegistryCharacter.create({
+      registry_id,
+      character_key:   charKey,
+      display_name:    character.name,
+      role_type:       character.type || 'special',
+      description:     character.role || null,
+      appearance_mode: appearanceMode,
+      core_belief:     character.belief || null,
+      pressure_type:   character.emotional_function || null,
+      personality:     character.writer_notes || null,
+      status:          'draft',
+      subtitle:        discovered_during
+        ? `Discovered during ${discovered_during} interview`
+        : 'Discovered during interview',
+      extra_fields: {
+        discovered_during: discovered_during || null,
+        auto_detected: true,
+        detection_source: 'character_interview',
+      },
+    });
+
+    res.json({ character: created });
+  } catch (err) {
+    console.error('POST /character-interview-create-character error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
@@ -1500,5 +1624,116 @@ Respond with ONLY valid JSON. No preamble. No markdown.
   }
 });
 
+
+// ────────────────────────────────────────────────
+// Career Echo routes
+// ────────────────────────────────────────────────
+
+/**
+ * POST /generate-career-echo
+ * Uses Claude to generate what a pain point becomes in JustAWoman's world
+ * and how Lala encounters it in Series 2.
+ */
+router.post('/generate-career-echo', optionalAuth, async (req, res) => {
+  try {
+    const { memory_id, book_id } = req.body;
+    if (!memory_id) return res.status(400).json({ error: 'memory_id required' });
+
+    const memory = await StorytellerMemory.findByPk(memory_id);
+    if (!memory) return res.status(404).json({ error: 'Memory not found' });
+    if (memory.type !== 'pain_point') {
+      return res.status(400).json({ error: 'Only pain_point memories can generate career echoes' });
+    }
+
+    // Build universe context for richer generation
+    let universeContext = '';
+    if (book_id) {
+      try {
+        universeContext = await buildUniverseContext(book_id);
+      } catch (_) { /* proceed without */ }
+    }
+
+    const prompt = `You are the LalaVerse Story Architect. You understand the full franchise:
+
+Series 1 — JustAWoman: A woman navigating self-doubt, comparison spirals, and creative paralysis.
+Series 2 — Lala: Lala is building a career. She doesn't know JustAWoman exists.
+
+The CAREER ECHO system: JustAWoman's pain points become content she creates (posts, frameworks, coaching, etc). That content enters the world and Lala encounters it — always without knowing the source.
+
+${universeContext ? `Universe context:\n${universeContext}\n` : ''}
+Here is a confirmed pain point from JustAWoman's story:
+
+Statement: "${memory.statement}"
+Category: ${memory.category || 'unspecified'}
+Coaching angle: ${memory.coaching_angle || 'none yet'}
+
+Generate a Career Echo. Return JSON only:
+{
+  "content_type": "post | framework | coaching_offer | video | podcast | book_chapter | course",
+  "title": "The title of the content JustAWoman creates from this pain",
+  "description": "2-3 sentences: what this content looks like in JustAWoman's world. How she packages it. What it sounds like.",
+  "lala_impact": "2-3 sentences: how Lala encounters this content in Series 2. What it shifts for her. She never knows JustAWoman made it."
+}
+
+IMPORTANT:
+- content_type must be exactly one of: post, framework, coaching_offer, video, podcast, book_chapter, course
+- title should feel like a real content title — not a generic label
+- description should be specific and grounded in JustAWoman's voice
+- lala_impact must never reference JustAWoman — Lala doesn't know she exists
+- Return ONLY the JSON object, no markdown fences`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    let echo;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      echo = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('generate-career-echo parse error:', parseErr);
+      return res.status(500).json({ error: 'Failed to parse echo response' });
+    }
+
+    res.json({ echo });
+  } catch (err) {
+    console.error('POST /generate-career-echo error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /add-career-echo
+ * Saves a confirmed career echo to the memory record.
+ * Once confirmed, the echo is canon — it will appear in Series 2.
+ */
+router.post('/add-career-echo', optionalAuth, async (req, res) => {
+  try {
+    const { memory_id, content_type, title, description, lala_impact } = req.body;
+    if (!memory_id) return res.status(400).json({ error: 'memory_id required' });
+
+    const memory = await StorytellerMemory.findByPk(memory_id);
+    if (!memory) return res.status(404).json({ error: 'Memory not found' });
+
+    memory.career_echo_content_type = content_type;
+    memory.career_echo_title        = title;
+    memory.career_echo_description  = description;
+    memory.career_echo_lala_impact   = lala_impact;
+    memory.career_echo_confirmed     = true;
+    await memory.save();
+
+    res.json({ memory });
+  } catch (err) {
+    console.error('POST /add-career-echo error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;

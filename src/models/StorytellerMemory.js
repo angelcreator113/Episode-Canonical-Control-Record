@@ -24,7 +24,7 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
 
-      // goal | preference | relationship | belief | event | constraint | transformation
+      // goal | preference | relationship | belief | event | constraint | transformation | pain_point | character_dynamic
       type: {
         type: DataTypes.STRING(100),
         allowNull: false,
@@ -38,8 +38,10 @@ module.exports = (sequelize) => {
               'event',
               'constraint',
               'transformation',
+              'pain_point',
+              'character_dynamic',
             ]],
-            msg: 'type must be one of: goal, preference, relationship, belief, event, constraint, transformation',
+            msg: 'type must be one of: goal, preference, relationship, belief, event, constraint, transformation, pain_point, character_dynamic',
           },
         },
       },
@@ -100,6 +102,45 @@ module.exports = (sequelize) => {
       confirmed_at: {
         type: DataTypes.DATE,
         allowNull: true,
+      },
+
+      // Pain point category (only for type=pain_point)
+      category: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+
+      // Coaching angle (only for type=pain_point) — auto-generated, never shown in manuscript
+      coaching_angle: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+      },
+
+      // ── Career Echo fields ──────────────────────────────────
+      // What this pain point becomes in JustAWoman's world + how Lala encounters it in Series 2
+      career_echo_content_type: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+        comment: 'post | framework | coaching_offer | video | podcast | book_chapter | course',
+      },
+      career_echo_title: {
+        type: DataTypes.STRING(255),
+        allowNull: true,
+      },
+      career_echo_description: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'What this content looks like in JustAWoman world',
+      },
+      career_echo_lala_impact: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+        comment: 'How Lala encounters this in Series 2 — never shown to JustAWoman',
+      },
+      career_echo_confirmed: {
+        type: DataTypes.BOOLEAN,
+        defaultValue: false,
+        comment: 'Author confirmed this echo is canon',
       },
     },
     {

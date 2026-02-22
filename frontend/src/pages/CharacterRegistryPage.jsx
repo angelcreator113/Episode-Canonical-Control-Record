@@ -465,6 +465,8 @@ export default function CharacterRegistryPage() {
         bookId={bookId}
         open={!!interviewTarget}
         onClose={() => setInterviewTarget(null)}
+        registryId={activeRegistry?.id}
+        characters={activeRegistry?.Characters || []}
         onComplete={(profile, threads) => {
           // Refresh registry to pick up updated character
           if (activeRegistry?.id) fetchRegistry(activeRegistry.id);

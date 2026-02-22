@@ -25,6 +25,7 @@
 
 import { useState, useRef, useEffect } from 'react';
 import { useVoice, MicButton, SpeakButton } from '../hooks/VoiceLayer';
+import NewCharacterDetected from './NewCharacterDetected';
 
 const MEMORIES_API    = '/api/v1/memories';
 const REGISTRY_API    = '/api/v1/character-registry';
@@ -83,6 +84,8 @@ export default function CharacterVoiceInterview({
   open,
   onClose,
   onComplete,
+  registryId,
+  characters = [],
 }) {
   const [messages, setMessages]       = useState([]); // { role: 'system'|'user', text }
   const [input, setInput]             = useState('');
@@ -172,6 +175,9 @@ export default function CharacterVoiceInterview({
 
       // After 2 answers, start generating adaptive follow-ups
       if (currentAnswers.length >= 2) {
+        // Build list of known character names so Claude can detect new ones
+        const existingNames = characters.map(c => c.selected_name || c.display_name).filter(Boolean);
+
         const res = await fetch(`${MEMORIES_API}/character-interview-next`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -181,6 +187,7 @@ export default function CharacterVoiceInterview({
             character_type: roleType,
             answers_so_far: currentAnswers,
             next_base_question: questions[nextIndex] || null,
+            existing_characters: existingNames,
           }),
         });
         const data = await res.json();
@@ -196,6 +203,16 @@ export default function CharacterVoiceInterview({
             role: 'thread_hint',
             text: `✦ Plot thread detected: ${data.thread_hint}`,
           }]);
+        }
+
+        // If new characters were detected, surface them
+        if (data.new_characters?.length) {
+          for (const nc of data.new_characters) {
+            setMessages(prev => [...prev, {
+              role: 'new_character_detected',
+              character: nc,
+            }]);
+          }
         }
       } else {
         // Use base question
@@ -361,7 +378,7 @@ export default function CharacterVoiceInterview({
           <>
             <div style={st.chatWindow}>
               {messages.map((msg, i) => (
-                <ChatMessage key={i} message={msg} charName={charName} />
+                <ChatMessage key={i} message={msg} charName={charName} registryId={registryId} discoveredDuring={charName} />
               ))}
               {generating && (
                 <div style={st.typingIndicator}>
@@ -425,7 +442,21 @@ export default function CharacterVoiceInterview({
 
 // ── Sub-components ─────────────────────────────────────────────────────────
 
-function ChatMessage({ message }) {
+function ChatMessage({ message, registryId, discoveredDuring }) {
+  if (message.role === 'new_character_detected') {
+    return (
+      <NewCharacterDetected
+        character={message.character}
+        registryId={registryId}
+        discoveredDuring={discoveredDuring}
+        onConfirm={(created) => {
+          console.log('Character added to registry:', created);
+        }}
+        onDismiss={() => {}}
+      />
+    );
+  }
+
   if (message.role === 'thread_hint') {
     return (
       <div style={st.threadHint}>
