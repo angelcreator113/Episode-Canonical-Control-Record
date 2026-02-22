@@ -745,6 +745,37 @@
   background: rgba(255,255,255,0.05);
 }
 
+/* interview button — detail header */
+.cr-action-btn.interview {
+  background: rgba(201, 168, 76, 0.08);
+  color: var(--gold);
+  border-color: rgba(201, 168, 76, 0.25);
+}
+.cr-action-btn.interview:hover {
+  background: rgba(201, 168, 76, 0.16);
+  border-color: var(--gold);
+}
+
+/* interview button — grid card */
+.cr-card-interview-btn {
+  margin-top: auto;
+  padding: 5px 10px;
+  background: rgba(201, 168, 76, 0.06);
+  border: 1px solid rgba(201, 168, 76, 0.18);
+  border-radius: 2px;
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--gold);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  align-self: flex-start;
+}
+.cr-card-interview-btn:hover {
+  background: rgba(201, 168, 76, 0.14);
+  border-color: var(--gold);
+}
+
 /* ---------- Edit Form ---------- */
 .cr-edit-header {
   display: flex;

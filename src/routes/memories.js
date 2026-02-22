@@ -1308,4 +1308,197 @@ Respond ONLY with valid JSON. No preamble. No markdown.
 });
 
 
+// ═══════════════════════════════════════════════════════════════════════════
+//  CHARACTER VOICE INTERVIEW ROUTES
+// ═══════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /character-interview-next
+ * Called after each answer during the character interview.
+ * Returns an adaptive follow-up question based on what the author said.
+ */
+router.post('/character-interview-next', optionalAuth, async (req, res) => {
+  try {
+    const {
+      book_id,
+      character_name,
+      character_type,
+      answers_so_far = [],
+      next_base_question,
+    } = req.body;
+
+    const answersFormatted = answers_so_far
+      .map((a, i) => `Q${i+1}: ${a.question}\nA${i+1}: ${a.answer}`)
+      .join('\n\n');
+
+    const prompt = `You are interviewing an author about one of their characters to help build a rich psychological profile and discover plot threads.
+
+CHARACTER: ${character_name} (type: ${character_type})
+BOOK: LalaVerse narrative — literary, psychological, fashion-rooted
+
+CONVERSATION SO FAR:
+${answersFormatted}
+
+${next_base_question ? `NEXT PLANNED QUESTION: ${next_base_question}` : ''}
+
+YOUR TASK:
+1. Read what the author just said carefully
+2. Decide: should you ask the planned next question, OR did the author reveal something so interesting that you should follow it up instead?
+3. If you follow up — make it specific to exactly what they said. Not generic.
+4. Also check: did the author hint at a plot thread? (A conflict, a scene possibility, a relationship dynamic that could become a chapter?)
+
+RULES:
+- Ask ONE question only
+- Keep it conversational — like a curious friend, not an interviewer with a clipboard
+- If the author mentioned something specific (a name, an event, a feeling) — follow that thread
+- Questions should feel like they're going deeper, not sideways
+- Do NOT ask about technical story structure — ask about the human truth
+
+Respond with ONLY valid JSON:
+{
+  "question": "Your next question here",
+  "thread_hint": "One sentence describing a plot thread you detected, or null if none"
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 300,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    let result;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      result = JSON.parse(clean);
+    } catch (e) {
+      return res.json({
+        question: next_base_question || 'Tell me more about that.',
+        thread_hint: null,
+      });
+    }
+
+    res.json(result);
+
+  } catch (err) {
+    console.error('POST /character-interview-next error:', err);
+    res.json({
+      question: req.body.next_base_question || 'What else should I know about this character?',
+      thread_hint: null,
+    });
+  }
+});
+
+
+/**
+ * POST /character-interview-complete
+ * Called when the interview is complete.
+ * Builds full character profile + discovers plot threads from all answers.
+ */
+router.post('/character-interview-complete', optionalAuth, async (req, res) => {
+  try {
+    const {
+      book_id,
+      character_id,
+      character_name,
+      character_type,
+      answers = [],
+    } = req.body;
+
+    // Universe context (optional — book_id may be null)
+    let universeContext = '';
+    if (book_id) {
+      universeContext = await buildUniverseContext(book_id, db);
+    }
+
+    const answersFormatted = answers
+      .map((a, i) => `Q${i+1}: ${a.question}\nA${i+1}: ${a.answer}`)
+      .join('\n\n');
+
+    const prompt = `${universeContext}
+
+You have just interviewed an author about one of their characters for their debut literary novel. Build a complete psychological profile AND discover plot threads from everything they said.
+
+CHARACTER: ${character_name} (type: ${character_type})
+
+FULL INTERVIEW:
+${answersFormatted}
+
+YOUR TASK — TWO PARTS:
+
+PART 1 — CHARACTER PROFILE
+Build the psychological profile entirely from the author's words. Use their language. Preserve their voice. Do not add facts they didn't give you. Do not make it sound like a character sheet — make it sound like a real person being described by someone who knows them intimately.
+
+PART 2 — PLOT THREADS
+Read between the lines. The author revealed things they may not have realized were plot threads. Find 2-4 specific, concrete story possibilities that emerged from what they said. Each thread should feel inevitable given what was shared — not invented.
+
+A plot thread is: a specific scene, conflict, or relationship dynamic that could become a chapter or a turning point.
+
+RULES:
+- Profile must be in the author's voice and understanding — not generic
+- personality should be practical guidance for writing this character in scenes
+- Threads must be grounded in what was actually said — no invention
+- Chapter hints should be specific: "The scene where X happens and Y realizes Z"
+
+IMPORTANT: Use these exact field names — they map directly to database columns.
+
+Respond with ONLY valid JSON. No preamble. No markdown.
+
+{
+  "profile": {
+    "selected_name": "The name the author uses for this character",
+    "description": "Who this character is and what they mean to the story. 2-4 sentences in the author's understanding.",
+    "core_belief": "The core belief or question this character pressures the protagonist with. One sentence.",
+    "pressure_type": "What emotional work this character does in the story. 2-3 sentences.",
+    "personality": "Practical notes for writing this character in scenes — their voice, behavior, how they show up. 3-5 sentences.",
+    "personality_matrix": {
+      "confidence": 0-100,
+      "playfulness": 0-100,
+      "luxury_tone": 0-100,
+      "drama": 0-100,
+      "softness": 0-100
+    }
+  },
+  "threads": [
+    {
+      "title": "Short evocative title for this plot thread",
+      "description": "What happens and why it matters. 2-3 sentences.",
+      "chapter_hint": "The specific scene this could become. One sentence starting with 'The scene where...'"
+    }
+  ]
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1500,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    let result;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      result = JSON.parse(clean);
+    } catch (e) {
+      console.error('character-interview-complete parse error:', e);
+      return res.status(500).json({ error: 'Failed to parse profile response' });
+    }
+
+    res.json(result);
+
+  } catch (err) {
+    console.error('POST /character-interview-complete error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 module.exports = router;

@@ -7,6 +7,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import './CharacterRegistryPage.css';
+import CharacterVoiceInterview from './CharacterVoiceInterview';
 
 const API = '/api/v1/character-registry';
 
@@ -45,6 +46,9 @@ export default function CharacterRegistryPage() {
   const [editingChar, setEditingChar] = useState(false);
   const [editForm, setEditForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [interviewTarget, setInterviewTarget] = useState(null);
+  const [plotThreads, setPlotThreads] = useState([]);
+  const [bookId, setBookId] = useState(null);
 
   const showToast = useCallback((message, type = '') => {
     setToast({ message, type, key: Date.now() });
@@ -78,6 +82,23 @@ export default function CharacterRegistryPage() {
   }, []);
 
   useEffect(() => { fetchRegistries(); }, [fetchRegistries]);
+
+  /* ---------- fetch book id for interview context ---------- */
+  useEffect(() => {
+    if (!activeRegistry?.book_tag) return;
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/storyteller/books');
+        const data = await res.json();
+        const books = data.books || data || [];
+        const match = books.find(b =>
+          b.title?.toLowerCase().includes('book 1') ||
+          b.title?.toLowerCase().includes('before lala')
+        );
+        if (match) setBookId(match.id);
+      } catch (e) { /* no book context — interview still works */ }
+    })();
+  }, [activeRegistry?.book_tag]);
 
   /* ---------- create registry ---------- */
   const createRegistry = async () => {
@@ -392,6 +413,12 @@ export default function CharacterRegistryPage() {
                       {c.pressure_quote && (
                         <p className="cr-card-quote">{c.pressure_quote}</p>
                       )}
+                      <button
+                        className="cr-card-interview-btn"
+                        onClick={e => { e.stopPropagation(); setInterviewTarget(c); }}
+                      >
+                        ✦ Interview
+                      </button>
                     </div>
                   ))}
                 </div>
@@ -471,7 +498,15 @@ export default function CharacterRegistryPage() {
                     </span>
                   </div>
                 </div>
-                <button className="cr-action-btn edit" onClick={() => startEdit(activeChar)} style={{ marginLeft: 'auto' }}>
+                <button
+                  className="cr-action-btn interview"
+                  onClick={() => setInterviewTarget(activeChar)}
+                  style={{ marginLeft: 'auto', marginRight: 8 }}
+                  title="Voice Interview — build profile from conversation"
+                >
+                  ✦ Voice Interview
+                </button>
+                <button className="cr-action-btn edit" onClick={() => startEdit(activeChar)}>
                   ✎ Edit
                 </button>
               </div>
@@ -624,6 +659,20 @@ export default function CharacterRegistryPage() {
       </div>
 
       {toast && <Toast key={toast.key} message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+
+      <CharacterVoiceInterview
+        character={interviewTarget}
+        bookId={bookId}
+        open={!!interviewTarget}
+        onClose={() => setInterviewTarget(null)}
+        onComplete={(profile, threads) => {
+          // Refresh registry to pick up updated character
+          if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+          if (threads?.length) setPlotThreads(prev => [...prev, ...threads]);
+          setInterviewTarget(null);
+          showToast('Profile saved from interview', 'success');
+        }}
+      />
     </div>
   );
 }

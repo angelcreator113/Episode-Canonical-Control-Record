@@ -329,7 +329,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       return;
     }
     try {
-      const res = await fetch(`${STORYTELLER_API}/books/${book.id}`, {
+      const res = await fetch(`${API}/books/${book.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: trimmed }),
@@ -350,7 +350,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       return;
     }
     try {
-      const res = await fetch(`${STORYTELLER_API}/chapters/${chId}`, {
+      const res = await fetch(`${API}/chapters/${chId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ title: trimmed }),
@@ -781,7 +781,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                         : `Delete chapter "${ch.title}"? This cannot be undone.`;
                       if (!window.confirm(msg)) return;
                       try {
-                        const res = await fetch(`${STORYTELLER_API}/chapters/${ch.id}`, { method: 'DELETE' });
+                        const res = await fetch(`${API}/chapters/${ch.id}`, { method: 'DELETE' });
                         if (!res.ok) throw new Error('Failed to delete');
                         setChapters(prev => {
                           const remaining = prev.filter(c => c.id !== ch.id);
@@ -931,7 +931,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                           const count = (activeChapter.lines || []).length;
                           if (!window.confirm(`Clear all ${count} line${count !== 1 ? 's' : ''} from this chapter? This cannot be undone.`)) return;
                           try {
-                            const res = await fetch(`${STORYTELLER_API}/chapters/${activeChapter.id}/lines`, { method: 'DELETE' });
+                            const res = await fetch(`${API}/chapters/${activeChapter.id}/lines`, { method: 'DELETE' });
                             if (!res.ok) throw new Error('Failed to clear');
                             setChapters(prev => prev.map(c =>
                               c.id === activeChapter.id ? { ...c, lines: [] } : c
