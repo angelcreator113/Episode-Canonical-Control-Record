@@ -42,6 +42,9 @@ export default function CharacterRegistryPage() {
   const [activeCharKey, setActiveCharKey] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState(null);
+  const [editingChar, setEditingChar] = useState(false);
+  const [editForm, setEditForm] = useState({});
+  const [saving, setSaving] = useState(false);
 
   const showToast = useCallback((message, type = '') => {
     setToast({ message, type, key: Date.now() });
@@ -133,6 +136,54 @@ export default function CharacterRegistryPage() {
       }
     } catch (e) {
       showToast('Failed to select name', 'error');
+    }
+  };
+
+  /* ---------- edit character ---------- */
+  const startEdit = (char) => {
+    setEditForm({
+      display_name: char.display_name || '',
+      subtitle: char.subtitle || '',
+      icon: char.icon || '',
+      role_type: char.role_type || 'special',
+      role_label: char.role_label || '',
+      appearance_mode: char.appearance_mode || 'on_page',
+      core_belief: char.core_belief || '',
+      pressure_type: char.pressure_type || '',
+      pressure_quote: char.pressure_quote || '',
+      personality: char.personality || '',
+      job_options: char.job_options || '',
+      description: char.description || '',
+    });
+    setEditingChar(true);
+  };
+
+  const cancelEdit = () => {
+    setEditingChar(false);
+    setEditForm({});
+  };
+
+  const saveEdit = async (charId) => {
+    setSaving(true);
+    try {
+      const res = await fetch(`${API}/characters/${charId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Character updated', 'success');
+        setEditingChar(false);
+        setEditForm({});
+        await fetchRegistry(activeRegistry.id);
+      } else {
+        showToast(data.error || 'Save failed', 'error');
+      }
+    } catch (e) {
+      showToast('Failed to save character', 'error');
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -349,6 +400,60 @@ export default function CharacterRegistryPage() {
           ) : activeChar ? (
             /* ---------- CHARACTER DETAIL ---------- */
             <div className="cr-detail">
+              {editingChar ? (
+                /* ===== EDIT MODE ===== */
+                <>
+                  <div className="cr-edit-header">
+                    <h2>Edit Character</h2>
+                    <div className="cr-edit-header-actions">
+                      <button className="cr-action-btn" onClick={cancelEdit}>Cancel</button>
+                      <button className="cr-action-btn accept" onClick={() => saveEdit(activeChar.id)} disabled={saving}>
+                        {saving ? 'Saving…' : '✓ Save'}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="cr-edit-form">
+                    <div className="cr-edit-row">
+                      <CrField label="Display Name" value={editForm.display_name} onChange={v => setEditForm(f => ({ ...f, display_name: v }))} />
+                      <CrField label="Icon" value={editForm.icon} onChange={v => setEditForm(f => ({ ...f, icon: v }))} small />
+                    </div>
+                    <CrField label="Subtitle" value={editForm.subtitle} onChange={v => setEditForm(f => ({ ...f, subtitle: v }))} />
+
+                    <div className="cr-edit-row">
+                      <CrSelect label="Role Type" value={editForm.role_type} onChange={v => setEditForm(f => ({ ...f, role_type: v }))}
+                        options={[
+                          { value: 'pressure', label: 'Pressure' },
+                          { value: 'mirror', label: 'Mirror' },
+                          { value: 'support', label: 'Support' },
+                          { value: 'shadow', label: 'Shadow' },
+                          { value: 'special', label: 'Special' },
+                        ]}
+                      />
+                      <CrField label="Role Label" value={editForm.role_label} onChange={v => setEditForm(f => ({ ...f, role_label: v }))} />
+                    </div>
+
+                    <CrSelect label="Appearance Mode" value={editForm.appearance_mode} onChange={v => setEditForm(f => ({ ...f, appearance_mode: v }))}
+                      options={[
+                        { value: 'on_page', label: 'On Page' },
+                        { value: 'composite', label: 'Composite' },
+                        { value: 'observed', label: 'Observed' },
+                        { value: 'invisible', label: 'Invisible' },
+                        { value: 'brief', label: 'Brief' },
+                      ]}
+                    />
+
+                    <CrTextArea label="Core Belief" value={editForm.core_belief} onChange={v => setEditForm(f => ({ ...f, core_belief: v }))} rows={2} />
+                    <CrField label="Pressure Type" value={editForm.pressure_type} onChange={v => setEditForm(f => ({ ...f, pressure_type: v }))} />
+                    <CrTextArea label="Pressure Quote" value={editForm.pressure_quote} onChange={v => setEditForm(f => ({ ...f, pressure_quote: v }))} rows={2} />
+                    <CrField label="Personality" value={editForm.personality} onChange={v => setEditForm(f => ({ ...f, personality: v }))} hint="Comma-separated traits" />
+                    <CrField label="Job Options" value={editForm.job_options} onChange={v => setEditForm(f => ({ ...f, job_options: v }))} />
+                    <CrTextArea label="Description" value={editForm.description} onChange={v => setEditForm(f => ({ ...f, description: v }))} rows={4} />
+                  </div>
+                </>
+              ) : (
+                /* ===== READ MODE ===== */
+                <>
               <div className="cr-detail-header">
                 <div className="cr-detail-icon">{activeChar.icon || '○'}</div>
                 <div className="cr-detail-meta">
@@ -366,6 +471,11 @@ export default function CharacterRegistryPage() {
                     </span>
                   </div>
                 </div>
+                {activeChar.status !== 'finalized' && (
+                  <button className="cr-action-btn edit" onClick={() => startEdit(activeChar)} style={{ marginLeft: 'auto' }}>
+                    ✎ Edit
+                  </button>
+                )}
               </div>
 
               {/* Core Belief */}
@@ -499,6 +609,8 @@ export default function CharacterRegistryPage() {
                   </span>
                 )}
               </div>
+                </>
+              )}
             </div>
           ) : (
             <div className="cr-empty">
@@ -509,6 +621,57 @@ export default function CharacterRegistryPage() {
       </div>
 
       {toast && <Toast key={toast.key} message={toast.message} type={toast.type} onClose={() => setToast(null)} />}
+    </div>
+  );
+}
+
+/* ================================================================== */
+/*  Edit form field components                                         */
+/* ================================================================== */
+
+function CrField({ label, value, onChange, hint, small }) {
+  return (
+    <div className={`cr-edit-field ${small ? 'small' : ''}`}>
+      <label className="cr-edit-label">{label}</label>
+      <input
+        className="cr-edit-input"
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        placeholder={label}
+      />
+      {hint && <span className="cr-edit-hint">{hint}</span>}
+    </div>
+  );
+}
+
+function CrSelect({ label, value, onChange, options }) {
+  return (
+    <div className="cr-edit-field">
+      <label className="cr-edit-label">{label}</label>
+      <select
+        className="cr-edit-input cr-edit-select"
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+      >
+        {options.map(o => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function CrTextArea({ label, value, onChange, rows = 3 }) {
+  return (
+    <div className="cr-edit-field">
+      <label className="cr-edit-label">{label}</label>
+      <textarea
+        className="cr-edit-input cr-edit-textarea"
+        value={value || ''}
+        onChange={e => onChange(e.target.value)}
+        rows={rows}
+        placeholder={label}
+      />
     </div>
   );
 }
