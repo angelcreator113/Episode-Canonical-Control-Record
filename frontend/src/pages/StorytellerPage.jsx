@@ -660,32 +660,62 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
               const chApproved = chLines.filter(l => l.status === 'approved').length;
               const chEdited = chLines.filter(l => l.status === 'edited').length;
               return (
-                <button
-                  key={ch.id}
-                  className={`st-nav-chapter ${ch.id === activeChapterId ? 'active' : ''}`}
-                  onClick={() => setActiveChapterId(ch.id)}
-                >
-                  <span className="st-nav-num">
-                    {String(ch.chapter_number || i + 1).padStart(2, '0')}
-                  </span>
-                  <div className="st-nav-chapter-info">
-                    <div className="st-nav-chapter-title">{ch.title}</div>
-                    <div className="st-nav-chapter-meta">
-                      {chLines.length} line{chLines.length !== 1 ? 's' : ''}{ch.badge ? ` · ${ch.badge}` : ''}
+                <div key={ch.id} style={{ position: 'relative' }}>
+                  <button
+                    className={`st-nav-chapter ${ch.id === activeChapterId ? 'active' : ''}`}
+                    onClick={() => setActiveChapterId(ch.id)}
+                  >
+                    <span className="st-nav-num">
+                      {String(ch.chapter_number || i + 1).padStart(2, '0')}
+                    </span>
+                    <div className="st-nav-chapter-info">
+                      <div className="st-nav-chapter-title">{ch.title}</div>
+                      <div className="st-nav-chapter-meta">
+                        {chLines.length} line{chLines.length !== 1 ? 's' : ''}{ch.badge ? ` · ${ch.badge}` : ''}
+                      </div>
+                      <div className="st-nav-dots">
+                        {Array(Math.min(chApproved, 5)).fill(null).map((_, di) => (
+                          <div key={`a${di}`} className="st-cnav-dot st-cnav-dot-a" />
+                        ))}
+                        {Array(Math.min(chPending, 5)).fill(null).map((_, di) => (
+                          <div key={`p${di}`} className="st-cnav-dot st-cnav-dot-p" />
+                        ))}
+                        {Array(Math.min(chEdited, 5)).fill(null).map((_, di) => (
+                          <div key={`e${di}`} className="st-cnav-dot st-cnav-dot-e" />
+                        ))}
+                      </div>
                     </div>
-                    <div className="st-nav-dots">
-                      {Array(Math.min(chApproved, 5)).fill(null).map((_, di) => (
-                        <div key={`a${di}`} className="st-cnav-dot st-cnav-dot-a" />
-                      ))}
-                      {Array(Math.min(chPending, 5)).fill(null).map((_, di) => (
-                        <div key={`p${di}`} className="st-cnav-dot st-cnav-dot-p" />
-                      ))}
-                      {Array(Math.min(chEdited, 5)).fill(null).map((_, di) => (
-                        <div key={`e${di}`} className="st-cnav-dot st-cnav-dot-e" />
-                      ))}
-                    </div>
-                  </div>
-                </button>
+                  </button>
+                  <button
+                    className="st-nav-chapter-delete"
+                    title={`Delete "${ch.title}"`}
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      const lineCount = chLines.length;
+                      const msg = lineCount > 0
+                        ? `Delete chapter "${ch.title}" and its ${lineCount} line${lineCount !== 1 ? 's' : ''}? This cannot be undone.`
+                        : `Delete chapter "${ch.title}"? This cannot be undone.`;
+                      if (!window.confirm(msg)) return;
+                      try {
+                        const res = await fetch(`${STORYTELLER_API}/chapters/${ch.id}`, { method: 'DELETE' });
+                        if (!res.ok) throw new Error('Failed to delete');
+                        setChapters(prev => {
+                          const remaining = prev.filter(c => c.id !== ch.id);
+                          if (ch.id === activeChapterId && remaining.length > 0) {
+                            setActiveChapterId(remaining[0].id);
+                          } else if (remaining.length === 0) {
+                            setActiveChapterId(null);
+                          }
+                          return remaining;
+                        });
+                      } catch (err) {
+                        console.error('Delete chapter error:', err);
+                      }
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
               );
             })}
           </div>
