@@ -33,7 +33,7 @@ router.get('/registries', async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registries = await CharacterRegistry.findAll({
-      include: [{ model: RegistryCharacter, as: 'characters', attributes: ['id', 'status', 'role_type', 'display_name', 'icon', 'sort_order'] }],
+      include: [{ model: RegistryCharacter, as: 'characters', attributes: ['id', 'character_key', 'status', 'role_type', 'display_name', 'icon', 'sort_order'] }],
       order: [['created_at', 'DESC']],
     });
     return res.json({ success: true, registries });
@@ -267,6 +267,7 @@ router.post('/characters/:id/select-name', async (req, res) => {
     if (!name) return res.status(400).json({ success: false, error: 'name is required' });
 
     character.selected_name = name;
+    character.display_name = name;
     await character.save();
 
     return res.json({ success: true, character });
@@ -291,10 +292,7 @@ router.post('/characters/:id/set-status', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid status. Must be draft, accepted, declined, or finalized.' });
     }
 
-    // Once finalized, cannot change
-    if (character.status === 'finalized' && status !== 'finalized') {
-      return res.status(400).json({ success: false, error: 'Finalized characters cannot be changed.' });
-    }
+    // Allow reverting from finalized (no longer permanently locked)
 
     character.status = status;
     await character.save();
