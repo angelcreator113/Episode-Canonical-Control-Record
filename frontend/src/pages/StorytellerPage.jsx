@@ -794,8 +794,8 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                     </button>
                   </div>
 
-                  {/* Scene Interview — auto-pops when chapter has no lines, or on redo */}
-                  {(((activeChapter.lines || []).length === 0 && !interviewDone[activeChapter.id]) || redoInterview) && (
+                  {/* Scene Interview — auto-pops when chapter has no lines and no prior interview, or on redo */}
+                  {(((activeChapter.lines || []).length === 0 && !interviewDone[activeChapter.id] && !activeChapter.interview_answers && !activeChapter.theme) || redoInterview) && (
                     <SceneInterview
                       chapter={activeChapter}
                       book={book}
