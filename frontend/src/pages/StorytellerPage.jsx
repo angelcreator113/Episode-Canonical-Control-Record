@@ -524,9 +524,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
               <div className={`st-line-text ${line.status === 'pending' ? 'pending' : ''}`}>
                 {line.text}
               </div>
-              {(line.source_tags || []).length > 0 && (
+              {line.source_tags && (Array.isArray(line.source_tags) ? line.source_tags : [line.source_tags]).length > 0 && (
                 <div className="st-line-meta">
-                  {line.source_tags.map((tag, ti) => (
+                  {(Array.isArray(line.source_tags) ? line.source_tags : [line.source_tags]).map((tag, ti) => (
                     <span key={ti} className="st-source-tag">{tag}</span>
                   ))}
                 </div>
