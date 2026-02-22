@@ -919,7 +919,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
         {/* ── Memory View ── */}
         {activeView === 'memory' && (
-          <MemoryBankView bookId={book.id} />
+          <MemoryBankView bookId={book.id} showId={book.show_id} />
         )}
 
         {/* ── Scenes View ── */}
