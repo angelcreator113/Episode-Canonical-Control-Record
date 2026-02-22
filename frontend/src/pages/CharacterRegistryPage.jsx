@@ -245,7 +245,7 @@ export default function CharacterRegistryPage() {
             <div
               key={r.id}
               className="cr-registry-item"
-              onClick={() => { setActiveRegistry(r); setActiveCharKey('overview'); }}
+              onClick={() => { fetchRegistry(r.id); setActiveCharKey('overview'); }}
             >
               <div className="cr-registry-item-left">
                 <h3>{r.title || 'Untitled'}</h3>
@@ -299,7 +299,7 @@ export default function CharacterRegistryPage() {
               <button
                 key={c.id}
                 className={`cr-nav-item ${activeCharKey === c.character_key ? 'active' : ''}`}
-                onClick={() => setActiveCharKey(c.character_key)}
+                onClick={() => { setEditingChar(false); setActiveCharKey(c.character_key); }}
               >
                 <span className="cr-nav-icon">{c.icon || '○'}</span>
                 <span className="cr-nav-label">{c.display_name}</span>
@@ -378,7 +378,7 @@ export default function CharacterRegistryPage() {
                     <div
                       key={c.id}
                       className={`cr-card role-${c.role_type} ${c.character_key === 'the-algorithm' ? 'algorithm-card' : ''}`}
-                      onClick={() => setActiveCharKey(c.character_key)}
+                      onClick={() => { setEditingChar(false); setActiveCharKey(c.character_key); }}
                     >
                       <div className="cr-card-top">
                         <span className="cr-card-icon">{c.icon || '○'}</span>

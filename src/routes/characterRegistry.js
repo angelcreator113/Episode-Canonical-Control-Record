@@ -33,7 +33,7 @@ router.get('/registries', async (req, res) => {
   try {
     const { CharacterRegistry, RegistryCharacter } = getModels();
     const registries = await CharacterRegistry.findAll({
-      include: [{ model: RegistryCharacter, as: 'characters', attributes: ['id', 'status', 'role_type', 'display_name', 'icon', 'sort_order'] }],
+      include: [{ model: RegistryCharacter, as: 'characters', attributes: ['id', 'character_key', 'status', 'role_type', 'display_name', 'icon', 'sort_order'] }],
       order: [['created_at', 'DESC']],
     });
     return res.json({ success: true, registries });
