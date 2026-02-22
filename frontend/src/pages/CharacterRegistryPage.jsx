@@ -471,11 +471,9 @@ export default function CharacterRegistryPage() {
                     </span>
                   </div>
                 </div>
-                {activeChar.status !== 'finalized' && (
-                  <button className="cr-action-btn edit" onClick={() => startEdit(activeChar)} style={{ marginLeft: 'auto' }}>
-                    ✎ Edit
-                  </button>
-                )}
+                <button className="cr-action-btn edit" onClick={() => startEdit(activeChar)} style={{ marginLeft: 'auto' }}>
+                  ✎ Edit
+                </button>
               </div>
 
               {/* Core Belief */}
@@ -604,9 +602,14 @@ export default function CharacterRegistryPage() {
                   </>
                 )}
                 {activeChar.status === 'finalized' && (
-                  <span style={{ color: 'var(--gold)', fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: 1 }}>
-                    ◆ FINALIZED — LOCKED
-                  </span>
+                  <>
+                    <span style={{ color: 'var(--gold)', fontFamily: 'var(--mono)', fontSize: 12, letterSpacing: 1 }}>
+                      ◆ FINALIZED
+                    </span>
+                    <button className="cr-action-btn revert" onClick={() => setCharStatus(activeChar.id, 'draft')}>
+                      ↺ Revert to Draft
+                    </button>
+                  </>
                 )}
               </div>
                 </>

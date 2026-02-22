@@ -291,10 +291,7 @@ router.post('/characters/:id/set-status', async (req, res) => {
       return res.status(400).json({ success: false, error: 'Invalid status. Must be draft, accepted, declined, or finalized.' });
     }
 
-    // Once finalized, cannot change
-    if (character.status === 'finalized' && status !== 'finalized') {
-      return res.status(400).json({ success: false, error: 'Finalized characters cannot be changed.' });
-    }
+    // Allow reverting from finalized (no longer permanently locked)
 
     character.status = status;
     await character.save();
