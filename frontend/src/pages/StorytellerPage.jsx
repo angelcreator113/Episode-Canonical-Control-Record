@@ -290,18 +290,16 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
     return () => document.head.removeChild(style);
   }, []);
 
-  // Fetch registry characters for the MemoryCard confirm step
+  // Fetch registry characters for ChapterBrief + MemoryCard confirm step
   useEffect(() => {
-    const showId = book.show_id;
-    if (!showId) return;
-    fetch(`/api/v1/character-registry/registries?show_id=${showId}`)
+    fetch('/api/v1/character-registry/registries')
       .then(r => r.json())
       .then(data => {
         const chars = data.registries?.flatMap(r => r.characters || []) || [];
         setRegistryCharacters(chars);
       })
       .catch(() => {});
-  }, [book.show_id]);
+  }, []);
 
   const [editingLine, setEditingLine] = useState(null);
   const [editText, setEditText] = useState('');
