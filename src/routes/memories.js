@@ -1316,6 +1316,7 @@ Respond ONLY with valid JSON. No preamble. No markdown.
  * POST /character-interview-next
  * Called after each answer during the character interview.
  * Returns an adaptive follow-up question based on what the author said.
+ * NOW ALSO: detects new characters mentioned in the author's answers.
  */
 router.post('/character-interview-next', optionalAuth, async (req, res) => {
   try {
@@ -1325,20 +1326,34 @@ router.post('/character-interview-next', optionalAuth, async (req, res) => {
       character_type,
       answers_so_far = [],
       next_base_question,
+      existing_characters = [],   // names already in the registry
     } = req.body;
+
+    // ── Build universe context if we have a book ──
+    let universeBlock = '';
+    if (book_id) {
+      try {
+        const ctx = await buildUniverseContext(book_id, db);
+        if (ctx) universeBlock = `\nUNIVERSE CONTEXT:\n${ctx}\n`;
+      } catch (_) { /* non-fatal */ }
+    }
 
     const answersFormatted = answers_so_far
       .map((a, i) => `Q${i+1}: ${a.question}\nA${i+1}: ${a.answer}`)
       .join('\n\n');
 
+    const existingList = existing_characters.length
+      ? `\nALREADY KNOWN CHARACTERS (do NOT flag these):\n${existing_characters.join(', ')}\n`
+      : '';
+
     const prompt = `You are interviewing an author about one of their characters to help build a rich psychological profile and discover plot threads.
 
 CHARACTER: ${character_name} (type: ${character_type})
 BOOK: LalaVerse narrative — literary, psychological, fashion-rooted
-
+${universeBlock}
 CONVERSATION SO FAR:
 ${answersFormatted}
-
+${existingList}
 ${next_base_question ? `NEXT PLANNED QUESTION: ${next_base_question}` : ''}
 
 YOUR TASK:
@@ -1346,6 +1361,7 @@ YOUR TASK:
 2. Decide: should you ask the planned next question, OR did the author reveal something so interesting that you should follow it up instead?
 3. If you follow up — make it specific to exactly what they said. Not generic.
 4. Also check: did the author hint at a plot thread? (A conflict, a scene possibility, a relationship dynamic that could become a chapter?)
+5. NEW: Scan the author's latest answer for any character names that are NOT in the ALREADY KNOWN CHARACTERS list above. If you detect a new character, include them in "new_characters".
 
 RULES:
 - Ask ONE question only
@@ -1353,16 +1369,30 @@ RULES:
 - If the author mentioned something specific (a name, an event, a feeling) — follow that thread
 - Questions should feel like they're going deeper, not sideways
 - Do NOT ask about technical story structure — ask about the human truth
+- For new_characters: only include proper names. Not pronouns, not generic references.
 
 Respond with ONLY valid JSON:
 {
   "question": "Your next question here",
-  "thread_hint": "One sentence describing a plot thread you detected, or null if none"
-}`;
+  "thread_hint": "One sentence describing a plot thread you detected, or null if none",
+  "new_characters": [
+    {
+      "name": "Character Name",
+      "type": "pressure|mirror|support|shadow|special",
+      "role": "Brief one-sentence description of who they seem to be",
+      "appearance_mode": "on_page|composite|observed|invisible|brief",
+      "belief": "What this character might believe, based on context",
+      "emotional_function": "What role they play emotionally in the story",
+      "writer_notes": "Why the author seems to have mentioned them — what they might mean to the story"
+    }
+  ]
+}
+
+If no new characters were detected, return "new_characters": []`;
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 300,
+      max_tokens: 600,
       messages: [{ role: 'user', content: prompt }],
     });
 
@@ -1379,8 +1409,12 @@ Respond with ONLY valid JSON:
       return res.json({
         question: next_base_question || 'Tell me more about that.',
         thread_hint: null,
+        new_characters: [],
       });
     }
+
+    // Ensure new_characters is always an array
+    if (!Array.isArray(result.new_characters)) result.new_characters = [];
 
     res.json(result);
 
@@ -1389,7 +1423,65 @@ Respond with ONLY valid JSON:
     res.json({
       question: req.body.next_base_question || 'What else should I know about this character?',
       thread_hint: null,
+      new_characters: [],
     });
+  }
+});
+
+
+/**
+ * POST /character-interview-create-character
+ * Called when the author confirms a newly detected character during an interview.
+ * Creates a draft RegistryCharacter with what Claude inferred.
+ */
+router.post('/character-interview-create-character', optionalAuth, async (req, res) => {
+  try {
+    const { registry_id, character, discovered_during } = req.body;
+    if (!registry_id || !character?.name) {
+      return res.status(400).json({ error: 'registry_id and character.name required' });
+    }
+
+    // Generate character_key from name
+    const charKey = character.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '_')
+      .replace(/^_|_$/g, '');
+
+    // Map appearance_mode values to valid enum values
+    const modeMap = {
+      'On-Page': 'on_page', 'on_page': 'on_page',
+      'Composite': 'composite', 'composite': 'composite',
+      'Referenced Only': 'observed', 'observed': 'observed',
+      'Invisible': 'invisible', 'invisible': 'invisible',
+      'Brief': 'brief', 'brief': 'brief',
+    };
+    const appearanceMode = modeMap[character.appearance_mode] || 'on_page';
+
+    const created = await RegistryCharacter.create({
+      registry_id,
+      character_key:   charKey,
+      display_name:    character.name,
+      role_type:       character.type || 'special',
+      description:     character.role || null,
+      appearance_mode: appearanceMode,
+      core_belief:     character.belief || null,
+      pressure_type:   character.emotional_function || null,
+      personality:     character.writer_notes || null,
+      status:          'draft',
+      subtitle:        discovered_during
+        ? `Discovered during ${discovered_during} interview`
+        : 'Discovered during interview',
+      extra_fields: {
+        discovered_during: discovered_during || null,
+        auto_detected: true,
+        detection_source: 'character_interview',
+      },
+    });
+
+    res.json({ character: created });
+  } catch (err) {
+    console.error('POST /character-interview-create-character error:', err);
+    res.status(500).json({ error: err.message });
   }
 });
 
