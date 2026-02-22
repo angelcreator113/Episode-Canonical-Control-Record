@@ -267,6 +267,7 @@ router.post('/characters/:id/select-name', async (req, res) => {
     if (!name) return res.status(400).json({ success: false, error: 'name is required' });
 
     character.selected_name = name;
+    character.display_name = name;
     await character.save();
 
     return res.json({ success: true, character });
