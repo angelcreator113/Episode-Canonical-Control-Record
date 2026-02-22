@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import '../styles/LandingPage.css';
@@ -20,6 +20,48 @@ export default function LandingPage() {
   const [loading, setLoading]         = useState(false);
   const [error, setError]             = useState('');
   const [success, setSuccess]         = useState('');
+
+  const [activeSection, setActiveSection] = useState('');
+  const [navScrolled, setNavScrolled]     = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
+
+  const navLinks = [
+    { id: 'hero',        label: 'Home' },
+    { id: 'problem',     label: 'The Problem' },
+    { id: 'how-it-works',label: 'How It Works' },
+    { id: 'engine',      label: 'The Engine' },
+    { id: 'promise',     label: 'The Promise' },
+    { id: 'built-for',   label: 'Built For' },
+    { id: 'expansion',   label: 'Expansion' },
+    { id: 'origin',      label: 'Origin' },
+    { id: 'get-started', label: 'Get Started' },
+  ];
+
+  /* ── Scroll spy: highlight active section ── */
+  useEffect(() => {
+    const handleScroll = () => {
+      setNavScrolled(window.scrollY > 40);
+
+      const offsets = navLinks.map(({ id }) => {
+        const el = document.getElementById(id);
+        if (!el) return { id, top: Infinity };
+        return { id, top: el.getBoundingClientRect().top };
+      });
+      const current = offsets
+        .filter(o => o.top <= 180)
+        .sort((a, b) => b.top - a.top)[0];
+      if (current) setActiveSection(current.id);
+    };
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    handleScroll();
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  const scrollTo = useCallback((id) => {
+    const el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth' });
+    setMobileNavOpen(false);
+  }, []);
 
   const scrollToCta = () => {
     ctaRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -62,8 +104,41 @@ export default function LandingPage() {
   return (
     <div className="lp">
 
+      {/* ───────── NAV BAR ───────── */}
+      <nav className={`lp-nav${navScrolled ? ' lp-nav--scrolled' : ''}`}>
+        <div className="lp-nav__inner">
+          <button
+            className="lp-nav__brand"
+            onClick={() => scrollTo('hero')}
+          >
+            Prime Studios
+          </button>
+
+          <button
+            className={`lp-nav__burger${mobileNavOpen ? ' open' : ''}`}
+            onClick={() => setMobileNavOpen(v => !v)}
+            aria-label="Toggle navigation"
+          >
+            <span /><span /><span />
+          </button>
+
+          <ul className={`lp-nav__links${mobileNavOpen ? ' lp-nav__links--open' : ''}`}>
+            {navLinks.map(({ id, label }) => (
+              <li key={id}>
+                <button
+                  className={`lp-nav__link${activeSection === id ? ' active' : ''}`}
+                  onClick={() => scrollTo(id)}
+                >
+                  {label}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </nav>
+
       {/* ───────── §1 HERO ───────── */}
-      <section className="lp-hero">
+      <section className="lp-hero" id="hero">
         <div className="lp-hero__inner">
           <span className="lp-eyebrow">Prime Studios</span>
           <h1>
@@ -89,7 +164,7 @@ export default function LandingPage() {
       <hr className="lp-divider" />
 
       {/* ───────── §2 THE PROBLEM ───────── */}
-      <section className="lp-section lp-section--narrow lp-problem">
+      <section className="lp-section lp-section--narrow lp-problem" id="problem">
         <span className="lp-eyebrow">The Problem</span>
         <h2>
           Most creators build content.<br />
@@ -153,7 +228,7 @@ export default function LandingPage() {
       <hr className="lp-divider" />
 
       {/* ───────── §4 PRODUCT SHOWCASE ───────── */}
-      <section className="lp-section lp-showcase">
+      <section className="lp-section lp-showcase" id="engine">
         <span className="lp-eyebrow">The Engine</span>
         <h2>See what you're building inside.</h2>
 
@@ -221,7 +296,7 @@ export default function LandingPage() {
       <hr className="lp-divider" />
 
       {/* ───────── §5 CORE PROMISE ───────── */}
-      <section className="lp-section lp-section--narrow lp-promise">
+      <section className="lp-section lp-section--narrow lp-promise" id="promise">
         <span className="lp-eyebrow">The Promise</span>
         <h2>Grow with Lala — help her rise, and rise with her.</h2>
         <div className="lp-promise__copy">
@@ -241,7 +316,7 @@ export default function LandingPage() {
       <hr className="lp-divider" />
 
       {/* ───────── §6 WHO IT'S FOR ───────── */}
-      <section className="lp-section lp-section--narrow lp-audience">
+      <section className="lp-section lp-section--narrow lp-audience" id="built-for">
         <span className="lp-eyebrow">Built For</span>
         <h2>Not everyone.</h2>
         <ul className="lp-audience__list">
@@ -257,7 +332,7 @@ export default function LandingPage() {
       <hr className="lp-divider" />
 
       {/* ───────── §7 EXPANSION PATH ───────── */}
-      <section className="lp-section lp-expand">
+      <section className="lp-section lp-expand" id="expansion">
         <span className="lp-eyebrow">How It Expands</span>
         <h2>One universe. Infinite formats.</h2>
         <div className="lp-expand__track">
@@ -291,7 +366,7 @@ export default function LandingPage() {
       <hr className="lp-divider" />
 
       {/* ───────── §8 FOUNDER STORY ───────── */}
-      <section className="lp-section lp-section--narrow lp-founder">
+      <section className="lp-section lp-section--narrow lp-founder" id="origin">
         <div className="lp-founder__inner">
           <span className="lp-eyebrow">Origin</span>
           <blockquote className="lp-founder__quote">
@@ -316,7 +391,7 @@ export default function LandingPage() {
       <hr className="lp-divider" />
 
       {/* ───────── §9 FINAL CTA + EMBEDDED LOGIN ───────── */}
-      <section className="lp-section lp-cta-section" ref={ctaRef}>
+      <section className="lp-section lp-cta-section" id="get-started" ref={ctaRef}>
         <h2>Start Building Your Universe.</h2>
         <p className="lp-cta-section__sub">
           You don't need another platform.<br />
