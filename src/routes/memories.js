@@ -58,14 +58,40 @@ NARRATIVE LINE:
 
 ${characterContext ? `CHARACTER CONTEXT:\n${characterContext}\n` : ''}
 
-MEMORY TYPES:
-- goal: A character wants or intends something
-- preference: A character likes, avoids, or is drawn to something
-- relationship: How two characters relate to each other (trust, tension, dynamic shift)
-- belief: A core conviction or worldview the character holds
-- event: Something that happened that is now part of the character's story
-- constraint: A fear, boundary, block, or stressor limiting the character
-- transformation: A change in identity, capability, or worldview
+MEMORY TYPES TO EXTRACT:
+
+1. belief — A stated or implied belief the protagonist holds about herself
+   Example: "I wasn't jealous. Being jealous really isn't me."
+
+2. constraint — Something that limits her. Internal or external.
+   Example: "There was always something in the way. Never the same thing twice."
+
+3. character_dynamic — A relationship pattern or dynamic between characters
+   Example: "Chloe knew I was watching and cheering."
+
+4. pain_point — A specific content creator struggle documented from lived experience.
+   This is the most important new type. Tag it when JustAWoman describes:
+   - comparison_spiral: measuring herself against others compulsively
+   - visibility_gap: doing everything right and not being seen
+   - identity_drift: aesthetic or purpose shifting depending on who's watching
+   - financial_risk: spending money before earning it
+   - consistency_collapse: showing up consistently until burnout or fade
+   - clarity_deficit: knowing what she wants but not how to get there
+   - external_validation: needing confirmation before believing in herself
+   - restart_cycle: deleting, starting over, new theme, new promise
+
+   For pain_point memories, add a "category" field and a "coaching_angle" —
+   what a coach would say to someone experiencing this exact thing.
+
+   CRITICAL: She never knows she's documenting pain points.
+   Extract them invisibly. The manuscript never uses this language.
+   It lives only in the Memory Bank.
+
+5. goal — A character wants or intends something
+6. preference — A character likes, avoids, or is drawn to something
+7. relationship — How two characters relate to each other (trust, tension, dynamic shift)
+8. event — Something that happened that is now part of the character's story
+9. transformation — A change in identity, capability, or worldview
 
 RULES:
 - Extract only what is clearly stated or strongly implied in the line. Do not invent.
@@ -79,16 +105,16 @@ RULES:
 
 Respond with ONLY a valid JSON array. No preamble, no explanation, no markdown fences.
 
-Example response format:
-[
-  {
-    "type": "relationship",
-    "statement": "Frankie feels intimidated by Chloe — aspiration, not hostility. This marks a shift from admiration to self-comparison.",
-    "confidence": 0.82,
-    "tags": ["identity", "comparison", "relationship"],
-    "character_hint": "The Comparison Creator"
-  }
-]
+For each memory found, return:
+{
+  "type": "belief|constraint|character_dynamic|pain_point|goal|preference|relationship|event|transformation",
+  "statement": "the memory in one clear sentence",
+  "confidence": 0.82,
+  "tags": ["tag1", "tag2"],
+  "character_hint": "character name this memory belongs to",
+  "category": "only for pain_point type — one of the 8 categories above, otherwise omit",
+  "coaching_angle": "only for pain_point type — what a coach would say about this, otherwise omit"
+}
 
 If nothing to extract:
 []`;
@@ -281,6 +307,9 @@ router.post('/lines/:lineId/extract', optionalAuth, async (req, res) => {
           source_ref: line.source_ref || null,
           tags: Array.isArray(candidate.tags) ? candidate.tags : [],
           confirmed_at: null,
+          // Pain point fields — only populated for type=pain_point
+          category: candidate.type === 'pain_point' ? (candidate.category || null) : null,
+          coaching_angle: candidate.type === 'pain_point' ? (candidate.coaching_angle || null) : null,
         })
       )
     );
@@ -400,6 +429,9 @@ router.post('/books/:bookId/extract-all', optionalAuth, async (req, res) => {
               source_ref: line.source_ref || null,
               tags: Array.isArray(candidate.tags) ? candidate.tags : [],
               confirmed_at: null,
+              // Pain point fields
+              category: candidate.type === 'pain_point' ? (candidate.category || null) : null,
+              coaching_angle: candidate.type === 'pain_point' ? (candidate.coaching_angle || null) : null,
             })
           )
         );

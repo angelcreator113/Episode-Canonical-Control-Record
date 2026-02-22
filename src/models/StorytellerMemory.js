@@ -24,7 +24,7 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
 
-      // goal | preference | relationship | belief | event | constraint | transformation
+      // goal | preference | relationship | belief | event | constraint | transformation | pain_point | character_dynamic
       type: {
         type: DataTypes.STRING(100),
         allowNull: false,
@@ -38,8 +38,10 @@ module.exports = (sequelize) => {
               'event',
               'constraint',
               'transformation',
+              'pain_point',
+              'character_dynamic',
             ]],
-            msg: 'type must be one of: goal, preference, relationship, belief, event, constraint, transformation',
+            msg: 'type must be one of: goal, preference, relationship, belief, event, constraint, transformation, pain_point, character_dynamic',
           },
         },
       },
@@ -99,6 +101,18 @@ module.exports = (sequelize) => {
       // Set when user hits confirm — null if still inferred
       confirmed_at: {
         type: DataTypes.DATE,
+        allowNull: true,
+      },
+
+      // Pain point category (only for type=pain_point)
+      category: {
+        type: DataTypes.STRING(100),
+        allowNull: true,
+      },
+
+      // Coaching angle (only for type=pain_point) — auto-generated, never shown in manuscript
+      coaching_angle: {
+        type: DataTypes.TEXT,
         allowNull: true,
       },
     },
