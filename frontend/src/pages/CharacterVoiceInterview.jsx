@@ -24,6 +24,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { useVoice, MicButton, SpeakButton } from '../hooks/VoiceLayer';
 
 const MEMORIES_API    = '/api/v1/memories';
 const REGISTRY_API    = '/api/v1/character-registry';
@@ -94,6 +95,7 @@ export default function CharacterVoiceInterview({
   const [saving, setSaving]           = useState(false);
   const [error, setError]             = useState(null);
   const bottomRef = useRef(null);
+  const { speak } = useVoice();
 
   const roleType  = character?.role_type || 'special';
   const questions = OPENING_QUESTIONS[roleType] || DEFAULT_QUESTIONS;
@@ -121,6 +123,14 @@ export default function CharacterVoiceInterview({
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Auto-speak system messages
+  useEffect(() => {
+    if (messages.length > 0) {
+      const last = messages[messages.length - 1];
+      if (last.role === 'system') speak(last.text);
+    }
+  }, [messages]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleStart() {
     setStep('interview');
@@ -383,6 +393,7 @@ export default function CharacterVoiceInterview({
                   autoFocus
                   spellCheck
                 />
+                <MicButton onTranscript={(text) => setInput(text)} />
                 <button
                   style={{
                     ...st.sendBtn,
@@ -429,7 +440,10 @@ function ChatMessage({ message }) {
       alignSelf: message.role === 'user' ? 'flex-end' : 'flex-start',
     }}>
       {message.role === 'system' && (
-        <div style={st.messageLabel}>✦ INTERVIEWER</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <div style={st.messageLabel}>✦ INTERVIEWER</div>
+          <SpeakButton text={message.text} size='small' />
+        </div>
       )}
       <div style={{
         ...st.messageBubble,

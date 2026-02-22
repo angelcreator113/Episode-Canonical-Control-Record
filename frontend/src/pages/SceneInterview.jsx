@@ -8,6 +8,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useVoice, MicButton, SpeakButton } from '../hooks/VoiceLayer';
 
 const STORYTELLER_API = '/api/v1/storyteller';
 const MEMORIES_API    = '/api/v1/memories';
@@ -78,6 +79,7 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
   const [openingAdded, setOpeningAdded]   = useState(false);
   const [savedAnswers, setSavedAnswers]   = useState(null); // loaded from DB
   const [viewingPrevious, setViewingPrevious] = useState(false);
+  const { speak } = useVoice();
 
   const questionIndex = step - 1; // step 1 = question 0
   const totalQuestions = QUESTIONS.length;
@@ -89,6 +91,14 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
       setSavedAnswers(chapter.interview_answers);
     }
   }, [chapter.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Auto-speak each question when step changes
+  useEffect(() => {
+    if (step >= 1 && step <= totalQuestions) {
+      const q = QUESTIONS[step - 1];
+      if (q) speak(q.question);
+    }
+  }, [step]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleNext() {
     if (step === 0) {
@@ -446,22 +456,28 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
         </div>
 
         {/* Question */}
-        <div style={s.questionText}>{q.question}</div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={s.questionText}>{q.question}</div>
+          <SpeakButton text={q.question} size='small' />
+        </div>
         {q.hint && <div style={s.questionHint}>{q.hint}</div>}
 
         {/* Answer */}
-        <textarea
-          style={s.answerInput}
-          placeholder={q.placeholder}
-          value={current}
-          onChange={e => setCurrent(e.target.value)}
-          rows={4}
-          autoFocus
-          onKeyDown={e => {
-            if (e.key === 'Enter' && e.metaKey) handleNext();
-          }}
-        />
-        <div style={s.cmdHint}>⌘ + Enter to continue</div>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+          <textarea
+            style={s.answerInput}
+            placeholder={q.placeholder}
+            value={current}
+            onChange={e => setCurrent(e.target.value)}
+            rows={4}
+            autoFocus
+            onKeyDown={e => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleNext();
+            }}
+          />
+          <MicButton onTranscript={(text) => setCurrent(text)} />
+        </div>
+        <div style={s.cmdHint}>Ctrl + Enter to continue</div>
 
         {error && <div style={s.error}>{error}</div>}
 
