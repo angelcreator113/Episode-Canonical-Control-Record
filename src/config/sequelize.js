@@ -114,10 +114,11 @@ const development = {
 /**
  * Test Configuration
  * Uses separate test database to avoid polluting development data
+ * Falls back to DATABASE_URL when TEST_DATABASE_URL is not set (e.g. in CI)
  */
 const test = {
   ...baseConfig,
-  ...(parseDatabaseUrl(process.env.TEST_DATABASE_URL) || {
+  ...(parseDatabaseUrl(process.env.TEST_DATABASE_URL) || parseDatabaseUrl(process.env.DATABASE_URL) || {
     username: process.env.DB_USER || process.env.DB_USERNAME || 'postgres',
     password: process.env.DB_PASSWORD || 'postgres',
     database: process.env.TEST_DB_NAME || 'episode_metadata_test',
