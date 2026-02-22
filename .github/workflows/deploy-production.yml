@@ -156,6 +156,7 @@ jobs:
       - name: Run database migrations
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+          DB_SSL_REJECT_UNAUTHORIZED: 'false'
         run: |
           echo "🔄 Running production database migrations..."
           npm ci
