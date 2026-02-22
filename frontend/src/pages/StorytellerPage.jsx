@@ -638,7 +638,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           {/* Top toolbar */}
           <div className="st-toolbar">
             <div className="st-toolbar-left">
-              {['book', 'toc', 'memory', 'scenes'].map(v => (
+              {['toc', 'book', 'memory', 'scenes'].map(v => (
                 <button
                   key={v}
                   className={`st-view-tab ${activeView === v ? 'active' : ''}`}

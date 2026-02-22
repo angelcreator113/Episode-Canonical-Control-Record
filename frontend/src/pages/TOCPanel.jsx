@@ -107,7 +107,7 @@ export default function TOCPanel({ book, chapters = [], onChapterClick }) {
                         )}
                       </>
                     )}
-                    <span style={{ color: 'rgba(26,21,16,0.2)', marginLeft: 'auto' }}>
+                    <span style={{ color: 'rgba(26,21,16,0.45)', marginLeft: 'auto' }}>
                       {lines.length} lines
                     </span>
                   </div>
@@ -159,8 +159,8 @@ const s = {
   },
   bookSub: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
-    color: 'rgba(26,21,16,0.4)',
+    fontSize: 11,
+    color: 'rgba(26,21,16,0.55)',
     letterSpacing: '0.1em',
     marginBottom: 10,
   },
@@ -185,15 +185,15 @@ const s = {
   },
   overallPct: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
+    fontSize: 12,
     color: '#C9A84C',
     minWidth: 30,
     textAlign: 'right',
   },
   overallLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
-    color: 'rgba(26,21,16,0.35)',
+    fontSize: 11,
+    color: 'rgba(26,21,16,0.5)',
     letterSpacing: '0.08em',
   },
   divider: {
@@ -215,8 +215,8 @@ const s = {
   },
   chNum: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
-    color: 'rgba(201,168,76,0.7)',
+    fontSize: 11,
+    color: 'rgba(201,168,76,0.85)',
     letterSpacing: '0.1em',
     paddingTop: 2,
     flexShrink: 0,
@@ -228,7 +228,7 @@ const s = {
   },
   chTitle: {
     fontFamily: "'Playfair Display', serif",
-    fontSize: 13,
+    fontSize: 14,
     fontStyle: 'italic',
     lineHeight: 1.3,
     marginBottom: 3,
@@ -236,8 +236,8 @@ const s = {
   },
   chArc: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
-    color: 'rgba(26,21,16,0.3)',
+    fontSize: 11,
+    color: 'rgba(26,21,16,0.45)',
     letterSpacing: '0.06em',
     marginBottom: 5,
   },
@@ -257,13 +257,13 @@ const s = {
     display: 'flex',
     gap: 8,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     letterSpacing: '0.06em',
   },
   empty: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
-    color: 'rgba(26,21,16,0.35)',
+    fontSize: 12,
+    color: 'rgba(26,21,16,0.5)',
     letterSpacing: '0.06em',
   },
 };

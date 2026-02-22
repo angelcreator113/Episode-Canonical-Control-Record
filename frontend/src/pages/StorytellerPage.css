@@ -5,7 +5,7 @@
 
 :root {
   --st-ink: #2c2c2c;
-  --st-ink-light: #555;
+  --st-ink-light: #444;
   --st-bg: #faf9f7;
   --st-surface: #ffffff;
   --st-border: #eae8e4;
@@ -17,7 +17,7 @@
   --st-blue: #6a8eb0;
   --st-orange: #b08030;
   --st-red: #b05040;
-  --st-muted: #999;
+  --st-muted: #666;
   --st-radius: 4px;
   --st-serif: 'Playfair Display', Georgia, serif;
   --st-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
@@ -101,7 +101,7 @@
   justify-content: space-between;
 }
 .st-card-status {
-  font-size: 11px;
+  font-size: 12px;
   font-family: var(--st-sans);
   font-weight: 600;
   text-transform: uppercase;
@@ -114,7 +114,7 @@
 .st-tone-active { background: rgba(90, 142, 196, 0.08); color: var(--st-blue); }
 
 .st-card-age {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--st-muted);
   font-family: var(--st-sans);
 }
@@ -436,7 +436,7 @@
   background: none;
   border: none;
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--st-muted);
   cursor: pointer;
   padding: 0;
@@ -462,7 +462,7 @@
   cursor: pointer;
   transition: all 0.15s;
   border-left: 2px solid transparent;
-  font-size: 13px;
+  font-size: 14px;
   color: var(--st-muted);
   line-height: 1.4;
   border-radius: 0;
@@ -486,7 +486,7 @@
 
 .st-nav-num {
   font-family: var(--st-mono);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--st-muted);
   flex-shrink: 0;
   width: 28px;
@@ -496,7 +496,7 @@
 
 .st-nav-chapter-title {
   font-family: var(--st-serif);
-  font-size: 13px;
+  font-size: 14px;
   color: inherit;
   white-space: nowrap;
   overflow: hidden;
@@ -525,7 +525,7 @@
 }
 .st-nav-brand-label {
   font-family: var(--st-mono);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.22em;
   color: var(--st-gold);
   text-transform: uppercase;
@@ -541,7 +541,7 @@
 }
 .st-nav-brand-sub {
   font-family: var(--st-mono);
-  font-size: 9px;
+  font-size: 11px;
   color: var(--st-muted);
   letter-spacing: 0.1em;
   margin-top: 3px;
@@ -554,12 +554,11 @@
 }
 .st-nav-section-label {
   font-family: var(--st-mono);
-  font-size: 8px;
+  font-size: 11px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: var(--st-muted);
   padding: 0 20px 8px;
-  opacity: 0.6;
 }
 
 /* ── Nav Chapter Info (dots + meta) ──────────── */
@@ -569,11 +568,10 @@
 }
 .st-nav-chapter-meta {
   font-family: var(--st-mono);
-  font-size: 8px;
+  font-size: 11px;
   color: var(--st-muted);
   letter-spacing: 0.06em;
   margin-top: 2px;
-  opacity: 0.6;
 }
 .st-nav-dots {
   display: flex;
@@ -604,14 +602,14 @@
 .st-stat-row:last-child { margin-bottom: 0; }
 .st-stat-label {
   font-family: var(--st-mono);
-  font-size: 8px;
+  font-size: 11px;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--st-muted);
 }
 .st-stat-val {
   font-family: var(--st-mono);
-  font-size: 13px;
+  font-size: 14px;
 }
 .st-stat-pending { color: var(--st-pending); }
 .st-stat-approved { color: var(--st-approved); }
@@ -657,7 +655,7 @@
   justify-content: center;
   gap: 16px;
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--st-muted);
@@ -696,7 +694,7 @@
   border: none;
   cursor: pointer;
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.1em;
   text-transform: uppercase;
@@ -719,7 +717,7 @@
   border-radius: 20px;
   padding: 5px 14px;
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--st-muted);
   cursor: pointer;
@@ -782,7 +780,7 @@
 }
 .st-chapter-meta {
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--st-muted);
   letter-spacing: 0.02em;
   display: flex;
@@ -796,7 +794,7 @@
   border: 1px solid rgba(201,168,76,0.35);
   border-radius: 3px;
   font-family: 'DM Mono', monospace;
-  font-size: 11px;
+  font-size: 12px;
   letter-spacing: 0.08em;
   color: #8B6914;
   padding: 3px 12px;
@@ -819,7 +817,7 @@
   background: transparent;
   cursor: pointer;
   font-family: var(--st-sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--st-muted);
   margin-left: 8px;
@@ -855,7 +853,7 @@
 }
 .st-ch-num {
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--st-gold);
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -868,14 +866,14 @@
 }
 .st-ch-badge {
   margin-left: auto;
-  font-size: 9px;
+  font-size: 11px;
   font-family: var(--st-mono);
   color: var(--st-muted);
   letter-spacing: 0.1em;
   text-transform: uppercase;
 }
 .st-ch-status {
-  font-size: 9px;
+  font-size: 11px;
   font-family: var(--st-mono);
   letter-spacing: 0.12em;
   padding: 3px 8px;
@@ -896,12 +894,11 @@
 /* Group labels inside book page */
 .st-group-label {
   font-family: var(--st-mono);
-  font-size: 9px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.18em;
   color: var(--st-muted);
   padding: 12px 24px 4px;
-  opacity: 0.7;
 }
 
 /* ── Action Bar (chapter footer) ─────────────── */
@@ -915,7 +912,7 @@
 }
 .st-action-hint {
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   color: var(--st-muted);
   letter-spacing: 0.06em;
 }
@@ -976,7 +973,7 @@
 }
 .st-canon-label {
   font-family: var(--st-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.1em;
@@ -984,7 +981,7 @@
 }
 .st-canon-value {
   font-family: var(--st-serif);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--st-ambient-ink, var(--st-ink));
   line-height: 1.45;
 }
@@ -1019,7 +1016,7 @@
   background: color-mix(in srgb, var(--st-ambient-bg, #f7f6f3), #000 3%);
 }
 .st-writing-mode .st-line-text {
-  font-size: 17px;
+  font-size: 18px;
   line-height: 1.95;
 }
 
@@ -1029,13 +1026,12 @@
 }
 .st-section-label {
   font-family: var(--st-mono);
-  font-size: 9px;
+  font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.18em;
   color: var(--st-muted);
   margin-bottom: 16px;
-  opacity: 0.7;
 }
 
 /* ── Line in manuscript ──────────────────────── */
@@ -1074,7 +1070,7 @@
 .st-line-memory   .st-line-dot { background: var(--st-memory); }
 
 /* Approved line opacity */
-.st-line-approved .st-line-text { opacity: 0.72; }
+.st-line-approved .st-line-text { opacity: 0.88; }
 .st-line-edited   .st-line-text { color: #3d2b5e; }
 
 .st-line-content {
@@ -1083,7 +1079,7 @@
 }
 
 .st-line-text {
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.75;
   color: var(--st-ambient-ink, var(--st-ink));
   word-wrap: break-word;
@@ -1091,8 +1087,7 @@
   font-family: var(--st-serif);
 }
 .st-line-text.pending {
-  color: var(--st-muted);
-  opacity: 0.65;
+  color: var(--st-ink-light);
 }
 
 .st-line-meta {
@@ -1105,7 +1100,7 @@
 .st-source-tag {
   display: inline-block;
   font-family: var(--st-mono);
-  font-size: 9px;
+  font-size: 11px;
   padding: 1px 5px;
   border-radius: 2px;
   background: rgba(26, 21, 16, 0.06);
@@ -1129,9 +1124,9 @@
   border: none;
   border-radius: 2px;
   font-family: var(--st-mono);
-  font-size: 9px;
+  font-size: 11px;
   letter-spacing: 0.08em;
-  padding: 3px 7px;
+  padding: 4px 9px;
   cursor: pointer;
   transition: opacity 0.15s;
 }
@@ -1199,7 +1194,7 @@
   border: none;
   cursor: pointer;
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
   color: var(--st-muted);
   padding: 8px 24px;
@@ -1244,7 +1239,7 @@
   background: none;
   border: none;
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--st-muted);
   cursor: pointer;
   padding: 6px 24px;
