@@ -489,7 +489,6 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const renderLine = (line) => (
     <React.Fragment key={line.id}>
       <div className={`st-line st-line-${line.status || 'pending'} ${editingLine === line.id ? 'st-line-editing' : ''}`}>
-        <div className="st-line-dot" />
         <div className="st-line-content">
           {editingLine === line.id ? (
             <>
@@ -563,10 +562,65 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       data-era={eraTheme}
     >
 
+      {/* ── Thin Top Bar ── */}
+      <div className="st-topbar">
+        <div className="st-topbar-left">
+          <button className="st-topbar-back" onClick={onBack}>← Archives</button>
+          <div className="st-topbar-sep" />
+          <span className="st-topbar-brand">PNOS</span>
+          <span className="st-topbar-title">{book.title || book.character_name}</span>
+          {book.era_name && <span className="st-topbar-era">{book.era_name}</span>}
+        </div>
+        <div className="st-topbar-center">
+          {['toc', 'book', 'memory', 'scenes'].map(v => (
+            <button
+              key={v}
+              className={`st-view-tab ${activeView === v ? 'active' : ''}`}
+              onClick={() => setActiveView(v)}
+            >
+              {v === 'book' ? 'Manuscript' : v === 'toc' ? 'TOC' : v === 'memory' ? 'Memory Bank' : 'Scenes'}
+            </button>
+          ))}
+        </div>
+        <div className="st-topbar-right">
+          <span className="st-topbar-wordcount">
+            {allLines.reduce((n, l) => n + (l.text || '').split(/\s+/).filter(Boolean).length, 0)} words
+          </span>
+          <button
+            className={`st-mode-toggle ${writingMode ? 'active' : ''}`}
+            onClick={() => setWritingMode(w => !w)}
+            title={writingMode ? 'Exit Writing Mode' : 'Enter Writing Mode'}
+          >
+            {writingMode ? '◉ Focus' : '○ Focus'}
+          </button>
+          {activeView === 'book' && !writingMode && (
+            <button
+              className="st-canon-toggle"
+              onClick={() => setCanonOpen(c => !c)}
+              title="Canon Anchor"
+            >
+              📜
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Writing mode floating exit */}
+      {writingMode && (
+        <button
+          className="st-writing-mode-exit"
+          onClick={() => setWritingMode(false)}
+        >
+          Exit Focus ✕
+        </button>
+      )}
+
+      {/* ── Editor Body (nav + content) ── */}
+      <div className="st-editor-body">
+
       {/* ── Left Nav ── */}
       <nav className="st-nav">
         <div className="st-nav-brand">
-          <button className="st-nav-back" onClick={onBack}>← Archives</button>
           <div className="st-nav-brand-label">PNOS</div>
           <h2 className="st-nav-brand-title">{book.character_name || book.title}</h2>
           <div className="st-nav-brand-sub">
@@ -639,60 +693,6 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
       {/* ── Center Content ── */}
       <div className="st-editor">
-
-        {/* ── Book Identity Panel (Crown) ── */}
-        <div className="st-crown">
-          <div className="st-crown-inner">
-            <h1 className="st-crown-title">{book.title || book.character_name}</h1>
-            <div className="st-crown-meta">
-              {[book.era_name, book.timeline_position].filter(Boolean).length > 0 && (
-                <span className="st-crown-era">
-                  {[book.era_name, book.timeline_position].filter(Boolean).join(' · ')}
-                </span>
-              )}
-              {book.primary_pov && (
-                <span className="st-crown-pov">POV: {book.primary_pov}</span>
-              )}
-              {book.subtitle && (
-                <span className="st-crown-theme">{book.subtitle}</span>
-              )}
-            </div>
-            <div className="st-crown-divider" />
-          </div>
-
-          {/* Top toolbar */}
-          <div className="st-toolbar">
-            <div className="st-toolbar-left">
-              {['toc', 'book', 'memory', 'scenes'].map(v => (
-                <button
-                  key={v}
-                  className={`st-view-tab ${activeView === v ? 'active' : ''}`}
-                  onClick={() => setActiveView(v)}
-                >
-                  {v === 'book' ? 'Manuscript' : v === 'toc' ? 'TOC' : v === 'memory' ? 'Memory Bank' : 'Scenes'}
-                </button>
-              ))}
-            </div>
-            <div className="st-toolbar-right">
-              <button
-                className={`st-mode-toggle ${writingMode ? 'active' : ''}`}
-                onClick={() => setWritingMode(w => !w)}
-                title={writingMode ? 'Exit Writing Mode' : 'Enter Writing Mode'}
-              >
-                {writingMode ? '◉ Writing Mode' : '○ Enter Writing Mode'}
-              </button>
-              {activeView === 'book' && !writingMode && (
-                <button
-                  className="st-canon-toggle"
-                  onClick={() => setCanonOpen(c => !c)}
-                  title="Canon Anchor"
-                >
-                  📜
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* Add chapter form (shared) */}
         {showAddChapter && (
@@ -810,20 +810,22 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                                   <React.Fragment key={`ni-${line.id}`}>
                                     {renderLine(line)}
                                     {(idx + 1) % 5 === 0 && idx < approvedLines.length - 1 && (
-                                      <NarrativeIntelligence
-                                        chapter={activeChapter}
-                                        lines={approvedLines}
-                                        lineIndex={idx}
-                                        book={book}
-                                        characters={registryCharacters}
-                                        onAccept={(newLine) => {
-                                          setChapters(prev => prev.map(c =>
-                                            c.id === activeChapter.id
-                                              ? { ...c, lines: [...c.lines, newLine] }
-                                              : c
-                                          ));
-                                        }}
-                                      />
+                                      <div className="narrative-intelligence-wrapper">
+                                        <NarrativeIntelligence
+                                          chapter={activeChapter}
+                                          lines={approvedLines}
+                                          lineIndex={idx}
+                                          book={book}
+                                          characters={registryCharacters}
+                                          onAccept={(newLine) => {
+                                            setChapters(prev => prev.map(c =>
+                                              c.id === activeChapter.id
+                                                ? { ...c, lines: [...c.lines, newLine] }
+                                                : c
+                                            ));
+                                          }}
+                                        />
+                                      </div>
                                     )}
                                   </React.Fragment>
                                 );
@@ -1013,6 +1015,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           }}
         />
       </div>
+      </div>{/* close st-editor-body */}
     </div>
   );
 }

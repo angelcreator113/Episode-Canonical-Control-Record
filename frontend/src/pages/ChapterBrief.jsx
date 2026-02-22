@@ -316,9 +316,9 @@ function typeColor(type) {
     mirror:   '#7B5EA7',
     support:  '#4A7C59',
     shadow:   '#8B6914',
-    special:  '#C9A84C',
+    special:  '#C6A85E',
   };
-  return colors[type] || '#C9A84C';
+  return colors[type] || '#C6A85E';
 }
 
 // ── Styles ─────────────────────────────────────────────────────────────────
@@ -362,7 +362,7 @@ const s = {
     flexShrink: 0,
   },
   characterName: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 12,
     color: 'rgba(30,25,20,0.8)',
     fontStyle: 'italic',
@@ -406,7 +406,7 @@ const s = {
     alignItems: 'baseline',
   },
   themeText: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 13,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.7)',
@@ -472,7 +472,7 @@ const s = {
     borderBottom: '1px solid rgba(201,168,76,0.12)',
   },
   editTitle: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 16,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.85)',
@@ -504,7 +504,7 @@ const s = {
     background: 'white',
     border: '1px solid rgba(30,25,20,0.12)',
     borderRadius: 2,
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 13,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.75)',
@@ -533,7 +533,7 @@ const s = {
     background: 'white',
     border: '1px solid rgba(30,25,20,0.12)',
     borderRadius: 2,
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 13,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.8)',
@@ -546,7 +546,7 @@ const s = {
     background: 'white',
     border: '1px solid rgba(30,25,20,0.12)',
     borderRadius: 2,
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 13,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.8)',
@@ -574,7 +574,7 @@ const s = {
     cursor: 'pointer',
   },
   saveBtn: {
-    background: '#C9A84C',
+    background: '#C6A85E',
     border: 'none',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',

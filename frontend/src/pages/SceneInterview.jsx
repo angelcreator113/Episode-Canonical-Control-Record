@@ -386,11 +386,11 @@ const s = {
   },
   introIcon: {
     fontSize: 24,
-    color: '#C9A84C',
+    color: '#C6A85E',
     marginBottom: 4,
   },
   introTitle: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 22,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.85)',
@@ -406,7 +406,7 @@ const s = {
   introChapter: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 9,
-    color: '#C9A84C',
+    color: '#C6A85E',
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
     marginTop: 4,
@@ -438,7 +438,7 @@ const s = {
   },
   progressFill: {
     height: '100%',
-    background: '#C9A84C',
+    background: '#C6A85E',
     borderRadius: 1,
     transition: 'width 0.3s ease',
   },
@@ -450,7 +450,7 @@ const s = {
     flexShrink: 0,
   },
   questionText: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 20,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.88)',
@@ -468,7 +468,7 @@ const s = {
     background: '#f5f0e8',
     border: '1px solid rgba(30,25,20,0.1)',
     borderRadius: 2,
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 15,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.82)',
@@ -509,11 +509,11 @@ const s = {
     width: 8,
     height: 8,
     borderRadius: '50%',
-    background: '#C9A84C',
+    background: '#C6A85E',
     animation: 'pulse 1.2s ease-in-out infinite',
   },
   generatingTitle: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 18,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.75)',
@@ -542,11 +542,11 @@ const s = {
     fontFamily: 'DM Mono, monospace',
     fontSize: 8,
     letterSpacing: '0.2em',
-    color: '#C9A84C',
+    color: '#C6A85E',
     marginBottom: 4,
   },
   reviewTitle: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 20,
     fontStyle: 'italic',
     color: 'rgba(30,25,20,0.85)',
@@ -564,7 +564,7 @@ const s = {
     textTransform: 'uppercase',
   },
   briefSectionText: {
-    fontFamily: "'Playfair Display', serif",
+    fontFamily: "'Lora', Georgia, serif",
     fontSize: 14,
     color: 'rgba(30,25,20,0.75)',
     lineHeight: 1.6,
@@ -621,7 +621,7 @@ const s = {
   },
   // Buttons
   startBtn: {
-    background: '#C9A84C',
+    background: '#C6A85E',
     border: 'none',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
@@ -634,7 +634,7 @@ const s = {
     transition: 'opacity 0.15s',
   },
   nextBtn: {
-    background: '#C9A84C',
+    background: '#C6A85E',
     border: 'none',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
