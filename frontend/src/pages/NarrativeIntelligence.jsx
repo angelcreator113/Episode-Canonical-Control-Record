@@ -312,7 +312,7 @@ const s = {
   },
   loadingText: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: 'rgba(30,25,20,0.3)',
     letterSpacing: '0.08em',
   },
@@ -347,7 +347,7 @@ const s = {
   },
   typeLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     letterSpacing: '0.16em',
     fontWeight: 600,
   },
@@ -355,7 +355,7 @@ const s = {
     background: 'none',
     border: 'none',
     color: 'rgba(30,25,20,0.25)',
-    fontSize: 10,
+    fontSize: 13,
     cursor: 'pointer',
     padding: '2px 4px',
     lineHeight: 1,
@@ -371,7 +371,7 @@ const s = {
   },
   expandIcon: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     color: 'rgba(30,25,20,0.2)',
   },
   cardBody: {
@@ -384,7 +384,7 @@ const s = {
   },
   suggestionText: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
+    fontSize: 13,
     color: 'rgba(30,25,20,0.65)',
     letterSpacing: '0.03em',
     lineHeight: 1.6,
@@ -397,7 +397,7 @@ const s = {
   },
   lineSuggestionLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 7,
+    fontSize: 11,
     letterSpacing: '0.18em',
     color: 'rgba(30,25,20,0.3)',
     marginBottom: 6,
@@ -419,7 +419,7 @@ const s = {
     border: '1px solid rgba(30,25,20,0.15)',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     letterSpacing: '0.08em',
     color: 'rgba(30,25,20,0.45)',
     padding: '5px 10px',
@@ -431,7 +431,7 @@ const s = {
     border: 'none',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     letterSpacing: '0.08em',
     color: 'white',
     padding: '5px 12px',
@@ -451,7 +451,7 @@ const s = {
   },
   cueCharRole: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     color: 'rgba(30,25,20,0.3)',
     letterSpacing: '0.06em',
   },
@@ -463,14 +463,14 @@ const s = {
   },
   lalaLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 7,
+    fontSize: 11,
     letterSpacing: '0.2em',
     color: '#C6A85E',
     marginBottom: 6,
   },
   lalaHint: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: 'rgba(30,25,20,0.4)',
     lineHeight: 1.5,
     letterSpacing: '0.03em',
@@ -485,7 +485,7 @@ const s = {
   },
   whatToDo: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: 'rgba(30,25,20,0.35)',
     letterSpacing: '0.04em',
     lineHeight: 1.5,

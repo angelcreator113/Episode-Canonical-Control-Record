@@ -397,7 +397,7 @@ const s = {
   },
   introSub: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
+    fontSize: 13,
     color: 'rgba(30,25,20,0.45)',
     letterSpacing: '0.04em',
     lineHeight: 1.7,
@@ -405,7 +405,7 @@ const s = {
   },
   introChapter: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: '#C6A85E',
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
@@ -444,7 +444,7 @@ const s = {
   },
   progressLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     color: 'rgba(30,25,20,0.3)',
     letterSpacing: '0.1em',
     flexShrink: 0,
@@ -458,7 +458,7 @@ const s = {
   },
   questionHint: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: 'rgba(30,25,20,0.35)',
     letterSpacing: '0.04em',
     lineHeight: 1.5,
@@ -482,7 +482,7 @@ const s = {
   },
   cmdHint: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     color: 'rgba(30,25,20,0.2)',
     letterSpacing: '0.06em',
     marginTop: -4,
@@ -520,7 +520,7 @@ const s = {
   },
   generatingSub: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: 'rgba(30,25,20,0.3)',
     letterSpacing: '0.06em',
     lineHeight: 1.6,
@@ -540,7 +540,7 @@ const s = {
   },
   reviewLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     letterSpacing: '0.2em',
     color: '#C6A85E',
     marginBottom: 4,
@@ -558,7 +558,7 @@ const s = {
   },
   briefSectionLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     letterSpacing: '0.16em',
     color: 'rgba(30,25,20,0.3)',
     textTransform: 'uppercase',
@@ -577,7 +577,7 @@ const s = {
   },
   arcStart: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
+    fontSize: 13,
     color: '#B85C38',
     letterSpacing: '0.04em',
   },
@@ -586,7 +586,7 @@ const s = {
   },
   arcEnd: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
+    fontSize: 13,
     color: '#4A7C59',
     letterSpacing: '0.04em',
   },
@@ -597,7 +597,7 @@ const s = {
   },
   charChip: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: '#8B6914',
     background: 'rgba(201,168,76,0.1)',
     borderRadius: 2,
@@ -606,7 +606,7 @@ const s = {
   },
   openingHint: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 8,
+    fontSize: 11,
     color: 'rgba(30,25,20,0.25)',
     letterSpacing: '0.06em',
     marginTop: 4,
@@ -625,7 +625,7 @@ const s = {
     border: 'none',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
+    fontSize: 13,
     letterSpacing: '0.12em',
     color: '#14100c',
     fontWeight: 600,
@@ -638,7 +638,7 @@ const s = {
     border: 'none',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 10,
+    fontSize: 13,
     letterSpacing: '0.12em',
     color: '#14100c',
     fontWeight: 600,
@@ -651,7 +651,7 @@ const s = {
     border: '1px solid rgba(30,25,20,0.12)',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     letterSpacing: '0.1em',
     color: 'rgba(30,25,20,0.4)',
     padding: '8px 14px',
@@ -661,7 +661,7 @@ const s = {
     background: 'none',
     border: 'none',
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     letterSpacing: '0.08em',
     color: 'rgba(30,25,20,0.3)',
     padding: '8px 4px',
@@ -670,7 +670,7 @@ const s = {
   },
   error: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 9,
+    fontSize: 12,
     color: '#B85C38',
     background: 'rgba(184,92,56,0.06)',
     border: '1px solid rgba(184,92,56,0.15)',

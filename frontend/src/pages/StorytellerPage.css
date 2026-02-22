@@ -117,7 +117,7 @@
   justify-content: space-between;
 }
 .st-card-status {
-  font-size: 11px;
+  font-size: 13px;
   font-family: var(--st-sans);
   font-weight: 600;
   text-transform: uppercase;
@@ -315,7 +315,7 @@
 .st-form-group { margin-bottom: 14px; }
 .st-form-group label {
   display: block;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   font-family: var(--st-sans);
   color: var(--st-muted);
@@ -457,7 +457,7 @@
 }
 .st-topbar-brand {
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.18em;
   color: var(--st-gold);
   text-transform: uppercase;
@@ -512,7 +512,7 @@
 }
 .st-topbar-wordcount {
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--st-muted);
   letter-spacing: 0.04em;
   opacity: 0.7;
@@ -523,7 +523,7 @@
   border-radius: 20px;
   padding: 5px 14px;
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--st-muted);
   cursor: pointer;
@@ -595,7 +595,7 @@
 }
 .st-nav-brand-label {
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.22em;
   color: var(--st-gold);
   text-transform: uppercase;
@@ -623,7 +623,7 @@
 }
 .st-nav-section-label {
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--st-muted);
@@ -666,7 +666,7 @@
 
 .st-nav-num {
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--st-muted);
   flex-shrink: 0;
   width: 24px;
@@ -691,7 +691,7 @@
 }
 .st-nav-chapter-meta {
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--st-muted);
   margin-top: 2px;
   opacity: 0.7;
@@ -735,7 +735,7 @@
 .st-stat-row:last-child { margin-bottom: 0; }
 .st-stat-label {
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--st-muted);
   opacity: 0.8;
 }
@@ -840,7 +840,7 @@
 }
 .st-ch-num {
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--st-gold);
   letter-spacing: 0.2em;
   text-transform: uppercase;
@@ -855,7 +855,7 @@
 }
 .st-ch-badge {
   margin-left: auto;
-  font-size: 10px;
+  font-size: 12px;
   font-family: var(--st-mono);
   color: var(--st-muted);
   letter-spacing: 0.12em;
@@ -863,7 +863,7 @@
   opacity: 0.6;
 }
 .st-ch-status {
-  font-size: 11px;
+  font-size: 13px;
   font-family: var(--st-sans);
   letter-spacing: 0.03em;
   padding: 2px 8px;
@@ -897,7 +897,7 @@
   background: transparent;
   cursor: pointer;
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--st-muted);
   transition: all 0.15s;
@@ -934,7 +934,7 @@
 /* Group labels */
 .st-group-label {
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.18em;
   color: var(--st-muted);
@@ -948,7 +948,7 @@
 }
 .st-section-label {
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.18em;
@@ -1021,7 +1021,7 @@
 .st-source-tag {
   display: inline-block;
   font-family: var(--st-mono);
-  font-size: 10px;
+  font-size: 12px;
   padding: 1px 5px;
   border-radius: 2px;
   background: rgba(47, 42, 38, 0.04);
@@ -1046,7 +1046,7 @@
   border: none;
   border-radius: 3px;
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 13px;
   letter-spacing: 0.02em;
   padding: 4px 10px;
   cursor: pointer;
@@ -1131,7 +1131,7 @@
 }
 .st-pending-toggle:hover { color: var(--st-gold); }
 .st-pending-toggle .arrow {
-  font-size: 10px;
+  font-size: 12px;
   transition: transform 0.2s;
   opacity: 0.5;
 }
@@ -1222,7 +1222,7 @@
   align-items: center;
   justify-content: space-between;
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
   color: var(--st-ambient-ink, var(--st-ink));
   letter-spacing: 0.04em;
@@ -1266,7 +1266,7 @@
 }
 .st-canon-label {
   font-family: var(--st-sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
@@ -1395,7 +1395,7 @@
   left: 50%;
   transform: translateX(-50%);
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--st-muted);
   opacity: 0;
   transition: opacity 0.3s;
@@ -1414,7 +1414,7 @@
   border-radius: 20px;
   padding: 6px 16px;
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 13px;
   color: var(--st-muted);
   cursor: pointer;
   z-index: 100;
