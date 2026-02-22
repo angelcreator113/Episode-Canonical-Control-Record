@@ -314,6 +314,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [newLineText, setNewLineText] = useState('');
   const [importTarget, setImportTarget] = useState(null);
   const [interviewDone, setInterviewDone] = useState({});
+  const [redoInterview, setRedoInterview] = useState(false);
   const [lastApprovedLine, setLastApprovedLine] = useState(null);
 
   // Active chapter
@@ -783,10 +784,18 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                         {reviewMode ? 'Reviewing' : 'Review'}
                       </span>
                     </button>
+                    <button
+                      className="st-import-btn"
+                      onClick={() => setRedoInterview(true)}
+                      title="Re-run Scene Interview to update chapter brief"
+                      style={{ marginLeft: 4 }}
+                    >
+                      ✎ Interview
+                    </button>
                   </div>
 
-                  {/* Scene Interview — auto-pops when chapter has no lines */}
-                  {(activeChapter.lines || []).length === 0 && !interviewDone[activeChapter.id] && (
+                  {/* Scene Interview — auto-pops when chapter has no lines, or on redo */}
+                  {(((activeChapter.lines || []).length === 0 && !interviewDone[activeChapter.id]) || redoInterview) && (
                     <SceneInterview
                       chapter={activeChapter}
                       book={book}
@@ -796,10 +805,14 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                           c.id === activeChapter.id ? { ...c, ...brief } : c
                         ));
                         setInterviewDone(prev => ({ ...prev, [activeChapter.id]: true }));
+                        setRedoInterview(false);
                       }}
-                      onSkip={() => setInterviewDone(prev => ({
-                        ...prev, [activeChapter.id]: true
-                      }))}
+                      onSkip={() => {
+                        setInterviewDone(prev => ({
+                          ...prev, [activeChapter.id]: true
+                        }));
+                        setRedoInterview(false);
+                      }}
                     />
                   )}
 
