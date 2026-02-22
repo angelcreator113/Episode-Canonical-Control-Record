@@ -20,6 +20,7 @@ import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
 import ImportDraftModal from './ImportDraftModal';
+import ChapterDraftGenerator from './ChapterDraftGenerator';
 
 const API = '/api/v1/storyteller';
 
@@ -984,6 +985,19 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                     onUpdated={(updated) => {
                       setChapters(prev => prev.map(c =>
                         c.id === updated.id ? { ...updated, lines: c.lines } : c
+                      ));
+                    }}
+                  />
+
+                  {/* Co-writing: generate chapter draft from brief */}
+                  <ChapterDraftGenerator
+                    chapter={activeChapter}
+                    book={book}
+                    onDraftGenerated={(lines) => {
+                      setChapters(prev => prev.map(c =>
+                        c.id === activeChapter.id
+                          ? { ...c, lines: [...(c.lines || []), ...lines] }
+                          : c
                       ));
                     }}
                   />
