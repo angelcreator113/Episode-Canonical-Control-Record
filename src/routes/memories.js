@@ -463,14 +463,7 @@ router.post('/memories/:memoryId/confirm', optionalAuth, async (req, res) => {
       return res.status(404).json({ error: 'Character not found in registry' });
     }
 
-    // Finalized characters cannot receive new memories
-    if (character.status === 'finalized') {
-      return res.status(403).json({
-        error: 'Character is finalized. Confirmed memories cannot be added to finalized characters.',
-        character_id,
-        character_status: 'finalized',
-      });
-    }
+    // Allow confirming memories to any character, including finalized ones
 
     // If user edited the statement in the confirmation card, mark it protected
     const finalStatement = statement && statement.trim() ? statement.trim() : memory.statement;
@@ -873,5 +866,116 @@ Respond with ONLY a valid JSON array. No preamble, no explanation, no markdown f
 ]`;
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /scene-interview
+// Takes 7 scene interview answers → Claude generates a structured scene brief
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/scene-interview', optionalAuth, async (req, res) => {
+  try {
+    const {
+      book_id,
+      chapter_id,
+      chapter_title,
+      answers,
+      characters = [],
+    } = req.body;
+
+    if (!answers || !book_id) {
+      return res.status(400).json({ error: 'answers and book_id are required' });
+    }
+
+    // ── Get universe context ───────────────────────────────────────────────
+    const universeContext = await buildUniverseContext(book_id, db);
+
+    // ── Build the prompt ───────────────────────────────────────────────────
+    const characterList = characters.length > 0
+      ? characters.map(c => `- ${c.name} (${c.type})`).join('\n')
+      : '- JustAWoman (protagonist)';
+
+    const prompt = `${universeContext}
+
+You are a narrative architect helping a first-time author write their debut novel.
+
+The author has answered 7 questions about their upcoming chapter. Use their answers to build a structured scene brief that will guide their writing session.
+
+CHAPTER: "${chapter_title}"
+
+KNOWN CHARACTERS:
+${characterList}
+
+AUTHOR'S ANSWERS:
+
+1. WHERE DOES THE SCENE OPEN?
+${answers.location || '(not answered)'}
+
+2. TIME AND WEATHER:
+${answers.time_weather || '(not answered)'}
+
+3. WHO IS PHYSICALLY PRESENT:
+${answers.who_present || '(not answered)'}
+
+4. CHARACTER RELATIONSHIPS AND ENERGY:
+${answers.relationships || '(not answered)'}
+
+5. WHAT JUST HAPPENED BEFORE THIS SCENE:
+${answers.just_happened || '(not answered)'}
+
+6. WHAT DOES SHE WANT RIGHT NOW:
+${answers.wants_right_now || '(not answered)'}
+
+7. WHAT IS SHE AFRAID OF RIGHT NOW:
+${answers.afraid_of || '(not answered)'}
+
+INSTRUCTIONS:
+Build a scene brief from these answers. Be specific. Use the author's actual words and details — do not invent facts they didn't give you. The scene_setting should be atmospheric and grounded. The opening_suggestion should feel like the first line of a novel — intimate, specific, and in JustAWoman's voice.
+
+This is a literary novel. First-person voice. Intimate. Real. Not commercial fiction.
+
+Respond with ONLY valid JSON. No preamble. No markdown.
+
+{
+  "scene_setting": "Full atmospheric description of the scene — where, when, what it feels, sounds, smells like. 3-5 sentences.",
+  "theme": "The core emotional idea this chapter explores. One phrase.",
+  "scene_goal": "What must happen by the end of this chapter. One or two sentences.",
+  "emotional_state_start": "Where JustAWoman begins emotionally. 3-6 words.",
+  "emotional_state_end": "Where she ends emotionally. 3-6 words.",
+  "characters_present": ["Name1", "Name2"],
+  "pov": "first_person",
+  "opening_suggestion": "One suggested first line of the chapter. In JustAWoman's voice. Specific. Grounded in the scene details the author gave."
+}`;
+
+    // ── Call Claude ────────────────────────────────────────────────────────
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 1000,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    // ── Parse ──────────────────────────────────────────────────────────────
+    let brief;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      brief = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('scene-interview parse error:', parseErr, '\nRaw:', rawText);
+      return res.status(500).json({
+        error: 'Claude returned an unparseable response',
+        raw: rawText.slice(0, 400),
+      });
+    }
+
+    res.json({ brief });
+
+  } catch (err) {
+    console.error('POST /scene-interview error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;

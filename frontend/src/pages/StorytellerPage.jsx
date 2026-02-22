@@ -13,6 +13,7 @@ import './StorytellerPage.css';
 import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
 import MemoryBankView from './MemoryBankView';
 import ChapterBrief from './ChapterBrief';
+import SceneInterview from './SceneInterview';
 import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
@@ -310,6 +311,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [addingLineTo, setAddingLineTo] = useState(null);
   const [newLineText, setNewLineText] = useState('');
   const [importTarget, setImportTarget] = useState(null);
+  const [interviewDone, setInterviewDone] = useState({});
 
   // Active chapter
   const activeChapter = chapters.find(c => c.id === activeChapterId) || null;
@@ -759,6 +761,24 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                       </span>
                     </button>
                   </div>
+
+                  {/* Scene Interview — auto-pops when chapter has no lines */}
+                  {(activeChapter.lines || []).length === 0 && !interviewDone[activeChapter.id] && (
+                    <SceneInterview
+                      chapter={activeChapter}
+                      book={book}
+                      characters={registryCharacters}
+                      onComplete={(brief) => {
+                        setChapters(prev => prev.map(c =>
+                          c.id === activeChapter.id ? { ...c, ...brief } : c
+                        ));
+                        setInterviewDone(prev => ({ ...prev, [activeChapter.id]: true }));
+                      }}
+                      onSkip={() => setInterviewDone(prev => ({
+                        ...prev, [activeChapter.id]: true
+                      }))}
+                    />
+                  )}
 
                   {/* Chapter Brief — writing context above lines */}
                   <ChapterBrief
