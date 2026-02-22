@@ -15,6 +15,7 @@ import MemoryBankView from './MemoryBankView';
 import ChapterBrief from './ChapterBrief';
 import SceneInterview from './SceneInterview';
 import NarrativeIntelligence from './NarrativeIntelligence';
+import { ContinuityGuard, RewriteOptions } from './ContinuityGuard';
 import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
@@ -313,6 +314,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [newLineText, setNewLineText] = useState('');
   const [importTarget, setImportTarget] = useState(null);
   const [interviewDone, setInterviewDone] = useState({});
+  const [lastApprovedLine, setLastApprovedLine] = useState(null);
 
   // Active chapter
   const activeChapter = chapters.find(c => c.id === activeChapterId) || null;
@@ -348,6 +350,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       await api(`/lines/${lineId}`, { method: 'PUT', body: { status: 'approved' } });
       updateLineLocal(lineId, { status: 'approved' });
       toast('Line approved');
+      // Track for ContinuityGuard
+      const approvedLine = lines.find(l => l.id === lineId);
+      if (approvedLine) setLastApprovedLine({ ...approvedLine, status: 'approved' });
       // Fire memory extraction in background (don't block approval)
       fetch(`/api/v1/memories/lines/${lineId}/extract`, {
         method: 'POST',
@@ -378,6 +383,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
         body: { text: editText },
       });
       updateLineLocal(editingLine, { text: editText, status: data.line?.status || 'edited' });
+      // Track for ContinuityGuard
+      const editedLine = lines.find(l => l.id === editingLine);
+      if (editedLine) setLastApprovedLine({ ...editedLine, text: editText, status: 'edited' });
       toast('Line updated');
       setEditingLine(null);
     } catch (err) { toast(err.message, 'error'); }
@@ -533,6 +541,17 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
             )}
             <button className="st-line-action st-action-edit" onClick={() => startEdit(line)} title="Edit">Edit</button>
             <button className="st-line-action st-action-reject" onClick={() => rejectLine(line.id)} title="Remove">✕</button>
+            {(line.status === 'approved' || line.status === 'edited') && (
+              <RewriteOptions
+                line={line}
+                chapter={activeChapter}
+                book={book}
+                onAccept={(newText) => {
+                  updateLineLocal(line.id, { text: newText, status: 'edited' });
+                  setLastApprovedLine({ ...line, text: newText, status: 'edited' });
+                }}
+              />
+            )}
           </div>
         )}
       </div>
@@ -836,6 +855,16 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                             </div>
                           ));
                         })()}
+
+                        {/* ContinuityGuard — passive check after approve/edit */}
+                        {activeChapter && (
+                          <ContinuityGuard
+                            chapter={activeChapter}
+                            lines={approvedLines}
+                            book={book}
+                            triggerLine={lastApprovedLine}
+                          />
+                        )}
                       </div>
                     )}
 

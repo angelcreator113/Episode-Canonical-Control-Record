@@ -1115,4 +1115,197 @@ Respond with ONLY valid JSON. No preamble. No markdown.
   }
 });
 
+
+// ══════════════════════════════════════════════════════════════════════════
+// POST /continuity-check — Detect contradictions, jumps, disconnects
+// ══════════════════════════════════════════════════════════════════════════
+
+router.post('/continuity-check', optionalAuth, async (req, res) => {
+  try {
+    const {
+      book_id,
+      chapter_id,
+      chapter_brief = {},
+      all_lines,
+      trigger_line,
+    } = req.body;
+
+    if (!book_id || !all_lines) {
+      return res.status(400).json({ error: 'book_id and all_lines are required' });
+    }
+
+    const briefText = [
+      chapter_brief.title        && `Chapter: ${chapter_brief.title}`,
+      chapter_brief.theme        && `Theme: ${chapter_brief.theme}`,
+      chapter_brief.scene_goal   && `Scene goal: ${chapter_brief.scene_goal}`,
+      chapter_brief.emotional_state_start && `Emotional start: ${chapter_brief.emotional_state_start}`,
+      chapter_brief.emotional_state_end   && `Emotional end: ${chapter_brief.emotional_state_end}`,
+    ].filter(Boolean).join('\n');
+
+    const prompt = `You are a continuity editor for a literary novel. A first-time author has just approved or edited a line. Check the full chapter for continuity issues.
+
+CHAPTER BRIEF:
+${briefText || 'Not set.'}
+
+ALL APPROVED LINES:
+${all_lines}
+
+MOST RECENTLY APPROVED LINE:
+${trigger_line}
+
+CHECK FOR THESE THREE ISSUE TYPES:
+
+1. FACTUAL CONTRADICTION
+A character, location, time, or stated fact contradicts something established earlier.
+Example: Character A was described as being at work in line 3 but is physically present in line 18 with no transition.
+
+2. EMOTIONAL JUMP
+The protagonist's emotional state shifts dramatically with no writing bridging the change.
+Example: She's devastated and doubting herself in line 12, but energized and certain in line 15 with nothing in between.
+
+3. NARRATIVE DISCONNECT
+Something is introduced — a character, a phone call, an object, a decision — with no prior setup or explanation.
+Example: Line 22 mentions a conversation she had with her sister, but no sister has been established.
+
+RULES:
+- Only flag REAL issues, not stylistic choices
+- Minor POV shifts (first person to close third) are intentional — do NOT flag these
+- If the chapter has no issues, return an empty array
+- Be specific about which line numbers are involved
+- Your suggestions must be actionable and concrete
+
+Respond ONLY with valid JSON. No preamble. No markdown fences.
+
+{
+  "issues": [
+    {
+      "id": "issue-1",
+      "type": "factual|emotional|narrative",
+      "description": "Clear description of the specific issue found.",
+      "lines_involved": [3, 18],
+      "suggestion": "Concrete fix — what to write or change to resolve this."
+    }
+  ]
+}
+
+If no issues found: { "issues": [] }`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    let result;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      result = JSON.parse(clean);
+    } catch (e) {
+      return res.json({ issues: [] }); // fail gracefully
+    }
+
+    res.json({ issues: result.issues || [] });
+
+  } catch (err) {
+    console.error('POST /continuity-check error:', err);
+    res.json({ issues: [] }); // never 500 — fail gracefully
+  }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// POST /rewrite-options — 3 alternative rewrites for a single line
+// ══════════════════════════════════════════════════════════════════════════
+
+router.post('/rewrite-options', optionalAuth, async (req, res) => {
+  try {
+    const {
+      book_id,
+      line_id,
+      content,
+      chapter_brief = {},
+    } = req.body;
+
+    if (!content || !book_id) {
+      return res.status(400).json({ error: 'content and book_id are required' });
+    }
+
+    // Get universe context for voice consistency
+    const universeContext = await buildUniverseContext(book_id, db);
+
+    const briefContext = [
+      chapter_brief.title                 && `Chapter: ${chapter_brief.title}`,
+      chapter_brief.theme                 && `Theme: ${chapter_brief.theme}`,
+      chapter_brief.pov                   && `POV: ${chapter_brief.pov}`,
+      chapter_brief.emotional_state_start && `Emotional state: ${chapter_brief.emotional_state_start}`,
+    ].filter(Boolean).join('\n');
+
+    const prompt = `${universeContext}
+
+You are a literary editor helping a first-time novelist improve a single line. The author has written something real but wants to see if it can be expressed better.
+
+CHAPTER CONTEXT:
+${briefContext || 'No brief set.'}
+
+ORIGINAL LINE:
+"${content}"
+
+Write exactly THREE rewrites of this line. Each rewrite serves a different purpose:
+
+1. TIGHTER — Same meaning, fewer words. Cut what's unnecessary. Sharper, cleaner delivery. The core thought lands harder.
+
+2. EMOTIONAL — More feeling. More vulnerability. More honest. Don't soften it — deepen it. What's the rawer version of this thought?
+
+3. VOICE — More JustAWoman. She's direct, self-aware, specific, occasionally funny. She doesn't perform. She doesn't dress things up. What would she actually say?
+
+RULES:
+- Stay in the same POV as the original (first person if original is first person)
+- Do NOT change the core meaning or introduce new facts
+- Each rewrite must feel distinct from the others
+- These are literary — not commercial, not self-help, not generic
+- Preserve any dialect or speech patterns that feel intentional
+
+Respond ONLY with valid JSON. No preamble. No markdown.
+
+{
+  "options": [
+    { "type": "tighter",   "text": "rewritten line here" },
+    { "type": "emotional", "text": "rewritten line here" },
+    { "type": "voice",     "text": "rewritten line here" }
+  ]
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 600,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    let result;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      result = JSON.parse(clean);
+    } catch (e) {
+      return res.status(500).json({ error: 'Failed to parse rewrite response' });
+    }
+
+    res.json({ options: result.options || [] });
+
+  } catch (err) {
+    console.error('POST /rewrite-options error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 module.exports = router;
