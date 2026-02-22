@@ -78,9 +78,10 @@ function confidenceLabel(value) {
   return { label: 'Low', cls: 'low' };
 }
 
-function getCharColor(char) {
-  if (!char) return '#888';
-  return CHARACTER_TYPE_COLORS[char.type] || '#888';
+function getCharColor(memory) {
+  if (!memory) return '#888';
+  const type = memory.character_type || memory.character?.role_type;
+  return CHARACTER_TYPE_COLORS[type] || '#888';
 }
 
 // ── Tension Detection ──────────────────────────────────────────────────────
@@ -137,6 +138,8 @@ export default function MemoryBankView({ bookId }) {
   const [editing, setEditing]             = useState(false);
   const [editText, setEditText]           = useState('');
   const [saving, setSaving]               = useState(false);
+  const [extracting, setExtracting]       = useState(false);
+  const [extractMsg, setExtractMsg]       = useState('');
 
   // ── Load memories ──────────────────────────────────────────────
 
@@ -158,11 +161,17 @@ export default function MemoryBankView({ bookId }) {
 
   const memories = useMemo(() => {
     if (!data?.memories) return [];
-    return data.memories.map(m => ({
-      ...m,
-      _status: getStatus(m),
-      _conf: confidenceLabel(m.confidence),
-    }));
+    return data.memories.map(m => {
+      // Flatten nested character object from Sequelize include
+      const char = m.character || {};
+      return {
+        ...m,
+        character_name: m.character_name || char.display_name || char.name || null,
+        character_type: m.character_type || char.role_type || char.type || null,
+        _status: getStatus(m),
+        _conf: confidenceLabel(m.confidence),
+      };
+    });
   }, [data]);
 
   // Unique characters across all memories
@@ -308,6 +317,28 @@ export default function MemoryBankView({ bookId }) {
     }
   };
 
+  // ── Batch Extract All ──────────────────────────────────────────
+
+  const handleExtractAll = async () => {
+    if (extracting) return;
+    setExtracting(true);
+    setExtractMsg('Extracting memories from approved lines…');
+    try {
+      const result = await apiFetch(`/books/${bookId}/extract-all`, { method: 'POST' });
+      const msg = result.extracted > 0
+        ? `Extracted ${result.extracted} memories from ${result.total_lines} lines.`
+        : result.message || 'No new memories to extract.';
+      setExtractMsg(msg);
+      await load(); // refresh the memory list
+    } catch (err) {
+      setExtractMsg(`Extraction failed: ${err.message}`);
+    } finally {
+      setExtracting(false);
+      // Clear message after 6 seconds
+      setTimeout(() => setExtractMsg(''), 6000);
+    }
+  };
+
   const toggleCluster = (type) => {
     setExpandedTypes(prev => {
       const next = new Set(prev);
@@ -363,6 +394,14 @@ export default function MemoryBankView({ bookId }) {
             character memories. Each approved line surfaces beliefs,<br />
             goals, relationships, and constraints.
           </div>
+          <button
+            className="mb-extract-btn"
+            onClick={handleExtractAll}
+            disabled={extracting}
+          >
+            {extracting ? 'Extracting…' : '◇ Extract from Approved Lines'}
+          </button>
+          {extractMsg && <div className="mb-extract-msg">{extractMsg}</div>}
         </div>
       </div>
     );
@@ -381,6 +420,15 @@ export default function MemoryBankView({ bookId }) {
             <span className="mb-legend-count">{statusCounts[key]}</span>
           </div>
         ))}
+        <button
+          className="mb-extract-btn-sm"
+          onClick={handleExtractAll}
+          disabled={extracting}
+          title="Extract memories from any approved lines that haven't been processed yet"
+        >
+          {extracting ? '…' : '◇ Extract'}
+        </button>
+        {extractMsg && <div className="mb-extract-msg">{extractMsg}</div>}
       </div>
 
       {/* ── Filter Bar ── */}

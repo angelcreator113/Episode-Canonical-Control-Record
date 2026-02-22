@@ -749,3 +749,57 @@
     flex-basis: 100%;
   }
 }
+
+/* ── Extract All Button ──────────────────────────────────────── */
+.mb-extract-btn {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 8px 20px;
+  background: transparent;
+  border: 1px solid #C9A84C;
+  color: #C9A84C;
+  font-family: var(--st-mono, 'DM Mono', monospace);
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+.mb-extract-btn:hover:not(:disabled) {
+  background: #C9A84C;
+  color: #1a1a1a;
+}
+.mb-extract-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+/* Small variant for the header */
+.mb-extract-btn-sm {
+  margin-left: auto;
+  padding: 4px 12px;
+  background: transparent;
+  border: 1px solid #C9A84C55;
+  color: #C9A84C;
+  font-family: var(--st-mono, 'DM Mono', monospace);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+.mb-extract-btn-sm:hover:not(:disabled) {
+  background: #C9A84C;
+  color: #1a1a1a;
+  border-color: #C9A84C;
+}
+.mb-extract-btn-sm:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.mb-extract-msg {
+  margin-top: 8px;
+  font-family: var(--st-mono, 'DM Mono', monospace);
+  font-size: 11px;
+  color: #888;
+  letter-spacing: 0.04em;
+}
