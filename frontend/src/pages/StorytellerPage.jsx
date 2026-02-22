@@ -813,6 +813,13 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                         }));
                         setRedoInterview(false);
                       }}
+                      onLineAdded={(line) => {
+                        setChapters(prev => prev.map(c =>
+                          c.id === activeChapter.id
+                            ? { ...c, lines: [...(c.lines || []), line] }
+                            : c
+                        ));
+                      }}
                     />
                   )}
 

@@ -65,7 +65,7 @@ const QUESTIONS = [
   },
 ];
 
-export default function SceneInterview({ chapter, book, characters, onComplete, onSkip }) {
+export default function SceneInterview({ chapter, book, characters, onComplete, onSkip, onLineAdded }) {
   const [step, setStep]         = useState(0); // 0 = intro, 1-7 = questions, 8 = generating, 9 = review
   const [answers, setAnswers]   = useState({});
   const [current, setCurrent]   = useState('');
@@ -391,6 +391,8 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
                         }),
                       });
                       if (!res.ok) throw new Error('Failed to add line');
+                      const data = await res.json();
+                      onLineAdded?.(data.line);
                       setOpeningAdded(true);
                     } catch (err) {
                       console.error('Add opening line error:', err);
