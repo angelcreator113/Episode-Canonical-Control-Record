@@ -314,6 +314,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [newLineText, setNewLineText] = useState('');
   const [importTarget, setImportTarget] = useState(null);
   const [interviewDone, setInterviewDone] = useState({});
+  const [redoInterview, setRedoInterview] = useState(false);
   const [lastApprovedLine, setLastApprovedLine] = useState(null);
 
   // Active chapter
@@ -523,9 +524,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
               <div className={`st-line-text ${line.status === 'pending' ? 'pending' : ''}`}>
                 {line.text}
               </div>
-              {(line.source_tags || []).length > 0 && (
+              {line.source_tags && (Array.isArray(line.source_tags) ? line.source_tags : [line.source_tags]).length > 0 && (
                 <div className="st-line-meta">
-                  {line.source_tags.map((tag, ti) => (
+                  {(Array.isArray(line.source_tags) ? line.source_tags : [line.source_tags]).map((tag, ti) => (
                     <span key={ti} className="st-source-tag">{tag}</span>
                   ))}
                 </div>
@@ -783,10 +784,18 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                         {reviewMode ? 'Reviewing' : 'Review'}
                       </span>
                     </button>
+                    <button
+                      className="st-import-btn"
+                      onClick={() => setRedoInterview(true)}
+                      title="Re-run Scene Interview to update chapter brief"
+                      style={{ marginLeft: 4 }}
+                    >
+                      ✎ Interview
+                    </button>
                   </div>
 
-                  {/* Scene Interview — auto-pops when chapter has no lines */}
-                  {(activeChapter.lines || []).length === 0 && !interviewDone[activeChapter.id] && (
+                  {/* Scene Interview — auto-pops when chapter has no lines and no prior interview, or on redo */}
+                  {(((activeChapter.lines || []).length === 0 && !interviewDone[activeChapter.id] && !activeChapter.interview_answers && !activeChapter.theme) || redoInterview) && (
                     <SceneInterview
                       chapter={activeChapter}
                       book={book}
@@ -796,10 +805,21 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                           c.id === activeChapter.id ? { ...c, ...brief } : c
                         ));
                         setInterviewDone(prev => ({ ...prev, [activeChapter.id]: true }));
+                        setRedoInterview(false);
                       }}
-                      onSkip={() => setInterviewDone(prev => ({
-                        ...prev, [activeChapter.id]: true
-                      }))}
+                      onSkip={() => {
+                        setInterviewDone(prev => ({
+                          ...prev, [activeChapter.id]: true
+                        }));
+                        setRedoInterview(false);
+                      }}
+                      onLineAdded={(line) => {
+                        setChapters(prev => prev.map(c =>
+                          c.id === activeChapter.id
+                            ? { ...c, lines: [...(c.lines || []), line] }
+                            : c
+                        ));
+                      }}
                     />
                   )}
 

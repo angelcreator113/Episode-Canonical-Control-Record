@@ -7,7 +7,7 @@
  * Brief is saved to the chapter and shown above the manuscript permanently.
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const STORYTELLER_API = '/api/v1/storyteller';
 const MEMORIES_API    = '/api/v1/memories';
@@ -65,7 +65,7 @@ const QUESTIONS = [
   },
 ];
 
-export default function SceneInterview({ chapter, book, characters, onComplete, onSkip }) {
+export default function SceneInterview({ chapter, book, characters, onComplete, onSkip, onLineAdded }) {
   const [step, setStep]         = useState(0); // 0 = intro, 1-7 = questions, 8 = generating, 9 = review
   const [answers, setAnswers]   = useState({});
   const [current, setCurrent]   = useState('');
@@ -73,23 +73,41 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
   const [brief, setBrief]       = useState(null);
   const [error, setError]       = useState(null);
   const [saving, setSaving]     = useState(false);
+  const [openingCopied, setOpeningCopied] = useState(false);
+  const [addingOpening, setAddingOpening] = useState(false);
+  const [openingAdded, setOpeningAdded]   = useState(false);
+  const [savedAnswers, setSavedAnswers]   = useState(null); // loaded from DB
+  const [viewingPrevious, setViewingPrevious] = useState(false);
 
   const questionIndex = step - 1; // step 1 = question 0
   const totalQuestions = QUESTIONS.length;
   const isLastQuestion = questionIndex === totalQuestions - 1;
 
+  // Load any previously saved interview answers
+  useEffect(() => {
+    if (chapter.interview_answers && Object.keys(chapter.interview_answers).length > 0) {
+      setSavedAnswers(chapter.interview_answers);
+    }
+  }, [chapter.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
   function handleNext() {
-    if (step === 0) { setStep(1); return; }
+    if (step === 0) {
+      setStep(1);
+      setCurrent(answers[QUESTIONS[0].id] || '');
+      return;
+    }
 
     // Save current answer
     const q = QUESTIONS[questionIndex];
     const newAnswers = { ...answers, [q.id]: current.trim() };
     setAnswers(newAnswers);
-    setCurrent('');
 
     if (isLastQuestion) {
+      setCurrent('');
       generateBrief(newAnswers);
     } else {
+      const nextQ = QUESTIONS[questionIndex + 1];
+      setCurrent(newAnswers[nextQ.id] || '');
       setStep(prev => prev + 1);
     }
   }
@@ -133,7 +151,7 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
   async function saveBrief() {
     setSaving(true);
     try {
-      // Save brief fields to chapter
+      // Save brief fields + interview answers to chapter
       const res = await fetch(`${STORYTELLER_API}/chapters/${chapter.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -144,6 +162,7 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
           emotional_state_end:   brief.emotional_state_end,
           chapter_notes:         brief.scene_setting, // setting stored in notes
           pov:                   brief.pov || chapter.pov || 'first_person',
+          interview_answers:     answers, // persist the raw Q&A
         }),
       });
       if (!res.ok) throw new Error('Failed to save');
@@ -154,12 +173,54 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
         emotional_state_end:   brief.emotional_state_end,
         chapter_notes:         brief.scene_setting,
         generated_brief:       brief,
+        interview_answers:     answers,
       });
     } catch (err) {
       setError(err.message);
     } finally {
       setSaving(false);
     }
+  }
+
+  // ── Viewing previous answers ────────────────────────────────────────────
+  if (viewingPrevious && savedAnswers) {
+    return (
+      <div style={s.shell}>
+        <div style={s.reviewBlock}>
+          <div style={s.reviewHeader}>
+            <div style={s.reviewLabel}>PREVIOUS INTERVIEW ANSWERS</div>
+            <div style={s.reviewTitle}>{chapter.title}</div>
+          </div>
+          {QUESTIONS.map(q => {
+            const answer = savedAnswers[q.id];
+            if (!answer) return null;
+            return (
+              <div key={q.id} style={s.briefSection}>
+                <div style={s.briefSectionLabel}>{q.question.toUpperCase()}</div>
+                <div style={s.briefSectionText}>{answer}</div>
+              </div>
+            );
+          })}
+          <div style={s.reviewActions}>
+            <button style={s.backBtn} onClick={() => setViewingPrevious(false)} type='button'>
+              ← Back
+            </button>
+            <button
+              style={s.startBtn}
+              onClick={() => {
+                setAnswers({ ...savedAnswers });
+                setViewingPrevious(false);
+                setStep(1);
+                setCurrent(savedAnswers[QUESTIONS[0].id] || '');
+              }}
+              type='button'
+            >
+              Edit these answers →
+            </button>
+          </div>
+        </div>
+      </div>
+    );
   }
 
   // ── Intro screen ───────────────────────────────────────────────────────
@@ -177,12 +238,36 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
           <div style={s.introChapter}>
             Chapter: <em>{chapter.title}</em>
           </div>
+          {savedAnswers && (
+            <div style={{ marginTop: 10, marginBottom: 4 }}>
+              <button
+                style={s.viewPrevBtn}
+                onClick={() => setViewingPrevious(true)}
+                type='button'
+              >
+                View previous answers
+              </button>
+            </div>
+          )}
           <div style={s.introBtns}>
             <button style={s.skipBtn} onClick={onSkip} type='button'>
               Skip — I'll write directly
             </button>
+            {savedAnswers && (
+              <button
+                style={s.reuseBtn}
+                onClick={() => {
+                  setAnswers({ ...savedAnswers });
+                  setStep(1);
+                  setCurrent(savedAnswers[QUESTIONS[0].id] || '');
+                }}
+                type='button'
+              >
+                Start from previous ↻
+              </button>
+            )}
             <button style={s.startBtn} onClick={handleNext} type='button'>
-              Start Scene Interview →
+              {savedAnswers ? 'Start fresh →' : 'Start Scene Interview →'}
             </button>
           </div>
         </div>
@@ -276,6 +361,49 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
                 "{brief.opening_suggestion}"
               </div>
               <div style={s.openingHint}>Use it, rewrite it, or ignore it — it's just a door in.</div>
+              <div style={s.openingActions}>
+                <button
+                  style={s.openingCopyBtn}
+                  type='button'
+                  onClick={() => {
+                    navigator.clipboard.writeText(brief.opening_suggestion).then(() => {
+                      setOpeningCopied(true);
+                      setTimeout(() => setOpeningCopied(false), 2000);
+                    });
+                  }}
+                >
+                  {openingCopied ? '✓ Copied' : 'Copy'}
+                </button>
+                <button
+                  style={{ ...s.openingUseBtn, opacity: addingOpening ? 0.6 : 1 }}
+                  type='button'
+                  disabled={addingOpening || openingAdded}
+                  onClick={async () => {
+                    setAddingOpening(true);
+                    try {
+                      const res = await fetch(`${STORYTELLER_API}/chapters/${chapter.id}/lines`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                          text: brief.opening_suggestion,
+                          group_label: 'Scene Interview opening',
+                          status: 'pending',
+                        }),
+                      });
+                      if (!res.ok) throw new Error('Failed to add line');
+                      const data = await res.json();
+                      onLineAdded?.(data.line);
+                      setOpeningAdded(true);
+                    } catch (err) {
+                      console.error('Add opening line error:', err);
+                    } finally {
+                      setAddingOpening(false);
+                    }
+                  }}
+                >
+                  {openingAdded ? '✓ Added as pending' : addingOpening ? 'Adding…' : '+ Use as first line'}
+                </button>
+              </div>
             </div>
           )}
 
@@ -611,6 +739,35 @@ const s = {
     letterSpacing: '0.06em',
     marginTop: 4,
   },
+  openingActions: {
+    display: 'flex',
+    gap: 8,
+    marginTop: 10,
+  },
+  openingCopyBtn: {
+    background: 'none',
+    border: '1px solid rgba(30,25,20,0.15)',
+    borderRadius: 2,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 11,
+    letterSpacing: '0.08em',
+    color: 'rgba(30,25,20,0.45)',
+    padding: '5px 12px',
+    cursor: 'pointer',
+    transition: 'all 0.12s',
+  },
+  openingUseBtn: {
+    background: '#7A9B7E',
+    border: 'none',
+    borderRadius: 2,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 11,
+    letterSpacing: '0.08em',
+    color: 'white',
+    padding: '5px 12px',
+    cursor: 'pointer',
+    transition: 'opacity 0.12s',
+  },
   reviewActions: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -667,6 +824,29 @@ const s = {
     padding: '8px 4px',
     cursor: 'pointer',
     textDecoration: 'underline',
+  },
+  viewPrevBtn: {
+    background: 'none',
+    border: '1px solid rgba(201,168,76,0.3)',
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 12,
+    letterSpacing: '0.08em',
+    color: '#C6A85E',
+    padding: '6px 12px',
+    borderRadius: 3,
+    cursor: 'pointer',
+  },
+  reuseBtn: {
+    fontFamily: 'DM Sans, sans-serif',
+    fontSize: 13,
+    fontWeight: 600,
+    background: 'rgba(201,168,76,0.1)',
+    border: '1px solid rgba(201,168,76,0.35)',
+    color: '#8B7A3E',
+    borderRadius: 3,
+    padding: '10px 20px',
+    cursor: 'pointer',
+    letterSpacing: '0.02em',
   },
   error: {
     fontFamily: 'DM Mono, monospace',
