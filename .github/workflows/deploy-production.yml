@@ -156,11 +156,10 @@ jobs:
       - name: Run database migrations
         env:
           DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
-          NODE_ENV: production
         run: |
           echo "🔄 Running production database migrations..."
           npm ci
-          npm run migrate:up
+          npx sequelize-cli db:migrate --env production
           echo "✅ Migrations completed successfully"
 
       - name: Deploy to Production
