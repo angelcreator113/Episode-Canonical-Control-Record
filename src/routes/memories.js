@@ -978,4 +978,141 @@ Respond with ONLY valid JSON. No preamble. No markdown.
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /narrative-intelligence
+// Inline co-pilot: reads last 10 lines + chapter brief → returns a contextual
+// writing suggestion (continuation, line, character_cue, sensory, or lala)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/narrative-intelligence', optionalAuth, async (req, res) => {
+  try {
+    const {
+      book_id,
+      chapter_id,
+      chapter_brief = {},
+      recent_lines = [],
+      line_count = 0,
+      characters = [],
+    } = req.body;
+
+    if (!book_id || recent_lines.length === 0) {
+      return res.status(400).json({ error: 'book_id and recent_lines are required' });
+    }
+
+    // ── Universe context ───────────────────────────────────────────────────
+    const universeContext = await buildUniverseContext(book_id, db);
+
+    // ── Character list ─────────────────────────────────────────────────────
+    const characterList = characters.length > 0
+      ? characters.map(c => `- ${c.name} (${c.type})`).join('\n')
+      : '- JustAWoman (protagonist)\n- Lala (proto-voice, not yet fully present)';
+
+    // ── Recent lines formatted ─────────────────────────────────────────────
+    const recentLinesFormatted = recent_lines
+      .map((l, i) => `LINE ${line_count - recent_lines.length + i + 1}: ${l}`)
+      .join('\n\n');
+
+    // ── Chapter brief ──────────────────────────────────────────────────────
+    const briefText = [
+      chapter_brief.title        && `Chapter: ${chapter_brief.title}`,
+      chapter_brief.theme        && `Theme: ${chapter_brief.theme}`,
+      chapter_brief.scene_goal   && `Scene goal: ${chapter_brief.scene_goal}`,
+      chapter_brief.emotional_state_start && `Emotional start: ${chapter_brief.emotional_state_start}`,
+      chapter_brief.emotional_state_end   && `Emotional end: ${chapter_brief.emotional_state_end}`,
+      chapter_brief.pov          && `POV: ${chapter_brief.pov}`,
+      chapter_brief.chapter_notes && `Scene setting: ${chapter_brief.chapter_notes}`,
+    ].filter(Boolean).join('\n');
+
+    const prompt = `${universeContext}
+
+You are an intelligent co-writing partner for a first-time novelist writing a literary debut.
+
+The author is writing in real time. You have just been given their last ${recent_lines.length} lines. Your job is to read what they've written, understand the emotional momentum, and offer ONE specific, useful suggestion that helps them continue.
+
+CHAPTER BRIEF:
+${briefText || 'No brief set yet.'}
+
+KNOWN CHARACTERS:
+${characterList}
+
+RECENT LINES (most recent at bottom):
+${recentLinesFormatted}
+
+TOTAL LINES WRITTEN SO FAR: ${line_count}
+
+YOUR TASK:
+Analyze what's happening in these lines. Then choose the SINGLE most useful suggestion type:
+
+- "continuation" — the scene is building but needs direction for what happens next
+- "line" — the author needs actual prose; give them a line in JustAWoman's voice
+- "character_cue" — a character is overdue to appear and their entrance would add value
+- "sensory" — the scene is all interior monologue; needs a physical/sensory detail to ground it
+- "lala" — the emotional conditions for Lala's proto-voice are present (frustration, creative spiral, the thought that sounds styled not afraid)
+
+LALA DETECTION RULES:
+Lala conditions are met when: the writing shows a creative spiral (trying and failing, comparing, feeling behind), AND there's an emotional peak (frustration, longing, self-doubt reaching maximum), AND the scene has been interior monologue for 5+ lines. When Lala conditions are met, ALWAYS choose type "lala".
+
+WRITING RULES:
+- The author is writing in first person (JustAWoman's voice) and close third
+- This is a literary novel — intimate, specific, real
+- JustAWoman's voice is: direct, self-aware, occasionally funny, never performative
+- Lala's proto-voice is: confident, styled, unapologetic, brief — one thought, not a speech
+- Do NOT invent new characters or facts not established in the brief or lines
+- Do NOT be generic — your suggestion must respond specifically to what was just written
+
+Respond with ONLY valid JSON. No preamble. No markdown.
+
+{
+  "type": "continuation|line|character_cue|sensory|lala",
+  "suggestion": "Your specific guidance in 1-3 sentences. What should the author consider doing next and why.",
+  "line_suggestion": "If type is 'line' or 'lala': actual prose in JustAWoman's voice they can use or modify. If not applicable, omit this field.",
+  "lala_line": "If type is 'lala': the proto-voice line. One thought. Styled. Brief. e.g. 'If it were me, I would've posted it already.' Omit if not lala.",
+  "character": "If type is 'character_cue': the character's name. Omit otherwise.",
+  "character_role": "If type is 'character_cue': their narrative function here. Omit otherwise.",
+  "what_to_do": "Optional. One concrete action the author can take right now. e.g. 'Describe what her hands are doing while she waits.'"
+}`;
+
+    // ── Call Claude ────────────────────────────────────────────────────────
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 600,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    // ── Parse ──────────────────────────────────────────────────────────────
+    let suggestion;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      suggestion = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('narrative-intelligence parse error:', parseErr);
+      // Return a safe fallback rather than erroring
+      return res.json({
+        suggestion: {
+          type: 'continuation',
+          suggestion: 'Keep writing. Stay in her voice. What does she do next?',
+          what_to_do: 'Write the next thing that happens — even if it\'s small.',
+        },
+      });
+    }
+
+    res.json({ suggestion });
+
+  } catch (err) {
+    console.error('POST /narrative-intelligence error:', err);
+    // Fail gracefully — never interrupt the writing session with a 500
+    res.json({
+      suggestion: {
+        type: 'continuation',
+        suggestion: 'Keep writing. Stay in her voice.',
+      },
+    });
+  }
+});
+
 module.exports = router;

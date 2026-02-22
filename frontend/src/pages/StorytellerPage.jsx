@@ -14,6 +14,7 @@ import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
 import MemoryBankView from './MemoryBankView';
 import ChapterBrief from './ChapterBrief';
 import SceneInterview from './SceneInterview';
+import NarrativeIntelligence from './NarrativeIntelligence';
 import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
@@ -796,14 +797,40 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                     {/* Approved / edited lines — the manuscript body */}
                     {approvedLines.length > 0 && (
                       <div className="st-section">
-                        {groupLines(approvedLines).map((group, gi) => (
-                          <div key={gi}>
-                            {group.label && (
-                              <div className="st-group-label">{group.label}</div>
-                            )}
-                            {group.lines.map(renderLine)}
-                          </div>
-                        ))}
+                        {(() => {
+                          let niIdx = 0;
+                          return groupLines(approvedLines).map((group, gi) => (
+                            <div key={gi}>
+                              {group.label && (
+                                <div className="st-group-label">{group.label}</div>
+                              )}
+                              {group.lines.map(line => {
+                                const idx = niIdx++;
+                                return (
+                                  <React.Fragment key={`ni-${line.id}`}>
+                                    {renderLine(line)}
+                                    {(idx + 1) % 5 === 0 && idx < approvedLines.length - 1 && (
+                                      <NarrativeIntelligence
+                                        chapter={activeChapter}
+                                        lines={approvedLines}
+                                        lineIndex={idx}
+                                        book={book}
+                                        characters={registryCharacters}
+                                        onAccept={(newLine) => {
+                                          setChapters(prev => prev.map(c =>
+                                            c.id === activeChapter.id
+                                              ? { ...c, lines: [...c.lines, newLine] }
+                                              : c
+                                          ));
+                                        }}
+                                      />
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          ));
+                        })()}
                       </div>
                     )}
 
