@@ -14,6 +14,8 @@ import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
 import MemoryBankView from './MemoryBankView';
 import ChapterBrief from './ChapterBrief';
 import SceneInterview from './SceneInterview';
+import NarrativeIntelligence from './NarrativeIntelligence';
+import { ContinuityGuard, RewriteOptions } from './ContinuityGuard';
 import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
@@ -312,6 +314,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const [newLineText, setNewLineText] = useState('');
   const [importTarget, setImportTarget] = useState(null);
   const [interviewDone, setInterviewDone] = useState({});
+  const [lastApprovedLine, setLastApprovedLine] = useState(null);
 
   // Active chapter
   const activeChapter = chapters.find(c => c.id === activeChapterId) || null;
@@ -347,6 +350,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       await api(`/lines/${lineId}`, { method: 'PUT', body: { status: 'approved' } });
       updateLineLocal(lineId, { status: 'approved' });
       toast('Line approved');
+      // Track for ContinuityGuard
+      const approvedLine = lines.find(l => l.id === lineId);
+      if (approvedLine) setLastApprovedLine({ ...approvedLine, status: 'approved' });
       // Fire memory extraction in background (don't block approval)
       fetch(`/api/v1/memories/lines/${lineId}/extract`, {
         method: 'POST',
@@ -377,6 +383,9 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
         body: { text: editText },
       });
       updateLineLocal(editingLine, { text: editText, status: data.line?.status || 'edited' });
+      // Track for ContinuityGuard
+      const editedLine = lines.find(l => l.id === editingLine);
+      if (editedLine) setLastApprovedLine({ ...editedLine, text: editText, status: 'edited' });
       toast('Line updated');
       setEditingLine(null);
     } catch (err) { toast(err.message, 'error'); }
@@ -389,19 +398,22 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const approveAll = async () => {
     if (pendingCount === 0) return toast('No pending lines', 'info');
     try {
+      // Capture IDs of lines that are currently pending — only these need extraction
+      const pendingLineIds = new Set();
+      for (const ch of chapters) {
+        for (const ln of (ch.lines || [])) {
+          if (ln.status === 'pending') pendingLineIds.add(ln.id);
+        }
+      }
+
       const data = await api(`/books/${book.id}/approve-all`, { method: 'POST' });
       toast(`${data.approved_count} lines approved`);
       const refreshed = await api(`/books/${book.id}`);
       const newChaps = refreshed.book.chapters || [];
       setChapters(newChaps);
-      // Fire memory extraction for all newly approved lines in background
-      const approvedLineIds = [];
-      for (const ch of newChaps) {
-        for (const ln of (ch.lines || [])) {
-          if (ln.status === 'approved') approvedLineIds.push(ln.id);
-        }
-      }
-      approvedLineIds.forEach(lid => {
+
+      // Only fire extraction for lines that were just changed from pending → approved
+      pendingLineIds.forEach(lid => {
         fetch(`/api/v1/memories/lines/${lid}/extract`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -488,7 +500,6 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
   const renderLine = (line) => (
     <React.Fragment key={line.id}>
       <div className={`st-line st-line-${line.status || 'pending'} ${editingLine === line.id ? 'st-line-editing' : ''}`}>
-        <div className="st-line-dot" />
         <div className="st-line-content">
           {editingLine === line.id ? (
             <>
@@ -530,6 +541,17 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
             )}
             <button className="st-line-action st-action-edit" onClick={() => startEdit(line)} title="Edit">Edit</button>
             <button className="st-line-action st-action-reject" onClick={() => rejectLine(line.id)} title="Remove">✕</button>
+            {(line.status === 'approved' || line.status === 'edited') && (
+              <RewriteOptions
+                line={line}
+                chapter={activeChapter}
+                book={book}
+                onAccept={(newText) => {
+                  updateLineLocal(line.id, { text: newText, status: 'edited' });
+                  setLastApprovedLine({ ...line, text: newText, status: 'edited' });
+                }}
+              />
+            )}
           </div>
         )}
       </div>
@@ -562,10 +584,65 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
       data-era={eraTheme}
     >
 
+      {/* ── Thin Top Bar ── */}
+      <div className="st-topbar">
+        <div className="st-topbar-left">
+          <button className="st-topbar-back" onClick={onBack}>← Archives</button>
+          <div className="st-topbar-sep" />
+          <span className="st-topbar-brand">PNOS</span>
+          <span className="st-topbar-title">{book.title || book.character_name}</span>
+          {book.era_name && <span className="st-topbar-era">{book.era_name}</span>}
+        </div>
+        <div className="st-topbar-center">
+          {['toc', 'book', 'memory', 'scenes'].map(v => (
+            <button
+              key={v}
+              className={`st-view-tab ${activeView === v ? 'active' : ''}`}
+              onClick={() => setActiveView(v)}
+            >
+              {v === 'book' ? 'Manuscript' : v === 'toc' ? 'TOC' : v === 'memory' ? 'Memory Bank' : 'Scenes'}
+            </button>
+          ))}
+        </div>
+        <div className="st-topbar-right">
+          <span className="st-topbar-wordcount">
+            {allLines.reduce((n, l) => n + (l.text || '').split(/\s+/).filter(Boolean).length, 0)} words
+          </span>
+          <button
+            className={`st-mode-toggle ${writingMode ? 'active' : ''}`}
+            onClick={() => setWritingMode(w => !w)}
+            title={writingMode ? 'Exit Writing Mode' : 'Enter Writing Mode'}
+          >
+            {writingMode ? '◉ Focus' : '○ Focus'}
+          </button>
+          {activeView === 'book' && !writingMode && (
+            <button
+              className="st-canon-toggle"
+              onClick={() => setCanonOpen(c => !c)}
+              title="Canon Anchor"
+            >
+              📜
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Writing mode floating exit */}
+      {writingMode && (
+        <button
+          className="st-writing-mode-exit"
+          onClick={() => setWritingMode(false)}
+        >
+          Exit Focus ✕
+        </button>
+      )}
+
+      {/* ── Editor Body (nav + content) ── */}
+      <div className="st-editor-body">
+
       {/* ── Left Nav ── */}
       <nav className="st-nav">
         <div className="st-nav-brand">
-          <button className="st-nav-back" onClick={onBack}>← Archives</button>
           <div className="st-nav-brand-label">PNOS</div>
           <h2 className="st-nav-brand-title">{book.character_name || book.title}</h2>
           <div className="st-nav-brand-sub">
@@ -638,60 +715,6 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
       {/* ── Center Content ── */}
       <div className="st-editor">
-
-        {/* ── Book Identity Panel (Crown) ── */}
-        <div className="st-crown">
-          <div className="st-crown-inner">
-            <h1 className="st-crown-title">{book.title || book.character_name}</h1>
-            <div className="st-crown-meta">
-              {[book.era_name, book.timeline_position].filter(Boolean).length > 0 && (
-                <span className="st-crown-era">
-                  {[book.era_name, book.timeline_position].filter(Boolean).join(' · ')}
-                </span>
-              )}
-              {book.primary_pov && (
-                <span className="st-crown-pov">POV: {book.primary_pov}</span>
-              )}
-              {book.subtitle && (
-                <span className="st-crown-theme">{book.subtitle}</span>
-              )}
-            </div>
-            <div className="st-crown-divider" />
-          </div>
-
-          {/* Top toolbar */}
-          <div className="st-toolbar">
-            <div className="st-toolbar-left">
-              {['toc', 'book', 'memory', 'scenes'].map(v => (
-                <button
-                  key={v}
-                  className={`st-view-tab ${activeView === v ? 'active' : ''}`}
-                  onClick={() => setActiveView(v)}
-                >
-                  {v === 'book' ? 'Manuscript' : v === 'toc' ? 'TOC' : v === 'memory' ? 'Memory Bank' : 'Scenes'}
-                </button>
-              ))}
-            </div>
-            <div className="st-toolbar-right">
-              <button
-                className={`st-mode-toggle ${writingMode ? 'active' : ''}`}
-                onClick={() => setWritingMode(w => !w)}
-                title={writingMode ? 'Exit Writing Mode' : 'Enter Writing Mode'}
-              >
-                {writingMode ? '◉ Writing Mode' : '○ Enter Writing Mode'}
-              </button>
-              {activeView === 'book' && !writingMode && (
-                <button
-                  className="st-canon-toggle"
-                  onClick={() => setCanonOpen(c => !c)}
-                  title="Canon Anchor"
-                >
-                  📜
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
 
         {/* Add chapter form (shared) */}
         {showAddChapter && (
@@ -796,14 +819,52 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
                     {/* Approved / edited lines — the manuscript body */}
                     {approvedLines.length > 0 && (
                       <div className="st-section">
-                        {groupLines(approvedLines).map((group, gi) => (
-                          <div key={gi}>
-                            {group.label && (
-                              <div className="st-group-label">{group.label}</div>
-                            )}
-                            {group.lines.map(renderLine)}
-                          </div>
-                        ))}
+                        {(() => {
+                          let niIdx = 0;
+                          return groupLines(approvedLines).map((group, gi) => (
+                            <div key={gi}>
+                              {group.label && (
+                                <div className="st-group-label">{group.label}</div>
+                              )}
+                              {group.lines.map(line => {
+                                const idx = niIdx++;
+                                return (
+                                  <React.Fragment key={`ni-${line.id}`}>
+                                    {renderLine(line)}
+                                    {(idx + 1) % 5 === 0 && idx < approvedLines.length - 1 && (
+                                      <div className="narrative-intelligence-wrapper">
+                                        <NarrativeIntelligence
+                                          chapter={activeChapter}
+                                          lines={approvedLines}
+                                          lineIndex={idx}
+                                          book={book}
+                                          characters={registryCharacters}
+                                          onAccept={(newLine) => {
+                                            setChapters(prev => prev.map(c =>
+                                              c.id === activeChapter.id
+                                                ? { ...c, lines: [...c.lines, newLine] }
+                                                : c
+                                            ));
+                                          }}
+                                        />
+                                      </div>
+                                    )}
+                                  </React.Fragment>
+                                );
+                              })}
+                            </div>
+                          ));
+                        })()}
+
+                        {/* ContinuityGuard — passive check after approve/edit */}
+                        {activeChapter && (
+                          <ContinuityGuard
+                            chapter={activeChapter}
+                            lines={approvedLines}
+                            book={book}
+                            triggerLine={lastApprovedLine}
+                          />
+                        )}
                       </div>
                     )}
 
@@ -986,6 +1047,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           }}
         />
       </div>
+      </div>{/* close st-editor-body */}
     </div>
   );
 }
