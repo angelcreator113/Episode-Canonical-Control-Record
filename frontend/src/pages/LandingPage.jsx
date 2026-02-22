@@ -133,6 +133,14 @@ export default function LandingPage() {
                 </button>
               </li>
             ))}
+            <li className="lp-nav__login-li">
+              <button
+                className="lp-nav__login-btn"
+                onClick={() => scrollTo('get-started')}
+              >
+                Log In
+              </button>
+            </li>
           </ul>
         </div>
       </nav>

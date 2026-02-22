@@ -178,6 +178,44 @@
     text-align: left;
     border-radius: 8px;
   }
+
+  .lp-nav__login-li {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid rgba(26,21,16,0.06);
+    width: 100%;
+  }
+
+  .lp-nav__login-btn {
+    width: 100%;
+    text-align: center;
+  }
+}
+
+/* Nav Login Button */
+.lp-nav__login-li {
+  margin-left: 8px;
+}
+
+.lp-nav__login-btn {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #fff;
+  background: #e8a0b4;
+  border: none;
+  cursor: pointer;
+  padding: 8px 20px;
+  border-radius: 100px;
+  transition: all 0.25s ease;
+  white-space: nowrap;
+}
+
+.lp-nav__login-btn:hover {
+  background: #d4879c;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 16px rgba(232,160,180,0.3);
 }
 
 .lp *,
