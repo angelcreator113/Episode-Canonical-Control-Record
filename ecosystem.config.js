@@ -38,6 +38,9 @@ const sharedEnv = {
   // Redis
   REDIS_HOST: '127.0.0.1',
   REDIS_PORT: '6379',
+
+  // Claude AI — Anthropic API (set via GitHub Secret → deploy workflow)
+  ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
 };
 
 module.exports = {

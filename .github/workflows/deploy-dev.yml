@@ -149,6 +149,7 @@ jobs:
           DEV_DB_USER: ${{ secrets.DEV_DB_USER }}
           DEV_DB_PASSWORD: ${{ secrets.DEV_DB_PASSWORD }}
           DEV_DB_NAME: ${{ secrets.DEV_DB_NAME }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           if [ -z "$EC2_HOST" ] || [ -z "$EC2_SSH_KEY" ]; then
             echo "⏭️  EC2 deployment skipped - secrets not configured"
@@ -258,6 +259,9 @@ jobs:
             export DB_PASSWORD='$DEV_DB_PASSWORD'
             export DB_SSL='true'
             export DB_SSL_REJECT_UNAUTHORIZED='false'
+
+            # Claude AI API key for memory extraction
+            export ANTHROPIC_API_KEY='$ANTHROPIC_API_KEY'
 
             # Bootstrap SequelizeMeta for databases created by sequelize.sync()
             echo '🔧 Bootstrapping migration metadata...'
