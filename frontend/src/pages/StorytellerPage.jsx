@@ -10,7 +10,8 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './StorytellerPage.css';
-import { MemoryCard, MemoryBankPanel, MEMORY_STYLES } from './MemoryConfirmation';
+import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
+import MemoryBankView from './MemoryBankView';
 import ScenesPanel from './ScenesPanel';
 import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
@@ -897,7 +898,7 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
 
         {/* ── Memory View ── */}
         {activeView === 'memory' && (
-          <MemoryBankPanel bookId={book.id} />
+          <MemoryBankView bookId={book.id} />
         )}
 
         {/* ── Scenes View ── */}
