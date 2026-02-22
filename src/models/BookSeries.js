@@ -28,6 +28,11 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       defaultValue: 0,
     },
+    protagonist_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      comment: 'Who this series follows. Series 1 = JustAWoman. Series 2 = Lala.',
+    },
   }, {
     tableName: 'book_series',
     timestamps: true,

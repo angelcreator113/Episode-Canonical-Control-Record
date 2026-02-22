@@ -69,6 +69,11 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    world_exists: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true,
+      comment: 'TRUE = exists in the world. FALSE = psychological force only.',
+    },
   }, {
     tableName: 'universe_characters',
     underscored: true,

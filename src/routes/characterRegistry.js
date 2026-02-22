@@ -320,18 +320,26 @@ router.post('/characters/:id/set-status', async (req, res) => {
           where: { registry_character_id: req.params.id, universe_id: LALAVERSE_ID },
         });
 
+        // Only promote world characters (on_page) to LalaVerse canon
+        const isWorldCharacter = character.appearance_mode === 'on_page';
+
         if (!existing && db.UniverseCharacter) {
-          await db.UniverseCharacter.create({
-            universe_id:           LALAVERSE_ID,
-            registry_character_id: req.params.id,
-            name:                  character.selected_name || character.display_name,
-            type:                  character.role_type,
-            canon_tier:            canonTier,
-            role:                  character.description,
-            first_appeared:        new Date(),
-            status:                'active',
-          });
-          console.log(`✓ Character ${character.display_name} promoted to LalaVerse canon`);
+          if (isWorldCharacter) {
+            await db.UniverseCharacter.create({
+              universe_id:           LALAVERSE_ID,
+              registry_character_id: req.params.id,
+              name:                  character.selected_name || character.display_name,
+              type:                  character.role_type,
+              canon_tier:            canonTier,
+              role:                  character.description,
+              first_appeared:        new Date(),
+              status:                'active',
+              world_exists:          true,
+            });
+            console.log(`✓ World character ${character.display_name} promoted to LalaVerse canon`);
+          } else {
+            console.log(`⊘ ${character.display_name} not promoted — appearance_mode: ${character.appearance_mode} (not on_page)`);
+          }
         }
       } catch (promoteErr) {
         // Log but don't fail the finalize

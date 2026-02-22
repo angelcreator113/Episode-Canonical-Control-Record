@@ -1625,4 +1625,115 @@ Respond with ONLY valid JSON. No preamble. No markdown.
 });
 
 
+// ────────────────────────────────────────────────
+// Career Echo routes
+// ────────────────────────────────────────────────
+
+/**
+ * POST /generate-career-echo
+ * Uses Claude to generate what a pain point becomes in JustAWoman's world
+ * and how Lala encounters it in Series 2.
+ */
+router.post('/generate-career-echo', optionalAuth, async (req, res) => {
+  try {
+    const { memory_id, book_id } = req.body;
+    if (!memory_id) return res.status(400).json({ error: 'memory_id required' });
+
+    const memory = await StorytellerMemory.findByPk(memory_id);
+    if (!memory) return res.status(404).json({ error: 'Memory not found' });
+    if (memory.type !== 'pain_point') {
+      return res.status(400).json({ error: 'Only pain_point memories can generate career echoes' });
+    }
+
+    // Build universe context for richer generation
+    let universeContext = '';
+    if (book_id) {
+      try {
+        universeContext = await buildUniverseContext(book_id);
+      } catch (_) { /* proceed without */ }
+    }
+
+    const prompt = `You are the LalaVerse Story Architect. You understand the full franchise:
+
+Series 1 — JustAWoman: A woman navigating self-doubt, comparison spirals, and creative paralysis.
+Series 2 — Lala: Lala is building a career. She doesn't know JustAWoman exists.
+
+The CAREER ECHO system: JustAWoman's pain points become content she creates (posts, frameworks, coaching, etc). That content enters the world and Lala encounters it — always without knowing the source.
+
+${universeContext ? `Universe context:\n${universeContext}\n` : ''}
+Here is a confirmed pain point from JustAWoman's story:
+
+Statement: "${memory.statement}"
+Category: ${memory.category || 'unspecified'}
+Coaching angle: ${memory.coaching_angle || 'none yet'}
+
+Generate a Career Echo. Return JSON only:
+{
+  "content_type": "post | framework | coaching_offer | video | podcast | book_chapter | course",
+  "title": "The title of the content JustAWoman creates from this pain",
+  "description": "2-3 sentences: what this content looks like in JustAWoman's world. How she packages it. What it sounds like.",
+  "lala_impact": "2-3 sentences: how Lala encounters this content in Series 2. What it shifts for her. She never knows JustAWoman made it."
+}
+
+IMPORTANT:
+- content_type must be exactly one of: post, framework, coaching_offer, video, podcast, book_chapter, course
+- title should feel like a real content title — not a generic label
+- description should be specific and grounded in JustAWoman's voice
+- lala_impact must never reference JustAWoman — Lala doesn't know she exists
+- Return ONLY the JSON object, no markdown fences`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 800,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    let echo;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      echo = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('generate-career-echo parse error:', parseErr);
+      return res.status(500).json({ error: 'Failed to parse echo response' });
+    }
+
+    res.json({ echo });
+  } catch (err) {
+    console.error('POST /generate-career-echo error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /add-career-echo
+ * Saves a confirmed career echo to the memory record.
+ * Once confirmed, the echo is canon — it will appear in Series 2.
+ */
+router.post('/add-career-echo', optionalAuth, async (req, res) => {
+  try {
+    const { memory_id, content_type, title, description, lala_impact } = req.body;
+    if (!memory_id) return res.status(400).json({ error: 'memory_id required' });
+
+    const memory = await StorytellerMemory.findByPk(memory_id);
+    if (!memory) return res.status(404).json({ error: 'Memory not found' });
+
+    memory.career_echo_content_type = content_type;
+    memory.career_echo_title        = title;
+    memory.career_echo_description  = description;
+    memory.career_echo_lala_impact   = lala_impact;
+    memory.career_echo_confirmed     = true;
+    await memory.save();
+
+    res.json({ memory });
+  } catch (err) {
+    console.error('POST /add-career-echo error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
