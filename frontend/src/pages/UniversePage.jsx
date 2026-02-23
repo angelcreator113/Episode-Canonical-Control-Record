@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import ShowWorldView from './ShowWorldView';
 
 const UNIVERSE_API    = '/api/v1/universe';
 const STORYTELLER_API = '/api/v1/storyteller';
@@ -689,39 +690,49 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  TAB 3 — SHOWS
+//  TAB 3 — SHOWS  (with ShowWorldView entry)
 // ══════════════════════════════════════════════════════════════════════════
 
 function ShowsTab({ shows, universeId, onChanged, showToast }) {
-  const [editingId, setEditingId]   = useState(null);
-  const [editForm, setEditForm]     = useState({});
-  const [saving, setSaving]         = useState(false);
+  const [selectedShow, setSelectedShow] = useState(null);
+  const [creating, setCreating]         = useState(false);
+  const [newForm, setNewForm]           = useState({ title: '', description: '' });
+  const [saving, setSaving]             = useState(false);
 
   const safeShows = Array.isArray(shows) ? shows : [];
   const linkedShows = safeShows.filter(sh =>
-    sh.universe_id === universeId || safeShows.length <= 3 // show all if few
+    sh.universe_id === universeId || safeShows.length <= 3
   );
 
-  function startEdit(show) {
-    setEditingId(show.id);
-    setEditForm({
-      description:     show.description || '',
-      era_name:        show.era_name || '',
-      era_description: show.era_description || '',
-    });
+  /* ── Enter show world ─────────────────────────────── */
+  if (selectedShow) {
+    return (
+      <ShowWorldView
+        show={selectedShow}
+        onBack={() => setSelectedShow(null)}
+      />
+    );
   }
 
-  async function saveShow(showId) {
+  /* ── Create show ──────────────────────────────────── */
+  async function createShow() {
+    if (!newForm.title.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`${SHOWS_API}/${showId}`, {
-        method: 'PUT',
+      const res = await fetch(SHOWS_API, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(editForm),
+        body: JSON.stringify({
+          title:       newForm.title.trim(),
+          description: newForm.description.trim(),
+          universe_id: universeId,
+        }),
       });
-      if (!res.ok) throw new Error('Failed to save show');
-      setEditingId(null);
+      if (!res.ok) throw new Error('Failed to create show');
+      setCreating(false);
+      setNewForm({ title: '', description: '' });
       onChanged();
+      showToast('Show created');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -729,81 +740,171 @@ function ShowsTab({ shows, universeId, onChanged, showToast }) {
     }
   }
 
-  if (linkedShows.length === 0) {
-    return (
-      <div style={s.tabShell}>
-        <div style={s.emptyState}>
-          <div style={s.emptyTitle}>No shows linked to this universe yet.</div>
-          <div style={s.emptyHint}>Shows are created in the main Prime Studios dashboard and linked here.</div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={s.tabShell}>
-      {linkedShows.map(show => (
-        <div key={show.id} style={s.showCard}>
-          <div style={s.showHeader}>
-            <div>
-              <div style={s.showName}>{show.title || show.name}</div>
-              {show.era_name && <div style={s.showEra}>{show.era_name}</div>}
-            </div>
-            {editingId !== show.id && (
-              <button style={s.secondaryBtn} onClick={() => startEdit(show)}>
-                Edit
-              </button>
-            )}
-          </div>
 
-          {editingId === show.id ? (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 12 }}>
-              <Field label='SHOW DESCRIPTION'>
-                <textarea
-                  style={{ ...s.textarea, minHeight: 100 }}
-                  value={editForm.description}
-                  onChange={e => setEditForm(prev => ({ ...prev, description: e.target.value }))}
-                />
-              </Field>
-              <div style={{ display: 'flex', gap: 12 }}>
-                <Field label='ERA NAME' style={{ flex: 1 }}>
-                  <input
-                    style={s.input}
-                    value={editForm.era_name}
-                    onChange={e => setEditForm(prev => ({ ...prev, era_name: e.target.value }))}
-                    placeholder='e.g. Soft Luxury Era'
-                  />
-                </Field>
-              </div>
-              <Field label='ERA DESCRIPTION'>
-                <textarea
-                  style={{ ...s.textarea, minHeight: 70 }}
-                  value={editForm.era_description}
-                  onChange={e => setEditForm(prev => ({ ...prev, era_description: e.target.value }))}
-                  placeholder='Tone, aesthetic, emotional register for this era…'
-                />
-              </Field>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button style={s.secondaryBtn} onClick={() => setEditingId(null)}>Cancel</button>
-                <button
-                  style={{ ...s.primaryBtn, opacity: saving ? 0.6 : 1 }}
-                  onClick={() => saveShow(show.id)}
-                  disabled={saving}
-                >
-                  {saving ? 'Saving…' : 'Save Show'}
-                </button>
-              </div>
-            </div>
-          ) : (
-            show.description && (
-              <div style={s.showDesc}>{show.description}</div>
-            )
-          )}
+      {/* Header row */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={s.sectionTitle}>Shows · {linkedShows.length}</div>
+        {!creating && (
+          <button style={s.primaryBtn} onClick={() => setCreating(true)}>
+            + New Show
+          </button>
+        )}
+      </div>
+
+      {/* Create form */}
+      {creating && (
+        <div style={{ ...s.showCard, marginBottom: 16 }}>
+          <Field label='SHOW TITLE'>
+            <input
+              style={s.input}
+              value={newForm.title}
+              onChange={e => setNewForm(p => ({ ...p, title: e.target.value }))}
+              placeholder='e.g. My New Show'
+              autoFocus
+            />
+          </Field>
+          <Field label='DESCRIPTION'>
+            <textarea
+              style={{ ...s.textarea, minHeight: 60 }}
+              value={newForm.description}
+              onChange={e => setNewForm(p => ({ ...p, description: e.target.value }))}
+              placeholder='Short description…'
+            />
+          </Field>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button style={s.secondaryBtn} onClick={() => { setCreating(false); setNewForm({ title: '', description: '' }); }}>Cancel</button>
+            <button
+              style={{ ...s.primaryBtn, opacity: saving ? 0.6 : 1 }}
+              onClick={createShow}
+              disabled={saving || !newForm.title.trim()}
+            >
+              {saving ? 'Creating…' : 'Create Show'}
+            </button>
+          </div>
         </div>
-      ))}
+      )}
+
+      {/* Show cards */}
+      {linkedShows.length === 0 ? (
+        <div style={s.emptyState}>
+          <div style={s.emptyTitle}>No shows linked to this universe yet.</div>
+          <div style={s.emptyHint}>Click "+ New Show" to create one.</div>
+        </div>
+      ) : (
+        <div style={st.showGrid}>
+          {linkedShows.map(show => (
+            <ShowCard key={show.id} show={show} onSelect={setSelectedShow} />
+          ))}
+        </div>
+      )}
     </div>
   );
 }
+
+/* ── ShowCard ─────────────────────────────────────────────────────────── */
+
+function ShowCard({ show, onSelect }) {
+  const eraColor = show.era_name ? '#C9A84C' : 'rgba(26,21,16,0.15)';
+
+  return (
+    <button
+      style={st.card}
+      onClick={() => onSelect(show)}
+      type='button'
+    >
+      {/* Era stripe */}
+      <div style={{ ...st.eraStripe, background: eraColor }} />
+
+      <div style={st.cardInner}>
+        <div style={st.cardTitle}>{show.title || show.name}</div>
+        {show.era_name && <div style={st.cardEra}>{show.era_name}</div>}
+        {show.description && <div style={st.cardDesc}>{show.description}</div>}
+
+        {/* Mini stats row */}
+        <div style={st.cardStats}>
+          {show.episode_count != null && <span style={st.cardStat}>📋 {show.episode_count}</span>}
+          {show.event_count   != null && <span style={st.cardStat}>❤️ {show.event_count}</span>}
+          {show.goal_count    != null && <span style={st.cardStat}>🎯 {show.goal_count}</span>}
+        </div>
+
+        <div style={st.cardArrow}>Enter show world →</div>
+      </div>
+    </button>
+  );
+}
+
+/* ── ShowsTab styles (st namespace — avoids collision with main s) ──── */
+
+const st = {
+  showGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+    gap: 14,
+  },
+  card: {
+    background: '#fff',
+    border: '1px solid rgba(26,21,16,0.08)',
+    borderRadius: 6,
+    padding: 0,
+    cursor: 'pointer',
+    textAlign: 'left',
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    transition: 'box-shadow 0.12s, border-color 0.12s',
+    boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+  },
+  eraStripe: {
+    height: 4,
+    width: '100%',
+  },
+  cardInner: {
+    padding: '16px 18px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  cardTitle: {
+    fontFamily: "'Playfair Display', serif",
+    fontSize: 17,
+    color: '#14100c',
+  },
+  cardEra: {
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 9,
+    letterSpacing: '0.08em',
+    color: '#C9A84C',
+  },
+  cardDesc: {
+    fontFamily: 'DM Sans, sans-serif',
+    fontSize: 12,
+    color: 'rgba(26,21,16,0.5)',
+    lineHeight: 1.4,
+    display: '-webkit-box',
+    WebkitLineClamp: 2,
+    WebkitBoxOrient: 'vertical',
+    overflow: 'hidden',
+  },
+  cardStats: {
+    display: 'flex',
+    gap: 10,
+    marginTop: 4,
+  },
+  cardStat: {
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 9,
+    color: 'rgba(26,21,16,0.35)',
+  },
+  cardArrow: {
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 9,
+    letterSpacing: '0.06em',
+    color: 'rgba(26,21,16,0.25)',
+    marginTop: 6,
+  },
+};
 
 // ══════════════════════════════════════════════════════════════════════════
 //  SHARED COMPONENTS
