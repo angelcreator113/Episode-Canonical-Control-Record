@@ -15,7 +15,20 @@
  *   />
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
+/* ── Responsive hook ─────────────────────────────────────────────── */
+function useWindowWidth() {
+  const [width, setWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  );
+  useEffect(() => {
+    const onResize = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
+  return width;
+}
 
 const UNIVERSE_API    = '/api/v1/universe';
 const STORYTELLER_API = '/api/v1/storyteller';
@@ -41,6 +54,11 @@ const CANON_OPTIONS = [
 ];
 
 export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
+  const winW = useWindowWidth();
+  const isMobile = winW < 640;
+  const isTablet = winW >= 640 && winW < 1024;
+  const compact  = isMobile || isTablet;
+
   const [series, setSeries]     = useState([]);
   const [universe, setUniverse] = useState(null);
   const [form, setForm]         = useState({
@@ -135,32 +153,154 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
 
   if (!open) return null;
 
+  /* ── Responsive style overrides ────────────────────────────────── */
+  const r = {
+    overlay: {
+      ...styles.overlay,
+      padding: isMobile ? 0 : isTablet ? 16 : 24,
+    },
+    modal: {
+      ...styles.modal,
+      width: isMobile ? '100%' : isTablet ? '94%' : 620,
+      maxHeight: isMobile ? '100vh' : '90vh',
+      borderRadius: isMobile ? 0 : 4,
+    },
+    header: {
+      ...styles.header,
+      padding: isMobile ? '18px 18px 14px' : isTablet ? '20px 22px 16px' : '22px 28px 18px',
+    },
+    headerLabel: {
+      ...styles.headerLabel,
+      fontSize: isMobile ? 11 : isTablet ? 10 : 9,
+    },
+    headerTitle: {
+      ...styles.headerTitle,
+      fontSize: isMobile ? 22 : isTablet ? 22 : 22,
+    },
+    closeBtn: {
+      ...styles.closeBtn,
+      fontSize: isMobile ? 22 : 16,
+      padding: isMobile ? 8 : 4,
+    },
+    body: {
+      ...styles.body,
+      padding: isMobile ? '16px 18px' : isTablet ? '20px 22px' : '22px 28px',
+      gap: isMobile ? 20 : 18,
+    },
+    previewLabel: {
+      ...styles.previewLabel,
+      fontSize: isMobile ? 10 : isTablet ? 9 : 8,
+    },
+    previewText: {
+      ...styles.previewText,
+      fontSize: isMobile ? 14 : isTablet ? 13 : 12,
+    },
+    themeChip: {
+      ...styles.themeChip,
+      fontSize: isMobile ? 10 : isTablet ? 9 : 8,
+      padding: isMobile ? '4px 8px' : '2px 6px',
+    },
+    label: {
+      ...styles.label,
+      fontSize: isMobile ? 11 : isTablet ? 10 : 9,
+    },
+    fieldHint: {
+      ...styles.fieldHint,
+      fontSize: isMobile ? 11 : isTablet ? 9 : 8,
+    },
+    descHint: {
+      ...styles.descHint,
+      fontSize: isMobile ? 11 : isTablet ? 9 : 8,
+    },
+    input: {
+      ...styles.input,
+      fontSize: isMobile ? 16 : isTablet ? 15 : 15,
+      padding: isMobile ? '12px 14px' : '10px 12px',
+    },
+    select: {
+      ...styles.select,
+      fontSize: isMobile ? 14 : isTablet ? 12 : 10,
+      padding: isMobile ? '12px 14px' : '9px 10px',
+    },
+    textarea: {
+      ...styles.textarea,
+      fontSize: isMobile ? 15 : isTablet ? 14 : 13,
+      padding: isMobile ? '12px 14px' : '10px 12px',
+    },
+    optionRow: {
+      ...styles.optionRow,
+      flexDirection: isMobile ? 'column' : 'row',
+      gap: isMobile ? 10 : 8,
+    },
+    optionBtn: {
+      ...styles.optionBtn,
+      padding: isMobile ? '14px 14px' : '10px 10px',
+    },
+    optionBtnLabel: {
+      ...styles.optionBtnLabel,
+      fontSize: isMobile ? 13 : isTablet ? 11 : 10,
+    },
+    optionBtnNote: {
+      ...styles.optionBtnNote,
+      fontSize: isMobile ? 11 : isTablet ? 9 : 8,
+    },
+    canonBtn: {
+      ...styles.canonBtn,
+      fontSize: isMobile ? 13 : isTablet ? 11 : 10,
+      padding: isMobile ? '12px 14px' : '8px 10px',
+    },
+    canonBtnNote: {
+      fontSize: isMobile ? 10 : 8,
+      opacity: 0.7,
+      marginTop: 2,
+    },
+    error: {
+      ...styles.error,
+      fontSize: isMobile ? 12 : isTablet ? 10 : 9,
+    },
+    footer: {
+      ...styles.footer,
+      padding: isMobile ? '14px 18px' : isTablet ? '16px 22px' : '16px 28px',
+      gap: isMobile ? 12 : 10,
+    },
+    cancelBtn: {
+      ...styles.cancelBtn,
+      fontSize: isMobile ? 13 : isTablet ? 11 : 10,
+      padding: isMobile ? '12px 20px' : '9px 18px',
+    },
+    createBtn: {
+      ...styles.createBtn,
+      fontSize: isMobile ? 13 : isTablet ? 11 : 10,
+      padding: isMobile ? '12px 24px' : '9px 22px',
+    },
+  };
+
   return (
-    <div style={styles.overlay} onClick={handleBackdrop}>
-      <div style={styles.modal}>
+    <div style={r.overlay} onClick={handleBackdrop}>
+      <div style={r.modal}>
 
         {/* Header */}
-        <div style={styles.header}>
+        <div style={r.header}>
           <div>
-            <div style={styles.headerLabel}>NEW BOOK</div>
-            <div style={styles.headerTitle}>Add to Canon</div>
+            <div style={r.headerLabel}>NEW BOOK</div>
+            <div style={r.headerTitle}>Add to Canon</div>
           </div>
-          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+          <button style={r.closeBtn} onClick={onClose}>✕</button>
         </div>
 
-        <div style={styles.body}>
+        <div style={r.body}>
 
           {/* Universe north-star preview */}
           {universe && (
             <div style={styles.universePreview}>
-              <div style={styles.previewLabel}>◈ {universe.name} — North Star</div>
-              <div style={styles.previewText}>
+              <div style={r.previewLabel}>◈ {universe.name} — North Star</div>
+              <div style={r.previewText}>
                 {universe.description?.split('\n')[0]}
               </div>
               {universe.core_themes?.length > 0 && (
                 <div style={styles.themeRow}>
                   {universe.core_themes.slice(0, 5).map(t => (
-                    <span key={t} style={styles.themeChip}>{t}</span>
+                    <span key={t} style={r.themeChip}>{t}</span>
                   ))}
                 </div>
               )}
@@ -169,9 +309,9 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
 
           {/* Series */}
           <div style={styles.field}>
-            <label style={styles.label}>SERIES</label>
+            <label style={r.label}>SERIES</label>
             <select
-              style={styles.select}
+              style={r.select}
               value={form.series_id}
               onChange={e => handleSeriesChange(e.target.value)}
             >
@@ -181,7 +321,7 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
               ))}
             </select>
             {series.find(sr => sr.id === form.series_id)?.description && (
-              <div style={styles.fieldHint}>
+              <div style={r.fieldHint}>
                 {series.find(sr => sr.id === form.series_id).description}
               </div>
             )}
@@ -189,9 +329,9 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
 
           {/* Book Title */}
           <div style={styles.field}>
-            <label style={styles.label}>BOOK TITLE <span style={{ color: '#B85C38' }}>*</span></label>
+            <label style={r.label}>BOOK TITLE <span style={{ color: '#B85C38' }}>*</span></label>
             <input
-              style={styles.input}
+              style={r.input}
               type='text'
               placeholder='e.g. Before Lala'
               value={form.title}
@@ -202,31 +342,31 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
 
           {/* Primary POV */}
           <div style={styles.field}>
-            <label style={styles.label}>PRIMARY POV</label>
-            <div style={styles.optionRow}>
+            <label style={r.label}>PRIMARY POV</label>
+            <div style={r.optionRow}>
               {POV_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
                   style={{
-                    ...styles.optionBtn,
+                    ...r.optionBtn,
                     ...(form.pov === opt.value ? styles.optionBtnActive : {}),
                   }}
                   onClick={() => set('pov', opt.value)}
                   type='button'
                 >
-                  <div style={styles.optionBtnLabel}>{opt.label}</div>
-                  <div style={styles.optionBtnNote}>{opt.note}</div>
+                  <div style={r.optionBtnLabel}>{opt.label}</div>
+                  <div style={r.optionBtnNote}>{opt.note}</div>
                 </button>
               ))}
             </div>
           </div>
 
           {/* Era Name + Timeline Position side by side */}
-          <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 12 }}>
             <div style={{ ...styles.field, flex: 1 }}>
-              <label style={styles.label}>ERA NAME</label>
+              <label style={r.label}>ERA NAME</label>
               <input
-                style={styles.input}
+                style={r.input}
                 type='text'
                 placeholder='e.g. Pre-Prime Era'
                 value={form.era_name}
@@ -234,9 +374,9 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
               />
             </div>
             <div style={{ ...styles.field, flex: 1 }}>
-              <label style={styles.label}>TIMELINE POSITION</label>
+              <label style={r.label}>TIMELINE POSITION</label>
               <select
-                style={styles.select}
+                style={r.select}
                 value={form.timeline_position}
                 onChange={e => set('timeline_position', e.target.value)}
               >
@@ -249,13 +389,13 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
 
           {/* Canon Status */}
           <div style={styles.field}>
-            <label style={styles.label}>CANON STATUS</label>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <label style={r.label}>CANON STATUS</label>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 10 : 8 }}>
               {CANON_OPTIONS.map(opt => (
                 <button
                   key={opt.value}
                   style={{
-                    ...styles.canonBtn,
+                    ...r.canonBtn,
                     borderColor: form.canon_status === opt.value
                       ? opt.color
                       : 'rgba(0,0,0,0.08)',
@@ -270,7 +410,7 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
                   type='button'
                 >
                   <div style={{ fontWeight: 500 }}>{opt.label}</div>
-                  <div style={{ fontSize: 8, opacity: 0.7, marginTop: 2 }}>{opt.note}</div>
+                  <div style={r.canonBtnNote}>{opt.note}</div>
                 </button>
               ))}
             </div>
@@ -278,12 +418,12 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
 
           {/* Book Description */}
           <div style={styles.field}>
-            <label style={styles.label}>BOOK DESCRIPTION</label>
-            <div style={styles.descHint}>
+            <label style={r.label}>BOOK DESCRIPTION</label>
+            <div style={r.descHint}>
               Emotional journey · character arc · timeline position. Not mechanics.
             </div>
             <textarea
-              style={styles.textarea}
+              style={r.textarea}
               placeholder='Before the world. Before the panels. Before the first episode. This is the story of JustAWoman — her failed ventures, her identity crisis, and the imagination that became the foundation of everything.'
               value={form.description}
               onChange={e => set('description', e.target.value)}
@@ -292,18 +432,18 @@ export default function NewBookModal({ open, onClose, showId, onBookCreated }) {
           </div>
 
           {/* Error */}
-          {error && <div style={styles.error}>{error}</div>}
+          {error && <div style={r.error}>{error}</div>}
 
         </div>
 
         {/* Footer */}
-        <div style={styles.footer}>
-          <button style={styles.cancelBtn} onClick={onClose} type='button'>
+        <div style={r.footer}>
+          <button style={r.cancelBtn} onClick={onClose} type='button'>
             Cancel
           </button>
           <button
             style={{
-              ...styles.createBtn,
+              ...r.createBtn,
               opacity: saving ? 0.6 : 1,
               cursor: saving ? 'not-allowed' : 'pointer',
             }}

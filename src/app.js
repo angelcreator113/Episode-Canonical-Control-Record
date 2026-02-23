@@ -826,6 +826,15 @@ try {
   console.error('✗ Failed to load Continuity Engine routes:', e.message);
 }
 
+// Character Relationship Map routes
+try {
+  const relationshipRoutes = require('./routes/relationships');
+  app.use('/api/v1/relationships', relationshipRoutes);
+  console.log('✓ Relationship Map routes loaded at /api/v1/relationships');
+} catch (e) {
+  console.error('✗ Failed to load Relationship Map routes:', e.message);
+}
+
 // Lala Scene Detection routes
 try {
   const lalaSceneRoutes = require('./routes/lala-scene-detection');

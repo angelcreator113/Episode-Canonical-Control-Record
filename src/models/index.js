@@ -74,6 +74,7 @@ let Universe, BookSeries; // Universe + Book Series models
 let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
 let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter; // Continuity Engine models
 let LalaEmergenceScene; // Lala Emergence Scene Detection model
+let CharacterRelationship; // Character Relationship Map model
 
 try {
   // Core models
@@ -218,6 +219,9 @@ try {
   // Lala Emergence Scene Detection model
   LalaEmergenceScene = require('./LalaEmergenceScene')(sequelize);
 
+  // Character Relationship Map model
+  CharacterRelationship = require('./CharacterRelationship')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -291,6 +295,7 @@ const requiredModels = {
   ContinuityBeat,
   ContinuityBeatCharacter,
   LalaEmergenceScene,
+  CharacterRelationship,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1460,3 +1465,4 @@ module.exports.ContinuityCharacter = ContinuityCharacter;
 module.exports.ContinuityBeat = ContinuityBeat;
 module.exports.ContinuityBeatCharacter = ContinuityBeatCharacter;
 module.exports.LalaEmergenceScene = LalaEmergenceScene;
+module.exports.CharacterRelationship = CharacterRelationship;
