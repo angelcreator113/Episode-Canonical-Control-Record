@@ -111,7 +111,7 @@ function StorytellerPage() {
     try {
       setLoading(true);
       const data = await api('/books');
-      setBooks(data || []);
+      setBooks(Array.isArray(data) ? data : (data?.books || []));
     } catch (e) {
       toast.add('Failed to load archives', 'error');
     } finally {
@@ -123,7 +123,7 @@ function StorytellerPage() {
     try {
       setLoading(true);
       const data = await api(`/books/${id}`);
-      setActiveBook(data);
+      setActiveBook(data?.book || data);
     } catch (e) {
       toast.add('Failed to open archive', 'error');
     } finally {
@@ -183,6 +183,7 @@ function StorytellerPage() {
    ═══════════════════════════════════════ */
 
 function BookList({ books, onOpen, onDelete, onNew }) {
+  const list = Array.isArray(books) ? books : [];
   return (
     <div className="st-book-list">
       <div className="st-book-list-header">
@@ -190,26 +191,29 @@ function BookList({ books, onOpen, onDelete, onNew }) {
         <p className="st-book-list-subtitle">Your narrative canon — select an archive to open.</p>
       </div>
       <div className="st-book-grid">
-        {books.map(book => {
-          const state = archiveState(book);
-          const chapters = book.chapters || [];
-          const lines = chapters.flatMap(ch => ch.lines || []);
-          const words = lines.reduce((s, l) => s + (l.text || '').split(/\s+/).filter(Boolean).length, 0);
-          const approved = lines.filter(l => l.status === 'approved' || l.status === 'edited').length;
-          const pct = lines.length ? Math.round((approved / lines.length) * 100) : 0;
-          const pending = lines.filter(l => l.status === 'pending').length;
+        {list.map(book => {
+          // The list endpoint provides pre-computed counts (chapters stripped)
+          const chapterCount = book.chapter_count ?? (book.chapters || []).length;
+          const lineCount = book.line_count ?? 0;
+          const pending = book.pending_count ?? 0;
+          const approved = (book.approved_count ?? 0) + (book.edited_count ?? 0);
+          const pct = lineCount ? Math.round((approved / lineCount) * 100) : 0;
+          const tone = pending === 0 && lineCount === 0 ? 'clean'
+            : pending === 0 ? 'warm' : 'active';
+          const label = lineCount === 0 ? 'Empty'
+            : pending === 0 ? 'Clean' : 'In Progress';
           return (
             <div key={book.id} className="st-book-card" onClick={() => onOpen(book.id)}>
               <div className="st-card-top">
-                <span className={`st-card-status st-tone-${state.tone}`}>{state.label}</span>
+                <span className={`st-card-status st-tone-${tone}`}>{label}</span>
                 <span className="st-card-age">{timeAgo(book.updated_at)}</span>
               </div>
               <div className="st-card-title">{book.title}</div>
               {book.subtitle && <p className="st-card-sub">{book.subtitle}</p>}
               <div className="st-card-meta">
-                <span>{chapters.length} chapters</span>
+                <span>{chapterCount} chapters</span>
                 <span className="st-meta-sep">·</span>
-                <span>{words.toLocaleString()} words</span>
+                <span>{lineCount} lines</span>
                 {pending > 0 && (
                   <>
                     <span className="st-meta-sep">·</span>
@@ -220,7 +224,7 @@ function BookList({ books, onOpen, onDelete, onNew }) {
               <div className="st-card-progress">
                 <div className="st-card-progress-bar" style={{ width: `${pct}%` }} />
               </div>
-              {book.insight && <p className="st-card-insight">{book.insight}</p>}
+              {book.recent_insight && <p className="st-card-insight">{book.recent_insight}</p>}
               <div className="st-card-foot">
                 <span className="st-card-open">Open archive →</span>
                 <button
