@@ -964,7 +964,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
           ) : (
             <>
               {(c.description || c.subtitle) && (
-                <p style={{ fontFamily: 'var(--serif)', fontSize: 15, lineHeight: 1.6, color: 'var(--ink)', marginBottom: 20, fontStyle: 'italic' }}>
+                <p style={{ fontFamily: 'var(--serif)', fontSize: 15, lineHeight: 1.6, color: 'var(--ink)', marginBottom: 20, fontStyle: 'italic', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                   {c.description || c.subtitle}
                 </p>
               )}

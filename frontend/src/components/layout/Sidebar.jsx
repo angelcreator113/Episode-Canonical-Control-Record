@@ -23,9 +23,9 @@ function Sidebar({ isOpen, onClose }) {
     loadShows();
   }, []);
   
-  // Auto-expand StoryTeller group when on its sub-routes
+  // Auto-expand Universe/StoryTeller group when on its sub-routes
   useEffect(() => {
-    if (location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships')) {
+    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships')) {
       setStoryExpanded(true);
     }
   }, [location.pathname]);
@@ -122,23 +122,20 @@ function Sidebar({ isOpen, onClose }) {
         {/* Home */}
         <NavItem icon="🏠" label="Home" path="/" />
         
-        {/* Universe */}
-        <NavItem icon="◈" label="Universe" path="/universe" />
-        
-        {/* StoryTeller group */}
+        {/* Universe group (includes StoryTeller tools) */}
         <div className="nav-group">
           <button
-            className={`nav-item ${isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') ? 'active' : ''}`}
+            className={`nav-item ${isActive('/universe') || isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') ? 'active' : ''}`}
             onClick={() => {
               setStoryExpanded(!storyExpanded);
               if (!storyExpanded) {
-                navigate('/storyteller');
+                navigate('/universe');
                 if (onClose) onClose();
               }
             }}
           >
-            <span className="nav-icon">📖</span>
-            <span className="nav-label">StoryTeller</span>
+            <span className="nav-icon">◈</span>
+            <span className="nav-label">Universe</span>
             <span className={`expand-icon ${storyExpanded ? 'expanded' : ''}`}>
               ▼
             </span>
@@ -146,6 +143,13 @@ function Sidebar({ isOpen, onClose }) {
           
           {storyExpanded && (
             <div className="nav-subgroup">
+              <button
+                className={`nav-subitem ${isActive('/universe') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/universe')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Overview</span>
+              </button>
               <button
                 className={`nav-subitem ${isActive('/storyteller') ? 'active' : ''}`}
                 onClick={() => handleNavigate('/storyteller')}

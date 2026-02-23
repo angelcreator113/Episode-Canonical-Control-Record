@@ -30,6 +30,7 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import api from '../services/api';
 import useOrientation from '../hooks/useOrientation';
+import ScriptIntelligencePanel from './ScriptIntelligencePanel';
 import './ScriptEditor.css';
 
 // ─── BEAT TYPES ───
@@ -233,6 +234,7 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [error, setError] = useState(null);
   const [showAnalysis, setShowAnalysis] = useState(false);
+  const [intelligenceOpen, setIntelligenceOpen] = useState(true);
 
   // Responsive
   const { isMobile, width: viewportWidth } = useOrientation();
@@ -544,6 +546,39 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
 
   return (
     <div className="se-root">
+      {/* ─── EPISODE IDENTITY BAR ─── */}
+      <div className="se-identity-bar">
+        <div className="se-identity-left">
+          <span className="se-identity-label">EPISODE</span>
+          <h2 className="se-identity-title">{episode?.title || 'Untitled Episode'}</h2>
+          <div className="se-identity-meta">
+            <span className="se-identity-tag">S{episode?.season_number || 1} · E{episode?.episode_number || '—'}</span>
+            <span className={`se-status-badge ${episodeStatus}`}>{episodeStatus}</span>
+          </div>
+        </div>
+        <div className="se-identity-stats">
+          <div className="se-identity-stat">
+            <span className="se-identity-stat-val">{beatCount}</span>
+            <span className="se-identity-stat-lbl">Beats</span>
+          </div>
+          <div className="se-identity-stat">
+            <span className="se-identity-stat-val">{wordCount}</span>
+            <span className="se-identity-stat-lbl">Words</span>
+          </div>
+          <div className="se-identity-stat">
+            <span className="se-identity-stat-val">~{estDuration}s</span>
+            <span className="se-identity-stat-lbl">Est.</span>
+          </div>
+          <div className="se-identity-stat">
+            <span className="se-identity-stat-val">{Object.keys(
+              (scriptContent.match(/^(Lala|Prime|Guest|Narrator):/gim) || [])
+                .reduce((acc, m) => { acc[m.replace(':', '')] = true; return acc; }, {})
+            ).length}</span>
+            <span className="se-identity-stat-lbl">Voices</span>
+          </div>
+        </div>
+      </div>
+
       {/* ─── TOP TOOLBAR ─── */}
       <div className="se-toolbar">
         <div className="se-toolbar-left">
@@ -597,6 +632,13 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
           <div className="se-toolbar-divider" />
           <button className="se-btn-primary" onClick={handleAnalyze} disabled={isAnalyzing}>
             {isAnalyzing ? '⏳ Analyzing…' : '🔍 Analyze'}
+          </button>
+          <button
+            className="se-btn-subtle"
+            onClick={() => setIntelligenceOpen(v => !v)}
+            title={intelligenceOpen ? 'Hide Intelligence Panel' : 'Show Intelligence Panel'}
+          >
+            {intelligenceOpen ? '← Writing' : 'Structure →'}
           </button>
           <div style={{ position: 'relative' }}>
             <button className="se-btn-overflow" onClick={(e) => { e.stopPropagation(); setOverflowOpen(!overflowOpen); }} title="More tools">⋯</button>
@@ -894,6 +936,15 @@ function ScriptEditor({ episodeId, episode, onScriptSaved }) {
             </div>
           </div>
         </div>
+
+        {/* ─── RIGHT: INTELLIGENCE PANEL ─── */}
+        <ScriptIntelligencePanel
+          parseResult={analysis}
+          scriptContent={scriptContent}
+          episode={episode}
+          isOpen={intelligenceOpen}
+          onClose={() => setIntelligenceOpen(false)}
+        />
 
         {/* ─── RIGHT: ANALYSIS PANEL ─── */}
         {showAnalysis && analysis && (

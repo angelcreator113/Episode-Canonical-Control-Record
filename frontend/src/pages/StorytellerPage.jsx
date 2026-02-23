@@ -23,6 +23,7 @@ import ImportDraftModal from './ImportDraftModal';
 import ChapterDraftGenerator from './ChapterDraftGenerator';
 import LalaSceneDetection from '../components/LalaSceneDetection';
 import ExportPanel from '../components/ExportPanel';
+import ScriptBridgePanel from '../components/ScriptBridgePanel';
 import './StorytellerPage.css';
 
 const API = '/api/v1/storyteller';
@@ -711,6 +712,12 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
               <span className="st-workspace-item-icon">✦</span> Lala Detection
             </button>
             <button
+              className={`st-workspace-item${activeView === 'script' ? ' active' : ''}`}
+              onClick={() => openWorkspace('script')}
+            >
+              <span className="st-workspace-item-icon">⟶</span> Script
+            </button>
+            <button
               className={`st-workspace-item${activeView === 'export' ? ' active' : ''}`}
               onClick={() => openWorkspace('export')}
             >
@@ -718,7 +725,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
             </button>
           </div>
         </>
-      )}
+      )}}
 
       {/* ── Editor Body (Nav + Content) ── */}
       <div className="st-editor-body">
@@ -1125,7 +1132,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
 
           /* ── Workspace Panels ── */
           ) : activeView === 'toc' ? (
-            <TOCPanel bookId={book.id} chapters={chapters} />
+            <TOCPanel book={book} chapters={chapters} onChapterClick={(id) => setSelectedChapter(chapters.find(c => c.id === id))} />
           ) : activeView === 'memory' ? (
             <MemoryBankView bookId={book.id} />
           ) : activeView === 'scenes' ? (
@@ -1134,6 +1141,14 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
             <LalaSceneDetection bookId={book.id} />
           ) : activeView === 'export' ? (
             <ExportPanel bookId={book.id} />
+          ) : activeView === 'script' ? (
+            <ScriptBridgePanel
+              bookId={book.id}
+              bookTitle={book.title}
+              chapterId={activeChapter?.id}
+              chapterTitle={activeChapter?.title}
+              showId={book.show_id}
+            />
           ) : null}
         </div>
       </div>
