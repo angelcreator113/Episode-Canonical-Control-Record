@@ -6,14 +6,16 @@ const API = import.meta.env.VITE_API_URL || 'http://localhost:3002/api/v1';
 /* ── colour palettes per layer ── */
 const PALETTE = {
   real_world: {
-    bg: '#1a1512', node: '#d4a56a', nodeBorder: '#8b6914',
-    edge: '#c49a6c', text: '#e8d5b7', accent: '#f0c674',
-    panelBg: '#2a2118', panelBorder: '#5a4628',
+    bg: '#faf8f5', node: '#8b5e34', nodeBorder: '#c49a6c',
+    edge: '#a07850', text: '#3d2b1f', accent: '#b8860b',
+    panelBg: '#ffffff', panelBorder: '#e0d5c7',
+    inputBg: 'rgba(0,0,0,.04)',
   },
   lalaverse: {
-    bg: '#0f1029', node: '#7b68ee', nodeBorder: '#4b0082',
-    edge: '#9370db', text: '#c9b8ff', accent: '#ffd700',
-    panelBg: '#1a1040', panelBorder: '#4b3d8f',
+    bg: '#f4f2fa', node: '#5b4bb5', nodeBorder: '#9a8ddb',
+    edge: '#7b68ee', text: '#2d1f5e', accent: '#7c3aed',
+    panelBg: '#ffffff', panelBorder: '#d5cff0',
+    inputBg: 'rgba(0,0,0,.04)',
   },
 };
 
@@ -112,7 +114,7 @@ export default function RelationshipMap() {
       </div>
 
       {/* canvas */}
-      <svg ref={svgRef} style={{ flex:1 }} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onClick={() => setSelected(null)}>
+      <svg ref={svgRef} style={{ flex:1, background: P.bg }} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onClick={() => setSelected(null)}>
         <defs>
           <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d={`M0,0 L8,3 L0,6`} fill={P.edge} /></marker>
         </defs>
@@ -145,7 +147,7 @@ export default function RelationshipMap() {
 
       {/* detail panel */}
       {selected?.type === 'edge' && (
-        <div style={{ position:'absolute', right:16, top:60, width:280, background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:8, padding:16, zIndex:10 }}>
+        <div style={{ position:'absolute', right:16, top:60, width:280, background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:8, padding:16, zIndex:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)' }}>
           <h4 style={{ margin:'0 0 8px', color: P.accent }}>{selected.data.source_name} → {selected.data.target_name}</h4>
           <p style={{ margin:4, fontSize:13 }}><b>Type:</b> {selected.data.relationship_type}</p>
           <p style={{ margin:4, fontSize:13 }}><b>Label:</b> {selected.data.label}</p>
@@ -161,7 +163,7 @@ export default function RelationshipMap() {
       )}
 
       {selected?.type === 'node' && (
-        <div style={{ position:'absolute', right:16, top:60, width:240, background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:8, padding:16, zIndex:10 }}>
+        <div style={{ position:'absolute', right:16, top:60, width:240, background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:8, padding:16, zIndex:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)' }}>
           <h4 style={{ margin:'0 0 8px', color: P.accent }}>{selected.data.name}</h4>
           <p style={{ fontSize:13 }}>Connections: {rels.filter(r => r.source_name === selected.data.name || r.target_name === selected.data.name).length}</p>
         </div>
@@ -169,20 +171,20 @@ export default function RelationshipMap() {
 
       {/* add modal */}
       {adding && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.6)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:20 }}
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.3)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:20 }}
           onClick={() => setAdding(false)}>
-          <div style={{ background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:12, padding:24, width:360 }} onClick={e => e.stopPropagation()}>
+          <div style={{ background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:12, padding:24, width:360, boxShadow:'0 8px 32px rgba(0,0,0,.12)' }} onClick={e => e.stopPropagation()}>
             <h3 style={{ margin:'0 0 16px', color: P.accent }}>New Relationship ({layer === 'real_world' ? 'Real World' : 'LalaVerse'})</h3>
             {['source_name','target_name','relationship_type','direction','label','subtext','status','intensity'].map(f => (
               <input key={f} placeholder={f} value={form[f]||''} onChange={e => setForm({...form, [f]: e.target.value})}
-                style={{ display:'block', width:'100%', marginBottom:8, padding:'6px 10px', background:'rgba(255,255,255,.06)', border:`1px solid ${P.panelBorder}`, borderRadius:4, color: P.text, boxSizing:'border-box' }} />
+                style={{ display:'block', width:'100%', marginBottom:8, padding:'6px 10px', background: P.inputBg, border:`1px solid ${P.panelBorder}`, borderRadius:4, color: P.text, boxSizing:'border-box' }} />
             ))}
             {layer === 'lalaverse' && ['source_knows','target_knows','reader_knows'].map(f => (
               <textarea key={f} placeholder={f} value={form[f]||''} onChange={e => setForm({...form, [f]: e.target.value})} rows={2}
-                style={{ display:'block', width:'100%', marginBottom:8, padding:'6px 10px', background:'rgba(255,255,255,.06)', border:`1px solid ${P.panelBorder}`, borderRadius:4, color: P.text, boxSizing:'border-box', resize:'vertical' }} />
+                style={{ display:'block', width:'100%', marginBottom:8, padding:'6px 10px', background: P.inputBg, border:`1px solid ${P.panelBorder}`, borderRadius:4, color: P.text, boxSizing:'border-box', resize:'vertical' }} />
             ))}
             <div style={{ display:'flex', gap:8, marginTop:12 }}>
-              <button onClick={submit} style={{ flex:1, padding:'8px 0', borderRadius:6, border:'none', background: P.accent, color:'#000', fontWeight:600, cursor:'pointer' }}>Create</button>
+              <button onClick={submit} style={{ flex:1, padding:'8px 0', borderRadius:6, border:'none', background: P.accent, color:'#fff', fontWeight:600, cursor:'pointer' }}>Create</button>
               <button onClick={() => setAdding(false)} style={{ flex:1, padding:'8px 0', borderRadius:6, border:`1px solid ${P.panelBorder}`, background:'transparent', color: P.text, cursor:'pointer' }}>Cancel</button>
             </div>
           </div>
