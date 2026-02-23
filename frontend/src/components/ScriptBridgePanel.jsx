@@ -155,7 +155,7 @@ export default function ScriptBridgePanel({ bookId, bookTitle, chapterId, chapte
             style={{
               ...s.tab,
               borderBottom: tab === t.key ? `2px solid ${GOLD}` : '2px solid transparent',
-              color: tab === t.key ? GOLD : 'rgba(245,240,232,0.35)',
+              color: tab === t.key ? GOLD : 'rgba(28,25,23,0.35)',
               opacity: t.disabled ? 0.3 : 1,
             }}
             onClick={() => !t.disabled && setTab(t.key)}
@@ -170,6 +170,36 @@ export default function ScriptBridgePanel({ bookId, bookTitle, chapterId, chapte
       {/* Config form */}
       {tab === 'form' && (
         <div style={s.form}>
+
+          {/* Guidance intro */}
+          <div style={{
+            background: 'rgba(201,168,76,0.06)',
+            border: '1px solid rgba(201,168,76,0.15)',
+            borderRadius: 6,
+            padding: '12px 14px',
+            marginBottom: 18,
+          }}>
+            <div style={{
+              fontFamily: "'Lora', serif",
+              fontSize: 14,
+              fontWeight: 600,
+              color: '#96790F',
+              marginBottom: 6,
+            }}>
+              Book → Episode Script
+            </div>
+            <div style={{
+              fontFamily: "'DM Sans', sans-serif",
+              fontSize: 13,
+              color: 'rgba(28,25,23,0.6)',
+              lineHeight: 1.55,
+            }}>
+              Configure the episode scene below, then hit <strong>Generate Script</strong>.
+              The bridge pulls approved lines from the current chapter and generates
+              a two-character script — <em>JustAWomanInHerPrime</em> (adapted from book)
+              and <em>Lala</em> (AI-driven by her stats).
+            </div>
+          </div>
 
           <Field label='Event name'>
             <input
@@ -377,7 +407,7 @@ export default function ScriptBridgePanel({ bookId, bookTitle, chapterId, chapte
                 <div key={i} style={s.beatRow}>
                   <div style={{
                     ...s.beatChar,
-                    color: beat.hasJLAW && beat.hasLala ? 'rgba(203,213,225,0.6)'
+                    color: beat.hasJLAW && beat.hasLala ? 'rgba(28,25,23,0.4)'
                       : beat.hasJLAW ? GOLD
                       : '#E879F9',
                   }}>
@@ -414,13 +444,13 @@ function PipelineTag({ color, label }) {
   return (
     <div style={{
       fontFamily:    'DM Mono, monospace',
-      fontSize:      7,
+      fontSize:      11,
       letterSpacing: '0.1em',
       color,
-      background:    `${color}12`,
-      border:        `1px solid ${color}25`,
-      borderRadius:  2,
-      padding:       '2px 6px',
+      background:    `${color}14`,
+      border:        `1px solid ${color}30`,
+      borderRadius:  4,
+      padding:       '3px 8px',
     }}>
       {label}
     </div>
@@ -429,13 +459,13 @@ function PipelineTag({ color, label }) {
 
 function Field({ label, children }) {
   return (
-    <div style={{ marginBottom: 10 }}>
+    <div style={{ marginBottom: 14 }}>
       <div style={{
         fontFamily:    'DM Mono, monospace',
-        fontSize:      7,
-        letterSpacing: '0.18em',
-        color:         'rgba(245,240,232,0.3)',
-        marginBottom:  5,
+        fontSize:      11,
+        letterSpacing: '0.14em',
+        color:         'rgba(28,25,23,0.45)',
+        marginBottom:  6,
       }}>
         {label.toUpperCase()}
       </div>
@@ -446,12 +476,12 @@ function Field({ label, children }) {
 
 function StatSlider({ label, value, max = 100, onChange, color }) {
   return (
-    <div style={{ marginBottom: 8 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 7, color: 'rgba(245,240,232,0.3)', letterSpacing: '0.1em' }}>
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 4 }}>
+        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: 'rgba(28,25,23,0.45)', letterSpacing: '0.1em' }}>
           {label.toUpperCase()}
         </span>
-        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 8, color }}>
+        <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 12, color }}>
           {value}
         </span>
       </div>
@@ -467,11 +497,11 @@ function StatSlider({ label, value, max = 100, onChange, color }) {
 function MetaRow({ label, value }) {
   if (!value) return null;
   return (
-    <div style={{ display: 'flex', gap: 8, padding: '4px 0', borderBottom: '1px solid rgba(245,240,232,0.04)' }}>
-      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 7, letterSpacing: '0.14em', color: 'rgba(245,240,232,0.25)', width: 70, flexShrink: 0 }}>
+    <div style={{ display: 'flex', gap: 10, padding: '5px 0', borderBottom: '1px solid rgba(28,25,23,0.06)' }}>
+      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.12em', color: 'rgba(28,25,23,0.4)', width: 72, flexShrink: 0 }}>
         {label.toUpperCase()}
       </div>
-      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 9, color: 'rgba(245,240,232,0.6)' }}>
+      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 13, color: 'rgba(28,25,23,0.7)' }}>
         {value}
       </div>
     </div>
@@ -491,7 +521,7 @@ function getLalaTonePreview(form) {
 
 // ── Styles ─────────────────────────────────────────────────────────────────
 
-const GOLD_DIM = 'rgba(201,168,76,0.7)';
+const GOLD_DIM = 'rgba(184,150,63,0.75)';
 
 const s = {
   shell: {
@@ -501,41 +531,41 @@ const s = {
     position:      'relative',
   },
   header: {
-    padding:      '14px 16px 10px',
-    borderBottom: '1px solid rgba(201,168,76,0.1)',
+    padding:      '16px 18px 12px',
+    borderBottom: '1px solid rgba(201,168,76,0.15)',
   },
   headerTop: {
     display:       'flex',
     justifyContent: 'space-between',
     alignItems:    'center',
-    marginBottom:  5,
+    marginBottom:  6,
   },
   headerLabel: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      8,
+    fontSize:      12,
     letterSpacing: '0.22em',
     color:         GOLD,
   },
   headerPipeline: {
     display:    'flex',
     alignItems: 'center',
-    gap:        5,
+    gap:        6,
   },
   pipeArrow: {
     fontFamily: 'DM Mono, monospace',
-    fontSize:   9,
-    color:      'rgba(245,240,232,0.2)',
+    fontSize:   13,
+    color:      'rgba(28,25,23,0.2)',
   },
   chapterRef: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      8,
-    color:         'rgba(245,240,232,0.2)',
+    fontSize:      12,
+    color:         'rgba(28,25,23,0.35)',
     fontStyle:     'italic',
     letterSpacing: '0.04em',
   },
   tabs: {
     display:      'flex',
-    borderBottom: '1px solid rgba(245,240,232,0.06)',
+    borderBottom: '1px solid rgba(28,25,23,0.08)',
   },
   tab: {
     flex:          1,
@@ -543,51 +573,51 @@ const s = {
     border:        'none',
     borderBottom:  '2px solid transparent',
     fontFamily:    'DM Mono, monospace',
-    fontSize:      8,
-    letterSpacing: '0.12em',
-    padding:       '9px 0',
+    fontSize:      12,
+    letterSpacing: '0.1em',
+    padding:       '11px 0',
     cursor:        'pointer',
     transition:    'color 0.12s',
   },
   form: {
-    padding: '14px 16px',
+    padding: '16px 18px',
     overflowY: 'auto',
   },
   input: {
     width:       '100%',
-    background:  'rgba(245,240,232,0.04)',
-    border:      '1px solid rgba(245,240,232,0.1)',
-    borderRadius: 3,
+    background:  'rgba(28,25,23,0.03)',
+    border:      '1px solid rgba(28,25,23,0.12)',
+    borderRadius: 4,
     fontFamily:  'DM Mono, monospace',
-    fontSize:    10,
-    color:       'rgba(245,240,232,0.75)',
-    padding:     '6px 9px',
+    fontSize:    13,
+    color:       'rgba(28,25,23,0.8)',
+    padding:     '8px 10px',
     boxSizing:   'border-box',
     outline:     'none',
   },
   row: {
     display: 'flex',
-    gap:     10,
+    gap:     12,
   },
   divider: {
     display:      'flex',
     alignItems:   'center',
-    gap:          8,
-    margin:       '14px 0 10px',
-    borderTop:    '1px solid rgba(245,240,232,0.06)',
-    paddingTop:   12,
+    gap:          10,
+    margin:       '16px 0 12px',
+    borderTop:    '1px solid rgba(28,25,23,0.08)',
+    paddingTop:   14,
   },
   dividerLabel: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      7,
-    letterSpacing: '0.2em',
-    color:         'rgba(245,240,232,0.2)',
+    fontSize:      11,
+    letterSpacing: '0.18em',
+    color:         'rgba(28,25,23,0.3)',
   },
   dividerSub: {
     fontFamily: 'DM Mono, monospace',
-    fontSize:   7,
-    color:      'rgba(245,240,232,0.12)',
-    letterSpacing: '0.06em',
+    fontSize:   11,
+    color:      'rgba(28,25,23,0.25)',
+    letterSpacing: '0.04em',
   },
   statsGrid: {
     display:       'flex',
@@ -595,50 +625,51 @@ const s = {
     gap:           0,
   },
   tonePreview: {
-    background:   'rgba(201,168,76,0.05)',
-    border:       '1px solid rgba(201,168,76,0.12)',
-    borderRadius: 3,
-    padding:      '8px 10px',
-    marginBottom: 12,
+    background:   'rgba(201,168,76,0.06)',
+    border:       '1px solid rgba(201,168,76,0.15)',
+    borderRadius: 5,
+    padding:      '10px 12px',
+    marginBottom: 14,
   },
   toneLabel: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      7,
-    letterSpacing: '0.16em',
+    fontSize:      11,
+    letterSpacing: '0.14em',
     color:         GOLD_DIM,
-    marginBottom:  4,
+    marginBottom:  5,
   },
   toneText: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize:   9,
-    color:      'rgba(245,240,232,0.5)',
+    fontFamily: "'Lora', serif",
+    fontSize:   13,
+    color:      'rgba(28,25,23,0.55)',
     fontStyle:  'italic',
-    lineHeight: 1.5,
+    lineHeight: 1.6,
   },
   errorBox: {
-    background:   'rgba(239,68,68,0.08)',
-    border:       '1px solid rgba(239,68,68,0.2)',
-    borderRadius: 3,
-    padding:      '8px 10px',
+    background:   'rgba(220,38,38,0.06)',
+    border:       '1px solid rgba(220,38,38,0.2)',
+    borderRadius: 4,
+    padding:      '10px 12px',
     fontFamily:   'DM Mono, monospace',
-    fontSize:     9,
-    color:        '#FCA5A5',
-    marginBottom: 10,
+    fontSize:     13,
+    color:        '#DC2626',
+    marginBottom: 12,
   },
   generateBtn: {
     width:         '100%',
-    background:    'rgba(201,168,76,0.1)',
-    border:        '1px solid rgba(201,168,76,0.3)',
-    borderRadius:  3,
+    background:    'rgba(201,168,76,0.12)',
+    border:        '1px solid rgba(201,168,76,0.35)',
+    borderRadius:  5,
     fontFamily:    'DM Mono, monospace',
-    fontSize:      10,
-    letterSpacing: '0.14em',
-    color:         GOLD,
-    padding:       '11px 0',
+    fontSize:      13,
+    letterSpacing: '0.12em',
+    color:         '#96790F',
+    padding:       '12px 0',
     display:       'flex',
     alignItems:    'center',
     justifyContent: 'center',
     gap:           8,
+    cursor:        'pointer',
     transition:    'opacity 0.12s',
   },
   spinner: {
@@ -646,10 +677,10 @@ const s = {
     animation: 'spin 1s linear infinite',
   },
   note: {
-    marginTop:  8,
+    marginTop:  10,
     fontFamily: 'DM Mono, monospace',
-    fontSize:   7,
-    color:      'rgba(245,240,232,0.2)',
+    fontSize:   11,
+    color:      'rgba(28,25,23,0.3)',
     letterSpacing: '0.04em',
     textAlign:  'center',
   },
@@ -663,134 +694,134 @@ const s = {
     display:        'flex',
     justifyContent: 'space-between',
     alignItems:     'center',
-    padding:        '8px 16px',
-    borderBottom:   '1px solid rgba(245,240,232,0.06)',
+    padding:        '10px 18px',
+    borderBottom:   '1px solid rgba(28,25,23,0.08)',
   },
   scriptMeta: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      8,
-    color:         'rgba(245,240,232,0.25)',
+    fontSize:      12,
+    color:         'rgba(28,25,23,0.4)',
     letterSpacing: '0.06em',
   },
   copyBtn: {
     background:    'none',
-    border:        '1px solid rgba(201,168,76,0.2)',
-    borderRadius:  2,
+    border:        '1px solid rgba(201,168,76,0.25)',
+    borderRadius:  4,
     fontFamily:    'DM Mono, monospace',
-    fontSize:      8,
-    letterSpacing: '0.1em',
+    fontSize:      12,
+    letterSpacing: '0.08em',
     color:         GOLD_DIM,
-    padding:       '4px 10px',
+    padding:       '5px 12px',
     cursor:        'pointer',
   },
   characterPipeline: {
     display:    'flex',
-    gap:        12,
-    padding:    '8px 16px',
-    borderBottom: '1px solid rgba(245,240,232,0.04)',
+    gap:        14,
+    padding:    '10px 18px',
+    borderBottom: '1px solid rgba(28,25,23,0.06)',
   },
   pipelineItem: {
     display:    'flex',
     alignItems: 'center',
-    gap:        7,
+    gap:        8,
   },
   pipelineDot: {
-    width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
+    width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
   },
   pipelineCharName: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      8,
+    fontSize:      12,
     fontWeight:    600,
     letterSpacing: '0.04em',
   },
   pipelineSource: {
     fontFamily: 'DM Mono, monospace',
-    fontSize:   7,
-    color:      'rgba(245,240,232,0.2)',
+    fontSize:   11,
+    color:      'rgba(28,25,23,0.35)',
     letterSpacing: '0.04em',
   },
   scriptText: {
     fontFamily: 'DM Mono, monospace',
-    fontSize:   9,
-    color:      'rgba(245,240,232,0.7)',
+    fontSize:   13,
+    color:      'rgba(28,25,23,0.75)',
     lineHeight: 1.7,
-    padding:    '12px 16px',
+    padding:    '14px 18px',
     overflowY:  'auto',
     whiteSpace: 'pre-wrap',
     flex:       1,
     margin:     0,
   },
   regenerateBtn: {
-    margin:        '8px 16px',
+    margin:        '10px 18px',
     background:    'none',
-    border:        '1px solid rgba(245,240,232,0.1)',
-    borderRadius:  3,
+    border:        '1px solid rgba(28,25,23,0.12)',
+    borderRadius:  4,
     fontFamily:    'DM Mono, monospace',
-    fontSize:      8,
-    letterSpacing: '0.1em',
-    color:         'rgba(245,240,232,0.3)',
-    padding:       '7px 0',
+    fontSize:      12,
+    letterSpacing: '0.08em',
+    color:         'rgba(28,25,23,0.4)',
+    padding:       '9px 0',
     cursor:        'pointer',
-    width:         'calc(100% - 32px)',
+    width:         'calc(100% - 36px)',
   },
   breakdown: {
-    padding:   '12px 16px',
+    padding:   '14px 18px',
     overflowY: 'auto',
   },
   breakdownSection: {
-    marginBottom: 20,
+    marginBottom: 22,
   },
   breakdownLabel: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      7,
-    letterSpacing: '0.2em',
-    color:         'rgba(245,240,232,0.2)',
-    marginBottom:  8,
+    fontSize:      11,
+    letterSpacing: '0.18em',
+    color:         'rgba(28,25,23,0.3)',
+    marginBottom:  10,
   },
   sourceLine: {
     display:      'flex',
-    gap:          8,
-    padding:      '6px 0',
-    borderBottom: '1px solid rgba(245,240,232,0.04)',
+    gap:          10,
+    padding:      '7px 0',
+    borderBottom: '1px solid rgba(28,25,23,0.06)',
   },
   sourceLineNum: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      8,
+    fontSize:      12,
     color:         GOLD_DIM,
     flexShrink:    0,
-    width:         18,
+    width:         20,
   },
   sourceLineText: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize:   11,
+    fontFamily: "'Lora', serif",
+    fontSize:   14,
     fontStyle:  'italic',
-    color:      'rgba(245,240,232,0.55)',
+    color:      'rgba(28,25,23,0.6)',
     lineHeight: 1.5,
   },
   beatRow: {
     display:      'flex',
     alignItems:   'center',
-    gap:          8,
-    padding:      '5px 0',
-    borderBottom: '1px solid rgba(245,240,232,0.04)',
+    gap:          10,
+    padding:      '6px 0',
+    borderBottom: '1px solid rgba(28,25,23,0.06)',
   },
   beatChar: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      7,
-    letterSpacing: '0.1em',
+    fontSize:      11,
+    letterSpacing: '0.08em',
     flexShrink:    0,
-    width:         32,
+    width:         36,
   },
   beatTitle: {
     fontFamily: 'DM Mono, monospace',
-    fontSize:   9,
-    color:      'rgba(245,240,232,0.6)',
+    fontSize:   13,
+    color:      'rgba(28,25,23,0.65)',
     flex:       1,
   },
   beatTagCount: {
     fontFamily:    'DM Mono, monospace',
-    fontSize:      7,
-    color:         'rgba(245,240,232,0.2)',
+    fontSize:      11,
+    color:         'rgba(28,25,23,0.3)',
     letterSpacing: '0.06em',
   },
 };

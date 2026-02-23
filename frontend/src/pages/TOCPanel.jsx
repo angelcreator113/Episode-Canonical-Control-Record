@@ -22,6 +22,7 @@
  */
 
 export default function TOCPanel({ book, chapters = [], onChapterClick }) {
+  if (!book) return null;
   const totalLines    = chapters.flatMap(c => c.lines || []).length;
   const approvedLines = chapters.flatMap(c => c.lines || []).filter(l =>
     l.status === 'approved' || l.status === 'edited'
