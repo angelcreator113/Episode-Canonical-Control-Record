@@ -18,6 +18,31 @@ function getModels() {
   return models;
 }
 
+/* ------------------------------------------------------------------ */
+/*  Auto-create continuity tables if missing (runs once)               */
+/* ------------------------------------------------------------------ */
+let tablesChecked = false;
+async function ensureTables() {
+  if (tablesChecked) return;
+  try {
+    const m = getModels();
+    const qi = m.sequelize.getQueryInterface();
+    const tables = await qi.showAllTables();
+    const tableSet = new Set(tables.map(t => (typeof t === 'string' ? t : t.tablename || t)));
+    if (!tableSet.has('continuity_timelines')) {
+      console.log('[ContinuityEngine] Creating continuity tables...');
+      await m.ContinuityTimeline.sync();
+      await m.ContinuityCharacter.sync();
+      await m.ContinuityBeat.sync();
+      if (m.ContinuityBeatCharacter) await m.ContinuityBeatCharacter.sync();
+      console.log('[ContinuityEngine] ✅ Continuity tables created');
+    }
+  } catch (err) {
+    console.error('[ContinuityEngine] Table check/create warning:', err.message);
+  }
+  tablesChecked = true;
+}
+
 /* ================================================================== */
 /*  TIMELINES                                                          */
 /* ================================================================== */
@@ -25,6 +50,7 @@ function getModels() {
 /** GET /timelines — list all timelines */
 router.get('/timelines', async (req, res) => {
   try {
+    await ensureTables();
     const { ContinuityTimeline, ContinuityBeat, ContinuityCharacter } = getModels();
     const timelines = await ContinuityTimeline.findAll({
       include: [

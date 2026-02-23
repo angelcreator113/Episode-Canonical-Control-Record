@@ -25,6 +25,10 @@
   --purple:      #8b45b5;
   --cyan:        #2fa8a0;
   --orange:      #c07830;
+  --pink:        #e8a0b0;
+  --pink-light:  #f5d5dd;
+  --pink-bg:     rgba(232, 160, 176, 0.12);
+  --pink-hover:  #d4899a;
 
   --role-protagonist: var(--gold);
   --role-pressure:    var(--red);
@@ -133,13 +137,13 @@
 }
 
 .cr-header-btn.primary {
-  background: var(--ink);
-  border-color: var(--ink);
+  background: var(--pink);
+  border-color: var(--pink);
   color: #fff;
 }
 
 .cr-header-btn.primary:hover {
-  background: #2a2520;
+  background: var(--pink-hover);
 }
 
 .cr-header-btn.active {
@@ -642,8 +646,8 @@
 }
 
 .cr-list-open-btn:hover {
-  background: var(--ink);
-  border-color: var(--ink);
+  background: var(--pink);
+  border-color: var(--pink);
   color: #fff;
 }
 
@@ -1171,7 +1175,7 @@
 }
 
 .cr-edit-save-btn {
-  background: var(--ink);
+  background: var(--pink);
   border: none;
   border-radius: 5px;
   padding: 6px 14px;
@@ -1179,6 +1183,11 @@
   font-weight: 600;
   color: #fff;
   cursor: pointer;
+  transition: background 0.12s;
+}
+
+.cr-edit-save-btn:hover {
+  background: var(--pink-hover);
 }
 
 .cr-edit-save-btn:disabled {
@@ -1234,7 +1243,7 @@
 .cr-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(26,21,16,0.5);
+  background: rgba(232, 160, 176, 0.25);
   z-index: 200;
   display: flex;
   align-items: center;
@@ -1296,7 +1305,7 @@
 }
 
 .cr-empty-btn {
-  background: var(--ink);
+  background: var(--pink);
   border: none;
   border-radius: 6px;
   padding: 10px 22px;
@@ -1309,7 +1318,7 @@
 }
 
 .cr-empty-btn:hover {
-  background: #2a2520;
+  background: var(--pink-hover);
 }
 
 
@@ -1358,6 +1367,8 @@
 /* ================================================================
    RESPONSIVE
    ================================================================ */
+
+/* ── Large tablets (≤1024px) ── */
 @media (max-width: 1024px) {
   .cr-dossier-layout {
     grid-template-columns: 260px 1fr;
@@ -1374,8 +1385,13 @@
   .cr-list-row > *:nth-child(6) {
     display: none;
   }
+
+  .cr-header { padding: 14px 20px; }
+  .cr-content { padding: 24px 20px 60px; }
+  .cr-filters { padding: 10px 20px; }
 }
 
+/* ── Tablets / small laptops (≤768px) ── */
 @media (max-width: 768px) {
   .cr-header {
     padding: 12px 16px;
@@ -1390,12 +1406,29 @@
     order: -1;
   }
 
-  .cr-filters {
-    padding: 10px 16px;
+  .cr-header-title { font-size: 18px; }
+
+  .cr-header-right {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
   }
 
-  .cr-content {
-    padding: 20px 16px 60px;
+  .cr-header-btn { padding: 9px 14px; font-size: 12px; min-height: 40px; }
+  .cr-header-btn.primary { min-height: 40px; }
+
+  .cr-search-input { width: 100%; flex: 1; min-width: 120px; }
+  .cr-search-input:focus { width: 100%; }
+  .cr-search-wrap { flex: 1; min-width: 120px; }
+
+  .cr-filters { padding: 10px 16px; }
+  .cr-filter-pill { padding: 7px 14px; font-size: 12px; min-height: 36px; }
+  .cr-content { padding: 20px 16px 60px; }
+
+  .cr-stats-strip {
+    flex-wrap: wrap;
+    gap: 12px 20px;
+    padding: 12px 16px;
   }
 
   .cr-grid {
@@ -1403,13 +1436,9 @@
     gap: 12px;
   }
 
-  .cr-card-portrait {
-    height: 140px;
-  }
+  .cr-card-portrait { height: 140px; }
 
-  .cr-dossier-layout {
-    grid-template-columns: 1fr;
-  }
+  .cr-dossier-layout { grid-template-columns: 1fr; }
 
   .cr-dossier-left {
     position: static;
@@ -1419,31 +1448,12 @@
     border-bottom: 1px solid var(--border);
   }
 
-  .cr-dossier-portrait {
-    max-width: 200px;
-    margin: 0 auto;
-  }
-
-  .cr-dossier-triad {
-    grid-template-columns: 1fr;
-  }
-
-  .cr-dossier-duality {
-    grid-template-columns: 1fr;
-  }
-
-  .cr-dossier-tabs {
-    padding: 0 16px;
-  }
-
-  .cr-dossier-tab-content {
-    padding: 20px 16px 40px;
-  }
-
-  .cr-dossier-row {
-    grid-template-columns: 1fr;
-    gap: 2px;
-  }
+  .cr-dossier-portrait { max-width: 200px; margin: 0 auto; }
+  .cr-dossier-triad { grid-template-columns: 1fr; }
+  .cr-dossier-duality { grid-template-columns: 1fr; }
+  .cr-dossier-tabs { padding: 0 16px; }
+  .cr-dossier-tab-content { padding: 20px 16px 40px; }
+  .cr-dossier-row { grid-template-columns: 1fr; gap: 2px; }
 
   .cr-list-header,
   .cr-list-row {
@@ -1456,4 +1466,155 @@
   }
 
   .cr-list-icon { display: none; }
+
+  .cr-modal {
+    width: 100%;
+    max-width: 100vw;
+    border-radius: 12px 12px 0 0;
+    max-height: 90vh;
+    margin-top: auto;
+  }
+
+  .cr-modal-overlay {
+    align-items: flex-end;
+    padding: 0;
+  }
+}
+
+/* ── Mobile phones (≤480px) ── */
+@media (max-width: 480px) {
+  .cr-header {
+    padding: 10px 12px;
+    gap: 6px;
+  }
+
+  .cr-header-left { gap: 1px; }
+  .cr-header-brand { font-size: 13px; }
+  .cr-header-breadcrumb { font-size: 9px; }
+  .cr-header-title { font-size: 16px; }
+
+  .cr-header-right {
+    gap: 6px;
+    width: 100%;
+  }
+
+  .cr-header-btn {
+    padding: 10px 12px;
+    font-size: 12px;
+    min-height: 42px;
+    flex: 1;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .cr-search-wrap { width: 100%; flex: unset; order: 10; }
+  .cr-search-input {
+    width: 100%;
+    font-size: 16px; /* prevent iOS zoom */
+    padding: 10px 12px 10px 30px;
+    min-height: 42px;
+  }
+  .cr-search-input:focus { width: 100%; }
+
+  .cr-view-toggle button { padding: 9px 14px; font-size: 14px; }
+
+  .cr-filters { padding: 8px 12px; gap: 6px; }
+  .cr-filter-pill { padding: 8px 12px; font-size: 11px; min-height: 36px; }
+  .cr-filter-label { font-size: 9px; }
+
+  .cr-content { padding: 16px 12px 48px; }
+
+  .cr-stats-strip {
+    gap: 8px 16px;
+    padding: 10px 12px;
+  }
+  .cr-stat-count { font-size: 18px; }
+  .cr-stat-label { font-size: 9px; }
+
+  .cr-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .cr-card { border-radius: 8px; }
+  .cr-card-portrait { height: 160px; }
+  .cr-card-body { padding: 14px 16px 16px; }
+  .cr-card-name { font-size: 17px; }
+  .cr-card-role { font-size: 10px; }
+  .cr-card-status-badge { font-size: 9px; }
+  .cr-card-hover { display: none; } /* No hover on touch */
+
+  .cr-list-row { padding: 14px 12px; min-height: 48px; }
+  .cr-list-header { padding: 10px 12px; }
+  .cr-list-name { font-size: 14px; }
+
+  .cr-dossier-left { padding: 16px 12px; }
+  .cr-dossier-portrait { max-width: 160px; }
+  .cr-dossier-tabs { padding: 0 12px; gap: 0; }
+  .cr-dossier-tab-content { padding: 16px 12px 32px; }
+
+  .cr-modal {
+    padding: 24px 16px;
+    border-radius: 16px 16px 0 0;
+  }
+  .cr-modal-title { font-size: 18px; }
+  .cr-modal-actions { flex-direction: column; }
+  .cr-modal-actions button { width: 100%; min-height: 44px; font-size: 14px; }
+
+  .cr-empty-state { padding: 48px 20px; }
+  .cr-empty-icon { font-size: 40px; }
+  .cr-empty-title { font-size: 18px; }
+  .cr-empty-btn { padding: 12px 24px; font-size: 14px; min-height: 44px; }
+
+  .cr-toast { font-size: 13px; padding: 10px 16px; max-width: calc(100vw - 32px); }
+
+  .cr-registry-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .cr-registry-select { width: 100%; font-size: 14px; padding: 10px 12px; min-height: 42px; }
+}
+
+/* ── Very small phones (≤360px) ── */
+@media (max-width: 360px) {
+  .cr-header { padding: 8px 10px; }
+  .cr-content { padding: 12px 8px 40px; }
+  .cr-card-body { padding: 12px 14px; }
+  .cr-card-name { font-size: 16px; }
+  .cr-stat-count { font-size: 16px; }
+  .cr-header-title { font-size: 15px; }
+  .cr-header-btn { font-size: 11px; padding: 8px 10px; }
+  .cr-modal { padding: 20px 12px; }
+}
+
+/* ── Touch device improvements ── */
+@media (hover: none) and (pointer: coarse) {
+  .cr-card-hover { display: none; }
+
+  .cr-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
+  .cr-card:active {
+    transform: scale(0.98);
+    box-shadow: 0 2px 8px rgba(26, 21, 16, 0.1);
+  }
+
+  .cr-header-btn { min-height: 42px; }
+  .cr-filter-pill { min-height: 38px; }
+  .cr-view-toggle button { min-height: 42px; padding: 10px 14px; }
+  .cr-list-row { min-height: 48px; }
+
+  .cr-card,
+  .cr-header-btn,
+  .cr-filter-pill,
+  .cr-view-toggle button,
+  .cr-list-row,
+  .cr-empty-btn,
+  .cr-registry-select {
+    touch-action: manipulation;
+  }
+
+  .cr-dossier-tabs { -webkit-overflow-scrolling: touch; }
 }

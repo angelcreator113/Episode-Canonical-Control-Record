@@ -87,6 +87,7 @@ export default function ContinuityEnginePage() {
       ...opts,
       body: opts.body ? JSON.stringify(opts.body) : undefined,
     });
+    if (!res.ok) return { success: false, error: `HTTP ${res.status}` };
     return res.json();
   }, []);
 
@@ -99,8 +100,13 @@ export default function ContinuityEnginePage() {
   // ── Load timelines ──
   const loadTimelines = useCallback(async () => {
     setLoading(true);
-    const data = await api('/timelines');
-    if (data.success) setTimelines(data.timelines || []);
+    try {
+      const data = await api('/timelines');
+      if (data.success) setTimelines(data.timelines || []);
+    } catch (err) {
+      console.error('[ContinuityEngine] Failed to load timelines:', err);
+      setTimelines([]);
+    }
     setLoading(false);
   }, [api]);
 

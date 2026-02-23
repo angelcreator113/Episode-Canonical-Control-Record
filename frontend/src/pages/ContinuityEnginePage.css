@@ -655,3 +655,28 @@
   .ce-location-grid { grid-template-columns: 1fr; }
   .ce-topbar { padding: 10px 16px; flex-wrap: wrap; gap: 8px; }
 }
+
+@media (max-width: 480px) {
+  .ce-topbar { padding: 8px 12px; gap: 6px; }
+  .ce-topbar-brand { font-size: 12px; }
+  .ce-topbar-title { font-size: 14px; }
+  .ce-topbar-scene { font-size: 10px; }
+
+  .ce-timeline-panel { max-height: 180px; padding: 8px 0; }
+  .ce-beat-item { padding: 10px 12px; min-height: 44px; }
+  .ce-beat-name { font-size: 13px; }
+  .ce-beat-location { font-size: 10px; }
+
+  .ce-main-panel { padding: 16px 12px; }
+  .ce-form-grid { gap: 10px; }
+
+  .ce-char-pip { width: 8px; height: 8px; }
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .ce-beat-item { min-height: 44px; }
+  .ce-beat-item,
+  .ce-char-pip {
+    touch-action: manipulation;
+  }
+}
