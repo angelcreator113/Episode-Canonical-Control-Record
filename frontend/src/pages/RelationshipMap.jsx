@@ -43,7 +43,7 @@ export default function RelationshipMap() {
   const load = useCallback(() => {
     let url = `${API}/relationships?layer=${layer}`;
     if (showId) url += `&show_id=${showId}`;
-    fetch(url).then(r => r.json()).then(setRels).catch(console.error);
+    fetch(url).then(r => r.json()).then(d => setRels(Array.isArray(d) ? d : [])).catch(console.error);
   }, [layer, showId]);
   useEffect(load, [load]);
 

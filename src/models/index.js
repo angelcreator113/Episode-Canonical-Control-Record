@@ -1465,3 +1465,4 @@ module.exports.ContinuityCharacter = ContinuityCharacter;
 module.exports.ContinuityBeat = ContinuityBeat;
 module.exports.ContinuityBeatCharacter = ContinuityBeatCharacter;
 module.exports.LalaEmergenceScene = LalaEmergenceScene;
+module.exports.CharacterRelationship = CharacterRelationship;

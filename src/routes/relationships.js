@@ -3,23 +3,14 @@ const express = require('express');
 const router = express.Router();
 const { Op } = require('sequelize');
 
-// Optional auth — works with or without Cognito
-let optionalAuth;
-try {
-  const { authenticate } = require('../middleware/auth');
-  optionalAuth = authenticate;
-} catch {
-  optionalAuth = (_req, _res, next) => next();
-}
-
-function getDb(req) {
-  return req.app.get('db') || require('../models');
+function getDb() {
+  return require('../models');
 }
 
 /* ───── LIST ───── */
-router.get('/', optionalAuth, async (req, res) => {
+router.get('/', async (req, res) => {
   try {
-    const db = getDb(req);
+    const db = getDb();
     const where = {};
     if (req.query.layer)   where.layer   = req.query.layer;
     if (req.query.show_id) where.show_id = req.query.show_id;
@@ -33,9 +24,9 @@ router.get('/', optionalAuth, async (req, res) => {
 });
 
 /* ───── CREATE ───── */
-router.post('/', optionalAuth, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const db = getDb(req);
+    const db = getDb();
     const row = await db.CharacterRelationship.create(req.body);
     res.status(201).json(row);
   } catch (err) {
@@ -45,9 +36,9 @@ router.post('/', optionalAuth, async (req, res) => {
 });
 
 /* ───── BATCH SAVE POSITIONS (before /:id to avoid param clash) ───── */
-router.put('/positions', optionalAuth, async (req, res) => {
+router.put('/positions', async (req, res) => {
   try {
-    const db = getDb(req);
+    const db = getDb();
     const { positions } = req.body; // [{ id, source_x, source_y, target_x, target_y }]
     if (!Array.isArray(positions)) return res.status(400).json({ error: 'positions array required' });
     await Promise.all(positions.map(p =>
@@ -64,9 +55,9 @@ router.put('/positions', optionalAuth, async (req, res) => {
 });
 
 /* ───── SEED BOOK 1 (before /:id to avoid param clash) ───── */
-router.post('/seed/book1', optionalAuth, async (req, res) => {
+router.post('/seed/book1', async (req, res) => {
   try {
-    const db = getDb(req);
+    const db = getDb();
     const seeds = [
       // Real-world layer
       { layer:'real_world', source_name:'Marcus Whitfield', target_name:'Anika Patel', relationship_type:'romantic', direction:'both', label:'childhood sweethearts', status:'active', intensity:5 },
@@ -89,9 +80,9 @@ router.post('/seed/book1', optionalAuth, async (req, res) => {
 });
 
 /* ───── UPDATE ───── */
-router.put('/:id', optionalAuth, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
-    const db = getDb(req);
+    const db = getDb();
     const [updated] = await db.CharacterRelationship.update(req.body, { where: { id: req.params.id } });
     if (!updated) return res.status(404).json({ error: 'Not found' });
     const row = await db.CharacterRelationship.findByPk(req.params.id);
@@ -103,9 +94,9 @@ router.put('/:id', optionalAuth, async (req, res) => {
 });
 
 /* ───── DELETE ───── */
-router.delete('/:id', optionalAuth, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
-    const db = getDb(req);
+    const db = getDb();
     const deleted = await db.CharacterRelationship.destroy({ where: { id: req.params.id } });
     if (!deleted) return res.status(404).json({ error: 'Not found' });
     res.json({ deleted: true });
