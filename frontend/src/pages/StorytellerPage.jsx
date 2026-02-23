@@ -22,6 +22,8 @@ import TOCPanel from './TOCPanel';
 import NewBookModal from './NewBookModal';
 import ImportDraftModal from './ImportDraftModal';
 import ChapterDraftGenerator from './ChapterDraftGenerator';
+import LalaSceneDetection from '../components/LalaSceneDetection';
+import ExportPanel from '../components/ExportPanel';
 
 const API = '/api/v1/storyteller';
 
@@ -661,13 +663,13 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           {book.era_name && <span className="st-topbar-era">{book.era_name}</span>}
         </div>
         <div className="st-topbar-center">
-          {['toc', 'book', 'memory', 'scenes'].map(v => (
+          {['toc', 'book', 'memory', 'scenes', 'lala', 'export'].map(v => (
             <button
               key={v}
               className={`st-view-tab ${activeView === v ? 'active' : ''}`}
               onClick={() => setActiveView(v)}
             >
-              {v === 'book' ? 'Manuscript' : v === 'toc' ? 'TOC' : v === 'memory' ? 'Memory Bank' : 'Scenes'}
+              {v === 'book' ? 'Manuscript' : v === 'toc' ? 'TOC' : v === 'memory' ? 'Memory Bank' : v === 'lala' ? '✦ Lala' : v === 'export' ? '↓ Export' : 'Scenes'}
             </button>
           ))}
         </div>
@@ -1233,6 +1235,16 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
               toast('Scene added as pending line');
             }}
           />
+        )}
+
+        {/* ── Lala Emergence View ── */}
+        {activeView === 'lala' && (
+          <LalaSceneDetection bookId={book.id} />
+        )}
+
+        {/* ── Export View ── */}
+        {activeView === 'export' && (
+          <ExportPanel bookId={book.id} bookTitle={book.title} />
         )}
 
         {/* ── Import Draft Modal ── */}

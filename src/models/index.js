@@ -73,6 +73,7 @@ let StorytellerMemory; // StoryTeller Memory Bank model
 let Universe, BookSeries; // Universe + Book Series models
 let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
 let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter; // Continuity Engine models
+let LalaEmergenceScene; // Lala Emergence Scene Detection model
 
 try {
   // Core models
@@ -214,6 +215,9 @@ try {
   ContinuityBeat = require('./ContinuityBeat')(sequelize);
   ContinuityBeatCharacter = require('./ContinuityBeatCharacter')(sequelize);
 
+  // Lala Emergence Scene Detection model
+  LalaEmergenceScene = require('./LalaEmergenceScene')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -286,6 +290,7 @@ const requiredModels = {
   ContinuityCharacter,
   ContinuityBeat,
   ContinuityBeatCharacter,
+  LalaEmergenceScene,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -353,6 +358,11 @@ RegistryCharacter.hasMany(StorytellerMemory, {
   foreignKey: 'character_id',
   as: 'memories',
 });
+
+// LalaEmergenceScene associations
+LalaEmergenceScene.belongsTo(StorytellerLine,    { foreignKey: 'line_id',    as: 'line' });
+LalaEmergenceScene.belongsTo(StorytellerChapter, { foreignKey: 'chapter_id', as: 'chapter' });
+LalaEmergenceScene.belongsTo(StorytellerBook,    { foreignKey: 'book_id',    as: 'book' });
 
 // Character Registry associations
 if (CharacterRegistry && CharacterRegistry.associate) {
@@ -1449,3 +1459,4 @@ module.exports.ContinuityTimeline = ContinuityTimeline;
 module.exports.ContinuityCharacter = ContinuityCharacter;
 module.exports.ContinuityBeat = ContinuityBeat;
 module.exports.ContinuityBeatCharacter = ContinuityBeatCharacter;
+module.exports.LalaEmergenceScene = LalaEmergenceScene;

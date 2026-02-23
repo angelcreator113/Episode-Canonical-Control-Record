@@ -826,6 +826,24 @@ try {
   console.error('✗ Failed to load Continuity Engine routes:', e.message);
 }
 
+// Lala Scene Detection routes
+try {
+  const lalaSceneRoutes = require('./routes/lala-scene-detection');
+  app.use('/api/v1/lala-scenes', lalaSceneRoutes);
+  console.log('✓ Lala Scene Detection routes loaded at /api/v1/lala-scenes');
+} catch (e) {
+  console.error('✗ Failed to load Lala Scene Detection routes:', e.message);
+}
+
+// Manuscript Export routes (DOCX + PDF)
+try {
+  const manuscriptExportRoutes = require('./routes/manuscript-export');
+  app.use('/api/v1/export', manuscriptExportRoutes);
+  console.log('✓ Manuscript Export routes loaded at /api/v1/export');
+} catch (e) {
+  console.error('✗ Failed to load Manuscript Export routes:', e.message);
+}
+
 // Export Queue Monitor (Bull Board dashboard + stats API)
 let queueMonitorRoutes;
 try {
