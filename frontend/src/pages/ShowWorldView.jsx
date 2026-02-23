@@ -100,10 +100,10 @@ export default function ShowWorldView({ show, onBack }) {
             style={{
               ...s.tabBtn,
               color: activeTab === tab.id
-                ? '#C9A84C'
-                : 'rgba(245,240,232,0.4)',
+                ? '#14100c'
+                : 'rgba(26,21,16,0.35)',
               borderBottom: activeTab === tab.id
-                ? '2px solid #C9A84C'
+                ? '2px solid #14100c'
                 : '2px solid transparent',
             }}
             onClick={() => setActiveTab(tab.id)}
@@ -289,7 +289,7 @@ const s = {
     flexDirection: 'column',
     gap: 0,
     minHeight: '100vh',
-    background: '#0d0b09',
+    background: '#faf8f5',
   },
   backBtn: {
     background: 'none',
@@ -297,7 +297,7 @@ const s = {
     fontFamily: 'DM Mono, monospace',
     fontSize: 9,
     letterSpacing: '0.1em',
-    color: 'rgba(245,240,232,0.35)',
+    color: 'rgba(26,21,16,0.35)',
     cursor: 'pointer',
     padding: '16px 24px 8px',
     textAlign: 'left',
@@ -308,7 +308,7 @@ const s = {
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     padding: '8px 24px 20px',
-    borderBottom: '1px solid rgba(201,168,76,0.1)',
+    borderBottom: '1px solid rgba(26,21,16,0.08)',
   },
   showHeaderLeft: {
     display: 'flex',
@@ -319,18 +319,18 @@ const s = {
     fontFamily: 'DM Mono, monospace',
     fontSize: 8,
     letterSpacing: '0.2em',
-    color: 'rgba(201,168,76,0.5)',
+    color: 'rgba(26,21,16,0.35)',
   },
   showName: {
     fontFamily: "'Playfair Display', serif",
     fontSize: 28,
     fontStyle: 'italic',
-    color: 'rgba(245,240,232,0.92)',
+    color: '#14100c',
   },
   showDesc: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 9,
-    color: 'rgba(245,240,232,0.3)',
+    color: 'rgba(26,21,16,0.4)',
     letterSpacing: '0.04em',
     lineHeight: 1.5,
     maxWidth: 400,
@@ -346,26 +346,26 @@ const s = {
     flexDirection: 'column',
     alignItems: 'center',
     gap: 2,
-    background: 'rgba(201,168,76,0.06)',
-    border: '1px solid rgba(201,168,76,0.15)',
+    background: 'rgba(26,21,16,0.03)',
+    border: '1px solid rgba(26,21,16,0.08)',
     borderRadius: 3,
     padding: '8px 14px',
   },
   statChipValue: {
     fontFamily: "'Playfair Display', serif",
     fontSize: 20,
-    color: '#C9A84C',
+    color: '#14100c',
     lineHeight: 1,
   },
   statChipLabel: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 7,
     letterSpacing: '0.1em',
-    color: 'rgba(245,240,232,0.3)',
+    color: 'rgba(26,21,16,0.35)',
   },
   tabBar: {
     display: 'flex',
-    borderBottom: '1px solid rgba(201,168,76,0.1)',
+    borderBottom: '1px solid rgba(26,21,16,0.08)',
     padding: '0 16px',
     overflowX: 'auto',
     gap: 0,
@@ -395,12 +395,12 @@ const s = {
   hubTitle: {
     fontFamily: "'Playfair Display', serif",
     fontSize: 22,
-    color: 'rgba(245,240,232,0.88)',
+    color: '#14100c',
   },
   hubSub: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 9,
-    color: 'rgba(245,240,232,0.3)',
+    color: 'rgba(26,21,16,0.4)',
     letterSpacing: '0.05em',
     marginTop: -14,
   },
@@ -410,8 +410,8 @@ const s = {
     flexWrap: 'wrap',
   },
   hubStat: {
-    background: 'rgba(255,255,255,0.04)',
-    border: '1px solid rgba(255,255,255,0.08)',
+    background: '#fff',
+    border: '1px solid rgba(26,21,16,0.08)',
     borderRadius: 4,
     padding: '20px 24px',
     display: 'flex',
@@ -425,26 +425,26 @@ const s = {
   hubStatValue: {
     fontFamily: "'Playfair Display', serif",
     fontSize: 32,
-    color: 'rgba(245,240,232,0.88)',
+    color: '#14100c',
     lineHeight: 1,
   },
   hubStatLabel: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 8,
     letterSpacing: '0.14em',
-    color: 'rgba(245,240,232,0.35)',
+    color: 'rgba(26,21,16,0.35)',
   },
   hubStatSub: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 8,
-    color: 'rgba(245,240,232,0.2)',
+    color: 'rgba(26,21,16,0.25)',
     letterSpacing: '0.04em',
   },
   hubLinksLabel: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 9,
     letterSpacing: '0.14em',
-    color: 'rgba(245,240,232,0.25)',
+    color: 'rgba(26,21,16,0.35)',
   },
   hubLinksGrid: {
     display: 'grid',
@@ -452,8 +452,8 @@ const s = {
     gap: 10,
   },
   hubLinkCard: {
-    background: 'rgba(255,255,255,0.03)',
-    border: '1px solid rgba(255,255,255,0.07)',
+    background: '#fff',
+    border: '1px solid rgba(26,21,16,0.07)',
     borderRadius: 4,
     padding: '16px',
     cursor: 'pointer',
@@ -467,12 +467,12 @@ const s = {
   hubLinkLabel: {
     fontFamily: "'Playfair Display', serif",
     fontSize: 14,
-    color: 'rgba(245,240,232,0.82)',
+    color: '#14100c',
   },
   hubLinkDesc: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 8,
-    color: 'rgba(245,240,232,0.25)',
+    color: 'rgba(26,21,16,0.35)',
     letterSpacing: '0.04em',
     lineHeight: 1.4,
   },
@@ -493,11 +493,11 @@ const s = {
     alignItems: 'flex-start',
     gap: 10,
     padding: '12px 20px',
-    background: 'rgba(201,168,76,0.04)',
-    borderBottom: '1px solid rgba(201,168,76,0.1)',
+    background: 'rgba(26,21,16,0.02)',
+    borderBottom: '1px solid rgba(26,21,16,0.06)',
   },
   bridgeNoteIcon: {
-    color: '#C9A84C',
+    color: '#14100c',
     fontSize: 12,
     flexShrink: 0,
     marginTop: 1,
@@ -506,23 +506,23 @@ const s = {
     fontFamily: 'DM Mono, monospace',
     fontSize: 8,
     letterSpacing: '0.12em',
-    color: '#C9A84C',
+    color: '#14100c',
     marginBottom: 3,
   },
   bridgeNoteText: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 8,
-    color: 'rgba(245,240,232,0.3)',
+    color: 'rgba(26,21,16,0.4)',
     letterSpacing: '0.04em',
     lineHeight: 1.5,
   },
   bridgeCode: {
     fontFamily: 'DM Mono, monospace',
     fontSize: 8,
-    background: 'rgba(201,168,76,0.1)',
+    background: 'rgba(26,21,16,0.05)',
     padding: '1px 4px',
     borderRadius: 2,
-    color: '#C9A84C',
+    color: '#14100c',
   },
   iframe: {
     flex: 1,
