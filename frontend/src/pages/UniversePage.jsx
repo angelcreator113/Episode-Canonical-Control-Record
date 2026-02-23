@@ -591,19 +591,32 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
         return (
           <div key={ser.id} style={{ ...s.seriesCard, padding: isMobile ? '14px 14px' : '18px 20px' }}>
             <div style={{ ...s.seriesHeader, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 0 }}>
-              <div>
-                <div style={s.seriesName}>{ser.name}</div>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <div style={{ ...s.seriesName, fontSize: isMobile ? 19 : 22 }}>{ser.name}</div>
+                  {isMobile && (
+                    <button
+                      style={{ ...s.deleteBtn, padding: '8px 12px', flexShrink: 0 }}
+                      onClick={() => deleteSeries(ser.id)}
+                      title='Delete series'
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
                 {ser.description && (
-                  <div style={s.seriesDesc}>{ser.description}</div>
+                  <div style={{ ...s.seriesDesc, maxWidth: isMobile ? '100%' : 560 }}>{ser.description}</div>
                 )}
               </div>
-              <button
-                style={s.deleteBtn}
-                onClick={() => deleteSeries(ser.id)}
-                title='Delete series'
-              >
-                ✕
-              </button>
+              {!isMobile && (
+                <button
+                  style={s.deleteBtn}
+                  onClick={() => deleteSeries(ser.id)}
+                  title='Delete series'
+                >
+                  ✕
+                </button>
+              )}
             </div>
 
             {/* Books in series */}
@@ -637,21 +650,23 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
                       ...s.bookRowRight,
                       justifyContent: isMobile ? 'flex-start' : 'flex-end',
                       width: isMobile ? '100%' : undefined,
+                      flexDirection: isMobile ? 'row' : 'row',
+                      flexWrap: 'wrap',
                     }}>
                       {editingEra === book.id ? (
-                        <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', width: isMobile ? '100%' : 'auto' }}>
                           <input
-                            style={{ ...s.input, padding: '6px 10px', fontSize: 13, width: 160 }}
+                            style={{ ...s.input, padding: '8px 10px', fontSize: 13, flex: 1, width: 'auto' }}
                             value={eraValues[book.id] ?? book.era_name ?? ''}
                             onChange={e => setEraValues(prev => ({ ...prev, [book.id]: e.target.value }))}
                             autoFocus
                           />
-                          <button style={s.microBtn} onClick={() => saveEra(book.id)}>✓</button>
-                          <button style={s.microBtn} onClick={() => setEditingEra(null)}>✕</button>
+                          <button style={{ ...s.microBtn, padding: isMobile ? '8px 12px' : '5px 9px' }} onClick={() => saveEra(book.id)}>✓</button>
+                          <button style={{ ...s.microBtn, padding: isMobile ? '8px 12px' : '5px 9px' }} onClick={() => setEditingEra(null)}>✕</button>
                         </div>
                       ) : (
                         <button
-                          style={s.eraBtn}
+                          style={{ ...s.eraBtn, padding: isMobile ? '8px 12px' : '5px 10px', fontSize: isMobile ? 12 : 11 }}
                           onClick={() => {
                             setEditingEra(book.id);
                             setEraValues(prev => ({ ...prev, [book.id]: book.era_name || '' }));
@@ -663,7 +678,13 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
 
                       {/* Move to different series */}
                       <select
-                        style={s.assignSelect}
+                        style={{
+                          ...s.assignSelect,
+                          maxWidth: isMobile ? 'none' : 160,
+                          flex: isMobile ? '1 1 auto' : '1 1 auto',
+                          fontSize: isMobile ? 12 : 11,
+                          padding: isMobile ? '8px 10px' : '5px 8px',
+                        }}
                         value={ser.id}
                         onChange={e => {
                           const val = e.target.value;
