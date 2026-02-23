@@ -914,8 +914,8 @@ function BeatDetail({ beat, characters, conflicts, onClose, onEdit, onDelete }) 
 function DetailField({ label, value }) {
   return (
     <div style={{ marginBottom: 10 }}>
-      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 7, letterSpacing: '0.18em', color: 'rgba(100,116,139,0.55)', marginBottom: 3 }}>{label}</div>
-      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: '#475569', lineHeight: 1.5 }}>{value}</div>
+      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, letterSpacing: '0.18em', color: 'rgba(100,116,139,0.55)', marginBottom: 3 }}>{label}</div>
+      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 15, color: '#475569', lineHeight: 1.5 }}>{value}</div>
     </div>
   );
 }
@@ -1035,7 +1035,7 @@ function AddBeatModal({ beat, characters, beats, onSubmit, onClose }) {
                     style={{ accentColor: color }}
                   />
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: color }} />
-                  <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 11, color: checked ? color : '#64748B' }}>
+                  <span style={{ fontFamily: 'DM Mono, monospace', fontSize: 15, color: checked ? color : '#64748B' }}>
                     {char.name}
                   </span>
                 </label>
@@ -1114,7 +1114,7 @@ function ModalActions({ onSubmit, onClose, submitLabel, disabled }) {
 
 function CenterMessage({ children }) {
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'rgba(100,116,139,0.5)', fontFamily: 'DM Mono, monospace', fontSize: 11 }}>
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100%', color: 'rgba(100,116,139,0.5)', fontFamily: 'DM Mono, monospace', fontSize: 15 }}>
       {children}
     </div>
   );
@@ -1154,16 +1154,16 @@ const s = {
     display: 'flex', alignItems: 'baseline', gap: 12,
   },
   pageTitle: {
-    fontSize: 9, letterSpacing: '0.24em', color: ACCENT, fontWeight: 600,
+    fontSize: 13, letterSpacing: '0.24em', color: ACCENT, fontWeight: 600,
   },
   timelineName: {
-    fontSize: 11, color: 'rgba(100,116,139,0.6)', letterSpacing: '0.06em',
+    fontSize: 15, color: 'rgba(100,116,139,0.6)', letterSpacing: '0.06em',
   },
   topbarCenter: {
     display: 'flex', alignItems: 'center', gap: 8,
   },
   conflictBadge: {
-    fontFamily: 'DM Mono, monospace', fontSize: 9, letterSpacing: '0.1em',
+    fontFamily: 'DM Mono, monospace', fontSize: 13, letterSpacing: '0.1em',
     padding: '4px 12px', borderRadius: 2, border: '1px solid', fontWeight: 600,
   },
   topbarRight: {
@@ -1172,7 +1172,7 @@ const s = {
   viewBtn: {
     background: 'none', border: '1px solid',
     borderRadius: 3, fontFamily: 'DM Mono, monospace',
-    fontSize: 8, letterSpacing: '0.12em', padding: '5px 10px',
+    fontSize: 12, letterSpacing: '0.12em', padding: '5px 10px',
     cursor: 'pointer', transition: 'all 0.12s',
   },
   body: {
@@ -1189,27 +1189,27 @@ const s = {
     borderBottom: `1px solid ${EDGE}`,
   },
   sideSectionLabel: {
-    fontSize: 7, letterSpacing: '0.2em', color: 'rgba(100,116,139,0.5)',
+    fontSize: 11, letterSpacing: '0.2em', color: 'rgba(100,116,139,0.5)',
     padding: '0 14px 8px',
   },
   timelineBtn: {
     display: 'block', width: '100%', textAlign: 'left',
     padding: '7px 14px', background: 'none', border: 'none',
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 14,
     letterSpacing: '0.04em', cursor: 'pointer',
     transition: 'background 0.1s',
   },
   addBtn: {
     display: 'block', width: 'calc(100% - 28px)', margin: '8px 14px 0',
     background: 'none', border: '1px solid rgba(8,145,178,0.25)',
-    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 8,
+    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 12,
     letterSpacing: '0.1em', color: '#0891B2',
     padding: '6px 10px', cursor: 'pointer', textAlign: 'left',
   },
   seedBtn: {
     display: 'block', width: 'calc(100% - 28px)', margin: '4px 14px 0',
     background: 'none', border: '1px dashed rgba(148,163,184,0.35)',
-    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 8,
+    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 12,
     letterSpacing: '0.08em', color: 'rgba(100,116,139,0.5)',
     padding: '6px 10px', cursor: 'pointer', textAlign: 'left',
   },
@@ -1222,18 +1222,18 @@ const s = {
     cursor: 'pointer', textAlign: 'left',
   },
   beatListName: {
-    fontSize: 10, color: '#475569', letterSpacing: '0.02em',
+    fontSize: 14, color: '#475569', letterSpacing: '0.02em',
     display: 'flex', alignItems: 'center', gap: 5,
   },
   beatListMeta: {
-    fontSize: 8, color: 'rgba(100,116,139,0.6)', letterSpacing: '0.04em',
+    fontSize: 12, color: 'rgba(100,116,139,0.6)', letterSpacing: '0.04em',
     marginTop: 2, display: 'flex', gap: 6,
   },
   beatTimeDot: {
     color: ACCENT, opacity: 0.7,
   },
   conflictFlag: {
-    color: '#DC2626', fontSize: 9,
+    color: '#DC2626', fontSize: 13,
   },
   charRow: {
     display: 'flex', alignItems: 'center', gap: 6,
@@ -1243,15 +1243,15 @@ const s = {
     width: 7, height: 7, borderRadius: '50%', flexShrink: 0,
   },
   charName: {
-    fontSize: 10, letterSpacing: '0.04em', flex: 1,
+    fontSize: 14, letterSpacing: '0.04em', flex: 1,
     color: '#475569',
   },
   charRole: {
-    fontSize: 8, color: 'rgba(100,116,139,0.6)', letterSpacing: '0.04em',
+    fontSize: 12, color: 'rgba(100,116,139,0.6)', letterSpacing: '0.04em',
   },
   charDelete: {
     background: 'none', border: 'none', color: 'rgba(148,163,184,0.5)',
-    fontSize: 14, cursor: 'pointer', padding: '0 2px', lineHeight: 1,
+    fontSize: 17, cursor: 'pointer', padding: '0 2px', lineHeight: 1,
     flexShrink: 0,
   },
   main: {
@@ -1260,7 +1260,7 @@ const s = {
   },
   toast: {
     position: 'fixed', bottom: 24, right: 24,
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 14,
     letterSpacing: '0.08em', padding: '9px 16px',
     borderRadius: 3, border: '1px solid', zIndex: 9999,
     pointerEvents: 'none',
@@ -1275,7 +1275,7 @@ const v = {
     flex: 1,
   },
   stripLabel: {
-    fontSize: 7, letterSpacing: '0.22em', color: 'rgba(100,116,139,0.5)',
+    fontSize: 11, letterSpacing: '0.22em', color: 'rgba(100,116,139,0.5)',
     marginBottom: 4,
   },
   strip: {
@@ -1286,9 +1286,9 @@ const v = {
     display: 'flex', flexDirection: 'column', alignItems: 'center',
     justifyContent: 'center', gap: 10, height: 240,
   },
-  emptyGlyph: { fontSize: 32, color: 'rgba(8,145,178,0.25)' },
-  emptyText:  { fontSize: 12, color: 'rgba(100,116,139,0.45)', fontFamily: 'DM Mono, monospace' },
-  emptySub:   { fontSize: 9,  color: 'rgba(100,116,139,0.35)', fontFamily: 'DM Mono, monospace', letterSpacing: '0.06em' },
+  emptyGlyph: { fontSize: 38, color: 'rgba(8,145,178,0.25)' },
+  emptyText:  { fontSize: 16, color: 'rgba(100,116,139,0.45)', fontFamily: 'DM Mono, monospace' },
+  emptySub:   { fontSize: 13,  color: 'rgba(100,116,139,0.35)', fontFamily: 'DM Mono, monospace', letterSpacing: '0.06em' },
   beatCard: {
     flexShrink: 0, width: 160, border: '1px solid',
     borderRadius: 6, padding: '12px 12px 10px',
@@ -1296,24 +1296,24 @@ const v = {
     transition: 'border-color 0.12s, background 0.12s',
   },
   beatNum: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    fontFamily: 'DM Mono, monospace', fontSize: 12,
     letterSpacing: '0.16em', color: ACCENT, marginBottom: 2,
   },
   beatName: {
-    fontFamily: 'DM Mono, monospace', fontSize: 11,
+    fontFamily: 'DM Mono, monospace', fontSize: 15,
     color: '#1E293B', letterSpacing: '0.02em',
     lineHeight: 1.3,
   },
   beatLocation: {
-    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    fontFamily: 'DM Mono, monospace', fontSize: 13,
     color: '#64748B', letterSpacing: '0.04em',
     display: 'flex', alignItems: 'center', gap: 4,
   },
   locationDot: {
-    color: ACCENT, fontSize: 7, opacity: 0.7,
+    color: ACCENT, fontSize: 11, opacity: 0.7,
   },
   beatTimeTag: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    fontFamily: 'DM Mono, monospace', fontSize: 12,
     color: 'rgba(8,145,178,0.7)', letterSpacing: '0.06em',
   },
   beatCharDots: {
@@ -1323,7 +1323,7 @@ const v = {
     width: 8, height: 8, borderRadius: '50%',
   },
   beatNote: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    fontFamily: 'DM Mono, monospace', fontSize: 12,
     color: 'rgba(100,116,139,0.6)', lineHeight: 1.4, letterSpacing: '0.02em',
   },
   conflictFlag: {
@@ -1347,10 +1347,10 @@ const mm = {
     fontFamily: 'DM Mono, monospace', padding: '0 4px',
   },
   beatHeaderNum: {
-    fontSize: 8, letterSpacing: '0.14em', marginBottom: 2,
+    fontSize: 12, letterSpacing: '0.14em', marginBottom: 2,
   },
   beatHeaderName: {
-    fontSize: 8, color: 'rgba(100,116,139,0.5)',
+    fontSize: 12, color: 'rgba(100,116,139,0.5)',
     whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
   },
   charRow: {
@@ -1361,7 +1361,7 @@ const mm = {
     width: 8, height: 8, borderRadius: '50%', flexShrink: 0,
   },
   charLabel: {
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 14,
     letterSpacing: '0.04em', flex: 1,
   },
   beatCell: {
@@ -1393,14 +1393,14 @@ const lc = {
     display: 'flex', alignItems: 'center', gap: 8,
   },
   locIcon: {
-    fontSize: 10, color: ACCENT, opacity: 0.7,
+    fontSize: 14, color: ACCENT, opacity: 0.7,
   },
   locName: {
-    fontFamily: 'DM Mono, monospace', fontSize: 12,
+    fontFamily: 'DM Mono, monospace', fontSize: 16,
     color: '#1E293B', flex: 1, letterSpacing: '0.04em',
   },
   conflictTag: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
+    fontFamily: 'DM Mono, monospace', fontSize: 11,
     color: '#DC2626', letterSpacing: '0.1em',
   },
   charRow: {
@@ -1415,7 +1415,7 @@ const lc = {
     width: 6, height: 6, borderRadius: '50%',
   },
   charName: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8, letterSpacing: '0.06em',
+    fontFamily: 'DM Mono, monospace', fontSize: 12, letterSpacing: '0.06em',
   },
   beats: {
     display: 'flex', flexDirection: 'column', gap: 4,
@@ -1427,15 +1427,15 @@ const lc = {
     borderRadius: '0 3px 3px 0',
   },
   beatName: {
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 14,
     color: '#475569', flex: 1, letterSpacing: '0.02em',
   },
   beatTime: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    fontFamily: 'DM Mono, monospace', fontSize: 12,
     color: 'rgba(8,145,178,0.6)',
   },
   conflictDot: {
-    color: '#DC2626', fontSize: 9,
+    color: '#DC2626', fontSize: 13,
   },
 };
 
@@ -1448,7 +1448,7 @@ const cp = {
     borderRadius: 6, padding: '14px 16px',
   },
   title: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    fontFamily: 'DM Mono, monospace', fontSize: 12,
     letterSpacing: '0.18em', color: '#DC2626',
     marginBottom: 10, fontWeight: 600,
   },
@@ -1458,18 +1458,18 @@ const cp = {
     borderTop: '1px solid rgba(239,68,68,0.15)',
   },
   charName: {
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 14,
     letterSpacing: '0.04em', fontWeight: 600, minWidth: 100,
   },
   timeTag: {
-    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    fontFamily: 'DM Mono, monospace', fontSize: 13,
     color: '#64748B', minWidth: 120,
   },
   locations: {
     display: 'flex', gap: 6, flexWrap: 'wrap',
   },
   locTag: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    fontFamily: 'DM Mono, monospace', fontSize: 12,
     color: '#DC2626', background: 'rgba(239,68,68,0.06)',
     border: '1px solid rgba(239,68,68,0.2)',
     borderRadius: 2, padding: '2px 8px',
@@ -1489,16 +1489,16 @@ const bd = {
     alignItems: 'flex-start', marginBottom: 12,
   },
   beatName: {
-    fontFamily: 'DM Mono, monospace', fontSize: 12,
+    fontFamily: 'DM Mono, monospace', fontSize: 16,
     color: '#1E293B', lineHeight: 1.3, flex: 1,
   },
   closeBtn: {
     background: 'none', border: 'none',
-    color: 'rgba(100,116,139,0.5)', fontSize: 18,
+    color: 'rgba(100,116,139,0.5)', fontSize: 22,
     cursor: 'pointer', padding: 0, lineHeight: 1, marginLeft: 8,
   },
   conflictAlert: {
-    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    fontFamily: 'DM Mono, monospace', fontSize: 13,
     color: '#DC2626', background: '#FEF2F2',
     border: '1px solid rgba(239,68,68,0.25)',
     borderRadius: 3, padding: '6px 10px', marginBottom: 12,
@@ -1506,7 +1506,7 @@ const bd = {
   fields: { marginBottom: 12 },
   charSection: { marginBottom: 12 },
   charLabel: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
+    fontFamily: 'DM Mono, monospace', fontSize: 11,
     letterSpacing: '0.18em', color: 'rgba(100,116,139,0.5)', marginBottom: 8,
   },
   charList: { display: 'flex', flexWrap: 'wrap', gap: 6 },
@@ -1515,16 +1515,16 @@ const bd = {
     background: 'rgba(148,163,184,0.08)', borderRadius: 2, padding: '3px 8px',
   },
   charDot: { width: 7, height: 7, borderRadius: '50%' },
-  charName: { fontFamily: 'DM Mono, monospace', fontSize: 9 },
+  charName: { fontFamily: 'DM Mono, monospace', fontSize: 13 },
   actions: { display: 'flex', gap: 8, marginTop: 'auto', paddingTop: 12 },
   editBtn: {
     flex: 1, background: 'none', border: '1px solid rgba(8,145,178,0.3)',
-    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 9,
+    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 13,
     letterSpacing: '0.1em', color: ACCENT, padding: '7px 0', cursor: 'pointer',
   },
   deleteBtn: {
     background: 'none', border: '1px solid rgba(239,68,68,0.25)',
-    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 9,
+    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 13,
     letterSpacing: '0.1em', color: '#DC2626', padding: '7px 12px', cursor: 'pointer',
   },
 };
@@ -1547,12 +1547,12 @@ const mo = {
     padding: '14px 18px', borderBottom: `1px solid ${EDGE}`,
   },
   title: {
-    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontFamily: 'DM Mono, monospace', fontSize: 14,
     letterSpacing: '0.16em', color: ACCENT,
   },
   closeBtn: {
     background: 'none', border: 'none', color: 'rgba(100,116,139,0.5)',
-    fontSize: 20, cursor: 'pointer', padding: 0, lineHeight: 1,
+    fontSize: 24, cursor: 'pointer', padding: 0, lineHeight: 1,
   },
   body: { padding: '18px', overflowY: 'auto' },
 };
@@ -1561,25 +1561,25 @@ const mo = {
 const mf = {
   field: { marginBottom: 14 },
   label: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
+    fontFamily: 'DM Mono, monospace', fontSize: 11,
     letterSpacing: '0.18em', color: 'rgba(100,116,139,0.55)', marginBottom: 6,
   },
   input: {
     width: '100%', background: '#F8FAFC',
     border: '1px solid rgba(148,163,184,0.3)',
-    borderRadius: 4, fontFamily: 'DM Mono, monospace', fontSize: 11,
+    borderRadius: 4, fontFamily: 'DM Mono, monospace', fontSize: 15,
     color: '#334155', padding: '8px 10px',
     boxSizing: 'border-box', outline: 'none',
   },
   cancelBtn: {
     background: 'none', border: '1px solid rgba(148,163,184,0.3)',
-    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 9,
+    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 13,
     letterSpacing: '0.1em', color: '#64748B',
     padding: '8px 16px', cursor: 'pointer',
   },
   submitBtn: {
     background: 'rgba(8,145,178,0.08)', border: '1px solid rgba(8,145,178,0.35)',
-    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 9,
+    borderRadius: 3, fontFamily: 'DM Mono, monospace', fontSize: 13,
     letterSpacing: '0.1em', color: ACCENT, padding: '8px 18px', cursor: 'pointer',
   },
 };
