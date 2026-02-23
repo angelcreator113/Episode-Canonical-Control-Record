@@ -24,6 +24,11 @@ import ChapterDraftGenerator from './ChapterDraftGenerator';
 import LalaSceneDetection from '../components/LalaSceneDetection';
 import ExportPanel from '../components/ExportPanel';
 import ScriptBridgePanel from '../components/ScriptBridgePanel';
+import PreWritingCheckin from '../components/PreWritingCheckin';
+import BeliefTracker from '../components/BeliefTracker';
+import VentureRegistry from '../components/VentureRegistry';
+import { PlantEchoButton, IncomingEchoes, EchoHealthPanel } from '../components/DecisionEchoPanel';
+import { getVentureContext, getThreadContext } from '../data/ventureData';
 import './StorytellerPage.css';
 
 const API = '/api/v1/storyteller';
@@ -269,6 +274,10 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
 
   // UI state
   const [pendingOpen, setPendingOpen] = useState(true);
+  const [showCheckin, setShowCheckin] = useState(true);
+  const [incomingEchoes, setIncomingEchoes] = useState([]);
+  const [activeThreads, setActiveThreads] = useState([]);
+  const [pnosAct, setPnosAct] = useState('act_1');
   const [reviewMode, setReviewMode] = useState(false);
   const [writingMode, setWritingMode] = useState(false);
   const [canonOpen, setCanonOpen] = useState(false);
@@ -316,6 +325,15 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
       .then(data => setRegistryCharacters(data || []))
       .catch(() => {});
   }, []);
+
+  // Fetch incoming echoes for the active chapter
+  useEffect(() => {
+    if (!activeChapterId || !book?.id) return;
+    fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`)
+      .then(r => r.json())
+      .then(data => setIncomingEchoes(Array.isArray(data) ? data : []))
+      .catch(() => setIncomingEchoes([]));
+  }, [activeChapterId, book?.id]);
 
   useEffect(() => {
     setChapters(book.chapters || []);
@@ -599,7 +617,18 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
             </>
           )}
           {!isPending && !isEditing && (
-            <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>✎</button>
+            <>
+              <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>✎</button>
+              <PlantEchoButton
+                line={ln}
+                chapters={chapters}
+                bookId={book.id}
+                onPlanted={() => {
+                  fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`)
+                    .then(r => r.json()).then(d => setIncomingEchoes(d.echoes || []));
+                }}
+              />
+            </>
           )}
         </div>
       </div>
@@ -813,6 +842,12 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
             <button onClick={() => setShowAddChapter(true)}>+ New Chapter</button>
           </div>
 
+          {/* Venture Registry — sidebar panel */}
+          <VentureRegistry
+            activeAct={pnosAct}
+            onVentureSelect={(v) => console.log('Selected venture:', v.id)}
+          />
+
           <div className="st-nav-stats">
             <div className="st-stat-row">
               <span className="st-stat-label">Lines</span>
@@ -831,6 +866,12 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
               </span>
             </div>
           </div>
+
+          {/* Echo Health — book-level echo overview */}
+          <EchoHealthPanel
+            echoes={incomingEchoes}
+            chapters={chapters}
+          />
         </nav>
 
         {/* ── Main Content ── */}
@@ -962,6 +1003,37 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                       </button>
                     </div>
                   </div>
+
+                  {/* Belief Tracker — PNOS act + threads */}
+                  <BeliefTracker
+                    chapter={activeChapter}
+                    onActChange={act => setPnosAct(act)}
+                    onThreadChange={threads => setActiveThreads(threads)}
+                  />
+
+                  {/* Incoming Echoes — planted moments that reverberate here */}
+                  <IncomingEchoes
+                    echoes={incomingEchoes}
+                    onMarkLanded={async (echoId) => {
+                      try {
+                        await fetch(`/api/v1/storyteller/echoes/${echoId}`, {
+                          method: 'PUT',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ status: 'landed' }),
+                        });
+                        setIncomingEchoes(prev => prev.map(e => e.id === echoId ? { ...e, status: 'landed' } : e));
+                      } catch (err) { console.error('Failed to mark echo landed:', err); }
+                    }}
+                  />
+
+                  {/* Pre-writing character check-in */}
+                  {showCheckin && registryCharacters?.length > 0 && (
+                    <PreWritingCheckin
+                      characters={registryCharacters}
+                      chapterContext={activeChapter?.scene_goal || activeChapter?.title || null}
+                      onDismiss={() => setShowCheckin(false)}
+                    />
+                  )}
 
                   {/* Scene Interview — empty chapter, not yet interviewed */}
                   {((lines.length === 0 && !interviewDone) || redoInterview) && (

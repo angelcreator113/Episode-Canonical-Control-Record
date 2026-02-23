@@ -54,11 +54,16 @@ const hasSpeechSynthesis = typeof window !== 'undefined' && !!window.speechSynth
 // ══════════════════════════════════════════════════════════════════════════
 
 export function useVoice() {
-  const [listening, setListening]     = useState(false);
-  const [speaking, setSpeaking]       = useState(false);
-  const [error, setError]             = useState(null);
-  const recognitionRef                = useRef(null);
-  const synthRef                      = useRef(typeof window !== 'undefined' ? window.speechSynthesis : null);
+  const [listening, setListening] = useState(false);
+  const [speaking, setSpeaking]   = useState(false);
+  const [error, setError]         = useState(null);
+
+  const recognitionRef = useRef(null);
+  const finalRef       = useRef('');      // FIX: ref instead of closure var
+  const callbackRef    = useRef(null);    // FIX: always-current callback ref
+  const synthRef       = useRef(
+    typeof window !== 'undefined' ? window.speechSynthesis : null
+  );
 
   // ── TEXT TO SPEECH ───────────────────────────────────────────────────
   const speak = useCallback((text, options = {}) => {
@@ -97,11 +102,20 @@ export function useVoice() {
     setSpeaking(false);
   }, []);
 
-  // ── SPEECH RECOGNITION ───────────────────────────────────────────────
+  // ── SPEECH RECOGNITION ───────────────────────────────────────────────────
   const startListening = useCallback((onTranscript) => {
     if (!hasSpeechRecognition) {
-      setError('Voice input is not supported in this browser. Try Chrome.');
+      setError('Voice input not supported in this browser. Try Chrome.');
       return;
+    }
+
+    // Store callback in ref — survives re-renders without stale closures
+    callbackRef.current = onTranscript;
+
+    // Abort any existing session before starting fresh
+    if (recognitionRef.current) {
+      recognitionRef.current.abort();
+      recognitionRef.current = null;
     }
 
     const SpeechRecognition =
@@ -112,38 +126,43 @@ export function useVoice() {
     recognition.interimResults = true;
     recognition.lang           = 'en-US';
 
-    let finalTranscript = '';
+    // FIX: Reset accumulator ref fresh for each new session
+    finalRef.current = '';
 
     recognition.onstart = () => {
       setListening(true);
       setError(null);
+      finalRef.current = '';
     };
 
     recognition.onresult = (event) => {
       let interimTranscript = '';
+
+      // FIX: Start from resultIndex — never reprocess already-committed results
       for (let i = event.resultIndex; i < event.results.length; i++) {
-        const transcript = event.results[i][0].transcript;
+        const text = event.results[i][0].transcript;
         if (event.results[i].isFinal) {
-          finalTranscript += transcript + ' ';
+          finalRef.current += text + ' ';
         } else {
-          interimTranscript += transcript;
+          interimTranscript += text;
         }
       }
-      // Pass combined to callback
-      onTranscript(finalTranscript + interimTranscript, {
-        final: finalTranscript,
+
+      // Live display during recording: committed + current interim
+      // This is for the textarea only — NOT what gets sent as the answer
+      const displayText = (finalRef.current + interimTranscript).trim();
+      callbackRef.current?.(displayText, {
+        final:   finalRef.current.trim(),
         interim: interimTranscript,
         isFinal: false,
       });
     };
 
-    recognition.onfinalresult = () => {
-      onTranscript(finalTranscript, { final: finalTranscript, isFinal: true });
-    };
-
     recognition.onerror = (event) => {
       if (event.error === 'not-allowed') {
         setError('Microphone access denied. Check browser permissions.');
+      } else if (event.error === 'no-speech') {
+        // Pause — not an error
       } else if (event.error !== 'aborted') {
         setError(`Voice error: ${event.error}`);
       }
@@ -152,10 +171,17 @@ export function useVoice() {
 
     recognition.onend = () => {
       setListening(false);
-      // Call with final flag
-      if (finalTranscript.trim()) {
-        onTranscript(finalTranscript.trim(), { final: finalTranscript.trim(), isFinal: true });
+      // FIX: Fire ONE clean final callback — committed text only, no interim
+      // This is the answer that gets sent to the interview / character questions
+      const finalText = finalRef.current.trim();
+      if (finalText) {
+        callbackRef.current?.(finalText, {
+          final:   finalText,
+          interim: '',
+          isFinal: true,  // <-- CharacterVoiceInterview watches for this to trigger send
+        });
       }
+      finalRef.current = '';
     };
 
     recognitionRef.current = recognition;
@@ -163,14 +189,13 @@ export function useVoice() {
   }, []);
 
   const stopListening = useCallback(() => {
+    // .stop() gracefully ends session and triggers onend → final clean callback
     recognitionRef.current?.stop();
-    setListening(false);
   }, []);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
-      recognitionRef.current?.stop();
+      recognitionRef.current?.abort();
       synthRef.current?.cancel();
     };
   }, []);
@@ -196,23 +221,44 @@ export function useVoice() {
 
 // ══════════════════════════════════════════════════════════════════════════
 //  MicButton COMPONENT
+//
+//  Mode A — CONTROLLED (use when parent already has useVoice):
+//    <MicButton
+//      listening={listening}
+//      onStart={() => startListening(myCallback)}
+//      onStop={stopListening}
+//    />
+//    No internal recognizer created. No conflict.
+//
+//  Mode B — STANDALONE (original usage):
+//    <MicButton onTranscript={(text, meta) => setInput(text)} />
+//    Manages its own internal voice instance.
+//
 // ══════════════════════════════════════════════════════════════════════════
 
-export function MicButton({ onTranscript, size = 'normal', style: customStyle }) {
-  const { startListening, stopListening, listening, error, supported } = useVoice();
-  const [localTranscript, setLocalTranscript] = useState('');
+export function MicButton({
+  listening:  externalListening,
+  onStart,
+  onStop,
+  onTranscript,
+  size = 'normal',
+  style: customStyle,
+}) {
+  const internal     = useVoice();
+  const isControlled = externalListening !== undefined;
+  const isListening  = isControlled ? externalListening : internal.listening;
 
-  if (!supported.input) return null;
+  if (!hasSpeechRecognition) return null;
 
   function handleClick() {
-    if (listening) {
-      stopListening();
+    if (isControlled) {
+      isListening ? onStop?.() : onStart?.();
     } else {
-      setLocalTranscript('');
-      startListening((text, meta) => {
-        setLocalTranscript(text);
-        onTranscript?.(text, meta);
-      });
+      if (internal.listening) {
+        internal.stopListening();
+      } else {
+        internal.startListening((text, meta) => onTranscript?.(text, meta));
+      }
     }
   }
 
@@ -225,39 +271,28 @@ export function MicButton({ onTranscript, size = 'normal', style: customStyle })
           ...mic.btn,
           width:  isSmall ? 28 : 36,
           height: isSmall ? 28 : 36,
-          background: listening
-            ? 'rgba(184,92,56,0.12)'
-            : 'rgba(201,168,76,0.08)',
-          border: listening
-            ? '1px solid rgba(184,92,56,0.4)'
-            : '1px solid rgba(201,168,76,0.25)',
-          animation: listening ? 'vl-pulse 1.5s ease-in-out infinite' : 'none',
+          background: isListening ? 'rgba(184,92,56,0.12)' : 'rgba(201,168,76,0.08)',
+          border:     isListening ? '1px solid rgba(184,92,56,0.4)' : '1px solid rgba(201,168,76,0.25)',
+          animation:  isListening ? 'vl-pulse 1.5s ease-in-out infinite' : 'none',
           ...customStyle,
         }}
         onClick={handleClick}
-        title={listening ? 'Stop recording' : 'Speak your answer'}
-        type='button'
+        title={isListening ? 'Stop recording' : 'Speak your answer'}
+        type="button"
       >
-        {listening ? (
-          <span style={{ ...mic.icon, color: '#B85C38', fontSize: isSmall ? 13 : 16 }}>◼</span>
-        ) : (
-          <span style={{ ...mic.icon, color: '#C9A84C', fontSize: isSmall ? 13 : 16 }}>🎤</span>
-        )}
+        {isListening
+          ? <span style={{ ...mic.icon, color: '#B85C38', fontSize: isSmall ? 13 : 16 }}>◼</span>
+          : <span style={{ ...mic.icon, color: '#C9A84C', fontSize: isSmall ? 13 : 16 }}>🎤</span>
+        }
       </button>
 
-      {listening && (
-        <div style={mic.listeningLabel}>listening…</div>
-      )}
+      {isListening && <div style={mic.listeningLabel}>listening…</div>}
+      {!isControlled && internal.error && <div style={mic.errorLabel}>{internal.error}</div>}
 
-      {error && (
-        <div style={mic.errorLabel}>{error}</div>
-      )}
-
-      {/* Keyframe for pulse animation */}
       <style>{`
         @keyframes vl-pulse {
           0%, 100% { box-shadow: 0 0 0 0 rgba(184,92,56,0.3); }
-          50% { box-shadow: 0 0 0 6px rgba(184,92,56,0); }
+          50%       { box-shadow: 0 0 0 6px rgba(184,92,56,0); }
         }
       `}</style>
     </div>
@@ -360,7 +395,9 @@ export function VoiceConversation({
       <div style={vc.actions}>
         {supported.input && (
           <MicButton
-            onTranscript={handleMicResult}
+            listening={listening}
+            onStart={() => startListening(handleMicResult)}
+            onStop={stopListening}
           />
         )}
         {supported.output && question && (

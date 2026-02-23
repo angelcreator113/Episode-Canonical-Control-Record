@@ -43,6 +43,14 @@
   box-shadow: 0 1px 0 rgba(26,21,16,0.06);
 }
 
+/* Mobile: replace shadow with a subtle border to avoid Samsung AMOLED artifacts */
+@media (max-width: 900px) {
+  .lp-nav--scrolled {
+    box-shadow: none;
+    border-bottom: 1px solid rgba(26,21,16,0.06);
+  }
+}
+
 .lp-nav__inner {
   max-width: 1200px;
   margin: 0 auto;
@@ -115,7 +123,7 @@
 }
 
 @media (max-width: 900px) {
-  .lp-nav { padding: 12px 0 0; }
+  .lp-nav { padding: 12px 0 0; border-bottom: 1px solid rgba(26,21,16,0.04); }
   .lp-nav--scrolled { padding: 8px 0 0; }
   .lp-nav__inner { flex-direction: column; align-items: stretch; gap: 0; }
   .lp-nav__brand { padding: 0 20px 10px; }
@@ -125,7 +133,7 @@
     scrollbar-width: none;
     gap: 2px;
     padding: 0 16px 10px;
-    border-top: 1px solid rgba(26,21,16,0.04);
+    border-top: none;
     flex-wrap: nowrap;
   }
   .lp-nav__links::-webkit-scrollbar { display: none; }
@@ -171,7 +179,7 @@
     display: flex;
     justify-content: center;
     padding: 6px 0 8px;
-    border-top: 1px solid rgba(26,21,16,0.04);
+    border-top: none;
     margin-top: 4px;
   }
   .lp-nav__login-btn {

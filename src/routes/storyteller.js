@@ -667,4 +667,100 @@ function parseImportText(rawText) {
 }
 
 
+// ═══════════════════════════════════════════════════════
+// ECHO ROUTES — Decision Echo CRUD
+// ═══════════════════════════════════════════════════════
+
+// POST /echoes — Plant an echo
+router.post('/echoes', optionalAuth, async (req, res) => {
+  try {
+    const db = await getModels();
+    if (!db?.StorytellerEcho) return res.status(500).json({ error: 'Echo model not loaded' });
+
+    const {
+      book_id, source_chapter_id, source_line_id,
+      source_line_content, target_chapter_id, note,
+      landing_note, status = 'planted',
+    } = req.body;
+
+    if (!book_id || !note) {
+      return res.status(400).json({ error: 'book_id and note are required' });
+    }
+
+    const echo = await db.StorytellerEcho.create({
+      book_id, source_chapter_id, source_line_id,
+      source_line_content, target_chapter_id, note,
+      landing_note, status,
+    });
+
+    res.status(201).json(echo);
+  } catch (err) {
+    console.error('POST /echoes error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// GET /echoes?book_id=...&target_chapter_id=... — Get echoes for a book (optionally filtered by target chapter)
+router.get('/echoes', optionalAuth, async (req, res) => {
+  try {
+    const db = await getModels();
+    if (!db?.StorytellerEcho) return res.status(500).json({ error: 'Echo model not loaded' });
+
+    const where = {};
+    if (req.query.book_id) where.book_id = req.query.book_id;
+    if (req.query.target_chapter_id) where.target_chapter_id = req.query.target_chapter_id;
+    if (req.query.status) where.status = req.query.status;
+
+    const echoes = await db.StorytellerEcho.findAll({
+      where,
+      order: [['created_at', 'DESC']],
+    });
+
+    res.json(echoes);
+  } catch (err) {
+    console.error('GET /echoes error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /echoes/:echoId — Update an echo (e.g., mark as landed)
+router.put('/echoes/:echoId', optionalAuth, async (req, res) => {
+  try {
+    const db = await getModels();
+    if (!db?.StorytellerEcho) return res.status(500).json({ error: 'Echo model not loaded' });
+
+    const echo = await db.StorytellerEcho.findByPk(req.params.echoId);
+    if (!echo) return res.status(404).json({ error: 'Echo not found' });
+
+    const allowed = ['note', 'landing_note', 'status', 'target_chapter_id'];
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) echo[key] = req.body[key];
+    }
+    await echo.save();
+
+    res.json(echo);
+  } catch (err) {
+    console.error('PUT /echoes/:echoId error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /echoes/:echoId — Delete an echo
+router.delete('/echoes/:echoId', optionalAuth, async (req, res) => {
+  try {
+    const db = await getModels();
+    if (!db?.StorytellerEcho) return res.status(500).json({ error: 'Echo model not loaded' });
+
+    const echo = await db.StorytellerEcho.findByPk(req.params.echoId);
+    if (!echo) return res.status(404).json({ error: 'Echo not found' });
+
+    await echo.destroy();
+    res.json({ deleted: true, id: req.params.echoId });
+  } catch (err) {
+    console.error('DELETE /echoes/:echoId error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 module.exports = router;
