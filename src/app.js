@@ -808,6 +808,15 @@ try {
   console.error('✗ Failed to load Memories routes:', e.message);
 }
 
+// Script Bridge routes (generate episode scripts from book lines)
+try {
+  const scriptFromBook = require('./routes/generate-script-from-book');
+  app.use('/api/v1/memories', scriptFromBook);
+  console.log('✓ Script Bridge routes loaded at /api/v1/memories/generate-script-from-book');
+} catch (e) {
+  console.error('✗ Failed to load Script Bridge routes:', e.message);
+}
+
 // Universe routes (PNOS world-building layer)
 try {
   const universeRoutes = require('./routes/universe');

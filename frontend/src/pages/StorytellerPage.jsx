@@ -23,6 +23,7 @@ import ImportDraftModal from './ImportDraftModal';
 import ChapterDraftGenerator from './ChapterDraftGenerator';
 import LalaSceneDetection from '../components/LalaSceneDetection';
 import ExportPanel from '../components/ExportPanel';
+import ScriptBridgePanel from '../components/ScriptBridgePanel';
 import './StorytellerPage.css';
 
 const API = '/api/v1/storyteller';
@@ -716,6 +717,12 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
             >
               <span className="st-workspace-item-icon">↓</span> Export
             </button>
+            <button
+              className={`st-workspace-item${activeView === 'script' ? ' active' : ''}`}
+              onClick={() => openWorkspace('script')}
+            >
+              <span className="st-workspace-item-icon">⟶</span> Script
+            </button>
           </div>
         </>
       )}
@@ -1134,6 +1141,14 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
             <LalaSceneDetection bookId={book.id} />
           ) : activeView === 'export' ? (
             <ExportPanel bookId={book.id} />
+          ) : activeView === 'script' ? (
+            <ScriptBridgePanel
+              bookId={book.id}
+              bookTitle={book.title}
+              chapterId={activeChapter?.id}
+              chapterTitle={activeChapter?.title}
+              showId={book.show_id}
+            />
           ) : null}
         </div>
       </div>
