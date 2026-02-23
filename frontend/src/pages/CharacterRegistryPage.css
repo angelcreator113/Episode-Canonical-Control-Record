@@ -1643,16 +1643,40 @@
   .cr-registry-select { width: 100%; font-size: 14px; padding: 10px 12px; min-height: 42px; }
 }
 
-/* ── Very small phones (≤360px) ── */
+/* ── Very small phones / Samsung Galaxy S (≤360px) ── */
 @media (max-width: 360px) {
   .cr-header { padding: 8px 10px; }
+  .cr-header-title { font-size: 15px; }
+  .cr-header-brand { font-size: 12px; }
+  .cr-header-breadcrumb { font-size: 8px; }
+  .cr-header-btn { font-size: 11px; padding: 8px 10px; }
+
+  .cr-filters { padding: 6px 10px; gap: 5px; }
+  .cr-filter-pill { padding: 6px 10px; font-size: 10px; }
+  .cr-filter-label { font-size: 8px; }
+
   .cr-content { padding: 12px 8px 40px; }
+  .cr-stats-strip { padding: 10px 10px; gap: 8px 14px; }
+  .cr-stat-count { font-size: 16px; }
+  .cr-stat-label { font-size: 8px; }
+
+  .cr-grid { gap: 10px; }
   .cr-card-body { padding: 12px 14px; }
   .cr-card-name { font-size: 16px; }
-  .cr-stat-count { font-size: 16px; }
-  .cr-header-title { font-size: 15px; }
-  .cr-header-btn { font-size: 11px; padding: 8px 10px; }
+  .cr-card-role { font-size: 9px; }
+  .cr-card-portrait { height: 130px; }
+  .cr-card-portrait .cr-card-icon { font-size: 40px; }
+  .cr-card-portrait .cr-card-initial { font-size: 52px; }
+
   .cr-modal { padding: 20px 12px; }
+  .cr-modal-title { font-size: 16px; }
+
+  .cr-empty-state { padding: 36px 12px; }
+  .cr-empty-icon { font-size: 32px; }
+  .cr-empty-title { font-size: 16px; }
+  .cr-empty-btn { padding: 10px 20px; font-size: 13px; }
+
+  .cr-loading { padding: 40px 12px; }
 
   .cr-dossier-name { font-size: 18px; }
   .cr-dossier-back { padding: 8px 8px; }
@@ -1661,6 +1685,24 @@
   .cr-dossier-tab-content { padding: 12px 8px 28px; }
   .cr-dossier-left { padding: 12px 8px; }
   .cr-dossier-portrait { max-width: 100px; }
+  .cr-dossier-portrait .portrait-icon { font-size: 52px; }
+  .cr-dossier-portrait .portrait-initial { font-size: 72px; }
+  .cr-dossier-meta-row { gap: 8px; font-size: 10px; }
+  .cr-dossier-row-label { font-size: 10px; }
+  .cr-dossier-row-value { font-size: 13px; }
+  .cr-dossier-section-title { font-size: 12px; }
+  .cr-dossier-triad-label { font-size: 9px; }
+  .cr-dossier-triad-value { font-size: 13px; }
+  .cr-dossier-action-btn { padding: 10px 12px; font-size: 13px; }
+
+  .cr-registry-bar { gap: 6px; }
+  .cr-registry-select { font-size: 13px; padding: 8px 10px; }
+  .cr-registry-meta { font-size: 9px; }
+
+  .cr-list-row { padding: 12px 8px; }
+  .cr-list-header { padding: 8px 8px; }
+  .cr-list-name { font-size: 13px; }
+  .cr-list-role { font-size: 9px; }
 }
 
 /* ── Touch device improvements ── */

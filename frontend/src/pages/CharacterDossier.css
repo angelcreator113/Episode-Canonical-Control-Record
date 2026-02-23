@@ -787,3 +787,35 @@
     padding: 12px;
   }
 }
+
+/* ── Samsung Galaxy S / very small phones (≤360px) ── */
+@media (max-width: 360px) {
+  .dossier-header {
+    padding: 12px 8px;
+    gap: 10px;
+  }
+
+  .dossier-header-icon {
+    width: 40px;
+    height: 40px;
+    font-size: 24px;
+  }
+
+  .dossier-name { font-size: 18px; }
+  .dossier-classification { font-size: 8px; letter-spacing: 1.5px; }
+
+  .dossier-section-header { padding: 10px 8px; font-size: 12px; }
+  .dossier-section-body { padding: 4px 8px 16px 16px; }
+  .dossier-row-label { font-size: 10px; }
+  .dossier-row-value { font-size: 12px; }
+
+  .dossier-triad-item,
+  .dossier-duality-item {
+    padding: 10px;
+  }
+
+  .dossier-triad-item label { font-size: 9px; }
+  .dossier-duality-item label { font-size: 9px; }
+
+  .dossier-footer { padding: 10px 8px; }
+}

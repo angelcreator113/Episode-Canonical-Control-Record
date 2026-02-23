@@ -396,10 +396,10 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
         body: JSON.stringify({ status: 'approved' }),
       });
       updateLineLocal(lineId, { status: 'approved' });
-      setLastApprovedLine(lineId);
       markSaved();
       // memory extraction
       const line = lines.find(l => l.id === lineId);
+      if (line) setLastApprovedLine({ ...line, status: 'approved' });
       if (line) {
         try {
           await api('/extract-memory', {
@@ -725,7 +725,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
             </button>
           </div>
         </>
-      )}}
+      )}
 
       {/* ── Editor Body (Nav + Content) ── */}
       <div className="st-editor-body">
@@ -966,8 +966,9 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                   {/* Scene Interview — empty chapter, not yet interviewed */}
                   {((lines.length === 0 && !interviewDone) || redoInterview) && (
                     <SceneInterview
-                      bookId={book.id}
-                      chapterId={activeChapter.id}
+                      book={book}
+                      chapter={activeChapter}
+                      characters={registryCharacters}
                       onComplete={() => {
                         setInterviewDone(true);
                         setRedoInterview(false);
@@ -979,9 +980,9 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                   {/* Chapter Draft Generator — after interview, before lines */}
                   {interviewDone && lines.length === 0 && (
                     <ChapterDraftGenerator
-                      bookId={book.id}
-                      chapterId={activeChapter.id}
-                      onGenerated={onRefresh}
+                      chapter={activeChapter}
+                      book={book}
+                      onDraftGenerated={onRefresh}
                     />
                   )}
 
@@ -999,9 +1000,11 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                               </span>
                             </div>
                             <NarrativeIntelligence
+                              chapter={activeChapter}
                               lines={approvedLines.slice(Math.max(0, i - 4), i + 1)}
-                              chapterId={activeChapter.id}
-                              bookId={book.id}
+                              lineIndex={i}
+                              book={book}
+                              characters={registryCharacters}
                             />
                           </div>
                         )}
@@ -1010,8 +1013,10 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
 
                     {/* Continuity Guard */}
                     <ContinuityGuard
+                      chapter={activeChapter}
                       lines={approvedLines}
-                      characters={registryCharacters}
+                      book={book}
+                      triggerLine={lastApprovedLine}
                     />
 
                     {/* Pending Lines — collapsible */}
@@ -1132,7 +1137,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
 
           /* ── Workspace Panels ── */
           ) : activeView === 'toc' ? (
-            <TOCPanel book={book} chapters={chapters} onChapterClick={(id) => setSelectedChapter(chapters.find(c => c.id === id))} />
+            <TOCPanel book={book} chapters={chapters} onChapterClick={(id) => { setActiveChapterId(id); setActiveView('book'); }} />
           ) : activeView === 'memory' ? (
             <MemoryBankView bookId={book.id} />
           ) : activeView === 'scenes' ? (
@@ -1166,7 +1171,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                 ×
               </button>
             </div>
-            <ChapterBrief bookId={book.id} chapterId={activeChapterId} />
+            <ChapterBrief chapter={activeChapter} characters={registryCharacters} />
           </div>
         </div>
       )}
@@ -1174,8 +1179,9 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
       {/* ── Import Draft Modal ── */}
       {importTarget && (
         <ImportDraftModal
-          chapter={importTarget}
-          bookId={book.id}
+          chapterId={importTarget.id}
+          chapterTitle={importTarget.title}
+          open={true}
           onClose={() => setImportTarget(null)}
           onImported={() => { setImportTarget(null); onRefresh(); }}
         />

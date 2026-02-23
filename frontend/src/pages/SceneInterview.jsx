@@ -87,10 +87,10 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
 
   // Load any previously saved interview answers
   useEffect(() => {
-    if (chapter.interview_answers && Object.keys(chapter.interview_answers).length > 0) {
+    if (chapter?.interview_answers && Object.keys(chapter.interview_answers).length > 0) {
       setSavedAnswers(chapter.interview_answers);
     }
-  }, [chapter.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [chapter?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Auto-speak each question when step changes
   useEffect(() => {
