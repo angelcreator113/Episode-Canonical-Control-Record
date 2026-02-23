@@ -1582,6 +1582,11 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-topbar-wordcount { display: none; }
   .st-topbar-saved { display: none; }
 
+  /* Topbar left / right: prevent overflow on small screens */
+  .st-topbar-left { gap: 10px; min-width: 0; flex-shrink: 1; }
+  .st-topbar-right { gap: 10px; min-width: 0; flex-shrink: 1; }
+  .st-topbar-back { white-space: nowrap; }
+
   /* Editor fills width */
   .st-editor { padding: 0 16px 40px; }
   .st-manuscript-wrapper { gap: 0; }
@@ -1602,6 +1607,21 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
     margin-top: 12px;
     opacity: 1;
     flex-wrap: wrap;
+    gap: 8px;
+  }
+  .st-chapter-icon-btn {
+    padding: 8px 12px;
+    font-size: 16px;
+    min-height: 38px;
+    min-width: 38px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 6px;
+    background: var(--st-gold-soft);
+  }
+  .st-chapter-icon-btn.danger {
+    background: rgba(192,122,92,0.06);
   }
 
   /* Brief sheet full width */
@@ -1620,26 +1640,40 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-modal-backdrop { padding: 0; }
   .st-form-row { grid-template-columns: 1fr; }
 
-  /* Workspace drawer */
+  /* Workspace drawer — full width bottom sheet style */
   .st-workspace-drawer {
     right: 0;
     left: 0;
-    border-radius: 0;
+    border-radius: 12px 12px 0 0;
     border-left: none;
     border-right: none;
+    top: auto;
+    bottom: 0;
+    position: fixed;
+    z-index: 35;
+    padding: 12px 8px 20px;
+    box-shadow: 0 -4px 24px rgba(47, 42, 38, 0.12);
   }
+  .st-workspace-item {
+    padding: 14px 18px;
+    font-size: 15px;
+    border-radius: 8px;
+    min-height: 48px;
+  }
+  .st-workspace-item-icon { font-size: 16px; }
 
   /* Touch-friendly line actions */
   .st-line-actions { opacity: 1; }
-  .st-line-action { padding: 6px 12px; font-size: 13px; }
+  .st-line-action { padding: 8px 14px; font-size: 14px; min-height: 36px; border-radius: 6px; }
 
   /* Touch-friendly action bar */
-  .st-action-bar { flex-direction: column; gap: 12px; align-items: stretch; }
+  .st-action-bar { flex-direction: column; gap: 12px; align-items: stretch; opacity: 1; }
   .st-action-bar-btns { justify-content: stretch; }
-  .st-action-bar-btns .st-btn { flex: 1; justify-content: center; }
+  .st-action-bar-btns .st-btn { flex: 1; justify-content: center; min-height: 44px; font-size: 14px; }
 
   /* Touch add-line */
   .st-add-line input { font-size: 16px; padding: 12px 0; }
+  .st-add-line-trigger { font-size: 16px; padding: 14px 0; }
 
   /* Touch-friendly pending toggle */
   .st-pending-toggle { padding: 16px 0; font-size: 14px; }
@@ -1654,10 +1688,20 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
 
   /* Edit area */
   .st-edit-area { font-size: 16px; min-height: 80px; }
+  .st-edit-actions { gap: 10px; }
+  .st-edit-save, .st-edit-cancel { padding: 8px 18px; font-size: 14px; min-height: 40px; }
 
   /* Nav chapter touch targets */
-  .st-nav-chapter { padding: 12px 20px; }
+  .st-nav-chapter { padding: 12px 20px; min-height: 48px; }
   .st-nav-chapter-delete { opacity: 1; font-size: 16px; right: 8px; top: 10px; }
+
+  /* Inline edit inputs sized for touch */
+  .st-inline-edit-chapter-bar { font-size: 24px; min-width: 100%; width: 100%; }
+
+  /* Add chapter form stacks nicely */
+  .st-add-chapter-form { flex-direction: column; align-items: stretch; }
+  .st-add-chapter-form .st-form-group { min-width: 100%; }
+  .st-add-chapter-form .st-btn { min-height: 44px; font-size: 14px; }
 }
 
 /* ═══════════════════════════════════════
@@ -1666,10 +1710,14 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
 @media (max-width: 480px) {
   :root { --st-topbar-h: 48px; }
 
-  .st-topbar-left { gap: 8px; min-width: auto; }
-  .st-topbar-right { gap: 8px; min-width: auto; }
-  .st-topbar-back { font-size: 13px; }
+  .st-topbar-left { gap: 6px; min-width: auto; }
+  .st-topbar-right { gap: 6px; min-width: auto; }
+  .st-topbar-back { font-size: 13px; padding: 6px 2px; }
   .st-mode-toggle { display: none; }
+  .st-mobile-nav-toggle { font-size: 22px; padding: 6px 10px; }
+
+  /* Workspace toggle shorter label */
+  .st-workspace-toggle { font-size: 12px; padding: 6px 10px; }
 
   .st-book-list { padding: 24px 12px 40px; }
   .st-book-list-header h1 { font-size: 24px; }
@@ -1685,10 +1733,20 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-chapter-header-label { font-size: 10px; }
   .st-chapter-header-meta { font-size: 12px; flex-wrap: wrap; }
 
+  /* Chapter actions: smaller grid on tiny screens */
+  .st-chapter-actions { gap: 6px; }
+  .st-chapter-icon-btn {
+    padding: 7px 10px;
+    font-size: 15px;
+    min-height: 36px;
+    min-width: 36px;
+  }
+
   .st-line-text { font-size: 15px; line-height: 1.75; }
   .st-edit-area { font-size: 16px; } /* prevent iOS zoom */
 
-  .st-chapter-icon-btn { padding: 6px 10px; font-size: 15px; }
+  /* Line actions: compact but still tappable */
+  .st-line-action { padding: 7px 12px; font-size: 13px; min-height: 34px; }
 
   /* Stack action buttons vertically */
   .st-action-bar-btns { flex-direction: column; }
@@ -1702,9 +1760,10 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-nav { width: 85vw; }
   .st-nav-brand { padding: 16px 16px 14px; }
   .st-nav-brand-title { font-size: 16px; }
-  .st-nav-chapter { padding: 14px 16px; }
+  .st-nav-chapter { padding: 14px 16px; min-height: 48px; }
   .st-nav-chapter-title { font-size: 15px; }
   .st-nav-add { padding: 8px 16px 14px; }
+  .st-nav-add button { font-size: 13px; padding: 8px 0; }
   .st-nav-stats { padding: 12px 16px; }
 
   /* Pending body */
@@ -1723,6 +1782,15 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   /* Brief sheet */
   .st-brief-sheet { padding: 24px 16px; }
   .st-brief-sheet-title { font-size: 15px; }
+
+  /* Edit actions — full width on tiny screens */
+  .st-edit-save, .st-edit-cancel { flex: 1; text-align: center; }
+
+  /* Add line trigger more visible */
+  .st-add-line-trigger { opacity: 0.4; font-size: 15px; padding: 16px 0; }
+
+  /* Inline edit inputs */
+  .st-inline-edit-chapter-bar { font-size: 20px; }
 }
 
 /* ═══════════════════════════════════════
@@ -1758,12 +1826,22 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-card-delete { opacity: 0.5; }
 
   /* Chapter actions always visible */
-  .st-chapter-actions { opacity: 0.8; }
+  .st-chapter-actions { opacity: 1; }
 
   /* Bigger tap targets */
-  .st-btn { min-height: 40px; padding: 10px 18px; }
-  .st-btn-sm { min-height: 36px; padding: 8px 14px; }
-  .st-nav-chapter { min-height: 44px; }
+  .st-btn { min-height: 44px; padding: 10px 18px; }
+  .st-btn-sm { min-height: 40px; padding: 8px 14px; }
+  .st-nav-chapter { min-height: 48px; }
+  .st-chapter-icon-btn { min-height: 40px; min-width: 40px; }
+
+  /* Action bar always full opacity on touch */
+  .st-action-bar { opacity: 1; }
+
+  /* Add line trigger more prominent on touch */
+  .st-add-line-trigger { opacity: 0.4; padding: 16px 0; }
+
+  /* Edit actions touch-friendly */
+  .st-edit-save, .st-edit-cancel { min-height: 40px; padding: 8px 16px; }
 
   /* Prevent double-tap zoom on interactive elements */
   .st-nav-chapter,
@@ -1771,7 +1849,22 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-btn,
   .st-chapter-icon-btn,
   .st-workspace-item,
-  .st-pending-toggle {
+  .st-pending-toggle,
+  .st-topbar-back,
+  .st-mobile-nav-toggle,
+  .st-workspace-toggle,
+  .st-mode-toggle,
+  .st-add-line-trigger,
+  .st-edit-save,
+  .st-edit-cancel,
+  .st-card-delete,
+  .st-nav-chapter-delete,
+  .st-nav-add button {
     touch-action: manipulation;
+  }
+
+  /* Smooth scrolling for nav chapter list */
+  .st-nav-chapters {
+    -webkit-overflow-scrolling: touch;
   }
 }

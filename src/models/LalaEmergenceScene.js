@@ -69,6 +69,7 @@ module.exports = (sequelize) => {
     tableName:  'lala_emergence_scenes',
     timestamps: true,
     underscored: true,
+    paranoid: false,
   });
 
   return LalaEmergenceScene;
