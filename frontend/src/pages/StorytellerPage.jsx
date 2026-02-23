@@ -273,6 +273,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
   const [canonOpen, setCanonOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Editing state
   const [editingLine, setEditingLine] = useState(null);
@@ -626,6 +627,13 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
           <button className="st-topbar-back" onClick={onClose}>← Library</button>
           <div className="st-topbar-sep" />
           <span className="st-topbar-brand">Prime Studios</span>
+          <button
+            className="st-mobile-nav-toggle"
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+            aria-label="Toggle chapters"
+          >
+            {mobileNavOpen ? '✕' : '☰'}
+          </button>
         </div>
 
         <div className="st-topbar-center">
@@ -715,8 +723,13 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
       {/* ── Editor Body (Nav + Content) ── */}
       <div className="st-editor-body">
 
+        {/* Mobile nav backdrop */}
+        {mobileNavOpen && (
+          <div className="st-mobile-nav-backdrop" onClick={() => setMobileNavOpen(false)} />
+        )}
+
         {/* Left Navigation — Quiet */}
-        <nav className="st-nav">
+        <nav className={`st-nav${mobileNavOpen ? ' st-nav-mobile-open' : ''}`}>
           <div className="st-nav-brand">
             <div className="st-nav-brand-label">Archive</div>
             {editingBookTitle ? (
@@ -746,7 +759,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                 <div key={ch.id} style={{ position: 'relative' }}>
                   <button
                     className={`st-nav-chapter${ch.id === activeChapterId ? ' active' : ''}`}
-                    onClick={() => { setActiveChapterId(ch.id); setActiveView('book'); }}
+                    onClick={() => { setActiveChapterId(ch.id); setActiveView('book'); setMobileNavOpen(false); }}
                   >
                     <span className="st-nav-num">{String(i + 1).padStart(2, '0')}</span>
                     <div className="st-nav-chapter-info">

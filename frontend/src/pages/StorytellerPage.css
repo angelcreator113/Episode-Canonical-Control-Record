@@ -1475,41 +1475,303 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
 }
 
 /* ═══════════════════════════════════════
-   Responsive
+   Mobile Nav Toggle (hidden on desktop)
+   ═══════════════════════════════════════ */
+.st-mobile-nav-toggle {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: var(--st-ink-light);
+  cursor: pointer;
+  padding: 4px 8px;
+  line-height: 1;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+.st-mobile-nav-toggle:hover { color: var(--st-gold); }
+
+.st-mobile-nav-backdrop {
+  display: none;
+}
+
+/* ═══════════════════════════════════════
+   Responsive — Tablet (≤1024px)
    ═══════════════════════════════════════ */
 @media (max-width: 1100px) {
   .st-canon-panel { width: 200px; }
 }
-@media (max-width: 900px) {
-  :root { --st-nav-w: 170px; }
-  .st-editor { padding: 0 24px 40px; }
+
+@media (max-width: 1024px) {
+  :root {
+    --st-nav-w: 200px;
+    --st-manuscript-w: 680px;
+  }
+  .st-editor { padding: 0 28px 60px; }
   .st-canon-panel { display: none; }
   .st-topbar-brand { display: none; }
+  .st-topbar-sep { display: none; }
+  .st-topbar { padding: 0 20px; }
+
+  /* Brief sheet narrower on tablet */
+  .st-brief-sheet { width: 360px; }
+
+  /* Book list grid: 2 columns */
+  .st-book-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .st-book-list { padding: 40px 24px 60px; }
+
+  /* Chapter header smaller padding */
+  .st-chapter-header { padding: 60px 0 36px; }
+
+  /* Workspace drawer full-width on small tablets */
+  .st-workspace-drawer { right: 12px; }
+
+  /* Add chapter form stacks */
+  .st-add-chapter-form { flex-direction: column; align-items: stretch; }
+  .st-add-chapter-form .st-form-group { min-width: 100%; }
 }
-@media (max-width: 700px) {
-  .st-editor-body { flex-direction: column; }
+
+/* ═══════════════════════════════════════
+   Responsive — Small Tablet / Large Phone (≤768px)
+   Nav becomes slide-over overlay
+   ═══════════════════════════════════════ */
+@media (max-width: 768px) {
+  :root {
+    --st-nav-w: 260px;
+    --st-topbar-h: 52px;
+    --st-manuscript-w: 100%;
+  }
+
+  /* Show hamburger */
+  .st-mobile-nav-toggle { display: inline-flex; }
+
+  /* Hide nav by default, show as slide-over */
   .st-nav {
-    width: 100%;
-    height: auto;
-    position: static;
-    border-right: none;
-    border-bottom: 1px solid var(--st-border-light);
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--st-nav-w);
+    height: 100vh;
+    z-index: 60;
+    background: var(--st-surface);
+    box-shadow: 4px 0 24px rgba(47, 42, 38, 0.12);
+    transform: translateX(-100%);
+    transition: transform 0.25s ease;
+    border-right: 1px solid var(--st-border);
   }
-  .st-nav-chapters { display: flex; overflow-x: auto; padding: 8px 0; }
-  .st-nav-chapter {
-    white-space: nowrap;
-    border-left: none;
-    border-bottom: 2px solid transparent;
+  .st-nav.st-nav-mobile-open {
+    transform: translateX(0);
   }
-  .st-nav-chapter.active {
-    border-bottom-color: var(--st-gold);
-    border-left-color: transparent;
+
+  /* Backdrop for mobile nav */
+  .st-mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(47, 42, 38, 0.2);
+    z-index: 55;
+    animation: st-sheet-bg-in 0.2s ease;
   }
-  .st-editor { padding: 0 16px 30px; }
-  .st-topbar { padding: 0 16px; }
+
+  /* Topbar adjustments */
+  .st-topbar { padding: 0 14px; gap: 8px; }
   .st-topbar-center { display: none; }
-  .st-chapter-header { padding-top: 40px; }
+  .st-topbar-wordcount { display: none; }
+  .st-topbar-saved { display: none; }
+
+  /* Editor fills width */
+  .st-editor { padding: 0 16px 40px; }
+  .st-manuscript-wrapper { gap: 0; }
+
+  /* Book list */
+  .st-book-list { padding: 32px 16px 48px; }
+  .st-book-grid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+  .st-book-card { padding: 20px; }
+
+  /* Chapter header */
+  .st-chapter-header { padding: 40px 0 28px; }
+  .st-chapter-header-title { font-size: 26px; }
+  .st-chapter-actions {
+    position: static;
+    margin-top: 12px;
+    opacity: 1;
+    flex-wrap: wrap;
+  }
+
+  /* Brief sheet full width */
+  .st-brief-sheet {
+    width: 100%;
+    max-width: 100vw;
+    border-left: none;
+    border-radius: 0;
+  }
+  .st-brief-sheet-overlay {
+    padding: 0;
+  }
+
+  /* Modal */
+  .st-modal { max-width: 100%; border-radius: 0; min-height: 100vh; }
+  .st-modal-backdrop { padding: 0; }
+  .st-form-row { grid-template-columns: 1fr; }
+
+  /* Workspace drawer */
+  .st-workspace-drawer {
+    right: 0;
+    left: 0;
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+
+  /* Touch-friendly line actions */
+  .st-line-actions { opacity: 1; }
+  .st-line-action { padding: 6px 12px; font-size: 13px; }
+
+  /* Touch-friendly action bar */
+  .st-action-bar { flex-direction: column; gap: 12px; align-items: stretch; }
+  .st-action-bar-btns { justify-content: stretch; }
+  .st-action-bar-btns .st-btn { flex: 1; justify-content: center; }
+
+  /* Touch add-line */
+  .st-add-line input { font-size: 16px; padding: 12px 0; }
+
+  /* Touch-friendly pending toggle */
+  .st-pending-toggle { padding: 16px 0; font-size: 14px; }
+
+  /* Manuscript lines */
+  .st-line-text { font-size: 16px; line-height: 1.8; }
+
+  /* Writing mode */
+  .st-writing-mode .st-editor { padding: 20px 16px 40px; }
+  .st-writing-mode .st-line-text { font-size: 17px; line-height: 1.9; }
+  .st-writing-mode-exit { top: 10px; right: 10px; }
+
+  /* Edit area */
+  .st-edit-area { font-size: 16px; min-height: 80px; }
+
+  /* Nav chapter touch targets */
+  .st-nav-chapter { padding: 12px 20px; }
+  .st-nav-chapter-delete { opacity: 1; font-size: 16px; right: 8px; top: 10px; }
 }
+
+/* ═══════════════════════════════════════
+   Responsive — Mobile (≤480px)
+   ═══════════════════════════════════════ */
 @media (max-width: 480px) {
-  .st-book-grid { grid-template-columns: 1fr; }
+  :root { --st-topbar-h: 48px; }
+
+  .st-topbar-left { gap: 8px; min-width: auto; }
+  .st-topbar-right { gap: 8px; min-width: auto; }
+  .st-topbar-back { font-size: 13px; }
+  .st-mode-toggle { display: none; }
+
+  .st-book-list { padding: 24px 12px 40px; }
+  .st-book-list-header h1 { font-size: 24px; }
+  .st-book-list-subtitle { font-size: 14px; }
+  .st-book-card { padding: 16px; }
+  .st-card-title { font-size: 18px; }
+  .st-card-meta { font-size: 12px; }
+  .st-card-insight { font-size: 13px; }
+
+  .st-editor { padding: 0 12px 32px; }
+  .st-chapter-header { padding: 28px 0 20px; }
+  .st-chapter-header-title { font-size: 22px; }
+  .st-chapter-header-label { font-size: 10px; }
+  .st-chapter-header-meta { font-size: 12px; flex-wrap: wrap; }
+
+  .st-line-text { font-size: 15px; line-height: 1.75; }
+  .st-edit-area { font-size: 16px; } /* prevent iOS zoom */
+
+  .st-chapter-icon-btn { padding: 6px 10px; font-size: 15px; }
+
+  /* Stack action buttons vertically */
+  .st-action-bar-btns { flex-direction: column; }
+  .st-action-bar-btns .st-btn { width: 100%; text-align: center; justify-content: center; }
+
+  /* Workspace drawer items bigger */
+  .st-workspace-item { padding: 12px 16px; font-size: 15px; }
+  .st-workspace-item-icon { font-size: 15px; }
+
+  /* Nav slide-over wider on small phones */
+  .st-nav { width: 85vw; }
+  .st-nav-brand { padding: 16px 16px 14px; }
+  .st-nav-brand-title { font-size: 16px; }
+  .st-nav-chapter { padding: 14px 16px; }
+  .st-nav-chapter-title { font-size: 15px; }
+  .st-nav-add { padding: 8px 16px 14px; }
+  .st-nav-stats { padding: 12px 16px; }
+
+  /* Pending body */
+  .st-pending-toggle { font-size: 14px; padding: 18px 0; }
+
+  /* Toast smaller */
+  .st-toast-container { bottom: 12px; right: 12px; left: 12px; }
+  .st-toast { font-size: 13px; padding: 10px 14px; }
+
+  /* No selection message */
+  .st-no-selection { min-height: 200px; font-size: 14px; padding: 20px; }
+
+  /* Add chapter form */
+  .st-add-chapter-form { padding: 12px; gap: 8px; }
+
+  /* Brief sheet */
+  .st-brief-sheet { padding: 24px 16px; }
+  .st-brief-sheet-title { font-size: 15px; }
+}
+
+/* ═══════════════════════════════════════
+   Responsive — Very small phones (≤360px)
+   ═══════════════════════════════════════ */
+@media (max-width: 360px) {
+  .st-book-list { padding: 20px 8px 32px; }
+  .st-book-card { padding: 14px; }
+  .st-card-title { font-size: 16px; }
+
+  .st-editor { padding: 0 8px 24px; }
+  .st-chapter-header-title { font-size: 20px; }
+  .st-line-text { font-size: 14px; line-height: 1.7; }
+
+  .st-topbar { padding: 0 10px; }
+  .st-topbar-back { font-size: 12px; }
+
+  .st-nav { width: 90vw; }
+}
+
+/* ═══════════════════════════════════════
+   Touch device improvements
+   ═══════════════════════════════════════ */
+@media (hover: none) and (pointer: coarse) {
+  /* Always show line actions on touch */
+  .st-line-actions { opacity: 1; }
+  .st-line-action { padding: 8px 14px; font-size: 14px; min-height: 36px; }
+
+  /* Always show chapter delete */
+  .st-nav-chapter-delete { opacity: 0.6; }
+
+  /* Always show card delete */
+  .st-card-delete { opacity: 0.5; }
+
+  /* Chapter actions always visible */
+  .st-chapter-actions { opacity: 0.8; }
+
+  /* Bigger tap targets */
+  .st-btn { min-height: 40px; padding: 10px 18px; }
+  .st-btn-sm { min-height: 36px; padding: 8px 14px; }
+  .st-nav-chapter { min-height: 44px; }
+
+  /* Prevent double-tap zoom on interactive elements */
+  .st-nav-chapter,
+  .st-line-action,
+  .st-btn,
+  .st-chapter-icon-btn,
+  .st-workspace-item,
+  .st-pending-toggle {
+    touch-action: manipulation;
+  }
 }
