@@ -54,6 +54,7 @@ function WorldAdmin() {
   const { id: showId } = useParams();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
+  const fromUniverse = searchParams.get('from') === 'universe';
 
   const [show, setShow] = useState(null);
   const [charState, setCharState] = useState(null);
@@ -281,7 +282,9 @@ function WorldAdmin() {
       {/* ─── HEADER ─── */}
       <div style={S.header}>
         <div>
-          <Link to={`/shows/${showId}`} style={S.backLink}>← Back to Show</Link>
+          <Link to={fromUniverse ? '/universe' : `/shows/${showId}`} style={S.backLink}>
+            {fromUniverse ? '← Universe' : '← Back to Show'}
+          </Link>
           <h1 style={S.title}>🌍 Producer Mode</h1>
           <p style={S.subtitle}>{show?.title || 'Show'} — World Rules &amp; Canon</p>
         </div>

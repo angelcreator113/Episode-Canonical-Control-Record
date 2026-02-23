@@ -214,11 +214,15 @@ function Sidebar({ isOpen, onClose }) {
           )}
         </div>
         
-        {/* Settings — context-aware: show-specific when viewing a show */}
+        {/* Settings — show-level config (Config + Advanced) */}
         <NavItem
           icon="⚙️"
           label="Settings"
-          path={currentShowId ? `/shows/${currentShowId}/settings` : '/settings'}
+          path={currentShowId
+            ? `/shows/${currentShowId}/settings`
+            : shows.length > 0
+              ? `/shows/${shows[0].id}/settings`
+              : '/universe'}
         />
       </nav>
       

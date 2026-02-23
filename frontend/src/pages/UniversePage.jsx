@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import ProducerModeFrame from './ProducerModeFrame';
 
 const UNIVERSE_API    = '/api/v1/universe';
 const STORYTELLER_API = '/api/v1/storyteller';
@@ -693,9 +694,10 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
 // ══════════════════════════════════════════════════════════════════════════
 
 function ShowsTab({ shows, universeId, onChanged, showToast }) {
-  const [editingId, setEditingId]   = useState(null);
-  const [editForm, setEditForm]     = useState({});
-  const [saving, setSaving]         = useState(false);
+  const [editingId, setEditingId]       = useState(null);
+  const [editForm, setEditForm]         = useState({});
+  const [saving, setSaving]             = useState(false);
+  const [selectedShowId, setSelectedShowId] = useState(null);
 
   const safeShows = Array.isArray(shows) ? shows : [];
   const linkedShows = safeShows.filter(sh =>
@@ -740,20 +742,45 @@ function ShowsTab({ shows, universeId, onChanged, showToast }) {
     );
   }
 
+  const selectedShow = linkedShows.find(sh => sh.id === selectedShowId) || null;
+
   return (
     <div style={s.tabShell}>
-      {linkedShows.map(show => (
+
+      {/* ── Producer Mode Frame (when a show is selected) ── */}
+      {selectedShow && (
+        <div style={{ marginBottom: 24 }}>
+          <button
+            style={{ ...s.secondaryBtn, marginBottom: 12 }}
+            onClick={() => setSelectedShowId(null)}
+          >
+            ← Back to show list
+          </button>
+          <ProducerModeFrame showId={selectedShow.id} show={selectedShow} />
+        </div>
+      )}
+
+      {/* ── Show Cards ── */}
+      {!selectedShow && linkedShows.map(show => (
         <div key={show.id} style={s.showCard}>
           <div style={s.showHeader}>
             <div>
               <div style={s.showName}>{show.title || show.name}</div>
               {show.era_name && <div style={s.showEra}>{show.era_name}</div>}
             </div>
-            {editingId !== show.id && (
-              <button style={s.secondaryBtn} onClick={() => startEdit(show)}>
-                Edit
+            <div style={{ display: 'flex', gap: 8 }}>
+              {editingId !== show.id && (
+                <button style={s.secondaryBtn} onClick={() => startEdit(show)}>
+                  Edit
+                </button>
+              )}
+              <button
+                style={s.primaryBtn}
+                onClick={() => setSelectedShowId(show.id)}
+              >
+                🌍 Producer Mode
               </button>
-            )}
+            </div>
           </div>
 
           {editingId === show.id ? (
