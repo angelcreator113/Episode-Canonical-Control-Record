@@ -18,6 +18,16 @@
 import { useState, useEffect, useCallback } from 'react';
 import ProducerModeFrame from './ProducerModeFrame';
 
+function useWindowWidth() {
+  const [w, setW] = useState(window.innerWidth);
+  useEffect(() => {
+    const h = () => setW(window.innerWidth);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return w;
+}
+
 const UNIVERSE_API    = '/api/v1/universe';
 const STORYTELLER_API = '/api/v1/storyteller';
 const SHOWS_API       = '/api/v1/shows';
@@ -28,6 +38,9 @@ const LALAVERSE_ID = 'a0cc3869-7d55-4d4c-8cf8-c2b66300bf6e'; // from seed
 // ── Main Page ──────────────────────────────────────────────────────────────
 
 export default function UniversePage() {
+  const width = useWindowWidth();
+  const isMobile = width < 640;
+  const isTablet = width >= 640 && width < 1024;
   const [activeTab, setActiveTab] = useState('universe');
   const [universe, setUniverse]   = useState(null);
   const [series, setSeries]       = useState([]);
@@ -79,25 +92,31 @@ export default function UniversePage() {
   if (loading) return <LoadingState />;
   if (!universe) return <ErrorState onRetry={load} />;
 
+  const px = isMobile ? 16 : isTablet ? 28 : 48;
+
   return (
     <div style={s.shell}>
 
       {/* Page header */}
-      <div style={s.pageHeader}>
+      <div style={{ ...s.pageHeader, padding: `${isMobile ? 20 : 36}px ${px}px 0`, paddingBottom: isMobile ? 16 : 24 }}>
         <div>
-          <div style={s.pageLabel}>FRANCHISE BRAIN</div>
-          <h1 style={s.pageTitle}>{universe.name}</h1>
+          <div style={{ ...s.pageLabel, fontSize: isMobile ? 11 : 12 }}>FRANCHISE BRAIN</div>
+          <h1 style={{ ...s.pageTitle, fontSize: isMobile ? 24 : isTablet ? 30 : 36 }}>{universe.name}</h1>
           <div style={s.pageSlug}>/{universe.slug}</div>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div style={s.tabBar}>
+      <div style={{ ...s.tabBar, padding: `0 ${px}px` }}>
         {['universe', 'series', 'shows'].map(tab => (
           <button
             key={tab}
             style={{
               ...s.tabBtn,
+              padding: isMobile ? '12px 0' : '16px 24px',
+              flex: isMobile ? 1 : undefined,
+              textAlign: 'center',
+              fontSize: isMobile ? 13 : 14,
               color: activeTab === tab ? '#C9A84C' : 'rgba(26,21,16,0.35)',
               borderBottom: activeTab === tab
                 ? '2px solid #C9A84C'
@@ -112,7 +131,7 @@ export default function UniversePage() {
       </div>
 
       {/* Tab content */}
-      <div style={s.tabContent}>
+      <div style={{ ...s.tabContent, padding: `0 ${px}px` }}>
         {activeTab === 'universe' && (
           <UniverseTab
             universe={universe}
@@ -120,6 +139,8 @@ export default function UniversePage() {
             books={books}
             onSaved={(updated) => { setUniverse(updated); showToast('Universe saved'); }}
             showToast={showToast}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         )}
         {activeTab === 'series' && (
@@ -129,6 +150,8 @@ export default function UniversePage() {
             universeId={LALAVERSE_ID}
             onChanged={() => { load(); showToast('Series updated'); }}
             showToast={showToast}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         )}
         {activeTab === 'shows' && (
@@ -137,6 +160,8 @@ export default function UniversePage() {
             universeId={LALAVERSE_ID}
             onChanged={() => { load(); showToast('Show updated'); }}
             showToast={showToast}
+            isMobile={isMobile}
+            isTablet={isTablet}
           />
         )}
       </div>
@@ -158,7 +183,7 @@ export default function UniversePage() {
 //  TAB 1 — UNIVERSE
 // ══════════════════════════════════════════════════════════════════════════
 
-function UniverseTab({ universe, series, books, onSaved, showToast }) {
+function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, isTablet }) {
   const [form, setForm]         = useState({
     name:               universe.name || '',
     description:        universe.description || '',
@@ -389,7 +414,10 @@ function UniverseTab({ universe, series, books, onSaved, showToast }) {
       {/* Raw Draft Modal */}
       {showRawModal && (
         <div style={s.modalOverlay} onClick={e => e.target === e.currentTarget && setShowRawModal(false)}>
-          <div style={s.modal}>
+          <div style={{
+            ...s.modal,
+            ...(isMobile ? { width: '100%', maxHeight: '100vh', borderRadius: 0, height: '100vh' } : {}),
+          }}>
             <div style={s.modalHeader}>
               <div>
                 <div style={s.modalLabel}>CLAUDE</div>
@@ -435,7 +463,7 @@ function UniverseTab({ universe, series, books, onSaved, showToast }) {
 //  TAB 2 — SERIES
 // ══════════════════════════════════════════════════════════════════════════
 
-function SeriesTab({ series, books, universeId, onChanged, showToast }) {
+function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, isTablet }) {
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState('');
   const [newDesc, setNewDesc]     = useState('');
@@ -561,8 +589,8 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
       {series.map(ser => {
         const seriesBooks = books.filter(b => b.series_id === ser.id);
         return (
-          <div key={ser.id} style={s.seriesCard}>
-            <div style={s.seriesHeader}>
+          <div key={ser.id} style={{ ...s.seriesCard, padding: isMobile ? '14px 14px' : '18px 20px' }}>
+            <div style={{ ...s.seriesHeader, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 0 }}>
               <div>
                 <div style={s.seriesName}>{ser.name}</div>
                 {ser.description && (
@@ -584,9 +612,13 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
             ) : (
               <div style={s.bookList}>
                 {seriesBooks.map(book => (
-                  <div key={book.id} style={s.bookRow}>
+                  <div key={book.id} style={{
+                    ...s.bookRow,
+                    flexDirection: isMobile ? 'column' : 'row',
+                    alignItems: isMobile ? 'flex-start' : 'center',
+                  }}>
                     <div style={s.bookRowLeft}>
-                      <div style={s.bookRowTitle}>{book.title}</div>
+                      <div style={{ ...s.bookRowTitle, fontSize: isMobile ? 15 : 16 }}>{book.title}</div>
                       <div style={s.bookRowMeta}>
                         {book.primary_pov && <span style={s.metaChip}>{book.primary_pov.replace('_', ' ')}</span>}
                         {book.canon_status && (
@@ -601,8 +633,11 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
                       </div>
                     </div>
 
-                    {/* Era + reassign */}
-                    <div style={s.bookRowRight}>
+                    <div style={{
+                      ...s.bookRowRight,
+                      justifyContent: isMobile ? 'flex-start' : 'flex-end',
+                      width: isMobile ? '100%' : undefined,
+                    }}>
                       {editingEra === book.id ? (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <input
@@ -651,13 +686,17 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
 
       {/* Unassigned books */}
       {unassigned.length > 0 && (
-        <div style={{ ...s.seriesCard, borderColor: 'rgba(26,21,16,0.08)' }}>
+        <div style={{ ...s.seriesCard, borderColor: 'rgba(26,21,16,0.08)', padding: isMobile ? '14px 14px' : '18px 20px' }}>
           <div style={s.seriesName}>Unassigned Books</div>
           <div style={s.bookList}>
             {unassigned.map(book => (
-              <div key={book.id} style={s.bookRow}>
+              <div key={book.id} style={{
+                ...s.bookRow,
+                flexDirection: isMobile ? 'column' : 'row',
+                alignItems: isMobile ? 'flex-start' : 'center',
+              }}>
                 <div style={s.bookRowLeft}>
-                  <div style={s.bookRowTitle}>{book.title}</div>
+                  <div style={{ ...s.bookRowTitle, fontSize: isMobile ? 15 : 16 }}>{book.title}</div>
                   <div style={s.bookRowMeta}>
                     <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.3)' }}>no series</span>
                   </div>
@@ -693,7 +732,7 @@ function SeriesTab({ series, books, universeId, onChanged, showToast }) {
 //  TAB 3 — SHOWS
 // ══════════════════════════════════════════════════════════════════════════
 
-function ShowsTab({ shows, universeId, onChanged, showToast }) {
+function ShowsTab({ shows, universeId, onChanged, showToast, isMobile, isTablet }) {
   const [editingId, setEditingId]       = useState(null);
   const [editForm, setEditForm]         = useState({});
   const [saving, setSaving]             = useState(false);
@@ -762,20 +801,36 @@ function ShowsTab({ shows, universeId, onChanged, showToast }) {
 
       {/* ── Show Cards ── */}
       {!selectedShow && linkedShows.map(show => (
-        <div key={show.id} style={s.showCard}>
-          <div style={s.showHeader}>
+        <div key={show.id} style={{ ...s.showCard, padding: isMobile ? '14px 14px' : '18px 20px' }}>
+          <div style={{
+            ...s.showHeader,
+            flexDirection: isMobile ? 'column' : 'row',
+            gap: isMobile ? 12 : 0,
+          }}>
             <div>
-              <div style={s.showName}>{show.title || show.name}</div>
+              <div style={{ ...s.showName, fontSize: isMobile ? 19 : 22 }}>{show.title || show.name}</div>
               {show.era_name && <div style={s.showEra}>{show.era_name}</div>}
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{
+              display: 'flex',
+              gap: 8,
+              width: isMobile ? '100%' : undefined,
+            }}>
               {editingId !== show.id && (
-                <button style={s.secondaryBtn} onClick={() => startEdit(show)}>
+                <button style={{
+                  ...s.secondaryBtn,
+                  flex: isMobile ? 1 : undefined,
+                  padding: isMobile ? '12px 14px' : '10px 18px',
+                }} onClick={() => startEdit(show)}>
                   Edit
                 </button>
               )}
               <button
-                style={s.primaryBtn}
+                style={{
+                  ...s.primaryBtn,
+                  flex: isMobile ? 1 : undefined,
+                  padding: isMobile ? '12px 14px' : '10px 22px',
+                }}
                 onClick={() => setSelectedShowId(show.id)}
               >
                 🌍 Producer Mode
