@@ -214,11 +214,11 @@ function Sidebar({ isOpen, onClose }) {
           )}
         </div>
         
-        {/* Settings — now routes to Universe page (Producer Mode hub) */}
+        {/* Settings — show-level config (Config + Advanced) */}
         <NavItem
           icon="⚙️"
           label="Settings"
-          path="/universe"
+          path={currentShowId ? `/shows/${currentShowId}/settings` : '/universe'}
         />
       </nav>
       

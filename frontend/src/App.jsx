@@ -208,7 +208,7 @@ function AppContent() {
           <Route path="/shows/:id/edit" element={<EditShow />} />
           <Route path="/shows/:id/world" element={<WorldAdmin />} />
           <Route path="/shows/:showId/quick-episode" element={<QuickEpisodeCreator />} />
-          <Route path="/shows/:id/settings" element={<Navigate to="/universe" replace />} />
+          <Route path="/shows/:id/settings" element={<ShowSettings />} />
           {/* Scene Composer */}
           <Route path="/episodes/:episodeId/scene-composer" element={<SceneComposerFull />} />
           
