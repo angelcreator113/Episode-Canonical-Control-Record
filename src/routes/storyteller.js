@@ -23,6 +23,7 @@
 const express = require('express');
 const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
+const { detectLalaFromLine, logLalaEmergence } = require('./lala-scene-detection');
 
 // Optional auth
 let optionalAuth;
@@ -438,6 +439,29 @@ router.put('/lines/:id', optionalAuth, async (req, res) => {
     if (confidence !== undefined) updates.confidence = confidence;
 
     await line.update(updates);
+
+    // ── Lala Emergence hook — detect after approval/edit ──
+    if (updates.status === 'approved' || updates.status === 'edited') {
+      try {
+        const updatedLine = line.toJSON();
+        if (detectLalaFromLine(updatedLine)) {
+          const chapter = await models.StorytellerChapter.findByPk(line.chapter_id);
+          await logLalaEmergence(models, {
+            lineId:          line.id,
+            chapterId:       line.chapter_id,
+            bookId:          chapter?.book_id,
+            lineContent:     updatedLine.text || '',
+            lineOrder:       updatedLine.sort_order || 0,
+            chapterTitle:    chapter?.title || null,
+            emotionalContext: null,
+            detectionMethod: 'approval',
+          });
+        }
+      } catch (lalaErr) {
+        console.error('Lala detection hook error (non-fatal):', lalaErr.message);
+      }
+    }
+
     return res.json({ success: true, line });
   } catch (error) {
     console.error('StoryTeller update line error:', error);
