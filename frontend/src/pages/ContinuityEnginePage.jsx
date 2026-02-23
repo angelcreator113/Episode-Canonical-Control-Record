@@ -24,6 +24,19 @@ import { useSearchParams } from 'react-router-dom';
 
 const API = '/api/v1/continuity';
 
+/* ── Responsive hook ─────────────────────────────────────────────── */
+function useWindowWidth() {
+  const [width, setWidth] = useState(
+    typeof window !== 'undefined' ? window.innerWidth : 1200
+  );
+  useEffect(() => {
+    const h = () => setWidth(window.innerWidth);
+    window.addEventListener('resize', h);
+    return () => window.removeEventListener('resize', h);
+  }, []);
+  return width;
+}
+
 const CHAR_COLORS = [
   '#0891B2', '#7C3AED', '#059669', '#DB2777',
   '#EA580C', '#2563EB', '#D97706', '#C026D3',
@@ -45,6 +58,12 @@ export default function ContinuityEnginePage() {
   const [view,       setView]       = useState('strip'); // strip | map | locations
   const [loading,    setLoading]    = useState(true);
   const [toast,      setToast]      = useState(null);
+
+  // Responsive
+  const winW = useWindowWidth();
+  const isMobile = winW < 640;
+  const isTablet = winW >= 640 && winW < 1024;
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Forms
   const [showNewTimeline, setShowNewTimeline] = useState(false);
@@ -268,47 +287,96 @@ export default function ContinuityEnginePage() {
 
   // ── Render ─────────────────────────────────────────────────────────────
 
+  // Close sidebar when selecting something on mobile
+  function handleMobileSidebarAction(fn) {
+    return (...args) => {
+      fn(...args);
+      if (isMobile) setSidebarOpen(false);
+    };
+  }
+
   return (
     <div style={s.page}>
 
       {/* ── Topbar ── */}
-      <div style={s.topbar}>
-        <div style={s.topbarLeft}>
-          <div style={s.pageTitle}>CONTINUITY ENGINE</div>
-          {active && (
-            <div style={s.timelineName}>{active.title}</div>
+      <div style={{
+        ...s.topbar,
+        ...(isMobile ? { flexWrap: 'wrap', height: 'auto', padding: '10px 12px', gap: 8 } :
+            isTablet ? { padding: '0 14px', gap: 8 } : {}),
+      }}>
+        <div style={{ ...s.topbarLeft, ...(isMobile ? { width: '100%', justifyContent: 'space-between' } : {}) }}>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: isMobile ? 6 : 12 }}>
+            {/* Hamburger on mobile */}
+            {isMobile && (
+              <button
+                style={{
+                  background: 'none', border: 'none',
+                  fontSize: 20, color: ACCENT, cursor: 'pointer',
+                  padding: '0 4px', lineHeight: 1,
+                }}
+                onClick={() => setSidebarOpen(o => !o)}
+                type='button'
+                aria-label='Toggle sidebar'
+              >
+                {sidebarOpen ? '✕' : '☰'}
+              </button>
+            )}
+            <div style={{ ...s.pageTitle, fontSize: isMobile ? 11 : isTablet ? 12 : 13 }}>CONTINUITY ENGINE</div>
+            {active && (
+              <div style={{ ...s.timelineName, fontSize: isMobile ? 12 : 15, display: isMobile ? 'none' : 'block' }}>{active.title}</div>
+            )}
+          </div>
+
+          {/* Conflict badge — inline on mobile */}
+          {isMobile && (
+            <div style={{
+              ...s.conflictBadge,
+              fontSize: 11, padding: '3px 8px',
+              background: conflicts.length > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(5,150,105,0.06)',
+              borderColor: conflicts.length > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(5,150,105,0.25)',
+              color: conflicts.length > 0 ? '#DC2626' : '#059669',
+            }}>
+              {conflicts.length > 0 ? `⚠ ${conflicts.length}` : '✓ OK'}
+            </div>
           )}
         </div>
 
-        <div style={s.topbarCenter}>
-          {/* Conflict badge */}
-          <div style={{
-            ...s.conflictBadge,
-            background: conflicts.length > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(5,150,105,0.06)',
-            borderColor: conflicts.length > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(5,150,105,0.25)',
-            color: conflicts.length > 0 ? '#DC2626' : '#059669',
-          }}>
-            {conflicts.length > 0
-              ? `⚠ ${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''}`
-              : '✓ No conflicts'}
+        {!isMobile && (
+          <div style={s.topbarCenter}>
+            <div style={{
+              ...s.conflictBadge,
+              background: conflicts.length > 0 ? 'rgba(239,68,68,0.08)' : 'rgba(5,150,105,0.06)',
+              borderColor: conflicts.length > 0 ? 'rgba(239,68,68,0.3)' : 'rgba(5,150,105,0.25)',
+              color: conflicts.length > 0 ? '#DC2626' : '#059669',
+            }}>
+              {conflicts.length > 0
+                ? `⚠ ${conflicts.length} conflict${conflicts.length > 1 ? 's' : ''}`
+                : '✓ No conflicts'}
+            </div>
           </div>
-        </div>
+        )}
 
-        <div style={s.topbarRight}>
-          {/* View switcher */}
-          {['strip', 'map', 'locations'].map(v => (
+        <div style={{
+          ...s.topbarRight,
+          ...(isMobile ? { width: '100%', justifyContent: 'center' } : {}),
+        }}>
+          {['strip', 'map', 'locations'].map(vw => (
             <button
-              key={v}
+              key={vw}
               style={{
                 ...s.viewBtn,
-                background: view === v ? 'rgba(8,145,178,0.08)' : 'transparent',
-                color:      view === v ? '#0891B2' : 'rgba(100,116,139,0.6)',
-                borderColor: view === v ? 'rgba(8,145,178,0.3)' : 'rgba(203,213,225,0.4)',
+                fontSize: isMobile ? 13 : isTablet ? 12 : 12,
+                padding: isMobile ? '8px 14px' : '5px 10px',
+                flex: isMobile ? 1 : undefined,
+                textAlign: 'center',
+                background: view === vw ? 'rgba(8,145,178,0.08)' : 'transparent',
+                color:      view === vw ? '#0891B2' : 'rgba(100,116,139,0.6)',
+                borderColor: view === vw ? 'rgba(8,145,178,0.3)' : 'rgba(203,213,225,0.4)',
               }}
-              onClick={() => setView(v)}
+              onClick={() => setView(vw)}
               type='button'
             >
-              {v === 'strip' ? '⟶ Strip' : v === 'map' ? '⊞ Map' : '◉ Locations'}
+              {vw === 'strip' ? (isMobile ? 'Strip' : '⟶ Strip') : vw === 'map' ? (isMobile ? 'Map' : '⊞ Map') : (isMobile ? 'Locs' : '◉ Locations')}
             </button>
           ))}
         </div>
@@ -317,8 +385,27 @@ export default function ContinuityEnginePage() {
       {/* ── Body ── */}
       <div style={s.body}>
 
+        {/* ── Mobile sidebar backdrop ── */}
+        {isMobile && sidebarOpen && (
+          <div
+            style={{
+              position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.35)',
+              zIndex: 50, backdropFilter: 'blur(2px)',
+            }}
+            onClick={() => setSidebarOpen(false)}
+          />
+        )}
+
         {/* ── Left sidebar ── */}
-        <div style={s.sidebar}>
+        <div style={{
+          ...s.sidebar,
+          ...(isMobile ? {
+            position: 'fixed', left: sidebarOpen ? 0 : -280, top: 0,
+            width: 270, height: '100vh', zIndex: 60,
+            background: PANEL, boxShadow: sidebarOpen ? '4px 0 20px rgba(0,0,0,0.12)' : 'none',
+            transition: 'left 0.25s ease', paddingTop: 56,
+          } : isTablet ? { width: 190 } : {}),
+        }}>
 
           {/* Timeline selector */}
           <div style={s.sideSection}>
@@ -328,6 +415,8 @@ export default function ContinuityEnginePage() {
                 key={t.id}
                 style={{
                   ...s.timelineBtn,
+                  fontSize: isMobile ? 15 : 14,
+                  padding: isMobile ? '10px 14px' : '7px 14px',
                   background: active?.id === t.id
                     ? 'rgba(8,145,178,0.06)'
                     : 'transparent',
@@ -338,7 +427,7 @@ export default function ContinuityEnginePage() {
                     ? '#0891B2'
                     : 'rgba(71,85,105,0.8)',
                 }}
-                onClick={() => loadTimeline(t.id)}
+                onClick={handleMobileSidebarAction(() => loadTimeline(t.id))}
                 type='button'
               >
                 {t.title}
@@ -375,14 +464,14 @@ export default function ContinuityEnginePage() {
                             ? '2px solid #0891B2'
                             : '2px solid transparent',
                       }}
-                      onClick={() => setSelectedBeat(isSelected ? null : beat)}
+                      onClick={handleMobileSidebarAction(() => setSelectedBeat(isSelected ? null : beat))}
                       type='button'
                     >
-                      <div style={s.beatListName}>
+                      <div style={{ ...s.beatListName, fontSize: isMobile ? 15 : 14 }}>
                         {hasConflict && <span style={s.conflictFlag}>⚠</span>}
                         {beat.name}
                       </div>
-                      <div style={s.beatListMeta}>
+                      <div style={{ ...s.beatListMeta, fontSize: isMobile ? 13 : 12 }}>
                         {beat.location && <span>{beat.location}</span>}
                         {beat.time_tag && <span style={s.beatTimeDot}>{beat.time_tag}</span>}
                       </div>
@@ -495,14 +584,21 @@ export default function ContinuityEnginePage() {
 
         {/* ── Beat detail panel ── */}
         {selectedBeat && (
-          <BeatDetail
-            beat={selectedBeat}
-            characters={characters}
-            conflicts={beatConflicts[selectedBeat.id] || []}
-            onClose={() => setSelectedBeat(null)}
-            onEdit={() => { setEditingBeat(selectedBeat); setSelectedBeat(null); }}
-            onDelete={() => deleteBeat(selectedBeat.id)}
-          />
+          <div style={isMobile ? {
+            position: 'fixed', inset: 0, zIndex: 70,
+            background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(2px)',
+            display: 'flex', justifyContent: 'flex-end',
+          } : {}}>
+            <BeatDetail
+              beat={selectedBeat}
+              characters={characters}
+              conflicts={beatConflicts[selectedBeat.id] || []}
+              onClose={() => setSelectedBeat(null)}
+              onEdit={() => { setEditingBeat(selectedBeat); setSelectedBeat(null); }}
+              onDelete={() => deleteBeat(selectedBeat.id)}
+              isMobile={isMobile}
+            />
+          </div>
         )}
       </div>
 
@@ -857,11 +953,17 @@ function ConflictPanel({ conflicts, characters }) {
 // Beat Detail panel
 // ─────────────────────────────────────────────────────────────────────────────
 
-function BeatDetail({ beat, characters, conflicts, onClose, onEdit, onDelete }) {
+function BeatDetail({ beat, characters, conflicts, onClose, onEdit, onDelete, isMobile }) {
   const beatChars = beat.characters || beat.continuity_characters || [];
 
   return (
-    <div style={bd.panel}>
+    <div style={{
+      ...bd.panel,
+      ...(isMobile ? {
+        width: '85%', maxWidth: 340, height: '100vh',
+        borderLeft: 'none', boxShadow: '-4px 0 20px rgba(0,0,0,0.12)',
+      } : {}),
+    }}>
       <div style={bd.header}>
         <div style={bd.beatName}>{beat.name}</div>
         <button style={bd.closeBtn} onClick={onClose} type='button'>×</button>
@@ -1058,12 +1160,16 @@ function AddBeatModal({ beat, characters, beats, onSubmit, onClose }) {
 // ── Modal primitives ──────────────────────────────────────────────────────────
 
 function Modal({ title, onClose, children }) {
+  const isMobileModal = typeof window !== 'undefined' && window.innerWidth < 640;
   return (
-    <div style={mo.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={mo.modal}>
+    <div style={{ ...mo.overlay, ...(isMobileModal ? { padding: 0 } : {}) }} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div style={{
+        ...mo.modal,
+        ...(isMobileModal ? { width: '100%', maxWidth: '100%', maxHeight: '100vh', borderRadius: 0, height: '100vh' } : {}),
+      }}>
         <div style={mo.header}>
           <div style={mo.title}>{title}</div>
-          <button style={mo.closeBtn} onClick={onClose} type='button'>×</button>
+          <button style={{ ...mo.closeBtn, ...(isMobileModal ? { fontSize: 28, padding: 4 } : {}) }} onClick={onClose} type='button'>×</button>
         </div>
         <div style={mo.body}>{children}</div>
       </div>
