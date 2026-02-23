@@ -167,7 +167,7 @@ function UniverseTab({ universe, series, books, onSaved, showToast }) {
     narrative_economy:  universe.narrative_economy || '',
     core_themes:        (universe.core_themes || []).join(', '),
   });
-  const [preview, setPreview]   = useState(false);
+  const [preview, setPreview]   = useState(true);
   const [saving, setSaving]     = useState(false);
   const [dirty, setDirty]       = useState(false);
   const [structuring, setStructuring] = useState(false);
