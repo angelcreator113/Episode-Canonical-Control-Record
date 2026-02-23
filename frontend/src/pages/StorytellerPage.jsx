@@ -9,6 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './StorytellerPage.css';
 import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
 import MemoryBankView from './MemoryBankView';
@@ -641,6 +642,22 @@ function BookEditor({ book, onBack, toast, onRefresh }) {
           <div className="st-topbar-sep" />
           <span className="st-topbar-brand">PNOS</span>
           <span className="st-topbar-title">{book.title || book.character_name}</span>
+          <button
+            onClick={() => window.open(`/books/${book.id}/read`, '_blank')}
+            style={{
+              background: 'none',
+              border: '1px solid rgba(201,168,76,0.3)',
+              borderRadius: 3,
+              fontFamily: 'DM Mono, monospace',
+              fontSize: 9,
+              letterSpacing: '0.12em',
+              color: '#C9A84C',
+              padding: '5px 12px',
+              cursor: 'pointer',
+            }}
+          >
+            Read →
+          </button>
           {book.era_name && <span className="st-topbar-era">{book.era_name}</span>}
         </div>
         <div className="st-topbar-center">

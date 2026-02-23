@@ -49,6 +49,7 @@ import StorytellerPage from './pages/StorytellerPage';
 import CharacterRegistryPage from './pages/CharacterRegistryPage';
 import ContinuityEnginePage from './pages/ContinuityEnginePage';
 import UniversePage from './pages/UniversePage';
+import ReadingMode from './pages/ReadingMode';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -163,7 +164,8 @@ function AppContent() {
   const isSceneComposer = location.pathname.includes('/scene-composer');
   const isExportPage = location.pathname.includes('/export');
   const isStorytellerPage = location.pathname.includes('/storyteller');
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage;
+  const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode;
   const hideFooter = isFullScreen || isStorytellerPage;
 
   return (
@@ -276,6 +278,7 @@ function AppContent() {
           
           {/* StoryTeller Book Editor */}
           <Route path="/storyteller" element={<StorytellerPage />} />
+          <Route path="/books/:bookId/read" element={<ReadingMode />} />
           
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
