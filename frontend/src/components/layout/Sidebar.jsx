@@ -214,11 +214,11 @@ function Sidebar({ isOpen, onClose }) {
           )}
         </div>
         
-        {/* Settings — context-aware: show-specific when viewing a show */}
+        {/* Settings — now routes to Universe page (Producer Mode hub) */}
         <NavItem
           icon="⚙️"
           label="Settings"
-          path={currentShowId ? `/shows/${currentShowId}/settings` : '/settings'}
+          path="/universe"
         />
       </nav>
       
