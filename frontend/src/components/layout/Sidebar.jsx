@@ -218,7 +218,11 @@ function Sidebar({ isOpen, onClose }) {
         <NavItem
           icon="⚙️"
           label="Settings"
-          path={currentShowId ? `/shows/${currentShowId}/settings` : '/universe'}
+          path={currentShowId
+            ? `/shows/${currentShowId}/settings`
+            : shows.length > 0
+              ? `/shows/${shows[0].id}/settings`
+              : '/universe'}
         />
       </nav>
       
