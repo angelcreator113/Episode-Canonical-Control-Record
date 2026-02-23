@@ -50,6 +50,7 @@ import CharacterRegistryPage from './pages/CharacterRegistryPage';
 import ContinuityEnginePage from './pages/ContinuityEnginePage';
 import UniversePage from './pages/UniversePage';
 import ReadingMode from './pages/ReadingMode';
+import RelationshipMap from './pages/RelationshipMap';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -285,6 +286,9 @@ function AppContent() {
           
           {/* PNOS Continuity Engine */}
           <Route path="/continuity" element={<ContinuityEnginePage />} />
+          
+          {/* PNOS Character Relationship Map */}
+          <Route path="/relationships" element={<RelationshipMap />} />
           
           {/* Search */}
           <Route path="/search" element={<SearchResults />} />

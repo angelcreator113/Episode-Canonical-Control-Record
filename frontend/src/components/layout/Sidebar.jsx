@@ -25,7 +25,7 @@ function Sidebar({ isOpen, onClose }) {
   
   // Auto-expand StoryTeller group when on its sub-routes
   useEffect(() => {
-    if (location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity')) {
+    if (location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships')) {
       setStoryExpanded(true);
     }
   }, [location.pathname]);
@@ -128,7 +128,7 @@ function Sidebar({ isOpen, onClose }) {
         {/* StoryTeller group */}
         <div className="nav-group">
           <button
-            className={`nav-item ${isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') ? 'active' : ''}`}
+            className={`nav-item ${isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') ? 'active' : ''}`}
             onClick={() => {
               setStoryExpanded(!storyExpanded);
               if (!storyExpanded) {
@@ -166,6 +166,13 @@ function Sidebar({ isOpen, onClose }) {
               >
                 <span className="subitem-indicator">└─</span>
                 <span className="subitem-label">Continuity</span>
+              </button>
+              <button
+                className={`nav-subitem ${isActive('/relationships') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/relationships')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Relationships</span>
               </button>
             </div>
           )}
