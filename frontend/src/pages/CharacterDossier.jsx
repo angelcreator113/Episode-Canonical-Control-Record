@@ -15,6 +15,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+import VoiceModeButton from '../components/VoiceModeButton';
 import './CharacterDossier.css';
 
 /* ─── Section definitions ── */
@@ -480,6 +481,10 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
           <span className="dossier-status-label">{c.status?.toUpperCase()}</span>
         </div>
         <div className="dossier-footer-actions">
+          <VoiceModeButton
+            character={c}
+            onProfileUpdate={() => onRefresh?.()}
+          />
           {c.status !== 'finalized' && (
             <>
               {c.status !== 'accepted' && (

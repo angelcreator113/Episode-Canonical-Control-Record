@@ -70,6 +70,7 @@ let Beat, CharacterClip, AudioClip; // Phase 2.5 Animatic System models
 let TimelineData; // Scene Composer & Timeline Editor integration
 let StorytellerBook, StorytellerChapter, StorytellerLine; // StoryTeller Book Editor models
 let StorytellerMemory; // StoryTeller Memory Bank model
+let StorytellerEcho; // StoryTeller Decision Echo model
 let Universe, BookSeries; // Universe + Book Series models
 let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
 let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter; // Continuity Engine models
@@ -202,6 +203,9 @@ try {
   // StoryTeller Memory Bank model
   StorytellerMemory = require('./StorytellerMemory')(sequelize);
 
+  // StoryTeller Decision Echo model
+  StorytellerEcho = require('./StorytellerEcho')(sequelize);
+
   // Universe + Book Series models
   Universe = require('./Universe')(sequelize);
   BookSeries = require('./BookSeries')(sequelize);
@@ -286,6 +290,7 @@ const requiredModels = {
   StorytellerChapter,
   StorytellerLine,
   StorytellerMemory,
+  StorytellerEcho,
   Universe,
   BookSeries,
   CharacterRegistry,
@@ -350,6 +355,9 @@ if (StorytellerLine && StorytellerLine.associate) {
 }
 if (StorytellerMemory && StorytellerMemory.associate) {
   StorytellerMemory.associate(requiredModels);
+}
+if (StorytellerEcho && StorytellerEcho.associate) {
+  StorytellerEcho.associate(requiredModels);
 }
 
 // StorytellerLine → StorytellerMemory (1:N) — line has many memories
@@ -1456,6 +1464,7 @@ module.exports.StorytellerBook = StorytellerBook;
 module.exports.StorytellerChapter = StorytellerChapter;
 module.exports.StorytellerLine = StorytellerLine;
 module.exports.StorytellerMemory = StorytellerMemory;
+module.exports.StorytellerEcho = StorytellerEcho;
 module.exports.Universe = Universe;
 module.exports.BookSeries = BookSeries;
 module.exports.CharacterRegistry = CharacterRegistry;

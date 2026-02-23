@@ -1464,6 +1464,13 @@
     gap: 12px;
   }
 
+  .cr-card {
+    transition: none;
+  }
+  .cr-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
   .cr-card-portrait { height: 140px; }
 
   .cr-dossier-layout { grid-template-columns: 1fr; }
@@ -1576,7 +1583,14 @@
     gap: 12px;
   }
 
-  .cr-card { border-radius: 8px; }
+  .cr-card {
+    border-radius: 8px;
+    transition: none;
+  }
+  .cr-card:hover {
+    transform: none;
+    box-shadow: none;
+  }
   .cr-card-portrait { height: 160px; }
   .cr-card-body { padding: 14px 16px 16px; }
   .cr-card-name { font-size: 17px; }
@@ -1643,16 +1657,40 @@
   .cr-registry-select { width: 100%; font-size: 14px; padding: 10px 12px; min-height: 42px; }
 }
 
-/* ── Very small phones (≤360px) ── */
+/* ── Very small phones / Samsung Galaxy S (≤360px) ── */
 @media (max-width: 360px) {
   .cr-header { padding: 8px 10px; }
+  .cr-header-title { font-size: 15px; }
+  .cr-header-brand { font-size: 12px; }
+  .cr-header-breadcrumb { font-size: 8px; }
+  .cr-header-btn { font-size: 11px; padding: 8px 10px; }
+
+  .cr-filters { padding: 6px 10px; gap: 5px; }
+  .cr-filter-pill { padding: 6px 10px; font-size: 10px; }
+  .cr-filter-label { font-size: 8px; }
+
   .cr-content { padding: 12px 8px 40px; }
+  .cr-stats-strip { padding: 10px 10px; gap: 8px 14px; }
+  .cr-stat-count { font-size: 16px; }
+  .cr-stat-label { font-size: 8px; }
+
+  .cr-grid { gap: 10px; }
   .cr-card-body { padding: 12px 14px; }
   .cr-card-name { font-size: 16px; }
-  .cr-stat-count { font-size: 16px; }
-  .cr-header-title { font-size: 15px; }
-  .cr-header-btn { font-size: 11px; padding: 8px 10px; }
+  .cr-card-role { font-size: 9px; }
+  .cr-card-portrait { height: 130px; }
+  .cr-card-portrait .cr-card-icon { font-size: 40px; }
+  .cr-card-portrait .cr-card-initial { font-size: 52px; }
+
   .cr-modal { padding: 20px 12px; }
+  .cr-modal-title { font-size: 16px; }
+
+  .cr-empty-state { padding: 36px 12px; }
+  .cr-empty-icon { font-size: 32px; }
+  .cr-empty-title { font-size: 16px; }
+  .cr-empty-btn { padding: 10px 20px; font-size: 13px; }
+
+  .cr-loading { padding: 40px 12px; }
 
   .cr-dossier-name { font-size: 18px; }
   .cr-dossier-back { padding: 8px 8px; }
@@ -1661,19 +1699,38 @@
   .cr-dossier-tab-content { padding: 12px 8px 28px; }
   .cr-dossier-left { padding: 12px 8px; }
   .cr-dossier-portrait { max-width: 100px; }
+  .cr-dossier-portrait .portrait-icon { font-size: 52px; }
+  .cr-dossier-portrait .portrait-initial { font-size: 72px; }
+  .cr-dossier-meta-row { gap: 8px; font-size: 10px; }
+  .cr-dossier-row-label { font-size: 10px; }
+  .cr-dossier-row-value { font-size: 13px; }
+  .cr-dossier-section-title { font-size: 12px; }
+  .cr-dossier-triad-label { font-size: 9px; }
+  .cr-dossier-triad-value { font-size: 13px; }
+  .cr-dossier-action-btn { padding: 10px 12px; font-size: 13px; }
+
+  .cr-registry-bar { gap: 6px; }
+  .cr-registry-select { font-size: 13px; padding: 8px 10px; }
+  .cr-registry-meta { font-size: 9px; }
+
+  .cr-list-row { padding: 12px 8px; }
+  .cr-list-header { padding: 8px 8px; }
+  .cr-list-name { font-size: 13px; }
+  .cr-list-role { font-size: 9px; }
 }
 
 /* ── Touch device improvements ── */
 @media (hover: none) and (pointer: coarse) {
   .cr-card-hover { display: none; }
 
+  .cr-card,
   .cr-card:hover {
-    transform: none;
-    box-shadow: none;
+    transform: none !important;
+    box-shadow: none !important;
   }
   .cr-card:active {
-    transform: scale(0.98);
-    box-shadow: 0 2px 8px rgba(26, 21, 16, 0.1);
+    opacity: 0.85;
+    box-shadow: 0 2px 8px rgba(26, 21, 16, 0.08) !important;
   }
 
   .cr-header-btn { min-height: 42px; }
@@ -1692,4 +1749,249 @@
   }
 
   .cr-dossier-tabs { -webkit-overflow-scrolling: touch; }
+}
+
+
+/* ================================================================
+   MOBILE COMPATIBILITY — Phase 2 Fixes
+   ================================================================ */
+
+/* Prevent iOS text size adjustment */
+.cr-page {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+/* ── Safe Area Insets (notched / Dynamic Island phones) ── */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  @media (max-width: 768px) {
+    .cr-header {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+    }
+
+    .cr-filters {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+    }
+
+    .cr-content {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+      padding-bottom: calc(60px + env(safe-area-inset-bottom));
+    }
+
+    .cr-dossier-back {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+    }
+
+    .cr-dossier-left {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+    }
+
+    .cr-dossier-tab-content {
+      padding-left: max(16px, env(safe-area-inset-left));
+      padding-right: max(16px, env(safe-area-inset-right));
+      padding-bottom: calc(40px + env(safe-area-inset-bottom));
+    }
+
+    .cr-toast {
+      bottom: calc(24px + env(safe-area-inset-bottom));
+    }
+
+    .cr-modal {
+      padding-bottom: calc(32px + env(safe-area-inset-bottom));
+    }
+  }
+}
+
+
+/* ── iOS Zoom Prevention — all inputs ≥16px on mobile ── */
+@media (max-width: 768px) {
+  .cr-edit-input,
+  .cr-edit-input.cr-edit-textarea,
+  .cr-edit-input.cr-edit-select,
+  select.cr-edit-select,
+  select.cr-registry-select {
+    font-size: 16px;
+  }
+
+  .cr-edit-input.cr-edit-select,
+  select.cr-edit-select,
+  select.cr-registry-select {
+    min-height: 44px;
+  }
+}
+
+
+/* ── List view: show status column on tablet / mobile ── */
+@media (max-width: 768px) {
+  .cr-list-header > *:nth-child(6),
+  .cr-list-row > *:nth-child(6) {
+    display: block !important;
+  }
+}
+
+
+/* ── Stats strip: 2×2 grid on small mobile ── */
+@media (max-width: 480px) {
+  .cr-stats-strip {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .cr-stat-item {
+    justify-content: center;
+    padding: 4px 0;
+  }
+}
+
+
+/* ── Filter bar: horizontal scroll on mobile phones ── */
+@media (max-width: 480px) {
+  .cr-filters {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 10px;
+  }
+
+  .cr-filters::-webkit-scrollbar {
+    display: none;
+  }
+
+  .cr-filter-sep {
+    flex-shrink: 0;
+  }
+
+  .cr-filter-clear {
+    position: sticky;
+    right: 0;
+    background: var(--surface);
+    padding-left: 12px;
+    box-shadow: -12px 0 12px var(--surface);
+    flex-shrink: 0;
+  }
+}
+
+
+/* ── Dossier back button: larger touch target ── */
+@media (max-width: 480px) {
+  .cr-dossier-back-btn {
+    font-size: 13px;
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 4px;
+  }
+}
+
+
+/* ── Edit form: sticky save / cancel on mobile ── */
+@media (max-width: 768px) {
+  .cr-edit-controls {
+    position: sticky;
+    bottom: 0;
+    background: var(--surface);
+    padding: 12px 16px;
+    margin: 0 -16px;
+    border-top: 1px solid var(--border);
+    z-index: 40;
+  }
+
+  .cr-edit-save-btn,
+  .cr-edit-cancel-btn {
+    min-height: 44px;
+    font-size: 14px;
+    padding: 10px 18px;
+  }
+}
+
+
+/* ── Character name: prevent overflow in dossier header ── */
+@media (max-width: 480px) {
+  .cr-header-title {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: calc(100vw - 32px);
+  }
+}
+
+
+/* ── Relationship grid: single column on mobile ── */
+@media (max-width: 480px) {
+  .cr-dossier-rel-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ── Dossier meta: touch-friendly row spacing ── */
+@media (max-width: 480px) {
+  .cr-dossier-meta-row {
+    min-height: 36px;
+    padding: 4px 0;
+  }
+
+  .cr-dossier-meta-value {
+    font-size: 14px;
+  }
+}
+
+
+/* ── Dossier action buttons: horizontal on tablets ── */
+@media (min-width: 481px) and (max-width: 768px) {
+  .cr-dossier-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  .cr-dossier-action-btn {
+    flex: 1;
+    min-width: 120px;
+  }
+}
+
+
+/* ── Dossier tabs: scroll fade indicator ── */
+@media (max-width: 768px) {
+  .cr-dossier-tabs {
+    mask-image: linear-gradient(
+      to right,
+      transparent 0px,
+      black 8px,
+      black calc(100% - 32px),
+      transparent 100%
+    );
+    -webkit-mask-image: linear-gradient(
+      to right,
+      transparent 0px,
+      black 8px,
+      black calc(100% - 32px),
+      transparent 100%
+    );
+    padding-right: 24px;
+  }
+}
+
+
+/* ── Dossier row labels: stacked layout on small phones ── */
+@media (max-width: 360px) {
+  .cr-dossier-row {
+    grid-template-columns: 1fr;
+    gap: 1px;
+    padding: 8px 0;
+  }
+
+  .cr-dossier-row-label {
+    font-size: 9px;
+  }
+
+  .cr-dossier-row-value {
+    font-size: 13px;
+  }
 }

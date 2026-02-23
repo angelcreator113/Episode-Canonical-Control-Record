@@ -82,6 +82,7 @@ export default function NarrativeIntelligence({
   }, []);
 
   async function fetchSuggestion() {
+    if (!book || !chapter) return;
     setLoading(true);
     setDismissed(false);
     setSuggestion(null);
@@ -109,7 +110,7 @@ export default function NarrativeIntelligence({
           },
           recent_lines:  recentLines,
           line_count:    lines.length,
-          characters:    characters.map(c => ({
+          characters:    (characters || []).map(c => ({
             name: c.name || c.display_name,
             type: c.type || c.role_type,
           })),
