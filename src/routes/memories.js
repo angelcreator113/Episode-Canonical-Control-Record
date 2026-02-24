@@ -2678,6 +2678,52 @@ Respond with ONLY valid JSON. No preamble. No markdown fences.
 
 
 // ═══════════════════════════════════════════════════════════════════════════════
+// Helper: build character voice context for WriteMode AI endpoints
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function getCharacterVoiceContext(characterId) {
+  if (!characterId) return null;
+  try {
+    const char = await RegistryCharacter.findByPk(characterId);
+    if (!char) return null;
+
+    const vs = char.voice_signature || {};
+    const name = char.display_name || char.selected_name || 'the character';
+
+    let voiceBlock = `CHARACTER VOICE — ${name}`;
+    if (char.character_archetype) voiceBlock += `\nArchetype: ${char.character_archetype}`;
+    if (char.personality) voiceBlock += `\nPersonality: ${char.personality}`;
+    if (char.emotional_baseline) voiceBlock += `\nEmotional baseline: ${char.emotional_baseline}`;
+    if (char.signature_trait) voiceBlock += `\nSignature trait: ${char.signature_trait}`;
+    if (vs.speech_pattern) voiceBlock += `\nSpeech pattern: ${vs.speech_pattern}`;
+    if (vs.vocabulary_tone) voiceBlock += `\nVocabulary/tone: ${vs.vocabulary_tone}`;
+    if (vs.internal_monologue_style) voiceBlock += `\nInternal monologue style: ${vs.internal_monologue_style}`;
+    if (vs.emotional_reactivity) voiceBlock += `\nEmotional reactivity: ${vs.emotional_reactivity}`;
+    if (vs.catchphrases?.length) voiceBlock += `\nCatchphrases: "${vs.catchphrases.join('", "')}"`;
+    if (char.mask_persona) voiceBlock += `\nPublic persona (mask): ${char.mask_persona}`;
+    if (char.truth_persona) voiceBlock += `\nPrivate truth: ${char.truth_persona}`;
+    if (char.core_belief) voiceBlock += `\nCore belief: ${char.core_belief}`;
+    if (char.core_wound) voiceBlock += `\nCore wound: ${char.core_wound}`;
+    if (char.core_desire) voiceBlock += `\nCore desire: ${char.core_desire}`;
+    if (char.core_fear) voiceBlock += `\nCore fear: ${char.core_fear}`;
+
+    const charRules = `
+CHARACTER RULES for ${name}:
+- Write in ${name}'s authentic voice — their specific speech patterns, rhythms, and vocabulary.
+- Honor their emotional baseline (${char.emotional_baseline || 'as established'}).
+- Their interior monologue should reflect their personality and worldview.
+- The mask/truth tension should inform what they say vs. what they think.
+- First person. This character is telling their story.
+- Do not give them clarity or growth they haven't earned yet.`;
+
+    return { name, voiceBlock, charRules };
+  } catch (err) {
+    console.error('getCharacterVoiceContext error:', err.message);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
 // POST /voice-to-story
 // Spoken words → story prose in JustAWoman's voice
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -2729,6 +2775,7 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
       pnos_act       = 'act_1',
       book_character = 'JustAWoman',
       session_log    = [],
+      character_id   = null,
     } = req.body;
 
     if (!spoken?.trim()) {
@@ -2736,6 +2783,7 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
     }
 
     const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+    const charVoice = await getCharacterVoiceContext(character_id);
 
     const recentProse = existing_prose
       ? existing_prose.split('\n\n').slice(-3).join('\n\n')
@@ -2745,13 +2793,17 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
       ? `Recent spoken inputs this session:\n${session_log.slice(-3).map(l => `"${l.spoken.slice(0, 80)}"`).join('\n')}`
       : '';
 
-    const prompt = `You are writing a memoir called "Before Lala" in the voice of JustAWoman.
+    const charName = charVoice?.name || 'JustAWoman';
+    const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
+    const charVoiceBlock = charVoice?.voiceBlock || '';
+
+    const prompt = `You are writing a memoir in the voice of ${charName}.
 
 The author just spoke this aloud — it is raw material, not polished prose:
 "${spoken}"
 
 YOUR JOB: Turn this into story. Not a transcript. Not a cleanup. Story.
-Take what they said and write it as JustAWoman would write it — in her voice, in her body, in the moment.
+Take what they said and write it as ${charName} would write it — in their voice, in their body, in the moment.
 
 CHAPTER: ${chapter_title || 'Untitled'}
 ${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
@@ -2760,11 +2812,11 @@ CURRENT ACT: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 PROSE TENSE/MODE: ${act.tense}
 
-${recentProse ? `WHAT WAS JUST WRITTEN (continue from here):\n${recentProse}` : ''}
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${recentProse ? `WHAT WAS JUST WRITTEN (continue from here):\n${recentProse}` : ''}
 
 ${sessionContext}
 
-${WRITE_MODE_CHARACTER_RULES}
+${charRules}
 
 WRITING RULES:
 - Write 2–5 paragraphs. Not more.
@@ -2773,11 +2825,11 @@ WRITING RULES:
 - If they described what happened, find what it cost.
 - If they trailed off or repeated themselves, that repetition is probably the real thing.
 - Do not add events or details they didn't give you.
-- Do not give her a revelation she didn't earn in what they said.
+- Do not give the character a revelation they didn't earn in what they said.
 - End on something that pulls forward — not a conclusion.
 
 Respond with ONLY the prose. No preamble. No explanation. No quotes around it.
-Just the story, in JustAWoman's first-person voice.`;
+Just the story, in ${charName}'s first-person voice.`;
 
     // Use model fallback like scene-interview
     const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
@@ -2855,6 +2907,7 @@ router.post('/story-edit', optionalAuth, async (req, res) => {
       edit_note,
       pnos_act      = 'act_1',
       chapter_title = '',
+      character_id  = null,
     } = req.body;
 
     if (!current_prose?.trim() || !edit_note?.trim()) {
@@ -2862,8 +2915,12 @@ router.post('/story-edit', optionalAuth, async (req, res) => {
     }
 
     const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+    const charVoice = await getCharacterVoiceContext(character_id);
+    const charName = charVoice?.name || 'JustAWoman';
+    const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
+    const charVoiceBlock = charVoice?.voiceBlock || '';
 
-    const prompt = `You are editing a memoir called "Before Lala" written in JustAWoman's voice.
+    const prompt = `You are editing a memoir written in ${charName}'s voice.
 
 CURRENT PROSE:
 ${current_prose}
@@ -2875,7 +2932,7 @@ CHAPTER: ${chapter_title || 'Untitled'}
 CURRENT VOICE: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 
-${WRITE_MODE_CHARACTER_RULES}
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${charRules}
 
 EDITING RULES:
 - Take the author's note seriously — they are telling you the truth of what's wrong.
@@ -2954,6 +3011,7 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
       chapter_brief  = '',
       pnos_act       = 'act_1',
       book_character = 'JustAWoman',
+      character_id   = null,
     } = req.body;
 
     if (!current_prose?.trim()) {
@@ -2961,11 +3019,15 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
     }
 
     const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+    const charVoice = await getCharacterVoiceContext(character_id);
+    const charName = charVoice?.name || 'JustAWoman';
+    const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
+    const charVoiceBlock = charVoice?.voiceBlock || '';
 
     // Send the last ~5 paragraphs for context
     const recentProse = current_prose.split('\n\n').slice(-5).join('\n\n');
 
-    const prompt = `You are continuing a memoir called "Before Lala" in the voice of JustAWoman.
+    const prompt = `You are continuing a memoir in the voice of ${charName}.
 
 The author has written prose below. They paused. Now they want you to pick up where they left off and keep going — same voice, same truth, same movement.
 
@@ -2976,10 +3038,10 @@ CURRENT ACT: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 PROSE TENSE/MODE: ${act.tense}
 
-WHAT THE AUTHOR HAS WRITTEN (continue from the end):
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}WHAT THE AUTHOR HAS WRITTEN (continue from the end):
 ${recentProse}
 
-${WRITE_MODE_CHARACTER_RULES}
+${charRules}
 
 CONTINUATION RULES:
 - Write 2–4 paragraphs. Not more.
@@ -3057,6 +3119,7 @@ router.post('/story-deepen', optionalAuth, async (req, res) => {
       current_prose  = '',
       pnos_act       = 'act_1',
       chapter_title  = '',
+      character_id   = null,
     } = req.body;
 
     if (!current_prose?.trim()) {
@@ -3064,11 +3127,15 @@ router.post('/story-deepen', optionalAuth, async (req, res) => {
     }
 
     const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+    const charVoice = await getCharacterVoiceContext(character_id);
+    const charName = charVoice?.name || 'JustAWoman';
+    const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
+    const charVoiceBlock = charVoice?.voiceBlock || '';
     const paragraphs = current_prose.split('\n\n').filter(p => p.trim());
     const lastParagraph = paragraphs[paragraphs.length - 1];
     const contextBefore = paragraphs.slice(-4, -1).join('\n\n');
 
-    const prompt = `You are deepening a moment in a memoir called "Before Lala" written in JustAWoman's voice.
+    const prompt = `You are deepening a moment in a memoir written in ${charName}'s voice.
 
 ${contextBefore ? `CONTEXT (what came before):\n${contextBefore}\n\n` : ''}
 PARAGRAPH TO DEEPEN:
@@ -3078,7 +3145,7 @@ CHAPTER: ${chapter_title || 'Untitled'}
 CURRENT VOICE: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 
-${WRITE_MODE_CHARACTER_RULES}
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${charRules}
 
 YOUR JOB: Deepen this paragraph. Not rewrite — deepen.
 - Find the body in it. Where is she standing? What does the air feel like? What's in her hands?
@@ -3157,16 +3224,20 @@ router.post('/story-nudge', optionalAuth, async (req, res) => {
       chapter_title  = '',
       chapter_brief  = '',
       pnos_act       = 'act_1',
+      character_id   = null,
     } = req.body;
 
     if (!current_prose?.trim()) {
-      return res.json({ nudge: 'Start with where she is — the room, the feeling, the thing she just did.' });
+      return res.json({ nudge: 'Start with where they are — the room, the feeling, the thing they just did.' });
     }
 
     const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+    const charVoice = await getCharacterVoiceContext(character_id);
+    const charName = charVoice?.name || 'JustAWoman';
+    const charVoiceBlock = charVoice?.voiceBlock || '';
     const recentProse = current_prose.split('\n\n').slice(-3).join('\n\n');
 
-    const prompt = `You are a writing partner for a memoir called "Before Lala" in JustAWoman's voice.
+    const prompt = `You are a writing partner for a memoir in ${charName}'s voice.
 
 The author has written this so far:
 ${recentProse}
@@ -3176,15 +3247,15 @@ ${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
 ACT ENERGY: ${act.voice}
 BELIEF: "${act.belief}"
 
-Give the writer a SHORT creative nudge — one sentence, maybe two. Not prose. A suggestion.
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}Give the writer a SHORT creative nudge — one sentence, maybe two. Not prose. A suggestion.
 Think: what would a brilliant writing partner whisper to you at this point?
 
 Examples of good nudges:
-- "What did she do with her hands while she waited?"
-- "She's circling. What is she avoiding naming?"
-- "The phone is still face-down. What happens when she picks it up?"
-- "This is the moment before the comparison spiral — lean into what she believes right before it breaks."
-- "You're in her head. Get her back in her body."
+- "What did they do with their hands while they waited?"
+- "They're circling. What are they avoiding naming?"
+- "Something was left unsaid. What happens when it comes out?"
+- "This is the moment before the spiral — lean into what they believe right before it breaks."
+- "You're in their head. Get them back in their body."
 
 RULES:
 - One nudge. Not a list. Not options.
