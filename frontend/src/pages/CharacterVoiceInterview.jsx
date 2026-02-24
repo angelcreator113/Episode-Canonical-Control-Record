@@ -199,6 +199,21 @@ export default function CharacterVoiceInterview({
   const charName  = character?.selected_name || character?.display_name || 'this character';
   const needsUnspokenQ = ['pressure', 'mirror'].includes(roleType);
 
+  // ── Generating safety valve — auto-reset if stuck ────────────────────
+  const generatingTimerRef = useRef(null);
+  useEffect(() => {
+    if (generating) {
+      generatingTimerRef.current = setTimeout(() => {
+        console.warn('Interview generating stuck — auto-resetting');
+        setGenerating(false);
+        setError('The response took too long. Try sending your answer again.');
+      }, 35000);
+    } else {
+      if (generatingTimerRef.current) clearTimeout(generatingTimerRef.current);
+    }
+    return () => { if (generatingTimerRef.current) clearTimeout(generatingTimerRef.current); };
+  }, [generating]);
+
   // ── Helper: reset to fresh interview state ────────────────────────────
   function resetToFresh() {
     setMessages([{
@@ -353,13 +368,14 @@ export default function CharacterVoiceInterview({
   }
 
   async function handleSend() {
-    if (!input.trim()) return;
+    if (!input.trim() || generating) return;
     await handleSendText(input.trim());
   }
 
   async function handleSendText(userAnswer) {
-    if (!userAnswer) return;
+    if (!userAnswer || generating) return;
     setInput('');
+    setError(null);
 
     const newMessages = [...messages, { role: 'user', text: userAnswer }];
     setMessages(newMessages);
@@ -373,7 +389,13 @@ export default function CharacterVoiceInterview({
     // Auto-save progress after every answer
     saveProgress({ messages: newMessages, answers: newAnswers, step: 'interview' });
 
-    await decideNextMove(newAnswers, newMessages, userAnswer);
+    try {
+      await decideNextMove(newAnswers, newMessages, userAnswer);
+    } catch (err) {
+      console.error('Interview decideNextMove error:', err);
+      setGenerating(false);
+      setError('Something went wrong. Try sending your answer again.');
+    }
   }
 
   // ── Core routing: what happens after every answer ──────────────────────
@@ -397,9 +419,18 @@ export default function CharacterVoiceInterview({
       return;
     }
 
-    // 3. CONTRADICTION CHECK — every 3rd answer
+    // 3. PRIVATE LIFE — answer 3 (before contradiction so it fires first)
+    if (answerCount === 3 && !privateLifeAsked) {
+      setPrivateLifeAsked(true);
+      const q = PRIVATE_LIFE_Q(charName);
+      setNextQuestion(q);
+      setMessages(prev => [...prev, { role: 'system', text: q }]);
+      return;
+    }
+
+    // 4. CONTRADICTION CHECK — every 3rd answer (but not 3 — private life owns that)
     if (
-      answerCount >= 3 &&
+      answerCount >= 6 &&
       answerCount % 3 === 0 &&
       answerCount !== lastContradictionCheck.current
     ) {
@@ -407,15 +438,6 @@ export default function CharacterVoiceInterview({
       await getAdaptiveQuestion(currentAnswers, currentMessages, {
         forceContradictionCheck: true,
       });
-      return;
-    }
-
-    // 4. PRIVATE LIFE — around answer 3
-    if (answerCount === 3 && !privateLifeAsked) {
-      setPrivateLifeAsked(true);
-      const q = PRIVATE_LIFE_Q(charName);
-      setNextQuestion(q);
-      setMessages(prev => [...prev, { role: 'system', text: q }]);
       return;
     }
 
@@ -449,6 +471,7 @@ export default function CharacterVoiceInterview({
 
   async function getAdaptiveQuestion(currentAnswers, currentMessages, options = {}) {
     setGenerating(true);
+    setError(null);
     try {
       const nextIndex = questionIndex + 1;
       setQuestionIndex(nextIndex);
@@ -465,9 +488,14 @@ export default function CharacterVoiceInterview({
         selected_name: c.selected_name,
       }));
 
+      // Fetch with 30-second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch(`${MEMORIES_API}/character-interview-next`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal:  controller.signal,
         body: JSON.stringify({
           book_id:                   bookId || null,
           character_name:            charName,
@@ -485,6 +513,7 @@ export default function CharacterVoiceInterview({
         }),
       });
 
+      clearTimeout(timeoutId);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
@@ -531,9 +560,13 @@ export default function CharacterVoiceInterview({
           setMessages(prev => [...prev, { role: 'new_character_detected', character: nc }]);
         }
       }
-    } catch {
-      const fallback = questions[questionIndex + 1];
-      if (fallback) setMessages(prev => [...prev, { role: 'system', text: fallback }]);
+    } catch (err) {
+      console.error('Interview getAdaptiveQuestion error:', err);
+      const fallback = questions[questionIndex + 1] || questions[questionIndex] || 'Tell me more about that.';
+      setMessages(prev => [...prev, { role: 'system', text: fallback }]);
+      if (err?.name === 'AbortError') {
+        setError('Response timed out. Your answer was saved — try again.');
+      }
     } finally {
       setGenerating(false);
     }
@@ -792,7 +825,10 @@ export default function CharacterVoiceInterview({
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend();
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
                     }}
                     rows={3}
                     autoFocus
@@ -811,10 +847,11 @@ export default function CharacterVoiceInterview({
                     →
                   </button>
                 </div>
+                {error && <div style={st.error}>{error}</div>}
                 <div style={st.cmdHint}>
                   {listening
                     ? '◼ Recording — tap mic to stop and send'
-                    : 'Ctrl + Enter to send · 🎤 to speak'}
+                    : 'Enter to send · Shift+Enter for new line · 🎤 to speak'}
                 </div>
               </>
             )}
