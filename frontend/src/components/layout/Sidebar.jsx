@@ -25,7 +25,7 @@ function Sidebar({ isOpen, onClose }) {
   
   // Auto-expand Universe/StoryTeller group when on its sub-routes
   useEffect(() => {
-    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships')) {
+    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships') || location.pathname.startsWith('/therapy')) {
       setStoryExpanded(true);
     }
   }, [location.pathname]);
@@ -128,7 +128,7 @@ function Sidebar({ isOpen, onClose }) {
         {/* Universe group (includes StoryTeller tools) */}
         <div className="nav-group">
           <button
-            className={`nav-item ${isActive('/universe') || isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') ? 'active' : ''}`}
+            className={`nav-item ${isActive('/universe') || isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') || isActive('/therapy') ? 'active' : ''}`}
             onClick={() => {
               setStoryExpanded(!storyExpanded);
               if (!storyExpanded) {
@@ -180,6 +180,13 @@ function Sidebar({ isOpen, onClose }) {
               >
                 <span className="subitem-indicator">└─</span>
                 <span className="subitem-label">Relationships</span>
+              </button>
+              <button
+                className={`nav-subitem ${isActive('/therapy') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/therapy/default')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Therapy</span>
               </button>
             </div>
           )}

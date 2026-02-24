@@ -853,6 +853,15 @@ try {
   console.error('✗ Failed to load Relationship Map routes:', e.message);
 }
 
+// Character Therapy — Psychological Narrative Engine routes
+try {
+  const therapyRoutes = require('./routes/therapy');
+  app.use('/api/v1/therapy', therapyRoutes);
+  console.log('✓ Character Therapy routes loaded at /api/v1/therapy');
+} catch (e) {
+  console.error('✗ Failed to load Character Therapy routes:', e.message);
+}
+
 // Lala Scene Detection routes
 try {
   const lalaSceneRoutes = require('./routes/lala-scene-detection');

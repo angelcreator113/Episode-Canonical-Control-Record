@@ -9,7 +9,7 @@
  * Philosophy: Calm × Intelligence
  */
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
 import MemoryBankView from './MemoryBankView';
 import ChapterBrief from './ChapterBrief';
@@ -114,10 +114,12 @@ const numberWord = n => NUM_WORDS[n] || String(n);
    ═══════════════════════════════════════ */
 
 function StorytellerPage() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [books, setBooks] = useState([]);
   const [activeBook, setActiveBook] = useState(null);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
+  const [initialChapterId, setInitialChapterId] = useState(null);
   const toast = useToasts();
 
   const loadBooks = useCallback(async () => {
@@ -132,11 +134,12 @@ function StorytellerPage() {
     }
   }, []);
 
-  const openBook = useCallback(async (id) => {
+  const openBook = useCallback(async (id, chapterId) => {
     try {
       setLoading(true);
       const data = await api(`/books/${id}`);
       setActiveBook(data?.book || data);
+      if (chapterId) setInitialChapterId(chapterId);
     } catch (e) {
       toast.add('Failed to open archive', 'error');
     } finally {
@@ -144,7 +147,14 @@ function StorytellerPage() {
     }
   }, []);
 
-  const closeBook = () => setActiveBook(null);
+  const closeBook = () => {
+    setActiveBook(null);
+    setInitialChapterId(null);
+    // Clear book/chapter params from URL without navigation
+    if (searchParams.has('book') || searchParams.has('chapter')) {
+      setSearchParams({}, { replace: true });
+    }
+  };
 
   const deleteBook = useCallback(async (id) => {
     if (!window.confirm('Delete this archive? This cannot be undone.')) return;
@@ -159,6 +169,15 @@ function StorytellerPage() {
 
   useEffect(() => { loadBooks(); }, [loadBooks]);
 
+  // Auto-open book from URL query params (?book=xxx&chapter=yyy)
+  useEffect(() => {
+    const bookParam = searchParams.get('book');
+    const chapterParam = searchParams.get('chapter');
+    if (bookParam && !activeBook) {
+      openBook(bookParam, chapterParam);
+    }
+  }, [searchParams]);
+
   if (loading && !activeBook && !books.length) {
     return <div className="storyteller-page"><div className="st-loading"><div className="st-spinner" /> Loading archives…</div></div>;
   }
@@ -171,6 +190,7 @@ function StorytellerPage() {
           onClose={closeBook}
           toast={toast}
           onRefresh={() => openBook(activeBook.id)}
+          initialChapterId={initialChapterId}
         />
       ) : (
         <BookList
@@ -268,13 +288,13 @@ function BookList({ books, onOpen, onDelete, onNew }) {
    Render redesigned for editorial calm.
    ═══════════════════════════════════════ */
 
-function BookEditor({ book, onClose, toast, onRefresh }) {
+function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   const navigate = useNavigate();
 
   /* ── State ── */
   const [chapters, setChapters] = useState(book.chapters || []);
   const [activeChapterId, setActiveChapterId] = useState(
-    (book.chapters && book.chapters[0]?.id) || null
+    initialChapterId || (book.chapters && book.chapters[0]?.id) || null
   );
   const [activeView, setActiveView] = useState('book');
   const [registryCharacters, setRegistryCharacters] = useState([]);
@@ -1059,7 +1079,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                     <div className="st-chapter-actions">
                       <button
                         className="st-chapter-icon-btn"
-                        onClick={() => navigate(`/write/${activeBook.id}/${activeChapter.id}`)}
+                        onClick={() => navigate(`/write/${book.id}/${activeChapter.id}`)}
                         title="Write mode"
                       >
                         ✍

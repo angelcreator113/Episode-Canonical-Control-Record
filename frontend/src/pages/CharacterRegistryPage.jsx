@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterVoiceInterview from './CharacterVoiceInterview';
 
@@ -83,6 +84,8 @@ function EmptyState({ label, onEdit }) {
    MAIN COMPONENT
    ================================================================ */
 export default function CharacterRegistryPage() {
+
+  const navigate = useNavigate();
 
   /* ── State ── */
   const [view, setView]             = useState('browse');      // 'browse' | 'dossier'
@@ -421,6 +424,9 @@ export default function CharacterRegistryPage() {
           <div className="cr-header-right">
             <button className="cr-header-btn" onClick={() => setInterviewTarget(c)}>
               Interview
+            </button>
+            <button className="cr-header-btn" onClick={() => navigate(`/therapy/${activeRegistry?.id || 'default'}`)}>
+              ◈ Therapy
             </button>
           </div>
         </div>

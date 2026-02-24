@@ -73,13 +73,29 @@ html, body {
   /* No margin needed - flexbox handles layout */
 }
 
-/* Mobile/Tablet: Sidebar is now a fixed drawer, main takes full width */
-@media (max-width: 1024px) {
+/* Tablet: Sidebar is inline collapsible, main adjusts width */
+@media (min-width: 768px) and (max-width: 1279px) {
   .app-layout {
-    flex-direction: row; /* keep horizontal — sidebar is position:fixed */
+    flex-direction: row;
     height: 100dvh;
   }
-  
+
+  .app-main-wrapper {
+    flex: 1;
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    transition: flex 0.3s ease;
+  }
+}
+
+/* Mobile: Sidebar is fixed overlay drawer, main takes full width */
+@media (max-width: 767px) {
+  .app-layout {
+    flex-direction: row;
+    height: 100dvh;
+  }
+
   .app-main-wrapper {
     flex: 1;
     width: 100%;

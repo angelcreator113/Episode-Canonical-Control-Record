@@ -1,0 +1,705 @@
+/**
+ * WriteMode.css
+ * Voice-first writing environment — immersive, quiet, beautiful.
+ * 
+ * Color tokens:
+ *   --wm-bg:       #FAF7F0  (parchment)
+ *   --wm-ink:      #1C1814  (ink)
+ *   --wm-gold:     #B8962E  (accent)
+ *   --wm-ink-30:   rgba(28,24,20,0.30)
+ *   --wm-ink-10:   rgba(28,24,20,0.10)
+ *   --wm-ink-05:   rgba(28,24,20,0.05)
+ *   --wm-gold-12:  rgba(184,150,46,0.12)
+ */
+
+/* ─── ROOT ──────────────────────────────────────────────────── */
+
+.wm-root {
+  display: flex;
+  flex-direction: column;
+  min-height: 100dvh;
+  height: 100dvh;
+  background: #FAF7F0;
+  font-family: 'Lora', 'Georgia', serif;
+  overflow: hidden;
+  position: relative;
+}
+
+/* subtle paper texture via noise overlay */
+.wm-root::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background:
+    radial-gradient(ellipse at 30% 20%, rgba(184,150,46,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 70% 80%, rgba(28,24,20,0.02) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.wm-root > * {
+  position: relative;
+  z-index: 1;
+}
+
+.wm-load-screen {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100dvh;
+  background: #FAF7F0;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.15em;
+  color: rgba(28,24,20,0.35);
+}
+
+/* ─── TOP BAR ───────────────────────────────────────────────── */
+
+.wm-topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px 12px;
+  border-bottom: 1px solid rgba(28,24,20,0.08);
+  background: linear-gradient(180deg, #FAF7F0 0%, #F8F4EB 100%);
+  flex-shrink: 0;
+  z-index: 10;
+  backdrop-filter: blur(8px);
+}
+
+.wm-back-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 18px;
+  color: rgba(28,24,20,0.4);
+  padding: 4px 8px 4px 0;
+  flex-shrink: 0;
+  transition: color 0.15s, transform 0.15s;
+  line-height: 1;
+}
+
+.wm-back-btn:hover {
+  color: rgba(28,24,20,0.7);
+  transform: translateX(-2px);
+}
+
+.wm-chapter-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.wm-chapter-title {
+  font-family: 'Lora', 'Georgia', serif;
+  font-style: italic;
+  font-size: 16px;
+  color: #1C1814;
+  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wm-book-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.15em;
+  color: rgba(28,24,20,0.35);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wm-top-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.wm-word-count {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(28,24,20,0.35);
+  padding: 3px 8px;
+  background: rgba(28,24,20,0.03);
+  border-radius: 10px;
+}
+
+.wm-save-status {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: #B8962E;
+  min-width: 50px;
+  text-align: right;
+}
+
+.wm-mode-btn {
+  background: none;
+  border: 1px solid rgba(28,24,20,0.12);
+  border-radius: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #1C1814;
+  padding: 6px 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.wm-mode-btn:hover {
+  background: rgba(28,24,20,0.04);
+  border-color: rgba(28,24,20,0.25);
+}
+
+.wm-mode-btn.active {
+  background: #1C1814;
+  color: #FAF7F0;
+  border-color: #1C1814;
+}
+
+/* ─── PROSE AREA ────────────────────────────────────────────── */
+
+.wm-prose-wrap {
+  flex: 1;
+  overflow: auto;
+  position: relative;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wm-prose-area {
+  width: 100%;
+  max-width: 680px;
+  margin: 0 auto;
+  min-height: 100%;
+  background: transparent;
+  border: none;
+  padding: 32px 24px 140px;
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 18px;
+  line-height: 2;
+  color: #1C1814;
+  resize: none;
+  display: block;
+  -webkit-text-size-adjust: 100%;
+  caret-color: #B8962E;
+}
+
+.wm-prose-area::placeholder {
+  color: rgba(28,24,20,0.22);
+  font-style: italic;
+}
+
+.wm-prose-area:focus {
+  outline: none;
+}
+
+/* ─── GENERATING OVERLAY ────────────────────────────────────── */
+
+.wm-generating {
+  position: absolute;
+  bottom: 100px;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  pointer-events: none;
+  animation: wmFadeIn 0.3s ease;
+}
+
+.wm-generating-dots {
+  display: flex;
+  gap: 8px;
+}
+
+.wm-generating-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #B8962E;
+  animation: wmDotPulse 1.4s ease-in-out infinite;
+}
+
+.wm-generating-dot:nth-child(2) { animation-delay: 0.2s; }
+.wm-generating-dot:nth-child(3) { animation-delay: 0.4s; }
+
+.wm-generating-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.25em;
+  color: #B8962E;
+  text-transform: uppercase;
+}
+
+/* ─── HINT BAR ──────────────────────────────────────────────── */
+
+.wm-hint {
+  position: absolute;
+  bottom: 80px;
+  left: 20px;
+  right: 20px;
+  max-width: 680px;
+  margin: 0 auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  background: rgba(184,150,46,0.08);
+  border: 1px solid rgba(184,150,46,0.18);
+  border-radius: 6px;
+  padding: 10px 14px;
+  animation: wmFadeIn 0.3s ease;
+  pointer-events: none;
+}
+
+.wm-hint-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #B8962E;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.wm-hint-text {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 13px;
+  font-style: italic;
+  color: rgba(28,24,20,0.55);
+  line-height: 1.6;
+}
+
+/* ─── TRANSCRIPT PREVIEW ────────────────────────────────────── */
+
+.wm-transcript {
+  background: rgba(184,150,46,0.05);
+  border-top: 1px solid rgba(28,24,20,0.06);
+  padding: 12px 24px;
+  flex-shrink: 0;
+  max-height: 90px;
+  overflow-y: auto;
+}
+
+.wm-transcript-text {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 14px;
+  font-style: italic;
+  color: rgba(28,24,20,0.4);
+  line-height: 1.6;
+  max-width: 680px;
+  margin: 0 auto;
+}
+
+/* ─── EDIT PANEL ────────────────────────────────────────────── */
+
+.wm-edit-panel {
+  border-top: 1px solid rgba(28,24,20,0.08);
+  padding: 18px 24px 20px;
+  background: linear-gradient(180deg, #FDFAF4 0%, #FAF7F0 100%);
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 730px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.wm-edit-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.2em;
+  color: rgba(28,24,20,0.35);
+  text-transform: uppercase;
+}
+
+.wm-edit-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.wm-edit-input {
+  flex: 1;
+  background: white;
+  border: 1px solid rgba(28,24,20,0.1);
+  border-radius: 6px;
+  padding: 12px 14px;
+  font-family: 'Lora', Georgia, serif;
+  font-size: 16px;
+  font-style: italic;
+  color: #1C1814;
+  line-height: 1.6;
+  resize: none;
+  transition: border-color 0.2s;
+}
+
+.wm-edit-input:focus {
+  outline: none;
+  border-color: rgba(184,150,46,0.4);
+}
+
+.wm-edit-input::placeholder {
+  color: rgba(28,24,20,0.2);
+}
+
+.wm-edit-mic-btn {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: #F0EBE0;
+  border: 1px solid rgba(28,24,20,0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+  -webkit-user-select: none;
+  user-select: none;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.wm-edit-mic-btn:hover {
+  background: #EBE5D6;
+  transform: scale(1.05);
+}
+
+.wm-mic-active-ring {
+  display: inline-block;
+  animation: wmMicRing 0.8s ease-out infinite;
+  border-radius: 50%;
+}
+
+.wm-apply-btn {
+  background: #1C1814;
+  color: #FAF7F0;
+  border: none;
+  border-radius: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.15em;
+  padding: 12px 22px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.15s;
+  align-self: flex-end;
+}
+
+.wm-apply-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+}
+
+.wm-apply-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+/* ─── MIC ERROR ─────────────────────────────────────────────── */
+
+.wm-mic-error {
+  padding: 10px 24px;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: #B85C38;
+  background: rgba(184,92,56,0.05);
+  border-top: 1px solid rgba(184,92,56,0.12);
+  flex-shrink: 0;
+  text-align: center;
+}
+
+/* ─── BOTTOM BAR ────────────────────────────────────────────── */
+
+.wm-bottom-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  padding: 18px 24px 22px;
+  border-top: 1px solid rgba(28,24,20,0.06);
+  background: linear-gradient(0deg, #F8F4EB 0%, #FAF7F0 100%);
+  flex-shrink: 0;
+  padding-bottom: max(22px, env(safe-area-inset-bottom));
+}
+
+.wm-mic-btn {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  border: 2px solid rgba(28,24,20,0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+  -webkit-user-select: none;
+  user-select: none;
+  touch-action: none;
+  background: #F5F0E8;
+  position: relative;
+}
+
+.wm-mic-btn::after {
+  content: '';
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid transparent;
+  transition: border-color 0.2s;
+}
+
+.wm-mic-btn:hover::after {
+  border-color: rgba(28,24,20,0.06);
+}
+
+.wm-mic-btn.listening {
+  background: #1a1a1a;
+  border-color: rgba(28,24,20,0.2);
+  box-shadow: 0 0 0 8px rgba(26,26,26,0.06);
+  transform: scale(1.08);
+}
+
+.wm-mic-btn.listening::after {
+  animation: wmMicPulse 2s ease-in-out infinite;
+}
+
+.wm-mic-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.wm-bottom-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: rgba(28,24,20,0.35);
+  flex: 1;
+  line-height: 1.6;
+}
+
+.wm-send-btn {
+  background: none;
+  border: 1px solid rgba(28,24,20,0.12);
+  border-radius: 4px;
+  flex-shrink: 0;
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: #1C1814;
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.wm-send-btn:hover:not(:disabled) {
+  background: #1C1814;
+  color: #FAF7F0;
+  border-color: #1C1814;
+}
+
+.wm-send-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+/* ─── EXIT MODAL ────────────────────────────────────────────── */
+
+.wm-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(28,24,20,0.4);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 100;
+  animation: wmFadeIn 0.15s ease;
+  backdrop-filter: blur(2px);
+}
+
+.wm-modal {
+  background: #FAF7F0;
+  width: 100%;
+  max-width: 480px;
+  border-radius: 16px 16px 0 0;
+  padding: 28px 24px;
+  padding-bottom: max(28px, env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  animation: wmSlideUp 0.25s ease;
+}
+
+.wm-modal-title {
+  font-family: 'Lora', Georgia, serif;
+  font-style: italic;
+  font-size: 20px;
+  color: #1C1814;
+}
+
+.wm-modal-sub {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: rgba(28,24,20,0.4);
+  line-height: 1.6;
+}
+
+.wm-modal-btns {
+  display: flex;
+  gap: 10px;
+  padding-top: 6px;
+}
+
+.wm-modal-cancel {
+  flex: 1;
+  padding: 14px;
+  background: #F0EBE0;
+  border: none;
+  border-radius: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: #1C1814;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.wm-modal-cancel:hover {
+  background: #E8E2D4;
+}
+
+.wm-modal-leave {
+  flex: 1;
+  padding: 14px;
+  background: #1C1814;
+  border: none;
+  border-radius: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  color: #FAF7F0;
+  cursor: pointer;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.wm-modal-leave:hover {
+  background: #2a2520;
+  transform: translateY(-1px);
+}
+
+/* ─── ANIMATIONS ────────────────────────────────────────────── */
+
+@keyframes wmDotPulse {
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.8); }
+  40% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes wmFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes wmSlideUp {
+  from { transform: translateY(30px); opacity: 0; }
+  to   { transform: translateY(0); opacity: 1; }
+}
+
+@keyframes wmMicRing {
+  0%   { box-shadow: 0 0 0 0 rgba(26,26,26,0.3); }
+  100% { box-shadow: 0 0 0 14px rgba(26,26,26,0); }
+}
+
+@keyframes wmMicPulse {
+  0%   { border-color: rgba(184,150,46,0.3); }
+  50%  { border-color: rgba(184,150,46,0); }
+  100% { border-color: rgba(184,150,46,0.3); }
+}
+
+/* ─── RESPONSIVE — DESKTOP ──────────────────────────────────── */
+
+@media (min-width: 768px) {
+  .wm-topbar {
+    padding: 16px 32px 14px;
+    gap: 16px;
+  }
+
+  .wm-prose-area {
+    padding: 48px 40px 160px;
+    font-size: 19px;
+    line-height: 2.1;
+  }
+
+  .wm-bottom-bar {
+    padding: 20px 32px 24px;
+    gap: 24px;
+  }
+
+  .wm-modal {
+    border-radius: 16px;
+    margin-bottom: 40px;
+  }
+
+  .wm-modal-overlay {
+    align-items: center;
+  }
+}
+
+@media (min-width: 1024px) {
+  .wm-topbar {
+    padding: 18px 48px 16px;
+  }
+
+  .wm-prose-area {
+    padding: 64px 48px 180px;
+    font-size: 20px;
+  }
+
+  .wm-bottom-bar {
+    padding: 22px 48px 28px;
+  }
+}
+
+/* ─── GLOBAL RESETS FOR WRITE MODE ──────────────────────────── */
+
+.wm-root * {
+  -webkit-tap-highlight-color: transparent;
+  box-sizing: border-box;
+}
+
+.wm-root textarea:focus {
+  outline: none;
+}
+
+.wm-root textarea {
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* ─── SCROLLBAR STYLING ─────────────────────────────────────── */
+
+.wm-prose-wrap::-webkit-scrollbar {
+  width: 6px;
+}
+
+.wm-prose-wrap::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.wm-prose-wrap::-webkit-scrollbar-thumb {
+  background: rgba(28,24,20,0.1);
+  border-radius: 3px;
+}
+
+.wm-prose-wrap::-webkit-scrollbar-thumb:hover {
+  background: rgba(28,24,20,0.2);
+}
