@@ -818,11 +818,14 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
     <div className="cr-header">
       <div className="cr-header-left">
         <div className="cr-header-brand">LaLaPlace</div>
-        <div className="cr-header-breadcrumb">Universe → World → Character Registry</div>
+        <div className="cr-header-breadcrumb">World → Characters</div>
       </div>
 
       <div className="cr-header-center">
-        <h1 className="cr-header-title">Character Registry</h1>
+        <h1 className="cr-header-title">Characters</h1>
+        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
+          Your character development bible
+        </div>
       </div>
 
       <div className="cr-header-right">
