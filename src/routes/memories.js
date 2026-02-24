@@ -1400,6 +1400,85 @@ Respond ONLY with valid JSON. No preamble. No markdown.
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
+ * GET /character-interview-progress/:character_id
+ * Load saved interview progress (stored in extra_fields.interview_progress)
+ */
+router.get('/character-interview-progress/:character_id', optionalAuth, async (req, res) => {
+  try {
+    const character = await RegistryCharacter.findByPk(req.params.character_id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+
+    const progress = character.extra_fields?.interview_progress || null;
+    res.json({ progress });
+  } catch (err) {
+    console.error('GET /character-interview-progress error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+/**
+ * POST /character-interview-save-progress
+ * Auto-save interview state after every answer so users can resume later.
+ * Stores in extra_fields.interview_progress on the RegistryCharacter.
+ */
+router.post('/character-interview-save-progress', optionalAuth, async (req, res) => {
+  try {
+    const {
+      character_id,
+      messages,
+      answers,
+      question_index,
+      next_question,
+      sensory_asked,
+      private_life_asked,
+      unspoken_asked,
+      one_more_asked,
+      last_contradiction_check,
+      drift_history,
+      relational_notes,
+      current_drift,
+      step,
+    } = req.body;
+
+    if (!character_id) return res.status(400).json({ error: 'character_id required' });
+
+    const character = await RegistryCharacter.findByPk(character_id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+
+    const existingExtra = character.extra_fields || {};
+    character.extra_fields = {
+      ...existingExtra,
+      interview_progress: {
+        messages,
+        answers,
+        question_index,
+        next_question,
+        sensory_asked,
+        private_life_asked,
+        unspoken_asked,
+        one_more_asked,
+        last_contradiction_check,
+        drift_history,
+        relational_notes,
+        current_drift,
+        step,
+        saved_at: new Date().toISOString(),
+      },
+    };
+    // Sequelize needs JSONB change flagged explicitly
+    character.changed('extra_fields', true);
+    await character.save();
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error('POST /character-interview-save-progress error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+/**
  * POST /character-interview-next
  * Called after each answer during the character interview.
  *

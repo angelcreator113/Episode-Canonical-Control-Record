@@ -186,6 +186,11 @@ export default function CharacterVoiceInterview({
   const [relationalNotes, setRelationalNotes] = useState([]);
   const [currentDrift,    setCurrentDrift]    = useState(null);
 
+  // Persistence: resume support
+  const [resumeData, setResumeData]   = useState(null);  // loaded progress
+  const [loadingProgress, setLoadingProgress] = useState(false);
+  const savingProgress = useRef(false);
+
   const bottomRef = useRef(null);
   const { speak, startListening, stopListening, listening } = useVoice();
 
@@ -194,32 +199,74 @@ export default function CharacterVoiceInterview({
   const charName  = character?.selected_name || character?.display_name || 'this character';
   const needsUnspokenQ = ['pressure', 'mirror'].includes(roleType);
 
-  // ── Reset on open / character change ──────────────────────────────────
+  // ── Helper: reset to fresh interview state ────────────────────────────
+  function resetToFresh() {
+    setMessages([{
+      role: 'system',
+      text: `Let's talk about ${charName}.\n\nAnswer like you're telling a friend — no right answers. The more specific and honest you are, the richer the character and the stronger the story.\n\nReady when you are.`,
+    }]);
+    setInput('');
+    setStep('intro');
+    setQuestionIndex(0);
+    setAnswers([]);
+    setNextQuestion(null);
+    setGenerating(false);
+    setResult(null);
+    setSaving(false);
+    setError(null);
+    setSensoryAsked(false);
+    setPrivateLifeAsked(false);
+    setUnspokenAsked(false);
+    setOneMoreAsked(false);
+    lastContradictionCheck.current = 0;
+    setDriftHistory([]);
+    setRelationalNotes([]);
+    setCurrentDrift(null);
+    setResumeData(null);
+  }
+
+  // ── Helper: restore state from saved progress ─────────────────────────
+  function restoreProgress(p) {
+    setMessages(p.messages || []);
+    setStep(p.step || 'interview');
+    setQuestionIndex(p.question_index || 0);
+    setAnswers(p.answers || []);
+    setNextQuestion(p.next_question || null);
+    setSensoryAsked(!!p.sensory_asked);
+    setPrivateLifeAsked(!!p.private_life_asked);
+    setUnspokenAsked(!!p.unspoken_asked);
+    setOneMoreAsked(!!p.one_more_asked);
+    lastContradictionCheck.current = p.last_contradiction_check || 0;
+    setDriftHistory(p.drift_history || []);
+    setRelationalNotes(p.relational_notes || []);
+    setCurrentDrift(p.current_drift || null);
+    setInput('');
+    setGenerating(false);
+    setResult(null);
+    setSaving(false);
+    setError(null);
+    setResumeData(null);
+  }
+
+  // ── Load saved progress on open ───────────────────────────────────────
   useEffect(() => {
-    if (open) {
-      setMessages([{
-        role: 'system',
-        text: `Let's talk about ${charName}.\n\nAnswer like you're telling a friend — no right answers. The more specific and honest you are, the richer the character and the stronger the story.\n\nReady when you are.`,
-      }]);
-      setInput('');
-      setStep('intro');
-      setQuestionIndex(0);
-      setAnswers([]);
-      setNextQuestion(null);
-      setGenerating(false);
-      setResult(null);
-      setSaving(false);
-      setError(null);
-      setSensoryAsked(false);
-      setPrivateLifeAsked(false);
-      setUnspokenAsked(false);
-      setOneMoreAsked(false);
-      lastContradictionCheck.current = 0;
-      setDriftHistory([]);
-      setRelationalNotes([]);
-      setCurrentDrift(null);
+    if (open && character?.id) {
+      setLoadingProgress(true);
+      fetch(`${MEMORIES_API}/character-interview-progress/${character.id}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.progress && data.progress.answers?.length > 0 && data.progress.step !== 'complete') {
+            setResumeData(data.progress);
+          } else {
+            resetToFresh();
+          }
+        })
+        .catch(() => resetToFresh())
+        .finally(() => setLoadingProgress(false));
+    } else if (open) {
+      resetToFresh();
     }
-  }, [open, character?.id]);
+  }, [open, character?.id]); // eslint-disable-line
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -239,6 +286,65 @@ export default function CharacterVoiceInterview({
     if (meta?.isFinal && text.trim() && step === 'interview' && !generating) {
       setTimeout(() => handleSendText(text.trim()), 80);
     }
+  }
+
+  // ── Auto-save progress after each answer ──────────────────────────────
+  async function saveProgress(overrides = {}) {
+    if (!character?.id || savingProgress.current) return;
+    savingProgress.current = true;
+    try {
+      await fetch(`${MEMORIES_API}/character-interview-save-progress`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id:             character.id,
+          messages:                 overrides.messages    ?? messages,
+          answers:                  overrides.answers     ?? answers,
+          question_index:           overrides.questionIndex ?? questionIndex,
+          next_question:            overrides.nextQuestion  ?? nextQuestion,
+          sensory_asked:            overrides.sensoryAsked  ?? sensoryAsked,
+          private_life_asked:       overrides.privateLifeAsked ?? privateLifeAsked,
+          unspoken_asked:           overrides.unspokenAsked ?? unspokenAsked,
+          one_more_asked:           overrides.oneMoreAsked ?? oneMoreAsked,
+          last_contradiction_check: lastContradictionCheck.current,
+          drift_history:            overrides.driftHistory ?? driftHistory,
+          relational_notes:         overrides.relationalNotes ?? relationalNotes,
+          current_drift:            overrides.currentDrift ?? currentDrift,
+          step:                     overrides.step ?? step,
+        }),
+      });
+    } catch (e) {
+      console.warn('Failed to save interview progress:', e);
+    } finally {
+      savingProgress.current = false;
+    }
+  }
+
+  // ── Clear saved progress (after profile saved) ────────────────────────
+  async function clearProgress() {
+    if (!character?.id) return;
+    try {
+      await fetch(`${MEMORIES_API}/character-interview-save-progress`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id: character.id,
+          messages:     [],
+          answers:      [],
+          question_index: 0,
+          next_question: null,
+          sensory_asked: false,
+          private_life_asked: false,
+          unspoken_asked: false,
+          one_more_asked: false,
+          last_contradiction_check: 0,
+          drift_history: [],
+          relational_notes: [],
+          current_drift: null,
+          step: 'complete',
+        }),
+      });
+    } catch (_) { /* non-critical */ }
   }
 
   function handleStart() {
@@ -263,6 +369,9 @@ export default function CharacterVoiceInterview({
       answer:   userAnswer,
     }];
     setAnswers(newAnswers);
+
+    // Auto-save progress after every answer
+    saveProgress({ messages: newMessages, answers: newAnswers, step: 'interview' });
 
     await decideNextMove(newAnswers, newMessages, userAnswer);
   }
@@ -467,6 +576,8 @@ export default function CharacterVoiceInterview({
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(result.profile),
       });
+      // Clear saved progress now that the profile is saved
+      await clearProgress();
       onComplete?.(result.profile, result.threads);
     } catch (err) {
       setError(err.message);
@@ -492,6 +603,52 @@ export default function CharacterVoiceInterview({
           </div>
           <button style={st.closeBtn} onClick={onClose}>✕</button>
         </div>
+
+        {/* ── Loading saved progress ──────────────────────────────────── */}
+        {loadingProgress && (
+          <div style={st.generatingBlock}>
+            <div style={st.generatingTitle}>Checking for saved progress…</div>
+          </div>
+        )}
+
+        {/* ── Resume prompt ───────────────────────────────────────────── */}
+        {!loadingProgress && resumeData && (
+          <div style={{
+            padding: '40px 32px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 16, textAlign: 'center',
+          }}>
+            <div style={{
+              fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontSize: 22, fontWeight: 600,
+              color: 'rgba(30,25,20,0.85)',
+            }}>
+              You have a conversation in progress
+            </div>
+            <div style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 12, color: 'rgba(30,25,20,0.5)',
+              letterSpacing: '0.03em',
+            }}>
+              {resumeData.answers?.length || 0} answer{(resumeData.answers?.length || 0) !== 1 ? 's' : ''} saved
+              {resumeData.saved_at ? ` · ${new Date(resumeData.saved_at).toLocaleDateString()}` : ''}
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+              <button
+                style={st.secondaryBtn}
+                onClick={() => { resetToFresh(); }}
+              >
+                Start Over
+              </button>
+              <button
+                style={st.primaryBtn}
+                onClick={() => restoreProgress(resumeData)}
+              >
+                Continue Where I Left Off →
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Generating ──────────────────────────────────────────────── */}
         {step === 'generating' && (
@@ -579,7 +736,7 @@ export default function CharacterVoiceInterview({
         )}
 
         {/* ── Chat ─────────────────────────────────────────────────────── */}
-        {(step === 'intro' || step === 'interview') && (
+        {!loadingProgress && !resumeData && (step === 'intro' || step === 'interview') && (
           <>
             <div style={st.chatWindow}>
               {/* Drift indicator — shows when drift is active */}
