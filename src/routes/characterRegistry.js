@@ -99,6 +99,30 @@ router.post('/registries', async (req, res) => {
 });
 
 /**
+ * GET /registries/default
+ * Auto-find the first registry (or create one)
+ */
+router.get('/registries/default', async (req, res) => {
+  try {
+    const { CharacterRegistry, RegistryCharacter } = getModels();
+    let registry = await CharacterRegistry.findOne({
+      include: [{ model: RegistryCharacter, as: 'characters', order: [['sort_order', 'ASC']] }],
+      order: [['created_at', 'ASC']],
+    });
+    if (!registry) {
+      registry = await CharacterRegistry.create({ title: 'My Registry', status: 'active' });
+      registry = await CharacterRegistry.findByPk(registry.id, {
+        include: [{ model: RegistryCharacter, as: 'characters' }],
+      });
+    }
+    return res.json({ success: true, registry });
+  } catch (err) {
+    console.error('[CharacterRegistry] GET /registries/default error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * GET /registries/:id
  * Get single registry with all characters
  */
