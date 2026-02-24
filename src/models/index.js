@@ -77,6 +77,7 @@ let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatChara
 let LalaEmergenceScene; // Lala Emergence Scene Detection model
 let CharacterRelationship; // Character Relationship Map model
 let CharacterTherapyProfile; // Character Therapy Psychological Narrative Engine model
+let PressCareer; // LalaVerse Press career tracking model
 
 try {
   // Core models
@@ -230,6 +231,9 @@ try {
   // Character Therapy — Psychological Narrative Engine model
   CharacterTherapyProfile = require('./CharacterTherapyProfile')(sequelize);
 
+  // LalaVerse Press career tracking model
+  PressCareer = require('./PressCareer')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -306,6 +310,7 @@ const requiredModels = {
   LalaEmergenceScene,
   CharacterRelationship,
   CharacterTherapyProfile,
+  PressCareer,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1480,3 +1485,4 @@ module.exports.ContinuityBeat = ContinuityBeat;
 module.exports.ContinuityBeatCharacter = ContinuityBeatCharacter;
 module.exports.LalaEmergenceScene = LalaEmergenceScene;
 module.exports.CharacterRelationship = CharacterRelationship;
+module.exports.PressCareer = PressCareer;
