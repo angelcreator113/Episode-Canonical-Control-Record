@@ -1,4 +1,4 @@
-// Add deleted_at column to storyteller_echoes
+// Add deleted_at column to new notification tables
 const { Client } = require('pg');
 const client = new Client({
   host: 'episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com',
@@ -10,8 +10,15 @@ const client = new Client({
 });
 async function run() {
   await client.connect();
-  await client.query('ALTER TABLE storyteller_echoes ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ');
-  console.log('Added deleted_at column');
+  const tables = ['lalaverse_brands', 'wardrobe_brand_tags', 'therapy_pending_sessions'];
+  for (const t of tables) {
+    try {
+      await client.query(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`);
+      console.log(`Added deleted_at to ${t}`);
+    } catch(e) {
+      console.log(`${t}: ${e.message}`);
+    }
+  }
   await client.end();
 }
 run().catch(e => { console.error(e); process.exit(1); });

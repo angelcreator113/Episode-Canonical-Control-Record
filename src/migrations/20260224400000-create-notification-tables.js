@@ -21,6 +21,7 @@ module.exports = {
       website:            { type: Sequelize.STRING },
       created_at:         { type: Sequelize.DATE, allowNull: false },
       updated_at:         { type: Sequelize.DATE, allowNull: false },
+      deleted_at:         { type: Sequelize.DATE },
     });
 
     // Wardrobe piece -> brand + event/scene tags
@@ -41,6 +42,7 @@ module.exports = {
       coverage_published:  { type: Sequelize.DATE },
       created_at:          { type: Sequelize.DATE, allowNull: false },
       updated_at:          { type: Sequelize.DATE, allowNull: false },
+      deleted_at:          { type: Sequelize.DATE },
     });
 
     // Therapy pending sessions -- characters waiting to be seen
@@ -58,6 +60,7 @@ module.exports = {
       status:              { type: Sequelize.STRING, defaultValue: 'waiting' },
       created_at:          { type: Sequelize.DATE, allowNull: false },
       updated_at:          { type: Sequelize.DATE, allowNull: false },
+      deleted_at:          { type: Sequelize.DATE },
     });
   },
   async down(queryInterface) {
