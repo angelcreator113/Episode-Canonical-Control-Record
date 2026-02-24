@@ -1059,7 +1059,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                     <div className="st-chapter-actions">
                       <button
                         className="st-chapter-icon-btn"
-                        onClick={() => navigate(`/write/${activeBook.id}/${activeChapter.id}`)}
+                        onClick={() => navigate(`/write/${book.id}/${activeChapter.id}`)}
                         title="Write mode"
                       >
                         ✍
