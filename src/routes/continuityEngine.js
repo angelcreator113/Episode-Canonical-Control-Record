@@ -18,6 +18,11 @@ function getModels() {
   return models;
 }
 
+let thresholdDetection;
+try {
+  thresholdDetection = require('../services/thresholdDetection');
+} catch { thresholdDetection = null; }
+
 /* ------------------------------------------------------------------ */
 /*  Auto-create continuity tables if missing (runs once)               */
 /* ------------------------------------------------------------------ */
@@ -251,6 +256,14 @@ router.post('/timelines/:id/beats', async (req, res) => {
     const full = await ContinuityBeat.findByPk(beat.id, {
       include: [{ model: ContinuityCharacter, as: 'characters', through: { attributes: [] } }],
     });
+
+    // ── Threshold Detection hook — check wound thresholds after beat creation ──
+    if (thresholdDetection) {
+      const allModels = getModels();
+      thresholdDetection.checkAllThresholds(allModels).catch(e =>
+        console.error('Threshold detection (beat-creation):', e.message)
+      );
+    }
 
     return res.status(201).json({ success: true, beat: full });
   } catch (err) {

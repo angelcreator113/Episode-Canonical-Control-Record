@@ -28,6 +28,11 @@ try {
   anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 } catch { anthropic = null; }
 
+let thresholdDetection;
+try {
+  thresholdDetection = require('../services/thresholdDetection');
+} catch { thresholdDetection = null; }
+
 // ── WOUND MEMORY PATTERNS ────────────────────────────────────────────────
 
 const WOUND_PATTERNS = {
@@ -516,6 +521,13 @@ router.post('/session-close', optionalAuth, async (req, res) => {
       });
     }
 
+    // ── Threshold Detection: check if any character just crossed a wound threshold ──
+    if (thresholdDetection) {
+      thresholdDetection.checkAllThresholds(models).catch(e =>
+        console.error('Threshold detection (session-close):', e.message)
+      );
+    }
+
     res.json({
       ok:               true,
       decayed_state:    decayedState,
@@ -550,6 +562,38 @@ router.get('/profile/:charId', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('GET /profile error:', err);
     res.json({});
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// ROUTE 6: GET /waiting  — characters waiting outside the therapy door
+// ════════════════════════════════════════════════════════════════════════
+
+router.get('/waiting', optionalAuth, async (req, res) => {
+  try {
+    if (!thresholdDetection) return res.json([]);
+    const models = req.app.get('models');
+    const waiting = await thresholdDetection.getWaitingSessions(models);
+    res.json(waiting);
+  } catch (err) {
+    console.error('GET /waiting error:', err);
+    res.json([]);
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// ROUTE 7: POST /clear-waiting/:id  — clear waiting when session opens
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/clear-waiting/:id', optionalAuth, async (req, res) => {
+  try {
+    if (!thresholdDetection) return res.json({ ok: true });
+    const models = req.app.get('models');
+    await thresholdDetection.clearWaitingSession(models, req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('POST /clear-waiting error:', err);
+    res.json({ ok: true });
   }
 });
 

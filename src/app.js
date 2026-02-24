@@ -899,6 +899,15 @@ try {
   console.error('✗ Failed to load LalaVerse Press routes:', e.message);
 }
 
+// LalaVerse Wardrobe Brand routes
+try {
+  const wardrobeBrandRoutes = require('./routes/wardrobeBrands');
+  app.use('/api/v1/wardrobe-brands', wardrobeBrandRoutes);
+  console.log('✓ Wardrobe Brand routes loaded at /api/v1/wardrobe-brands');
+} catch (e) {
+  console.error('✗ Failed to load Wardrobe Brand routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
