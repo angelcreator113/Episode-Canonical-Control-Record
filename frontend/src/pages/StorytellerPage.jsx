@@ -28,6 +28,13 @@ import PreWritingCheckin from '../components/PreWritingCheckin';
 import BeliefTracker from '../components/BeliefTracker';
 import VentureRegistry from '../components/VentureRegistry';
 import { PlantEchoButton, IncomingEchoes, EchoHealthPanel } from '../components/DecisionEchoPanel';
+import BookQuestionLayer, { getBookQuestionContext } from '../components/BookQuestionLayer';
+import CharacterAppearanceRules from '../components/CharacterAppearanceRules';
+import ChapterExitEmotion from '../components/ChapterExitEmotion';
+import PacingArc from '../components/PacingArc';
+import AbsenceTracker from '../components/AbsenceTracker';
+import { getLalaSessionPrompt } from '../data/lalaVoiceData';
+import { getCharacterRulesPrompt } from '../data/characterAppearanceRules';
 import { getVentureContext, getThreadContext } from '../data/ventureData';
 import './StorytellerPage.css';
 
@@ -279,6 +286,11 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
   const [activeThreads, setActiveThreads] = useState([]);
   const [pnosAct, setPnosAct] = useState('act_1');
   const [reviewMode, setReviewMode] = useState(false);
+
+  // Alive system state
+  const [chapterCharacters, setChapterCharacters] = useState([]);
+  const [exitEmotionData, setExitEmotionData] = useState({ exit_emotion: '', exit_emotion_note: '' });
+  const [questionDirection, setQuestionDirection] = useState(null);
   const [writingMode, setWritingMode] = useState(false);
   const [canonOpen, setCanonOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -358,6 +370,19 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
   const eraSlug = activeChapter?.badge?.toLowerCase().replace(/\s+/g, '-') || '';
   const eraTheme = eraSlug.includes('pre-prime') ? 'pre-prime'
     : eraSlug.includes('prime') ? 'prime' : 'default';
+
+  // Build narrative payload — all alive system context for AI routes
+  const buildNarrativePayload = useCallback(() => ({
+    venture_context: getVentureContext ? getVentureContext(pnosAct) : '',
+    pnos_act: pnosAct,
+    incoming_echoes: incomingEchoes,
+    active_threads: activeThreads,
+    character_rules: getCharacterRulesPrompt(chapterCharacters),
+    book_question: getBookQuestionContext(book, activeChapter),
+    exit_emotion: exitEmotionData.exit_emotion || '',
+    exit_emotion_note: exitEmotionData.exit_emotion_note || '',
+    lala_session_prompt: getLalaSessionPrompt ? getLalaSessionPrompt() : '',
+  }), [pnosAct, incomingEchoes, activeThreads, chapterCharacters, book, activeChapter, exitEmotionData]);
 
   /* ── Handlers ── */
 
@@ -872,6 +897,33 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
             echoes={incomingEchoes}
             chapters={chapters}
           />
+
+          {/* Pacing Arc — emotional temperature across chapters */}
+          <PacingArc
+            chapters={chapters}
+            onTemperatureChange={async (chapterId, temp) => {
+              try {
+                await api(`/chapters/${chapterId}`, {
+                  method: 'PUT',
+                  body: JSON.stringify({ emotional_temperature: temp }),
+                });
+                setChapters(prev => prev.map(ch =>
+                  ch.id === chapterId ? { ...ch, emotional_temperature: temp } : ch
+                ));
+              } catch (e) {
+                toast.add('Failed to save temperature', 'error');
+              }
+            }}
+          />
+
+          {/* Absence Tracker — character disappearance windows */}
+          <AbsenceTracker
+            chapters={chapters}
+            currentChapterId={activeChapterId}
+            onAcknowledge={(charId, sourceChapterId) => {
+              console.log('Acknowledged absence:', charId, 'from chapter:', sourceChapterId);
+            }}
+          />
         </nav>
 
         {/* ── Main Content ── */}
@@ -1009,6 +1061,25 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                     chapter={activeChapter}
                     onActChange={act => setPnosAct(act)}
                     onThreadChange={threads => setActiveThreads(threads)}
+                  />
+
+                  {/* Book Question Layer — the central question + direction */}
+                  <BookQuestionLayer
+                    book={book}
+                    chapter={activeChapter}
+                    onDirectionChange={(dir) => setQuestionDirection(dir)}
+                  />
+
+                  {/* Character Appearance Rules — who can appear & how */}
+                  <CharacterAppearanceRules
+                    chapterCharacters={chapterCharacters}
+                    onCharacterToggle={(charIds) => setChapterCharacters(charIds)}
+                  />
+
+                  {/* Chapter Exit Emotion — where this chapter should land */}
+                  <ChapterExitEmotion
+                    chapter={activeChapter}
+                    onExitChange={(data) => setExitEmotionData(data)}
                   />
 
                   {/* Incoming Echoes — planted moments that reverberate here */}

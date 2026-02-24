@@ -1025,11 +1025,16 @@ router.post('/narrative-intelligence', optionalAuth, async (req, res) => {
       recent_lines = [],
       line_count = 0,
       characters = [],
-      // ── NEW: venture context fields ──────────────────────────────────────
+      // ── venture context fields ───────────────────────────────────────────
       venture_context = '',
       pnos_act = 'act_1',
       incoming_echoes = [],
       active_threads = [],
+      // ── alive system fields ──────────────────────────────────────────────
+      character_rules = '',
+      book_question = '',
+      exit_emotion = '',
+      exit_emotion_note = '',
     } = req.body;
 
     if (!book_id || recent_lines.length === 0) {
@@ -1073,8 +1078,21 @@ router.post('/narrative-intelligence', optionalAuth, async (req, res) => {
       ? `\nACTIVE PLOT THREADS: ${active_threads.join(', ')}`
       : '';
 
+    // ── Alive system blocks ────────────────────────────────────────────
+    const characterRulesBlock = character_rules
+      ? `\n═══════════════════════════════════════════════════════\nCHARACTER APPEARANCE RULES\n═══════════════════════════════════════════════════════\n${character_rules}\n`
+      : '';
+
+    const bookQuestionBlock = book_question
+      ? `\n═══════════════════════════════════════════════════════\nBOOK QUESTION LAYER\n═══════════════════════════════════════════════════════\n${book_question}\n`
+      : '';
+
+    const exitEmotionBlock = exit_emotion
+      ? `\nEXIT EMOTION TARGET: ${exit_emotion}${exit_emotion_note ? ` — ${exit_emotion_note}` : ''}\n`
+      : '';
+
     const prompt = `${universeContext}
-${ventureBlock}${echoBlock}
+${ventureBlock}${echoBlock}${characterRulesBlock}${bookQuestionBlock}
 You are an intelligent co-writing partner for a first-time novelist writing a literary debut.
 
 The author is writing in real time. You have just been given their last ${recent_lines.length} lines. Your job is to read what they've written, understand the emotional momentum, and offer ONE specific, useful suggestion that helps them continue.
@@ -1082,7 +1100,7 @@ The author is writing in real time. You have just been given their last ${recent
 CHAPTER BRIEF:
 ${briefText || 'No brief set yet.'}
 ${threadBlock}
-
+${exitEmotionBlock}
 KNOWN CHARACTERS:
 ${characterList}
 
@@ -1100,6 +1118,16 @@ Analyze what's happening in these lines. Then choose the SINGLE most useful sugg
 - "sensory" — the scene is all interior monologue; needs a physical/sensory detail to ground it
 - "lala" — the emotional conditions for Lala's proto-voice are present (frustration, creative spiral, the thought that sounds styled not afraid)
 - "echo" — an incoming echo is ripe to land in this moment; suggest how to weave it in
+- "appearance" — a character's appearance rules are being violated or an entrance needs attention
+
+CHARACTER APPEARANCE RULES:
+If character rules are provided, ensure suggestions respect those rules. Never describe a character appearing in a way that violates their architectural constraints.
+
+BOOK QUESTION AWARENESS:
+If a book question direction is provided (toward/holding/away), the suggestion should subtly align with that direction. "Toward" means the character is moving closer to answering yes. "Away" means doubt is winning. "Holding" means the tension is suspended.
+
+EXIT EMOTION AWARENESS:
+If an exit emotion is set, the scene should be building toward that emotional landing. Your suggestion should help the writer steer toward that target.
 
 LALA DETECTION RULES:
 Lala conditions are met when: the writing shows a creative spiral (trying and failing, comparing, feeling behind), AND there's an emotional peak (frustration, longing, self-doubt reaching maximum), AND the scene has been interior monologue for 5+ lines. When Lala conditions are met, ALWAYS choose type "lala".
@@ -2095,11 +2123,16 @@ router.post('/generate-chapter-draft', optionalAuth, async (req, res) => {
       book_id,
       chapter_id,
       target_lines = 20,
-      // ── NEW: venture context fields ──────────────────────────────────────
+      // ── venture context fields ───────────────────────────────────────────
       venture_context = '',
       pnos_act = '',
       incoming_echoes = [],
       active_threads = [],
+      // ── alive system fields ──────────────────────────────────────────────
+      character_rules = '',
+      book_question = '',
+      exit_emotion = '',
+      exit_emotion_note = '',
     } = req.body;
 
     if (!book_id || !chapter_id) {
@@ -2238,9 +2271,22 @@ router.post('/generate-chapter-draft', optionalAuth, async (req, res) => {
       ? `\nACTIVE PLOT THREADS: ${active_threads.join(', ')}\n`
       : '';
 
+    // ── 8b. Alive system blocks ──────────────────────────────────────────
+    const characterRulesBlock = character_rules
+      ? `\n═══════════════════════════════════════════════════════\nCHARACTER APPEARANCE RULES\n═══════════════════════════════════════════════════════\n${character_rules}\n`
+      : '';
+
+    const bookQuestionBlock = book_question
+      ? `\n═══════════════════════════════════════════════════════\nBOOK QUESTION LAYER\n═══════════════════════════════════════════════════════\n${book_question}\n`
+      : '';
+
+    const exitEmotionBlock = exit_emotion
+      ? `\nEXIT EMOTION TARGET: ${exit_emotion}${exit_emotion_note ? ` — ${exit_emotion_note}` : ''}\n`
+      : '';
+
     // ── 9. Build the prompt ───────────────────────────────────────────────
     const prompt = `${universeContext}
-${ventureBlock}${echoBlock}
+${ventureBlock}${echoBlock}${characterRulesBlock}${bookQuestionBlock}
 You are co-writing a literary novel with a first-time author. Your job is to generate the next ${target_lines} lines of this chapter as a draft. The author will review every line — approving, editing, or rejecting each one. You are writing 70-85% of the draft. She completes it.
 
 ═══════════════════════════════════════════════════════
@@ -2248,6 +2294,7 @@ CHAPTER BRIEF
 ═══════════════════════════════════════════════════════
 ${briefText || 'No brief set — write based on character context and momentum.'}
 ${threadBlock}
+${exitEmotionBlock}
 ═══════════════════════════════════════════════════════
 CHARACTERS IN THIS SCENE
 ═══════════════════════════════════════════════════════
@@ -2286,6 +2333,19 @@ VENTURE AWARENESS:
 - The doubt is accumulated, not fresh. The hope is harder-won.
 - If venture_context was provided, let it inform the texture — not the plot.
 - Never explain a venture directly. Let the emotional residue show through specifics.
+
+CHARACTER APPEARANCE RULES:
+- If character rules are provided, EVERY character entrance must respect their architectural constraints.
+- Do not describe a character appearing in a way that violates their mode or rules.
+- The Almost-Mentor is voice-only in Book 1. Digital Products Customer appears only through products/content.
+
+BOOK QUESTION AWARENESS:
+- If a book question direction is set (toward/holding/away), let it inform the emotional undertow of the draft.
+- "Toward" = hope is quietly building, small wins feel real. "Away" = doubt is winning, the gap between wanting and having widens. "Holding" = suspended tension, neither forward nor back.
+
+EXIT EMOTION:
+- If an exit emotion target is set, build the draft so it arrives at that feeling by the final lines.
+- Don't name the emotion — embody it through action, image, and rhythm.
 
 ECHO AWARENESS:
 - If incoming echoes are provided, try to weave at least one naturally into the draft.
