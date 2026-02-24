@@ -21,6 +21,13 @@ const express       = require('express');
 const router        = express.Router();
 const notifications = require('../services/notifications');
 
+/* Lazy model loader */
+let _models = null;
+function getModels() {
+  if (!_models) { _models = require('../models'); }
+  return _models;
+}
+
 let optionalAuth;
 try {
   const m = require('../middleware/auth');
@@ -130,7 +137,7 @@ function getPressReadyForCategory(category) {
 
 router.post('/seed-brands', optionalAuth, async (req, res) => {
   try {
-    const models  = req.app.get('models');
+    const models  = getModels();
     const seeded  = [];
 
     for (const brand of LALAVERSE_BRANDS_SEED) {
@@ -153,7 +160,7 @@ router.post('/seed-brands', optionalAuth, async (req, res) => {
 
 router.get('/brands', optionalAuth, async (req, res) => {
   try {
-    const models = req.app.get('models');
+    const models = getModels();
     const brands = await models.LalaverseBrand.findAll({
       order: [['name', 'ASC']],
     });
@@ -191,7 +198,7 @@ router.post('/brands', optionalAuth, async (req, res) => {
       website,
     } = req.body;
 
-    const models = req.app.get('models');
+    const models = getModels();
     const slug   = name.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
     const brand = await models.LalaverseBrand.create({
@@ -225,7 +232,7 @@ router.post('/tag-piece', optionalAuth, async (req, res) => {
       show_id,
     } = req.body;
 
-    const models = req.app.get('models');
+    const models = getModels();
 
     const brand = await models.LalaverseBrand.findByPk(brand_id);
     if (!brand) return res.status(404).json({ error: 'Brand not found' });
@@ -291,7 +298,7 @@ router.post('/tag-piece', optionalAuth, async (req, res) => {
 router.get('/pieces/uncovered', optionalAuth, async (req, res) => {
   try {
     const { show_id } = req.query;
-    const models = req.app.get('models');
+    const models = getModels();
 
     const where = { coverage_status: 'uncovered' };
     if (show_id) where.show_id = show_id;
@@ -333,7 +340,7 @@ router.post('/generate-coverage', optionalAuth, async (req, res) => {
       format = 'newsletter',
     } = req.body;
 
-    const models = req.app.get('models');
+    const models = getModels();
     const tag    = await models.WardrobeBrandTag.findByPk(tag_id);
     if (!tag) return res.status(404).json({ error: 'Tag not found' });
 
@@ -443,7 +450,7 @@ Write only the post. Start immediately. No preamble.`;
 router.post('/mark-published', optionalAuth, async (req, res) => {
   try {
     const { tag_id, publish_url } = req.body;
-    const models = req.app.get('models');
+    const models = getModels();
     const tag    = await models.WardrobeBrandTag.findByPk(tag_id);
     if (!tag) return res.status(404).json({ error: 'Tag not found' });
 

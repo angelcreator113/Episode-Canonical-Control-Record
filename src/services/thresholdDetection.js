@@ -25,6 +25,13 @@
 
 const notifications = require('./notifications');
 
+/* Lazy model loader */
+let _models = null;
+function getModels() {
+  if (!_models) { _models = require('../models'); }
+  return _models;
+}
+
 let anthropic;
 try {
   const Anthropic = require('@anthropic-ai/sdk');
@@ -134,6 +141,7 @@ const DEFENSE_KNOCK_STYLE = {
 // -- CHECK THRESHOLDS FOR ONE CHARACTER --
 
 async function checkCharacterThreshold(charId, charSlug, profile, models) {
+  if (!models) models = getModels();
   const thresholdData = WOUND_THRESHOLDS[charSlug];
   if (!thresholdData) return null;
 
@@ -240,7 +248,8 @@ RULES:
 
 // -- MAIN: CHECK ALL THRESHOLDS --
 
-async function checkAllThresholds({ models, showId }) {
+async function checkAllThresholds(passedModels) {
+  const models = passedModels || getModels();
   if (!models?.CharacterTherapyProfile) return;
 
   try {
@@ -320,7 +329,8 @@ async function checkAllThresholds({ models, showId }) {
 
 // -- WAITING SESSIONS ROUTE HELPER --
 
-async function getWaitingSessions(models) {
+async function getWaitingSessions(passedModels) {
+  const models = passedModels || getModels();
   if (!models?.TherapyPendingSession) return [];
   return models.TherapyPendingSession.findAll({
     where:  { status: 'waiting' },
@@ -330,11 +340,12 @@ async function getWaitingSessions(models) {
 
 // -- CLEAR WAITING SESSION --
 
-async function clearWaitingSession(charId, models) {
+async function clearWaitingSession(passedModels, sessionId) {
+  const models = passedModels || getModels();
   if (!models?.TherapyPendingSession) return;
   await models.TherapyPendingSession.update(
     { status: 'opened' },
-    { where: { character_id: charId, status: 'waiting' } }
+    { where: { id: sessionId, status: 'waiting' } }
   );
 }
 
