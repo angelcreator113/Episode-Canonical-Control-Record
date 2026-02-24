@@ -59,6 +59,11 @@ import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useVoice, MicButton, SpeakButton } from '../hooks/VoiceLayer';
 import NewCharacterDetected from './NewCharacterDetected';
+import {
+  DriftIndicator,
+  RelationalNotesPanel,
+  BridgeMomentPrompt,
+} from '../components/DriftDetection';
 
 const MEMORIES_API = '/api/v1/memories';
 const REGISTRY_API = '/api/v1/character-registry';
@@ -176,6 +181,11 @@ export default function CharacterVoiceInterview({
   const [oneMoreAsked, setOneMoreAsked]         = useState(false);
   const lastContradictionCheck                  = useRef(0);
 
+  // Drift detection state
+  const [driftHistory,    setDriftHistory]    = useState([]);
+  const [relationalNotes, setRelationalNotes] = useState([]);
+  const [currentDrift,    setCurrentDrift]    = useState(null);
+
   const bottomRef = useRef(null);
   const { speak, startListening, stopListening, listening } = useVoice();
 
@@ -205,6 +215,9 @@ export default function CharacterVoiceInterview({
       setUnspokenAsked(false);
       setOneMoreAsked(false);
       lastContradictionCheck.current = 0;
+      setDriftHistory([]);
+      setRelationalNotes([]);
+      setCurrentDrift(null);
     }
   }, [open, character?.id]);
 
@@ -335,6 +348,14 @@ export default function CharacterVoiceInterview({
         .map(c => c.selected_name || c.display_name)
         .filter(Boolean);
 
+      const knownChars = characters.map(c => ({
+        id:            c.id,
+        name:          c.selected_name || c.display_name,
+        archetype:     c.character_archetype || c.display_name,
+        role:          c.role_type,
+        selected_name: c.selected_name,
+      }));
+
       const res = await fetch(`${MEMORIES_API}/character-interview-next`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -347,11 +368,37 @@ export default function CharacterVoiceInterview({
           existing_characters:       existingNames,
           force_hesitation_catch:    options.forceHesitationCatch    || false,
           force_contradiction_check: options.forceContradictionCheck || false,
+          // Drift detection fields
+          primary_character:         charName,
+          known_characters:          knownChars,
+          drift_history:             driftHistory,
+          relational_notes:          relationalNotes,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
+      // Handle drift state
+      if (data.drift_detected) {
+        setCurrentDrift({
+          drifted_to:   data.drifted_to,
+          drift_type:   data.drift_type,
+          bridge_ready: data.bridge_question_ready,
+        });
+        setDriftHistory(prev => [...prev, {
+          drifted_to: data.drifted_to,
+          type:       data.drift_type,
+          bridged:    data.bridge_question_ready,
+        }]);
+      } else {
+        setCurrentDrift(null);
+      }
+
+      // Save relational note if captured
+      if (data.relational_note?.observation) {
+        setRelationalNotes(prev => [...prev, data.relational_note]);
+      }
 
       setNextQuestion(data.question);
       setMessages(prev => [...prev, { role: 'system', text: data.question }]);
@@ -391,11 +438,12 @@ export default function CharacterVoiceInterview({
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          book_id:        bookId || null,
-          character_id:   character?.id,
-          character_name: charName,
-          character_type: roleType,
-          answers:        finalAnswers,
+          book_id:            bookId || null,
+          character_id:       character?.id,
+          character_name:     charName,
+          character_type:     roleType,
+          answers:            finalAnswers,
+          relational_notes:   relationalNotes,
         }),
       });
       const data = await res.json();
@@ -534,6 +582,20 @@ export default function CharacterVoiceInterview({
         {(step === 'intro' || step === 'interview') && (
           <>
             <div style={st.chatWindow}>
+              {/* Drift indicator — shows when drift is active */}
+              <DriftIndicator
+                drift={currentDrift}
+                primaryCharacter={charName}
+              />
+
+              {/* Bridge moment prompt — when bridging back */}
+              {currentDrift?.bridge_ready && (
+                <BridgeMomentPrompt
+                  primaryCharacter={charName}
+                  driftedTo={currentDrift.drifted_to}
+                />
+              )}
+
               {messages.map((msg, i) => (
                 <ChatMessage
                   key={i}
@@ -599,6 +661,12 @@ export default function CharacterVoiceInterview({
                 </div>
               </>
             )}
+
+            {/* Cross-character observations panel */}
+            <RelationalNotesPanel
+              notes={relationalNotes}
+              primaryCharacter={charName}
+            />
           </>
         )}
       </div>

@@ -1402,13 +1402,21 @@ Respond ONLY with valid JSON. No preamble. No markdown.
 /**
  * POST /character-interview-next
  * Called after each answer during the character interview.
- * Returns an adaptive follow-up question based on what the author said.
  *
- * UPGRADES:
- * ─ First-answer deep read (was: only after answer 2)
- * ─ Hesitation catch mode (force_hesitation_catch flag from frontend)
- * ─ Contradiction detection mode (force_contradiction_check flag)
- * ─ contradiction_detected field in response for inline surfacing
+ * ════════════════════════════════════════════════════════════════════════
+ * DRIFT DETECTION — when the author shifts characters mid-session
+ * ════════════════════════════════════════════════════════════════════════
+ *
+ * 1. FOLLOWS IT — leans into the drift instead of redirecting back
+ * 2. TAGS IT — saves the drift content as relational perception data
+ * 3. BRIDGES IT — after following the drift, asks the bridge question
+ *
+ * Also preserves:
+ * ─ First-answer deep read
+ * ─ Hesitation catch mode
+ * ─ Contradiction detection mode
+ * ─ New character detection
+ * ─ Plot thread detection
  */
 router.post('/character-interview-next', optionalAuth, async (req, res) => {
   try {
@@ -1416,12 +1424,34 @@ router.post('/character-interview-next', optionalAuth, async (req, res) => {
       book_id,
       character_name,
       character_type,
-      answers_so_far          = [],
+      answers_so_far            = [],
       next_base_question,
-      existing_characters     = [],
-      force_hesitation_catch  = false,
+      existing_characters       = [],
+      force_hesitation_catch    = false,
       force_contradiction_check = false,
+      // ── Drift detection fields ──
+      primary_character,            // who the session is about (fallback to character_name)
+      known_characters    = [],     // [{ id, name, archetype, role }]
+      drift_history       = [],     // previous drift events this session
+      relational_notes    = [],     // accumulated cross-character observations
     } = req.body;
+
+    const primaryName = primary_character || character_name;
+
+    if (!answers_so_far.length || !answers_so_far[answers_so_far.length - 1]?.answer?.trim()) {
+      return res.json({
+        question: 'Take your time — what were you saying?',
+        drift_detected: false,
+        drifted_to: null,
+        drift_type: null,
+        bridge_question_ready: false,
+        relational_note: null,
+        thread_hint: null,
+        contradiction_detected: null,
+        new_characters: [],
+        session_notes: [],
+      });
+    }
 
     // ── Universe context ──────────────────────────────────────────────
     let universeBlock = '';
@@ -1435,6 +1465,7 @@ router.post('/character-interview-next', optionalAuth, async (req, res) => {
     // ── Separate history from latest answer ──────────────────────────
     const previousAnswers = answers_so_far.slice(0, -1);
     const latestAnswer    = answers_so_far[answers_so_far.length - 1];
+    const latestText      = latestAnswer?.answer || '';
 
     const historyFormatted = previousAnswers.length > 0
       ? previousAnswers.map((a, i) => `Q${i+1}: ${a.question}\nA${i+1}: ${a.answer}`).join('\n\n')
@@ -1448,14 +1479,96 @@ router.post('/character-interview-next', optionalAuth, async (req, res) => {
       ? `\nALREADY KNOWN CHARACTERS (do NOT flag as new):\n${existing_characters.join(', ')}\n`
       : '';
 
-    // ── Choose prompt mode based on flags ─────────────────────────────
+    // ── STEP 1: DRIFT DETECTION ─────────────────────────────────────
+    const knownNames = known_characters
+      .map(c => ({ ...c, searchTerms: [
+        c.name,
+        c.selected_name || '',
+        ...(c.name?.toLowerCase().includes('husband') ? ['husband', 'him', 'he'] : []),
+        ...(c.name?.toLowerCase().includes('comparison') ? ['chloe', 'comparison creator', 'her content'] : []),
+        ...(c.name?.toLowerCase().includes('lala') ? ['lala'] : []),
+        ...(c.name?.toLowerCase().includes('witness') ? ['witness'] : []),
+        ...(c.name?.toLowerCase().includes('mentor') ? ['mentor', 'almost-mentor', 'almost mentor'] : []),
+      ].filter(Boolean)}))
+      .filter(c => c.name?.toLowerCase() !== primaryName?.toLowerCase());
 
+    const answerLower = latestText.toLowerCase();
+
+    const mentionedChars = knownNames.filter(c =>
+      c.searchTerms.some(term => term && answerLower.includes(term.toLowerCase()))
+    );
+
+    let driftDetected = false;
+    let driftedTo = null;
+    let driftType = null;
+
+    if (mentionedChars.length > 0) {
+      const wordCount = latestText.split(/\s+/).length;
+      const primaryLower = primaryName?.toLowerCase();
+      const primaryMentions = (answerLower.match(new RegExp(primaryLower, 'g')) || []).length;
+      const otherMentions = mentionedChars[0].searchTerms.reduce((count, term) =>
+        count + (answerLower.match(new RegExp(term.toLowerCase(), 'g')) || []).length, 0
+      );
+
+      driftedTo = mentionedChars[0].name;
+      driftDetected = true;
+
+      if (wordCount > 40 && otherMentions >= primaryMentions) {
+        driftType = 'full_shift';
+      } else if (answerLower.includes('like') || answerLower.includes('unlike') ||
+                 answerLower.includes('different') || answerLower.includes('compare')) {
+        driftType = 'comparison';
+      } else {
+        driftType = 'mention';
+      }
+    }
+
+    const alreadyBridged = drift_history.some(
+      d => d.drifted_to === driftedTo && d.bridged === true
+    );
+
+    const lastDrift = drift_history[drift_history.length - 1];
+    const bridgeQuestionReady = driftType !== 'full_shift' &&
+      lastDrift?.drifted_to === driftedTo &&
+      lastDrift?.type === 'full_shift' &&
+      !alreadyBridged;
+
+    // ── STEP 2: BUILD RELATIONAL NOTE ───────────────────────────────
+    let relationalNote = null;
+    if (driftDetected && driftType !== 'mention') {
+      relationalNote = {
+        primary_character: primaryName,
+        drifted_to: driftedTo,
+        type: driftType,
+        raw_content: latestText,
+        observation: null, // Claude will fill this
+      };
+    }
+
+    // ── STEP 3: BUILD PROMPT ─────────────────────────────────────────
+
+    // Drift context blocks
+    const driftContext = driftDetected ? `
+DRIFT DETECTED: The author drifted from ${primaryName} to ${driftedTo} (type: ${driftType}).
+${driftType === 'full_shift' ? `They shifted significantly to talking about ${driftedTo}. FOLLOW this drift — do NOT redirect. Ask one question that explores ${primaryName}'s relationship to ${driftedTo} or how ${primaryName} sees/feels about ${driftedTo}. The author's mind went there for a reason.` : ''}
+${driftType === 'comparison' ? `They compared ${primaryName} to ${driftedTo}. Lean into the comparison — what does it reveal about ${primaryName}?` : ''}
+${driftType === 'mention' ? `They mentioned ${driftedTo} in passing. Acknowledge it lightly, stay with ${primaryName}.` : ''}
+` : '';
+
+    const bridgeContext = bridgeQuestionReady ? `
+BRIDGE MOMENT: The author followed ${driftedTo} in the previous exchange. Now it's time to bridge back.
+Ask the bridge question: "You were talking about ${primaryName} and kept coming back to ${driftedTo}. What does that drift tell you about ${primaryName} — not about ${driftedTo}?"
+This is the question the author didn't know they had.
+` : '';
+
+    const relationalContext = relational_notes.length > 0
+      ? `Cross-character observations collected so far:\n${relational_notes.slice(-3).map(n => `• ${n.primary_character} on ${n.drifted_to}: "${n.raw_content?.slice(0, 80)}..."`).join('\n')}`
+      : '';
+
+    // ── Choose prompt mode based on flags ─────────────────────────────
     let taskInstructions;
 
     if (force_hesitation_catch) {
-      // ── MODE: HESITATION CATCH ──────────────────────────────────────
-      // The author trailed off, hedged, or said "I don't know."
-      // Do not move to the next question. Stay here. Follow the thread.
       taskInstructions = `
 THE AUTHOR TRAILED OFF OR HEDGED IN THEIR LAST ANSWER.
 
@@ -1470,68 +1583,71 @@ Ask ONE question that goes directly into the hesitation.
 - If they hedged ("sort of", "kind of") — ask for the version without the qualifier.
 
 Do NOT move to the next planned question. Stay with what they just said.
-The moment they can't finish is always the moment the real character is.
-
 One question only. Warm, curious, direct.`;
 
     } else if (force_contradiction_check) {
-      // ── MODE: CONTRADICTION DETECTION ──────────────────────────────
-      // Scan ALL answers for tensions. Surface them as a question.
-      // Contradictions are not problems — they are the character.
       taskInstructions = `
 SCAN THE FULL CONVERSATION FOR TENSIONS AND CONTRADICTIONS.
 
 Read every answer so far (including the latest). Look for places where:
 - The author described the character one way early on, and a different way later
 - The character seems to have two contradictory qualities that both feel true
-- The author said something the character values, and something else that conflicts with it
-- The relationship described in one answer doesn't match another
-
-IMPORTANT: These tensions are NOT errors. They are exactly what makes a character
-feel real. A character who is "very supportive" AND "always makes her feel small" is
-not a contradiction to resolve — it's the most interesting thing about them.
+- The author said something the character values, and something else that conflicts
 
 YOUR TASK:
 If you find a tension: ask ONE question that names it directly and invites the author
-to sit with both truths rather than resolve them. Something like:
-"Earlier you said [X] — but just now it sounds like [Y]. What if both are true?
-What does that tension feel like in a scene?"
+to sit with both truths. Something like:
+"Earlier you said [X] — but just now it sounds like [Y]. What if both are true?"
 
 If you find NO real tension: fall back to a genuine follow-up on the latest answer.
 
-Return the tension in the "contradiction_detected" field (one sentence summary).`;
+Return the tension in the "contradiction_detected" field.`;
+
+    } else if (bridgeQuestionReady) {
+      taskInstructions = `
+BRIDGE MOMENT — this is the most important question of the session.
+Ask: "You were talking about ${primaryName} and kept coming back to ${driftedTo}. What does that drift tell you about ${primaryName} — not about ${driftedTo}?"
+Do NOT ask anything else. This IS the question.`;
+
+    } else if (driftDetected && driftType === 'full_shift') {
+      taskInstructions = `
+DRIFT FOLLOW — the author shifted from ${primaryName} to ${driftedTo}.
+Do NOT say "let's get back to ${primaryName}." Do NOT ignore the drift.
+Ask one question that explores the relationship between ${primaryName} and ${driftedTo}.
+Specifically: how does ${primaryName} experience, perceive, or feel about ${driftedTo}?
+Frame it that way: "What does ${primaryName} feel watching ${driftedTo}..."
+The observation from this drift belongs to ${primaryName}'s profile, not ${driftedTo}'s.
+One question only. Follow the drift.`;
+
+    } else if (driftDetected && driftType === 'comparison') {
+      taskInstructions = `
+The author is comparing ${primaryName} to ${driftedTo}. Lean into the comparison.
+Ask one question that reveals what this comparison tells us about ${primaryName}.
+One question only. Warm, curious.`;
 
     } else {
-      // ── MODE: STANDARD ADAPTIVE FOLLOW-UP ──────────────────────────
       taskInstructions = `
 YOUR TASK:
-
-1. Read WHAT THE AUTHOR JUST SAID carefully. Not the previous answers — this one.
-
-2. Ask ONE follow-up question that responds DIRECTLY to something specific in their answer.
+1. Read WHAT THE AUTHOR JUST SAID carefully.
+2. Ask ONE follow-up question that responds DIRECTLY to something specific.
    - Did they mention a name? Ask about that person.
-   - Did they describe a feeling? Ask what created that feeling.
-   - Did they say something surprising or specific? Follow that thread.
+   - Did they describe a feeling? Ask what created it.
    - Did they give a detail that suggests a scene? Ask what that scene looks like.
+3. ONLY fall back to the planned next question if they gave you nothing to follow.
+4. Check for plot threads and new character names.
 
-3. ONLY fall back to the planned next question if their answer was very short
-   and gave you genuinely nothing to follow.
-
-4. Check for plot threads — conflicts, scenes, relationship dynamics that could become chapters.
-
-5. Scan for new character names not in the ALREADY KNOWN CHARACTERS list.
-
-One question only. Warm, curious, specific. Never clinical. Never generic.`;
+One question only. Warm, curious, specific. Never clinical.`;
     }
 
-    const prompt = `You are interviewing an author about one of their characters to build a rich psychological profile and discover plot threads.
+    const prompt = `You are interviewing an author about one of their characters for a memoir called "Before Lala."
 
-CHARACTER: ${character_name} (type: ${character_type})
+CHARACTER: ${primaryName} (type: ${character_type})
 BOOK: LalaVerse — literary, psychological, first-person narrative
 ${universeBlock}
 ${existingList}
+${relationalContext}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-CONVERSATION HISTORY (context):
+CONVERSATION HISTORY:
 ${historyFormatted}
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1541,37 +1657,20 @@ ${latestFormatted}
 
 ${next_base_question ? `NEXT PLANNED QUESTION (use as fallback only): ${next_base_question}` : ''}
 
+${driftContext}
+${bridgeContext}
 ${taskInstructions}
-
-QUESTION RULES:
-- ONE question only
-- Conversational, warm — like a curious friend, not a clinician
-- Specific to exactly what they said — never a generic follow-up
-- Goes deeper, not sideways
-- Never asks about story structure — always asks about the human truth
 
 Respond with ONLY valid JSON. No preamble. No markdown fences.
 
 {
-  "question": "Your follow-up question — specific to the latest answer",
+  "question": "Your single question here",
+  "relational_observation": "One sentence capturing what this drift revealed about how ${primaryName} perceives ${driftedTo} — or null if not applicable",
+  "session_note": "One new thing learned about ${primaryName} from this exchange — or null",
   "thread_hint": "One sentence describing a plot thread you detected, or null",
   "contradiction_detected": "One sentence naming the tension you found (for contradiction mode), or null",
-  "new_characters": [
-    {
-      "name": "Character Name",
-      "type": "pressure|mirror|support|shadow|special",
-      "role": "Brief description of who they seem to be",
-      "appearance_mode": "on_page|composite|observed|invisible|brief",
-      "belief": "What this character might believe, based on context",
-      "emotional_function": "Their emotional role in the story",
-      "writer_notes": "Why the author mentioned them — what they might mean to the story"
-    }
-  ]
-}
-
-If no new characters: "new_characters": []
-If no thread: "thread_hint": null
-If no contradiction: "contradiction_detected": null`;
+  "new_characters": []
+}`;
 
     const response = await anthropic.messages.create({
       model:      'claude-sonnet-4-6',
@@ -1584,22 +1683,44 @@ If no contradiction: "contradiction_detected": null`;
       .map(b => b.text)
       .join('');
 
-    let result;
+    let parsed;
     try {
       const clean = rawText.replace(/```json|```/g, '').trim();
-      result = JSON.parse(clean);
+      parsed = JSON.parse(clean);
     } catch (e) {
-      return res.json({
-        question:                next_base_question || 'Tell me more about that.',
-        thread_hint:             null,
-        contradiction_detected:  null,
-        new_characters:          [],
-      });
+      parsed = {
+        question: next_base_question || 'Tell me more about that.',
+        relational_observation: null,
+        session_note: null,
+        thread_hint: null,
+        contradiction_detected: null,
+        new_characters: [],
+      };
     }
 
-    if (!Array.isArray(result.new_characters)) result.new_characters = [];
+    if (!Array.isArray(parsed.new_characters)) parsed.new_characters = [];
 
-    res.json(result);
+    // Attach Claude's relational observation to the note
+    if (relationalNote && parsed.relational_observation) {
+      relationalNote.observation = parsed.relational_observation;
+    }
+
+    res.json({
+      question:              parsed.question,
+      // Existing fields
+      thread_hint:           parsed.thread_hint || null,
+      contradiction_detected: parsed.contradiction_detected || null,
+      new_characters:        parsed.new_characters,
+      // Drift state
+      drift_detected:        driftDetected,
+      drifted_to:            driftedTo,
+      drift_type:            driftType,
+      bridge_question_ready: bridgeQuestionReady,
+      // Relational note
+      relational_note:       relationalNote,
+      // Session note from Claude
+      session_note:          parsed.session_note || null,
+    });
 
   } catch (err) {
     console.error('POST /character-interview-next error:', err);
@@ -1608,6 +1729,12 @@ If no contradiction: "contradiction_detected": null`;
       thread_hint:            null,
       contradiction_detected: null,
       new_characters:         [],
+      drift_detected:         false,
+      drifted_to:             null,
+      drift_type:             null,
+      bridge_question_ready:  false,
+      relational_note:        null,
+      session_note:           null,
     });
   }
 });
@@ -1690,6 +1817,7 @@ router.post('/character-interview-complete', optionalAuth, async (req, res) => {
       character_name,
       character_type,
       answers = [],
+      relational_notes = [],
     } = req.body;
 
     let universeContext = '';
@@ -1712,6 +1840,12 @@ CHARACTER: ${character_name} (type: ${character_type})
 FULL INTERVIEW:
 ${answersFormatted}
 
+${relational_notes.length > 0 ? `
+CROSS-CHARACTER OBSERVATIONS (captured during interview):
+${relational_notes.map((n, i) => `${i+1}. [${n.primary_character} ↔ ${n.other_character}] ${n.observation}`).join('\n')}
+
+These observations reveal how characters relate to each other through the author's instinctive associations. Use them to enrich the profile — especially pressure_type and personality sections.
+` : ''}
 ════════════════════════════════════════════════════════
 YOUR TASK — THREE PARTS
 ════════════════════════════════════════════════════════
