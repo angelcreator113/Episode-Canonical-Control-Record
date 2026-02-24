@@ -129,17 +129,19 @@ function VentureField({ label, text, color }) {
 const st = {
   panel: {
     display: 'flex', flexDirection: 'column', gap: 10,
+    padding: '14px 20px',
+    borderTop: '1px solid rgba(47,42,38,0.06)',
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
   },
   headerLeft: { display: 'flex', flexDirection: 'column', gap: 3 },
   label: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
     letterSpacing: '0.2em', color: '#C9A84C',
   },
   sub: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7.5,
+    fontFamily: 'DM Mono, monospace', fontSize: 8.5,
     color: 'rgba(30,25,20,0.35)', letterSpacing: '0.04em', lineHeight: 1.5,
   },
   echoToggle: {
@@ -151,7 +153,7 @@ const st = {
   actBadge: {
     border: '1px solid', borderRadius: 2,
     padding: '5px 10px',
-    fontFamily: 'DM Mono, monospace', fontSize: 7.5,
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
     letterSpacing: '0.05em', lineHeight: 1.5,
   },
   ventureList: {
@@ -167,15 +169,15 @@ const st = {
   },
   cardLeft: { display: 'flex', flexDirection: 'column', gap: 3 },
   archetype: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
+    fontFamily: 'DM Mono, monospace', fontSize: 8.5,
     letterSpacing: '0.12em', color: 'rgba(30,25,20,0.3)',
   },
   ventureName: {
     fontFamily: "'Lora', 'Playfair Display', serif",
-    fontSize: 13, fontStyle: 'italic', color: 'rgba(30,25,20,0.82)',
+    fontSize: 13.5, fontStyle: 'italic', color: 'rgba(30,25,20,0.82)',
   },
   statusBadge: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
+    fontFamily: 'DM Mono, monospace', fontSize: 8,
     letterSpacing: '0.06em', padding: '2px 6px',
     borderRadius: 2, display: 'inline-block', marginTop: 2,
   },
