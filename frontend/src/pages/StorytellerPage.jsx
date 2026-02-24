@@ -140,12 +140,16 @@ function StorytellerPage() {
       const data = await api(`/books/${id}`);
       setActiveBook(data?.book || data);
       if (chapterId) setInitialChapterId(chapterId);
+      // Persist book (and optional chapter) in URL so refresh restores the editor
+      const params = { book: String(id) };
+      if (chapterId) params.chapter = String(chapterId);
+      setSearchParams(params, { replace: true });
     } catch (e) {
       toast.add('Failed to open archive', 'error');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setSearchParams]);
 
   const closeBook = () => {
     setActiveBook(null);
