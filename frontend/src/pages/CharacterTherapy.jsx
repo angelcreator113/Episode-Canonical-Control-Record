@@ -587,16 +587,16 @@ export default function CharacterTherapy() {
                 fontWeight: 600,
                 letterSpacing: '0.08em',
                 textTransform: 'uppercase',
-                color: '#c2185b',
-                borderBottom: '1px solid rgba(194,24,91,0.15)',
+                color: '#c45c5c',
+                borderBottom: '1px solid rgba(200,100,100,0.15)',
               }}>
                 Waiting Room
               </div>
               {waiting.map(w => {
                 const typeColor =
-                  w.character_type === 'pnos' ? '#d4af37'
+                  w.character_type === 'pnos' ? '#c45c5c'
                   : w.character_type === 'press' ? '#c2185b'
-                  : '#666';
+                  : '#7a6565';
                 return (
                   <button
                     key={w.id}
@@ -622,7 +622,7 @@ export default function CharacterTherapy() {
                     <span style={{
                       display: 'block',
                       fontSize: 9,
-                      color: '#888',
+                      color: '#a08080',
                       marginTop: 2,
                       fontStyle: 'italic',
                       whiteSpace: 'nowrap',
@@ -655,7 +655,7 @@ export default function CharacterTherapy() {
             );
           })}
           {characters.length === 0 && (
-            <div style={{ padding: '20px 14px', color: '#444', fontSize: 11, textAlign: 'center' }}>
+            <div style={{ padding: '20px 14px', color: '#a08080', fontSize: 11, textAlign: 'center' }}>
               No characters in this registry
             </div>
           )}
