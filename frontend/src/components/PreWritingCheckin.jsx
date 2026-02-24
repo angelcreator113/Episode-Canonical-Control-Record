@@ -101,7 +101,7 @@ export default function PreWritingCheckin({
                 style={{
                   ...st.charCard,
                   borderColor: done ? `${color}60` : `${color}25`,
-                  background:  done ? `${color}10` : 'rgba(255,255,255,0.025)',
+                  background:  done ? `${color}10` : 'rgba(255,255,255,0.7)',
                   opacity:     1,
                 }}
                 onClick={() => handleSelect(char)}
@@ -162,9 +162,9 @@ export default function PreWritingCheckin({
 
 const st = {
   panel: {
-    background: 'rgba(14,10,8,0.6)',
-    border: '1px solid rgba(201,168,76,0.12)',
-    borderRadius: 3, padding: '16px 20px',
+    background: '#FFF0F3',
+    border: '1px solid rgba(219,112,147,0.18)',
+    borderRadius: 6, padding: '16px 20px',
     marginBottom: 20,
     display: 'flex', flexDirection: 'column', gap: 14,
   },
@@ -173,17 +173,17 @@ const st = {
   },
   headerLeft: { display: 'flex', flexDirection: 'column', gap: 4 },
   label: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
-    letterSpacing: '0.2em', color: '#C9A84C',
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    letterSpacing: '0.2em', color: 'rgba(180,80,120,0.7)',
   },
   sub: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
-    color: 'rgba(245,240,232,0.3)', letterSpacing: '0.04em', lineHeight: 1.5,
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    color: 'rgba(100,40,60,0.4)', letterSpacing: '0.04em', lineHeight: 1.5,
   },
   dismissBtn: {
     background: 'none', border: 'none',
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
-    letterSpacing: '0.1em', color: 'rgba(245,240,232,0.25)',
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    letterSpacing: '0.1em', color: 'rgba(180,80,120,0.4)',
     cursor: 'pointer', padding: '2px 0',
   },
   characterGrid: {
@@ -191,11 +191,12 @@ const st = {
   },
   charCard: {
     position: 'relative',
-    border: '1px solid', borderRadius: 3,
+    border: '1px solid', borderRadius: 4,
     padding: '10px 14px 10px 20px',
     cursor: 'pointer', textAlign: 'left',
     display: 'flex', flexDirection: 'column', gap: 3,
     minWidth: 130, transition: 'border-color 0.15s, background 0.15s',
+    background: 'rgba(255,255,255,0.6)',
   },
   typeDot: {
     position: 'absolute', left: 8, top: 14,
@@ -204,37 +205,37 @@ const st = {
   charName: {
     fontFamily: "'Lora', 'Playfair Display', serif",
     fontSize: 14, fontStyle: 'italic',
-    color: 'rgba(245,240,232,0.85)', lineHeight: 1.3,
+    color: 'rgba(60,30,40,0.85)', lineHeight: 1.3,
   },
   charType: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7.5, letterSpacing: '0.1em',
+    fontFamily: 'DM Mono, monospace', fontSize: 8.5, letterSpacing: '0.1em',
   },
   doneTag: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7, letterSpacing: '0.1em',
+    fontFamily: 'DM Mono, monospace', fontSize: 8, letterSpacing: '0.1em',
     border: '1px solid', borderRadius: 2, padding: '1px 6px',
     display: 'inline-block', marginTop: 3, alignSelf: 'flex-start',
   },
   lockedTag: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7, letterSpacing: '0.1em',
-    color: 'rgba(245,240,232,0.25)', marginTop: 3,
+    fontFamily: 'DM Mono, monospace', fontSize: 8, letterSpacing: '0.1em',
+    color: 'rgba(100,40,60,0.35)', marginTop: 3,
   },
   talkHint: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7.5,
-    color: 'rgba(245,240,232,0.2)', letterSpacing: '0.08em',
+    fontFamily: 'DM Mono, monospace', fontSize: 8.5,
+    color: 'rgba(180,80,120,0.4)', letterSpacing: '0.08em',
     marginTop: 4,
   },
   readyRow: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    borderTop: '1px solid rgba(201,168,76,0.1)', paddingTop: 12,
+    borderTop: '1px solid rgba(219,112,147,0.15)', paddingTop: 12,
   },
   readyText: {
     fontFamily: "'Lora', 'Playfair Display', serif",
-    fontSize: 13, fontStyle: 'italic', color: 'rgba(245,240,232,0.5)',
+    fontSize: 13, fontStyle: 'italic', color: 'rgba(100,40,60,0.6)',
   },
   writeBtn: {
-    background: '#C9A84C', border: 'none', borderRadius: 2,
-    fontFamily: 'DM Mono, monospace', fontSize: 9,
-    letterSpacing: '0.12em', color: '#0f0c09', fontWeight: 600,
+    background: '#e8a0b0', border: 'none', borderRadius: 3,
+    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    letterSpacing: '0.12em', color: '#fff', fontWeight: 600,
     padding: '8px 16px', cursor: 'pointer',
   },
 };
