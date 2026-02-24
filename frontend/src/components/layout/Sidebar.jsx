@@ -122,6 +122,9 @@ function Sidebar({ isOpen, onClose }) {
         {/* Home */}
         <NavItem icon="🏠" label="Home" path="/" />
         
+        {/* Session Briefing */}
+        <NavItem icon="◈" label="Session" path="/start" />
+        
         {/* Universe group (includes StoryTeller tools) */}
         <div className="nav-group">
           <button

@@ -68,6 +68,45 @@ import {
 const MEMORIES_API = '/api/v1/memories';
 const REGISTRY_API = '/api/v1/character-registry';
 
+const CVI_MOBILE_CSS = `
+  @media (max-width: 600px) {
+    .cvi-overlay {
+      padding: 0 !important;
+      align-items: flex-end !important;
+    }
+    .cvi-modal {
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 100vh !important;
+      max-height: 100dvh !important;
+      border-radius: 12px 12px 0 0 !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+    }
+    .cvi-chat-window {
+      max-height: none !important;
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      padding: 12px 14px !important;
+    }
+    .cvi-header {
+      padding: 14px 16px 10px !important;
+    }
+    .cvi-input-row {
+      padding: 8px 14px !important;
+    }
+    .cvi-cmd-hint {
+      padding: 2px 14px 6px !important;
+    }
+    .cvi-complete-block {
+      padding: 14px 16px !important;
+    }
+    .cvi-generating-block {
+      padding: 24px 16px !important;
+    }
+  }
+`;
+
 // ── Hesitation / trailing-off detection ─────────────────────────────────
 const HESITATION_PATTERNS = [
   /i don'?t know/i,
@@ -186,7 +225,13 @@ export default function CharacterVoiceInterview({
   const [relationalNotes, setRelationalNotes] = useState([]);
   const [currentDrift,    setCurrentDrift]    = useState(null);
 
+  // Persistence: resume support
+  const [resumeData, setResumeData]   = useState(null);  // loaded progress
+  const [loadingProgress, setLoadingProgress] = useState(false);
+  const savingProgress = useRef(false);
+
   const bottomRef = useRef(null);
+  const sendingRef = useRef(false);  // synchronous guard against double-send
   const { speak, startListening, stopListening, listening } = useVoice();
 
   const roleType  = character?.role_type || 'special';
@@ -194,32 +239,91 @@ export default function CharacterVoiceInterview({
   const charName  = character?.selected_name || character?.display_name || 'this character';
   const needsUnspokenQ = ['pressure', 'mirror'].includes(roleType);
 
-  // ── Reset on open / character change ──────────────────────────────────
+  // ── Generating safety valve — auto-reset if stuck ────────────────────
+  const generatingTimerRef = useRef(null);
   useEffect(() => {
-    if (open) {
-      setMessages([{
-        role: 'system',
-        text: `Let's talk about ${charName}.\n\nAnswer like you're telling a friend — no right answers. The more specific and honest you are, the richer the character and the stronger the story.\n\nReady when you are.`,
-      }]);
-      setInput('');
-      setStep('intro');
-      setQuestionIndex(0);
-      setAnswers([]);
-      setNextQuestion(null);
-      setGenerating(false);
-      setResult(null);
-      setSaving(false);
-      setError(null);
-      setSensoryAsked(false);
-      setPrivateLifeAsked(false);
-      setUnspokenAsked(false);
-      setOneMoreAsked(false);
-      lastContradictionCheck.current = 0;
-      setDriftHistory([]);
-      setRelationalNotes([]);
-      setCurrentDrift(null);
+    if (generating) {
+      generatingTimerRef.current = setTimeout(() => {
+        console.warn('Interview generating stuck — auto-resetting');
+        setGenerating(false);
+        setError('The response took too long. Try sending your answer again.');
+      }, 35000);
+    } else {
+      if (generatingTimerRef.current) clearTimeout(generatingTimerRef.current);
     }
-  }, [open, character?.id]);
+    return () => { if (generatingTimerRef.current) clearTimeout(generatingTimerRef.current); };
+  }, [generating]);
+
+  // ── Helper: reset to fresh interview state ────────────────────────────
+  function resetToFresh() {
+    sendingRef.current = false;
+    setMessages([{
+      role: 'system',
+      text: `Let's talk about ${charName}.\n\nAnswer like you're telling a friend — no right answers. The more specific and honest you are, the richer the character and the stronger the story.\n\nReady when you are.`,
+    }]);
+    setInput('');
+    setStep('intro');
+    setQuestionIndex(0);
+    setAnswers([]);
+    setNextQuestion(null);
+    setGenerating(false);
+    setResult(null);
+    setSaving(false);
+    setError(null);
+    setSensoryAsked(false);
+    setPrivateLifeAsked(false);
+    setUnspokenAsked(false);
+    setOneMoreAsked(false);
+    lastContradictionCheck.current = 0;
+    setDriftHistory([]);
+    setRelationalNotes([]);
+    setCurrentDrift(null);
+    setResumeData(null);
+  }
+
+  // ── Helper: restore state from saved progress ─────────────────────────
+  function restoreProgress(p) {
+    sendingRef.current = false;
+    setMessages(p.messages || []);
+    setStep(p.step || 'interview');
+    setQuestionIndex(p.question_index || 0);
+    setAnswers(p.answers || []);
+    setNextQuestion(p.next_question || null);
+    setSensoryAsked(!!p.sensory_asked);
+    setPrivateLifeAsked(!!p.private_life_asked);
+    setUnspokenAsked(!!p.unspoken_asked);
+    setOneMoreAsked(!!p.one_more_asked);
+    lastContradictionCheck.current = p.last_contradiction_check || 0;
+    setDriftHistory(p.drift_history || []);
+    setRelationalNotes(p.relational_notes || []);
+    setCurrentDrift(p.current_drift || null);
+    setInput('');
+    setGenerating(false);
+    setResult(null);
+    setSaving(false);
+    setError(null);
+    setResumeData(null);
+  }
+
+  // ── Load saved progress on open ───────────────────────────────────────
+  useEffect(() => {
+    if (open && character?.id) {
+      setLoadingProgress(true);
+      fetch(`${MEMORIES_API}/character-interview-progress/${character.id}`)
+        .then(r => r.json())
+        .then(data => {
+          if (data.progress && data.progress.answers?.length > 0 && data.progress.step !== 'complete') {
+            setResumeData(data.progress);
+          } else {
+            resetToFresh();
+          }
+        })
+        .catch(() => resetToFresh())
+        .finally(() => setLoadingProgress(false));
+    } else if (open) {
+      resetToFresh();
+    }
+  }, [open, character?.id]); // eslint-disable-line
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -235,10 +339,72 @@ export default function CharacterVoiceInterview({
 
   // Auto-send on mic stop
   function handleMicResult(text, meta) {
-    setInput(text);
-    if (meta?.isFinal && text.trim() && step === 'interview' && !generating) {
+    if (meta?.isFinal && text.trim() && step === 'interview' && !generating && !sendingRef.current) {
+      // Clear input immediately so a stray tap/Enter can't also trigger handleSend
+      setInput('');
       setTimeout(() => handleSendText(text.trim()), 80);
+    } else {
+      setInput(text);
     }
+  }
+
+  // ── Auto-save progress after each answer ──────────────────────────────
+  async function saveProgress(overrides = {}) {
+    if (!character?.id || savingProgress.current) return;
+    savingProgress.current = true;
+    try {
+      await fetch(`${MEMORIES_API}/character-interview-save-progress`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id:             character.id,
+          messages:                 overrides.messages    ?? messages,
+          answers:                  overrides.answers     ?? answers,
+          question_index:           overrides.questionIndex ?? questionIndex,
+          next_question:            overrides.nextQuestion  ?? nextQuestion,
+          sensory_asked:            overrides.sensoryAsked  ?? sensoryAsked,
+          private_life_asked:       overrides.privateLifeAsked ?? privateLifeAsked,
+          unspoken_asked:           overrides.unspokenAsked ?? unspokenAsked,
+          one_more_asked:           overrides.oneMoreAsked ?? oneMoreAsked,
+          last_contradiction_check: lastContradictionCheck.current,
+          drift_history:            overrides.driftHistory ?? driftHistory,
+          relational_notes:         overrides.relationalNotes ?? relationalNotes,
+          current_drift:            overrides.currentDrift ?? currentDrift,
+          step:                     overrides.step ?? step,
+        }),
+      });
+    } catch (e) {
+      console.warn('Failed to save interview progress:', e);
+    } finally {
+      savingProgress.current = false;
+    }
+  }
+
+  // ── Clear saved progress (after profile saved) ────────────────────────
+  async function clearProgress() {
+    if (!character?.id) return;
+    try {
+      await fetch(`${MEMORIES_API}/character-interview-save-progress`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_id: character.id,
+          messages:     [],
+          answers:      [],
+          question_index: 0,
+          next_question: null,
+          sensory_asked: false,
+          private_life_asked: false,
+          unspoken_asked: false,
+          one_more_asked: false,
+          last_contradiction_check: 0,
+          drift_history: [],
+          relational_notes: [],
+          current_drift: null,
+          step: 'complete',
+        }),
+      });
+    } catch (_) { /* non-critical */ }
   }
 
   function handleStart() {
@@ -247,13 +413,15 @@ export default function CharacterVoiceInterview({
   }
 
   async function handleSend() {
-    if (!input.trim()) return;
+    if (!input.trim() || generating || sendingRef.current) return;
     await handleSendText(input.trim());
   }
 
   async function handleSendText(userAnswer) {
-    if (!userAnswer) return;
+    if (!userAnswer || generating || sendingRef.current) return;
+    sendingRef.current = true;  // synchronous lock — prevents any concurrent send
     setInput('');
+    setError(null);
 
     const newMessages = [...messages, { role: 'user', text: userAnswer }];
     setMessages(newMessages);
@@ -264,7 +432,18 @@ export default function CharacterVoiceInterview({
     }];
     setAnswers(newAnswers);
 
-    await decideNextMove(newAnswers, newMessages, userAnswer);
+    // Auto-save progress after every answer
+    saveProgress({ messages: newMessages, answers: newAnswers, step: 'interview' });
+
+    try {
+      await decideNextMove(newAnswers, newMessages, userAnswer);
+    } catch (err) {
+      console.error('Interview decideNextMove error:', err);
+      setGenerating(false);
+      setError('Something went wrong. Try sending your answer again.');
+    } finally {
+      sendingRef.current = false;  // release lock after send completes
+    }
   }
 
   // ── Core routing: what happens after every answer ──────────────────────
@@ -288,9 +467,18 @@ export default function CharacterVoiceInterview({
       return;
     }
 
-    // 3. CONTRADICTION CHECK — every 3rd answer
+    // 3. PRIVATE LIFE — answer 3 (before contradiction so it fires first)
+    if (answerCount === 3 && !privateLifeAsked) {
+      setPrivateLifeAsked(true);
+      const q = PRIVATE_LIFE_Q(charName);
+      setNextQuestion(q);
+      setMessages(prev => [...prev, { role: 'system', text: q }]);
+      return;
+    }
+
+    // 4. CONTRADICTION CHECK — every 3rd answer (but not 3 — private life owns that)
     if (
-      answerCount >= 3 &&
+      answerCount >= 6 &&
       answerCount % 3 === 0 &&
       answerCount !== lastContradictionCheck.current
     ) {
@@ -298,15 +486,6 @@ export default function CharacterVoiceInterview({
       await getAdaptiveQuestion(currentAnswers, currentMessages, {
         forceContradictionCheck: true,
       });
-      return;
-    }
-
-    // 4. PRIVATE LIFE — around answer 3
-    if (answerCount === 3 && !privateLifeAsked) {
-      setPrivateLifeAsked(true);
-      const q = PRIVATE_LIFE_Q(charName);
-      setNextQuestion(q);
-      setMessages(prev => [...prev, { role: 'system', text: q }]);
       return;
     }
 
@@ -340,6 +519,7 @@ export default function CharacterVoiceInterview({
 
   async function getAdaptiveQuestion(currentAnswers, currentMessages, options = {}) {
     setGenerating(true);
+    setError(null);
     try {
       const nextIndex = questionIndex + 1;
       setQuestionIndex(nextIndex);
@@ -356,9 +536,14 @@ export default function CharacterVoiceInterview({
         selected_name: c.selected_name,
       }));
 
+      // Fetch with 30-second timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 30000);
+
       const res = await fetch(`${MEMORIES_API}/character-interview-next`, {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal:  controller.signal,
         body: JSON.stringify({
           book_id:                   bookId || null,
           character_name:            charName,
@@ -376,6 +561,7 @@ export default function CharacterVoiceInterview({
         }),
       });
 
+      clearTimeout(timeoutId);
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
 
@@ -422,9 +608,13 @@ export default function CharacterVoiceInterview({
           setMessages(prev => [...prev, { role: 'new_character_detected', character: nc }]);
         }
       }
-    } catch {
-      const fallback = questions[questionIndex + 1];
-      if (fallback) setMessages(prev => [...prev, { role: 'system', text: fallback }]);
+    } catch (err) {
+      console.error('Interview getAdaptiveQuestion error:', err);
+      const fallback = questions[questionIndex + 1] || questions[questionIndex] || 'Tell me more about that.';
+      setMessages(prev => [...prev, { role: 'system', text: fallback }]);
+      if (err?.name === 'AbortError') {
+        setError('Response timed out. Your answer was saved — try again.');
+      }
     } finally {
       setGenerating(false);
     }
@@ -467,6 +657,8 @@ export default function CharacterVoiceInterview({
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify(result.profile),
       });
+      // Clear saved progress now that the profile is saved
+      await clearProgress();
       onComplete?.(result.profile, result.threads);
     } catch (err) {
       setError(err.message);
@@ -475,14 +667,24 @@ export default function CharacterVoiceInterview({
     }
   }
 
+  useEffect(() => {
+    const id = 'cvi-mobile-css';
+    if (!document.getElementById(id)) {
+      const s = document.createElement('style');
+      s.id = id;
+      s.textContent = CVI_MOBILE_CSS;
+      document.head.appendChild(s);
+    }
+  }, []);
+
   if (!open) return null;
 
   return createPortal(
-    <div style={st.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={st.modal} onClick={e => e.stopPropagation()}>
+    <div className="cvi-overlay" style={st.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="cvi-modal" style={st.modal} onClick={e => e.stopPropagation()}>
 
         {/* ── Header ──────────────────────────────────────────────────── */}
-        <div style={st.header}>
+        <div className="cvi-header" style={st.header}>
           <div>
             <div style={st.headerLabel}>CHARACTER VOICE INTERVIEW</div>
             <div style={st.headerTitle}>{charName}</div>
@@ -493,9 +695,55 @@ export default function CharacterVoiceInterview({
           <button style={st.closeBtn} onClick={onClose}>✕</button>
         </div>
 
+        {/* ── Loading saved progress ──────────────────────────────────── */}
+        {loadingProgress && (
+          <div className="cvi-generating-block" style={st.generatingBlock}>
+            <div style={st.generatingTitle}>Checking for saved progress…</div>
+          </div>
+        )}
+
+        {/* ── Resume prompt ───────────────────────────────────────────── */}
+        {!loadingProgress && resumeData && (
+          <div style={{
+            padding: '40px 32px',
+            display: 'flex', flexDirection: 'column', alignItems: 'center',
+            gap: 16, textAlign: 'center',
+          }}>
+            <div style={{
+              fontFamily: "'Cormorant Garamond', Georgia, serif",
+              fontSize: 22, fontWeight: 600,
+              color: 'rgba(30,25,20,0.85)',
+            }}>
+              You have a conversation in progress
+            </div>
+            <div style={{
+              fontFamily: "'DM Mono', monospace",
+              fontSize: 12, color: 'rgba(30,25,20,0.5)',
+              letterSpacing: '0.03em',
+            }}>
+              {resumeData.answers?.length || 0} answer{(resumeData.answers?.length || 0) !== 1 ? 's' : ''} saved
+              {resumeData.saved_at ? ` · ${new Date(resumeData.saved_at).toLocaleDateString()}` : ''}
+            </div>
+            <div style={{ display: 'flex', gap: 12, marginTop: 8 }}>
+              <button
+                style={st.secondaryBtn}
+                onClick={() => { resetToFresh(); }}
+              >
+                Start Over
+              </button>
+              <button
+                style={st.primaryBtn}
+                onClick={() => restoreProgress(resumeData)}
+              >
+                Continue Where I Left Off →
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* ── Generating ──────────────────────────────────────────────── */}
         {step === 'generating' && (
-          <div style={st.generatingBlock}>
+          <div className="cvi-generating-block" style={st.generatingBlock}>
             <div style={st.generatingDots}>
               {[0,1,2].map(i => (
                 <div key={i} style={{ ...st.dot, animationDelay: `${i * 0.3}s` }} />
@@ -510,7 +758,7 @@ export default function CharacterVoiceInterview({
 
         {/* ── Complete ─────────────────────────────────────────────────── */}
         {step === 'complete' && result && (
-          <div style={st.completeBlock}>
+          <div className="cvi-complete-block" style={st.completeBlock}>
             <div style={st.completeHeader}>
               <div style={st.completeLabel}>PROFILE READY</div>
               <div style={st.completeTitle}>{charName}</div>
@@ -579,9 +827,9 @@ export default function CharacterVoiceInterview({
         )}
 
         {/* ── Chat ─────────────────────────────────────────────────────── */}
-        {(step === 'intro' || step === 'interview') && (
+        {!loadingProgress && !resumeData && (step === 'intro' || step === 'interview') && (
           <>
-            <div style={st.chatWindow}>
+            <div className="cvi-chat-window" style={st.chatWindow}>
               {/* Drift indicator — shows when drift is active */}
               <DriftIndicator
                 drift={currentDrift}
@@ -623,7 +871,7 @@ export default function CharacterVoiceInterview({
               </div>
             ) : (
               <>
-                <div style={st.inputRow}>
+                <div className="cvi-input-row" style={st.inputRow}>
                   <textarea
                     style={{
                       ...st.chatInput,
@@ -635,7 +883,10 @@ export default function CharacterVoiceInterview({
                     value={input}
                     onChange={e => setInput(e.target.value)}
                     onKeyDown={e => {
-                      if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend();
+                      if (e.key === 'Enter' && !e.shiftKey) {
+                        e.preventDefault();
+                        handleSend();
+                      }
                     }}
                     rows={3}
                     autoFocus
@@ -654,10 +905,11 @@ export default function CharacterVoiceInterview({
                     →
                   </button>
                 </div>
-                <div style={st.cmdHint}>
+                {error && <div style={st.error}>{error}</div>}
+                <div className="cvi-cmd-hint" style={st.cmdHint}>
                   {listening
                     ? '◼ Recording — tap mic to stop and send'
-                    : 'Ctrl + Enter to send · 🎤 to speak'}
+                    : 'Enter to send · Shift+Enter for new line · 🎤 to speak'}
                 </div>
               </>
             )}
@@ -754,22 +1006,23 @@ function typeColor(type) {
 
 const st = {
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(20,16,12,0.6)',
-    backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+    position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.55)',
+    backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
     zIndex: 10000,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
     pointerEvents: 'auto',
   },
   modal: {
-    background: '#faf9f7', border: '1px solid rgba(201,168,76,0.2)',
-    borderRadius: 4, width: 620, maxWidth: '100%', maxHeight: '90vh',
+    background: '#ffffff', border: '1px solid rgba(201,168,76,0.18)',
+    borderRadius: 8, width: 620, maxWidth: '100%', maxHeight: '90vh',
     display: 'flex', flexDirection: 'column',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
+    boxShadow: '0 8px 40px rgba(0,0,0,0.10)', overflow: 'hidden',
     pointerEvents: 'auto', position: 'relative', zIndex: 1,
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-    padding: '20px 24px 16px', borderBottom: '1px solid rgba(201,168,76,0.12)', flexShrink: 0,
+    padding: '20px 24px 16px', borderBottom: '1px solid rgba(201,168,76,0.10)', flexShrink: 0,
+    background: '#fff',
   },
   headerLabel: {
     fontFamily: 'DM Mono, monospace', fontSize: 8, letterSpacing: '0.2em',
@@ -787,6 +1040,7 @@ const st = {
   chatWindow: {
     flex: 1, overflowY: 'auto', padding: '20px 24px',
     display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0, maxHeight: 420,
+    background: '#fff',
   },
   message: { display: 'flex', flexDirection: 'column', gap: 4, maxWidth: '85%' },
   messageLabel: {
@@ -818,7 +1072,7 @@ const st = {
     borderTop: '1px solid rgba(201,168,76,0.1)', alignItems: 'flex-end', flexShrink: 0,
   },
   chatInput: {
-    flex: 1, background: '#f5f0e8', border: '1px solid', borderRadius: 2,
+    flex: 1, background: '#faf9f6', border: '1px solid', borderRadius: 4,
     fontFamily: "'Lora', 'Playfair Display', serif",
     fontSize: 14, fontStyle: 'italic', color: 'rgba(30,25,20,0.82)',
     padding: '10px 12px', outline: 'none', resize: 'none', lineHeight: 1.6,

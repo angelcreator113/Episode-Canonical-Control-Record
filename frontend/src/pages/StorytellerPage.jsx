@@ -317,6 +317,7 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
   const [interviewDone, setInterviewDone] = useState(false);
   const [redoInterview, setRedoInterview] = useState(false);
   const [lastApprovedLine, setLastApprovedLine] = useState(null);
+  const [contextExpanded, setContextExpanded] = useState(false);
 
   // Saved indicator
   const [savedAt, setSavedAt] = useState(null);
@@ -334,7 +335,14 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
   useEffect(() => {
     fetch('/api/v1/character-registry/registries')
       .then(r => r.json())
-      .then(data => setRegistryCharacters(data || []))
+      .then(data => {
+        // API returns { registries: [{ characters: [...] }, ...] } — flatten to character list
+        const regs = data?.registries || data || [];
+        const chars = Array.isArray(regs)
+          ? regs.flatMap(r => (r.characters || []).map(c => ({ ...c, name: c.display_name || c.character_key })))
+          : [];
+        setRegistryCharacters(chars);
+      })
       .catch(() => {});
   }, []);
 
@@ -803,12 +811,21 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                 autoFocus
               />
             ) : (
-              <h3
-                className="st-nav-brand-title"
-                onDoubleClick={() => { setEditingBookTitle(true); setBookTitleDraft(book.title || ''); }}
-              >
-                {book.title}
-              </h3>
+              <div className="st-nav-brand-row">
+                <h3
+                  className="st-nav-brand-title"
+                  onDoubleClick={() => { setEditingBookTitle(true); setBookTitleDraft(book.title || ''); }}
+                >
+                  {book.title}
+                </h3>
+                <button
+                  className="st-nav-edit-btn"
+                  onClick={() => { setEditingBookTitle(true); setBookTitleDraft(book.title || ''); }}
+                  title="Edit book title"
+                >
+                  ✎
+                </button>
+              </div>
             )}
             {book.subtitle && <div className="st-nav-brand-sub">{book.subtitle}</div>}
           </div>
@@ -851,13 +868,26 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                       )}
                     </div>
                   </button>
-                  <button
-                    className="st-nav-chapter-delete"
-                    onClick={e => { e.stopPropagation(); deleteChapter(ch.id); }}
-                    title="Delete chapter"
-                  >
-                    ×
-                  </button>
+                  <div className="st-nav-chapter-actions">
+                    <button
+                      className="st-nav-chapter-edit"
+                      onClick={e => {
+                        e.stopPropagation();
+                        setEditingChapterId(ch.id);
+                        setChapterTitleDraft(ch.title || '');
+                      }}
+                      title="Edit chapter title"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      className="st-nav-chapter-delete"
+                      onClick={e => { e.stopPropagation(); deleteChapter(ch.id); }}
+                      title="Delete chapter"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               ))}
             </div>
@@ -985,30 +1015,55 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                         autoFocus
                       />
                     ) : (
-                      <h2
-                        className="st-chapter-header-title"
-                        onDoubleClick={() => {
-                          setEditingChapterId(activeChapter.id);
-                          setChapterTitleDraft(activeChapter.title || '');
-                        }}
-                      >
-                        {activeChapter.title || 'Untitled Chapter'}
-                      </h2>
+                      <div className="st-chapter-header-title-row">
+                        <h2
+                          className="st-chapter-header-title"
+                          onDoubleClick={() => {
+                            setEditingChapterId(activeChapter.id);
+                            setChapterTitleDraft(activeChapter.title || '');
+                          }}
+                        >
+                          {activeChapter.title || 'Untitled Chapter'}
+                        </h2>
+                        <button
+                          className="st-chapter-title-edit-btn"
+                          onClick={() => {
+                            setEditingChapterId(activeChapter.id);
+                            setChapterTitleDraft(activeChapter.title || '');
+                          }}
+                          title="Edit chapter title"
+                        >
+                          ✎
+                        </button>
+                      </div>
                     )}
                     <div className="st-chapter-header-meta">
                       {activeChapter.badge && <span>{activeChapter.badge}</span>}
                       {activeChapter.badge && <span>·</span>}
-                      <span>{approvedLines.length} approved</span>
-                      {pendingCount > 0 && (
+                      {lines.length > 0 ? (
                         <>
-                          <span>·</span>
-                          <span>{pendingCount} pending</span>
+                          <span>{approvedLines.length} approved</span>
+                          {pendingCount > 0 && (
+                            <>
+                              <span>·</span>
+                              <span>{pendingCount} pending</span>
+                            </>
+                          )}
                         </>
+                      ) : (
+                        <span className="st-chapter-header-new">New chapter — ready to begin</span>
                       )}
                     </div>
 
                     {/* Chapter Actions — icons, appear on hover */}
                     <div className="st-chapter-actions">
+                      <button
+                        className="st-chapter-icon-btn"
+                        onClick={() => navigate(`/write/${activeBook.id}/${activeChapter.id}`)}
+                        title="Write mode"
+                      >
+                        ✍
+                      </button>
                       <button
                         className="st-chapter-icon-btn"
                         onClick={() => setBriefOpen(true)}
@@ -1056,54 +1111,137 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                     </div>
                   </div>
 
-                  {/* Belief Tracker — PNOS act + threads */}
-                  <BeliefTracker
-                    chapter={activeChapter}
-                    onActChange={act => setPnosAct(act)}
-                    onThreadChange={threads => setActiveThreads(threads)}
-                  />
+                  {/* ── Workflow Stepper — shows progress for empty chapters ── */}
+                  {lines.length === 0 && (
+                    <div className="st-workflow-stepper">
+                      <div className={`st-workflow-step${!interviewDone ? ' active' : ' done'}`}>
+                        <div className="st-workflow-step-num">{interviewDone ? '✓' : '1'}</div>
+                        <div className="st-workflow-step-info">
+                          <div className="st-workflow-step-title">Set the Scene</div>
+                          <div className="st-workflow-step-desc">Answer 7 quick questions about this chapter</div>
+                        </div>
+                      </div>
+                      <div className="st-workflow-step-line" />
+                      <div className={`st-workflow-step${interviewDone && lines.length === 0 ? ' active' : interviewDone ? ' done' : ''}`}>
+                        <div className="st-workflow-step-num">{lines.length > 0 ? '✓' : '2'}</div>
+                        <div className="st-workflow-step-info">
+                          <div className="st-workflow-step-title">Generate Draft</div>
+                          <div className="st-workflow-step-desc">AI creates opening lines from your brief</div>
+                        </div>
+                      </div>
+                      <div className="st-workflow-step-line" />
+                      <div className={`st-workflow-step${lines.length > 0 ? ' active' : ''}`}>
+                        <div className="st-workflow-step-num">3</div>
+                        <div className="st-workflow-step-info">
+                          <div className="st-workflow-step-title">Write & Refine</div>
+                          <div className="st-workflow-step-desc">Review, approve, and continue writing</div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
-                  {/* Book Question Layer — the central question + direction */}
-                  <BookQuestionLayer
-                    book={book}
-                    chapter={activeChapter}
-                    onDirectionChange={(dir) => setQuestionDirection(dir)}
-                  />
+                  {/* ── Context Layers — visible for active chapters, collapsed for empty ── */}
+                  {lines.length > 0 ? (
+                    <>
+                      {/* Belief Tracker — PNOS act + threads */}
+                      <BeliefTracker
+                        chapter={activeChapter}
+                        onActChange={act => setPnosAct(act)}
+                        onThreadChange={threads => setActiveThreads(threads)}
+                      />
 
-                  {/* Character Appearance Rules — who can appear & how */}
-                  <CharacterAppearanceRules
-                    chapterCharacters={chapterCharacters}
-                    onCharacterToggle={(charIds) => setChapterCharacters(charIds)}
-                  />
+                      {/* Book Question Layer — the central question + direction */}
+                      <BookQuestionLayer
+                        book={book}
+                        chapter={activeChapter}
+                        onDirectionChange={(dir) => setQuestionDirection(dir)}
+                      />
 
-                  {/* Chapter Exit Emotion — where this chapter should land */}
-                  <ChapterExitEmotion
-                    chapter={activeChapter}
-                    onExitChange={(data) => setExitEmotionData(data)}
-                  />
+                      {/* Character Appearance Rules — who can appear & how */}
+                      <CharacterAppearanceRules
+                        chapterCharacters={chapterCharacters}
+                        onCharacterToggle={(charIds) => setChapterCharacters(charIds)}
+                      />
 
-                  {/* Incoming Echoes — planted moments that reverberate here */}
-                  <IncomingEchoes
-                    echoes={incomingEchoes}
-                    onMarkLanded={async (echoId) => {
-                      try {
-                        await fetch(`/api/v1/storyteller/echoes/${echoId}`, {
-                          method: 'PUT',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ status: 'landed' }),
-                        });
-                        setIncomingEchoes(prev => prev.map(e => e.id === echoId ? { ...e, status: 'landed' } : e));
-                      } catch (err) { console.error('Failed to mark echo landed:', err); }
-                    }}
-                  />
+                      {/* Chapter Exit Emotion — where this chapter should land */}
+                      <ChapterExitEmotion
+                        chapter={activeChapter}
+                        onExitChange={(data) => setExitEmotionData(data)}
+                      />
 
-                  {/* Pre-writing character check-in */}
-                  {showCheckin && registryCharacters?.length > 0 && (
-                    <PreWritingCheckin
-                      characters={registryCharacters}
-                      chapterContext={activeChapter?.scene_goal || activeChapter?.title || null}
-                      onDismiss={() => setShowCheckin(false)}
-                    />
+                      {/* Incoming Echoes — planted moments that reverberate here */}
+                      <IncomingEchoes
+                        echoes={incomingEchoes}
+                        onMarkLanded={async (echoId) => {
+                          try {
+                            await fetch(`/api/v1/storyteller/echoes/${echoId}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ status: 'landed' }),
+                            });
+                            setIncomingEchoes(prev => prev.map(e => e.id === echoId ? { ...e, status: 'landed' } : e));
+                          } catch (err) { console.error('Failed to mark echo landed:', err); }
+                        }}
+                      />
+
+                      {/* Pre-writing character check-in */}
+                      {showCheckin && registryCharacters?.length > 0 && (
+                        <PreWritingCheckin
+                          characters={registryCharacters}
+                          chapterContext={activeChapter?.scene_goal || activeChapter?.title || null}
+                          onDismiss={() => setShowCheckin(false)}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    /* Collapsed context toggle for empty chapters */
+                    <div className="st-context-collapse">
+                      <button
+                        className="st-context-collapse-toggle"
+                        onClick={() => setContextExpanded(!contextExpanded)}
+                      >
+                        <span className={`st-context-collapse-arrow${contextExpanded ? ' open' : ''}`}>▸</span>
+                        Chapter settings
+                        <span className="st-context-collapse-hint">
+                          (act pattern, characters, exit emotion)
+                        </span>
+                      </button>
+                      {contextExpanded && (
+                        <div className="st-context-collapse-body">
+                          <BeliefTracker
+                            chapter={activeChapter}
+                            onActChange={act => setPnosAct(act)}
+                            onThreadChange={threads => setActiveThreads(threads)}
+                          />
+                          <BookQuestionLayer
+                            book={book}
+                            chapter={activeChapter}
+                            onDirectionChange={(dir) => setQuestionDirection(dir)}
+                          />
+                          <CharacterAppearanceRules
+                            chapterCharacters={chapterCharacters}
+                            onCharacterToggle={(charIds) => setChapterCharacters(charIds)}
+                          />
+                          <ChapterExitEmotion
+                            chapter={activeChapter}
+                            onExitChange={(data) => setExitEmotionData(data)}
+                          />
+                          <IncomingEchoes
+                            echoes={incomingEchoes}
+                            onMarkLanded={async (echoId) => {
+                              try {
+                                await fetch(`/api/v1/storyteller/echoes/${echoId}`, {
+                                  method: 'PUT',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({ status: 'landed' }),
+                                });
+                                setIncomingEchoes(prev => prev.map(e => e.id === echoId ? { ...e, status: 'landed' } : e));
+                              } catch (err) { console.error('Failed to mark echo landed:', err); }
+                            }}
+                          />
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {/* Scene Interview — empty chapter, not yet interviewed */}
@@ -1117,6 +1255,11 @@ function BookEditor({ book, onClose, toast, onRefresh }) {
                         setRedoInterview(false);
                         onRefresh();
                       }}
+                      onSkip={() => {
+                        setInterviewDone(true);
+                        setRedoInterview(false);
+                      }}
+                      onLineAdded={() => onRefresh()}
                     />
                   )}
 

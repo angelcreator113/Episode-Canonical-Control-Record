@@ -60,6 +60,10 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    draft_prose: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     interview_answers: {
       type: DataTypes.JSONB,
       allowNull: true,

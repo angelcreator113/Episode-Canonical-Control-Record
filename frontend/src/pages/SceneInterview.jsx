@@ -79,6 +79,7 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
   const [openingAdded, setOpeningAdded]   = useState(false);
   const [savedAnswers, setSavedAnswers]   = useState(null); // loaded from DB
   const [viewingPrevious, setViewingPrevious] = useState(false);
+  const [retryReady, setRetryReady]       = useState(false); // show retry button after generation error
   const { speak } = useVoice();
 
   const questionIndex = step - 1; // step 1 = question 0
@@ -143,16 +144,24 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
           chapter_id: chapter.id,
           chapter_title: chapter.title,
           answers:    finalAnswers,
-          characters: characters.map(c => ({ name: c.name || c.display_name, type: c.type || c.role_type })),
+          characters: (Array.isArray(characters) ? characters : []).map(c => ({ name: c.name || c.display_name, type: c.type || c.role_type })),
         }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Generation failed');
+      if (!res.ok) {
+        const msg = data.error || 'Generation failed';
+        // Provide a user-friendly message for overloaded/server errors
+        if (msg.includes('overloaded') || msg.includes('Overloaded') || msg.includes('529')) {
+          throw new Error('The AI is temporarily busy. Please wait a moment and try again.');
+        }
+        throw new Error(msg);
+      }
       setBrief(data.brief);
       setStep(9);
     } catch (err) {
       setError(err.message);
-      setStep(7); // back to last question
+      setRetryReady(true);
+      setStep(7); // back to last question so they can retry
     } finally {
       setGenerating(false);
     }
@@ -352,7 +361,7 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
           )}
 
           {/* Characters present */}
-          {brief.characters_present?.length > 0 && (
+          {Array.isArray(brief.characters_present) && brief.characters_present.length > 0 && (
             <div style={s.briefSection}>
               <div style={s.briefSectionLabel}>CHARACTERS PRESENT</div>
               <div style={s.charRow}>
@@ -479,7 +488,20 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
         </div>
         <div style={s.cmdHint}>Ctrl + Enter to continue</div>
 
-        {error && <div style={s.error}>{error}</div>}
+        {error && (
+          <div style={s.error}>
+            {error}
+            {retryReady && (
+              <button
+                style={{ ...s.nextBtn, marginLeft: 12, padding: '6px 18px', fontSize: '0.95rem' }}
+                onClick={() => { setError(null); setRetryReady(false); generateBrief(answers); }}
+                type='button'
+              >
+                Retry ↻
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Navigation */}
         <div style={s.navRow}>
