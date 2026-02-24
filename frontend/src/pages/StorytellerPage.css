@@ -570,7 +570,7 @@
   width: var(--st-nav-w);
   flex-shrink: 0;
   border-right: 1px solid var(--st-border-light);
-  background: transparent;
+  background: rgba(47, 42, 38, 0.015);
   display: flex;
   flex-direction: column;
   position: sticky;
@@ -580,9 +580,10 @@
   z-index: 1;
   transition: opacity 0.4s, width 0.4s;
 }
-.st-nav::-webkit-scrollbar { width: 2px; }
+.st-nav::-webkit-scrollbar { width: 4px; }
 .st-nav::-webkit-scrollbar-track { background: transparent; }
-.st-nav::-webkit-scrollbar-thumb { background: var(--st-secondary); border-radius: 2px; }
+.st-nav::-webkit-scrollbar-thumb { background: rgba(198, 168, 94, 0.2); border-radius: 4px; }
+.st-nav::-webkit-scrollbar-thumb:hover { background: rgba(198, 168, 94, 0.35); }
 
 /* ── Nav Brand — book title ──────────────────── */
 .st-nav-brand {
@@ -683,7 +684,7 @@
   display: flex;
   align-items: flex-start;
   gap: 10px;
-  padding: 9px 20px;
+  padding: 11px 20px;
   cursor: pointer;
   transition: all 0.15s;
   border: none;
@@ -696,10 +697,12 @@
 }
 .st-nav-chapter:hover {
   color: var(--st-ink-light);
+  background: rgba(198, 168, 94, 0.04);
 }
 .st-nav-chapter.active {
   color: var(--st-ambient-ink, var(--st-ink));
   border-left-color: var(--st-gold);
+  background: rgba(198, 168, 94, 0.06);
 }
 
 .st-nav-num {
@@ -773,16 +776,23 @@ div:hover > .st-nav-chapter-actions { opacity: 1; }
 .st-nav-add { padding: 8px 20px 16px; }
 .st-nav-add button {
   background: none;
-  border: none;
+  border: 1px dashed rgba(198, 168, 94, 0.25);
+  border-radius: 4px;
   font-family: var(--st-sans);
   font-size: 12px;
   color: var(--st-muted);
   cursor: pointer;
-  padding: 0;
+  padding: 6px 12px;
+  width: 100%;
   opacity: 0.7;
-  transition: color 0.15s, opacity 0.15s;
+  transition: all 0.15s;
 }
-.st-nav-add button:hover { color: var(--st-gold); opacity: 1; }
+.st-nav-add button:hover {
+  color: var(--st-gold);
+  opacity: 1;
+  border-color: var(--st-gold);
+  background: rgba(198, 168, 94, 0.04);
+}
 
 /* ── Nav Stats — minimal footer ──────────────── */
 .st-nav-stats {
@@ -1312,6 +1322,101 @@ div:hover > .st-nav-chapter-actions { opacity: 1; }
   color: var(--st-muted);
 }
 .st-edit-cancel:hover { background: rgba(47, 42, 38, 0.02); }
+
+/* ═══════════════════════════════════════
+   Review Mode — Line-by-line review
+   ═══════════════════════════════════════ */
+.st-review-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  background: rgba(232, 160, 176, 0.08);
+  border: 1px solid rgba(232, 160, 176, 0.2);
+  border-radius: 6px;
+  margin-bottom: 16px;
+}
+.st-review-banner-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.st-review-banner-icon { font-size: 16px; }
+.st-review-banner-title {
+  font-family: var(--st-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--st-ink);
+  letter-spacing: 0.03em;
+}
+.st-review-banner-stats {
+  font-family: var(--st-mono);
+  font-size: 11px;
+  color: var(--st-muted);
+  letter-spacing: 0.02em;
+}
+.st-review-banner-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.st-review-banner-exit {
+  background: none;
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius);
+  padding: 4px 12px;
+  font-family: var(--st-sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--st-muted);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.st-review-banner-exit:hover { border-color: var(--st-pink); color: var(--st-pink); }
+
+/* Review mode badge — inline status indicator */
+.st-review-badge {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  font-weight: 600;
+  margin-top: 6px;
+  margin-right: 8px;
+  transition: all 0.15s;
+}
+.st-review-badge-approved {
+  background: rgba(122, 155, 126, 0.12);
+  color: var(--st-approved);
+  border: 1px solid rgba(122, 155, 126, 0.25);
+}
+.st-review-badge-pending {
+  background: rgba(184, 164, 104, 0.1);
+  color: var(--st-pending);
+  border: 1px solid rgba(184, 164, 104, 0.25);
+}
+.st-review-badge-edited {
+  background: rgba(148, 132, 179, 0.1);
+  color: var(--st-edited);
+  border: 1px solid rgba(148, 132, 179, 0.25);
+}
+
+/* Review mode — always-visible actions */
+.st-line-review .st-line-actions-review { opacity: 0.6; }
+.st-line-review:hover .st-line-actions-review { opacity: 1; }
+
+/* Review mode — subtle left accent for status */
+.st-line-review.st-line-approved { border-left: 2px solid rgba(122, 155, 126, 0.3); padding-left: 8px; }
+.st-line-review.st-line-pending { border-left: 2px solid rgba(184, 164, 104, 0.3); padding-left: 8px; }
+.st-line-review.st-line-edited { border-left: 2px solid rgba(148, 132, 179, 0.3); padding-left: 8px; }
+
+/* Review mode page background hint */
+.st-book-page-review { background: rgba(232, 160, 176, 0.02); border-radius: 4px; padding: 8px; }
 
 /* ═══════════════════════════════════════
    Pending Lines (collapsible)

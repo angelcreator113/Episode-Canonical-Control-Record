@@ -140,12 +140,16 @@ function StorytellerPage() {
       const data = await api(`/books/${id}`);
       setActiveBook(data?.book || data);
       if (chapterId) setInitialChapterId(chapterId);
+      // Persist book (and optional chapter) in URL so refresh restores the editor
+      const params = { book: String(id) };
+      if (chapterId) params.chapter = String(chapterId);
+      setSearchParams(params, { replace: true });
     } catch (e) {
       toast.add('Failed to open archive', 'error');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setSearchParams]);
 
   const closeBook = () => {
     setActiveBook(null);
@@ -627,8 +631,14 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     return (
       <div
         key={ln.id}
-        className={`st-line st-line-${ln.status}${isEditing ? ' st-line-editing' : ''}`}
+        className={`st-line st-line-${ln.status}${isEditing ? ' st-line-editing' : ''}${reviewMode ? ' st-line-review' : ''}`}
       >
+        {/* Review mode status badge */}
+        {reviewMode && (
+          <div className={`st-review-badge st-review-badge-${ln.status}`}>
+            {ln.status === 'approved' ? '\u2713' : ln.status === 'pending' ? '\u25CB' : ln.status === 'edited' ? '\u270E' : '\u2022'}
+          </div>
+        )}
         <div className="st-line-content">
           {!isEditing && (
             <div className={`st-line-text${isPending ? ' pending' : ''}`}>
@@ -661,26 +671,38 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
           )}
           {reviewMode && ln.memory_data && <MemoryCard data={ln.memory_data} />}
         </div>
-        <div className="st-line-actions">
-          {isPending && (
+        <div className={`st-line-actions${reviewMode ? ' st-line-actions-review' : ''}`}>
+          {reviewMode && !isEditing ? (
             <>
-              <button className="st-line-action st-action-approve" onClick={() => approveLine(ln.id)}>✓</button>
-              <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>✎</button>
-              <button className="st-line-action st-action-reject" onClick={() => rejectLine(ln.id)}>✕</button>
+              {ln.status !== 'approved' && (
+                <button className="st-line-action st-action-approve" onClick={() => approveLine(ln.id)} title="Approve">{'\u2713'}</button>
+              )}
+              <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)} title="Edit">{'\u270E'}</button>
+              <button className="st-line-action st-action-reject" onClick={() => rejectLine(ln.id)} title="Reject">{'\u2715'}</button>
             </>
-          )}
-          {!isPending && !isEditing && (
+          ) : (
             <>
-              <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>✎</button>
-              <PlantEchoButton
-                line={ln}
-                chapters={chapters}
-                bookId={book.id}
-                onPlanted={() => {
-                  fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`)
-                    .then(r => r.json()).then(d => setIncomingEchoes(d.echoes || []));
-                }}
-              />
+              {isPending && (
+                <>
+                  <button className="st-line-action st-action-approve" onClick={() => approveLine(ln.id)}>{'\u2713'}</button>
+                  <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>{'\u270E'}</button>
+                  <button className="st-line-action st-action-reject" onClick={() => rejectLine(ln.id)}>{'\u2715'}</button>
+                </>
+              )}
+              {!isPending && !isEditing && (
+                <>
+                  <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>{'\u270E'}</button>
+                  <PlantEchoButton
+                    line={ln}
+                    chapters={chapters}
+                    bookId={book.id}
+                    onPlanted={() => {
+                      fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`)
+                        .then(r => r.json()).then(d => setIncomingEchoes(d.echoes || []));
+                    }}
+                  />
+                </>
+              )}
             </>
           )}
         </div>
@@ -1292,8 +1314,31 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                     />
                   )}
 
+                  {/* Review Mode Banner */}
+                  {reviewMode && (
+                    <div className="st-review-banner">
+                      <div className="st-review-banner-left">
+                        <span className="st-review-banner-icon">{'\uD83D\uDC41'}</span>
+                        <span className="st-review-banner-title">Review Mode</span>
+                        <span className="st-review-banner-stats">
+                          {approvedLines.length} approved {'\u00B7'} {pendingLines.length} pending {'\u00B7'} {lines.length} total
+                        </span>
+                      </div>
+                      <div className="st-review-banner-actions">
+                        {pendingLines.length > 0 && (
+                          <button className="st-btn st-btn-sm st-btn-ghost" onClick={approveAll}>
+                            Approve All ({pendingLines.length})
+                          </button>
+                        )}
+                        <button className="st-review-banner-exit" onClick={() => setReviewMode(false)}>
+                          Exit Review
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Book Page — the manuscript body */}
-                  <div className="st-book-page">
+                  <div className={`st-book-page${reviewMode ? ' st-book-page-review' : ''}`}>
                     {/* Approved lines with Narrative Intelligence every 5 */}
                     {approvedLines.map((ln, i) => (
                       <React.Fragment key={ln.id}>

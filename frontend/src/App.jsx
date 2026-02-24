@@ -54,6 +54,7 @@ import WriteMode from './pages/WriteMode';
 import RelationshipMap from './pages/RelationshipMap';
 import SessionStart from './pages/SessionStart';
 import CharacterTherapy from './pages/CharacterTherapy';
+import PressPublisher from './pages/PressPublisher';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -297,6 +298,9 @@ function AppContent() {
           
           {/* PNOS Character Relationship Map */}
           <Route path="/relationships" element={<RelationshipMap />} />
+          
+          {/* PNOS LalaVerse Press — Publisher Dashboard */}
+          <Route path="/press" element={<PressPublisher />} />
           
           {/* Search */}
           <Route path="/search" element={<SearchResults />} />

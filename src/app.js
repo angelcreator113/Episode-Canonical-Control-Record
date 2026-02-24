@@ -890,6 +890,15 @@ try {
   console.error('✗ Failed to load Queue Monitor routes:', e.message);
 }
 
+// LalaVerse Press — Publisher Dashboard routes
+try {
+  const pressRoutes = require('./routes/press');
+  app.use('/api/v1/press', pressRoutes);
+  console.log('✓ LalaVerse Press routes loaded at /api/v1/press');
+} catch (e) {
+  console.error('✗ Failed to load LalaVerse Press routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({

@@ -25,7 +25,7 @@ function Sidebar({ isOpen, onClose }) {
   
   // Auto-expand Universe/StoryTeller group when on its sub-routes
   useEffect(() => {
-    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships') || location.pathname.startsWith('/therapy')) {
+    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships') || location.pathname.startsWith('/therapy') || location.pathname.startsWith('/press')) {
       setStoryExpanded(true);
     }
   }, [location.pathname]);
@@ -128,7 +128,7 @@ function Sidebar({ isOpen, onClose }) {
         {/* Universe group (includes StoryTeller tools) */}
         <div className="nav-group">
           <button
-            className={`nav-item ${isActive('/universe') || isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') || isActive('/therapy') ? 'active' : ''}`}
+            className={`nav-item ${isActive('/universe') || isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') || isActive('/therapy') || isActive('/press') ? 'active' : ''}`}
             onClick={() => {
               setStoryExpanded(!storyExpanded);
               if (!storyExpanded) {
@@ -187,6 +187,13 @@ function Sidebar({ isOpen, onClose }) {
               >
                 <span className="subitem-indicator">└─</span>
                 <span className="subitem-label">Therapy</span>
+              </button>
+              <button
+                className={`nav-subitem ${isActive('/press') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/press')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">The Press</span>
               </button>
             </div>
           )}

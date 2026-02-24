@@ -122,26 +122,26 @@ export default function CharacterAppearanceRules({ chapterCharacters = [], onCha
 
 const st = {
   panel: {
-    border: '1px solid rgba(30,25,20,0.1)',
-    borderRadius: 3, overflow: 'hidden', marginBottom: 10,
-    background: 'white',
+    border: '1px solid rgba(219,112,147,0.18)',
+    borderRadius: 6, overflow: 'hidden', marginBottom: 10,
+    background: '#FFF0F3',
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-    padding: '10px 14px', cursor: 'pointer', gap: 10,
+    padding: '12px 14px', cursor: 'pointer', gap: 10,
   },
   headerLeft: { display: 'flex', flexDirection: 'column', gap: 3, flex: 1 },
   eyebrow: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
-    letterSpacing: '0.2em', color: 'rgba(30,25,20,0.3)',
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    letterSpacing: '0.2em', color: 'rgba(180,80,120,0.55)',
   },
   summary: {
     fontFamily: "'Lora', 'Playfair Display', serif",
-    fontSize: 12.5, fontStyle: 'italic', color: 'rgba(30,25,20,0.6)',
+    fontSize: 13, fontStyle: 'italic', color: 'rgba(100,40,60,0.65)',
   },
-  caret: { fontFamily: 'DM Mono, monospace', fontSize: 7, color: 'rgba(30,25,20,0.2)' },
+  caret: { fontFamily: 'DM Mono, monospace', fontSize: 8, color: 'rgba(180,80,120,0.3)' },
   body: {
-    borderTop: '1px solid rgba(30,25,20,0.06)',
+    borderTop: '1px solid rgba(219,112,147,0.12)',
     padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 12,
   },
   grid: { display: 'flex', flexWrap: 'wrap', gap: 6 },
@@ -154,11 +154,11 @@ const st = {
   chipDot: { width: 7, height: 7, borderRadius: '50%', flexShrink: 0, transition: 'opacity 0.15s' },
   chipInfo: { display: 'flex', flexDirection: 'column', gap: 1 },
   chipName: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8.5,
+    fontFamily: 'DM Mono, monospace', fontSize: 9.5,
     fontWeight: 600, letterSpacing: '0.06em',
   },
   chipMode: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
+    fontFamily: 'DM Mono, monospace', fontSize: 8,
     letterSpacing: '0.04em', opacity: 0.6,
   },
   rules: { display: 'flex', flexDirection: 'column', gap: 8 },
@@ -170,46 +170,46 @@ const st = {
     display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer',
   },
   charRuleName: {
-    fontFamily: 'DM Mono, monospace', fontSize: 9,
-    fontWeight: 600, letterSpacing: '0.08em', color: 'rgba(30,25,20,0.7)',
+    fontFamily: 'DM Mono, monospace', fontSize: 10,
+    fontWeight: 600, letterSpacing: '0.08em', color: 'rgba(100,40,60,0.7)',
   },
   modeBadge: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
+    fontFamily: 'DM Mono, monospace', fontSize: 8,
     letterSpacing: '0.06em', flex: 1,
   },
   rulesCaret: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
-    color: 'rgba(30,25,20,0.2)',
+    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    color: 'rgba(180,80,120,0.3)',
   },
   criticalRule: {
     fontFamily: "'Lora', 'Playfair Display', serif",
-    fontSize: 12, fontStyle: 'italic',
-    color: 'rgba(30,25,20,0.65)', lineHeight: 1.55,
+    fontSize: 12.5, fontStyle: 'italic',
+    color: 'rgba(100,40,60,0.65)', lineHeight: 1.55,
   },
   ruleDetail: { display: 'flex', flexDirection: 'column', gap: 5 },
   ruleItem: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
-    color: 'rgba(30,25,20,0.5)', letterSpacing: '0.03em', lineHeight: 1.55,
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    color: 'rgba(100,40,60,0.5)', letterSpacing: '0.03em', lineHeight: 1.55,
   },
   violations: {
     display: 'flex', flexDirection: 'column', gap: 3, marginTop: 4,
-    background: 'rgba(184,92,56,0.04)', border: '1px solid rgba(184,92,56,0.12)',
-    borderRadius: 2, padding: '7px 9px',
+    background: 'rgba(184,92,56,0.06)', border: '1px solid rgba(184,92,56,0.15)',
+    borderRadius: 3, padding: '7px 9px',
   },
   violationsLabel: {
-    fontFamily: 'DM Mono, monospace', fontSize: 7,
+    fontFamily: 'DM Mono, monospace', fontSize: 8,
     letterSpacing: '0.15em', color: '#B85C38', marginBottom: 2,
   },
   violationItem: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
     color: 'rgba(184,92,56,0.7)', letterSpacing: '0.03em', lineHeight: 1.5,
   },
   entryNote: {
-    fontFamily: 'DM Mono, monospace', fontSize: 8,
-    color: 'rgba(30,25,20,0.45)', letterSpacing: '0.03em', lineHeight: 1.6,
+    fontFamily: 'DM Mono, monospace', fontSize: 9,
+    color: 'rgba(100,40,60,0.55)', letterSpacing: '0.03em', lineHeight: 1.6,
     marginTop: 3,
   },
-  entryLabel: { color: 'rgba(30,25,20,0.22)', letterSpacing: '0.12em', fontSize: 7 },
+  entryLabel: { color: 'rgba(180,80,120,0.35)', letterSpacing: '0.12em', fontSize: 8 },
   absenceNote: {
     fontFamily: 'DM Mono, monospace', fontSize: 8,
     color: 'rgba(139,105,20,0.7)', letterSpacing: '0.03em', lineHeight: 1.6,

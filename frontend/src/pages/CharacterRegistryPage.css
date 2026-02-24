@@ -41,7 +41,18 @@
   --sans:   'DM Sans', 'Inter', -apple-system, sans-serif;
   --mono:   'DM Mono', 'JetBrains Mono', monospace;
 
+  /* Elevated base sizing */
+  --fs-xs:   11px;
+  --fs-sm:   12px;
+  --fs-base: 14px;
+  --fs-md:   15px;
+  --fs-lg:   16px;
+  --fs-xl:   18px;
+  --fs-2xl:  22px;
+  --fs-3xl:  26px;
+
   font-family: var(--sans);
+  font-size: var(--fs-base);
   color: var(--ink);
   background: var(--bg);
   min-height: 100vh;
@@ -81,7 +92,7 @@
 
 .cr-header-brand {
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: 17px;
   font-weight: 700;
   color: var(--gold);
   letter-spacing: 0.04em;
@@ -89,7 +100,7 @@
 
 .cr-header-breadcrumb {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--ink-faint);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -103,7 +114,7 @@
 
 .cr-header-title {
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 24px;
   font-weight: 600;
   color: var(--ink);
   letter-spacing: 0.01em;
@@ -119,17 +130,17 @@
 .cr-header-btn {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 7px 14px;
+  border-radius: 8px;
+  padding: 8px 16px;
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--ink-dim);
   cursor: pointer;
   transition: all 0.15s;
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
 }
 
 .cr-header-btn:hover {
@@ -162,11 +173,11 @@
 }
 
 .cr-search-input {
-  width: 180px;
-  padding: 7px 12px 7px 30px;
+  width: 200px;
+  padding: 8px 14px 8px 32px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 12px;
+  border-radius: 8px;
+  font-size: var(--fs-base);
   font-family: var(--sans);
   color: var(--ink);
   background: var(--surface);
@@ -176,7 +187,8 @@
 
 .cr-search-input:focus {
   border-color: var(--gold);
-  width: 220px;
+  width: 260px;
+  box-shadow: 0 0 0 3px var(--gold-bg);
 }
 
 .cr-search-input::placeholder {
@@ -185,8 +197,8 @@
 
 .cr-search-icon {
   position: absolute;
-  left: 9px;
-  font-size: 12px;
+  left: 10px;
+  font-size: var(--fs-base);
   color: var(--ink-faint);
   pointer-events: none;
 }
@@ -202,8 +214,8 @@
 .cr-view-toggle button {
   background: none;
   border: none;
-  padding: 7px 11px;
-  font-size: 13px;
+  padding: 8px 12px;
+  font-size: var(--fs-md);
   cursor: pointer;
   color: var(--ink-faint);
   transition: all 0.12s;
@@ -236,7 +248,7 @@
 
 .cr-filter-label {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--ink-faint);
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -247,9 +259,9 @@
   background: none;
   border: 1px solid var(--border);
   border-radius: 20px;
-  padding: 5px 14px;
+  padding: 6px 16px;
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink-dim);
   cursor: pointer;
@@ -279,7 +291,7 @@
   background: none;
   border: none;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--ink-faint);
   cursor: pointer;
   padding: 4px 8px;
@@ -312,11 +324,11 @@
 }
 
 .cr-registry-select {
-  padding: 6px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: var(--fs-base);
   color: var(--ink);
   background: var(--surface);
   cursor: pointer;
@@ -324,7 +336,7 @@
 
 .cr-registry-meta {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--ink-faint);
   letter-spacing: 0.04em;
 }
@@ -348,14 +360,14 @@
 
 .cr-stat-count {
   font-family: var(--serif);
-  font-size: 22px;
+  font-size: 26px;
   font-weight: 700;
   color: var(--ink);
 }
 
 .cr-stat-label {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--ink-faint);
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -441,16 +453,16 @@
 
 .cr-card-name {
   font-family: var(--serif);
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 600;
   color: var(--ink);
-  margin: 0 0 3px;
+  margin: 0 0 4px;
   line-height: 1.25;
 }
 
 .cr-card-role {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
   margin-bottom: 6px;
@@ -466,7 +478,7 @@
 
 .cr-card-archetype {
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink-dim);
   margin-bottom: 8px;
 }
@@ -480,21 +492,21 @@
 
 .cr-card-era {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   color: var(--ink-faint);
   letter-spacing: 0.04em;
   background: var(--surface2);
-  padding: 3px 8px;
-  border-radius: 3px;
+  padding: 3px 10px;
+  border-radius: 4px;
 }
 
 .cr-card-status-badge {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  padding: 3px 8px;
-  border-radius: 3px;
+  padding: 3px 10px;
+  border-radius: 4px;
 }
 
 .cr-card-status-badge.draft     { background: var(--surface2);   color: var(--ink-faint); }
@@ -521,7 +533,7 @@
 
 .cr-card-hover-desire {
   font-family: var(--serif);
-  font-size: 13px;
+  font-size: var(--fs-md);
   font-style: italic;
   color: rgba(255,255,255,0.85);
   margin-bottom: 6px;
@@ -530,7 +542,7 @@
 
 .cr-card-hover-essence {
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: rgba(255,255,255,0.55);
   line-height: 1.4;
 }
@@ -553,10 +565,10 @@
   display: grid;
   grid-template-columns: 48px 1fr 160px 120px 100px 100px 120px;
   gap: 0;
-  padding: 10px 16px;
+  padding: 12px 16px;
   background: var(--surface2);
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -595,37 +607,37 @@
 
 .cr-list-name {
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-weight: 600;
   color: var(--ink);
 }
 
 .cr-list-subtitle {
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--ink-faint);
 }
 
 .cr-list-role {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
 
 .cr-list-archetype {
-  font-size: 12px;
+  font-size: var(--fs-sm);
   color: var(--ink-dim);
 }
 
 .cr-list-era {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--ink-faint);
 }
 
 .cr-list-status {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
 }
@@ -638,10 +650,10 @@
 .cr-list-open-btn {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 5px 12px;
+  border-radius: 6px;
+  padding: 6px 14px;
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--ink-dim);
   cursor: pointer;
   transition: all 0.12s;
@@ -675,7 +687,7 @@
   background: none;
   border: none;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--ink-faint);
   cursor: pointer;
   padding: 4px 0;
@@ -744,7 +756,7 @@
 
 .cr-dossier-name {
   font-family: var(--serif);
-  font-size: 26px;
+  font-size: 28px;
   font-weight: 600;
   color: var(--ink);
   margin: 0;
@@ -753,7 +765,7 @@
 
 .cr-dossier-alias {
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink-faint);
   font-style: italic;
   margin-top: 2px;
@@ -773,7 +785,7 @@
 
 .cr-dossier-meta-label {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -781,7 +793,7 @@
 
 .cr-dossier-meta-value {
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink);
   font-weight: 500;
 }
@@ -793,10 +805,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  border-radius: 4px;
+  padding: 6px 14px;
+  border-radius: 6px;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.08em;
   text-transform: uppercase;
 }
@@ -828,12 +840,12 @@
 
 .cr-dossier-action-btn {
   width: 100%;
-  padding: 9px 14px;
+  padding: 10px 16px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--surface);
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--ink-dim);
   cursor: pointer;
@@ -876,12 +888,12 @@
 
 .cr-dossier-action-btn.revert {
   color: var(--ink-faint);
-  font-size: 11px;
+  font-size: var(--fs-sm);
 }
 
 .cr-dossier-finalized-label {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   color: var(--gold);
   letter-spacing: 0.1em;
   text-align: center;
@@ -900,15 +912,15 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  padding: 3px 10px;
+  padding: 4px 12px;
   background: var(--surface2);
   border-radius: 12px;
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--ink-dim);
 }
 
 .cr-dossier-rel-chip-icon {
-  font-size: 10px;
+  font-size: 12px;
 }
 
 
@@ -947,12 +959,12 @@
 /* Tab-level edit button */
 .cr-tab-edit-btn {
   flex-shrink: 0;
-  padding: 10px 18px;
+  padding: 10px 20px;
   background: var(--gold-bg);
   border: none;
   border-left: 1px solid var(--border);
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--gold);
@@ -985,7 +997,7 @@
   border: none;
   padding: 14px 18px;
   font-family: var(--sans);
-  font-size: 12px;
+  font-size: var(--fs-base);
   font-weight: 500;
   color: var(--ink-faint);
   cursor: pointer;
@@ -1032,7 +1044,7 @@
 
 .cr-dossier-section-title {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1041,10 +1053,10 @@
 .cr-dossier-edit-btn {
   background: var(--gold-bg);
   border: 1px solid var(--gold-border);
-  border-radius: 6px;
-  padding: 8px 16px;
+  border-radius: 8px;
+  padding: 8px 18px;
   font-family: var(--mono);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--gold);
@@ -1054,7 +1066,7 @@
   z-index: 5;
   -webkit-tap-highlight-color: rgba(184, 150, 58, 0.2);
   touch-action: manipulation;
-  min-height: 36px;
+  min-height: 38px;
   min-width: 64px;
   display: inline-flex;
   align-items: center;
@@ -1098,7 +1110,7 @@
 
 .cr-dossier-row-label {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1107,9 +1119,9 @@
 
 .cr-dossier-row-value {
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: var(--fs-md);
   color: var(--ink);
-  line-height: 1.5;
+  line-height: 1.55;
   min-width: 0;
   overflow-wrap: break-word;
   word-break: break-word;
@@ -1122,7 +1134,7 @@
 
 .cr-dossier-row-value.serif {
   font-family: var(--serif);
-  font-size: 15px;
+  font-size: var(--fs-lg);
   font-style: italic;
 }
 
@@ -1193,7 +1205,7 @@
 
 .cr-dossier-triad-label {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1207,9 +1219,9 @@
 
 .cr-dossier-triad-text {
   font-family: var(--serif);
-  font-size: 14px;
+  font-size: var(--fs-md);
   color: var(--ink);
-  line-height: 1.5;
+  line-height: 1.55;
   margin: 0;
 }
 
@@ -1230,7 +1242,7 @@
 
 .cr-dossier-duality-label {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1240,9 +1252,9 @@
 
 .cr-dossier-duality-text {
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink);
-  line-height: 1.5;
+  line-height: 1.55;
   margin: 0;
 }
 
@@ -1255,12 +1267,12 @@
 }
 
 .cr-dossier-pill {
-  padding: 4px 12px;
+  padding: 5px 14px;
   background: var(--surface2);
   border: 1px solid var(--border);
   border-radius: 14px;
   font-family: var(--sans);
-  font-size: 11px;
+  font-size: var(--fs-sm);
   color: var(--ink-dim);
 }
 
@@ -1280,7 +1292,7 @@
 
 .cr-dossier-rel-type {
   font-family: var(--mono);
-  font-size: 9px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--ink-faint);
@@ -1289,9 +1301,9 @@
 
 .cr-dossier-rel-names {
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink);
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 
@@ -1308,9 +1320,9 @@
 .cr-edit-cancel-btn {
   background: none;
   border: 1px solid var(--border);
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 8px 18px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   color: var(--ink-dim);
   cursor: pointer;
   min-height: 40px;
@@ -1320,9 +1332,9 @@
 .cr-edit-save-btn {
   background: var(--pink);
   border: none;
-  border-radius: 5px;
+  border-radius: 6px;
   padding: 8px 22px;
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: #fff;
   cursor: pointer;
@@ -1346,29 +1358,30 @@
 .cr-edit-label {
   display: block;
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: var(--fs-xs);
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  margin-bottom: 5px;
+  margin-bottom: 6px;
 }
 
 .cr-edit-input {
   width: 100%;
-  padding: 9px 12px;
+  padding: 10px 14px;
   border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 13px;
+  border-radius: 8px;
+  font-size: var(--fs-base);
   font-family: var(--sans);
   color: var(--ink);
   background: var(--surface);
   box-sizing: border-box;
   outline: none;
-  transition: border-color 0.15s;
+  transition: border-color 0.15s, box-shadow 0.15s;
 }
 
 .cr-edit-input:focus {
   border-color: var(--gold);
+  box-shadow: 0 0 0 3px var(--gold-bg);
 }
 
 .cr-edit-textarea {
@@ -1408,7 +1421,7 @@
 
 .cr-modal-title {
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: var(--fs-2xl);
   font-weight: 600;
   color: var(--ink);
   margin: 0 0 20px;
@@ -1438,24 +1451,25 @@
 
 .cr-empty-title {
   font-family: var(--serif);
-  font-size: 20px;
+  font-size: var(--fs-2xl);
   color: var(--ink-dim);
   margin: 0 0 8px;
 }
 
 .cr-empty-desc {
-  font-size: 13px;
+  font-size: var(--fs-md);
   color: var(--ink-faint);
   margin: 0 0 24px;
+  line-height: 1.5;
 }
 
 .cr-empty-btn {
   background: var(--pink);
   border: none;
-  border-radius: 6px;
-  padding: 10px 22px;
+  border-radius: 8px;
+  padding: 11px 24px;
   font-family: var(--sans);
-  font-size: 13px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: #fff;
   cursor: pointer;
@@ -1475,9 +1489,9 @@
   bottom: 24px;
   left: 50%;
   transform: translateX(-50%);
-  padding: 10px 22px;
-  border-radius: 8px;
-  font-size: 13px;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: var(--fs-base);
   font-weight: 600;
   color: #fff;
   z-index: 9999;
@@ -1503,7 +1517,7 @@
   justify-content: center;
   padding: 80px;
   font-family: var(--mono);
-  font-size: 12px;
+  font-size: var(--fs-base);
   color: var(--ink-faint);
   letter-spacing: 0.06em;
 }
@@ -1559,7 +1573,7 @@
     gap: 8px;
   }
 
-  .cr-header-btn { padding: 9px 14px; font-size: 12px; min-height: 40px; }
+  .cr-header-btn { padding: 9px 14px; font-size: 13px; min-height: 40px; }
   .cr-header-btn.primary { min-height: 40px; }
 
   .cr-search-input { width: 100%; flex: 1; min-width: 120px; }
@@ -1567,7 +1581,7 @@
   .cr-search-wrap { flex: 1; min-width: 120px; }
 
   .cr-filters { padding: 10px 16px; }
-  .cr-filter-pill { padding: 7px 14px; font-size: 12px; min-height: 36px; }
+  .cr-filter-pill { padding: 7px 14px; font-size: 13px; min-height: 36px; }
   .cr-content { padding: 20px 16px 60px; }
 
   .cr-stats-strip {
@@ -1655,9 +1669,9 @@
   }
 
   .cr-header-left { gap: 1px; }
-  .cr-header-brand { font-size: 13px; }
-  .cr-header-breadcrumb { font-size: 9px; }
-  .cr-header-title { font-size: 16px; }
+  .cr-header-brand { font-size: 14px; }
+  .cr-header-breadcrumb { font-size: 10px; }
+  .cr-header-title { font-size: 17px; }
 
   .cr-header-right {
     gap: 6px;
@@ -1666,7 +1680,7 @@
 
   .cr-header-btn {
     padding: 10px 12px;
-    font-size: 12px;
+    font-size: 13px;
     min-height: 42px;
     flex: 1;
     justify-content: center;
@@ -1685,8 +1699,8 @@
   .cr-view-toggle button { padding: 9px 14px; font-size: 14px; }
 
   .cr-filters { padding: 8px 12px; gap: 6px; }
-  .cr-filter-pill { padding: 8px 12px; font-size: 11px; min-height: 36px; }
-  .cr-filter-label { font-size: 9px; }
+  .cr-filter-pill { padding: 8px 12px; font-size: 12px; min-height: 36px; }
+  .cr-filter-label { font-size: 10px; }
 
   .cr-content { padding: 16px 12px 48px; }
 
@@ -1694,8 +1708,8 @@
     gap: 8px 16px;
     padding: 10px 12px;
   }
-  .cr-stat-count { font-size: 18px; }
-  .cr-stat-label { font-size: 9px; }
+  .cr-stat-count { font-size: 20px; }
+  .cr-stat-label { font-size: 10px; }
 
   .cr-grid {
     grid-template-columns: 1fr;
@@ -1713,8 +1727,8 @@
   .cr-card-portrait { height: 160px; }
   .cr-card-body { padding: 14px 16px 16px; }
   .cr-card-name { font-size: 17px; }
-  .cr-card-role { font-size: 10px; }
-  .cr-card-status-badge { font-size: 9px; }
+  .cr-card-role { font-size: 11px; }
+  .cr-card-status-badge { font-size: 10px; }
   .cr-card-hover { display: none; } /* No hover on touch */
 
   .cr-list-row { padding: 14px 12px; min-height: 48px; }
@@ -1745,7 +1759,7 @@
     scrollbar-width: none;
   }
   .cr-dossier-tabs::-webkit-scrollbar { display: none; }
-  .cr-dossier-tab { padding: 11px 10px; font-size: 12px; }
+  .cr-dossier-tab { padding: 11px 10px; font-size: 13px; }
   .cr-dossier-tab-content { padding: 16px 12px 32px; }
   .cr-dossier-row { grid-template-columns: 1fr; gap: 2px; }
   .cr-dossier-section-header { flex-wrap: wrap; gap: 8px; }
@@ -1779,24 +1793,24 @@
 /* ── Very small phones / Samsung Galaxy S (≤360px) ── */
 @media (max-width: 360px) {
   .cr-header { padding: 8px 10px; }
-  .cr-header-title { font-size: 15px; }
-  .cr-header-brand { font-size: 12px; }
-  .cr-header-breadcrumb { font-size: 8px; }
-  .cr-header-btn { font-size: 11px; padding: 8px 10px; }
+  .cr-header-title { font-size: 16px; }
+  .cr-header-brand { font-size: 13px; }
+  .cr-header-breadcrumb { font-size: 10px; }
+  .cr-header-btn { font-size: 12px; padding: 8px 10px; }
 
   .cr-filters { padding: 6px 10px; gap: 5px; }
-  .cr-filter-pill { padding: 6px 10px; font-size: 10px; }
-  .cr-filter-label { font-size: 8px; }
+  .cr-filter-pill { padding: 6px 10px; font-size: 11px; }
+  .cr-filter-label { font-size: 10px; }
 
   .cr-content { padding: 12px 8px 40px; }
   .cr-stats-strip { padding: 10px 10px; gap: 8px 14px; }
-  .cr-stat-count { font-size: 16px; }
-  .cr-stat-label { font-size: 8px; }
+  .cr-stat-count { font-size: 18px; }
+  .cr-stat-label { font-size: 10px; }
 
   .cr-grid { gap: 10px; }
   .cr-card-body { padding: 12px 14px; }
   .cr-card-name { font-size: 16px; }
-  .cr-card-role { font-size: 9px; }
+  .cr-card-role { font-size: 10px; }
   .cr-card-portrait { height: 130px; }
   .cr-card-portrait .cr-card-icon { font-size: 40px; }
   .cr-card-portrait .cr-card-initial { font-size: 52px; }
@@ -1814,28 +1828,28 @@
   .cr-dossier-name { font-size: 18px; }
   .cr-dossier-back { padding: 8px 8px; }
   .cr-dossier-tabs { padding: 0 4px; }
-  .cr-dossier-tab { padding: 10px 8px; font-size: 11px; }
+  .cr-dossier-tab { padding: 10px 8px; font-size: 12px; }
   .cr-dossier-tab-content { padding: 12px 8px 28px; }
   .cr-dossier-left { padding: 12px 8px; }
   .cr-dossier-portrait { max-width: 100px; }
   .cr-dossier-portrait .portrait-icon { font-size: 52px; }
   .cr-dossier-portrait .portrait-initial { font-size: 72px; }
-  .cr-dossier-meta-row { gap: 8px; font-size: 10px; }
-  .cr-dossier-row-label { font-size: 10px; }
+  .cr-dossier-meta-row { gap: 8px; font-size: 11px; }
+  .cr-dossier-row-label { font-size: 11px; }
   .cr-dossier-row-value { font-size: 13px; }
   .cr-dossier-section-title { font-size: 12px; }
-  .cr-dossier-triad-label { font-size: 9px; }
+  .cr-dossier-triad-label { font-size: 10px; }
   .cr-dossier-triad-value { font-size: 13px; }
   .cr-dossier-action-btn { padding: 10px 12px; font-size: 13px; }
 
   .cr-registry-bar { gap: 6px; }
   .cr-registry-select { font-size: 13px; padding: 8px 10px; }
-  .cr-registry-meta { font-size: 9px; }
+  .cr-registry-meta { font-size: 10px; }
 
   .cr-list-row { padding: 12px 8px; }
   .cr-list-header { padding: 8px 8px; }
   .cr-list-name { font-size: 13px; }
-  .cr-list-role { font-size: 9px; }
+  .cr-list-role { font-size: 10px; }
 }
 
 /* ── Touch device improvements ── */
@@ -2107,10 +2121,10 @@
   }
 
   .cr-dossier-row-label {
-    font-size: 9px;
+    font-size: 10px;
   }
 
   .cr-dossier-row-value {
-    font-size: 13px;
+    font-size: 14px;
   }
 }
