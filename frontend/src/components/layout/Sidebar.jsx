@@ -25,7 +25,7 @@ function Sidebar({ isOpen, onClose }) {
   
   // Auto-expand Universe/StoryTeller group when on its sub-routes
   useEffect(() => {
-    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships') || location.pathname.startsWith('/therapy') || location.pathname.startsWith('/press')) {
+    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships') || location.pathname.startsWith('/therapy') || location.pathname.startsWith('/press') || location.pathname.startsWith('/start')) {
       setStoryExpanded(true);
     }
   }, [location.pathname]);
@@ -122,13 +122,10 @@ function Sidebar({ isOpen, onClose }) {
         {/* Home */}
         <NavItem icon="🏠" label="Home" path="/" />
         
-        {/* Session Briefing */}
-        <NavItem icon="◈" label="Session" path="/start" />
-        
         {/* Universe group (includes StoryTeller tools) */}
         <div className="nav-group">
           <button
-            className={`nav-item ${isActive('/universe') || isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') || isActive('/therapy') || isActive('/press') ? 'active' : ''}`}
+            className={`nav-item ${isActive('/universe') || isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') || isActive('/therapy') || isActive('/press') || isActive('/start') ? 'active' : ''}`}
             onClick={() => {
               setStoryExpanded(!storyExpanded);
               if (!storyExpanded) {
@@ -152,6 +149,13 @@ function Sidebar({ isOpen, onClose }) {
               >
                 <span className="subitem-indicator">└─</span>
                 <span className="subitem-label">Overview</span>
+              </button>
+              <button
+                className={`nav-subitem ${isActive('/start') ? 'active' : ''}`}
+                onClick={() => handleNavigate('/start')}
+              >
+                <span className="subitem-indicator">└─</span>
+                <span className="subitem-label">Session</span>
               </button>
               <button
                 className={`nav-subitem ${isActive('/storyteller') ? 'active' : ''}`}

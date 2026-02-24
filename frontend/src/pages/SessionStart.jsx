@@ -21,7 +21,7 @@ function SessionStart() {
   const fetchBrief = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API}/api/v1/session/brief`);
+      const res = await fetch(`${API}/session/brief`);
       if (!res.ok) throw new Error('Failed to load briefing');
       const data = await res.json();
       setBrief(data);
