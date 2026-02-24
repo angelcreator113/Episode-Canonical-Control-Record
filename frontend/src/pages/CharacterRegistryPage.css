@@ -316,29 +316,74 @@
 }
 
 /* Registry selector (when multiple registries) */
-.cr-registry-bar {
+/* Registry tab pills */
+.cr-registry-tabs {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   margin-bottom: 24px;
+  flex-wrap: wrap;
 }
 
-.cr-registry-select {
-  padding: 8px 14px;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+.cr-registry-pill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  border: 1.5px solid var(--border);
+  border-radius: 24px;
   font-family: var(--sans);
   font-size: var(--fs-base);
-  color: var(--ink);
+  font-weight: 500;
+  color: var(--ink-soft);
   background: var(--surface);
   cursor: pointer;
+  transition: all .2s ease;
+  white-space: nowrap;
 }
 
-.cr-registry-meta {
+.cr-registry-pill:hover {
+  border-color: var(--wine);
+  color: var(--wine);
+  background: rgba(114,47,55,.04);
+}
+
+.cr-registry-pill.active {
+  border-color: var(--wine);
+  background: var(--wine);
+  color: #fff;
+  font-weight: 600;
+  box-shadow: 0 2px 8px rgba(114,47,55,.18);
+}
+
+.cr-pill-title {
+  letter-spacing: .02em;
+}
+
+.cr-pill-tag {
   font-family: var(--mono);
-  font-size: var(--fs-xs);
+  font-size: 10px;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  opacity: .7;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(255,255,255,.15);
+}
+
+.cr-registry-pill:not(.active) .cr-pill-tag {
+  background: rgba(0,0,0,.06);
+}
+
+.cr-registry-pill.cr-pill-add {
+  width: 38px;
+  height: 38px;
+  padding: 0;
+  justify-content: center;
+  font-size: 20px;
+  font-weight: 300;
   color: var(--ink-faint);
-  letter-spacing: 0.04em;
+  border-style: dashed;
 }
 
 /* Stats strip */
@@ -1782,12 +1827,9 @@
 
   .cr-toast { font-size: 13px; padding: 10px 16px; max-width: calc(100vw - 32px); }
 
-  .cr-registry-bar {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-  .cr-registry-select { width: 100%; font-size: 14px; padding: 10px 12px; min-height: 42px; }
+  .cr-registry-tabs { gap: 8px; }
+  .cr-registry-pill { padding: 8px 14px; font-size: 13px; }
+  .cr-pill-tag { font-size: 9px; }
 }
 
 /* ── Very small phones / Samsung Galaxy S (≤360px) ── */
@@ -1842,9 +1884,10 @@
   .cr-dossier-triad-value { font-size: 13px; }
   .cr-dossier-action-btn { padding: 10px 12px; font-size: 13px; }
 
-  .cr-registry-bar { gap: 6px; }
-  .cr-registry-select { font-size: 13px; padding: 8px 10px; }
-  .cr-registry-meta { font-size: 10px; }
+  .cr-registry-tabs { gap: 5px; }
+  .cr-registry-pill { padding: 7px 12px; font-size: 12px; }
+  .cr-pill-tag { display: none; }
+  .cr-pill-add { width: 32px; height: 32px; font-size: 18px; }
 
   .cr-list-row { padding: 12px 8px; }
   .cr-list-header { padding: 8px 8px; }
@@ -1877,7 +1920,7 @@
   .cr-view-toggle button,
   .cr-list-row,
   .cr-empty-btn,
-  .cr-registry-select {
+  .cr-registry-pill {
     touch-action: manipulation;
   }
 
@@ -1947,13 +1990,12 @@
   .cr-edit-input.cr-edit-textarea,
   .cr-edit-input.cr-edit-select,
   select.cr-edit-select,
-  select.cr-registry-select {
+  .cr-registry-pill {
     font-size: 16px;
   }
 
   .cr-edit-input.cr-edit-select,
-  select.cr-edit-select,
-  select.cr-registry-select {
+  select.cr-edit-select {
     min-height: 44px;
   }
 }
