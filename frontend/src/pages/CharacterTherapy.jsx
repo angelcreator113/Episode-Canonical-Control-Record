@@ -280,6 +280,7 @@ export default function CharacterTherapy() {
   const [showReveal, setShowReveal]       = useState(false);
   const [dejaVu, setDejaVu]              = useState(null);
   const [sidebarOpen, setSidebarOpen]     = useState(false);
+  const [waiting, setWaiting]             = useState([]);
 
   const chatRef = useRef(null);
 
@@ -307,6 +308,20 @@ export default function CharacterTherapy() {
       }
     })();
   }, [registryId]);
+
+  /* == Load waiting room (characters who knocked) =================== */
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(`${API}/waiting`);
+        const data = await res.json();
+        if (Array.isArray(data)) setWaiting(data);
+      } catch (e) {
+        console.error('Failed to load waiting sessions:', e);
+      }
+    })();
+  }, [selectedChar]);
 
   /* == Load psychological profile for selected character ============= */
 
@@ -563,6 +578,66 @@ export default function CharacterTherapy() {
           <div className="therapy-sidebar-title">Character Therapy</div>
         </div>
         <div className="therapy-char-list">
+          {/* ── Waiting Room ── */}
+          {waiting.length > 0 && (
+            <div className="therapy-waiting-room">
+              <div style={{
+                padding: '8px 14px',
+                fontSize: 10,
+                fontWeight: 600,
+                letterSpacing: '0.08em',
+                textTransform: 'uppercase',
+                color: '#c45c5c',
+                borderBottom: '1px solid rgba(200,100,100,0.15)',
+              }}>
+                Waiting Room
+              </div>
+              {waiting.map(w => {
+                const typeColor =
+                  w.character_type === 'pnos' ? '#c45c5c'
+                  : w.character_type === 'press' ? '#c2185b'
+                  : '#7a6565';
+                return (
+                  <button
+                    key={w.id}
+                    className="therapy-char-btn waiting"
+                    style={{ borderLeft: `3px solid ${typeColor}` }}
+                    onClick={async () => {
+                      const match = characters.find(c =>
+                        c.id === w.character_id || c.slug === w.character_slug
+                      );
+                      if (match) {
+                        selectCharacter(match);
+                        try {
+                          await fetch(`${API}/clear-waiting/${w.id}`, { method: 'POST' });
+                          setWaiting(prev => prev.filter(p => p.id !== w.id));
+                        } catch {}
+                      }
+                    }}
+                  >
+                    <span className="char-icon" style={{ color: typeColor }}>◇</span>
+                    <span className="char-name" style={{ fontSize: 11 }}>
+                      {w.character_name}
+                    </span>
+                    <span style={{
+                      display: 'block',
+                      fontSize: 9,
+                      color: '#a08080',
+                      marginTop: 2,
+                      fontStyle: 'italic',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      maxWidth: '160px',
+                    }}>
+                      {w.knock_message?.slice(0, 60) || 'Waiting outside the door…'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          {/* ── Character List ── */}
           {characters.map(c => {
             const nature = getCharNature(c);
             return (
@@ -580,7 +655,7 @@ export default function CharacterTherapy() {
             );
           })}
           {characters.length === 0 && (
-            <div style={{ padding: '20px 14px', color: '#444', fontSize: 11, textAlign: 'center' }}>
+            <div style={{ padding: '20px 14px', color: '#a08080', fontSize: 11, textAlign: 'center' }}>
               No characters in this registry
             </div>
           )}

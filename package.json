@@ -88,6 +88,7 @@
     "jwks-rsa": "^3.2.2",
     "multer": "^2.0.2",
     "node-pg-migrate": "^8.0.4",
+    "nodemailer": "^8.0.1",
     "pdfkit": "^0.17.2",
     "pg": "^8.18.0",
     "pg-hstore": "^2.3.4",

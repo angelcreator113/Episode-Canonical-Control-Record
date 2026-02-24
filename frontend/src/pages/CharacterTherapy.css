@@ -1,7 +1,7 @@
 /**
  * CharacterTherapy.css
  *
- * Psychological Narrative Engine — dark cinematic UI
+ * Psychological Narrative Engine — light pink editorial UI
  * Mobile-first responsive design with proper touch targets
  */
 
@@ -10,8 +10,8 @@
 .therapy-container {
   display: flex;
   height: 100vh;
-  background: #0a0a0c;
-  color: #c8c8d0;
+  background: #fdf8f6;
+  color: #3a2e2e;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
   overflow: hidden;
   position: relative;
@@ -22,8 +22,8 @@
 .therapy-sidebar {
   width: 220px;
   min-width: 220px;
-  background: linear-gradient(180deg, #0d0d10, #08080b);
-  border-right: 1px solid #1a1a22;
+  background: linear-gradient(180deg, #fff5f2, #fef0ec);
+  border-right: 1px solid #f0ddd8;
   display: flex;
   flex-direction: column;
   overflow-y: auto;
@@ -32,20 +32,20 @@
 
 .therapy-sidebar-header {
   padding: 16px 14px 12px;
-  border-bottom: 1px solid #1a1a22;
+  border-bottom: 1px solid #f0ddd8;
 }
 
 .therapy-sidebar-label {
   font-size: 8px;
   letter-spacing: 2.5px;
   text-transform: uppercase;
-  color: #555;
+  color: #a08080;
   margin-bottom: 6px;
 }
 
 .therapy-sidebar-title {
   font-size: 13px;
-  color: #e0e0e8;
+  color: #3a2e2e;
   font-weight: 300;
   letter-spacing: 0.5px;
 }
@@ -63,7 +63,7 @@
   padding: 10px 14px;
   background: transparent;
   border: none;
-  color: #888;
+  color: #7a6565;
   font-size: 11px;
   cursor: pointer;
   transition: all 0.15s;
@@ -72,14 +72,14 @@
 }
 
 .therapy-char-btn:hover {
-  background: rgba(255, 255, 255, 0.03);
-  color: #c8c8d0;
+  background: rgba(200, 140, 140, 0.08);
+  color: #3a2e2e;
 }
 
 .therapy-char-btn.active {
-  background: rgba(212, 175, 55, 0.06);
-  color: #d4af37;
-  border-left: 2px solid #d4af37;
+  background: rgba(200, 100, 100, 0.08);
+  color: #c45c5c;
+  border-left: 2px solid #c45c5c;
 }
 
 .therapy-char-btn .char-icon {
@@ -96,7 +96,7 @@
 .therapy-char-btn .char-sessions {
   margin-left: auto;
   font-size: 9px;
-  color: #555;
+  color: #a08080;
   flex-shrink: 0;
 }
 
@@ -109,12 +109,12 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #1a1a22;
-  border: 1px solid #2a2a35;
-  color: #d4af37;
+  background: #fff;
+  border: 1px solid #f0ddd8;
+  color: #c45c5c;
   font-size: 20px;
   cursor: pointer;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  box-shadow: 0 4px 12px rgba(180,120,120,0.15);
   align-items: center;
   justify-content: center;
 }
@@ -123,7 +123,7 @@
   display: none;
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,0.6);
+  background: rgba(60,40,40,0.3);
   z-index: 9;
 }
 
@@ -144,15 +144,15 @@
   align-items: center;
   gap: 12px;
   padding: 12px 20px;
-  border-bottom: 1px solid #1a1a22;
-  background: rgba(13, 13, 16, 0.9);
+  border-bottom: 1px solid #f0ddd8;
+  background: rgba(255, 250, 248, 0.95);
   flex-shrink: 0;
 }
 
 .therapy-back-btn {
   background: none;
-  border: 1px solid #2a2a35;
-  color: #888;
+  border: 1px solid #e8d0cc;
+  color: #7a6565;
   padding: 6px 12px;
   border-radius: 4px;
   cursor: pointer;
@@ -162,8 +162,8 @@
 }
 
 .therapy-back-btn:hover {
-  color: #d4af37;
-  border-color: #d4af37;
+  color: #c45c5c;
+  border-color: #c45c5c;
 }
 
 .therapy-header-info {
@@ -173,7 +173,7 @@
 
 .therapy-header-name {
   font-size: 14px;
-  color: #e0e0e8;
+  color: #3a2e2e;
   font-weight: 300;
   white-space: nowrap;
   overflow: hidden;
@@ -182,7 +182,7 @@
 
 .therapy-header-defense {
   font-size: 9px;
-  color: #666;
+  color: #a08080;
   text-transform: uppercase;
   letter-spacing: 1.5px;
   margin-top: 2px;
@@ -190,7 +190,7 @@
 
 .therapy-session-count {
   font-size: 9px;
-  color: #555;
+  color: #a08080;
   letter-spacing: 1px;
   text-transform: uppercase;
   flex-shrink: 0;
@@ -213,7 +213,7 @@
 }
 
 .therapy-chat::-webkit-scrollbar-thumb {
-  background: #222;
+  background: #e0ccc8;
   border-radius: 2px;
 }
 
@@ -249,9 +249,9 @@
   margin-bottom: 4px;
 }
 
-.therapy-msg.character .therapy-msg-sender { color: #d4af37; }
-.therapy-msg.author .therapy-msg-sender { color: #888; text-align: right; }
-.therapy-msg.system .therapy-msg-sender { color: #555; text-align: center; }
+.therapy-msg.character .therapy-msg-sender { color: #c45c5c; }
+.therapy-msg.author .therapy-msg-sender { color: #7a6565; text-align: right; }
+.therapy-msg.system .therapy-msg-sender { color: #a08080; text-align: center; }
 
 .therapy-msg-bubble {
   padding: 14px 18px;
@@ -262,21 +262,21 @@
 }
 
 .therapy-msg.character .therapy-msg-bubble {
-  background: rgba(212, 175, 55, 0.04);
-  border: 1px solid rgba(212, 175, 55, 0.1);
-  color: #d4d0c0;
+  background: rgba(200, 100, 100, 0.06);
+  border: 1px solid rgba(200, 100, 100, 0.15);
+  color: #4a3535;
 }
 
 .therapy-msg.author .therapy-msg-bubble {
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid #1a1a22;
-  color: #c8c8d0;
+  background: rgba(240, 220, 215, 0.4);
+  border: 1px solid #f0ddd8;
+  color: #3a2e2e;
 }
 
 .therapy-msg.system .therapy-msg-bubble {
-  background: rgba(100, 100, 120, 0.05);
-  border: 1px solid rgba(100, 100, 120, 0.1);
-  color: #777;
+  background: rgba(200, 180, 175, 0.1);
+  border: 1px solid rgba(200, 180, 175, 0.2);
+  color: #8a7070;
   font-style: italic;
   text-align: center;
 }
@@ -285,14 +285,14 @@
   display: inline-block;
   margin-top: 8px;
   font-size: 9px;
-  color: #d4af37;
+  color: #c45c5c;
   opacity: 0.6;
   letter-spacing: 1px;
 }
 
 /* Grief coloring */
 .therapy-msg.character.grief .therapy-msg-bubble {
-  border-color: rgba(70, 70, 130, 0.2);
+  border-color: rgba(100, 100, 180, 0.2);
 }
 
 /* ── Typing Indicator ───────────────────────────────────── */
@@ -307,7 +307,7 @@
 
 .therapy-typing-label {
   font-size: 9px;
-  color: #d4af37;
+  color: #c45c5c;
   text-transform: uppercase;
   letter-spacing: 1.5px;
   opacity: 0.5;
@@ -318,7 +318,7 @@
   width: 4px;
   height: 4px;
   border-radius: 50%;
-  background: #d4af37;
+  background: #c45c5c;
   opacity: 0.3;
   animation: typingPulse 1.4s infinite;
 }
@@ -335,8 +335,8 @@
 
 .therapy-input-area {
   padding: 16px 20px;
-  border-top: 1px solid #1a1a22;
-  background: rgba(10, 10, 12, 0.95);
+  border-top: 1px solid #f0ddd8;
+  background: rgba(255, 250, 248, 0.97);
   flex-shrink: 0;
 }
 
@@ -350,9 +350,9 @@
 .therapy-event-input {
   flex: 1;
   min-width: 200px;
-  background: #111118;
-  border: 1px solid #222230;
-  color: #c8c8d0;
+  background: #fff;
+  border: 1px solid #e8d0cc;
+  color: #3a2e2e;
   padding: 10px 14px;
   border-radius: 4px;
   font-size: 11px;
@@ -362,19 +362,19 @@
 }
 
 .therapy-event-input::placeholder {
-  color: #444;
+  color: #bba0a0;
 }
 
 .therapy-event-input:focus {
-  border-color: rgba(212, 175, 55, 0.3);
+  border-color: rgba(200, 100, 100, 0.4);
 }
 
 .therapy-event-btn {
   padding: 10px 16px;
   border-radius: 4px;
-  border: 1px solid #2a2a35;
+  border: 1px solid #e8d0cc;
   background: transparent;
-  color: #888;
+  color: #7a6565;
   font-size: 10px;
   cursor: pointer;
   text-transform: uppercase;
@@ -385,8 +385,8 @@
 }
 
 .therapy-event-btn:hover:not(:disabled) {
-  color: #d4af37;
-  border-color: #d4af37;
+  color: #c45c5c;
+  border-color: #c45c5c;
 }
 
 .therapy-event-btn:disabled {
@@ -401,9 +401,9 @@
 
 .therapy-respond-input {
   flex: 1;
-  background: #111118;
-  border: 1px solid #222230;
-  color: #c8c8d0;
+  background: #fff;
+  border: 1px solid #e8d0cc;
+  color: #3a2e2e;
   padding: 10px 14px;
   border-radius: 4px;
   font-size: 11px;
@@ -413,19 +413,19 @@
 }
 
 .therapy-respond-input::placeholder {
-  color: #444;
+  color: #bba0a0;
 }
 
 .therapy-respond-input:focus {
-  border-color: rgba(212, 175, 55, 0.3);
+  border-color: rgba(200, 100, 100, 0.4);
 }
 
 .therapy-respond-btn {
   padding: 10px 20px;
   border-radius: 4px;
-  border: 1px solid rgba(212, 175, 55, 0.2);
-  background: rgba(212, 175, 55, 0.05);
-  color: #d4af37;
+  border: 1px solid rgba(200, 100, 100, 0.3);
+  background: rgba(200, 100, 100, 0.06);
+  color: #c45c5c;
   font-size: 10px;
   cursor: pointer;
   text-transform: uppercase;
@@ -436,7 +436,7 @@
 }
 
 .therapy-respond-btn:hover:not(:disabled) {
-  background: rgba(212, 175, 55, 0.1);
+  background: rgba(200, 100, 100, 0.12);
 }
 
 .therapy-respond-btn:disabled {
@@ -464,9 +464,9 @@
 .therapy-action-btn {
   padding: 8px 12px;
   border-radius: 3px;
-  border: 1px solid #1a1a22;
+  border: 1px solid #f0ddd8;
   background: transparent;
-  color: #555;
+  color: #a08080;
   font-size: 9px;
   cursor: pointer;
   text-transform: uppercase;
@@ -477,28 +477,28 @@
 }
 
 .therapy-action-btn:hover {
-  color: #888;
-  border-color: #2a2a35;
+  color: #7a6565;
+  border-color: #e0ccc8;
 }
 
-.therapy-action-btn.reveal { color: #8b4513; }
-.therapy-action-btn.reveal:hover { border-color: #8b4513; }
-.therapy-action-btn.close-session { color: #444; }
-.therapy-action-btn.close-session:hover { color: #d4af37; }
+.therapy-action-btn.reveal { color: #8b6513; }
+.therapy-action-btn.reveal:hover { border-color: #8b6513; }
+.therapy-action-btn.close-session { color: #a08080; }
+.therapy-action-btn.close-session:hover { color: #c45c5c; }
 
 /* ── Psychological State Panel ──────────────────────────── */
 
 .therapy-psych-panel {
   padding: 16px 14px;
-  border-top: 1px solid #1a1a22;
-  background: rgba(13, 13, 16, 0.6);
+  border-top: 1px solid #f0ddd8;
+  background: rgba(255, 248, 245, 0.7);
 }
 
 .therapy-psych-title {
   font-size: 8px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #555;
+  color: #a08080;
   margin-bottom: 10px;
 }
 
@@ -517,13 +517,13 @@
   font-size: 8px;
   text-transform: uppercase;
   letter-spacing: 1.2px;
-  color: #555;
+  color: #a08080;
   margin-bottom: 4px;
 }
 
 .therapy-emotion-bar-bg {
   height: 3px;
-  background: #1a1a22;
+  background: #f0ddd8;
   border-radius: 2px;
   overflow: hidden;
 }
@@ -543,7 +543,7 @@
 
 .therapy-emotion-value {
   font-size: 8px;
-  color: #444;
+  color: #bba0a0;
   margin-top: 2px;
 }
 
@@ -557,20 +557,20 @@
 
 .therapy-knowledge-tier {
   padding: 8px;
-  border: 1px solid #1a1a22;
+  border: 1px solid #f0ddd8;
   border-radius: 3px;
 }
 
 .therapy-knowledge-tier.known {
-  border-color: rgba(212, 175, 55, 0.15);
+  border-color: rgba(200, 100, 100, 0.2);
 }
 
 .therapy-knowledge-tier.sensed {
-  border-color: rgba(100, 100, 200, 0.15);
+  border-color: rgba(100, 100, 200, 0.2);
 }
 
 .therapy-knowledge-tier.never {
-  border-color: rgba(139, 69, 19, 0.15);
+  border-color: rgba(160, 120, 80, 0.2);
 }
 
 .therapy-tier-label {
@@ -580,9 +580,9 @@
   margin-bottom: 6px;
 }
 
-.therapy-knowledge-tier.known .therapy-tier-label { color: #d4af37; }
+.therapy-knowledge-tier.known .therapy-tier-label { color: #c45c5c; }
 .therapy-knowledge-tier.sensed .therapy-tier-label { color: #6666cc; }
-.therapy-knowledge-tier.never .therapy-tier-label { color: #8b4513; }
+.therapy-knowledge-tier.never .therapy-tier-label { color: #a07840; }
 
 .therapy-tier-items {
   list-style: none;
@@ -592,7 +592,7 @@
 
 .therapy-tier-items li {
   font-size: 9px;
-  color: #666;
+  color: #7a6565;
   padding: 2px 0;
   line-height: 1.5;
 }
@@ -604,7 +604,7 @@
 
 .therapy-tier-empty {
   font-size: 9px;
-  color: #333;
+  color: #bba0a0;
   font-style: italic;
 }
 
@@ -613,7 +613,7 @@
 .therapy-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.85);
+  background: rgba(60, 40, 40, 0.4);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -622,8 +622,8 @@
 }
 
 .therapy-modal {
-  background: #0d0d10;
-  border: 1px solid #1a1a22;
+  background: #fff;
+  border: 1px solid #f0ddd8;
   border-radius: 6px;
   padding: 28px;
   width: 100%;
@@ -636,15 +636,15 @@
   font-size: 9px;
   letter-spacing: 2.5px;
   text-transform: uppercase;
-  color: #8b4513;
+  color: #8b6513;
   margin-bottom: 20px;
 }
 
 .therapy-reveal-textarea {
   width: 100%;
-  background: #111118;
-  border: 1px solid #222230;
-  color: #c8c8d0;
+  background: #fdf8f6;
+  border: 1px solid #e8d0cc;
+  color: #3a2e2e;
   padding: 12px;
   border-radius: 4px;
   font-size: 12px;
@@ -656,7 +656,7 @@
 }
 
 .therapy-reveal-textarea:focus {
-  border-color: rgba(139, 69, 19, 0.3);
+  border-color: rgba(160, 120, 80, 0.4);
 }
 
 .therapy-reveal-type-row {
@@ -670,10 +670,10 @@
   flex: 1;
   min-width: 80px;
   padding: 10px;
-  border: 1px solid #222230;
+  border: 1px solid #e8d0cc;
   border-radius: 4px;
   background: transparent;
-  color: #666;
+  color: #7a6565;
   font-size: 9px;
   cursor: pointer;
   text-transform: uppercase;
@@ -684,14 +684,14 @@
 }
 
 .therapy-reveal-type-btn.active {
-  border-color: #8b4513;
-  color: #8b4513;
-  background: rgba(139, 69, 19, 0.05);
+  border-color: #8b6513;
+  color: #8b6513;
+  background: rgba(160, 120, 80, 0.06);
 }
 
 .therapy-reveal-type-btn:hover:not(.active) {
-  border-color: #333;
-  color: #888;
+  border-color: #d0b8b0;
+  color: #5a4a4a;
 }
 
 .therapy-reveal-actions {
@@ -703,10 +703,10 @@
 
 .therapy-cancel-btn {
   padding: 10px 20px;
-  border: 1px solid #222230;
+  border: 1px solid #e8d0cc;
   border-radius: 4px;
   background: transparent;
-  color: #666;
+  color: #7a6565;
   font-size: 10px;
   cursor: pointer;
   min-height: 44px;
@@ -714,10 +714,10 @@
 
 .therapy-reveal-send-btn {
   padding: 10px 20px;
-  border: 1px solid rgba(139, 69, 19, 0.3);
+  border: 1px solid rgba(160, 120, 80, 0.3);
   border-radius: 4px;
-  background: rgba(139, 69, 19, 0.08);
-  color: #8b4513;
+  background: rgba(160, 120, 80, 0.08);
+  color: #8b6513;
   font-size: 10px;
   cursor: pointer;
   text-transform: uppercase;
@@ -744,17 +744,17 @@
 }
 
 @keyframes dejavuFlash {
-  0%   { background: rgba(0,0,0,0); }
-  15%  { background: rgba(70,70,130,0.15); }
-  40%  { background: rgba(70,70,130,0.1); }
-  100% { background: rgba(0,0,0,0); opacity: 0; }
+  0%   { background: rgba(255,250,248,0); }
+  15%  { background: rgba(200,150,200,0.12); }
+  40%  { background: rgba(200,150,200,0.06); }
+  100% { background: rgba(255,250,248,0); opacity: 0; }
 }
 
 .therapy-dejavu-text {
   font-size: 11px;
   letter-spacing: 4px;
   text-transform: uppercase;
-  color: rgba(100,100,200,0.5);
+  color: rgba(140,100,180,0.5);
   animation: dejavuTextFade 2.5s ease forwards;
 }
 
@@ -774,7 +774,7 @@
   align-items: center;
   justify-content: center;
   gap: 12px;
-  color: #333;
+  color: #bba0a0;
 }
 
 .therapy-empty-icon {
@@ -786,12 +786,12 @@
   font-size: 10px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #444;
+  color: #a08080;
 }
 
 .therapy-empty-sub {
   font-size: 10px;
-  color: #333;
+  color: #bba0a0;
   max-width: 260px;
   text-align: center;
   line-height: 1.6;
@@ -806,14 +806,14 @@
   align-items: center;
   justify-content: center;
   gap: 16px;
-  background: #0a0a0c;
+  background: #fdf8f6;
 }
 
 .therapy-loading-spinner {
   width: 24px;
   height: 24px;
-  border: 1.5px solid #1a1a22;
-  border-top-color: #d4af37;
+  border: 1.5px solid #f0ddd8;
+  border-top-color: #c45c5c;
   border-radius: 50%;
   animation: therapySpin 1s linear infinite;
 }
@@ -826,7 +826,7 @@
   font-size: 9px;
   letter-spacing: 2px;
   text-transform: uppercase;
-  color: #444;
+  color: #a08080;
 }
 
 /* ================================================================
@@ -860,6 +860,7 @@
     height: 100vh;
     z-index: 50;
     transition: left 0.25s ease;
+    background: linear-gradient(180deg, #fff5f2, #fef0ec);
   }
 
   .therapy-sidebar.mobile-open {

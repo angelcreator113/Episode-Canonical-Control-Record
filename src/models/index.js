@@ -78,6 +78,9 @@ let LalaEmergenceScene; // Lala Emergence Scene Detection model
 let CharacterRelationship; // Character Relationship Map model
 let CharacterTherapyProfile; // Character Therapy Psychological Narrative Engine model
 let PressCareer; // LalaVerse Press career tracking model
+let LalaverseBrand; // LalaVerse brand registry model
+let WardrobeBrandTag; // Wardrobe brand tag model
+let TherapyPendingSession; // Therapy pending session model
 
 try {
   // Core models
@@ -233,6 +236,11 @@ try {
 
   // LalaVerse Press career tracking model
   PressCareer = require('./PressCareer')(sequelize);
+
+  // LalaVerse brand registry + wardrobe brand tags + therapy pending sessions
+  LalaverseBrand = require('./LalaverseBrand')(sequelize);
+  WardrobeBrandTag = require('./WardrobeBrandTag')(sequelize);
+  TherapyPendingSession = require('./TherapyPendingSession')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -1246,6 +1254,9 @@ const db = {
     DecisionPattern,
     DecisionLog,
     TimelineData,
+    LalaverseBrand,
+    WardrobeBrandTag,
+    TherapyPendingSession,
   },
 
   /**
@@ -1486,3 +1497,6 @@ module.exports.ContinuityBeatCharacter = ContinuityBeatCharacter;
 module.exports.LalaEmergenceScene = LalaEmergenceScene;
 module.exports.CharacterRelationship = CharacterRelationship;
 module.exports.PressCareer = PressCareer;
+module.exports.LalaverseBrand = LalaverseBrand;
+module.exports.WardrobeBrandTag = WardrobeBrandTag;
+module.exports.TherapyPendingSession = TherapyPendingSession;

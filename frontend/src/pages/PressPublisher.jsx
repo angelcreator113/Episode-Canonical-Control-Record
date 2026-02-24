@@ -90,7 +90,7 @@ export default function PressPublisher() {
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`${API}/api/v1/press/characters`);
+      const r = await fetch(`${API}/press/characters`);
       if (!r.ok) throw new Error('Failed to load press characters');
       const d = await r.json();
       const list = d.characters || d.data || [];
@@ -106,7 +106,7 @@ export default function PressPublisher() {
   const seed = async () => {
     setLoading(true);
     try {
-      await fetch(`${API}/api/v1/press/seed-characters`, { method: 'POST' });
+      await fetch(`${API}/press/seed-characters`, { method: 'POST' });
       await load();
     } catch (e) { setError(e.message); }
     finally { setLoading(false); }
@@ -119,8 +119,8 @@ export default function PressPublisher() {
     setGenResult(null);
     try {
       const url = type === 'post'
-        ? `${API}/api/v1/press/generate-post`
-        : `${API}/api/v1/press/generate-scene`;
+        ? `${API}/press/generate-post`
+        : `${API}/press/generate-scene`;
       const r = await fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -138,7 +138,7 @@ export default function PressPublisher() {
     if (!selected) return;
     setGenerating(true);
     try {
-      const r = await fetch(`${API}/api/v1/press/advance-career`, {
+      const r = await fetch(`${API}/press/advance-career`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ slug: selected.character_slug }),

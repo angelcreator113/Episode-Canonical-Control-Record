@@ -25,6 +25,11 @@ const router = express.Router();
 const { v4: uuidv4 } = require('uuid');
 const { detectLalaFromLine, logLalaEmergence } = require('./lala-scene-detection');
 
+let thresholdDetection;
+try {
+  thresholdDetection = require('../services/thresholdDetection');
+} catch { thresholdDetection = null; }
+
 // Optional auth
 let optionalAuth;
 try {
@@ -460,6 +465,13 @@ router.put('/lines/:id', optionalAuth, async (req, res) => {
       } catch (lalaErr) {
         console.error('Lala detection hook error (non-fatal):', lalaErr.message);
       }
+    }
+
+    // ── Threshold Detection hook — check wound thresholds after approval ──
+    if (thresholdDetection && (updates.status === 'approved' || updates.status === 'edited')) {
+      thresholdDetection.checkAllThresholds(models).catch(e =>
+        console.error('Threshold detection (line-approval):', e.message)
+      );
     }
 
     return res.json({ success: true, line });

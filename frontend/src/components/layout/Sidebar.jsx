@@ -6,265 +6,212 @@ import { episodeService } from '../../services/episodeService';
 import './Sidebar.css';
 
 /**
- * Sidebar - Simple MVP Navigation
- * On mobile: slides in as a drawer from the left with backdrop overlay
- * On desktop: always visible in the flex layout
+ * Sidebar — 3-zone navigation reorganization
+ *
+ *   WRITE   — Start Session, Write (Book Editor), Timeline
+ *   WORLD   — Universe Overview, Characters, Therapy Room, The Press
+ *   PRODUCE — Shows (dynamic), Wardrobe
+ *   MANAGE  — Memory Bank (Continuity), Relationships, Notifications
  */
+
+/* ─── Navigation map ────────────────────────────────────────── */
+const NAV_SECTIONS = [
+  {
+    label: 'WRITE',
+    items: [
+      { icon: '▶',  label: 'Start Session', path: '/start' },
+      { icon: '✎',  label: 'Write',         path: '/storyteller' },
+      { icon: '◇',  label: 'Timeline',      path: '/continuity' },
+    ],
+  },
+  {
+    label: 'WORLD',
+    items: [
+      { icon: '◈',  label: 'Universe',       path: '/universe' },
+      { icon: '👤', label: 'Characters',     path: '/character-registry' },
+      { icon: '🛋️', label: 'Therapy Room',   path: '/therapy/default' },
+      { icon: '📰', label: 'The Press',      path: '/press' },
+      { icon: '🔗', label: 'Relationships',  path: '/relationships' },
+    ],
+  },
+];
 
 function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
   const [shows, setShows] = useState([]);
   const [showsExpanded, setShowsExpanded] = useState(true);
-  const [storyExpanded, setStoryExpanded] = useState(false);
   const [currentShowId, setCurrentShowId] = useState(null);
-  
-  useEffect(() => {
-    loadShows();
-  }, []);
-  
-  // Auto-expand Universe/StoryTeller group when on its sub-routes
-  useEffect(() => {
-    if (location.pathname.startsWith('/universe') || location.pathname.startsWith('/storyteller') || location.pathname.startsWith('/character-registry') || location.pathname.startsWith('/continuity') || location.pathname.startsWith('/relationships') || location.pathname.startsWith('/therapy') || location.pathname.startsWith('/press')) {
-      setStoryExpanded(true);
-    }
-  }, [location.pathname]);
 
-  // Detect if we're on an episode page and get its parent show
+  useEffect(() => { loadShows(); }, []);
+
+  // Detect parent show from episode routes
   useEffect(() => {
     const checkEpisodeRoute = async () => {
       const match = location.pathname.match(/\/episodes\/([^/]+)/);
       if (match && match[1] !== 'create') {
-        const episodeId = match[1];
         try {
-          const episode = await episodeService.getEpisode(episodeId);
+          const episode = await episodeService.getEpisode(match[1]);
           if (episode?.show_id || episode?.showId) {
             setCurrentShowId(episode.show_id || episode.showId);
-            setShowsExpanded(true); // Auto-expand shows when viewing an episode
+            setShowsExpanded(true);
           }
         } catch (err) {
           console.error('Failed to get episode for sidebar:', err);
         }
       } else {
-        // Check if we're on a show page
         const showMatch = location.pathname.match(/\/shows\/([^/]+)/);
-        if (showMatch) {
-          setCurrentShowId(showMatch[1]);
-        } else {
-          setCurrentShowId(null);
-        }
+        setCurrentShowId(showMatch ? showMatch[1] : null);
       }
     };
     checkEpisodeRoute();
   }, [location.pathname]);
-  
+
   const loadShows = async () => {
     try {
-      const showsData = await showService.getAllShows();
-      
-      // Map shows to include episode count if available
-      const formattedShows = showsData.map(show => ({
-        id: show.id,
-        name: show.name || show.title || 'Untitled Show',
-        episodeCount: show.episodeCount || show.episode_count || show.episodes?.length || 0
-      }));
-      
-      setShows(formattedShows);
-    } catch (error) {
-      console.error('Error loading shows:', error);
-      // Set empty array on error to prevent showing mock data
+      const data = await showService.getAllShows();
+      setShows(data.map(s => ({
+        id: s.id,
+        name: s.name || s.title || 'Untitled Show',
+        episodeCount: s.episodeCount || s.episode_count || s.episodes?.length || 0,
+      })));
+    } catch (e) {
+      console.error('Error loading shows:', e);
       setShows([]);
     }
   };
-  
-  const isActive = (path) => {
-    return location.pathname === path || location.pathname.startsWith(path);
-  };
-  
-  // On mobile, close sidebar after navigating
-  const handleNavigate = (path) => {
-    navigate(path);
-    if (onClose) onClose();
-  };
 
-  const NavItem = ({ icon, label, path, onClick }) => (
-    <button
-      className={`nav-item ${isActive(path) ? 'active' : ''}`}
-      onClick={onClick || (() => handleNavigate(path))}
-    >
-      <span className="nav-icon">{icon}</span>
-      <span className="nav-label">{label}</span>
-    </button>
-  );
-  
+  /* helpers */
+  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path);
+  const go = (path) => { navigate(path); if (onClose) onClose(); };
+
   return (
     <>
-    {/* Mobile backdrop overlay */}
-    {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
+      {/* Mobile backdrop */}
+      {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
-    <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-      {/* Logo + Mobile Close */}
-      <div className="sidebar-logo" onClick={() => handleNavigate('/')}>
-        <span className="logo-icon">🎬</span>
-        <div className="logo-text">
-          <div className="logo-title">Creative Engine</div>
-          <div className="logo-subtitle">by LaLa</div>
-        </div>
-        {onClose && (
-          <button className="sidebar-close-btn" onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Close sidebar">
-            ✕
-          </button>
-        )}
-      </div>
-      
-      {/* Navigation */}
-      <nav className="sidebar-nav">
-        {/* Home */}
-        <NavItem icon="🏠" label="Home" path="/" />
-        
-        {/* Session Briefing */}
-        <NavItem icon="◈" label="Session" path="/start" />
-        
-        {/* Universe group (includes StoryTeller tools) */}
-        <div className="nav-group">
-          <button
-            className={`nav-item ${isActive('/universe') || isActive('/storyteller') || isActive('/character-registry') || isActive('/continuity') || isActive('/relationships') || isActive('/therapy') || isActive('/press') ? 'active' : ''}`}
-            onClick={() => {
-              setStoryExpanded(!storyExpanded);
-              if (!storyExpanded) {
-                navigate('/universe');
-                if (onClose) onClose();
-              }
-            }}
-          >
-            <span className="nav-icon">◈</span>
-            <span className="nav-label">Universe</span>
-            <span className={`expand-icon ${storyExpanded ? 'expanded' : ''}`}>
-              ▼
-            </span>
-          </button>
-          
-          {storyExpanded && (
-            <div className="nav-subgroup">
-              <button
-                className={`nav-subitem ${isActive('/universe') ? 'active' : ''}`}
-                onClick={() => handleNavigate('/universe')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">Overview</span>
-              </button>
-              <button
-                className={`nav-subitem ${isActive('/storyteller') ? 'active' : ''}`}
-                onClick={() => handleNavigate('/storyteller')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">Book Editor</span>
-              </button>
-              <button
-                className={`nav-subitem ${isActive('/character-registry') ? 'active' : ''}`}
-                onClick={() => handleNavigate('/character-registry')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">Characters</span>
-              </button>
-              <button
-                className={`nav-subitem ${isActive('/continuity') ? 'active' : ''}`}
-                onClick={() => handleNavigate('/continuity')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">Continuity</span>
-              </button>
-              <button
-                className={`nav-subitem ${isActive('/relationships') ? 'active' : ''}`}
-                onClick={() => handleNavigate('/relationships')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">Relationships</span>
-              </button>
-              <button
-                className={`nav-subitem ${isActive('/therapy') ? 'active' : ''}`}
-                onClick={() => handleNavigate('/therapy/default')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">Therapy</span>
-              </button>
-              <button
-                className={`nav-subitem ${isActive('/press') ? 'active' : ''}`}
-                onClick={() => handleNavigate('/press')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">The Press</span>
-              </button>
-            </div>
+      <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+        {/* ── Logo ── */}
+        <div className="sidebar-logo" onClick={() => go('/')}>
+          <span className="logo-icon">🎬</span>
+          <div className="logo-text">
+            <div className="logo-title">Creative Engine</div>
+            <div className="logo-subtitle">by LaLa</div>
+          </div>
+          {onClose && (
+            <button className="sidebar-close-btn" onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Close sidebar">
+              ✕
+            </button>
           )}
         </div>
-        
-        {/* Shows */}
-        <div className="nav-group">
-          <button
-            className={`nav-item ${isActive('/shows') ? 'active' : ''}`}
-            onClick={() => {
-              setShowsExpanded(!showsExpanded);
-              if (!showsExpanded) {
-                navigate('/shows');
-                if (onClose) onClose();
-              }
-            }}
-          >
-            <span className="nav-icon">🎬</span>
-            <span className="nav-label">Shows</span>
-            <span className={`expand-icon ${showsExpanded ? 'expanded' : ''}`}>
-              ▼
-            </span>
+
+        {/* ── Navigation ── */}
+        <nav className="sidebar-nav">
+          {/* Home */}
+          <button className={`nav-item ${location.pathname === '/' ? 'active' : ''}`} onClick={() => go('/')}>
+            <span className="nav-icon">🏠</span>
+            <span className="nav-label">Home</span>
           </button>
-          
-          {showsExpanded && (
-            <div className="nav-subgroup">
-              <button
-                className={`nav-subitem ${location.pathname === '/shows' ? 'active' : ''}`}
-                onClick={() => handleNavigate('/shows')}
-              >
-                <span className="subitem-indicator">└─</span>
-                <span className="subitem-label">Shows</span>
-              </button>
-              {shows.map(show => (
+
+          {/* Static sections — WRITE / WORLD */}
+          {NAV_SECTIONS.map(section => (
+            <div className="nav-section" key={section.label}>
+              <div className="nav-section-label">{section.label}</div>
+              {section.items.map(item => (
                 <button
-                  key={show.id}
-                  className={`nav-subitem ${isActive(`/shows/${show.id}`) || currentShowId === show.id ? 'active' : ''}`}
-                  onClick={() => handleNavigate(`/shows/${show.id}`)}
+                  key={item.path}
+                  className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
+                  onClick={() => go(item.path)}
                 >
-                  <span className="subitem-indicator">└─</span>
-                  <span className="subitem-label">{show.name}</span>
-                  <span className="subitem-count">{show.episodeCount}</span>
+                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-label">{item.label}</span>
                 </button>
               ))}
             </div>
-          )}
-        </div>
-        
-        {/* Settings — show-level config (Config + Advanced) */}
-        <NavItem
-          icon="⚙️"
-          label="Settings"
-          path={currentShowId
-            ? `/shows/${currentShowId}/settings`
-            : shows.length > 0
-              ? `/shows/${shows[0].id}/settings`
-              : '/universe'}
-        />
-      </nav>
-      
-      {/* Footer */}
-      <div className="sidebar-footer">
-        <div className="user-info">
-          <div className="user-avatar">L</div>
-          <div className="user-details">
-            <div className="user-name">LaLa</div>
-            <div className="user-status">Creator</div>
+          ))}
+
+          {/* ── PRODUCE — Shows (dynamic) ── */}
+          <div className="nav-section">
+            <div className="nav-section-label">PRODUCE</div>
+
+            <div className="nav-group">
+              <button
+                className={`nav-item ${isActive('/shows') ? 'active' : ''}`}
+                onClick={() => {
+                  setShowsExpanded(prev => !prev);
+                  if (!showsExpanded) go('/shows');
+                }}
+              >
+                <span className="nav-icon">🎬</span>
+                <span className="nav-label">Shows</span>
+                <span className={`expand-icon ${showsExpanded ? 'expanded' : ''}`}>▼</span>
+              </button>
+
+              {showsExpanded && (
+                <div className="nav-subgroup">
+                  <button
+                    className={`nav-subitem ${location.pathname === '/shows' ? 'active' : ''}`}
+                    onClick={() => go('/shows')}
+                  >
+                    <span className="subitem-indicator">└─</span>
+                    <span className="subitem-label">All Shows</span>
+                  </button>
+                  {shows.map(show => (
+                    <button
+                      key={show.id}
+                      className={`nav-subitem ${isActive(`/shows/${show.id}`) || currentShowId === show.id ? 'active' : ''}`}
+                      onClick={() => go(`/shows/${show.id}`)}
+                    >
+                      <span className="subitem-indicator">└─</span>
+                      <span className="subitem-label">{show.name}</span>
+                      <span className="subitem-count">{show.episodeCount}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Wardrobe */}
+            <button className={`nav-item ${isActive('/wardrobe') ? 'active' : ''}`} onClick={() => go('/wardrobe')}>
+              <span className="nav-icon">👗</span>
+              <span className="nav-label">Wardrobe</span>
+            </button>
+          </div>
+
+          {/* ── MANAGE ── */}
+          <div className="nav-section">
+            <div className="nav-section-label">MANAGE</div>
+            <button className={`nav-item ${isActive('/assets') ? 'active' : ''}`} onClick={() => go('/assets')}>
+              <span className="nav-icon">📁</span>
+              <span className="nav-label">Asset Library</span>
+            </button>
+            <button
+              className={`nav-item ${isActive('/settings') || (currentShowId && isActive(`/shows/${currentShowId}/settings`)) ? 'active' : ''}`}
+              onClick={() => go(
+                currentShowId
+                  ? `/shows/${currentShowId}/settings`
+                  : shows.length > 0
+                    ? `/shows/${shows[0].id}/settings`
+                    : '/settings'
+              )}
+            >
+              <span className="nav-icon">⚙️</span>
+              <span className="nav-label">Settings</span>
+            </button>
+          </div>
+        </nav>
+
+        {/* ── Footer ── */}
+        <div className="sidebar-footer">
+          <div className="user-info">
+            <div className="user-avatar">L</div>
+            <div className="user-details">
+              <div className="user-name">LaLa</div>
+              <div className="user-status">Creator</div>
+            </div>
           </div>
         </div>
-      </div>
-    </aside>
+      </aside>
     </>
   );
 }
