@@ -2941,4 +2941,308 @@ The complete revised version from start to finish.`;
 });
 
 
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /story-continue
+// AI writes the next 2–4 paragraphs continuing from where the author left off
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/story-continue', optionalAuth, async (req, res) => {
+  try {
+    const {
+      current_prose  = '',
+      chapter_title  = '',
+      chapter_brief  = '',
+      pnos_act       = 'act_1',
+      book_character = 'JustAWoman',
+    } = req.body;
+
+    if (!current_prose?.trim()) {
+      return res.json({ prose: null, error: 'Nothing written yet — write a few lines first.' });
+    }
+
+    const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+
+    // Send the last ~5 paragraphs for context
+    const recentProse = current_prose.split('\n\n').slice(-5).join('\n\n');
+
+    const prompt = `You are continuing a memoir called "Before Lala" in the voice of JustAWoman.
+
+The author has written prose below. They paused. Now they want you to pick up where they left off and keep going — same voice, same truth, same movement.
+
+CHAPTER: ${chapter_title || 'Untitled'}
+${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
+
+CURRENT ACT: ${act.voice}
+CURRENT BELIEF: "${act.belief}"
+PROSE TENSE/MODE: ${act.tense}
+
+WHAT THE AUTHOR HAS WRITTEN (continue from the end):
+${recentProse}
+
+${WRITE_MODE_CHARACTER_RULES}
+
+CONTINUATION RULES:
+- Write 2–4 paragraphs. Not more.
+- Continue the exact emotional arc and rhythm. Don't restart. Don't summarize.
+- If the last paragraph ended mid-thought, finish that thought first.
+- If the last paragraph landed on something, let the next beat come naturally from it.
+- Stay in the same tense, same POV, same proximity to the body.
+- Do not leap ahead. The next moment. The next breath. That's all.
+- If doubt was building, let it build one more turn — don't resolve it.
+- If something just happened, let her sit with it before reacting.
+- Do not add characters or events not implied by what's already written.
+- End on something that pulls forward — not a conclusion.
+
+Respond with ONLY the continuation prose. No preamble. No explanation.
+Start exactly where they left off.`;
+
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`story-continue: trying ${model} (attempt ${attempt + 1})`);
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 800,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`story-continue: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`story-continue: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.json({ prose: null, error: 'AI is busy — please try again in a moment' });
+    }
+
+    const prose = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+      .trim();
+
+    res.json({ prose });
+
+  } catch (err) {
+    console.error('POST /story-continue error:', err);
+    res.json({ prose: null, error: 'Could not continue — please try again' });
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /story-deepen
+// Takes the last paragraph and adds emotional/sensory depth
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/story-deepen', optionalAuth, async (req, res) => {
+  try {
+    const {
+      current_prose  = '',
+      pnos_act       = 'act_1',
+      chapter_title  = '',
+    } = req.body;
+
+    if (!current_prose?.trim()) {
+      return res.json({ prose: null, error: 'Nothing to deepen yet.' });
+    }
+
+    const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+    const paragraphs = current_prose.split('\n\n').filter(p => p.trim());
+    const lastParagraph = paragraphs[paragraphs.length - 1];
+    const contextBefore = paragraphs.slice(-4, -1).join('\n\n');
+
+    const prompt = `You are deepening a moment in a memoir called "Before Lala" written in JustAWoman's voice.
+
+${contextBefore ? `CONTEXT (what came before):\n${contextBefore}\n\n` : ''}
+PARAGRAPH TO DEEPEN:
+${lastParagraph}
+
+CHAPTER: ${chapter_title || 'Untitled'}
+CURRENT VOICE: ${act.voice}
+CURRENT BELIEF: "${act.belief}"
+
+${WRITE_MODE_CHARACTER_RULES}
+
+YOUR JOB: Deepen this paragraph. Not rewrite — deepen.
+- Find the body in it. Where is she standing? What does the air feel like? What's in her hands?
+- Find the image underneath the feeling. "I was anxious" → What did the anxiety look like in her body?
+- Slow down the moment. Give it more room to breathe.
+- If there's dialogue or interior monologue, give it more weight — the pause before, the reaction after.
+- Add 1–3 sentences of depth. Don't double the length. Just let the moment land harder.
+- Preserve every single word and idea of the original. You're adding resonance, not rewriting.
+
+Respond with the FULL REVISED PARAGRAPH ONLY. No preamble. No explanation.
+The paragraph should feel like the same paragraph, just more alive.`;
+
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`story-deepen: trying ${model} (attempt ${attempt + 1})`);
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 600,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`story-deepen: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`story-deepen: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.json({ prose: null, error: 'AI is busy — please try again in a moment' });
+    }
+
+    const deepened = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+      .trim();
+
+    // Reassemble with deepened last paragraph
+    const before = paragraphs.slice(0, -1).join('\n\n');
+    const fullProse = before ? before + '\n\n' + deepened : deepened;
+
+    res.json({ prose: fullProse });
+
+  } catch (err) {
+    console.error('POST /story-deepen error:', err);
+    res.json({ prose: null, error: 'Could not deepen — please try again' });
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /story-nudge
+// Suggests what could happen next — a creative prompt, not prose
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/story-nudge', optionalAuth, async (req, res) => {
+  try {
+    const {
+      current_prose  = '',
+      chapter_title  = '',
+      chapter_brief  = '',
+      pnos_act       = 'act_1',
+    } = req.body;
+
+    if (!current_prose?.trim()) {
+      return res.json({ nudge: 'Start with where she is — the room, the feeling, the thing she just did.' });
+    }
+
+    const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+    const recentProse = current_prose.split('\n\n').slice(-3).join('\n\n');
+
+    const prompt = `You are a writing partner for a memoir called "Before Lala" in JustAWoman's voice.
+
+The author has written this so far:
+${recentProse}
+
+CHAPTER: ${chapter_title || 'Untitled'}
+${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
+ACT ENERGY: ${act.voice}
+BELIEF: "${act.belief}"
+
+Give the writer a SHORT creative nudge — one sentence, maybe two. Not prose. A suggestion.
+Think: what would a brilliant writing partner whisper to you at this point?
+
+Examples of good nudges:
+- "What did she do with her hands while she waited?"
+- "She's circling. What is she avoiding naming?"
+- "The phone is still face-down. What happens when she picks it up?"
+- "This is the moment before the comparison spiral — lean into what she believes right before it breaks."
+- "You're in her head. Get her back in her body."
+
+RULES:
+- One nudge. Not a list. Not options.
+- Reference something specific from what they've written.
+- Don't tell them what to write. Open a door.
+- Match the emotional temperature of where they are.
+- Be brief. A whisper, not a lecture.
+
+Respond with ONLY the nudge. No preamble.`;
+
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`story-nudge: trying ${model} (attempt ${attempt + 1})`);
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 150,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`story-nudge: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`story-nudge: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.json({ nudge: 'Stay with where she is right now. Don\'t skip ahead.' });
+    }
+
+    const nudge = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+      .trim();
+
+    res.json({ nudge });
+
+  } catch (err) {
+    console.error('POST /story-nudge error:', err);
+    res.json({ nudge: 'Keep going — you\'re closer than you think.' });
+  }
+});
+
+
 module.exports = router;

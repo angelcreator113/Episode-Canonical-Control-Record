@@ -43,6 +43,11 @@ export default function WriteMode() {
   const [editListening, setEditListening] = useState(false);
   const [editTranscript, setEditTranscript] = useState('');
 
+  // AI toolbar state
+  const [aiAction,     setAiAction]     = useState(null); // 'continue'|'deepen'|'nudge'
+  const [nudgeText,    setNudgeText]    = useState(null);
+  const [proseBeforeAi, setProseBeforeAi] = useState(null); // for undo
+
   // UI state
   const [showExit,   setShowExit]   = useState(false);
   const [hint,       setHint]       = useState(null);
@@ -263,6 +268,114 @@ export default function WriteMode() {
     setGenerating(false);
   }, [prose, editNote, chapter]);
 
+  // ── AI TOOLBAR ACTIONS ─────────────────────────────────────────────────
+
+  const handleContinue = useCallback(async () => {
+    if (!prose.trim() || generating) return;
+    setAiAction('continue');
+    setGenerating(true);
+    setProseBeforeAi(prose);
+    setNudgeText(null);
+    try {
+      const res = await fetch(`${API}/memories/story-continue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_prose:  prose,
+          chapter_title:  chapter?.title,
+          chapter_brief:  chapter?.scene_goal || chapter?.chapter_notes,
+          pnos_act:       chapter?.pnos_act || 'act_1',
+          book_character: book?.character || 'JustAWoman',
+        }),
+      });
+      const data = await res.json();
+      if (data.prose) {
+        const newProse = prose.trimEnd() + '\n\n' + data.prose;
+        setProse(newProse);
+        setWordCount(newProse.split(/\s+/).filter(Boolean).length);
+        setSaved(false);
+        setTimeout(() => {
+          if (proseRef.current) proseRef.current.scrollTop = proseRef.current.scrollHeight;
+        }, 100);
+      } else if (data.error) {
+        setHint(data.error);
+        setTimeout(() => setHint(null), 5000);
+      }
+    } catch (err) {
+      console.error('story-continue error:', err);
+    }
+    setGenerating(false);
+    setAiAction(null);
+  }, [prose, chapter, book, generating]);
+
+  const handleDeepen = useCallback(async () => {
+    if (!prose.trim() || generating) return;
+    setAiAction('deepen');
+    setGenerating(true);
+    setProseBeforeAi(prose);
+    setNudgeText(null);
+    try {
+      const res = await fetch(`${API}/memories/story-deepen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_prose:  prose,
+          pnos_act:       chapter?.pnos_act || 'act_1',
+          chapter_title:  chapter?.title,
+        }),
+      });
+      const data = await res.json();
+      if (data.prose) {
+        setProse(data.prose);
+        setWordCount(data.prose.split(/\s+/).filter(Boolean).length);
+        setSaved(false);
+      } else if (data.error) {
+        setHint(data.error);
+        setTimeout(() => setHint(null), 5000);
+      }
+    } catch (err) {
+      console.error('story-deepen error:', err);
+    }
+    setGenerating(false);
+    setAiAction(null);
+  }, [prose, chapter, generating]);
+
+  const handleNudge = useCallback(async () => {
+    if (generating) return;
+    setAiAction('nudge');
+    setGenerating(true);
+    setNudgeText(null);
+    try {
+      const res = await fetch(`${API}/memories/story-nudge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_prose:  prose,
+          chapter_title:  chapter?.title,
+          chapter_brief:  chapter?.scene_goal || chapter?.chapter_notes,
+          pnos_act:       chapter?.pnos_act || 'act_1',
+        }),
+      });
+      const data = await res.json();
+      if (data.nudge) {
+        setNudgeText(data.nudge);
+      }
+    } catch (err) {
+      console.error('story-nudge error:', err);
+    }
+    setGenerating(false);
+    setAiAction(null);
+  }, [prose, chapter, generating]);
+
+  const undoAi = useCallback(() => {
+    if (proseBeforeAi !== null) {
+      setProse(proseBeforeAi);
+      setWordCount(proseBeforeAi.split(/\s+/).filter(Boolean).length);
+      setSaved(false);
+      setProseBeforeAi(null);
+    }
+  }, [proseBeforeAi]);
+
   // ── SEND TO REVIEW ────────────────────────────────────────────────────
 
   const sendToReview = useCallback(async () => {
@@ -335,7 +448,7 @@ export default function WriteMode() {
           className="wm-prose-area"
           value={prose}
           onChange={handleProseChange}
-          placeholder={editMode ? '' : "Start speaking or type here \u2014 your story will appear."}
+          placeholder={editMode ? '' : "Type your story here, or use the AI tools below \u2014 Continue, Deepen, Nudge."}
           spellCheck={false}
           readOnly={generating}
         />
@@ -347,7 +460,12 @@ export default function WriteMode() {
               <span className="wm-generating-dot" />
               <span className="wm-generating-dot" />
             </div>
-            <div className="wm-generating-label">writing</div>
+            <div className="wm-generating-label">
+              {aiAction === 'continue' ? 'continuing your story' :
+               aiAction === 'deepen' ? 'deepening the moment' :
+               aiAction === 'nudge' ? 'thinking' :
+               'writing'}
+            </div>
           </div>
         )}
 
@@ -363,6 +481,47 @@ export default function WriteMode() {
       {listening && transcript && (
         <div className="wm-transcript">
           <div className="wm-transcript-text">{transcript}</div>
+        </div>
+      )}
+
+      {/* ── NUDGE DISPLAY ── */}
+      {nudgeText && !generating && (
+        <div className="wm-nudge">
+          <div className="wm-nudge-icon">{"\uD83D\uDCA1"}</div>
+          <div className="wm-nudge-text">{nudgeText}</div>
+          <button className="wm-nudge-close" onClick={() => setNudgeText(null)}>{"\u00D7"}</button>
+        </div>
+      )}
+
+      {/* ── AI TOOLBAR ── */}
+      {!editMode && (
+        <div className="wm-ai-toolbar">
+          <button
+            className={`wm-ai-btn${aiAction === 'continue' ? ' active' : ''}`}
+            onClick={handleContinue}
+            disabled={generating || !prose.trim()}
+          >
+            <span className="wm-ai-icon">{"\u2728"}</span> Continue
+          </button>
+          <button
+            className={`wm-ai-btn${aiAction === 'deepen' ? ' active' : ''}`}
+            onClick={handleDeepen}
+            disabled={generating || !prose.trim()}
+          >
+            <span className="wm-ai-icon">{"\uD83D\uDD0D"}</span> Deepen
+          </button>
+          <button
+            className={`wm-ai-btn${aiAction === 'nudge' ? ' active' : ''}`}
+            onClick={handleNudge}
+            disabled={generating}
+          >
+            <span className="wm-ai-icon">{"\uD83D\uDCA1"}</span> Nudge
+          </button>
+          {proseBeforeAi !== null && !generating && (
+            <button className="wm-ai-btn wm-undo-ai" onClick={undoAi}>
+              <span className="wm-ai-icon">{"\u21A9"}</span> Undo
+            </button>
+          )}
         </div>
       )}
 
@@ -430,10 +589,10 @@ export default function WriteMode() {
             {listening
               ? 'Release to write'
               : generating
-              ? 'Writing your story\u2026'
+              ? (aiAction === 'continue' ? 'Continuing\u2026' : aiAction === 'deepen' ? 'Deepening\u2026' : 'Writing your story\u2026')
               : prose
-              ? 'Hold to keep going'
-              : 'Hold to speak \u2014 release to write'}
+              ? 'Hold mic to speak \u2014 or use AI tools above'
+              : 'Hold to speak, or type and use AI tools'}
           </div>
 
           {prose.length > 20 && (

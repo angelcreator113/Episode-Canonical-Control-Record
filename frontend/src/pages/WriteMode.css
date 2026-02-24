@@ -500,6 +500,74 @@
   background: rgba(184, 150, 46, 0.22);
 }
 
+/* ─── NUDGE DISPLAY ─────────────────────────────────────────── */
+
+.wm-nudge {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 1rem;
+  padding: 0.65rem 0.85rem;
+  background: rgba(184, 150, 46, 0.08);
+  border: 1px solid rgba(184, 150, 46, 0.18);
+  border-radius: 12px;
+  color: #5A4A1E;
+  font-family: 'Lora', serif;
+  font-size: 0.85rem;
+  font-style: italic;
+  line-height: 1.5;
+  animation: wm-nudge-in 0.3s ease;
+  flex-shrink: 0;
+}
+
+@keyframes wm-nudge-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.wm-nudge-icon {
+  font-size: 1rem;
+  flex-shrink: 0;
+  margin-top: 0.05rem;
+}
+
+.wm-nudge-text {
+  flex: 1;
+}
+
+.wm-nudge-close {
+  background: none;
+  border: none;
+  color: #5A4A1E;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0 0.2rem;
+  opacity: 0.5;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+
+.wm-nudge-close:hover {
+  opacity: 1;
+}
+
+/* ─── UNDO AI BUTTON ────────────────────────────────────────── */
+
+.wm-undo-ai {
+  border-color: rgba(184, 92, 56, 0.3) !important;
+  background: rgba(184, 92, 56, 0.06) !important;
+  color: #8B4513 !important;
+}
+
+.wm-undo-ai:hover:not(:disabled) {
+  background: rgba(184, 92, 56, 0.15) !important;
+  border-color: rgba(184, 92, 56, 0.45) !important;
+}
+
+.wm-undo-ai .wm-ai-icon {
+  color: #B85C38 !important;
+}
+
 /* ─── SUGGESTIONS POPOVER ───────────────────────────────────── */
 
 .wm-suggestions {
