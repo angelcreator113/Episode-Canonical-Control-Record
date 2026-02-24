@@ -294,13 +294,14 @@ function BookList({ books, onOpen, onDelete, onNew }) {
 
 function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   /* ── State ── */
   const [chapters, setChapters] = useState(book.chapters || []);
   const [activeChapterId, setActiveChapterId] = useState(
     initialChapterId || (book.chapters && book.chapters[0]?.id) || null
   );
-  const [activeView, setActiveView] = useState('book');
+  const [activeView, setActiveView] = useState(searchParams.get('view') || 'book');
   const [registryCharacters, setRegistryCharacters] = useState([]);
 
   // UI state
@@ -310,12 +311,19 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   const [activeThreads, setActiveThreads] = useState([]);
   const [pnosAct, setPnosAct] = useState('act_1');
   const [reviewMode, setReviewMode] = useState(false);
+  const [navCollapsed, setNavCollapsed] = useState(false);
 
   // Alive system state
   const [chapterCharacters, setChapterCharacters] = useState([]);
   const [exitEmotionData, setExitEmotionData] = useState({ exit_emotion: '', exit_emotion_note: '' });
   const [questionDirection, setQuestionDirection] = useState(null);
   const [writingMode, setWritingMode] = useState(false);
+
+  // Prose mode state (write-mode style instead of line-by-line)
+  const [proseMode, setProseMode] = useState(true);
+  const [proseText, setProseText] = useState('');
+  const [proseSaved, setProseSaved] = useState(true);
+  const proseSaveTimer = useRef(null);
   const [canonOpen, setCanonOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
@@ -349,6 +357,49 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   const justSaved = savedAt && (Date.now() - savedAt < 3000);
 
   /* ── Effects ── */
+
+  // Sync activeView to URL so refresh preserves the tab
+  useEffect(() => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (activeView === 'book') next.delete('view');
+      else next.set('view', activeView);
+      return next;
+    }, { replace: true });
+  }, [activeView, setSearchParams]);
+
+  // Load prose when chapter changes
+  useEffect(() => {
+    if (!activeChapterId) return;
+    const ch = chapters.find(c => c.id === activeChapterId);
+    if (ch?.draft_prose) {
+      setProseText(ch.draft_prose);
+    } else {
+      // Fallback: join approved lines into prose
+      const lns = (ch?.lines || []).filter(l => l.status === 'approved' || l.status === 'edited');
+      setProseText(lns.map(l => l.text).join('\n\n'));
+    }
+    setProseSaved(true);
+  }, [activeChapterId, chapters]);
+
+  // Autosave prose
+  useEffect(() => {
+    if (proseSaved || !proseText || !activeChapterId) return;
+    if (proseSaveTimer.current) clearTimeout(proseSaveTimer.current);
+    proseSaveTimer.current = setTimeout(async () => {
+      try {
+        await fetch(`${API}/chapters/${activeChapterId}/save-draft`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ draft_prose: proseText }),
+        });
+        setProseSaved(true);
+        markSaved();
+      } catch (e) { console.error('Prose autosave failed:', e); }
+    }, 3000);
+    return () => clearTimeout(proseSaveTimer.current);
+  }, [proseText, proseSaved, activeChapterId]);
+
   useEffect(() => {
     const style = document.createElement('style');
     style.textContent = MEMORY_STYLES;
@@ -840,7 +891,22 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
         )}
 
         {/* Left Navigation — Quiet */}
-        <nav className={`st-nav${mobileNavOpen ? ' st-nav-mobile-open' : ''}`}>
+        <nav
+          className={`st-nav${mobileNavOpen ? ' st-nav-mobile-open' : ''}${navCollapsed ? ' st-nav-collapsed' : ''}`}
+          style={navCollapsed ? { width: 44, minWidth: 44, overflow: 'hidden', padding: '8px 4px' } : {}}
+        >
+          <button
+            onClick={() => setNavCollapsed(!navCollapsed)}
+            title={navCollapsed ? 'Expand archive' : 'Collapse archive'}
+            style={{
+              display: 'block', width: '100%', background: 'none', border: 'none',
+              cursor: 'pointer', fontSize: 16, color: '#b0a48c', padding: '6px',
+              textAlign: navCollapsed ? 'center' : 'right', marginBottom: 4,
+            }}
+          >
+            {navCollapsed ? '\u25B8' : '\u25C2'}
+          </button>
+          {!navCollapsed && (<>
           <div className="st-nav-brand">
             <div className="st-nav-brand-label">Archive</div>
             {editingBookTitle ? (
@@ -996,6 +1062,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
               console.log('Acknowledged absence:', charId, 'from chapter:', sourceChapterId);
             }}
           />
+          </>)}
         </nav>
 
         {/* ── Main Content ── */}
@@ -1100,11 +1167,12 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                     {/* Chapter Actions — icons, appear on hover */}
                     <div className="st-chapter-actions">
                       <button
-                        className="st-chapter-icon-btn"
-                        onClick={() => navigate(`/write/${book.id}/${activeChapter.id}`)}
-                        title="Write mode"
+                        className={`st-chapter-icon-btn${proseMode ? ' active' : ''}`}
+                        onClick={() => setProseMode(!proseMode)}
+                        title={proseMode ? 'Switch to line view' : 'Switch to prose view'}
+                        style={proseMode ? { color: 'var(--st-gold)', opacity: 1 } : {}}
                       >
-                        ✍
+                        {proseMode ? '\u00B6' : '\u270D'}
                       </button>
                       <button
                         className="st-chapter-icon-btn"
@@ -1339,6 +1407,39 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
 
                   {/* Book Page — the manuscript body */}
                   <div className={`st-book-page${reviewMode ? ' st-book-page-review' : ''}`}>
+
+                    {proseMode ? (
+                      /* ── Prose Mode (WriteMode-style textarea) ── */
+                      <>
+                        <textarea
+                          value={proseText}
+                          onChange={e => { setProseText(e.target.value); setProseSaved(false); }}
+                          placeholder="Start writing your story here\u2026"
+                          style={{
+                            width: '100%',
+                            minHeight: 420,
+                            border: 'none',
+                            outline: 'none',
+                            resize: 'vertical',
+                            fontFamily: "'Spectral', 'Georgia', serif",
+                            fontSize: 17,
+                            lineHeight: 1.85,
+                            color: '#1a1816',
+                            background: 'transparent',
+                            padding: '20px 0',
+                          }}
+                        />
+                        <div style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '8px 0', fontSize: 12, color: '#b0a48c', borderTop: '1px solid #ece6da',
+                        }}>
+                          <span>{proseText.split(/\s+/).filter(Boolean).length} words</span>
+                          <span>{proseSaved ? '\u2713 Saved' : 'Saving\u2026'}</span>
+                        </div>
+                      </>
+                    ) : (
+                      /* ── Line-by-Line Mode ── */
+                      <>
                     {/* Approved lines with Narrative Intelligence every 5 */}
                     {approvedLines.map((ln, i) => (
                       <React.Fragment key={ln.id}>
@@ -1398,7 +1499,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                         <input
                           value={newLineText}
                           onChange={e => setNewLineText(e.target.value)}
-                          placeholder="Continue writing…"
+                          placeholder="Continue writing\u2026"
                           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) addLine(activeChapterId); }}
                           autoFocus
                         />
@@ -1414,8 +1515,10 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                         className="st-add-line-trigger"
                         onClick={() => setAddingLineTo(activeChapterId)}
                       >
-                        Continue writing…
+                        Continue writing\u2026
                       </button>
+                    )}
+                      </>
                     )}
                   </div>
 
