@@ -76,6 +76,7 @@ let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
 let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter; // Continuity Engine models
 let LalaEmergenceScene; // Lala Emergence Scene Detection model
 let CharacterRelationship; // Character Relationship Map model
+let CharacterTherapyProfile; // Character Therapy Psychological Narrative Engine model
 
 try {
   // Core models
@@ -226,6 +227,9 @@ try {
   // Character Relationship Map model
   CharacterRelationship = require('./CharacterRelationship')(sequelize);
 
+  // Character Therapy — Psychological Narrative Engine model
+  CharacterTherapyProfile = require('./CharacterTherapyProfile')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -301,6 +305,7 @@ const requiredModels = {
   ContinuityBeatCharacter,
   LalaEmergenceScene,
   CharacterRelationship,
+  CharacterTherapyProfile,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {

@@ -53,6 +53,7 @@ import ReadingMode from './pages/ReadingMode';
 import WriteMode from './pages/WriteMode';
 import RelationshipMap from './pages/RelationshipMap';
 import SessionStart from './pages/SessionStart';
+import CharacterTherapy from './pages/CharacterTherapy';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -287,6 +288,9 @@ function AppContent() {
           
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
+          
+          {/* PNOS Character Therapy — Psychological Narrative Engine */}
+          <Route path="/therapy/:registryId" element={<CharacterTherapy />} />
           
           {/* PNOS Continuity Engine */}
           <Route path="/continuity" element={<ContinuityEnginePage />} />
