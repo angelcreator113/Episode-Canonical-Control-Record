@@ -56,6 +56,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useVoice, MicButton, SpeakButton } from '../hooks/VoiceLayer';
 import NewCharacterDetected from './NewCharacterDetected';
 
@@ -428,9 +429,9 @@ export default function CharacterVoiceInterview({
 
   if (!open) return null;
 
-  return (
+  return createPortal(
     <div style={st.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={st.modal}>
+      <div style={st.modal} onClick={e => e.stopPropagation()}>
 
         {/* ── Header ──────────────────────────────────────────────────── */}
         <div style={st.header}>
@@ -608,7 +609,8 @@ export default function CharacterVoiceInterview({
           50%       { opacity: 1; transform: scale(1); }
         }
       `}</style>
-    </div>
+    </div>,
+    document.body
   );
 }
 
@@ -685,14 +687,17 @@ function typeColor(type) {
 const st = {
   overlay: {
     position: 'fixed', inset: 0, background: 'rgba(20,16,12,0.6)',
-    backdropFilter: 'blur(4px)', zIndex: 400,
+    backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+    zIndex: 10000,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+    pointerEvents: 'auto',
   },
   modal: {
     background: '#faf9f7', border: '1px solid rgba(201,168,76,0.2)',
     borderRadius: 4, width: 620, maxWidth: '100%', maxHeight: '90vh',
     display: 'flex', flexDirection: 'column',
     boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
+    pointerEvents: 'auto', position: 'relative', zIndex: 1,
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
@@ -713,7 +718,7 @@ const st = {
   },
   chatWindow: {
     flex: 1, overflowY: 'auto', padding: '20px 24px',
-    display: 'flex', flexDirection: 'column', gap: 16, minHeight: 300, maxHeight: 420,
+    display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0, maxHeight: 420,
   },
   message: { display: 'flex', flexDirection: 'column', gap: 4, maxWidth: '85%' },
   messageLabel: {
