@@ -279,8 +279,53 @@
   display: none;
 }
 
-/* ─── Responsive: Mobile/Tablet Slide-Out Drawer ─────────────────────── */
-@media (max-width: 1024px) {
+/* ─── Tablet: Inline Collapsible Sidebar (768px – 1279px) ────────────── */
+@media (min-width: 768px) and (max-width: 1279px) {
+  .sidebar {
+    width: 260px;
+    min-width: 260px;
+    margin-left: -260px;
+    transition: margin-left 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  .sidebar.open {
+    margin-left: 0;
+  }
+
+  /* No backdrop on tablet — sidebar pushes content */
+  .sidebar-backdrop {
+    display: none !important;
+  }
+
+  .sidebar-close-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    margin-left: auto;
+    background: rgba(99, 102, 241, 0.08);
+    border: 1px solid rgba(99, 102, 241, 0.15);
+    border-radius: 8px;
+    color: #64748b;
+    font-size: 16px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.2s;
+  }
+
+  .sidebar-close-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: #ef4444;
+  }
+}
+
+/* ─── Mobile: Overlay Slide-Out Drawer (≤767px) ──────────────────────── */
+@media (max-width: 767px) {
   .sidebar {
     position: fixed;
     top: 0;
