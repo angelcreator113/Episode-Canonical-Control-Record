@@ -763,4 +763,35 @@ router.delete('/echoes/:echoId', optionalAuth, async (req, res) => {
 });
 
 
+// ═══════════════════════════════════════════
+// POST /chapters/:chapterId/save-draft — Save draft prose without splitting into lines
+// ═══════════════════════════════════════════
+router.post('/chapters/:chapterId/save-draft', optionalAuth, async (req, res) => {
+  try {
+    const { chapterId } = req.params;
+    const { draft_prose } = req.body;
+
+    if (!draft_prose) {
+      return res.status(400).json({ error: 'draft_prose required' });
+    }
+
+    const models = await getModels();
+    if (!models?.StorytellerChapter) {
+      return res.status(500).json({ error: 'Models not loaded' });
+    }
+
+    await models.StorytellerChapter.update(
+      { draft_prose },
+      { where: { id: chapterId } }
+    );
+
+    res.json({ ok: true });
+
+  } catch (err) {
+    console.error('POST /chapters/:id/save-draft error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
 module.exports = router;

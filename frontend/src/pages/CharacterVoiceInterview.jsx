@@ -68,6 +68,45 @@ import {
 const MEMORIES_API = '/api/v1/memories';
 const REGISTRY_API = '/api/v1/character-registry';
 
+const CVI_MOBILE_CSS = `
+  @media (max-width: 600px) {
+    .cvi-overlay {
+      padding: 0 !important;
+      align-items: flex-end !important;
+    }
+    .cvi-modal {
+      width: 100% !important;
+      max-width: 100% !important;
+      max-height: 100vh !important;
+      max-height: 100dvh !important;
+      border-radius: 12px 12px 0 0 !important;
+      height: 100vh !important;
+      height: 100dvh !important;
+    }
+    .cvi-chat-window {
+      max-height: none !important;
+      flex: 1 1 0 !important;
+      min-height: 0 !important;
+      padding: 12px 14px !important;
+    }
+    .cvi-header {
+      padding: 14px 16px 10px !important;
+    }
+    .cvi-input-row {
+      padding: 8px 14px !important;
+    }
+    .cvi-cmd-hint {
+      padding: 2px 14px 6px !important;
+    }
+    .cvi-complete-block {
+      padding: 14px 16px !important;
+    }
+    .cvi-generating-block {
+      padding: 24px 16px !important;
+    }
+  }
+`;
+
 // ── Hesitation / trailing-off detection ─────────────────────────────────
 const HESITATION_PATTERNS = [
   /i don'?t know/i,
@@ -192,6 +231,7 @@ export default function CharacterVoiceInterview({
   const savingProgress = useRef(false);
 
   const bottomRef = useRef(null);
+  const sendingRef = useRef(false);  // synchronous guard against double-send
   const { speak, startListening, stopListening, listening } = useVoice();
 
   const roleType  = character?.role_type || 'special';
@@ -216,6 +256,7 @@ export default function CharacterVoiceInterview({
 
   // ── Helper: reset to fresh interview state ────────────────────────────
   function resetToFresh() {
+    sendingRef.current = false;
     setMessages([{
       role: 'system',
       text: `Let's talk about ${charName}.\n\nAnswer like you're telling a friend — no right answers. The more specific and honest you are, the richer the character and the stronger the story.\n\nReady when you are.`,
@@ -242,6 +283,7 @@ export default function CharacterVoiceInterview({
 
   // ── Helper: restore state from saved progress ─────────────────────────
   function restoreProgress(p) {
+    sendingRef.current = false;
     setMessages(p.messages || []);
     setStep(p.step || 'interview');
     setQuestionIndex(p.question_index || 0);
@@ -297,9 +339,12 @@ export default function CharacterVoiceInterview({
 
   // Auto-send on mic stop
   function handleMicResult(text, meta) {
-    setInput(text);
-    if (meta?.isFinal && text.trim() && step === 'interview' && !generating) {
+    if (meta?.isFinal && text.trim() && step === 'interview' && !generating && !sendingRef.current) {
+      // Clear input immediately so a stray tap/Enter can't also trigger handleSend
+      setInput('');
       setTimeout(() => handleSendText(text.trim()), 80);
+    } else {
+      setInput(text);
     }
   }
 
@@ -368,12 +413,13 @@ export default function CharacterVoiceInterview({
   }
 
   async function handleSend() {
-    if (!input.trim() || generating) return;
+    if (!input.trim() || generating || sendingRef.current) return;
     await handleSendText(input.trim());
   }
 
   async function handleSendText(userAnswer) {
-    if (!userAnswer || generating) return;
+    if (!userAnswer || generating || sendingRef.current) return;
+    sendingRef.current = true;  // synchronous lock — prevents any concurrent send
     setInput('');
     setError(null);
 
@@ -395,6 +441,8 @@ export default function CharacterVoiceInterview({
       console.error('Interview decideNextMove error:', err);
       setGenerating(false);
       setError('Something went wrong. Try sending your answer again.');
+    } finally {
+      sendingRef.current = false;  // release lock after send completes
     }
   }
 
@@ -619,14 +667,24 @@ export default function CharacterVoiceInterview({
     }
   }
 
+  useEffect(() => {
+    const id = 'cvi-mobile-css';
+    if (!document.getElementById(id)) {
+      const s = document.createElement('style');
+      s.id = id;
+      s.textContent = CVI_MOBILE_CSS;
+      document.head.appendChild(s);
+    }
+  }, []);
+
   if (!open) return null;
 
   return createPortal(
-    <div style={st.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
-      <div style={st.modal} onClick={e => e.stopPropagation()}>
+    <div className="cvi-overlay" style={st.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="cvi-modal" style={st.modal} onClick={e => e.stopPropagation()}>
 
         {/* ── Header ──────────────────────────────────────────────────── */}
-        <div style={st.header}>
+        <div className="cvi-header" style={st.header}>
           <div>
             <div style={st.headerLabel}>CHARACTER VOICE INTERVIEW</div>
             <div style={st.headerTitle}>{charName}</div>
@@ -639,7 +697,7 @@ export default function CharacterVoiceInterview({
 
         {/* ── Loading saved progress ──────────────────────────────────── */}
         {loadingProgress && (
-          <div style={st.generatingBlock}>
+          <div className="cvi-generating-block" style={st.generatingBlock}>
             <div style={st.generatingTitle}>Checking for saved progress…</div>
           </div>
         )}
@@ -685,7 +743,7 @@ export default function CharacterVoiceInterview({
 
         {/* ── Generating ──────────────────────────────────────────────── */}
         {step === 'generating' && (
-          <div style={st.generatingBlock}>
+          <div className="cvi-generating-block" style={st.generatingBlock}>
             <div style={st.generatingDots}>
               {[0,1,2].map(i => (
                 <div key={i} style={{ ...st.dot, animationDelay: `${i * 0.3}s` }} />
@@ -700,7 +758,7 @@ export default function CharacterVoiceInterview({
 
         {/* ── Complete ─────────────────────────────────────────────────── */}
         {step === 'complete' && result && (
-          <div style={st.completeBlock}>
+          <div className="cvi-complete-block" style={st.completeBlock}>
             <div style={st.completeHeader}>
               <div style={st.completeLabel}>PROFILE READY</div>
               <div style={st.completeTitle}>{charName}</div>
@@ -771,7 +829,7 @@ export default function CharacterVoiceInterview({
         {/* ── Chat ─────────────────────────────────────────────────────── */}
         {!loadingProgress && !resumeData && (step === 'intro' || step === 'interview') && (
           <>
-            <div style={st.chatWindow}>
+            <div className="cvi-chat-window" style={st.chatWindow}>
               {/* Drift indicator — shows when drift is active */}
               <DriftIndicator
                 drift={currentDrift}
@@ -813,7 +871,7 @@ export default function CharacterVoiceInterview({
               </div>
             ) : (
               <>
-                <div style={st.inputRow}>
+                <div className="cvi-input-row" style={st.inputRow}>
                   <textarea
                     style={{
                       ...st.chatInput,
@@ -848,7 +906,7 @@ export default function CharacterVoiceInterview({
                   </button>
                 </div>
                 {error && <div style={st.error}>{error}</div>}
-                <div style={st.cmdHint}>
+                <div className="cvi-cmd-hint" style={st.cmdHint}>
                   {listening
                     ? '◼ Recording — tap mic to stop and send'
                     : 'Enter to send · Shift+Enter for new line · 🎤 to speak'}
@@ -948,22 +1006,23 @@ function typeColor(type) {
 
 const st = {
   overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(20,16,12,0.6)',
-    backdropFilter: 'blur(4px)', WebkitBackdropFilter: 'blur(4px)',
+    position: 'fixed', inset: 0, background: 'rgba(255,255,255,0.55)',
+    backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
     zIndex: 10000,
     display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
     pointerEvents: 'auto',
   },
   modal: {
-    background: '#faf9f7', border: '1px solid rgba(201,168,76,0.2)',
-    borderRadius: 4, width: 620, maxWidth: '100%', maxHeight: '90vh',
+    background: '#ffffff', border: '1px solid rgba(201,168,76,0.18)',
+    borderRadius: 8, width: 620, maxWidth: '100%', maxHeight: '90vh',
     display: 'flex', flexDirection: 'column',
-    boxShadow: '0 20px 60px rgba(0,0,0,0.18)', overflow: 'hidden',
+    boxShadow: '0 8px 40px rgba(0,0,0,0.10)', overflow: 'hidden',
     pointerEvents: 'auto', position: 'relative', zIndex: 1,
   },
   header: {
     display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-    padding: '20px 24px 16px', borderBottom: '1px solid rgba(201,168,76,0.12)', flexShrink: 0,
+    padding: '20px 24px 16px', borderBottom: '1px solid rgba(201,168,76,0.10)', flexShrink: 0,
+    background: '#fff',
   },
   headerLabel: {
     fontFamily: 'DM Mono, monospace', fontSize: 8, letterSpacing: '0.2em',
@@ -981,6 +1040,7 @@ const st = {
   chatWindow: {
     flex: 1, overflowY: 'auto', padding: '20px 24px',
     display: 'flex', flexDirection: 'column', gap: 16, minHeight: 0, maxHeight: 420,
+    background: '#fff',
   },
   message: { display: 'flex', flexDirection: 'column', gap: 4, maxWidth: '85%' },
   messageLabel: {
@@ -1012,7 +1072,7 @@ const st = {
     borderTop: '1px solid rgba(201,168,76,0.1)', alignItems: 'flex-end', flexShrink: 0,
   },
   chatInput: {
-    flex: 1, background: '#f5f0e8', border: '1px solid', borderRadius: 2,
+    flex: 1, background: '#faf9f6', border: '1px solid', borderRadius: 4,
     fontFamily: "'Lora', 'Playfair Display', serif",
     fontSize: 14, fontStyle: 'italic', color: 'rgba(30,25,20,0.82)',
     padding: '10px 12px', outline: 'none', resize: 'none', lineHeight: 1.6,

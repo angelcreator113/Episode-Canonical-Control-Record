@@ -918,21 +918,62 @@
   display: flex;
   flex-direction: column;
   min-width: 0;
-  overflow: hidden;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* Tab row (tabs + edit button) */
+.cr-dossier-tabs-row {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  position: sticky;
+  top: 60px;
+  z-index: 50;
 }
 
 /* Tab bar */
 .cr-dossier-tabs {
   display: flex;
-  border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  flex: 1;
+  min-width: 0;
   padding: 0 28px;
-  position: sticky;
-  top: 60px;
-  z-index: 50;
   overflow-x: auto;
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
+}
+
+/* Tab-level edit button */
+.cr-tab-edit-btn {
+  flex-shrink: 0;
+  padding: 10px 18px;
+  background: var(--gold-bg);
+  border: none;
+  border-left: 1px solid var(--border);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--gold);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(184, 150, 58, 0.2);
+  min-height: 44px;
+}
+
+.cr-tab-edit-btn:hover {
+  background: rgba(184, 150, 58, 0.15);
+  color: var(--gold-dim);
+}
+
+.cr-tab-edit-btn:active {
+  background: rgba(184, 150, 58, 0.2);
 }
 
 .cr-dossier-tabs::-webkit-scrollbar {
@@ -985,6 +1026,8 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 16px;
+  position: relative;
+  z-index: 5;
 }
 
 .cr-dossier-section-title {
@@ -996,20 +1039,40 @@
 }
 
 .cr-dossier-edit-btn {
-  background: none;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 10px;
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-border);
+  border-radius: 6px;
+  padding: 8px 16px;
   font-family: var(--mono);
-  font-size: 10px;
-  color: var(--ink-faint);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--gold);
   cursor: pointer;
-  transition: all 0.12s;
+  transition: all 0.15s;
+  position: relative;
+  z-index: 5;
+  -webkit-tap-highlight-color: rgba(184, 150, 58, 0.2);
+  touch-action: manipulation;
+  min-height: 36px;
+  min-width: 64px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  user-select: none;
 }
 
 .cr-dossier-edit-btn:hover {
-  border-color: var(--gold-border);
-  color: var(--gold);
+  background: rgba(184, 150, 58, 0.15);
+  border-color: var(--gold);
+  color: var(--gold-dim);
+  transform: translateY(-1px);
+}
+
+.cr-dossier-edit-btn:active {
+  transform: translateY(0);
+  background: rgba(184, 150, 58, 0.2);
 }
 
 /* Read-mode data rows */
@@ -1061,6 +1124,56 @@
   font-family: var(--serif);
   font-size: 15px;
   font-style: italic;
+}
+
+/* Empty state */
+.cr-dossier-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  border: 2px dashed var(--border, #e0e0e0);
+  border-radius: 12px;
+  margin: 16px 0;
+  background: rgba(102, 126, 234, 0.02);
+}
+.cr-dossier-empty-icon {
+  font-size: 36px;
+  margin-bottom: 12px;
+  opacity: 0.6;
+}
+.cr-dossier-empty-text {
+  font-family: var(--sans, 'DM Sans', sans-serif);
+  font-size: 15px;
+  color: var(--muted, #999);
+  margin: 0 0 20px;
+  line-height: 1.5;
+}
+.cr-dossier-empty-btn {
+  padding: 10px 24px;
+  min-height: 44px;
+  font-size: 14px;
+  font-weight: 600;
+  font-family: var(--sans, 'DM Sans', sans-serif);
+  background: var(--gold-bg, rgba(212, 175, 55, 0.1));
+  border: 1.5px solid var(--gold-border, rgba(212, 175, 55, 0.3));
+  color: var(--gold, #d4af37);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: rgba(212, 175, 55, 0.15);
+  user-select: none;
+}
+.cr-dossier-empty-btn:hover {
+  background: var(--gold-border, rgba(212, 175, 55, 0.3));
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(212, 175, 55, 0.15);
+}
+.cr-dossier-empty-btn:active {
+  transform: scale(0.97);
 }
 
 /* Triad (desire/fear/wound) */
@@ -1196,22 +1309,26 @@
   background: none;
   border: 1px solid var(--border);
   border-radius: 5px;
-  padding: 6px 14px;
-  font-size: 12px;
+  padding: 8px 18px;
+  font-size: 13px;
   color: var(--ink-dim);
   cursor: pointer;
+  min-height: 40px;
+  touch-action: manipulation;
 }
 
 .cr-edit-save-btn {
   background: var(--pink);
   border: none;
   border-radius: 5px;
-  padding: 6px 14px;
-  font-size: 12px;
+  padding: 8px 22px;
+  font-size: 13px;
   font-weight: 600;
   color: #fff;
   cursor: pointer;
   transition: background 0.12s;
+  min-height: 40px;
+  touch-action: manipulation;
 }
 
 .cr-edit-save-btn:hover {
@@ -1495,8 +1612,10 @@
   .cr-dossier-actions { width: 100%; }
   .cr-dossier-triad { grid-template-columns: 1fr; }
   .cr-dossier-duality { grid-template-columns: 1fr; }
-  .cr-dossier-tabs { padding: 0 16px; }
+  .cr-dossier-tabs-row { top: 0; flex-wrap: wrap; }
+  .cr-dossier-tabs { padding: 0 16px; flex: 1; min-width: 0; }
   .cr-dossier-tab { padding: 12px 14px; font-size: 13px; }
+  .cr-tab-edit-btn { border-left: none; border-top: 1px solid var(--border); width: 100%; justify-content: center; min-height: 44px; font-size: 13px; padding: 12px; }
   .cr-dossier-tab-content { padding: 20px 16px 40px; }
   .cr-dossier-row { grid-template-columns: 120px 1fr; gap: 8px; }
   .cr-dossier-back { padding: 12px 16px; }

@@ -63,6 +63,22 @@ const STORY_STATUSES = ['Active', 'Evolving', 'Archived'];
 
 const jGet = (obj, key) => (obj && typeof obj === 'object' ? obj[key] || '' : '');
 
+/* Check if a JSON object has any non-empty value */
+const hasJsonData = (obj) => obj && typeof obj === 'object' && Object.values(obj).some(v => v && String(v).trim());
+
+/* Empty state shown when a tab has no data */
+function EmptyState({ label, onEdit }) {
+  return (
+    <div className="cr-dossier-empty">
+      <div className="cr-dossier-empty-icon">📝</div>
+      <p className="cr-dossier-empty-text">No {label} data yet.</p>
+      <button className="cr-dossier-empty-btn" onClick={onEdit}>
+        ✎ Add {label}
+      </button>
+    </div>
+  );
+}
+
 /* ================================================================
    MAIN COMPONENT
    ================================================================ */
@@ -292,6 +308,7 @@ export default function CharacterRegistryPage() {
   };
 
   const startEdit = (tabKey) => {
+    console.log('[EDIT] startEdit called with tabKey:', tabKey, 'activeChar:', activeChar?.display_name);
     const initial = buildFormForTab(tabKey, activeChar);
     setForm(initial);
     setEditSection(tabKey);
@@ -543,17 +560,27 @@ export default function CharacterRegistryPage() {
 
             {/* ── RIGHT PANEL (70%) ── */}
             <div className="cr-dossier-right">
-              {/* Tabs */}
-              <div className="cr-dossier-tabs">
-                {DOSSIER_TABS.map(t => (
+              {/* Tabs + Edit toggle */}
+              <div className="cr-dossier-tabs-row">
+                <div className="cr-dossier-tabs">
+                  {DOSSIER_TABS.map(t => (
+                    <button
+                      key={t.key}
+                      className={`cr-dossier-tab ${dossierTab === t.key ? 'active' : ''}`}
+                      onClick={() => { setDossierTab(t.key); setEditSection(null); }}
+                    >
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+                {!editSection && (
                   <button
-                    key={t.key}
-                    className={`cr-dossier-tab ${dossierTab === t.key ? 'active' : ''}`}
-                    onClick={() => { setDossierTab(t.key); setEditSection(null); }}
+                    className="cr-tab-edit-btn"
+                    onClick={() => startEdit(dossierTab)}
                   >
-                    {t.label}
+                    ✎ Edit Section
                   </button>
-                ))}
+                )}
               </div>
 
               {/* Tab Content */}
@@ -937,7 +964,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     <div className="cr-dossier-section-header">
       <span className="cr-dossier-section-title">{title}</span>
       {!editing && (
-        <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)}>Edit</button>
+        <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)}>✎ Edit</button>
       )}
     </div>
   );
@@ -1078,7 +1105,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                 options={GLAM_ENERGIES.map(g => ({ value: g, label: g }))} allowEmpty />
               <EArea label="Visual Evolution Notes" value={form.visual_evolution_notes} onChange={v => F('visual_evolution_notes', v)} rows={3} />
             </>
-          ) : (
+          ) : hasJsonData(c.aesthetic_dna) ? (
             <>
               <DRow label="Era Aesthetic" value={jGet(c.aesthetic_dna, 'era_aesthetic')} accent />
               <DRow label="Color Palette" value={jGet(c.aesthetic_dna, 'color_palette')} />
@@ -1087,6 +1114,8 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <DRow label="Glam Energy" value={jGet(c.aesthetic_dna, 'glam_energy')} accent />
               <DRow label="Visual Evolution" value={jGet(c.aesthetic_dna, 'visual_evolution_notes')} />
             </>
+          ) : (
+            <EmptyState label="Aesthetic DNA" onEdit={() => startEdit(tab)} />
           )}
         </div>
       );
@@ -1107,7 +1136,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EField label="Public Recognition" value={form.public_recognition} onChange={v => F('public_recognition', v)} />
               <EArea label="Ongoing Arc" value={form.ongoing_arc} onChange={v => F('ongoing_arc', v)} rows={3} />
             </>
-          ) : (
+          ) : hasJsonData(c.career_status) ? (
             <>
               <DRow label="Profession" value={jGet(c.career_status, 'profession')} accent />
               <DRow label="Ambition" value={jGet(c.career_status, 'career_goal')} />
@@ -1117,6 +1146,8 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <DRow label="Financial Status" value={jGet(c.career_status, 'financial_status')} />
               <DRow label="Ongoing Arc" value={jGet(c.career_status, 'ongoing_arc')} />
             </>
+          ) : (
+            <EmptyState label="Career" onEdit={() => startEdit(tab)} />
           )}
         </div>
       );
@@ -1137,7 +1168,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EArea label="Dynamic Notes" value={form.dynamic_notes} onChange={v => F('dynamic_notes', v)} rows={3}
                 placeholder="Tension? Loyal? Competitive?" />
             </>
-          ) : (
+          ) : hasJsonData(c.relationships_map) ? (
             <div className="cr-dossier-rel-grid">
               <RelCard type="Allies" icon="🤝" value={jGet(c.relationships_map, 'allies')} />
               <RelCard type="Rivals" icon="⚔" value={jGet(c.relationships_map, 'rivals')} />
@@ -1151,6 +1182,8 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                 </div>
               )}
             </div>
+          ) : (
+            <EmptyState label="Relationships" onEdit={() => startEdit(tab)} />
           )}
         </div>
       );
@@ -1172,7 +1205,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <ESelect label="Future Potential" value={form.future_potential} onChange={v => F('future_potential', v)}
                 options={[{ value: 'Yes', label: 'Yes' }, { value: 'No', label: 'No' }]} allowEmpty />
             </>
-          ) : (
+          ) : hasJsonData(c.story_presence) ? (
             <>
               <DRow label="Books" value={jGet(c.story_presence, 'appears_in_books')} />
               <DRow label="Shows" value={jGet(c.story_presence, 'appears_in_shows')} />
@@ -1193,6 +1226,8 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                 </>
               )}
             </>
+          ) : (
+            <EmptyState label="Story Presence" onEdit={() => startEdit(tab)} />
           )}
         </div>
       );
@@ -1214,7 +1249,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EField label="Emotional Reactivity" value={form.emotional_reactivity} onChange={v => F('emotional_reactivity', v)}
                 placeholder="Low / Moderate / High / Volatile" />
             </>
-          ) : (
+          ) : hasJsonData(c.voice_signature) ? (
             <>
               <DRow label="Speech Pattern" value={jGet(c.voice_signature, 'speech_pattern')} accent />
               <DRow label="Vocabulary Tone" value={jGet(c.voice_signature, 'vocabulary_tone')} />
@@ -1222,6 +1257,8 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <DRow label="Internal Monologue" value={jGet(c.voice_signature, 'internal_monologue_style')} />
               <DRow label="Dialogue Rhythm" value={jGet(c.voice_signature, 'emotional_reactivity')} accent />
             </>
+          ) : (
+            <EmptyState label="Voice Profile" onEdit={() => startEdit(tab)} />
           )}
         </div>
       );

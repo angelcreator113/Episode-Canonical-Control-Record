@@ -50,7 +50,9 @@ import CharacterRegistryPage from './pages/CharacterRegistryPage';
 import ContinuityEnginePage from './pages/ContinuityEnginePage';
 import UniversePage from './pages/UniversePage';
 import ReadingMode from './pages/ReadingMode';
+import WriteMode from './pages/WriteMode';
 import RelationshipMap from './pages/RelationshipMap';
+import SessionStart from './pages/SessionStart';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -188,6 +190,7 @@ function AppContent() {
           <Routes>
           {/* ===== DASHBOARD ===== */}
           <Route path="/" element={<Home />} />
+          <Route path="/start" element={<SessionStart />} />
           
           {/* Universe */}
           <Route path="/universe" element={<UniversePage />} />
@@ -280,6 +283,7 @@ function AppContent() {
           {/* StoryTeller Book Editor */}
           <Route path="/storyteller" element={<StorytellerPage />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />
+          <Route path="/write/:bookId/:chapterId" element={<WriteMode />} />
           
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />

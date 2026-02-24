@@ -799,6 +799,15 @@ try {
   console.error('✗ Failed to load Character Registry routes:', e.message);
 }
 
+// Session Briefing routes (creative session start)
+try {
+  const sessionRoutes = require('./routes/session');
+  app.use('/api/v1/session', sessionRoutes);
+  console.log('✓ Session routes loaded at /api/v1/session');
+} catch (e) {
+  console.error('✗ Failed to load Session routes:', e.message);
+}
+
 // Memory Bank routes (PNOS Storyteller Memories — Phase 1)
 try {
   const memoriesRoutes = require('./routes/memories');

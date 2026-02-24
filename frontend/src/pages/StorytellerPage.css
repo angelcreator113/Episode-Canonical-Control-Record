@@ -23,7 +23,7 @@
   --st-surface: #FFFDF9;
   --st-border: rgba(47, 42, 38, 0.10);
   --st-border-light: rgba(47, 42, 38, 0.06);
-  --st-muted: #7A746C;
+  --st-muted: #635D55;
   --st-gold: #C6A85E;
   --st-gold-dim: #A08A5C;
   --st-gold-soft: rgba(198, 168, 94, 0.06);
@@ -353,7 +353,7 @@
   inset: 0;
   pointer-events: none;
   background: var(--st-ambient-vignette);
-  z-index: 0;
+  z-index: -1;
 }
 
 /* ═══════════════════════════════════════
@@ -388,12 +388,12 @@
   background: none;
   border: none;
   font-family: var(--st-sans);
-  font-size: 12px;
+  font-size: 13px;
   color: var(--st-muted);
   cursor: pointer;
   padding: 4px 0;
   transition: color 0.15s;
-  opacity: 0.6;
+  opacity: 0.8;
 }
 .st-topbar-back:hover { color: var(--st-gold); opacity: 1; }
 
@@ -446,7 +446,7 @@
   font-family: var(--st-mono);
   font-size: 12px;
   color: var(--st-ink-light);
-  opacity: 0.7;
+  opacity: 0.85;
   transition: opacity 0.6s;
   letter-spacing: 0.02em;
 }
@@ -456,7 +456,7 @@
   font-family: var(--st-sans);
   font-size: 12px;
   color: var(--st-ink-light);
-  opacity: 0.6;
+  opacity: 0.8;
   transition: opacity 0.8s ease;
 }
 .st-topbar-saved.just-saved {
@@ -479,7 +479,7 @@
   color: var(--st-ink-light);
   cursor: pointer;
   transition: all 0.3s;
-  opacity: 0.7;
+  opacity: 0.85;
 }
 .st-mode-toggle:hover { opacity: 1; border-color: var(--st-border); }
 .st-mode-toggle.active {
@@ -494,12 +494,12 @@
   background: none;
   border: none;
   font-family: var(--st-sans);
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--st-ink-light);
   cursor: pointer;
   padding: 4px 8px;
-  opacity: 0.7;
+  opacity: 0.85;
   transition: all 0.15s;
   letter-spacing: 0.02em;
 }
@@ -591,8 +591,8 @@
 }
 .st-nav-brand-label {
   font-family: var(--st-sans);
-  font-size: 10px;
-  letter-spacing: 0.16em;
+  font-size: 12px;
+  letter-spacing: 0.14em;
   color: var(--st-muted);
   text-transform: uppercase;
   margin-bottom: 6px;
@@ -605,7 +605,28 @@
   font-weight: 600;
   line-height: 1.3;
   margin: 0;
+  flex: 1;
+  min-width: 0;
 }
+.st-nav-brand-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.st-nav-edit-btn {
+  background: none;
+  border: none;
+  font-size: 13px;
+  color: var(--st-muted);
+  cursor: pointer;
+  padding: 3px 6px;
+  border-radius: 3px;
+  line-height: 1;
+  opacity: 0.6;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.st-nav-edit-btn:hover { opacity: 1; color: var(--st-gold); background: var(--st-gold-soft); }
 .st-nav-brand-sub {
   font-family: var(--st-sans);
   font-size: 12px;
@@ -649,8 +670,8 @@
 .st-nav-section { padding: 12px 0; flex: 1; }
 .st-nav-section-label {
   font-family: var(--st-sans);
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 12px;
+  letter-spacing: 0.10em;
   text-transform: uppercase;
   color: var(--st-muted);
   font-weight: 600;
@@ -683,7 +704,7 @@
 
 .st-nav-num {
   font-family: var(--st-mono);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--st-muted);
   flex-shrink: 0;
   width: 20px;
@@ -709,11 +730,33 @@
 .st-cnav-dot { display: none; }
 .st-cnav-dot-p, .st-cnav-dot-a, .st-cnav-dot-e { display: none; }
 
-/* Chapter delete — appears on hover, very subtle */
-.st-nav-chapter-delete {
+/* Chapter actions row — edit + delete, appears on hover */
+.st-nav-chapter-actions {
   position: absolute;
   top: 6px;
   right: 4px;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+div:hover > .st-nav-chapter-actions { opacity: 1; }
+
+.st-nav-chapter-edit {
+  background: none;
+  border: none;
+  font-size: 12px;
+  color: rgba(47,42,38,0.3);
+  cursor: pointer;
+  padding: 2px 5px;
+  border-radius: 3px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+}
+.st-nav-chapter-edit:hover { color: var(--st-gold); background: var(--st-gold-soft); }
+
+.st-nav-chapter-delete {
   background: none;
   border: none;
   font-size: 13px;
@@ -722,10 +765,8 @@
   padding: 2px 6px;
   border-radius: 3px;
   line-height: 1;
-  opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
+  transition: color 0.15s, background 0.15s;
 }
-div:hover > .st-nav-chapter-delete { opacity: 1; }
 .st-nav-chapter-delete:hover { color: #B85C38; background: rgba(184,92,56,0.06); }
 
 /* ── Add Chapter ──────────────────────────────── */
@@ -734,11 +775,11 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   background: none;
   border: none;
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--st-muted);
   cursor: pointer;
   padding: 0;
-  opacity: 0.5;
+  opacity: 0.7;
   transition: color 0.15s, opacity 0.15s;
 }
 .st-nav-add button:hover { color: var(--st-gold); opacity: 1; }
@@ -756,8 +797,8 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   margin-bottom: 4px;
 }
 .st-stat-row:last-child { margin-bottom: 0; }
-.st-stat-label { font-family: var(--st-sans); font-size: 12px; color: var(--st-ink-light); font-weight: 500; }
-.st-stat-val { font-family: var(--st-mono); font-size: 12px; color: var(--st-ink); font-weight: 500; }
+.st-stat-label { font-family: var(--st-sans); font-size: 13px; color: var(--st-ink-light); font-weight: 500; }
+.st-stat-val { font-family: var(--st-mono); font-size: 13px; color: var(--st-ink); font-weight: 500; }
 .st-stat-pending { color: var(--st-pending); }
 .st-stat-approved { color: var(--st-approved); }
 .st-stat-edited { color: var(--st-edited); }
@@ -770,6 +811,7 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   min-width: 0;
   padding: 0 40px 80px;
   z-index: 1;
+  position: relative;
   display: flex;
   flex-direction: column;
 }
@@ -831,8 +873,8 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
 
 .st-chapter-header-label {
   font-family: var(--st-sans);
-  font-size: 11px;
-  letter-spacing: 0.18em;
+  font-size: 12px;
+  letter-spacing: 0.16em;
   text-transform: uppercase;
   color: var(--st-muted);
   font-weight: 600;
@@ -847,6 +889,29 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   letter-spacing: -0.5px;
   line-height: 1.2;
   margin: 0 0 12px;
+}
+.st-chapter-header-title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+.st-chapter-title-edit-btn {
+  background: none;
+  border: none;
+  font-size: 14px;
+  color: var(--st-muted);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  line-height: 1;
+  opacity: 0.3;
+  transition: all 0.15s;
+  flex-shrink: 0;
+}
+.st-chapter-title-edit-btn:hover {
+  opacity: 1;
+  color: var(--st-gold);
+  background: var(--st-gold-soft);
 }
 
 .st-chapter-header-meta {
@@ -890,6 +955,146 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
 }
 .st-chapter-icon-btn:hover { color: var(--st-gold); background: var(--st-gold-soft); }
 .st-chapter-icon-btn.danger:hover { color: var(--st-red); background: rgba(192,122,92,0.06); }
+
+/* "New chapter" label in header meta */
+.st-chapter-header-new {
+  color: var(--st-gold);
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════
+   Workflow Stepper — guides user through empty chapter
+   ═══════════════════════════════════════ */
+.st-workflow-stepper {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 28px 0 24px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.st-workflow-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  opacity: 0.35;
+  transition: opacity 0.2s;
+}
+.st-workflow-step.active {
+  opacity: 1;
+}
+.st-workflow-step.done {
+  opacity: 0.6;
+}
+
+.st-workflow-step-num {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--st-sans);
+  font-size: 12px;
+  font-weight: 700;
+  border: 2px solid var(--st-muted);
+  color: var(--st-muted);
+  background: transparent;
+  transition: all 0.2s;
+}
+.st-workflow-step.active .st-workflow-step-num {
+  border-color: var(--st-gold);
+  color: #fff;
+  background: var(--st-gold);
+}
+.st-workflow-step.done .st-workflow-step-num {
+  border-color: var(--st-gold);
+  color: var(--st-gold);
+  background: rgba(201,168,76,0.08);
+}
+
+.st-workflow-step-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.st-workflow-step-title {
+  font-family: var(--st-sans);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--st-ink);
+  letter-spacing: 0.01em;
+}
+.st-workflow-step.active .st-workflow-step-title {
+  color: var(--st-gold);
+}
+.st-workflow-step-desc {
+  font-family: var(--st-sans);
+  font-size: 12px;
+  color: var(--st-muted);
+  line-height: 1.3;
+}
+
+.st-workflow-step-line {
+  flex: 0 0 auto;
+  width: 24px;
+  height: 2px;
+  background: var(--st-border);
+  margin-top: 13px;
+  border-radius: 1px;
+}
+
+/* ═══════════════════════════════════════
+   Context Collapse — hidden until toggled for empty chapters
+   ═══════════════════════════════════════ */
+.st-context-collapse {
+  margin: 4px 0 16px;
+  border: 1px solid var(--st-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.st-context-collapse-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 14px;
+  background: rgba(201,168,76,0.03);
+  border: none;
+  cursor: pointer;
+  font-family: var(--st-sans);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--st-ink-light);
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  text-align: left;
+  transition: background-color 0.15s;
+}
+.st-context-collapse-toggle:hover {
+  background: rgba(201,168,76,0.06);
+}
+.st-context-collapse-arrow {
+  display: inline-block;
+  transition: transform 0.2s;
+  font-size: 12px;
+}
+.st-context-collapse-arrow.open {
+  transform: rotate(90deg);
+}
+.st-context-collapse-hint {
+  font-weight: 400;
+  color: var(--st-muted);
+  font-size: 12px;
+  text-transform: none;
+}
+.st-context-collapse-body {
+  padding: 12px 14px 16px;
+  border-top: 1px solid var(--st-border);
+}
 
 /* ═══════════════════════════════════════
    Brief Sheet — right side, slides in
@@ -1128,7 +1333,7 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   transition: opacity 0.15s, color 0.15s;
 }
 .st-pending-toggle:hover { opacity: 0.8; color: var(--st-gold); }
-.st-pending-toggle .arrow { font-size: 10px; transition: transform 0.2s; opacity: 0.4; }
+.st-pending-toggle .arrow { font-size: 12px; transition: transform 0.2s; opacity: 0.65; }
 .st-pending-toggle .arrow.open { transform: rotate(90deg); }
 .st-pending-body { padding: 4px 0; }
 
@@ -1220,7 +1425,7 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   align-items: center;
   justify-content: space-between;
   font-family: var(--st-sans);
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--st-muted);
   letter-spacing: 0.08em;
@@ -1246,7 +1451,7 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   cursor: pointer;
   padding: 4px;
   color: var(--st-muted);
-  opacity: 0.4;
+  opacity: 0.65;
   transition: all 0.15s;
 }
 .st-canon-toggle:hover { color: var(--st-gold); opacity: 1; }
@@ -1254,18 +1459,18 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
 .st-canon-row { display: flex; flex-direction: column; gap: 2px; }
 .st-canon-label {
   font-family: var(--st-sans);
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   text-transform: uppercase;
   letter-spacing: 0.08em;
   color: var(--st-muted);
-  opacity: 0.5;
+  opacity: 0.8;
 }
 .st-canon-value {
   font-family: var(--st-body);
-  font-size: 13px;
+  font-size: 14px;
   color: var(--st-ambient-ink, var(--st-ink));
-  line-height: 1.5;
+  line-height: 1.55;
 }
 
 /* ═══════════════════════════════════════
@@ -1561,9 +1766,11 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
     transform: translateX(-100%);
     transition: transform 0.25s ease;
     border-right: 1px solid var(--st-border);
+    pointer-events: none;
   }
   .st-nav.st-nav-mobile-open {
     transform: translateX(0);
+    pointer-events: auto;
   }
 
   /* Backdrop for mobile nav */
@@ -1605,9 +1812,10 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-chapter-actions {
     position: static;
     margin-top: 12px;
-    opacity: 1;
+    opacity: 1 !important;
     flex-wrap: wrap;
     gap: 8px;
+    pointer-events: auto;
   }
   .st-chapter-icon-btn {
     padding: 8px 12px;
@@ -1693,7 +1901,9 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
 
   /* Nav chapter touch targets */
   .st-nav-chapter { padding: 12px 20px; min-height: 48px; }
-  .st-nav-chapter-delete { opacity: 1; font-size: 16px; right: 8px; top: 10px; }
+  .st-nav-chapter-actions { opacity: 1; }
+  .st-nav-chapter-delete { font-size: 16px; }
+  .st-nav-chapter-edit { font-size: 14px; }
 
   /* Inline edit inputs sized for touch */
   .st-inline-edit-chapter-bar { font-size: 24px; min-width: 100%; width: 100%; }
@@ -1730,8 +1940,24 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-editor { padding: 0 12px 32px; }
   .st-chapter-header { padding: 28px 0 20px; }
   .st-chapter-header-title { font-size: 22px; }
-  .st-chapter-header-label { font-size: 10px; }
+  .st-chapter-header-label { font-size: 11px; }
   .st-chapter-header-meta { font-size: 12px; flex-wrap: wrap; }
+
+  /* Workflow stepper — vertical on mobile */
+  .st-workflow-stepper {
+    flex-direction: column;
+    gap: 0;
+    padding: 20px 0 16px;
+  }
+  .st-workflow-step-line {
+    width: 2px;
+    height: 16px;
+    margin: 0 0 0 13px;
+  }
+  .st-workflow-step-desc { display: none; }
+  .st-workflow-step-num { width: 24px; height: 24px; min-width: 24px; font-size: 11px; }
+  .st-context-collapse-toggle { font-size: 11px; padding: 8px 12px; }
+  .st-context-collapse-hint { display: none; }
 
   /* Chapter actions: smaller grid on tiny screens */
   .st-chapter-actions { gap: 6px; }
@@ -1816,26 +2042,36 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
    ═══════════════════════════════════════ */
 @media (hover: none) and (pointer: coarse) {
   /* Always show line actions on touch */
-  .st-line-actions { opacity: 1; }
+  .st-line-actions { opacity: 1 !important; pointer-events: auto !important; }
   .st-line-action { padding: 8px 14px; font-size: 14px; min-height: 36px; }
 
-  /* Always show chapter delete */
-  .st-nav-chapter-delete { opacity: 0.6; }
+  /* Always show chapter edit/delete actions */
+  .st-nav-chapter-actions { opacity: 1 !important; }
+  .st-nav-chapter-edit { font-size: 14px; padding: 6px 8px; min-height: 32px; min-width: 32px; }
+  .st-nav-chapter-delete { font-size: 15px; padding: 6px 8px; min-height: 32px; min-width: 32px; }
+
+  /* Always show book edit button */
+  .st-nav-edit-btn { opacity: 0.7; font-size: 14px; padding: 6px 8px; min-height: 32px; min-width: 32px; }
+
+  /* Always show chapter title edit button */
+  .st-chapter-title-edit-btn { opacity: 0.6; font-size: 16px; padding: 6px 10px; min-height: 36px; }
 
   /* Always show card delete */
   .st-card-delete { opacity: 0.5; }
 
-  /* Chapter actions always visible */
-  .st-chapter-actions { opacity: 1; }
+  /* Chapter actions always visible and clickable */
+  .st-chapter-actions { opacity: 1 !important; pointer-events: auto !important; }
+  .st-chapter-icon-btn { pointer-events: auto !important; }
+
+  /* Action bar always full opacity on touch */
+  .st-action-bar { opacity: 1 !important; }
+  .st-action-bar .st-btn { pointer-events: auto !important; }
 
   /* Bigger tap targets */
   .st-btn { min-height: 44px; padding: 10px 18px; }
   .st-btn-sm { min-height: 40px; padding: 8px 14px; }
   .st-nav-chapter { min-height: 48px; }
   .st-chapter-icon-btn { min-height: 40px; min-width: 40px; }
-
-  /* Action bar always full opacity on touch */
-  .st-action-bar { opacity: 1; }
 
   /* Add line trigger more prominent on touch */
   .st-add-line-trigger { opacity: 0.4; padding: 16px 0; }
@@ -1859,6 +2095,9 @@ div:hover > .st-nav-chapter-delete { opacity: 1; }
   .st-edit-cancel,
   .st-card-delete,
   .st-nav-chapter-delete,
+  .st-nav-chapter-edit,
+  .st-nav-edit-btn,
+  .st-chapter-title-edit-btn,
   .st-nav-add button {
     touch-action: manipulation;
   }

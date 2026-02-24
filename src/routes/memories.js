@@ -977,12 +977,45 @@ Respond with ONLY valid JSON. No preamble. No markdown.
   "opening_suggestion": "One suggested first line of the chapter. In JustAWoman's voice. Specific. Grounded in the scene details the author gave."
 }`;
 
-    // ── Call Claude ────────────────────────────────────────────────────────
-    const response = await anthropic.messages.create({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 1000,
-      messages: [{ role: 'user', content: prompt }],
-    });
+    // ── Call Claude (with model fallback + retry for overloaded errors) ──
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`scene-interview: trying ${model} (attempt ${attempt + 1})`);
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 1000,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break; // success
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`scene-interview: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          // If this model is overloaded or not found, try next model
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`scene-interview: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.status(503).json({
+        error: 'The AI service is temporarily overloaded. Please wait a minute and try again.',
+        retryable: true,
+      });
+    }
 
     const rawText = response.content
       .filter(b => b.type === 'text')
@@ -2642,5 +2675,270 @@ Respond with ONLY valid JSON. No preamble. No markdown fences.
     res.status(500).json({ error: err.message });
   }
 });
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /voice-to-story
+// Spoken words → story prose in JustAWoman's voice
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const WRITE_MODE_ACT_VOICE = {
+  act_1: {
+    belief: 'If I find the right niche, everything will click.',
+    voice:  'Raw. Eager. Still hopeful. She tries things with full belief, then quietly stops. Sentences cycle and restart. Not yet aware of the pattern.',
+    tense:  'Present or close-past — the wound is fresh.',
+  },
+  act_2: {
+    belief: 'Maybe I\'m just not meant for this. Maybe I\'m delusional.',
+    voice:  'Heavier. Slower. Interior monologue rising. Shorter sentences when doubt peaks. The comparison spiral is loudest here.',
+    tense:  'Interior, reflective — she is watching herself fail.',
+  },
+  act_3: {
+    belief: 'What if I stop trying to fit into niches and create my own world?',
+    voice:  'Something lifts. Permission, not confidence yet. Sentences start reaching further. A new rhythm appears.',
+    tense:  'Present — she is noticing something for the first time.',
+  },
+  act_4: {
+    belief: 'I can sustain this. Even when it\'s fragile.',
+    voice:  'Quieter confidence. Less proving, more building. Doubt present but not in charge. Prose gets cleaner.',
+    tense:  'Active present — she is doing the thing.',
+  },
+  act_5: {
+    belief: 'This is the first thing I\'ve built that feels like me.',
+    voice:  'Owned. Narrator and subject feel like the same person. Earned.',
+    tense:  'Reflective present — she has arrived somewhere.',
+  },
+};
+
+const WRITE_MODE_CHARACTER_RULES = `
+KEY RULES:
+- JustAWoman is ACTIVE — posting, trying, showing up. Wound is invisibility, not fear.
+- The Husband never speaks aloud — he exists only in her interior monologue.
+- Chloe appears on screens only — never in person, never in the same physical space.
+- Lala in Book 1: one intrusive thought maximum — brief, different altitude, not JustAWoman being confident.
+- First person. Vary sentence rhythm. Short when doubt peaks, longer when something opens.
+- Do not give her clarity she hasn't yet earned.`;
+
+router.post('/voice-to-story', optionalAuth, async (req, res) => {
+  try {
+    const {
+      spoken,
+      existing_prose = '',
+      chapter_title  = '',
+      chapter_brief  = '',
+      pnos_act       = 'act_1',
+      book_character = 'JustAWoman',
+      session_log    = [],
+    } = req.body;
+
+    if (!spoken?.trim()) {
+      return res.json({ prose: null, hint: null });
+    }
+
+    const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+
+    const recentProse = existing_prose
+      ? existing_prose.split('\n\n').slice(-3).join('\n\n')
+      : '';
+
+    const sessionContext = session_log.length > 0
+      ? `Recent spoken inputs this session:\n${session_log.slice(-3).map(l => `"${l.spoken.slice(0, 80)}"`).join('\n')}`
+      : '';
+
+    const prompt = `You are writing a memoir called "Before Lala" in the voice of JustAWoman.
+
+The author just spoke this aloud — it is raw material, not polished prose:
+"${spoken}"
+
+YOUR JOB: Turn this into story. Not a transcript. Not a cleanup. Story.
+Take what they said and write it as JustAWoman would write it — in her voice, in her body, in the moment.
+
+CHAPTER: ${chapter_title || 'Untitled'}
+${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
+
+CURRENT ACT: ${act.voice}
+CURRENT BELIEF: "${act.belief}"
+PROSE TENSE/MODE: ${act.tense}
+
+${recentProse ? `WHAT WAS JUST WRITTEN (continue from here):\n${recentProse}` : ''}
+
+${sessionContext}
+
+${WRITE_MODE_CHARACTER_RULES}
+
+WRITING RULES:
+- Write 2–5 paragraphs. Not more.
+- Stay close to what they said — the truth of it — but give it the shape of prose.
+- If they mentioned a feeling, find the image underneath it.
+- If they described what happened, find what it cost.
+- If they trailed off or repeated themselves, that repetition is probably the real thing.
+- Do not add events or details they didn't give you.
+- Do not give her a revelation she didn't earn in what they said.
+- End on something that pulls forward — not a conclusion.
+
+Respond with ONLY the prose. No preamble. No explanation. No quotes around it.
+Just the story, in JustAWoman's first-person voice.`;
+
+    // Use model fallback like scene-interview
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`voice-to-story: trying ${model} (attempt ${attempt + 1})`);
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 800,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`voice-to-story: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`voice-to-story: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.json({ prose: null, hint: null, error: 'AI is busy — please try again in a moment' });
+    }
+
+    const prose = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+      .trim();
+
+    // Check for Lala conditions — very subtle hint
+    let hint = null;
+    const proseAndSpoken = (existing_prose + prose).toLowerCase();
+    const spiralCount = (proseAndSpoken.match(/can't|couldn't|wrong|what if|why|tired|keep/g) || []).length;
+    const interiorCount = existing_prose.split('\n\n').length;
+    if (spiralCount >= 4 && interiorCount >= 4) {
+      hint = 'Something is building here — a different voice is close.';
+    }
+
+    res.json({ prose, hint });
+
+  } catch (err) {
+    console.error('POST /voice-to-story error:', err);
+    res.json({
+      prose: null,
+      hint:  null,
+      error: 'Could not generate prose — please try again',
+    });
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /story-edit
+// Author says what's wrong → returns revised prose
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/story-edit', optionalAuth, async (req, res) => {
+  try {
+    const {
+      current_prose,
+      edit_note,
+      pnos_act      = 'act_1',
+      chapter_title = '',
+    } = req.body;
+
+    if (!current_prose?.trim() || !edit_note?.trim()) {
+      return res.json({ prose: current_prose });
+    }
+
+    const act = WRITE_MODE_ACT_VOICE[pnos_act] || WRITE_MODE_ACT_VOICE.act_1;
+
+    const prompt = `You are editing a memoir called "Before Lala" written in JustAWoman's voice.
+
+CURRENT PROSE:
+${current_prose}
+
+THE AUTHOR'S NOTE ON WHAT NEEDS TO CHANGE:
+"${edit_note}"
+
+CHAPTER: ${chapter_title || 'Untitled'}
+CURRENT VOICE: ${act.voice}
+CURRENT BELIEF: "${act.belief}"
+
+${WRITE_MODE_CHARACTER_RULES}
+
+EDITING RULES:
+- Take the author's note seriously — they are telling you the truth of what's wrong.
+- "That's not how she'd say it" → find how she would say it.
+- "That part is too neat" → find the roughness.
+- "She wouldn't have that clarity yet" → pull the clarity back.
+- "More of that feeling" → expand that moment, compress others.
+- "That's not what happened" → ask what the note says did happen, adjust accordingly.
+- Preserve what is working. Change what the note says is wrong.
+- Do not add new events or details beyond what exists plus what the note implies.
+- Keep the same overall arc and length unless the note specifically asks to expand.
+
+Respond with ONLY the revised prose. No preamble. No explanation.
+The complete revised version from start to finish.`;
+
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let response;
+    for (const model of MODELS) {
+      let succeeded = false;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          console.log(`story-edit: trying ${model} (attempt ${attempt + 1})`);
+          response = await anthropic.messages.create({
+            model,
+            max_tokens: 1200,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          succeeded = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if ((status === 529 || status === 503) && attempt < 1) {
+            console.log(`story-edit: ${model} returned ${status}, retrying in 2s`);
+            await new Promise(r => setTimeout(r, 2000));
+            continue;
+          }
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`story-edit: ${model} status ${status}, trying next model`);
+            break;
+          }
+          throw apiErr;
+        }
+      }
+      if (succeeded) break;
+    }
+
+    if (!response) {
+      return res.json({ prose: current_prose }); // return unchanged on total failure
+    }
+
+    const prose = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('')
+      .trim();
+
+    res.json({ prose });
+
+  } catch (err) {
+    console.error('POST /story-edit error:', err);
+    res.json({ prose: req.body.current_prose });
+  }
+});
+
 
 module.exports = router;
