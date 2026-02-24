@@ -799,6 +799,15 @@ try {
   console.error('✗ Failed to load Character Registry routes:', e.message);
 }
 
+// Character AI Writing Assistant routes
+try {
+  const characterAIRoutes = require('./routes/characterAI');
+  app.use('/api/v1/character-ai', characterAIRoutes);
+  console.log('✓ Character AI routes loaded at /api/v1/character-ai');
+} catch (e) {
+  console.error('✗ Failed to load Character AI routes:', e.message);
+}
+
 // Session Briefing routes (creative session start)
 try {
   const sessionRoutes = require('./routes/session');

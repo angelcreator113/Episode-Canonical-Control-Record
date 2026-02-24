@@ -19,6 +19,7 @@ import './CharacterRegistryPage.css';
 import CharacterVoiceInterview from './CharacterVoiceInterview';
 
 const API = '/api/v1/character-registry';
+const AI_API = '/api/v1/character-ai';
 
 /* ── Constants ─────────────────────────────────────────────────── */
 
@@ -50,6 +51,7 @@ const DOSSIER_TABS = [
   { key: 'relationships', label: 'Relationships' },
   { key: 'story',         label: 'Story Presence' },
   { key: 'voice',         label: 'Voice' },
+  { key: 'ai',            label: '✦ AI Writer' },
 ];
 
 const ARCHETYPES = [
@@ -114,6 +116,18 @@ export default function CharacterRegistryPage() {
   // Interview
   const [interviewTarget, setInterviewTarget] = useState(null);
   const [bookId, setBookId] = useState(null);
+
+  // AI Writer state
+  const [aiMode, setAiMode]             = useState('scene');    // scene | monologue | profile | gaps | next
+  const [aiPrompt, setAiPrompt]         = useState('');
+  const [aiMood, setAiMood]             = useState('');
+  const [aiOtherChars, setAiOtherChars] = useState('');
+  const [aiLength, setAiLength]         = useState('medium');   // short | medium | long
+  const [aiDirection, setAiDirection]    = useState('');
+  const [aiResult, setAiResult]         = useState(null);
+  const [aiLoading, setAiLoading]       = useState(false);
+  const [aiError, setAiError]           = useState(null);
+  const [aiContextUsed, setAiContextUsed] = useState(null);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type, key: Date.now() });
@@ -354,6 +368,65 @@ export default function CharacterRegistryPage() {
     }
   };
 
+  /* ── AI Writer Actions ── */
+  const aiGenerate = async () => {
+    if (!activeChar) return;
+    setAiLoading(true);
+    setAiError(null);
+    setAiResult(null);
+    setAiContextUsed(null);
+
+    const endpoints = {
+      scene:     'write-scene',
+      monologue: 'character-monologue',
+      profile:   'build-profile',
+      gaps:      'suggest-gaps',
+      next:      'what-happens-next',
+    };
+
+    const body = { character_id: activeChar.id };
+
+    if (aiMode === 'scene') {
+      body.situation = aiPrompt;
+      body.mood = aiMood;
+      body.other_characters = aiOtherChars;
+      body.length = aiLength;
+    } else if (aiMode === 'monologue') {
+      body.moment = aiPrompt;
+      body.prompt = aiMood; // reuse mood field as additional context
+    } else if (aiMode === 'next') {
+      body.direction = aiDirection || aiPrompt;
+    }
+
+    try {
+      const res = await fetch(`${AI_API}/${endpoints[aiMode]}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAiResult(data);
+        setAiContextUsed(data.context_used || data.data_sources || null);
+      } else {
+        setAiError(data.error || 'Generation failed');
+      }
+    } catch (e) {
+      setAiError('Failed to connect to AI service');
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
+  const aiClear = () => {
+    setAiResult(null);
+    setAiError(null);
+    setAiPrompt('');
+    setAiMood('');
+    setAiOtherChars('');
+    setAiDirection('');
+  };
+
   /* ── Stats ── */
   const statusCounts = {
     total: sorted.length,
@@ -591,7 +664,7 @@ export default function CharacterRegistryPage() {
 
               {/* Tab Content */}
               <div className="cr-dossier-tab-content">
-                {renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F)}
+                {renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear })}
               </div>
             </div>
           </div>
@@ -957,7 +1030,7 @@ function Toast({ msg, type, onClose }) {
 /* ================================================================
    DOSSIER TAB CONTENT
    ================================================================ */
-function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEdit, saveSection, F) {
+function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, ai) {
   const editing = editSection === tab;
 
   const editControls = editing ? (
@@ -1272,9 +1345,354 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
         </div>
       );
 
+    /* ── AI WRITER ── */
+    case 'ai':
+      return <AIWriterTab character={c} ai={ai} />;
+
     default:
       return null;
   }
+}
+
+
+/* ================================================================
+   AI WRITER TAB
+   ================================================================ */
+function AIWriterTab({ character, ai }) {
+  const {
+    aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood,
+    aiOtherChars, setAiOtherChars, aiLength, setAiLength,
+    aiDirection, setAiDirection, aiResult, aiLoading, aiError,
+    aiContextUsed, aiGenerate, aiClear,
+  } = ai;
+
+  const charName = character.selected_name || character.display_name;
+
+  const AI_MODES = [
+    { key: 'scene',     label: 'Write a Scene',       icon: '✦', desc: 'Claude writes a scene featuring this character using everything it knows' },
+    { key: 'monologue', label: 'Inner Monologue',      icon: '◈', desc: 'Hear what this character is really thinking — behind the mask' },
+    { key: 'next',      label: 'What Happens Next',    icon: '→', desc: 'Claude predicts the next story beat based on psychology & plot' },
+    { key: 'gaps',      label: 'Suggest Missing',      icon: '◇', desc: 'Find underdeveloped areas in this character\'s profile' },
+    { key: 'profile',   label: 'Generate from Story',  icon: '⟐', desc: 'Build a profile by reading all memories, lines & relationships' },
+  ];
+
+  const renderInputs = () => {
+    switch (aiMode) {
+      case 'scene':
+        return (
+          <div className="ai-writer-inputs">
+            <div className="ai-writer-field">
+              <label>What\'s happening?</label>
+              <textarea
+                value={aiPrompt}
+                onChange={e => setAiPrompt(e.target.value)}
+                placeholder={`e.g. ${charName} walks into a meeting she wasn't invited to...`}
+                rows={3}
+              />
+            </div>
+            <div className="ai-writer-field-row">
+              <div className="ai-writer-field half">
+                <label>Mood / Feeling</label>
+                <input value={aiMood} onChange={e => setAiMood(e.target.value)}
+                  placeholder="Tense, electric, quiet" />
+              </div>
+              <div className="ai-writer-field half">
+                <label>Other Characters</label>
+                <input value={aiOtherChars} onChange={e => setAiOtherChars(e.target.value)}
+                  placeholder="Names of others present" />
+              </div>
+            </div>
+            <div className="ai-writer-length-row">
+              <span className="ai-writer-length-label">Length:</span>
+              {['short', 'medium', 'long'].map(l => (
+                <button key={l} className={`ai-writer-length-btn ${aiLength === l ? 'active' : ''}`}
+                  onClick={() => setAiLength(l)}>{l}</button>
+              ))}
+            </div>
+          </div>
+        );
+
+      case 'monologue':
+        return (
+          <div className="ai-writer-inputs">
+            <div className="ai-writer-field">
+              <label>The moment (optional)</label>
+              <textarea
+                value={aiPrompt}
+                onChange={e => setAiPrompt(e.target.value)}
+                placeholder={`e.g. Right after she finds out the truth about Dillon...`}
+                rows={3}
+              />
+            </div>
+            <div className="ai-writer-field">
+              <label>Additional context (optional)</label>
+              <input value={aiMood} onChange={e => setAiMood(e.target.value)}
+                placeholder="What else should Claude know?" />
+            </div>
+          </div>
+        );
+
+      case 'next':
+        return (
+          <div className="ai-writer-inputs">
+            <div className="ai-writer-field">
+              <label>Direction (optional — leave blank for Claude to decide)</label>
+              <textarea
+                value={aiDirection}
+                onChange={e => setAiDirection(e.target.value)}
+                placeholder="e.g. I want the story to move toward confrontation... or leave blank and let Claude read the momentum"
+                rows={3}
+              />
+            </div>
+          </div>
+        );
+
+      case 'gaps':
+      case 'profile':
+        return (
+          <div className="ai-writer-inputs">
+            <p className="ai-writer-auto-note">
+              Claude will analyze all available data — memories, approved lines, relationships, 
+              therapy sessions — to {aiMode === 'gaps' ? 'find what\'s underdeveloped' : 'build a comprehensive profile'}.
+            </p>
+          </div>
+        );
+
+      default:
+        return null;
+    }
+  };
+
+  const renderResult = () => {
+    if (aiLoading) {
+      return (
+        <div className="ai-writer-loading">
+          <div className="ai-writer-loading-icon">✦</div>
+          <div className="ai-writer-loading-text">
+            Claude is reading everything about {charName}...
+          </div>
+          <div className="ai-writer-loading-sub">
+            Psychology · Relationships · Memories · Story Lines · Universe
+          </div>
+        </div>
+      );
+    }
+
+    if (aiError) {
+      return (
+        <div className="ai-writer-error">
+          <span>⚠ {aiError}</span>
+          <button onClick={aiClear} className="ai-writer-retry-btn">Try Again</button>
+        </div>
+      );
+    }
+
+    if (!aiResult) return null;
+
+    // Prose result (scene / monologue)
+    if (aiResult.prose) {
+      return (
+        <div className="ai-writer-result">
+          <div className="ai-writer-result-header">
+            <span className="ai-writer-result-label">Generated for {aiResult.character_name}</span>
+            <div className="ai-writer-result-actions">
+              <button onClick={() => navigator.clipboard?.writeText(aiResult.prose)} className="ai-writer-copy-btn">Copy</button>
+              <button onClick={aiClear} className="ai-writer-clear-btn">Clear</button>
+            </div>
+          </div>
+          <div className="ai-writer-prose">{aiResult.prose}</div>
+          {aiContextUsed && (
+            <div className="ai-writer-context-badge">
+              Context: {aiContextUsed.memories || 0} memories · {aiContextUsed.relationships || 0} relationships · {aiContextUsed.recent_lines || 0} lines
+              {aiContextUsed.has_universe && ' · Universe'}
+              {aiContextUsed.has_therapy && ' · Therapy'}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Beats result (what happens next)
+    if (aiResult.beats) {
+      const beats = aiResult.beats;
+      return (
+        <div className="ai-writer-result">
+          <div className="ai-writer-result-header">
+            <span className="ai-writer-result-label">Story Beats for {aiResult.character_name}</span>
+            <button onClick={aiClear} className="ai-writer-clear-btn">Clear</button>
+          </div>
+          {beats.story_tension && (
+            <div className="ai-writer-tension">
+              <strong>Core Tension:</strong> {beats.story_tension}
+            </div>
+          )}
+          <div className="ai-writer-beats">
+            {(beats.beats || []).map((beat, i) => (
+              <div key={i} className="ai-writer-beat">
+                <div className="ai-writer-beat-num">{i + 1}</div>
+                <div className="ai-writer-beat-body">
+                  <div className="ai-writer-beat-title">{beat.title}</div>
+                  <div className="ai-writer-beat-desc">{beat.description}</div>
+                  <div className="ai-writer-beat-why"><em>Why:</em> {beat.why}</div>
+                  {beat.prose_preview && (
+                    <div className="ai-writer-beat-preview">"{beat.prose_preview}"</div>
+                  )}
+                  <div className="ai-writer-beat-meta">
+                    {beat.tone && <span className="ai-writer-beat-tone">{beat.tone}</span>}
+                    {beat.characters_involved?.length > 0 && (
+                      <span className="ai-writer-beat-chars">with {beat.characters_involved.join(', ')}</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // Analysis result (gaps)
+    if (aiResult.analysis) {
+      const a = aiResult.analysis;
+      return (
+        <div className="ai-writer-result">
+          <div className="ai-writer-result-header">
+            <span className="ai-writer-result-label">Gap Analysis — {aiResult.character_name}</span>
+            <button onClick={aiClear} className="ai-writer-clear-btn">Clear</button>
+          </div>
+          <div className="ai-writer-score-row">
+            <div className="ai-writer-score">
+              <div className="ai-writer-score-num">{a.overall_depth_score || '?'}</div>
+              <div className="ai-writer-score-label">Depth Score</div>
+            </div>
+            <div className="ai-writer-score-details">
+              {a.strongest_aspect && <div><strong>Strongest:</strong> {a.strongest_aspect}</div>}
+              {a.weakest_aspect && <div><strong>Weakest:</strong> {a.weakest_aspect}</div>}
+            </div>
+          </div>
+          {(a.gaps || []).map((gap, i) => (
+            <div key={i} className={`ai-writer-gap ${gap.severity}`}>
+              <div className="ai-writer-gap-header">
+                <span className="ai-writer-gap-area">{gap.area}</span>
+                <span className={`ai-writer-gap-severity ${gap.severity}`}>{gap.severity?.replace('_', ' ')}</span>
+              </div>
+              <div className="ai-writer-gap-title">{gap.title}</div>
+              <div className="ai-writer-gap-detail">{gap.detail}</div>
+              {gap.suggestion && <div className="ai-writer-gap-suggestion">💡 {gap.suggestion}</div>}
+            </div>
+          ))}
+          {a.scene_prompts?.length > 0 && (
+            <div className="ai-writer-scene-prompts">
+              <div className="ai-writer-scene-prompts-title">Scene Ideas to Explore</div>
+              {a.scene_prompts.map((p, i) => (
+                <div key={i} className="ai-writer-scene-prompt"
+                  onClick={() => { setAiMode('scene'); setAiPrompt(p); }}
+                  title="Click to use as scene prompt"
+                >✦ {p}</div>
+              ))}
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Profile result
+    if (aiResult.profile) {
+      const p = aiResult.profile;
+      return (
+        <div className="ai-writer-result">
+          <div className="ai-writer-result-header">
+            <span className="ai-writer-result-label">Generated Profile — {aiResult.character_name}</span>
+            <button onClick={aiClear} className="ai-writer-clear-btn">Clear</button>
+          </div>
+          {p.ai_summary && (
+            <div className="ai-writer-profile-summary">{p.ai_summary}</div>
+          )}
+          <div className="ai-writer-profile-grid">
+            {p.core_desire && <div className="ai-writer-profile-item"><strong>Core Desire</strong><span>{p.core_desire}</span></div>}
+            {p.core_fear && <div className="ai-writer-profile-item"><strong>Core Fear</strong><span>{p.core_fear}</span></div>}
+            {p.core_wound && <div className="ai-writer-profile-item"><strong>Core Wound</strong><span>{p.core_wound}</span></div>}
+            {p.mask_persona && <div className="ai-writer-profile-item"><strong>Public Mask</strong><span>{p.mask_persona}</span></div>}
+            {p.truth_persona && <div className="ai-writer-profile-item"><strong>Private Truth</strong><span>{p.truth_persona}</span></div>}
+            {p.signature_trait && <div className="ai-writer-profile-item"><strong>Signature Trait</strong><span>{p.signature_trait}</span></div>}
+            {p.emotional_baseline && <div className="ai-writer-profile-item"><strong>Emotional Baseline</strong><span>{p.emotional_baseline}</span></div>}
+          </div>
+          {p.description && (
+            <div className="ai-writer-profile-desc">
+              <strong>Bio:</strong> {p.description}
+            </div>
+          )}
+          {p.evidence?.length > 0 && (
+            <div className="ai-writer-evidence">
+              <div className="ai-writer-evidence-title">Evidence from Story</div>
+              {p.evidence.map((e, i) => <div key={i} className="ai-writer-evidence-item">• {e}</div>)}
+            </div>
+          )}
+          {aiResult.data_sources && (
+            <div className="ai-writer-context-badge">
+              Analyzed: {aiResult.data_sources.memories || 0} memories · {aiResult.data_sources.relationships || 0} relationships · {aiResult.data_sources.lines_mentioning || 0} character lines · {aiResult.data_sources.recent_lines || 0} story lines
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Fallback: show raw
+    if (aiResult.raw) {
+      return (
+        <div className="ai-writer-result">
+          <div className="ai-writer-result-header">
+            <span className="ai-writer-result-label">Result</span>
+            <button onClick={aiClear} className="ai-writer-clear-btn">Clear</button>
+          </div>
+          <div className="ai-writer-prose">{aiResult.raw}</div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  return (
+    <div className="ai-writer-tab">
+      {/* Header */}
+      <div className="ai-writer-header">
+        <div className="ai-writer-header-title">✦ AI Writer</div>
+        <div className="ai-writer-header-sub">
+          Claude knows everything about {charName} — psychology, wounds, relationships, 
+          memories, voice, and every approved line of story.
+        </div>
+      </div>
+
+      {/* Mode selector */}
+      <div className="ai-writer-modes">
+        {AI_MODES.map(m => (
+          <button
+            key={m.key}
+            className={`ai-writer-mode ${aiMode === m.key ? 'active' : ''}`}
+            onClick={() => { setAiMode(m.key); if (aiResult) aiClear(); }}
+          >
+            <span className="ai-writer-mode-icon">{m.icon}</span>
+            <span className="ai-writer-mode-label">{m.label}</span>
+            <span className="ai-writer-mode-desc">{m.desc}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* Inputs */}
+      {renderInputs()}
+
+      {/* Generate button */}
+      {!aiResult && !aiLoading && (
+        <button className="ai-writer-generate-btn" onClick={aiGenerate} disabled={aiLoading}>
+          ✦ Generate with Claude
+        </button>
+      )}
+
+      {/* Result */}
+      {renderResult()}
+    </div>
+  );
 }
 
 
