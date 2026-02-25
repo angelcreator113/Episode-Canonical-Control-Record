@@ -207,6 +207,13 @@
   margin-right: 280px;
 }
 
+/* When panel is open, widen prose to fill the space — no dead zone */
+.wm-panel-open .wm-prose-area {
+  max-width: 100%;
+  padding-left: 48px;
+  padding-right: 48px;
+}
+
 .wm-prose-area {
   width: 100%;
   max-width: 680px;
