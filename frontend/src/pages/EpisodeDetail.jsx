@@ -6,13 +6,11 @@ import episodeService from '../services/episodeService';
 import EpisodeAssetsTab from '../components/Episodes/EpisodeAssetsTab';
 import EpisodeOverviewTab from '../components/Episodes/EpisodeOverviewTab';
 import ScriptEditor from '../components/ScriptEditor';
-import EpisodeSceneComposerTab from '../components/Episodes/EpisodeSceneComposerTab';
 import EpisodeDistributionTab from '../components/Episodes/EpisodeDistributionTab';
 import EpisodeWardrobeTab from '../components/Episodes/EpisodeWardrobeTab';
 import EpisodeWardrobeGameplay from '../components/EpisodeWardrobeGameplay';
 import SceneLibraryPicker from '../components/SceneLibraryPicker';
 import SceneLinking from '../components/SceneLinking';
-import useOrientation from '../hooks/useOrientation';
 import './EpisodeDetail.css';
 
 
@@ -26,8 +24,7 @@ const EpisodeDetail = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTabState] = useState(searchParams.get('tab') || 'overview');
-  const { isMobile, isPortrait } = useOrientation();
-  const needsLandscape = isMobile && isPortrait;
+
   const [sceneView, setSceneView] = useState('composer');
   const [tabLoading, setTabLoading] = useState(false);
   const [showScenePicker, setShowScenePicker] = useState(false);
@@ -434,7 +431,7 @@ const EpisodeDetail = () => {
     const primaryAction = getPrimaryNextAction();
     
     if (episodeScenes.length === 0 && primaryAction?.title !== 'Add your first scene') {
-      steps.push({ title: 'Add Scenes', status: 'pending', action: () => setActiveTab('scenes') });
+      steps.push({ title: 'Add Scenes', status: 'pending', action: () => navigate(`/episodes/${episode.id}/scene-composer`) });
     } else if (episodeScenes.length > 0) {
       steps.push({ title: 'Add Scenes', status: 'complete', count: episodeScenes.length });
     }
@@ -597,28 +594,22 @@ const EpisodeDetail = () => {
             <span className="ed-tab-label">Script</span>
           </button>
           <button
-            className={`ed-tab ${activeTab === 'scenes' ? 'ed-tab-active' : ''}`}
-            onClick={() => setActiveTab('scenes')}
-            title="Scene Composer"
+            className="ed-tab ed-tab-launch"
+            onClick={() => navigate(`/episodes/${episodeId}/scene-composer`)}
+            title="Open Scene Composer"
           >
             <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Scene Composer</span>
-            {needsLandscape && <span className="ed-tab-landscape-badge" title="Landscape only">↻</span>}
+            <span className="ed-tab-label">Compose</span>
+            <span className="ed-tab-launch-arrow">↗</span>
           </button>
           <button
-            className={`ed-tab ${activeTab === 'timeline' ? 'ed-tab-active' : ''}`}
-            onClick={() => {
-              if (needsLandscape) {
-                setActiveTab('timeline');
-              } else {
-                navigate(`/episodes/${episodeId}/timeline`);
-              }
-            }}
-            title="Timeline Editor"
+            className="ed-tab ed-tab-launch"
+            onClick={() => navigate(`/episodes/${episodeId}/timeline`)}
+            title="Open Timeline Editor"
           >
             <span className="ed-tab-icon">⏱️</span>
             <span className="ed-tab-label">Timeline</span>
-            {needsLandscape && <span className="ed-tab-landscape-badge" title="Landscape only">↻</span>}
+            <span className="ed-tab-launch-arrow">↗</span>
           </button>
           <button
             className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
@@ -677,46 +668,6 @@ const EpisodeDetail = () => {
               setEpisode(prev => ({ ...prev, script_content: newScript }));
             }}
           />
-        )}
-
-        {/* Scenes Tab - Scene Composer */}
-        {activeTab === 'scenes' && (
-          needsLandscape ? (
-            <div className="ed-landscape-prompt">
-              <div className="ed-landscape-prompt-inner">
-                <div className="ed-landscape-phone-icon">
-                  <svg width="56" height="56" viewBox="0 0 64 64" fill="none">
-                    <rect x="14" y="8" width="36" height="48" rx="4" stroke="#ec4899" strokeWidth="2.5" fill="none" />
-                    <circle cx="32" cy="50" r="2" fill="#ec4899" />
-                    <path d="M50 32 C50 20 42 12 32 12" stroke="#ec4899" strokeWidth="2" fill="none" strokeLinecap="round" />
-                    <path d="M50 32 L47 27 M50 32 L54 28" stroke="#ec4899" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <h3>Rotate for Scene Composer</h3>
-                <p>The Scene Composer works best in landscape mode. Please turn your device sideways to use this feature.</p>
-              </div>
-            </div>
-          ) : (
-            <EpisodeSceneComposerTab episode={episode} show={episode.show} />
-          )
-        )}
-
-        {/* Timeline Tab - Landscape prompt on mobile portrait */}
-        {activeTab === 'timeline' && needsLandscape && (
-          <div className="ed-landscape-prompt">
-            <div className="ed-landscape-prompt-inner">
-              <div className="ed-landscape-phone-icon">
-                <svg width="56" height="56" viewBox="0 0 64 64" fill="none">
-                  <rect x="14" y="8" width="36" height="48" rx="4" stroke="#ec4899" strokeWidth="2.5" fill="none" />
-                  <circle cx="32" cy="50" r="2" fill="#ec4899" />
-                  <path d="M50 32 C50 20 42 12 32 12" stroke="#ec4899" strokeWidth="2" fill="none" strokeLinecap="round" />
-                  <path d="M50 32 L47 27 M50 32 L54 28" stroke="#ec4899" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </div>
-              <h3>Rotate for Timeline Editor</h3>
-              <p>The Timeline Editor works best in landscape mode. Please turn your device sideways to use this feature.</p>
-            </div>
-          </div>
         )}
 
         {/* Assets Tab */}

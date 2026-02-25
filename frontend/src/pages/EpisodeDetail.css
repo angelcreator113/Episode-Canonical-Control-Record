@@ -689,6 +689,25 @@
   background: #ffffff !important;
 }
 
+/* Launch buttons (Scene Composer / Timeline) - not switchable tabs */
+.ed-tab.ed-tab-launch {
+  border-style: dashed;
+  border-color: rgba(198, 168, 94, 0.4);
+  color: #A3892E;
+  background: rgba(198, 168, 94, 0.06);
+  position: relative;
+}
+.ed-tab.ed-tab-launch:hover {
+  border-color: #C6A85E;
+  background: rgba(198, 168, 94, 0.12);
+  color: #8A7420;
+}
+.ed-tab-launch-arrow {
+  font-size: 0.7rem;
+  margin-left: 2px;
+  opacity: 0.6;
+}
+
 .ed-tab-icon{
   font-size: 1rem;
   line-height: 1;

@@ -173,6 +173,12 @@ function Sidebar({ isOpen, onClose }) {
               )}
             </div>
 
+            {/* Episode Workspace */}
+            <button className={`nav-item ${isActive('/episodes') && !location.pathname.match(/\/episodes\/[^/]/) ? 'active' : ''}`} onClick={() => go('/episodes')}>
+              <span className="nav-icon">📂</span>
+              <span className="nav-label">Episodes</span>
+            </button>
+
             {/* Wardrobe */}
             <button className={`nav-item ${isActive('/wardrobe') ? 'active' : ''}`} onClick={() => go('/wardrobe')}>
               <span className="nav-icon">{'\uD83D\uDC57'}</span>
