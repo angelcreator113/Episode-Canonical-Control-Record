@@ -53,7 +53,6 @@ export default function WriteMode() {
   // Character sidebar state
   const [characters,        setCharacters]        = useState([]);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
-  const [charPanelOpen,     setCharPanelOpen]     = useState(() => window.innerWidth >= 768);
   const [charLoading,       setCharLoading]       = useState(false);
 
   // UI state
@@ -672,7 +671,7 @@ export default function WriteMode() {
   if (loading) return <div className="wm-load-screen">Loading...</div>;
 
   return (
-    <div className={`wm-root${charPanelOpen ? ' wm-panel-open' : ''}${focusMode ? ' wm-focus-mode' : ''}`}>
+    <div className={`wm-root${focusMode ? ' wm-focus-mode' : ''}`}>
       {/* ── FOCUS MODE EXIT ── */}
       {focusMode && (
         <button className="wm-focus-exit" onClick={() => setFocusMode(false)} title="Exit focus mode (F11)">
@@ -763,13 +762,6 @@ export default function WriteMode() {
             {focusMode ? '\u26F6' : '\u26F6'}
           </button>
 
-          <button
-            className={`wm-char-toggle${charPanelOpen ? ' active' : ''}`}
-            onClick={() => setCharPanelOpen(!charPanelOpen)}
-            title="Characters"
-          >
-            {'\uD83D\uDC65'}
-          </button>
           <button
             className={`wm-mode-btn${editMode ? ' active' : ''}`}
             style={{ opacity: prose.length > 10 ? 1 : 0.3 }}
@@ -884,93 +876,6 @@ export default function WriteMode() {
           )}
         </div>
 
-        {/* ── CHARACTER SIDEBAR ── */}
-        <aside className={`wm-char-sidebar${charPanelOpen ? ' open' : ''}`}>
-          <div className="wm-char-sidebar-header">
-            <span className="wm-char-sidebar-title">Characters</span>
-            <button className="wm-char-sidebar-close" onClick={() => setCharPanelOpen(false)}>{'\u00D7'}</button>
-          </div>
-
-          {/* Active voice card */}
-          {selectedCharacter && (
-            <div className="wm-voice-card">
-              <div className="wm-voice-card-name">
-                <span className="wm-voice-card-icon">{selectedCharacter.icon || '\uD83D\uDC64'}</span>
-                {selectedCharacter.display_name || selectedCharacter.selected_name}
-              </div>
-              {selectedCharacter.character_archetype && (
-                <div className="wm-voice-card-archetype">{selectedCharacter.character_archetype}</div>
-              )}
-              {selectedCharacter.voice_signature?.speech_pattern && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Speech</span>
-                  <span className="wm-voice-card-value">{selectedCharacter.voice_signature.speech_pattern}</span>
-                </div>
-              )}
-              {selectedCharacter.emotional_baseline && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Baseline</span>
-                  <span className="wm-voice-card-value">{selectedCharacter.emotional_baseline}</span>
-                </div>
-              )}
-              {selectedCharacter.signature_trait && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Trait</span>
-                  <span className="wm-voice-card-value">{selectedCharacter.signature_trait}</span>
-                </div>
-              )}
-              {selectedCharacter.voice_signature?.vocabulary_tone && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Tone</span>
-                  <span className="wm-voice-card-value">{selectedCharacter.voice_signature.vocabulary_tone}</span>
-                </div>
-              )}
-              {selectedCharacter.voice_signature?.catchphrases?.length > 0 && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Catchphrases</span>
-                  <span className="wm-voice-card-value">
-                    {selectedCharacter.voice_signature.catchphrases.slice(0, 3).map((c, i) => (
-                      <span key={i} className="wm-voice-catchphrase">{'\u201C'}{c}{'\u201D'}</span>
-                    ))}
-                  </span>
-                </div>
-              )}
-              <button className="wm-voice-card-clear" onClick={() => setSelectedCharacter(null)}>
-                Clear voice
-              </button>
-            </div>
-          )}
-
-          {/* Character list */}
-          <div className="wm-char-list">
-            {charLoading ? (
-              <div className="wm-char-loading">Loading characters{'\u2026'}</div>
-            ) : characters.length === 0 ? (
-              <div className="wm-char-empty">No characters found. Create characters in the Character Registry.</div>
-            ) : (
-              characters.map(c => (
-                <div
-                  key={c.id}
-                  className={`wm-char-item${selectedCharacter?.id === c.id ? ' selected' : ''}`}
-                  onClick={() => {
-                    setSelectedCharacter(selectedCharacter?.id === c.id ? null : c);
-                    if (window.innerWidth < 768) setCharPanelOpen(false);
-                  }}
-                >
-                  <span className="wm-char-item-icon">{c.icon || '\uD83D\uDC64'}</span>
-                  <div className="wm-char-item-info">
-                    <div className="wm-char-item-name">{c.display_name || c.selected_name}</div>
-                    {c.story_role && <div className="wm-char-item-role">{c.story_role}</div>}
-                    {c._registryTitle && <div className="wm-char-item-registry">{c._registryTitle}</div>}
-                  </div>
-                  {selectedCharacter?.id === c.id && (
-                    <span className="wm-char-item-check">{'\u2713'}</span>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
       </div>
 
       {/* ── TRANSCRIPT PREVIEW (while listening) ── */}
