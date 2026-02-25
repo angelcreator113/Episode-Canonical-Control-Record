@@ -1339,12 +1339,29 @@
   }
 }
 
-/* On mobile — hide the toggle, sidebar is full-height overlay */
+/* On mobile — sidebar is full-height dismissible overlay */
 @media (max-width: 767px) {
+  .wm-panel-open .wm-prose-wrap {
+    margin-right: 0;
+  }
   .wm-char-sidebar {
     width: 100%;
     max-width: 100%;
     min-width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    border-left: none;
+    border-radius: 0;
+  }
+  .wm-char-sidebar.open {
+    transform: translateX(0);
+  }
+  .wm-char-sidebar:not(.open) {
+    transform: translateX(100%);
   }
   .wm-active-char-pill {
     max-width: 120px;

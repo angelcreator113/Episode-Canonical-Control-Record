@@ -51,7 +51,7 @@ export default function WriteMode() {
   // Character sidebar state
   const [characters,        setCharacters]        = useState([]);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
-  const [charPanelOpen,     setCharPanelOpen]     = useState(true);
+  const [charPanelOpen,     setCharPanelOpen]     = useState(() => window.innerWidth >= 768);
   const [charLoading,       setCharLoading]       = useState(false);
 
   // UI state
