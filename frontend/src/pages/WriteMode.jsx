@@ -821,6 +821,24 @@ export default function WriteMode() {
             readOnly={generating}
           />
 
+          {/* ── Contextual paragraph hint ── */}
+          {!editMode && prose.trim() && (
+            <div
+              className={`wm-para-float-hint${selectedParagraph !== null ? ' active' : ''}`}
+              onClick={() => {
+                if (selectedParagraph !== null) {
+                  setSelectedParagraph(null);
+                  setParaAction(null);
+                } else {
+                  setSelectedParagraph(0);
+                }
+              }}
+              title="Paragraph actions"
+            >
+              {'\u00B6'}
+            </div>
+          )}
+
           {/* ── PARAGRAPH SELECTION OVERLAY ── */}
           {selectedParagraph !== null && (
             <div className="wm-para-overlay">
