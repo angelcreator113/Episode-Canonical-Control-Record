@@ -71,6 +71,10 @@ export default function WriteMode() {
   const [showSectionTypeMenu, setShowSectionTypeMenu] = useState(false);
   const tocSectionSaveRef = useRef(null);
 
+  // Per-section prose state (when chapter has header sections)
+  const [sectionProse, setSectionProse] = useState({}); // { sectionId: prose string }
+  const sectionProseRef = useRef({});
+
   // Context panel state
   const [editingContext,  setEditingContext]  = useState(null); // field name being edited
   const [contextEditVal,  setContextEditVal]  = useState('');
@@ -164,6 +168,23 @@ export default function WriteMode() {
         if (ch?.draft_prose) {
           setProse(ch.draft_prose);
           setWordCount(ch.draft_prose.split(/\s+/).filter(Boolean).length);
+        }
+
+        // Initialize per-section prose from sections JSONB
+        if (ch?.sections?.length > 0) {
+          const pMap = {};
+          ch.sections.forEach(s => { if (s.id) pMap[s.id] = s.prose || ''; });
+          setSectionProse(pMap);
+          sectionProseRef.current = pMap;
+          // If sections already have prose, use combined text as source of truth
+          const sectionContent = ch.sections
+            .filter(s => ['h2','h3','h4'].includes(s.type) && s.prose?.trim())
+            .map(s => s.prose)
+            .join('\n\n');
+          if (sectionContent.trim()) {
+            setProse(sectionContent);
+            setWordCount(sectionContent.split(/\s+/).filter(Boolean).length);
+          }
         }
 
         // Build previous chapter summary
@@ -322,6 +343,26 @@ export default function WriteMode() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ draft_prose: text }),
       });
+      // Also persist per-section prose into sections JSONB
+      const curSP = sectionProseRef.current;
+      if (Object.keys(curSP).length > 0) {
+        // Read latest chapter from state via closure
+        setChapter(prev => {
+          if (prev?.sections?.length > 0) {
+            const updatedSections = prev.sections.map(s => ({
+              ...s,
+              prose: curSP[s.id] ?? s.prose ?? '',
+            }));
+            fetch(`${API}/storyteller/chapters/${chapterId}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sections: updatedSections }),
+            }).catch(() => {});
+            return { ...prev, sections: updatedSections };
+          }
+          return prev;
+        });
+      }
       setSaved(true);
     } catch {}
     setSaving(false);
@@ -707,6 +748,28 @@ export default function WriteMode() {
     setWordCount(val.split(/\s+/).filter(Boolean).length);
     setSaved(false);
   };
+
+  // ── SECTION-AWARE PROSE ───────────────────────────────────────────────
+
+  const hasSectionHeaders = chapter?.sections?.length > 0 &&
+    chapter.sections.some(s => ['h2','h3','h4'].includes(s.type));
+
+  const handleSectionProseChange = useCallback((secId, value) => {
+    setSectionProse(prev => {
+      const updated = { ...prev, [secId]: value };
+      sectionProseRef.current = updated;
+      // Combine all section prose into the main prose state
+      const combined = (chapter?.sections || [])
+        .filter(s => ['h2','h3','h4'].includes(s.type))
+        .map(s => updated[s.id] || '')
+        .filter(Boolean)
+        .join('\n\n');
+      setProse(combined);
+      setWordCount(combined.split(/\s+/).filter(Boolean).length);
+      setSaved(false);
+      return updated;
+    });
+  }, [chapter?.sections]);
 
   // ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────
 
@@ -1308,42 +1371,60 @@ export default function WriteMode() {
               <div className="wm-chapter-ornament">{'\u2756'}</div>
             </div>
 
-            {/* ── Section structure markers ── */}
-            {chapter?.sections?.length > 0 && (
+            {/* ── Section-aware writing area ── */}
+            {hasSectionHeaders ? (
               <div className="wm-canvas-sections">
                 {chapter.sections.map((sec, idx) => {
-                  if (sec.type === 'divider') {
-                    return <div key={sec.id || idx} className="wm-cs-divider"><span className="wm-cs-divider-line" /></div>;
-                  }
-                  if (sec.type === 'h2') {
-                    return <h2 key={sec.id || idx} className="wm-cs-h2">{sec.content || 'Untitled Section'}</h2>;
-                  }
-                  if (sec.type === 'h3') {
-                    return <h3 key={sec.id || idx} className="wm-cs-h3">{sec.content || 'Untitled Section'}</h3>;
-                  }
-                  if (sec.type === 'h4') {
-                    return <h4 key={sec.id || idx} className="wm-cs-h4">{sec.content || 'Untitled'}</h4>;
-                  }
-                  if (sec.type === 'quote') {
-                    return <blockquote key={sec.id || idx} className="wm-cs-quote">{sec.content}</blockquote>;
-                  }
-                  if (sec.type === 'reflection') {
-                    return <div key={sec.id || idx} className="wm-cs-reflection">{sec.content}</div>;
-                  }
-                  // body
-                  return <p key={sec.id || idx} className="wm-cs-body">{sec.content}</p>;
+                  const isHeader = ['h2','h3','h4'].includes(sec.type);
+                  return (
+                    <div key={sec.id || idx} className="wm-cs-block">
+                      {/* Section marker */}
+                      {sec.type === 'divider' && (
+                        <div className="wm-cs-divider"><span className="wm-cs-divider-line" /></div>
+                      )}
+                      {sec.type === 'h2' && (
+                        <h2 className="wm-cs-h2">{sec.content || 'Untitled Section'}</h2>
+                      )}
+                      {sec.type === 'h3' && (
+                        <h3 className="wm-cs-h3">{sec.content || 'Untitled Section'}</h3>
+                      )}
+                      {sec.type === 'h4' && (
+                        <h4 className="wm-cs-h4">{sec.content || 'Untitled'}</h4>
+                      )}
+                      {sec.type === 'quote' && (
+                        <blockquote className="wm-cs-quote">{sec.content}</blockquote>
+                      )}
+                      {sec.type === 'reflection' && (
+                        <div className="wm-cs-reflection">{sec.content}</div>
+                      )}
+                      {sec.type === 'body' && (
+                        <p className="wm-cs-body">{sec.content}</p>
+                      )}
+                      {/* Textarea under each header section */}
+                      {isHeader && (
+                        <textarea
+                          className="wm-prose-area wm-section-prose"
+                          value={sectionProse[sec.id] || ''}
+                          onChange={(e) => handleSectionProseChange(sec.id, e.target.value)}
+                          placeholder={`Write under ${sec.content || 'this section'}\u2026`}
+                          spellCheck={false}
+                          readOnly={generating}
+                        />
+                      )}
+                    </div>
+                  );
                 })}
               </div>
+            ) : (
+              <textarea
+                className="wm-prose-area"
+                value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}
+                onChange={handleProseChange}
+                placeholder={editMode ? '' : "Begin writing\u2026"}
+                spellCheck={false}
+                readOnly={generating}
+              />
             )}
-
-            <textarea
-              className="wm-prose-area"
-              value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}
-              onChange={handleProseChange}
-              placeholder={editMode ? '' : "Begin writing\u2026"}
-              spellCheck={false}
-              readOnly={generating}
-            />
 
             {/* ── Running footer ── */}
             <div className="wm-manuscript-footer">

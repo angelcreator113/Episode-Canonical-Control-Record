@@ -999,29 +999,43 @@
 
 /* ── Canvas section structure markers ── */
 .wm-canvas-sections {
-  padding: 4px 80px 12px;
-  border-top: 1px solid rgba(28,24,20,0.04);
+  padding: 4px 0 0;
   flex-shrink: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+.wm-cs-block {
+  display: flex;
+  flex-direction: column;
 }
 .wm-cs-h2 {
   font-family: 'Lora', Georgia, serif;
   font-size: 20px;
   font-weight: 600;
   color: #1C1814;
-  margin: 20px 0 6px;
+  margin: 0;
+  padding: 24px 80px 8px;
   letter-spacing: 0.01em;
   line-height: 1.35;
+  border-top: 1px solid rgba(28,24,20,0.06);
+}
+.wm-cs-block:first-child .wm-cs-h2 {
+  border-top: none;
 }
 .wm-cs-h3 {
   font-family: 'Lora', Georgia, serif;
   font-size: 16px;
   font-weight: 600;
   color: rgba(28,24,20,0.82);
-  margin: 16px 0 4px;
+  margin: 0;
+  padding: 18px 80px 6px;
   letter-spacing: 0.01em;
   line-height: 1.4;
-  padding-left: 4px;
-  border-left: 2px solid rgba(184,150,46,0.25);
+  border-left: 3px solid rgba(184,150,46,0.25);
+  margin-left: 76px;
+  padding-left: 8px;
+  padding-right: 0;
 }
 .wm-cs-h4 {
   font-family: 'Lora', Georgia, serif;
@@ -1029,16 +1043,29 @@
   font-weight: 600;
   font-style: italic;
   color: rgba(28,24,20,0.68);
-  margin: 12px 0 3px;
+  margin: 0;
+  padding: 14px 80px 4px 90px;
   letter-spacing: 0.01em;
   line-height: 1.4;
-  padding-left: 10px;
+}
+/* Per-section textarea */
+.wm-section-prose {
+  padding: 8px 80px 40px !important;
+  min-height: 120px !important;
+  flex: 0 0 auto;
+}
+.wm-section-prose:focus {
+  background: rgba(184,150,46,0.015);
+}
+.wm-section-prose::placeholder {
+  text-indent: 0;
 }
 .wm-cs-body {
   font-family: 'Lora', Georgia, serif;
   font-size: 14px;
   color: rgba(28,24,20,0.55);
-  margin: 6px 0;
+  margin: 0;
+  padding: 6px 80px;
   line-height: 1.7;
   font-style: italic;
   text-indent: 1.5em;
@@ -1047,9 +1074,10 @@
   font-family: 'Lora', Georgia, serif;
   font-size: 14px;
   color: rgba(28,24,20,0.5);
-  margin: 10px 0 10px 20px;
-  padding: 6px 16px;
+  margin: 0;
+  padding: 10px 80px 10px 100px;
   border-left: 2px solid rgba(184,150,46,0.3);
+  margin-left: 80px;
   font-style: italic;
   line-height: 1.65;
 }
@@ -1057,7 +1085,7 @@
   font-family: 'DM Mono', monospace;
   font-size: 11.5px;
   color: rgba(184,150,46,0.55);
-  margin: 10px 0;
+  margin: 6px 80px;
   padding: 8px 14px;
   background: rgba(184,150,46,0.04);
   border-radius: 4px;
@@ -1068,7 +1096,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px 0;
+  padding: 20px 0;
 }
 .wm-cs-divider-line {
   display: block;
@@ -2103,11 +2131,15 @@
     text-indent: 1.5em;
   }
   .wm-canvas-sections {
-    padding: 4px 20px 10px;
+    padding: 4px 0 0;
   }
-  .wm-cs-h2 { font-size: 17px; }
-  .wm-cs-h3 { font-size: 14px; }
-  .wm-cs-h4 { font-size: 12.5px; }
+  .wm-cs-h2 { font-size: 17px; padding: 18px 20px 6px; border-top-color: rgba(28,24,20,0.04); }
+  .wm-cs-h3 { font-size: 14px; padding: 14px 20px 4px; margin-left: 16px; }
+  .wm-cs-h4 { font-size: 12.5px; padding: 12px 20px 3px 26px; }
+  .wm-section-prose { padding: 6px 20px 30px !important; min-height: 80px !important; }
+  .wm-cs-body { padding: 4px 20px; }
+  .wm-cs-quote { padding: 8px 20px 8px 36px; margin-left: 20px; }
+  .wm-cs-reflection { margin: 4px 20px; }
   .wm-manuscript-header,
   .wm-manuscript-footer {
     padding-left: 20px;
