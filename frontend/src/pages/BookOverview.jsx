@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import './BookOverview.css';
 
@@ -11,6 +11,12 @@ async function api(path, opts = {}) {
   });
   if (!res.ok) throw new Error(`API ${res.status}`);
   return res.json();
+}
+
+/* Planning-field completeness helper */
+const PLAN_FIELDS = ['scene_goal', 'theme', 'chapter_notes', 'pov', 'emotional_state_start', 'emotional_state_end'];
+function planScore(ch) {
+  return PLAN_FIELDS.filter(f => ch[f]?.toString().trim()).length;
 }
 
 export default function BookOverview() {
@@ -27,6 +33,15 @@ export default function BookOverview() {
   const [editFields, setEditFields] = useState({});     // edited field values
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
+
+  // View mode: 'cards' | 'outline'
+  const [viewMode, setViewMode] = useState('cards');
+
+  // Batch chapter planning
+  const [showBatchAdd, setShowBatchAdd] = useState(false);
+  const [batchTitles, setBatchTitles] = useState('');
+  const [batchAdding, setBatchAdding] = useState(false);
+  const batchRef = useRef(null);
 
   // New chapter form
   const [showNewChapter, setShowNewChapter] = useState(false);
@@ -106,6 +121,44 @@ export default function BookOverview() {
     finally { setAddingChapter(false); }
   };
 
+  // ── Batch-add chapters (outline planner) ──
+  const addBatchChapters = async () => {
+    const titles = batchTitles.split('\n').map(t => t.trim()).filter(Boolean);
+    if (titles.length === 0) return;
+    try {
+      setBatchAdding(true);
+      const startNum = chapters.length + 1;
+      const results = [];
+      for (let i = 0; i < titles.length; i++) {
+        const data = await api(`/books/${id}/chapters`, {
+          method: 'POST',
+          body: JSON.stringify({
+            chapter_number: startNum + i,
+            title: titles[i],
+          }),
+        });
+        results.push(data.chapter || data);
+      }
+      setChapters(prev => [...prev, ...results]);
+      setBatchTitles('');
+      setShowBatchAdd(false);
+      flash(`${results.length} chapter${results.length > 1 ? 's' : ''} added`);
+    } catch { flash('Failed to add chapters', 'error'); }
+    finally { setBatchAdding(false); }
+  };
+
+  // ── Focus batch textarea ──
+  useEffect(() => {
+    if (showBatchAdd && batchRef.current) batchRef.current.focus();
+  }, [showBatchAdd]);
+
+  // ── Outline stats ──
+  const outlineStats = useMemo(() => {
+    const planned = chapters.filter(ch => planScore(ch) >= 2).length;
+    const withProse = chapters.filter(ch => ch.draft_prose?.trim()).length;
+    return { total: chapters.length, planned, withProse };
+  }, [chapters]);
+
   // ── Delete chapter ──
   const deleteChapter = async (chId) => {
     if (!window.confirm('Delete this chapter? This cannot be undone.')) return;
@@ -125,6 +178,9 @@ export default function BookOverview() {
       scene_goal: ch.scene_goal || '',
       theme: ch.theme || '',
       chapter_notes: ch.chapter_notes || '',
+      pov: ch.pov || 'first_person',
+      emotional_state_start: ch.emotional_state_start || '',
+      emotional_state_end: ch.emotional_state_end || '',
     });
   };
 
@@ -245,19 +301,107 @@ export default function BookOverview() {
         <div className="bo-header-meta">
           <span className="bo-chapter-count">{chapters.length} chapter{chapters.length !== 1 ? 's' : ''}</span>
           {book.status && <span className={`bo-status bo-status-${book.status}`}>{book.status}</span>}
+
+          {/* View toggle */}
+          <div className="bo-view-toggle">
+            <button
+              className={`bo-view-btn${viewMode === 'cards' ? ' active' : ''}`}
+              onClick={() => setViewMode('cards')}
+              title="Card view"
+            >Cards</button>
+            <button
+              className={`bo-view-btn${viewMode === 'outline' ? ' active' : ''}`}
+              onClick={() => setViewMode('outline')}
+              title="Outline view"
+            >Outline</button>
+          </div>
         </div>
+
+        {/* ── Outline Progress Bar ── */}
+        {chapters.length > 0 && (
+          <div className="bo-outline-stats">
+            <div className="bo-stat-bar">
+              <div
+                className="bo-stat-fill bo-stat-planned"
+                style={{ width: `${(outlineStats.planned / outlineStats.total) * 100}%` }}
+              />
+              <div
+                className="bo-stat-fill bo-stat-written"
+                style={{ width: `${(outlineStats.withProse / outlineStats.total) * 100}%` }}
+              />
+            </div>
+            <div className="bo-stat-labels">
+              <span className="bo-stat-label">{outlineStats.planned}/{outlineStats.total} planned</span>
+              <span className="bo-stat-label">{outlineStats.withProse}/{outlineStats.total} written</span>
+            </div>
+          </div>
+        )}
       </header>
 
       {/* ── Chapter List ── */}
       <div className="bo-chapter-list">
-        {chapters.length === 0 && !showNewChapter && (
+        {chapters.length === 0 && !showNewChapter && !showBatchAdd && (
           <div className="bo-empty">
             <div className="bo-empty-icon">{'\uD83D\uDCD6'}</div>
-            <div className="bo-empty-text">No chapters yet. Add your first chapter to begin.</div>
+            <div className="bo-empty-text">No chapters yet. Plan your book outline or add your first chapter.</div>
           </div>
         )}
 
-        {chapters.map((ch, idx) => {
+        {/* ───── OUTLINE VIEW ───── */}
+        {viewMode === 'outline' && chapters.length > 0 && (
+          <div className="bo-outline-table">
+            <div className="bo-outline-header-row">
+              <span className="bo-outline-col bo-ol-num">#</span>
+              <span className="bo-outline-col bo-ol-title">Title</span>
+              <span className="bo-outline-col bo-ol-goal">Scene Goal</span>
+              <span className="bo-outline-col bo-ol-theme">Theme</span>
+              <span className="bo-outline-col bo-ol-arc">Emotional Arc</span>
+              <span className="bo-outline-col bo-ol-status">Status</span>
+              <span className="bo-outline-col bo-ol-actions"></span>
+            </div>
+            {chapters.map((ch, idx) => {
+              const score = planScore(ch);
+              const hasProse = ch.draft_prose?.trim();
+              return (
+                <div
+                  key={ch.id}
+                  className={`bo-outline-row${editingId === ch.id ? ' editing' : ''}`}
+                  draggable={editingId !== ch.id}
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={e => handleDragOver(e, idx)}
+                  onDragEnd={handleDragEnd}
+                >
+                  <span className="bo-outline-col bo-ol-num">{ch.chapter_number || idx + 1}</span>
+                  <span className="bo-outline-col bo-ol-title" title={ch.title}>{ch.title}</span>
+                  <span className="bo-outline-col bo-ol-goal" title={ch.scene_goal || ''}>
+                    {ch.scene_goal ? ch.scene_goal.substring(0, 60) + (ch.scene_goal.length > 60 ? '\u2026' : '') : '\u2014'}
+                  </span>
+                  <span className="bo-outline-col bo-ol-theme">{ch.theme || '\u2014'}</span>
+                  <span className="bo-outline-col bo-ol-arc">
+                    {ch.emotional_state_start || ch.emotional_state_end
+                      ? `${ch.emotional_state_start || '?'} \u2192 ${ch.emotional_state_end || '?'}`
+                      : '\u2014'}
+                  </span>
+                  <span className="bo-outline-col bo-ol-status">
+                    <span className={`bo-plan-dots`} title={`${score}/${PLAN_FIELDS.length} fields planned`}>
+                      {PLAN_FIELDS.map((_, i) => (
+                        <span key={i} className={`bo-plan-dot${i < score ? ' filled' : ''}`} />
+                      ))}
+                    </span>
+                    {hasProse && <span className="bo-ol-written-badge">W</span>}
+                  </span>
+                  <span className="bo-outline-col bo-ol-actions">
+                    <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => startEdit(ch)}>Plan</button>
+                    <button className="bo-btn bo-btn-write bo-btn-sm" onClick={() => navigate(`/write/${id}/${ch.id}`)}>Write</button>
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ───── CARD VIEW ───── */}
+        {viewMode === 'cards' && chapters.map((ch, idx) => {
           const isEditing = editingId === ch.id;
           const isDragging = dragIdx === idx;
           const isDragOver = dragOverIdx === idx;
@@ -265,6 +409,7 @@ export default function BookOverview() {
           const hasTheme = ch.theme?.trim();
           const hasNotes = ch.chapter_notes?.trim();
           const hasProse = ch.draft_prose?.trim();
+          const score = planScore(ch);
 
           return (
             <div
@@ -328,6 +473,9 @@ export default function BookOverview() {
                   {hasGoal && <span className="bo-ch-tag bo-tag-goal">scene goal</span>}
                   {hasTheme && <span className="bo-ch-tag bo-tag-theme">theme</span>}
                   {hasNotes && <span className="bo-ch-tag bo-tag-notes">notes</span>}
+                  {score > 0 && (
+                    <span className="bo-ch-tag bo-tag-plan">{score}/{PLAN_FIELDS.length} planned</span>
+                  )}
                   {!hasProse && !hasGoal && !hasTheme && !hasNotes && (
                     <span className="bo-ch-tag bo-tag-empty">empty</span>
                   )}
@@ -341,7 +489,15 @@ export default function BookOverview() {
                 </div>
               )}
 
-              {/* Edit Form */}
+              {/* Emotional arc preview */}
+              {!isEditing && (ch.emotional_state_start || ch.emotional_state_end) && (
+                <div className="bo-ch-preview">
+                  <span className="bo-ch-preview-label">Arc:</span>{' '}
+                  {ch.emotional_state_start || '?'} {'\u2192'} {ch.emotional_state_end || '?'}
+                </div>
+              )}
+
+              {/* Edit Form (expanded) */}
               {isEditing && (
                 <div className="bo-ch-edit-form">
                   <div className="bo-field">
@@ -354,14 +510,49 @@ export default function BookOverview() {
                       rows={2}
                     />
                   </div>
-                  <div className="bo-field">
-                    <label className="bo-field-label">Theme</label>
-                    <input
-                      className="bo-field-input"
-                      value={editFields.theme}
-                      onChange={e => setEditFields(f => ({ ...f, theme: e.target.value }))}
-                      placeholder="e.g. invisibility, self-doubt, finding voice"
-                    />
+                  <div className="bo-field-row">
+                    <div className="bo-field bo-field-half">
+                      <label className="bo-field-label">Theme</label>
+                      <input
+                        className="bo-field-input"
+                        value={editFields.theme}
+                        onChange={e => setEditFields(f => ({ ...f, theme: e.target.value }))}
+                        placeholder="e.g. invisibility, self-doubt"
+                      />
+                    </div>
+                    <div className="bo-field bo-field-half">
+                      <label className="bo-field-label">POV</label>
+                      <select
+                        className="bo-field-input bo-field-select"
+                        value={editFields.pov}
+                        onChange={e => setEditFields(f => ({ ...f, pov: e.target.value }))}
+                      >
+                        <option value="first_person">First Person</option>
+                        <option value="third_person_limited">Third Person Limited</option>
+                        <option value="third_person_omniscient">Third Person Omniscient</option>
+                        <option value="second_person">Second Person</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="bo-field-row">
+                    <div className="bo-field bo-field-half">
+                      <label className="bo-field-label">Emotional Start</label>
+                      <input
+                        className="bo-field-input"
+                        value={editFields.emotional_state_start}
+                        onChange={e => setEditFields(f => ({ ...f, emotional_state_start: e.target.value }))}
+                        placeholder="e.g. hopeful, anxious, numb"
+                      />
+                    </div>
+                    <div className="bo-field bo-field-half">
+                      <label className="bo-field-label">Emotional End</label>
+                      <input
+                        className="bo-field-input"
+                        value={editFields.emotional_state_end}
+                        onChange={e => setEditFields(f => ({ ...f, emotional_state_end: e.target.value }))}
+                        placeholder="e.g. devastated, resolved"
+                      />
+                    </div>
                   </div>
                   <div className="bo-field">
                     <label className="bo-field-label">Notes</label>
@@ -385,7 +576,45 @@ export default function BookOverview() {
           );
         })}
 
-        {/* ── Add Chapter ── */}
+        {/* ── Batch Chapter Planner ── */}
+        {showBatchAdd && (
+          <div className="bo-batch-form">
+            <div className="bo-batch-header">
+              <h3 className="bo-batch-title">Plan Your Chapters</h3>
+              <p className="bo-batch-desc">Type one chapter title per line to scaffold your book outline.</p>
+            </div>
+            <textarea
+              ref={batchRef}
+              className="bo-batch-input"
+              value={batchTitles}
+              onChange={e => setBatchTitles(e.target.value)}
+              placeholder={'Chapter 1: The Beginning\nChapter 2: Rising Action\nChapter 3: The Turning Point\nChapter 4: Climax\nChapter 5: Resolution'}
+              rows={8}
+              onKeyDown={e => {
+                if (e.key === 'Escape') { setShowBatchAdd(false); setBatchTitles(''); }
+              }}
+            />
+            <div className="bo-batch-footer">
+              <span className="bo-batch-count">
+                {batchTitles.split('\n').filter(t => t.trim()).length} chapter{batchTitles.split('\n').filter(t => t.trim()).length !== 1 ? 's' : ''}
+              </span>
+              <div className="bo-batch-actions">
+                <button
+                  className="bo-btn bo-btn-gold"
+                  onClick={addBatchChapters}
+                  disabled={!batchTitles.trim() || batchAdding}
+                >
+                  {batchAdding ? 'Creating\u2026' : 'Create All'}
+                </button>
+                <button className="bo-btn bo-btn-ghost" onClick={() => { setShowBatchAdd(false); setBatchTitles(''); }}>
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Add Chapter Buttons ── */}
         {showNewChapter ? (
           <div className="bo-new-chapter-form">
             <input
@@ -415,10 +644,15 @@ export default function BookOverview() {
               </button>
             </div>
           </div>
-        ) : (
-          <button className="bo-add-chapter-btn" onClick={() => setShowNewChapter(true)}>
-            + Add Chapter
-          </button>
+        ) : !showBatchAdd && (
+          <div className="bo-add-buttons">
+            <button className="bo-add-chapter-btn" onClick={() => setShowNewChapter(true)}>
+              + Add Chapter
+            </button>
+            <button className="bo-add-chapter-btn bo-add-batch-btn" onClick={() => setShowBatchAdd(true)}>
+              + Plan Multiple Chapters
+            </button>
+          </div>
         )}
       </div>
     </div>

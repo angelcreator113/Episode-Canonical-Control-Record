@@ -464,4 +464,295 @@ textarea.bo-field-input { min-height: 40px; }
   .bo-ch-actions { flex-wrap: wrap; }
   .bo-ch-header { flex-wrap: wrap; }
   .bo-btn-write { order: -1; }
+  .bo-view-toggle { display: none; }
+  .bo-outline-table { display: none; }
+  .bo-field-row { flex-direction: column; gap: 14px; }
+  .bo-field-half { min-width: 100%; }
+  .bo-add-buttons { flex-direction: column; }
+}
+
+/* ── View Toggle ── */
+.bo-view-toggle {
+  display: flex;
+  margin-left: auto;
+  border: 1px solid var(--bo-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.bo-view-btn {
+  font-family: var(--bo-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  padding: 5px 14px;
+  border: none;
+  background: transparent;
+  color: var(--bo-ink-soft);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.bo-view-btn + .bo-view-btn { border-left: 1px solid var(--bo-border); }
+.bo-view-btn.active {
+  background: var(--bo-ink);
+  color: var(--bo-bg);
+}
+.bo-view-btn:hover:not(.active) { background: var(--bo-bg); }
+
+/* ── Outline Stats / Progress Bar ── */
+.bo-outline-stats {
+  margin-top: 14px;
+}
+.bo-stat-bar {
+  height: 4px;
+  background: var(--bo-border);
+  border-radius: 2px;
+  overflow: hidden;
+  display: flex;
+  position: relative;
+}
+.bo-stat-fill {
+  height: 100%;
+  transition: width 0.3s ease;
+}
+.bo-stat-planned { background: var(--bo-gold); }
+.bo-stat-written { background: var(--bo-success); }
+.bo-stat-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 6px;
+}
+.bo-stat-label {
+  font-family: var(--bo-font-mono);
+  font-size: 11px;
+  color: var(--bo-ink-soft);
+  letter-spacing: 0.03em;
+}
+
+/* ── Outline Table View ── */
+.bo-outline-table {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius);
+  overflow: hidden;
+  background: var(--bo-card);
+}
+.bo-outline-header-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 10px 16px;
+  background: var(--bo-bg);
+  border-bottom: 1px solid var(--bo-border);
+}
+.bo-outline-header-row .bo-outline-col {
+  font-family: var(--bo-font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--bo-ink-soft);
+  font-weight: 600;
+}
+.bo-outline-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid rgba(0,0,0,0.04);
+  transition: background 0.1s;
+  cursor: default;
+}
+.bo-outline-row:last-child { border-bottom: none; }
+.bo-outline-row:hover { background: var(--bo-card-hover); }
+.bo-outline-row.editing {
+  background: rgba(198, 168, 94, 0.06);
+  border-color: var(--bo-gold);
+}
+
+.bo-outline-col { padding: 0 6px; }
+.bo-ol-num {
+  width: 36px;
+  flex-shrink: 0;
+  font-family: var(--bo-font-mono);
+  font-size: 12px;
+  color: var(--bo-gold-dark);
+  text-align: center;
+}
+.bo-ol-title {
+  flex: 2;
+  min-width: 0;
+  font-family: var(--bo-font-serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--bo-ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bo-ol-goal {
+  flex: 2.5;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--bo-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bo-ol-theme {
+  flex: 1.2;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--bo-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bo-ol-arc {
+  flex: 1.8;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--bo-ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.bo-ol-status {
+  width: 80px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.bo-ol-actions {
+  width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+}
+
+/* Plan dots */
+.bo-plan-dots {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.bo-plan-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--bo-border);
+  display: inline-block;
+}
+.bo-plan-dot.filled { background: var(--bo-gold); }
+.bo-ol-written-badge {
+  font-family: var(--bo-font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  background: #E8F5E9;
+  color: #388E3C;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* ── Planning tag ── */
+.bo-tag-plan {
+  background: rgba(198, 168, 94, 0.12);
+  color: var(--bo-gold-dark);
+}
+
+/* ── Field layout rows ── */
+.bo-field-row {
+  display: flex;
+  gap: 14px;
+}
+.bo-field-half {
+  flex: 1;
+  min-width: 0;
+}
+.bo-field-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%236B6460'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+  cursor: pointer;
+}
+
+/* ── Batch Chapter Planner ── */
+.bo-batch-form {
+  border: 1px solid var(--bo-gold);
+  border-radius: var(--bo-radius);
+  background: var(--bo-card);
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.bo-batch-header {}
+.bo-batch-title {
+  font-family: var(--bo-font-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--bo-ink);
+  margin: 0 0 4px;
+}
+.bo-batch-desc {
+  font-family: var(--bo-font-sans);
+  font-size: 13px;
+  color: var(--bo-ink-soft);
+  margin: 0;
+}
+.bo-batch-input {
+  font-family: var(--bo-font-serif);
+  font-size: 15px;
+  line-height: 2;
+  color: var(--bo-ink);
+  border: 1px solid var(--bo-border);
+  border-radius: 6px;
+  background: var(--bo-bg);
+  padding: 14px 16px;
+  outline: none;
+  resize: vertical;
+}
+.bo-batch-input:focus {
+  border-color: var(--bo-gold);
+  background: #fff;
+}
+.bo-batch-input::placeholder {
+  color: var(--bo-border);
+}
+.bo-batch-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.bo-batch-count {
+  font-family: var(--bo-font-mono);
+  font-size: 12px;
+  color: var(--bo-ink-soft);
+}
+.bo-batch-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* ── Add Buttons row ── */
+.bo-add-buttons {
+  display: flex;
+  gap: 10px;
+}
+.bo-add-buttons .bo-add-chapter-btn {
+  flex: 1;
+}
+.bo-add-batch-btn {
+  border-color: var(--bo-gold) !important;
+  color: var(--bo-gold-dark) !important;
+}
+.bo-add-batch-btn:hover {
+  background: rgba(198, 168, 94, 0.08) !important;
 }
