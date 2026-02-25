@@ -96,6 +96,12 @@ module.exports = (sequelize) => {
       defaultValue: 0,
     },
 
+    /* ── Portrait Image ── */
+    portrait_url: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+
     /* ── Section 1: Core Identity additions ── */
     canon_tier: {
       type: DataTypes.STRING(50),

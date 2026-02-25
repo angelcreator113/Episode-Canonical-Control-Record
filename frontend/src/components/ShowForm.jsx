@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { showService } from '../services/showService';
+import LoadingSkeleton from './LoadingSkeleton';
 import '../styles/ShowForm.css';
 
 const ShowForm = () => {
@@ -88,7 +89,7 @@ const ShowForm = () => {
   };
 
   if (loading && isEditing) {
-    return <div className="show-form-container"><p>Loading...</p></div>;
+    return <div className="show-form-container"><LoadingSkeleton variant="text" lines={6} /></div>;
   }
 
   return (

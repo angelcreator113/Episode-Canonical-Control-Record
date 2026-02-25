@@ -6,6 +6,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import Breadcrumbs from './Breadcrumbs';
 import '../styles/Header.css';
 
 const Header = ({ navOpen, onNavToggle }) => {
@@ -53,6 +54,7 @@ const Header = ({ navOpen, onNavToggle }) => {
           )}
         </div>
       </div>
+      <Breadcrumbs />
     </header>
   );
 };

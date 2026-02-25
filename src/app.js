@@ -962,6 +962,12 @@ console.log('  - Index.html exists:', fs.existsSync(indexHtmlPath));
 
 // Serve static files from frontend/dist if it exists
 if (fs.existsSync(frontendDistPath) && fs.existsSync(indexHtmlPath)) {
+
+  // Serve uploaded files (portraits, etc.)
+  const uploadsPath = path.join(__dirname, '..', 'uploads');
+  if (!fs.existsSync(uploadsPath)) fs.mkdirSync(uploadsPath, { recursive: true });
+  app.use('/uploads', express.static(uploadsPath, { maxAge: '7d' }));
+
   console.log('✓ Serving frontend from:', frontendDistPath);
   console.log('✓ Dist contents:', fs.readdirSync(frontendDistPath));
 

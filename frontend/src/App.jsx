@@ -56,6 +56,7 @@ import RelationshipMap from './pages/RelationshipMap';
 import SessionStart from './pages/SessionStart';
 import CharacterTherapy from './pages/CharacterTherapy';
 import PressPublisher from './pages/PressPublisher';
+import SettingsPage from './pages/SettingsPage';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -66,6 +67,7 @@ import ToastProvider from './components/ToastContainer';
 import SceneComposerFull from './components/SceneComposer/SceneComposerFull';
 import AnimaticPreview from './components/Episodes/SceneComposer/AnimaticPreview';
 import OrientationToast from './components/OrientationToast';
+import LoadingSkeleton from './components/LoadingSkeleton';
 
 import './App.css';
 
@@ -77,7 +79,7 @@ function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
 
   if (loading) {
-    return <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>;
+    return <div style={{ padding: '2rem', textAlign: 'center' }}><LoadingSkeleton variant="page" /></div>;
   }
 
   return isAuthenticated ? children : <Navigate to="/login" replace />;
@@ -149,7 +151,7 @@ function AppContent() {
         backgroundColor: '#f5f5f5'
       }}>
         <div style={{ textAlign: 'center' }}>
-          <p>Loading...</p>
+          <LoadingSkeleton variant="page" />
         </div>
       </div>
     );
@@ -319,13 +321,8 @@ function AppContent() {
           {/* Diagnostics */}
           <Route path="/diagnostics" element={<DiagnosticPage />} />
           
-          {/* Settings (Coming Soon) */}
-          <Route path="/settings" element={
-            <div className="page-wrapper">
-              <h1>Settings</h1>
-              <p>Coming soon - App settings</p>
-            </div>
-          } />
+          {/* Settings */}
+          <Route path="/settings" element={<SettingsPage />} />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />

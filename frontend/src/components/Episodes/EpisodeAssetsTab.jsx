@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { assetService } from '../../services/assetService';
 import AssetUploader from '../Assets/AssetUploader';
 import AssetLinkModal from '../Assets/AssetLinkModal';
+import LoadingSkeleton from '../LoadingSkeleton';
 import './EpisodeAssetsTab.css';
 
 /**
@@ -181,7 +182,7 @@ function EpisodeAssetsTab({ episode, show }) {
     alert('Asset promoted to Show Library!');
   };
   
-  if (loading) return <div className="episode-assets-loading">Loading...</div>;
+  if (loading) return <div className="episode-assets-loading"><LoadingSkeleton variant="card" count={3} /></div>;
   
   return (
     <div className="episode-assets-tab">

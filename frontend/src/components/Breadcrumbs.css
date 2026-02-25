@@ -1,0 +1,50 @@
+/* Breadcrumbs.css */
+
+.breadcrumbs {
+  padding: 0.5rem 0 0;
+  margin-bottom: 0.5rem;
+}
+
+.breadcrumb-list {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  flex-wrap: wrap;
+}
+
+.breadcrumb-item {
+  display: flex;
+  align-items: center;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.75rem;
+}
+
+.breadcrumb-link {
+  background: none;
+  border: none;
+  color: #6B6560;
+  cursor: pointer;
+  padding: 0.15rem 0;
+  font: inherit;
+  text-decoration: none;
+  transition: color 0.15s;
+}
+
+.breadcrumb-link:hover {
+  color: #B8962E;
+  text-decoration: underline;
+}
+
+.breadcrumb-sep {
+  margin: 0 0.4rem;
+  color: rgba(107, 101, 96, 0.4);
+  font-size: 0.7rem;
+}
+
+.breadcrumb-current {
+  color: #1C1814;
+  font-weight: 600;
+}

@@ -10,6 +10,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import LoadingSkeleton from '../components/LoadingSkeleton';
 import './WriteMode.css';
 
 const API = '/api/v1';
@@ -668,7 +669,7 @@ export default function WriteMode() {
 
   // ── RENDER ────────────────────────────────────────────────────────────
 
-  if (loading) return <div className="wm-load-screen">Loading...</div>;
+  if (loading) return <div className="wm-load-screen"><LoadingSkeleton variant="editor" /></div>;
 
   return (
     <div className={`wm-root${focusMode ? ' wm-focus-mode' : ''}`}>
@@ -820,6 +821,24 @@ export default function WriteMode() {
             spellCheck={false}
             readOnly={generating}
           />
+
+          {/* ── Contextual paragraph hint ── */}
+          {!editMode && prose.trim() && (
+            <div
+              className={`wm-para-float-hint${selectedParagraph !== null ? ' active' : ''}`}
+              onClick={() => {
+                if (selectedParagraph !== null) {
+                  setSelectedParagraph(null);
+                  setParaAction(null);
+                } else {
+                  setSelectedParagraph(0);
+                }
+              }}
+              title="Paragraph actions"
+            >
+              {'\u00B6'}
+            </div>
+          )}
 
           {/* ── PARAGRAPH SELECTION OVERLAY ── */}
           {selectedParagraph !== null && (
