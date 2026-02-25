@@ -172,43 +172,6 @@ export default function WriteMode() {
     }]);
   }, [prose, wordCount]);
 
-  // ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────
-
-  useEffect(() => {
-    const handleKey = (e) => {
-      // Ctrl/Cmd+Enter → Continue
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
-        e.preventDefault();
-        if (!editMode && prose.trim() && !generating) handleContinue();
-      }
-      // Ctrl/Cmd+D → Deepen
-      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
-        e.preventDefault();
-        if (!editMode && prose.trim() && !generating) handleDeepen();
-      }
-      // Ctrl/Cmd+S → Save
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-        e.preventDefault();
-        if (prose) saveDraft(prose);
-      }
-      // Escape → exit edit mode, close panels
-      if (e.key === 'Escape') {
-        if (editMode) { setEditMode(false); return; }
-        if (showHistory) { setShowHistory(false); return; }
-        if (showGoalInput) { setShowGoalInput(false); return; }
-        if (focusMode) { setFocusMode(false); return; }
-        if (selectedParagraph !== null) { setSelectedParagraph(null); setParaAction(null); return; }
-      }
-      // F11 → toggle focus mode (prevent browser fullscreen)
-      if (e.key === 'F11') {
-        e.preventDefault();
-        setFocusMode(f => !f);
-      }
-    };
-    window.addEventListener('keydown', handleKey);
-    return () => window.removeEventListener('keydown', handleKey);
-  }, [editMode, prose, generating, focusMode, showHistory, showGoalInput, selectedParagraph, handleContinue, handleDeepen, saveDraft]);
-
   // ── PARAGRAPH-LEVEL ACTIONS ───────────────────────────────────────────
 
   const handleParagraphAction = useCallback(async (action) => {
@@ -666,6 +629,43 @@ export default function WriteMode() {
     setWordCount(val.split(/\s+/).filter(Boolean).length);
     setSaved(false);
   };
+
+  // ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      // Ctrl/Cmd+Enter → Continue
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!editMode && prose.trim() && !generating) handleContinue();
+      }
+      // Ctrl/Cmd+D → Deepen
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        if (!editMode && prose.trim() && !generating) handleDeepen();
+      }
+      // Ctrl/Cmd+S → Save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (prose) saveDraft(prose);
+      }
+      // Escape → exit edit mode, close panels
+      if (e.key === 'Escape') {
+        if (editMode) { setEditMode(false); return; }
+        if (showHistory) { setShowHistory(false); return; }
+        if (showGoalInput) { setShowGoalInput(false); return; }
+        if (focusMode) { setFocusMode(false); return; }
+        if (selectedParagraph !== null) { setSelectedParagraph(null); setParaAction(null); return; }
+      }
+      // F11 → toggle focus mode (prevent browser fullscreen)
+      if (e.key === 'F11') {
+        e.preventDefault();
+        setFocusMode(f => !f);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [editMode, prose, generating, focusMode, showHistory, showGoalInput, selectedParagraph, handleContinue, handleDeepen, saveDraft]);
 
   // ── RENDER ────────────────────────────────────────────────────────────
 
