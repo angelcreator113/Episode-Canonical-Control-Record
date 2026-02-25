@@ -434,6 +434,223 @@
   cursor: default;
 }
 
+/* ── TOC expand/collapse arrow ── */
+.wm-toc-expand {
+  background: none;
+  border: none;
+  font-size: 10px;
+  color: rgba(28,24,20,0.2);
+  cursor: pointer;
+  padding: 2px 3px;
+  margin: -2px 0;
+  transition: transform 0.2s ease, color 0.2s;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.wm-toc-expand.expanded {
+  transform: rotate(90deg);
+  color: rgba(184,150,46,0.6);
+}
+.wm-toc-expand:hover {
+  color: #B8962E;
+}
+
+/* ── TOC chapter group ── */
+.wm-toc-chapter-group {
+  /* wrapper for chapter item + sections */
+}
+
+/* ═══════════════════════  TOC SECTIONS  ══════════════════════ */
+
+.wm-toc-sections {
+  padding: 2px 0 6px 28px;
+  border-left: 2px solid rgba(184,150,46,0.08);
+  margin-left: 20px;
+  animation: wmSecFade 0.2s ease both;
+}
+
+@keyframes wmSecFade {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.wm-toc-sec-empty {
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: rgba(28,24,20,0.2);
+  padding: 6px 8px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+
+.wm-toc-sec-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  min-height: 26px;
+}
+.wm-toc-sec-item:hover {
+  background: rgba(184,150,46,0.04);
+}
+.wm-toc-sec-item:hover .wm-toc-sec-actions {
+  opacity: 1;
+}
+
+.wm-toc-sec-item.is-header {
+  margin-top: 2px;
+}
+.wm-toc-sec-item.is-header .wm-toc-sec-text {
+  font-weight: 600;
+  font-size: 11.5px;
+}
+
+.wm-toc-sec-item.is-divider {
+  padding: 2px 8px;
+  min-height: 16px;
+}
+
+.wm-toc-sec-icon {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  font-weight: 600;
+  color: rgba(184,150,46,0.45);
+  width: 18px;
+  text-align: center;
+  flex-shrink: 0;
+  letter-spacing: -0.02em;
+}
+
+.wm-toc-sec-text {
+  flex: 1;
+  font-family: 'Lora', Georgia, serif;
+  font-size: 11px;
+  color: rgba(28,24,20,0.7);
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.4;
+  padding: 1px 0;
+}
+.wm-toc-sec-text:hover {
+  color: #1C1814;
+}
+
+.wm-toc-sec-placeholder {
+  color: rgba(28,24,20,0.2);
+  font-style: italic;
+}
+
+.wm-toc-sec-divider-line {
+  flex: 1;
+  height: 1px;
+  background: rgba(28,24,20,0.08);
+  margin: 0 4px;
+}
+
+.wm-toc-sec-edit {
+  flex: 1;
+  font-family: 'Lora', Georgia, serif;
+  font-size: 11px;
+  color: #1C1814;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(184,150,46,0.25);
+  border-radius: 3px;
+  padding: 2px 5px;
+  outline: none;
+  min-width: 0;
+}
+.wm-toc-sec-edit:focus {
+  border-color: #B8962E;
+  box-shadow: 0 0 0 1.5px rgba(184,150,46,0.1);
+}
+
+.wm-toc-sec-actions {
+  display: flex;
+  gap: 1px;
+  opacity: 0;
+  transition: opacity 0.2s;
+  flex-shrink: 0;
+}
+.wm-toc-sec-actions button {
+  background: none;
+  border: none;
+  font-size: 10px;
+  color: rgba(28,24,20,0.25);
+  cursor: pointer;
+  padding: 2px 3px;
+  border-radius: 3px;
+  transition: color 0.15s, background 0.15s;
+  line-height: 1;
+}
+.wm-toc-sec-actions button:hover {
+  color: rgba(28,24,20,0.6);
+  background: rgba(28,24,20,0.04);
+}
+.wm-toc-sec-del:hover {
+  color: #c44 !important;
+  background: rgba(204,68,68,0.06) !important;
+}
+
+/* Add section button */
+.wm-toc-sec-add {
+  display: block;
+  width: calc(100% - 8px);
+  margin: 3px 4px 4px;
+  padding: 5px 0;
+  background: none;
+  border: 1px dashed rgba(28,24,20,0.08);
+  border-radius: 4px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  color: rgba(28,24,20,0.22);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.wm-toc-sec-add:hover {
+  border-color: rgba(184,150,46,0.25);
+  color: #B8962E;
+  background: rgba(184,150,46,0.02);
+}
+
+/* Section type picker menu */
+.wm-toc-sec-type-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  padding: 5px 6px;
+  background: rgba(250,247,240,0.97);
+  border: 1px solid rgba(28,24,20,0.06);
+  border-radius: 6px;
+  margin: 3px 4px 4px;
+  animation: wmSecFade 0.15s ease both;
+}
+.wm-toc-sec-type-opt {
+  background: none;
+  border: 1px solid rgba(28,24,20,0.06);
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  color: rgba(28,24,20,0.45);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+.wm-toc-sec-type-opt:hover {
+  border-color: rgba(184,150,46,0.25);
+  color: #B8962E;
+  background: rgba(184,150,46,0.04);
+}
+.wm-toc-sec-type-icon {
+  font-weight: 600;
+  margin-right: 2px;
+}
+
 /* ═══════════════════════  CONTEXT PANEL  ═════════════════════ */
 
 .wm-context-panel {

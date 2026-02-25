@@ -18,6 +18,22 @@ const API = '/api/v1';
 /* Planning-field completeness helper */
 const PLAN_FIELDS = ['scene_goal', 'theme', 'chapter_notes', 'pov', 'emotional_state_start', 'emotional_state_end'];
 
+/* ── Section types for chapter structure ── */
+const SECTION_TYPES = [
+  { type: 'h2',         label: 'Chapter Title',  icon: 'H2' },
+  { type: 'h3',         label: 'Section',        icon: 'H3' },
+  { type: 'h4',         label: 'Subsection',     icon: 'H4' },
+  { type: 'body',       label: 'Body',           icon: '\u00B6' },
+  { type: 'quote',      label: 'Quote',          icon: '\u201C' },
+  { type: 'reflection', label: 'Reflection',     icon: '?' },
+  { type: 'divider',    label: 'Divider',        icon: '\u2500' },
+];
+const HEADER_TYPES = ['h1', 'h2', 'h3', 'h4'];
+
+function tocUuid() {
+  return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+}
+
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────
 
 export default function WriteMode() {
@@ -45,6 +61,15 @@ export default function WriteMode() {
   const [tocEditTitle,   setTocEditTitle]   = useState('');
   const [addingTocChapter, setAddingTocChapter] = useState(false);
   const [newTocTitle,    setNewTocTitle]    = useState('');
+
+  // TOC section structure state
+  const [expandedTocId,    setExpandedTocId]    = useState(null); // chapter id whose sections are shown
+  const [tocSections,      setTocSections]      = useState([]);   // sections for expanded chapter
+  const [editingSectionId, setEditingSectionId] = useState(null);
+  const [sectionEditVal,   setSectionEditVal]   = useState('');
+  const [addingSectionType, setAddingSectionType] = useState(null); // show type picker
+  const [showSectionTypeMenu, setShowSectionTypeMenu] = useState(false);
+  const tocSectionSaveRef = useRef(null);
 
   // Context panel state
   const [editingContext,  setEditingContext]  = useState(null); // field name being edited
@@ -805,6 +830,90 @@ export default function WriteMode() {
     } catch (err) { console.error('rename error', err); }
   }, [editingTocId, tocEditTitle, chapterId]);
 
+  // ── TOC: EXPAND / COLLAPSE SECTIONS ─────────────────────────────────
+
+  const toggleExpandChapter = useCallback((chId) => {
+    if (expandedTocId === chId) {
+      setExpandedTocId(null);
+      setTocSections([]);
+      return;
+    }
+    setExpandedTocId(chId);
+    const ch = allChapters.find(c => c.id === chId);
+    const secs = (ch?.sections && Array.isArray(ch.sections)) ? ch.sections.map(s => ({ ...s, id: s.id || tocUuid() })) : [];
+    setTocSections(secs);
+  }, [expandedTocId, allChapters]);
+
+  // Auto-save sections (debounced)
+  const saveTocSections = useCallback(async (secs) => {
+    if (!expandedTocId) return;
+    try {
+      await fetch(`${API}/storyteller/chapters/${expandedTocId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections: secs }),
+      });
+      // update local cache
+      setAllChapters(prev => prev.map(c => c.id === expandedTocId ? { ...c, sections: secs } : c));
+      if (expandedTocId === chapterId) setChapter(prev => ({ ...prev, sections: secs }));
+    } catch (err) { console.error('save sections error', err); }
+  }, [expandedTocId, chapterId]);
+
+  // Trigger debounced section save
+  useEffect(() => {
+    if (!expandedTocId || tocSections.length === 0) return;
+    clearTimeout(tocSectionSaveRef.current);
+    tocSectionSaveRef.current = setTimeout(() => saveTocSections(tocSections), 1500);
+    return () => clearTimeout(tocSectionSaveRef.current);
+  }, [tocSections, expandedTocId, saveTocSections]);
+
+  // ── TOC SECTIONS: ADD ─────────────────────────────────────────────────
+
+  const addTocSection = useCallback((type = 'body') => {
+    const newSec = { id: tocUuid(), type, content: '' };
+    setTocSections(prev => [...prev, newSec]);
+    setShowSectionTypeMenu(false);
+    // Auto-focus
+    setTimeout(() => {
+      setEditingSectionId(newSec.id);
+      setSectionEditVal('');
+    }, 50);
+  }, []);
+
+  // ── TOC SECTIONS: UPDATE ──────────────────────────────────────────────
+
+  const commitSectionEdit = useCallback(() => {
+    if (!editingSectionId) return;
+    setTocSections(prev => prev.map(s => s.id === editingSectionId ? { ...s, content: sectionEditVal } : s));
+    setEditingSectionId(null);
+  }, [editingSectionId, sectionEditVal]);
+
+  // ── TOC SECTIONS: DELETE ──────────────────────────────────────────────
+
+  const deleteTocSection = useCallback((secId) => {
+    setTocSections(prev => prev.filter(s => s.id !== secId));
+  }, []);
+
+  // ── TOC SECTIONS: REORDER ─────────────────────────────────────────────
+
+  const moveTocSection = useCallback((secId, direction) => {
+    setTocSections(prev => {
+      const idx = prev.findIndex(s => s.id === secId);
+      if (idx < 0) return prev;
+      const newIdx = idx + direction;
+      if (newIdx < 0 || newIdx >= prev.length) return prev;
+      const copy = [...prev];
+      [copy[idx], copy[newIdx]] = [copy[newIdx], copy[idx]];
+      return copy;
+    });
+  }, []);
+
+  // ── TOC SECTIONS: CHANGE TYPE ─────────────────────────────────────────
+
+  const changeSectionType = useCallback((secId, newType) => {
+    setTocSections(prev => prev.map(s => s.id === secId ? { ...s, type: newType } : s));
+  }, []);
+
   // ── TOC: ADD NEW CHAPTER ──────────────────────────────────────────────
 
   const commitAddChapter = useCallback(async () => {
@@ -1025,37 +1134,106 @@ export default function WriteMode() {
               {allChapters.map((ch, i) => {
                 const isCurrent = ch.id === chapterId;
                 const chWords = ch.draft_prose ? ch.draft_prose.split(/\s+/).filter(Boolean).length : 0;
+                const isExpanded = expandedTocId === ch.id;
+                const hasSections = ch.sections && Array.isArray(ch.sections) && ch.sections.length > 0;
                 return (
-                  <div
-                    key={ch.id}
-                    className={`wm-toc-item${isCurrent ? ' current' : ''}${tocDragOverIdx === i ? ' drag-over' : ''}`}
-                    draggable
-                    onDragStart={() => setTocDragIdx(i)}
-                    onDragOver={(e) => { e.preventDefault(); setTocDragOverIdx(i); }}
-                    onDragEnd={handleTocDrop}
-                    onClick={() => !editingTocId && switchChapter(ch.id)}
-                  >
-                    <span className="wm-toc-drag">{'\u2261'}</span>
-                    <span className="wm-toc-num">{ch.chapter_number || i + 1}</span>
-                    {editingTocId === ch.id ? (
-                      <input
-                        className="wm-toc-edit-input"
-                        value={tocEditTitle}
-                        onChange={e => setTocEditTitle(e.target.value)}
-                        onBlur={commitTocRename}
-                        onKeyDown={e => { if (e.key === 'Enter') commitTocRename(); if (e.key === 'Escape') setEditingTocId(null); }}
-                        autoFocus
-                        onClick={e => e.stopPropagation()}
-                      />
-                    ) : (
-                      <span
-                        className="wm-toc-title"
-                        onDoubleClick={(e) => { e.stopPropagation(); setEditingTocId(ch.id); setTocEditTitle(ch.title || ''); }}
+                  <div key={ch.id} className="wm-toc-chapter-group">
+                    <div
+                      className={`wm-toc-item${isCurrent ? ' current' : ''}${tocDragOverIdx === i ? ' drag-over' : ''}`}
+                      draggable
+                      onDragStart={() => setTocDragIdx(i)}
+                      onDragOver={(e) => { e.preventDefault(); setTocDragOverIdx(i); }}
+                      onDragEnd={handleTocDrop}
+                      onClick={() => !editingTocId && switchChapter(ch.id)}
+                    >
+                      <span className="wm-toc-drag">{'\u2261'}</span>
+                      <button
+                        className={`wm-toc-expand${isExpanded ? ' expanded' : ''}`}
+                        onClick={(e) => { e.stopPropagation(); toggleExpandChapter(ch.id); }}
+                        title={isExpanded ? 'Collapse sections' : 'Show sections'}
                       >
-                        {ch.title || 'Untitled'}
-                      </span>
+                        {'\u25B8'}
+                      </button>
+                      <span className="wm-toc-num">{ch.chapter_number || i + 1}</span>
+                      {editingTocId === ch.id ? (
+                        <input
+                          className="wm-toc-edit-input"
+                          value={tocEditTitle}
+                          onChange={e => setTocEditTitle(e.target.value)}
+                          onBlur={commitTocRename}
+                          onKeyDown={e => { if (e.key === 'Enter') commitTocRename(); if (e.key === 'Escape') setEditingTocId(null); }}
+                          autoFocus
+                          onClick={e => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span
+                          className="wm-toc-title"
+                          onDoubleClick={(e) => { e.stopPropagation(); setEditingTocId(ch.id); setTocEditTitle(ch.title || ''); }}
+                        >
+                          {ch.title || 'Untitled'}
+                        </span>
+                      )}
+                      <span className="wm-toc-words">{chWords > 0 ? `${chWords}w` : '\u2014'}</span>
+                    </div>
+
+                    {/* ── Sections inside this chapter ── */}
+                    {isExpanded && (
+                      <div className="wm-toc-sections">
+                        {tocSections.length === 0 && (
+                          <div className="wm-toc-sec-empty">No sections yet</div>
+                        )}
+                        {tocSections.map((sec) => {
+                          const typeInfo = SECTION_TYPES.find(t => t.type === sec.type) || { icon: '?', label: sec.type };
+                          const isHeader = HEADER_TYPES.includes(sec.type);
+                          const isDivider = sec.type === 'divider';
+                          return (
+                            <div key={sec.id} className={`wm-toc-sec-item${isHeader ? ' is-header' : ''}${isDivider ? ' is-divider' : ''}`}>
+                              <span className="wm-toc-sec-icon" title={typeInfo.label}>{typeInfo.icon}</span>
+                              {isDivider ? (
+                                <span className="wm-toc-sec-divider-line" />
+                              ) : editingSectionId === sec.id ? (
+                                <input
+                                  className="wm-toc-sec-edit"
+                                  value={sectionEditVal}
+                                  onChange={e => setSectionEditVal(e.target.value)}
+                                  onBlur={commitSectionEdit}
+                                  onKeyDown={e => { if (e.key === 'Enter') commitSectionEdit(); if (e.key === 'Escape') setEditingSectionId(null); }}
+                                  placeholder={typeInfo.label + '\u2026'}
+                                  autoFocus
+                                />
+                              ) : (
+                                <span
+                                  className="wm-toc-sec-text"
+                                  onClick={(e) => { e.stopPropagation(); setEditingSectionId(sec.id); setSectionEditVal(sec.content || ''); }}
+                                >
+                                  {sec.content || <span className="wm-toc-sec-placeholder">{typeInfo.label}</span>}
+                                </span>
+                              )}
+                              <div className="wm-toc-sec-actions">
+                                <button onClick={(e) => { e.stopPropagation(); moveTocSection(sec.id, -1); }} title="Move up">{'\u2191'}</button>
+                                <button onClick={(e) => { e.stopPropagation(); moveTocSection(sec.id, 1); }} title="Move down">{'\u2193'}</button>
+                                <button className="wm-toc-sec-del" onClick={(e) => { e.stopPropagation(); deleteTocSection(sec.id); }} title="Delete">{'\u00D7'}</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+
+                        {/* Add section */}
+                        {showSectionTypeMenu && expandedTocId === ch.id ? (
+                          <div className="wm-toc-sec-type-menu">
+                            {SECTION_TYPES.map(st => (
+                              <button key={st.type} className="wm-toc-sec-type-opt" onClick={() => addTocSection(st.type)}>
+                                <span className="wm-toc-sec-type-icon">{st.icon}</span> {st.label}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <button className="wm-toc-sec-add" onClick={(e) => { e.stopPropagation(); setShowSectionTypeMenu(true); }}>
+                            + Add Section
+                          </button>
+                        )}
+                      </div>
                     )}
-                    <span className="wm-toc-words">{chWords > 0 ? `${chWords}w` : '\u2014'}</span>
                   </div>
                 );
               })}
@@ -1543,15 +1721,22 @@ export default function WriteMode() {
               </div>
             )}
 
-            {/* Quick link to structure editor */}
+            {/* Quick link to structure in TOC */}
             <button
               className="wm-ctx-structure-link"
-              onClick={async () => {
-                if (prose) await saveDraft(prose);
-                navigate(`/chapter-structure/${bookId}/${chapterId}`);
+              onClick={() => {
+                if (!showToc) setShowToc(true);
+                setExpandedTocId(prev => {
+                  if (prev !== chapterId) {
+                    const ch = allChapters.find(c => c.id === chapterId);
+                    const secs = (ch?.sections && Array.isArray(ch.sections)) ? ch.sections.map(s => ({ ...s, id: s.id || tocUuid() })) : [];
+                    setTocSections(secs);
+                  }
+                  return chapterId;
+                });
               }}
             >
-              {'\u2699'} Open Structure Editor
+              {'\u2630'} Show Chapter Structure
             </button>
           </aside>
         )}
