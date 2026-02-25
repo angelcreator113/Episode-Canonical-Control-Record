@@ -134,6 +134,11 @@ html, body {
   background: transparent;
 }
 
+/* WriteMode keeps its own parchment background in full-screen mode */
+.full-screen .app-content > .wm-root {
+  background: #FAF7F0;
+}
+
 /* SCENE COMPOSER FULL-SCREEN OVERRIDE */
 .app-content > .scene-composer-full {
   position: fixed !important;

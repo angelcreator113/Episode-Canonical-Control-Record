@@ -2777,6 +2777,7 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
       session_log    = [],
       character_id   = null,
       gen_length     = 'paragraph',
+      stream         = false,
     } = req.body;
 
     if (!spoken?.trim()) {
@@ -2787,7 +2788,7 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
     const charVoice = await getCharacterVoiceContext(character_id);
 
     const recentProse = existing_prose
-      ? existing_prose.split('\n\n').slice(-3).join('\n\n')
+      ? existing_prose.split('\n\n').slice(-5).join('\n\n')
       : '';
 
     const sessionContext = session_log.length > 0
@@ -2798,13 +2799,16 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
     const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
     const charVoiceBlock = charVoice?.voiceBlock || '';
 
+    const lengthInstruction = gen_length === 'sentence'
+      ? 'Write exactly 1–2 sentences. One vivid moment. One breath.'
+      : 'Write 2–5 paragraphs. Rich but controlled.';
+
     const prompt = `You are writing a memoir in the voice of ${charName}.
 
-The author just spoke this aloud — it is raw material, not polished prose:
+The author just spoke this aloud — raw material, not polished prose:
 "${spoken}"
 
-YOUR JOB: Turn this into story. Not a transcript. Not a cleanup. Story.
-Take what they said and write it as ${charName} would write it — in their voice, in their body, in the moment.
+YOUR JOB: Turn this into IMMERSIVE story. The reader should be INSIDE the scene — seeing it, smelling it, feeling it in their body.
 
 CHAPTER: ${chapter_title || 'Untitled'}
 ${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
@@ -2813,27 +2817,82 @@ CURRENT ACT: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 PROSE TENSE/MODE: ${act.tense}
 
-${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${recentProse ? `WHAT WAS JUST WRITTEN (continue from here):\n${recentProse}` : ''}
+${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${recentProse ? `WHAT WAS JUST WRITTEN (continue seamlessly from here — match the rhythm and flow):\n${recentProse}` : ''}
 
 ${sessionContext}
 
 ${charRules}
 
-WRITING RULES:
-- ${gen_length === 'sentence' ? 'Write exactly 1–2 sentences. That\'s it. One moment, one image, one breath.' : 'Write 2–5 paragraphs. Not more.'}
+IMMERSION RULES:
+- ${lengthInstruction}
+- SENSORY DETAIL: Ground every moment. What does the room smell like? What does she hear? What is the light doing? What does the air feel like on skin? Don't list senses — weave them into the prose so the reader is THERE.
+- EMOTION IN THE BODY: Don't say "she felt sad." Show it — the throat tightening, the hands going still, the breath she holds without meaning to. Emotions live in the body.
+- DIALOGUE IS SPOKEN: When someone talks out loud, use dialogue. "Like this," she said. Internal thoughts stay in narration. The reader must always know what's spoken vs. thought.
+- FLOW & CONTINUITY: Each passage must flow from the last like water. Read what came before and continue the emotional current — don't restart, don't summarize.
+- SPECIFICITY: No generic details. Not "a store" — the name of the store. Not "music" — the song. Not "food" — what's on the plate. Use what the author gave you; if they didn't name it, choose something real and specific that fits.
 - Stay close to what they said — the truth of it — but give it the shape of prose.
-- If they mentioned a feeling, find the image underneath it.
-- If they described what happened, find what it cost.
-- If they trailed off or repeated themselves, that repetition is probably the real thing.
-- Do not add events or details they didn't give you.
-- Do not give the character a revelation they didn't earn in what they said.
+- If they trailed off or repeated themselves, that repetition IS the real thing — lean into it.
+- Do not add events they didn't give you.
 - End on something that pulls forward — not a conclusion.
 
-Respond with ONLY the prose. No preamble. No explanation. No quotes around it.
-Just the story, in ${charName}'s first-person voice.`;
+Respond with ONLY the prose. No preamble. No explanation. No quotes around it.`;
 
-    // Use model fallback like scene-interview
+    const maxTok = gen_length === 'sentence' ? 200 : 900;
     const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+
+    // ── STREAMING PATH ──
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+
+      let streamed = false;
+      for (const model of MODELS) {
+        try {
+          console.log(`voice-to-story stream: trying ${model}`);
+          const streamResp = anthropic.messages.stream({
+            model,
+            max_tokens: maxTok,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          let fullText = '';
+          streamResp.on('text', (text) => {
+            fullText += text;
+            res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+          });
+          await streamResp.finalMessage();
+
+          // Check for Lala hint
+          let hint = null;
+          const proseAndSpoken = (existing_prose + fullText).toLowerCase();
+          const spiralCount = (proseAndSpoken.match(/can't|couldn't|wrong|what if|why|tired|keep/g) || []).length;
+          const interiorCount = existing_prose.split('\n\n').length;
+          if (spiralCount >= 4 && interiorCount >= 4) {
+            hint = 'Something is building here — a different voice is close.';
+          }
+          res.write(`data: ${JSON.stringify({ type: 'done', hint })}\n\n`);
+          res.end();
+          streamed = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`voice-to-story stream: ${model} status ${status}, trying next`);
+            continue;
+          }
+          throw apiErr;
+        }
+      }
+      if (!streamed) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI is busy — please try again in a moment' })}\n\n`);
+        res.end();
+      }
+      return;
+    }
+
+    // ── NON-STREAMING (fallback) ──
     let response;
     for (const model of MODELS) {
       let succeeded = false;
@@ -2842,7 +2901,7 @@ Just the story, in ${charName}'s first-person voice.`;
           console.log(`voice-to-story: trying ${model} (attempt ${attempt + 1})`);
           response = await anthropic.messages.create({
             model,
-            max_tokens: 800,
+            max_tokens: maxTok,
             messages: [{ role: 'user', content: prompt }],
           });
           succeeded = true;
@@ -3013,6 +3072,8 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
       pnos_act       = 'act_1',
       book_character = 'JustAWoman',
       character_id   = null,
+      gen_length     = 'paragraph',
+      stream         = false,
     } = req.body;
 
     if (!current_prose?.trim()) {
@@ -3025,12 +3086,16 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
     const charRules = charVoice?.charRules || WRITE_MODE_CHARACTER_RULES;
     const charVoiceBlock = charVoice?.voiceBlock || '';
 
-    // Send the last ~5 paragraphs for context
-    const recentProse = current_prose.split('\n\n').slice(-5).join('\n\n');
+    // Send the last ~6 paragraphs for context — more context = better predictions
+    const recentProse = current_prose.split('\n\n').slice(-6).join('\n\n');
+
+    const lengthInstruction = gen_length === 'sentence'
+      ? 'Write exactly 1–2 sentences. One beat. One moment. That\'s all.'
+      : 'Write 2–4 paragraphs. Rich but controlled.';
 
     const prompt = `You are continuing a memoir in the voice of ${charName}.
 
-The author has written prose below. They paused. Now they want you to pick up where they left off and keep going — same voice, same truth, same movement.
+The author has written prose below. They paused. Now pick up EXACTLY where they left off — same voice, same truth, same movement. The reader should not be able to tell where the author stopped and you began.
 
 CHAPTER: ${chapter_title || 'Untitled'}
 ${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
@@ -3045,12 +3110,14 @@ ${recentProse}
 ${charRules}
 
 CONTINUATION RULES:
-- ${gen_length === 'sentence' ? 'Write exactly 1–2 sentences. One beat. One moment. That\'s all.' : 'Write 2–4 paragraphs. Not more.'}
-- Continue the exact emotional arc and rhythm. Don't restart. Don't summarize.
+- ${lengthInstruction}
+- PREDICT THE NEXT BEAT: Read the emotional current of what's already written. Where is it heading? What would naturally happen next in THIS specific moment? Not a big leap — the very next breath, the next small action, the next thought that would cross THIS character's mind given what just happened.
+- SENSORY IMMERSION: Ground every moment in the physical world. What does the space smell like? What are the sounds? What is the light doing? What does her body feel like right now? Weave these in naturally — don't list them.
+- EMOTION IN THE BODY: Never say "she felt X." Show it — the jaw clenching, the hands going still, the way she holds her coffee without drinking it. Emotions are physical.
+- DIALOGUE IS SPOKEN: When someone talks aloud, use proper dialogue. "Like this." Internal thoughts stay in narration. The reader must always know what's spoken vs. thought.
+- SEAMLESS FLOW: Continue the exact rhythm. If the last paragraph was short and tight, keep that tension. If it was opening up, let it breathe. Don't restart tone.
+- SPECIFICITY: Real details. The name of the store, the song on the radio, what's on the plate. Never generic.
 - If the last paragraph ended mid-thought, finish that thought first.
-- If the last paragraph landed on something, let the next beat come naturally from it.
-- Stay in the same tense, same POV, same proximity to the body.
-- Do not leap ahead. The next moment. The next breath. That's all.
 - If doubt was building, let it build one more turn — don't resolve it.
 - If something just happened, let her sit with it before reacting.
 - Do not add characters or events not implied by what's already written.
@@ -3059,7 +3126,51 @@ CONTINUATION RULES:
 Respond with ONLY the continuation prose. No preamble. No explanation.
 Start exactly where they left off.`;
 
+    const maxTok = gen_length === 'sentence' ? 200 : 900;
     const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+
+    // ── STREAMING PATH ──
+    if (stream) {
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.setHeader('X-Accel-Buffering', 'no');
+      res.flushHeaders();
+
+      let streamed = false;
+      for (const model of MODELS) {
+        try {
+          console.log(`story-continue stream: trying ${model}`);
+          const streamResp = anthropic.messages.stream({
+            model,
+            max_tokens: maxTok,
+            messages: [{ role: 'user', content: prompt }],
+          });
+          streamResp.on('text', (text) => {
+            res.write(`data: ${JSON.stringify({ type: 'text', text })}\n\n`);
+          });
+          await streamResp.finalMessage();
+          res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+          res.end();
+          streamed = true;
+          break;
+        } catch (apiErr) {
+          const status = apiErr?.status || apiErr?.error?.status;
+          if (status === 529 || status === 503 || status === 404) {
+            console.log(`story-continue stream: ${model} status ${status}, trying next`);
+            continue;
+          }
+          throw apiErr;
+        }
+      }
+      if (!streamed) {
+        res.write(`data: ${JSON.stringify({ type: 'error', error: 'AI is busy — please try again in a moment' })}\n\n`);
+        res.end();
+      }
+      return;
+    }
+
+    // ── NON-STREAMING (fallback) ──
     let response;
     for (const model of MODELS) {
       let succeeded = false;
@@ -3068,7 +3179,7 @@ Start exactly where they left off.`;
           console.log(`story-continue: trying ${model} (attempt ${attempt + 1})`);
           response = await anthropic.messages.create({
             model,
-            max_tokens: 800,
+            max_tokens: maxTok,
             messages: [{ role: 'user', content: prompt }],
           });
           succeeded = true;

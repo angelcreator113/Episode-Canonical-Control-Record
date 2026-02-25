@@ -18,6 +18,17 @@ import { useNavigate } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterVoiceInterview from './CharacterVoiceInterview';
 
+/* ── Auto-scroll active tab into view on mobile ── */
+function useTabAutoScroll(tabRef, activeTab) {
+  useEffect(() => {
+    if (!tabRef.current) return;
+    const active = tabRef.current.querySelector('.cr-dossier-tab.active');
+    if (active) {
+      active.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }
+  }, [activeTab]);
+}
+
 const API = '/api/v1/character-registry';
 const AI_API = '/api/v1/character-ai';
 
@@ -125,6 +136,11 @@ export default function CharacterRegistryPage() {
   // Interview
   const [interviewTarget, setInterviewTarget] = useState(null);
   const [bookId, setBookId] = useState(null);
+
+  // Dossier mobile: collapse left panel
+  const [dossierPanelOpen, setDossierPanelOpen] = useState(false);
+  const tabsRef = useRef(null);
+  useTabAutoScroll(tabsRef, dossierTab);
 
   // AI Writer state
   const [aiMode, setAiMode]             = useState('scene');    // scene | monologue | profile | gaps | next
@@ -496,10 +512,16 @@ export default function CharacterRegistryPage() {
     return (
       <div className="cr-page">
         {/* Header (simplified for dossier) */}
-        <div className="cr-header">
+        <div className="cr-header cr-header-dossier">
           <div className="cr-header-left">
-            <div className="cr-header-brand">LaLaPlace</div>
-            {!isMobile && <div className="cr-header-breadcrumb">Universe → Registry → Dossier</div>}
+            {isMobile ? (
+              <button className="cr-dossier-back-btn-inline" onClick={closeDossier}>←</button>
+            ) : (
+              <>
+                <div className="cr-header-brand">LaLaPlace</div>
+                <div className="cr-header-breadcrumb">Universe → Registry → Dossier</div>
+              </>
+            )}
           </div>
           <div className="cr-header-center">
             <h1 className="cr-header-title">{c.selected_name || c.display_name}</h1>
@@ -508,142 +530,174 @@ export default function CharacterRegistryPage() {
             <button className="cr-header-btn" onClick={() => setInterviewTarget(c)}>
               {isMobile ? '🎙' : 'Interview'}
             </button>
-            <button className="cr-header-btn" onClick={() => navigate(`/therapy/${activeRegistry?.id || 'default'}`)}>
-              {isMobile ? '◈' : '◈ Therapy'}
-            </button>
+            {!isMobile && (
+              <button className="cr-header-btn" onClick={() => navigate(`/therapy/${activeRegistry?.id || 'default'}`)}>
+                ◈ Therapy
+              </button>
+            )}
           </div>
         </div>
 
         <div className="cr-dossier">
-          {/* Back bar */}
-          <div className="cr-dossier-back">
-            <button className="cr-dossier-back-btn" onClick={closeDossier}>
-              ← Back to Registry
-            </button>
-          </div>
+          {/* Back bar — desktop only, mobile uses header back button */}
+          {!isMobile && (
+            <div className="cr-dossier-back">
+              <button className="cr-dossier-back-btn" onClick={closeDossier}>
+                ← Back to Registry
+              </button>
+            </div>
+          )}
 
           <div className="cr-dossier-layout">
 
-            {/* ── LEFT PANEL (30%) ── */}
-            <div className="cr-dossier-left">
-              {/* Portrait */}
-              <div className={`cr-dossier-portrait ${isCore ? 'canon-core' : ''}`}>
-                {c.icon ? (
-                  <span className="portrait-icon">{c.icon}</span>
-                ) : (
-                  <span className="portrait-initial">{(c.display_name || '?')[0]}</span>
-                )}
-              </div>
-
-              {/* Identity */}
-              <div>
-                <h2 className="cr-dossier-name">{c.selected_name || c.display_name}</h2>
-                {c.selected_name && c.display_name !== c.selected_name && (
-                  <div className="cr-dossier-alias">née {c.display_name}</div>
-                )}
-              </div>
-
-              {/* Meta fields */}
-              <div className="cr-dossier-meta">
-                <div className="cr-dossier-meta-row">
-                  <span className="cr-dossier-meta-label">Role</span>
-                  <span className="cr-dossier-meta-value">{c.role_label || ROLE_LABELS[c.role_type] || c.role_type}</span>
-                </div>
-                <div className="cr-dossier-meta-row">
-                  <span className="cr-dossier-meta-label">Canon Tier</span>
-                  <span className={`cr-dossier-meta-value ${isCore ? 'gold' : ''}`}>
-                    {c.canon_tier || '—'}
-                  </span>
-                </div>
-                {c.character_archetype && (
-                  <div className="cr-dossier-meta-row">
-                    <span className="cr-dossier-meta-label">Archetype</span>
-                    <span className="cr-dossier-meta-value">{c.character_archetype}</span>
-                  </div>
-                )}
-                {c.first_appearance && (
-                  <div className="cr-dossier-meta-row">
-                    <span className="cr-dossier-meta-label">First Appeared</span>
-                    <span className="cr-dossier-meta-value">{c.first_appearance}</span>
-                  </div>
-                )}
-                {c.era_introduced && (
-                  <div className="cr-dossier-meta-row">
-                    <span className="cr-dossier-meta-label">Era</span>
-                    <span className="cr-dossier-meta-value">{c.era_introduced}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Status */}
-              <div className={`cr-dossier-status ${c.status}`}>
-                <span className="cr-dossier-status-dot" />
-                {c.status?.toUpperCase()}
-              </div>
-
-              {/* Relationship Quick View */}
-              {c.relationships_map && (
-                <div>
-                  <span className="cr-dossier-meta-label" style={{ marginBottom: 8, display: 'block' }}>
-                    Relationships
-                  </span>
-                  <div className="cr-dossier-rel-quick">
-                    {jGet(c.relationships_map, 'allies') && (
-                      <span className="cr-dossier-rel-chip">
-                        <span className="cr-dossier-rel-chip-icon">🤝</span>
-                        {jGet(c.relationships_map, 'allies').split(',')[0]?.trim()}
-                      </span>
-                    )}
-                    {jGet(c.relationships_map, 'rivals') && (
-                      <span className="cr-dossier-rel-chip">
-                        <span className="cr-dossier-rel-chip-icon">⚔</span>
-                        {jGet(c.relationships_map, 'rivals').split(',')[0]?.trim()}
-                      </span>
-                    )}
-                    {jGet(c.relationships_map, 'mentors') && (
-                      <span className="cr-dossier-rel-chip">
-                        <span className="cr-dossier-rel-chip-icon">🏛</span>
-                        {jGet(c.relationships_map, 'mentors').split(',')[0]?.trim()}
-                      </span>
-                    )}
-                    {jGet(c.relationships_map, 'love_interests') && (
-                      <span className="cr-dossier-rel-chip">
-                        <span className="cr-dossier-rel-chip-icon">♡</span>
-                        {jGet(c.relationships_map, 'love_interests').split(',')[0]?.trim()}
-                      </span>
+            {/* ── LEFT PANEL (30%) — collapsible on mobile ── */}
+            <div className={`cr-dossier-left ${isMobile && !dossierPanelOpen ? 'collapsed' : ''}`}>
+              {/* Mobile: compact summary strip (always visible) */}
+              {isMobile && (
+                <div className="cr-dossier-mobile-summary" onClick={() => setDossierPanelOpen(p => !p)}>
+                  <div className={`cr-dossier-portrait-mini ${isCore ? 'canon-core' : ''}`}>
+                    {c.icon ? (
+                      <span className="portrait-icon-mini">{c.icon}</span>
+                    ) : (
+                      <span className="portrait-initial-mini">{(c.display_name || '?')[0]}</span>
                     )}
                   </div>
+                  <div className="cr-dossier-mobile-identity">
+                    <h2 className="cr-dossier-name-mobile">{c.selected_name || c.display_name}</h2>
+                    <div className="cr-dossier-mobile-meta-line">
+                      <span className={`cr-card-role ${c.role_type}`}>{c.role_label || ROLE_LABELS[c.role_type] || c.role_type}</span>
+                      {c.character_archetype && <span className="cr-dossier-mobile-archetype">{c.character_archetype}</span>}
+                      <span className={`cr-dossier-status-mini ${c.status}`}>
+                        <span className="cr-dossier-status-dot" />
+                        {c.status}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`cr-dossier-expand-arrow ${dossierPanelOpen ? 'open' : ''}`}>&#9662;</span>
                 </div>
               )}
 
-              {/* Actions */}
-              <div className="cr-dossier-actions">
-                {c.status !== 'finalized' ? (
-                  <>
-                    {c.status !== 'accepted' && (
-                      <button className="cr-dossier-action-btn accept" onClick={() => setCharStatus(c.id, 'accepted')}>
-                        Accept
-                      </button>
-                    )}
-                    {c.status === 'accepted' && (
-                      <button className="cr-dossier-action-btn finalize" onClick={() => setCharStatus(c.id, 'finalized')}>
-                        Finalize to Canon
-                      </button>
-                    )}
-                    {c.status !== 'declined' && (
-                      <button className="cr-dossier-action-btn decline" onClick={() => setCharStatus(c.id, 'declined')}>
-                        Decline
-                      </button>
-                    )}
-                  </>
-                ) : (
-                  <>
-                    <div className="cr-dossier-finalized-label">CANON LOCKED</div>
-                    <button className="cr-dossier-action-btn revert" onClick={() => setCharStatus(c.id, 'draft')}>
-                      Revert to Draft
-                    </button>
-                  </>
+              {/* Full panel content — always on desktop, toggled on mobile */}
+              <div className={`cr-dossier-left-inner ${isMobile && !dossierPanelOpen ? 'hidden' : ''}`}>
+                {/* Portrait */}
+                <div className={`cr-dossier-portrait ${isCore ? 'canon-core' : ''}`}>
+                  {c.icon ? (
+                    <span className="portrait-icon">{c.icon}</span>
+                  ) : (
+                    <span className="portrait-initial">{(c.display_name || '?')[0]}</span>
+                  )}
+                </div>
+
+                {/* Identity */}
+                <div>
+                  <h2 className="cr-dossier-name">{c.selected_name || c.display_name}</h2>
+                  {c.selected_name && c.display_name !== c.selected_name && (
+                    <div className="cr-dossier-alias">née {c.display_name}</div>
+                  )}
+                </div>
+
+                {/* Meta fields */}
+                <div className="cr-dossier-meta">
+                  <div className="cr-dossier-meta-row">
+                    <span className="cr-dossier-meta-label">Role</span>
+                    <span className="cr-dossier-meta-value">{c.role_label || ROLE_LABELS[c.role_type] || c.role_type}</span>
+                  </div>
+                  <div className="cr-dossier-meta-row">
+                    <span className="cr-dossier-meta-label">Canon Tier</span>
+                    <span className={`cr-dossier-meta-value ${isCore ? 'gold' : ''}`}>
+                      {c.canon_tier || '—'}
+                    </span>
+                  </div>
+                  {c.character_archetype && (
+                    <div className="cr-dossier-meta-row">
+                      <span className="cr-dossier-meta-label">Archetype</span>
+                      <span className="cr-dossier-meta-value">{c.character_archetype}</span>
+                    </div>
+                  )}
+                  {c.first_appearance && (
+                    <div className="cr-dossier-meta-row">
+                      <span className="cr-dossier-meta-label">First Appeared</span>
+                      <span className="cr-dossier-meta-value">{c.first_appearance}</span>
+                    </div>
+                  )}
+                  {c.era_introduced && (
+                    <div className="cr-dossier-meta-row">
+                      <span className="cr-dossier-meta-label">Era</span>
+                      <span className="cr-dossier-meta-value">{c.era_introduced}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Status */}
+                <div className={`cr-dossier-status ${c.status}`}>
+                  <span className="cr-dossier-status-dot" />
+                  {c.status?.toUpperCase()}
+                </div>
+
+                {/* Relationship Quick View */}
+                {c.relationships_map && (
+                  <div>
+                    <span className="cr-dossier-meta-label" style={{ marginBottom: 8, display: 'block' }}>
+                      Relationships
+                    </span>
+                    <div className="cr-dossier-rel-quick">
+                      {jGet(c.relationships_map, 'allies') && (
+                        <span className="cr-dossier-rel-chip">
+                          <span className="cr-dossier-rel-chip-icon">🤝</span>
+                          {jGet(c.relationships_map, 'allies').split(',')[0]?.trim()}
+                        </span>
+                      )}
+                      {jGet(c.relationships_map, 'rivals') && (
+                        <span className="cr-dossier-rel-chip">
+                          <span className="cr-dossier-rel-chip-icon">⚔</span>
+                          {jGet(c.relationships_map, 'rivals').split(',')[0]?.trim()}
+                        </span>
+                      )}
+                      {jGet(c.relationships_map, 'mentors') && (
+                        <span className="cr-dossier-rel-chip">
+                          <span className="cr-dossier-rel-chip-icon">🏛</span>
+                          {jGet(c.relationships_map, 'mentors').split(',')[0]?.trim()}
+                        </span>
+                      )}
+                      {jGet(c.relationships_map, 'love_interests') && (
+                        <span className="cr-dossier-rel-chip">
+                          <span className="cr-dossier-rel-chip-icon">♡</span>
+                          {jGet(c.relationships_map, 'love_interests').split(',')[0]?.trim()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 )}
+
+                {/* Actions */}
+                <div className="cr-dossier-actions">
+                  {c.status !== 'finalized' ? (
+                    <>
+                      {c.status !== 'accepted' && (
+                        <button className="cr-dossier-action-btn accept" onClick={() => setCharStatus(c.id, 'accepted')}>
+                          Accept
+                        </button>
+                      )}
+                      {c.status === 'accepted' && (
+                        <button className="cr-dossier-action-btn finalize" onClick={() => setCharStatus(c.id, 'finalized')}>
+                          Finalize to Canon
+                        </button>
+                      )}
+                      {c.status !== 'declined' && (
+                        <button className="cr-dossier-action-btn decline" onClick={() => setCharStatus(c.id, 'declined')}>
+                          Decline
+                        </button>
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <div className="cr-dossier-finalized-label">CANON LOCKED</div>
+                      <button className="cr-dossier-action-btn revert" onClick={() => setCharStatus(c.id, 'draft')}>
+                        Revert to Draft
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
 
@@ -651,7 +705,7 @@ export default function CharacterRegistryPage() {
             <div className="cr-dossier-right">
               {/* Tabs + Edit toggle */}
               <div className="cr-dossier-tabs-row">
-                <div className="cr-dossier-tabs">
+                <div className="cr-dossier-tabs" ref={tabsRef}>
                   {DOSSIER_TABS.map(t => (
                     <button
                       key={t.key}
@@ -679,6 +733,28 @@ export default function CharacterRegistryPage() {
             </div>
           </div>
         </div>
+
+        {/* Mobile bottom action bar */}
+        {isMobile && (
+          <div className="cr-mobile-bottom-bar">
+            <button className="cr-mobile-bottom-btn" onClick={() => navigate(`/write?character=${c.id}`)}>
+              <span className="cr-mobile-bottom-icon">✦</span>
+              <span>Write</span>
+            </button>
+            <button className="cr-mobile-bottom-btn" onClick={() => setInterviewTarget(c)}>
+              <span className="cr-mobile-bottom-icon">🎙</span>
+              <span>Interview</span>
+            </button>
+            <button className="cr-mobile-bottom-btn" onClick={() => navigate(`/therapy/${activeRegistry?.id || 'default'}`)}>
+              <span className="cr-mobile-bottom-icon">◈</span>
+              <span>Therapy</span>
+            </button>
+            <button className="cr-mobile-bottom-btn" onClick={() => { setDossierTab('ai'); }}>
+              <span className="cr-mobile-bottom-icon">⟐</span>
+              <span>AI</span>
+            </button>
+          </div>
+        )}
 
         {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
