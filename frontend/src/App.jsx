@@ -165,13 +165,14 @@ function AppContent() {
     );
   }
 
-  // Check if current route is Timeline Editor, Scene Composer, or Export (full-screen modes)
+  // Check if current route is Timeline Editor, Scene Composer, Export, or WriteMode (full-screen modes)
   const isTimelineEditor = location.pathname.includes('/timeline');
   const isSceneComposer = location.pathname.includes('/scene-composer');
   const isExportPage = location.pathname.includes('/export');
   const isStorytellerPage = location.pathname.includes('/storyteller');
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode;
+  const isWriteMode = location.pathname.startsWith('/write/');
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode;
   const hideFooter = isFullScreen || isStorytellerPage;
 
   return (
