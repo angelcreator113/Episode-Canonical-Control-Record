@@ -1,0 +1,657 @@
+/* ── ChapterStructureEditor (cse- prefix) ── */
+
+/* ── Variables ── */
+.cse-root {
+  --cse-bg: #FAF7F0;
+  --cse-parchment: #FAF7F0;
+  --cse-ink: #2F2A26;
+  --cse-ink-soft: #6B6460;
+  --cse-muted: #8A8078;
+  --cse-gold: #C6A85E;
+  --cse-gold-dark: #A3892E;
+  --cse-gold-light: #E8D9A8;
+  --cse-border: #E2DCD4;
+  --cse-card: #FFFFFF;
+  --cse-card-hover: #FDF9F2;
+  --cse-danger: #C0392B;
+  --cse-success: #27AE60;
+  --cse-font-serif: 'Lora', 'Georgia', serif;
+  --cse-font-mono: 'DM Mono', 'Fira Mono', monospace;
+  --cse-font-sans: 'DM Sans', 'Inter', sans-serif;
+  --cse-radius: 8px;
+
+  /* Text style colors */
+  --cse-h1-color: #1C1814;
+  --cse-h2-color: #2F2A26;
+  --cse-h3-color: #5A4D3A;
+  --cse-h4-color: #7A6D5A;
+  --cse-body-color: #2F2A26;
+  --cse-quote-color: #6B6460;
+  --cse-reflection-color: #8B6914;
+  --cse-divider-color: #D4CCC0;
+}
+
+.cse-root {
+  min-height: 100vh;
+  background: var(--cse-bg);
+  color: var(--cse-ink);
+  font-family: var(--cse-font-sans);
+  display: flex;
+  flex-direction: column;
+}
+
+/* ── Toast ── */
+.cse-toast {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 9999;
+  padding: 10px 28px;
+  border-radius: 24px;
+  font-family: var(--cse-font-mono);
+  font-size: 13px;
+  letter-spacing: 0.03em;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.14);
+  animation: cseToastIn 0.25s ease-out;
+}
+.cse-toast-success { background: var(--cse-ink); color: var(--cse-bg); }
+.cse-toast-error   { background: var(--cse-danger); color: #fff; }
+
+@keyframes cseToastIn {
+  from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* ── Header ── */
+.cse-header {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background: var(--cse-bg);
+  border-bottom: 1px solid var(--cse-border);
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.cse-back-btn {
+  background: none;
+  border: 1px solid var(--cse-border);
+  border-radius: var(--cse-radius);
+  padding: 6px 14px;
+  font-family: var(--cse-font-mono);
+  font-size: 13px;
+  color: var(--cse-ink-soft);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cse-back-btn:hover {
+  border-color: var(--cse-gold);
+  color: var(--cse-gold-dark);
+}
+
+.cse-header-info {
+  flex: 1;
+  min-width: 0;
+}
+.cse-header-info h1 {
+  font-family: var(--cse-font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  margin: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cse-header-info .cse-breadcrumb {
+  font-family: var(--cse-font-mono);
+  font-size: 12px;
+  color: var(--cse-muted);
+  margin-top: 2px;
+}
+
+.cse-header-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.cse-save-status {
+  font-family: var(--cse-font-mono);
+  font-size: 12px;
+  color: var(--cse-muted);
+  padding: 4px 12px;
+}
+.cse-save-status.saving { color: var(--cse-gold-dark); }
+.cse-save-status.saved { color: var(--cse-success); }
+
+/* ── Layout: TOC + Editor ── */
+.cse-layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ── Table of Contents Sidebar ── */
+.cse-toc {
+  width: 260px;
+  min-width: 260px;
+  border-right: 1px solid var(--cse-border);
+  padding: 20px 0;
+  overflow-y: auto;
+  background: var(--cse-card);
+  height: calc(100vh - 80px);
+  position: sticky;
+  top: 80px;
+}
+
+.cse-toc-title {
+  font-family: var(--cse-font-mono);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--cse-muted);
+  padding: 0 20px 12px;
+  border-bottom: 1px solid var(--cse-border);
+  margin-bottom: 8px;
+}
+
+.cse-toc-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 6px 20px;
+  font-family: var(--cse-font-sans);
+  color: var(--cse-ink-soft);
+  cursor: pointer;
+  transition: all 0.12s;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.cse-toc-item:hover {
+  background: var(--cse-card-hover);
+  color: var(--cse-ink);
+}
+.cse-toc-item.active {
+  background: var(--cse-gold-light);
+  color: var(--cse-gold-dark);
+  font-weight: 600;
+}
+.cse-toc-item.toc-h1 { padding-left: 20px; font-weight: 700; font-size: 14px; }
+.cse-toc-item.toc-h2 { padding-left: 20px; font-weight: 600; font-size: 13px; }
+.cse-toc-item.toc-h3 { padding-left: 36px; font-size: 13px; }
+.cse-toc-item.toc-h4 { padding-left: 52px; font-size: 12px; font-style: italic; }
+
+.cse-toc-empty {
+  padding: 20px;
+  font-size: 13px;
+  color: var(--cse-muted);
+  font-style: italic;
+  text-align: center;
+}
+
+/* ── Editor Area ── */
+.cse-editor {
+  flex: 1;
+  padding: 32px 40px 120px;
+  max-width: 800px;
+  margin: 0 auto;
+  width: 100%;
+  min-height: calc(100vh - 80px);
+}
+
+.cse-editor-empty {
+  text-align: center;
+  padding: 80px 20px;
+  color: var(--cse-muted);
+}
+.cse-editor-empty h2 {
+  font-family: var(--cse-font-serif);
+  font-size: 24px;
+  font-weight: 400;
+  margin-bottom: 12px;
+  color: var(--cse-ink-soft);
+}
+.cse-editor-empty p {
+  font-size: 14px;
+  margin-bottom: 24px;
+}
+
+/* ── Section Block ── */
+.cse-section {
+  position: relative;
+  margin-bottom: 2px;
+  border-radius: var(--cse-radius);
+  transition: background 0.12s;
+}
+.cse-section:hover {
+  background: rgba(198, 168, 94, 0.04);
+}
+.cse-section.cse-section-focused {
+  background: rgba(198, 168, 94, 0.08);
+}
+
+/* Section hover toolbar */
+.cse-section-toolbar {
+  position: absolute;
+  left: -44px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.cse-section:hover .cse-section-toolbar,
+.cse-section.cse-section-focused .cse-section-toolbar {
+  opacity: 1;
+}
+
+.cse-section-tool-btn {
+  background: var(--cse-card);
+  border: 1px solid var(--cse-border);
+  border-radius: 4px;
+  width: 28px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--cse-muted);
+  font-size: 12px;
+  transition: all 0.1s;
+}
+.cse-section-tool-btn:hover {
+  border-color: var(--cse-gold);
+  color: var(--cse-gold-dark);
+  background: var(--cse-card-hover);
+}
+.cse-section-tool-btn.danger:hover {
+  border-color: var(--cse-danger);
+  color: var(--cse-danger);
+}
+
+/* Collapsible header toggle */
+.cse-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  margin-right: 6px;
+  color: var(--cse-muted);
+  font-size: 12px;
+  transition: transform 0.2s;
+  user-select: none;
+}
+.cse-collapse-toggle.collapsed {
+  transform: rotate(-90deg);
+}
+
+/* ── Text Style: H1 — Book Title ── */
+.cse-block-h1 {
+  font-family: var(--cse-font-serif);
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--cse-h1-color);
+  padding: 24px 0 8px;
+  border-bottom: 3px solid var(--cse-gold);
+  margin-bottom: 12px;
+  line-height: 1.25;
+}
+
+/* ── Text Style: H2 — Chapter Title ── */
+.cse-block-h2 {
+  font-family: var(--cse-font-serif);
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--cse-h2-color);
+  padding: 20px 0 6px;
+  border-bottom: 2px solid var(--cse-gold-light);
+  margin-bottom: 10px;
+  line-height: 1.3;
+}
+
+/* ── Text Style: H3 — Section Header ── */
+.cse-block-h3 {
+  font-family: var(--cse-font-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cse-h3-color);
+  padding: 16px 0 4px;
+  border-left: 3px solid var(--cse-gold);
+  padding-left: 12px;
+  margin-bottom: 8px;
+  line-height: 1.35;
+}
+
+/* ── Text Style: H4 — Subsection ── */
+.cse-block-h4 {
+  font-family: var(--cse-font-sans);
+  font-size: 14px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cse-h4-color);
+  padding: 12px 0 4px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+/* ── Text Style: Body ── */
+.cse-block-body {
+  font-family: var(--cse-font-serif);
+  font-size: 16px;
+  font-weight: 400;
+  color: var(--cse-body-color);
+  line-height: 1.75;
+  padding: 4px 0;
+  margin-bottom: 4px;
+}
+
+/* ── Text Style: Quote ── */
+.cse-block-quote {
+  font-family: var(--cse-font-serif);
+  font-size: 16px;
+  font-style: italic;
+  color: var(--cse-quote-color);
+  line-height: 1.7;
+  padding: 12px 20px;
+  margin: 8px 0;
+  border-left: 3px solid var(--cse-gold);
+  background: rgba(198, 168, 94, 0.06);
+  border-radius: 0 var(--cse-radius) var(--cse-radius) 0;
+}
+
+/* ── Text Style: Reflection Prompt ── */
+.cse-block-reflection {
+  font-family: var(--cse-font-sans);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--cse-reflection-color);
+  line-height: 1.6;
+  padding: 10px 16px;
+  margin: 8px 0;
+  background: rgba(139, 105, 20, 0.06);
+  border: 1px dashed var(--cse-gold-light);
+  border-radius: var(--cse-radius);
+}
+
+/* ── Divider ── */
+.cse-block-divider {
+  border: none;
+  height: 1px;
+  background: var(--cse-divider-color);
+  margin: 24px 0;
+  position: relative;
+}
+.cse-block-divider::after {
+  content: '\2022 \2022 \2022';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--cse-bg);
+  padding: 0 12px;
+  color: var(--cse-muted);
+  font-size: 14px;
+  letter-spacing: 6px;
+}
+
+/* ── Editable text areas within blocks ── */
+.cse-block-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  outline: none;
+  resize: none;
+  font: inherit;
+  color: inherit;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+  line-height: inherit;
+}
+.cse-block-input::placeholder {
+  color: var(--cse-muted);
+  opacity: 0.6;
+}
+
+/* ── Type Selector Dropdown ── */
+.cse-type-selector {
+  position: absolute;
+  left: -44px;
+  top: calc(50% + 20px);
+  z-index: 200;
+  background: var(--cse-card);
+  border: 1px solid var(--cse-border);
+  border-radius: var(--cse-radius);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.12);
+  padding: 6px 0;
+  min-width: 180px;
+}
+
+.cse-type-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  background: none;
+  border: none;
+  padding: 8px 16px;
+  font-family: var(--cse-font-sans);
+  font-size: 13px;
+  color: var(--cse-ink-soft);
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.1s;
+}
+.cse-type-option:hover {
+  background: var(--cse-card-hover);
+  color: var(--cse-ink);
+}
+.cse-type-option.active {
+  background: var(--cse-gold-light);
+  color: var(--cse-gold-dark);
+  font-weight: 600;
+}
+.cse-type-option-label {
+  font-family: var(--cse-font-mono);
+  font-size: 10px;
+  background: rgba(0,0,0,0.06);
+  padding: 1px 6px;
+  border-radius: 3px;
+  color: var(--cse-muted);
+}
+
+/* ── Bottom Toolbar ── */
+.cse-bottom-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 90;
+  background: var(--cse-card);
+  border-top: 1px solid var(--cse-border);
+  padding: 10px 32px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cse-add-btn {
+  background: none;
+  border: 1px solid var(--cse-border);
+  border-radius: var(--cse-radius);
+  padding: 6px 14px;
+  font-family: var(--cse-font-mono);
+  font-size: 12px;
+  color: var(--cse-ink-soft);
+  cursor: pointer;
+  transition: all 0.12s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.cse-add-btn:hover {
+  border-color: var(--cse-gold);
+  color: var(--cse-gold-dark);
+  background: var(--cse-card-hover);
+}
+.cse-add-btn.primary {
+  background: var(--cse-gold);
+  border-color: var(--cse-gold);
+  color: #fff;
+}
+.cse-add-btn.primary:hover {
+  background: var(--cse-gold-dark);
+}
+
+.cse-bottom-spacer {
+  flex: 1;
+}
+
+.cse-word-count {
+  font-family: var(--cse-font-mono);
+  font-size: 12px;
+  color: var(--cse-muted);
+}
+
+.cse-section-count {
+  font-family: var(--cse-font-mono);
+  font-size: 12px;
+  color: var(--cse-muted);
+  margin-left: 8px;
+}
+
+/* ── Template Picker Modal ── */
+.cse-template-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(28, 24, 20, 0.5);
+  z-index: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: cseFadeIn 0.15s ease-out;
+}
+
+@keyframes cseFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.cse-template-modal {
+  background: var(--cse-card);
+  border-radius: 12px;
+  max-width: 560px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 12px 48px rgba(0,0,0,0.2);
+  padding: 32px;
+}
+
+.cse-template-modal h2 {
+  font-family: var(--cse-font-serif);
+  font-size: 22px;
+  margin-bottom: 8px;
+}
+.cse-template-modal p {
+  font-size: 14px;
+  color: var(--cse-muted);
+  margin-bottom: 24px;
+}
+
+.cse-template-card {
+  border: 1px solid var(--cse-border);
+  border-radius: var(--cse-radius);
+  padding: 16px 20px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.cse-template-card:hover {
+  border-color: var(--cse-gold);
+  background: var(--cse-card-hover);
+}
+.cse-template-card h3 {
+  font-family: var(--cse-font-serif);
+  font-size: 16px;
+  margin-bottom: 4px;
+}
+.cse-template-card .cse-template-desc {
+  font-size: 13px;
+  color: var(--cse-ink-soft);
+  margin-bottom: 8px;
+}
+.cse-template-card .cse-template-sections {
+  font-family: var(--cse-font-mono);
+  font-size: 11px;
+  color: var(--cse-muted);
+}
+
+.cse-template-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  justify-content: flex-end;
+}
+
+/* ── Collapsed state ── */
+.cse-section.collapsed-children {
+  /* Children hidden via JS */
+}
+
+.cse-collapsed-badge {
+  font-family: var(--cse-font-mono);
+  font-size: 11px;
+  color: var(--cse-muted);
+  margin-left: 8px;
+  background: rgba(0,0,0,0.04);
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+
+/* ── Drag handle ── */
+.cse-drag-handle {
+  cursor: grab;
+  font-size: 10px;
+  line-height: 1;
+}
+.cse-drag-handle:active {
+  cursor: grabbing;
+}
+
+/* ── Responsive ── */
+@media (max-width: 900px) {
+  .cse-toc {
+    display: none;
+  }
+  .cse-editor {
+    padding: 20px 20px 120px;
+  }
+  .cse-header {
+    padding: 12px 16px;
+  }
+  .cse-section-toolbar {
+    left: -36px;
+  }
+}
+
+/* ── Loading ── */
+.cse-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  font-family: var(--cse-font-mono);
+  font-size: 14px;
+  color: var(--cse-muted);
+}

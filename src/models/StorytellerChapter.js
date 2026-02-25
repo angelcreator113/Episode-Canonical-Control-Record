@@ -68,6 +68,16 @@ module.exports = (sequelize) => {
       type: DataTypes.JSONB,
       allowNull: true,
     },
+    sections: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+    },
+    chapter_template: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+      defaultValue: null,
+    },
   }, {
     tableName: 'storyteller_chapters',
     timestamps: true,

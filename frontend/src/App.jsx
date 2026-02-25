@@ -58,6 +58,7 @@ import CharacterTherapy from './pages/CharacterTherapy';
 import PressPublisher from './pages/PressPublisher';
 import SettingsPage from './pages/SettingsPage';
 import EpisodeWorkspace from './pages/EpisodeWorkspace';
+import ChapterStructureEditor from './pages/ChapterStructureEditor';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -292,6 +293,7 @@ function AppContent() {
           <Route path="/book/:id" element={<BookOverview />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />
           <Route path="/write/:bookId/:chapterId" element={<WriteMode />} />
+          <Route path="/chapter-structure/:bookId/:chapterId" element={<ChapterStructureEditor />} />
           
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />

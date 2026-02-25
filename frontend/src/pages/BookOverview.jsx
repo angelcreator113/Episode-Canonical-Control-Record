@@ -689,6 +689,7 @@ export default function BookOverview() {
                   </span>
                   <span className="bo-outline-col bo-ol-actions">
                     <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => startEdit(ch)}>Plan</button>
+                    <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}>Structure</button>
                     <button className="bo-btn bo-btn-write bo-btn-sm" onClick={() => navigate(`/write/${id}/${ch.id}`)}>Write</button>
                   </span>
                 </div>
@@ -800,6 +801,10 @@ export default function BookOverview() {
                       </span>
                       {hasProse && <span className="bo-bp-written">\u2713 Written</span>}
                       <button
+                        className="bo-btn bo-btn-ghost bo-btn-sm"
+                        onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}
+                      >Structure</button>
+                      <button
                         className="bo-btn bo-btn-write bo-btn-sm"
                         onClick={() => navigate(`/write/${id}/${ch.id}`)}
                       >Write</button>
@@ -903,6 +908,13 @@ export default function BookOverview() {
                         title="Open in WriteMode"
                       >
                         {'\u270E'} Write
+                      </button>
+                      <button
+                        className="bo-btn bo-btn-ghost bo-btn-sm"
+                        onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}
+                        title="Edit chapter structure"
+                      >
+                        Structure
                       </button>
                       <button
                         className="bo-btn bo-btn-ghost bo-btn-sm"
