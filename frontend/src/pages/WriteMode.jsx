@@ -1308,6 +1308,34 @@ export default function WriteMode() {
               <div className="wm-chapter-ornament">{'\u2756'}</div>
             </div>
 
+            {/* ── Section structure markers ── */}
+            {chapter?.sections?.length > 0 && (
+              <div className="wm-canvas-sections">
+                {chapter.sections.map((sec, idx) => {
+                  if (sec.type === 'divider') {
+                    return <div key={sec.id || idx} className="wm-cs-divider"><span className="wm-cs-divider-line" /></div>;
+                  }
+                  if (sec.type === 'h2') {
+                    return <h2 key={sec.id || idx} className="wm-cs-h2">{sec.content || 'Untitled Section'}</h2>;
+                  }
+                  if (sec.type === 'h3') {
+                    return <h3 key={sec.id || idx} className="wm-cs-h3">{sec.content || 'Untitled Section'}</h3>;
+                  }
+                  if (sec.type === 'h4') {
+                    return <h4 key={sec.id || idx} className="wm-cs-h4">{sec.content || 'Untitled'}</h4>;
+                  }
+                  if (sec.type === 'quote') {
+                    return <blockquote key={sec.id || idx} className="wm-cs-quote">{sec.content}</blockquote>;
+                  }
+                  if (sec.type === 'reflection') {
+                    return <div key={sec.id || idx} className="wm-cs-reflection">{sec.content}</div>;
+                  }
+                  // body
+                  return <p key={sec.id || idx} className="wm-cs-body">{sec.content}</p>;
+                })}
+              </div>
+            )}
+
             <textarea
               className="wm-prose-area"
               value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}

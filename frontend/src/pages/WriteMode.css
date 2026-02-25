@@ -997,6 +997,86 @@
   line-height: 1;
 }
 
+/* ── Canvas section structure markers ── */
+.wm-canvas-sections {
+  padding: 4px 80px 12px;
+  border-top: 1px solid rgba(28,24,20,0.04);
+  flex-shrink: 0;
+}
+.wm-cs-h2 {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1C1814;
+  margin: 20px 0 6px;
+  letter-spacing: 0.01em;
+  line-height: 1.35;
+}
+.wm-cs-h3 {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: rgba(28,24,20,0.82);
+  margin: 16px 0 4px;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  padding-left: 4px;
+  border-left: 2px solid rgba(184,150,46,0.25);
+}
+.wm-cs-h4 {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 14px;
+  font-weight: 600;
+  font-style: italic;
+  color: rgba(28,24,20,0.68);
+  margin: 12px 0 3px;
+  letter-spacing: 0.01em;
+  line-height: 1.4;
+  padding-left: 10px;
+}
+.wm-cs-body {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 14px;
+  color: rgba(28,24,20,0.55);
+  margin: 6px 0;
+  line-height: 1.7;
+  font-style: italic;
+  text-indent: 1.5em;
+}
+.wm-cs-quote {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 14px;
+  color: rgba(28,24,20,0.5);
+  margin: 10px 0 10px 20px;
+  padding: 6px 16px;
+  border-left: 2px solid rgba(184,150,46,0.3);
+  font-style: italic;
+  line-height: 1.65;
+}
+.wm-cs-reflection {
+  font-family: 'DM Mono', monospace;
+  font-size: 11.5px;
+  color: rgba(184,150,46,0.55);
+  margin: 10px 0;
+  padding: 8px 14px;
+  background: rgba(184,150,46,0.04);
+  border-radius: 4px;
+  line-height: 1.6;
+  letter-spacing: 0.02em;
+}
+.wm-cs-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px 0;
+}
+.wm-cs-divider-line {
+  display: block;
+  width: 60px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(184,150,46,0.3), transparent);
+}
+
 /* ── Prose textarea (inside manuscript page) ── */
 .wm-prose-area {
   display: block;
@@ -2022,6 +2102,12 @@
     line-height: 1.9;
     text-indent: 1.5em;
   }
+  .wm-canvas-sections {
+    padding: 4px 20px 10px;
+  }
+  .wm-cs-h2 { font-size: 17px; }
+  .wm-cs-h3 { font-size: 14px; }
+  .wm-cs-h4 { font-size: 12.5px; }
   .wm-manuscript-header,
   .wm-manuscript-footer {
     padding-left: 20px;
