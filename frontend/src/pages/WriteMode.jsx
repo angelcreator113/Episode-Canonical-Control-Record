@@ -50,16 +50,39 @@ export default function WriteMode() {
   const [genLength,    setGenLength]    = useState('paragraph'); // 'sentence'|'paragraph'
   const [streamingText, setStreamingText] = useState(''); // live text while streaming
 
-  // Character sidebar state
+  // Character state
   const [characters,        setCharacters]        = useState([]);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
-  const [charPanelOpen,     setCharPanelOpen]     = useState(() => window.innerWidth >= 768);
   const [charLoading,       setCharLoading]       = useState(false);
 
   // UI state
   const [showExit,   setShowExit]   = useState(false);
   const [hint,       setHint]       = useState(null);
   const [sessionLog, setSessionLog] = useState([]);
+
+  // Focus mode
+  const [focusMode,  setFocusMode]  = useState(false);
+
+  // Session timer & goal
+  const [sessionStart]             = useState(() => Date.now());
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+  const [wordGoal,       setWordGoal]       = useState(() => {
+    const saved = localStorage.getItem('wm-word-goal');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [showGoalInput,  setShowGoalInput]  = useState(false);
+  const startingWordCountRef = useRef(0);
+
+  // Paragraph-level actions
+  const [selectedParagraph, setSelectedParagraph] = useState(null); // index
+  const [paraAction,        setParaAction]        = useState(null); // 'rewrite'|'expand'|'delete'
+
+  // History / version snapshots
+  const [history,        setHistory]        = useState([]); // [{prose, label, timestamp}]
+  const [showHistory,    setShowHistory]    = useState(false);
+
+  // Quick character switch
+  const [showCharQuick,  setShowCharQuick]  = useState(false);
 
   const recognitionRef  = useRef(null);
   const editRecRef      = useRef(null);
@@ -119,6 +142,88 @@ export default function WriteMode() {
     }
     loadCharacters();
   }, []);
+
+  // ── SESSION TIMER ─────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setSessionElapsed(Math.floor((Date.now() - sessionStart) / 1000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [sessionStart]);
+
+  // Track starting word count for goal progress 
+  useEffect(() => {
+    if (startingWordCountRef.current === 0 && wordCount > 0) {
+      startingWordCountRef.current = wordCount;
+    }
+  }, [wordCount]);
+
+  // ── SNAPSHOT HELPER ───────────────────────────────────────────────────
+
+  const takeSnapshot = useCallback((label) => {
+    if (!prose.trim()) return;
+    setHistory(prev => [...prev.slice(-19), {
+      prose,
+      label,
+      timestamp: Date.now(),
+      wordCount,
+    }]);
+  }, [prose, wordCount]);
+
+  // ── PARAGRAPH-LEVEL ACTIONS ───────────────────────────────────────────
+
+  const handleParagraphAction = useCallback(async (action) => {
+    if (selectedParagraph === null || generating) return;
+    const paragraphs = prose.split(/\n\n+/);
+    const targetPara = paragraphs[selectedParagraph];
+    if (!targetPara) return;
+
+    if (action === 'delete') {
+      takeSnapshot('Before delete paragraph');
+      const newParagraphs = paragraphs.filter((_, i) => i !== selectedParagraph);
+      const newProse = newParagraphs.join('\n\n');
+      setProse(newProse);
+      setWordCount(newProse.split(/\s+/).filter(Boolean).length);
+      setSaved(false);
+      setSelectedParagraph(null);
+      setParaAction(null);
+      return;
+    }
+
+    takeSnapshot(`Before ${action} paragraph`);
+    setGenerating(true);
+    setParaAction(action);
+    try {
+      const res = await fetch(`${API}/memories/story-edit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_prose: targetPara,
+          edit_note: action === 'rewrite'
+            ? 'Rewrite this paragraph with better prose, keeping the same meaning and tone.'
+            : 'Expand this paragraph with more sensory detail, interiority, and emotional depth. Keep the same voice.',
+          pnos_act: chapter?.pnos_act || 'act_1',
+          chapter_title: chapter?.title,
+          character_id: selectedCharacter?.id || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.prose) {
+        const newParagraphs = [...paragraphs];
+        newParagraphs[selectedParagraph] = data.prose.trim();
+        const newProse = newParagraphs.join('\n\n');
+        setProse(newProse);
+        setWordCount(newProse.split(/\s+/).filter(Boolean).length);
+        setSaved(false);
+      }
+    } catch (err) {
+      console.error('paragraph action error:', err);
+    }
+    setGenerating(false);
+    setSelectedParagraph(null);
+    setParaAction(null);
+  }, [prose, selectedParagraph, generating, chapter, selectedCharacter, takeSnapshot]);
 
   // ── AUTOSAVE ─────────────────────────────────────────────────────────
 
@@ -189,6 +294,7 @@ export default function WriteMode() {
   // ── GENERATE PROSE FROM SPEECH ────────────────────────────────────────
 
   const generateProse = useCallback(async (spoken) => {
+    takeSnapshot('Before voice-to-story');
     setGenerating(true);
     setStreamingText('');
     try {
@@ -257,7 +363,7 @@ export default function WriteMode() {
     }
     setStreamingText('');
     setGenerating(false);
-  }, [prose, chapter, book, sessionLog, genLength, selectedCharacter]);
+  }, [prose, chapter, book, sessionLog, genLength, selectedCharacter, takeSnapshot]);
 
   const toggleListening = useCallback(async () => {
     if (listening) {
@@ -310,6 +416,7 @@ export default function WriteMode() {
 
   const applyEdit = useCallback(async () => {
     if (!editNote.trim()) return;
+    takeSnapshot('Before edit');
     setGenerating(true);
     try {
       const res = await fetch(`${API}/memories/story-edit`, {
@@ -335,12 +442,13 @@ export default function WriteMode() {
       console.error('story-edit error:', err);
     }
     setGenerating(false);
-  }, [prose, editNote, chapter]);
+  }, [prose, editNote, chapter, takeSnapshot]);
 
   // ── AI TOOLBAR ACTIONS ─────────────────────────────────────────────────
 
   const handleContinue = useCallback(async () => {
     if (!prose.trim() || generating) return;
+    takeSnapshot('Before continue');
     setAiAction('continue');
     setGenerating(true);
     setProseBeforeAi(prose);
@@ -401,10 +509,11 @@ export default function WriteMode() {
     setStreamingText('');
     setGenerating(false);
     setAiAction(null);
-  }, [prose, chapter, book, generating, genLength, selectedCharacter]);
+  }, [prose, chapter, book, generating, genLength, selectedCharacter, takeSnapshot]);
 
   const handleDeepen = useCallback(async () => {
     if (!prose.trim() || generating) return;
+    takeSnapshot('Before deepen');
     setAiAction('deepen');
     setGenerating(true);
     setProseBeforeAi(prose);
@@ -434,7 +543,7 @@ export default function WriteMode() {
     }
     setGenerating(false);
     setAiAction(null);
-  }, [prose, chapter, generating]);
+  }, [prose, chapter, generating, takeSnapshot]);
 
   const handleNudge = useCallback(async () => {
     if (generating) return;
@@ -520,12 +629,56 @@ export default function WriteMode() {
     setSaved(false);
   };
 
+  // ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────
+
+  useEffect(() => {
+    const handleKey = (e) => {
+      // Ctrl/Cmd+Enter → Continue
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (!editMode && prose.trim() && !generating) handleContinue();
+      }
+      // Ctrl/Cmd+D → Deepen
+      if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+        e.preventDefault();
+        if (!editMode && prose.trim() && !generating) handleDeepen();
+      }
+      // Ctrl/Cmd+S → Save
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (prose) saveDraft(prose);
+      }
+      // Escape → exit edit mode, close panels
+      if (e.key === 'Escape') {
+        if (editMode) { setEditMode(false); return; }
+        if (showHistory) { setShowHistory(false); return; }
+        if (showGoalInput) { setShowGoalInput(false); return; }
+        if (focusMode) { setFocusMode(false); return; }
+        if (selectedParagraph !== null) { setSelectedParagraph(null); setParaAction(null); return; }
+      }
+      // F11 → toggle focus mode (prevent browser fullscreen)
+      if (e.key === 'F11') {
+        e.preventDefault();
+        setFocusMode(f => !f);
+      }
+    };
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  }, [editMode, prose, generating, focusMode, showHistory, showGoalInput, selectedParagraph, handleContinue, handleDeepen, saveDraft]);
+
   // ── RENDER ────────────────────────────────────────────────────────────
 
   if (loading) return <div className="wm-load-screen">Loading...</div>;
 
   return (
-    <div className={`wm-root${charPanelOpen ? ' wm-panel-open' : ''}`}>
+    <div className={`wm-root${focusMode ? ' wm-focus-mode' : ''}`}>
+      {/* ── FOCUS MODE EXIT ── */}
+      {focusMode && (
+        <button className="wm-focus-exit" onClick={() => setFocusMode(false)} title="Exit focus mode (F11)">
+          {'\u2715'}
+        </button>
+      )}
+
       {/* ── TOP BAR ── */}
       <header className="wm-topbar">
         <button className="wm-back-btn" onClick={() => setShowExit(true)}>
@@ -535,26 +688,80 @@ export default function WriteMode() {
           <div className="wm-chapter-title">{chapter?.title || 'Untitled'}</div>
           <div className="wm-book-title">{book?.title || book?.character || ''}</div>
         </div>
+
+        {/* ── Session timer ── */}
+        <div className="wm-session-timer">
+          <span className="wm-timer-icon">{'\u23F1'}</span>
+          <span className="wm-timer-value">
+            {Math.floor(sessionElapsed / 3600) > 0 && `${Math.floor(sessionElapsed / 3600)}:`}
+            {String(Math.floor((sessionElapsed % 3600) / 60)).padStart(2, '0')}:{String(sessionElapsed % 60).padStart(2, '0')}
+          </span>
+        </div>
+
         <div className="wm-top-right">
-          {selectedCharacter && (
-            <div className="wm-active-char-pill" onClick={() => setCharPanelOpen(!charPanelOpen)}>
-              <span className="wm-active-char-icon">{selectedCharacter.icon || '\uD83D\uDC64'}</span>
-              <span className="wm-active-char-name">{selectedCharacter.display_name || selectedCharacter.selected_name}</span>
-            </div>
-          )}
+          {/* Quick Character Switch */}
+          <div className="wm-quick-char-wrap">
+            <button
+              className="wm-quick-char-btn"
+              onClick={() => setShowCharQuick(q => !q)}
+              title="Quick switch character"
+            >
+              <span>{selectedCharacter?.icon || '\uD83D\uDC64'}</span>
+              <span className="wm-quick-char-caret">{showCharQuick ? '\u25B2' : '\u25BC'}</span>
+            </button>
+            {showCharQuick && (
+              <div className="wm-quick-char-dropdown">
+                <div
+                  className={`wm-quick-char-option${!selectedCharacter ? ' selected' : ''}`}
+                  onClick={() => { setSelectedCharacter(null); setShowCharQuick(false); }}
+                >
+                  <span className="wm-quick-char-option-icon">{'\u2014'}</span>
+                  <span>No character voice</span>
+                </div>
+                {characters.map(c => (
+                  <div
+                    key={c.id}
+                    className={`wm-quick-char-option${selectedCharacter?.id === c.id ? ' selected' : ''}`}
+                    onClick={() => { setSelectedCharacter(c); setShowCharQuick(false); }}
+                  >
+                    <span className="wm-quick-char-option-icon">{c.icon || '\uD83D\uDC64'}</span>
+                    <span>{c.display_name || c.selected_name}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
           {wordCount > 0 && (
-            <div className="wm-word-count">{wordCount}w</div>
+            <div className="wm-word-count" onClick={() => setShowGoalInput(g => !g)} title="Click to set word goal">
+              {wordCount}w
+              {wordGoal > 0 && (
+                <span className="wm-goal-fraction">
+                  {' / '}{wordGoal}
+                </span>
+              )}
+            </div>
           )}
           <div className="wm-save-status">
             {saving ? '\u00B7\u00B7 saving' : saved ? '' : '\u00B7 unsaved'}
           </div>
+
           <button
-            className={`wm-char-toggle${charPanelOpen ? ' active' : ''}`}
-            onClick={() => setCharPanelOpen(!charPanelOpen)}
-            title="Characters"
+            className={`wm-history-btn${showHistory ? ' active' : ''}`}
+            onClick={() => setShowHistory(h => !h)}
+            title={`Snapshots (${history.length})`}
           >
-            {'\uD83D\uDC65'}
+            {'\uD83D\uDCDC'}{history.length > 0 && <span className="wm-history-badge">{history.length}</span>}
           </button>
+
+          <button
+            className={`wm-focus-btn${focusMode ? ' active' : ''}`}
+            onClick={() => setFocusMode(f => !f)}
+            title="Focus mode (F11)"
+          >
+            {focusMode ? '\u26F6' : '\u26F6'}
+          </button>
+
           <button
             className={`wm-mode-btn${editMode ? ' active' : ''}`}
             style={{ opacity: prose.length > 10 ? 1 : 0.3 }}
@@ -564,6 +771,42 @@ export default function WriteMode() {
           </button>
         </div>
       </header>
+
+      {/* ── WORD GOAL BAR ── */}
+      {wordGoal > 0 && (
+        <div className="wm-goal-bar-wrap">
+          <div className="wm-goal-bar">
+            <div
+              className="wm-goal-fill"
+              style={{ width: `${Math.min(100, ((wordCount - startingWordCountRef.current) / wordGoal) * 100)}%` }}
+            />
+          </div>
+          <span className="wm-goal-label">
+            {Math.max(0, wordCount - startingWordCountRef.current)} / {wordGoal} words this session
+          </span>
+        </div>
+      )}
+
+      {/* ── WORD GOAL INPUT ── */}
+      {showGoalInput && (
+        <div className="wm-goal-input-wrap">
+          <label className="wm-goal-input-label">Session word goal:</label>
+          <input
+            className="wm-goal-input"
+            type="number"
+            min={0}
+            step={50}
+            value={wordGoal}
+            onChange={e => {
+              const v = parseInt(e.target.value) || 0;
+              setWordGoal(v);
+              localStorage.setItem('wm_word_goal', v);
+            }}
+            placeholder="e.g. 500"
+          />
+          <button className="wm-goal-input-close" onClick={() => setShowGoalInput(false)}>{'\u2713'}</button>
+        </div>
+      )}
 
       {/* ── MAIN CONTENT AREA ── */}
       <div className="wm-content-row">
@@ -577,6 +820,37 @@ export default function WriteMode() {
             spellCheck={false}
             readOnly={generating}
           />
+
+          {/* ── PARAGRAPH SELECTION OVERLAY ── */}
+          {selectedParagraph !== null && (
+            <div className="wm-para-overlay">
+              {prose.split(/\n\n+/).map((p, i) => (
+                <div
+                  key={i}
+                  className={`wm-para-block${i === selectedParagraph ? ' selected' : ''}`}
+                  onClick={() => setSelectedParagraph(i === selectedParagraph ? null : i)}
+                >
+                  <p>{p}</p>
+                  {i === selectedParagraph && (
+                    <div className="wm-para-actions">
+                      <button onClick={(e) => { e.stopPropagation(); handleParagraphAction('rewrite'); }} disabled={generating}>
+                        {generating && paraAction === 'rewrite' ? 'Rewriting\u2026' : '\u270E Rewrite'}
+                      </button>
+                      <button onClick={(e) => { e.stopPropagation(); handleParagraphAction('expand'); }} disabled={generating}>
+                        {generating && paraAction === 'expand' ? 'Expanding\u2026' : '\u2194 Expand'}
+                      </button>
+                      <button className="wm-para-delete" onClick={(e) => { e.stopPropagation(); handleParagraphAction('delete'); }} disabled={generating}>
+                        {'\u2717 Delete'}
+                      </button>
+                      <button className="wm-para-cancel" onClick={(e) => { e.stopPropagation(); setSelectedParagraph(null); setParaAction(null); }}>
+                        {'\u2715'}
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
 
           {generating && !streamingText && (
             <div className="wm-generating">
@@ -602,93 +876,6 @@ export default function WriteMode() {
           )}
         </div>
 
-        {/* ── CHARACTER SIDEBAR ── */}
-        <aside className={`wm-char-sidebar${charPanelOpen ? ' open' : ''}`}>
-          <div className="wm-char-sidebar-header">
-            <span className="wm-char-sidebar-title">Characters</span>
-            <button className="wm-char-sidebar-close" onClick={() => setCharPanelOpen(false)}>{'\u00D7'}</button>
-          </div>
-
-          {/* Active voice card */}
-          {selectedCharacter && (
-            <div className="wm-voice-card">
-              <div className="wm-voice-card-name">
-                <span className="wm-voice-card-icon">{selectedCharacter.icon || '\uD83D\uDC64'}</span>
-                {selectedCharacter.display_name || selectedCharacter.selected_name}
-              </div>
-              {selectedCharacter.character_archetype && (
-                <div className="wm-voice-card-archetype">{selectedCharacter.character_archetype}</div>
-              )}
-              {selectedCharacter.voice_signature?.speech_pattern && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Speech</span>
-                  <span className="wm-voice-card-value">{selectedCharacter.voice_signature.speech_pattern}</span>
-                </div>
-              )}
-              {selectedCharacter.emotional_baseline && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Baseline</span>
-                  <span className="wm-voice-card-value">{selectedCharacter.emotional_baseline}</span>
-                </div>
-              )}
-              {selectedCharacter.signature_trait && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Trait</span>
-                  <span className="wm-voice-card-value">{selectedCharacter.signature_trait}</span>
-                </div>
-              )}
-              {selectedCharacter.voice_signature?.vocabulary_tone && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Tone</span>
-                  <span className="wm-voice-card-value">{selectedCharacter.voice_signature.vocabulary_tone}</span>
-                </div>
-              )}
-              {selectedCharacter.voice_signature?.catchphrases?.length > 0 && (
-                <div className="wm-voice-card-field">
-                  <span className="wm-voice-card-label">Catchphrases</span>
-                  <span className="wm-voice-card-value">
-                    {selectedCharacter.voice_signature.catchphrases.slice(0, 3).map((c, i) => (
-                      <span key={i} className="wm-voice-catchphrase">{'\u201C'}{c}{'\u201D'}</span>
-                    ))}
-                  </span>
-                </div>
-              )}
-              <button className="wm-voice-card-clear" onClick={() => setSelectedCharacter(null)}>
-                Clear voice
-              </button>
-            </div>
-          )}
-
-          {/* Character list */}
-          <div className="wm-char-list">
-            {charLoading ? (
-              <div className="wm-char-loading">Loading characters{'\u2026'}</div>
-            ) : characters.length === 0 ? (
-              <div className="wm-char-empty">No characters found. Create characters in the Character Registry.</div>
-            ) : (
-              characters.map(c => (
-                <div
-                  key={c.id}
-                  className={`wm-char-item${selectedCharacter?.id === c.id ? ' selected' : ''}`}
-                  onClick={() => {
-                    setSelectedCharacter(selectedCharacter?.id === c.id ? null : c);
-                    if (window.innerWidth < 768) setCharPanelOpen(false);
-                  }}
-                >
-                  <span className="wm-char-item-icon">{c.icon || '\uD83D\uDC64'}</span>
-                  <div className="wm-char-item-info">
-                    <div className="wm-char-item-name">{c.display_name || c.selected_name}</div>
-                    {c.story_role && <div className="wm-char-item-role">{c.story_role}</div>}
-                    {c._registryTitle && <div className="wm-char-item-registry">{c._registryTitle}</div>}
-                  </div>
-                  {selectedCharacter?.id === c.id && (
-                    <span className="wm-char-item-check">{'\u2713'}</span>
-                  )}
-                </div>
-              ))
-            )}
-          </div>
-        </aside>
       </div>
 
       {/* ── TRANSCRIPT PREVIEW (while listening) ── */}
@@ -743,6 +930,66 @@ export default function WriteMode() {
           >
             {genLength === 'sentence' ? '1\u2009line' : '\u00B6\u2009full'}
           </button>
+          {prose.trim() && (
+            <button
+              className={`wm-ai-btn wm-para-mode-btn${selectedParagraph !== null ? ' active' : ''}`}
+              onClick={() => {
+                if (selectedParagraph !== null) {
+                  setSelectedParagraph(null);
+                  setParaAction(null);
+                } else {
+                  setSelectedParagraph(0);
+                }
+              }}
+              title="Paragraph-level actions"
+            >
+              <span className="wm-ai-icon">{'\u00B6'}</span> Paragraphs
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* ── HISTORY PANEL ── */}
+      {showHistory && (
+        <div className="wm-history-panel">
+          <div className="wm-history-header">
+            <span className="wm-history-title">Snapshots</span>
+            <button className="wm-history-close" onClick={() => setShowHistory(false)}>{'\u00D7'}</button>
+          </div>
+          {history.length === 0 ? (
+            <div className="wm-history-empty">No snapshots yet. Snapshots are taken automatically before each AI action.</div>
+          ) : (
+            <div className="wm-history-list">
+              {[...history].reverse().map((snap, i) => {
+                const idx = history.length - 1 - i;
+                const t = new Date(snap.timestamp);
+                const timeStr = `${t.getHours()}:${String(t.getMinutes()).padStart(2, '0')}`;
+                return (
+                  <div key={i} className="wm-history-item">
+                    <div className="wm-history-item-header">
+                      <span className="wm-history-item-label">{snap.label}</span>
+                      <span className="wm-history-item-meta">{timeStr} \u00B7 {snap.wordCount}w</span>
+                    </div>
+                    <div className="wm-history-item-preview">
+                      {snap.prose.length > 200 ? snap.prose.slice(0, 200) + '\u2026' : snap.prose}
+                    </div>
+                    <button
+                      className="wm-history-restore"
+                      onClick={() => {
+                        takeSnapshot('Before restore');
+                        setProse(snap.prose);
+                        setWordCount(snap.prose.split(/\s+/).filter(Boolean).length);
+                        setSaved(false);
+                        setShowHistory(false);
+                      }}
+                    >
+                      Restore this version
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
