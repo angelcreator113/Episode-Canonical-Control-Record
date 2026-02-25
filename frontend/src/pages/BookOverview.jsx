@@ -19,6 +19,84 @@ function planScore(ch) {
   return PLAN_FIELDS.filter(f => ch[f]?.toString().trim()).length;
 }
 
+/* ── Story Structure Templates ── */
+const STORY_TEMPLATES = {
+  three_act: {
+    name: 'Three-Act Structure',
+    desc: 'Classic beginning, middle, end. Great for most stories.',
+    chapters: [
+      { title: 'The World Before', scene_goal: 'Establish the protagonist in their ordinary world. Show what they want and what holds them back.', theme: 'Status Quo', pov: 'first_person', emotional_state_start: 'comfortable', emotional_state_end: 'restless', chapter_notes: 'ACT I — Setup. Ground the reader in the world.' },
+      { title: 'The Inciting Incident', scene_goal: 'Something disrupts the protagonist\'s world. They cannot ignore it.', theme: 'Disruption', pov: 'first_person', emotional_state_start: 'restless', emotional_state_end: 'shocked', chapter_notes: 'The event that forces the story into motion.' },
+      { title: 'The Reluctant Choice', scene_goal: 'The protagonist resists change but is pushed past the point of no return.', theme: 'Denial', pov: 'first_person', emotional_state_start: 'resistant', emotional_state_end: 'committed', chapter_notes: 'End of Act I. The character crosses the threshold.' },
+      { title: 'New Territory', scene_goal: 'Protagonist enters the unfamiliar. They make allies, learn rules, face small tests.', theme: 'Discovery', pov: 'first_person', emotional_state_start: 'uncertain', emotional_state_end: 'cautiously hopeful', chapter_notes: 'ACT II begins. Rising action.' },
+      { title: 'Rising Stakes', scene_goal: 'Obstacles grow harder. The protagonist\'s flaw begins to show under pressure.', theme: 'Pressure', pov: 'first_person', emotional_state_start: 'determined', emotional_state_end: 'strained', chapter_notes: 'Complications multiply. Tension escalates.' },
+      { title: 'The Midpoint Shift', scene_goal: 'A revelation or reversal changes everything the protagonist thought they knew.', theme: 'Truth', pov: 'first_person', emotional_state_start: 'confident', emotional_state_end: 'shaken', chapter_notes: 'Midpoint turn. False victory or false defeat.' },
+      { title: 'The Downward Spiral', scene_goal: 'Things fall apart. Alliances break, plans fail, the protagonist\'s weakness takes over.', theme: 'Consequences', pov: 'first_person', emotional_state_start: 'desperate', emotional_state_end: 'broken', chapter_notes: 'Building toward the lowest point.' },
+      { title: 'The Dark Night', scene_goal: 'All seems lost. The protagonist hits rock bottom and must face their deepest fear.', theme: 'Surrender', pov: 'first_person', emotional_state_start: 'defeated', emotional_state_end: 'quietly resolute', chapter_notes: 'ACT II ends. The crisis moment.' },
+      { title: 'The Final Push', scene_goal: 'Armed with new understanding, the protagonist commits to one last effort.', theme: 'Transformation', pov: 'first_person', emotional_state_start: 'resolute', emotional_state_end: 'focused', chapter_notes: 'ACT III begins. The climax approaches.' },
+      { title: 'The Climax', scene_goal: 'The protagonist faces the central conflict head-on. Everything built to this moment.', theme: 'Confrontation', pov: 'first_person', emotional_state_start: 'focused', emotional_state_end: 'transformed', chapter_notes: 'The decisive battle, conversation, or choice.' },
+      { title: 'The New World', scene_goal: 'Show the aftermath. How has the protagonist changed? What does life look like now?', theme: 'Resolution', pov: 'first_person', emotional_state_start: 'exhausted', emotional_state_end: 'at peace', chapter_notes: 'Denouement. Tie up threads. Leave the reader satisfied.' },
+    ]
+  },
+  heros_journey: {
+    name: 'Hero\'s Journey',
+    desc: 'The mythic 12-stage arc. Ideal for adventure, fantasy, and coming-of-age.',
+    chapters: [
+      { title: 'The Ordinary World', scene_goal: 'Show the hero in their everyday life. Establish what they lack or long for.', theme: 'Incompleteness', pov: 'first_person', emotional_state_start: 'unfulfilled', emotional_state_end: 'yearning', chapter_notes: 'Stage 1: Ordinary World' },
+      { title: 'The Call to Adventure', scene_goal: 'A challenge, message, or event beckons the hero toward the unknown.', theme: 'Invitation', pov: 'first_person', emotional_state_start: 'surprised', emotional_state_end: 'intrigued', chapter_notes: 'Stage 2: Call to Adventure' },
+      { title: 'Refusal of the Call', scene_goal: 'Fear, duty, or doubt makes the hero hesitate or refuse.', theme: 'Fear', pov: 'first_person', emotional_state_start: 'hesitant', emotional_state_end: 'conflicted', chapter_notes: 'Stage 3: Refusal' },
+      { title: 'Meeting the Mentor', scene_goal: 'A guide appears who gives the hero tools, wisdom, or confidence to proceed.', theme: 'Guidance', pov: 'first_person', emotional_state_start: 'uncertain', emotional_state_end: 'empowered', chapter_notes: 'Stage 4: Mentor' },
+      { title: 'Crossing the Threshold', scene_goal: 'The hero leaves the familiar world and enters the realm of adventure.', theme: 'Commitment', pov: 'first_person', emotional_state_start: 'nervous', emotional_state_end: 'exhilarated', chapter_notes: 'Stage 5: Threshold' },
+      { title: 'Tests, Allies, Enemies', scene_goal: 'The hero is tested, makes friends, and identifies foes.', theme: 'Trial', pov: 'first_person', emotional_state_start: 'alert', emotional_state_end: 'battle-tested', chapter_notes: 'Stage 6: Tests & Allies' },
+      { title: 'The Innermost Cave', scene_goal: 'The hero approaches the heart of danger. Final preparations before the great ordeal.', theme: 'Preparation', pov: 'first_person', emotional_state_start: 'tense', emotional_state_end: 'steeled', chapter_notes: 'Stage 7: Approach' },
+      { title: 'The Ordeal', scene_goal: 'The hero faces their greatest challenge — a death-and-rebirth moment.', theme: 'Death & Rebirth', pov: 'first_person', emotional_state_start: 'terrified', emotional_state_end: 'reborn', chapter_notes: 'Stage 8: Ordeal (midpoint crisis)' },
+      { title: 'The Reward', scene_goal: 'Having survived, the hero claims the treasure, knowledge, or power they sought.', theme: 'Achievement', pov: 'first_person', emotional_state_start: 'elated', emotional_state_end: 'watchful', chapter_notes: 'Stage 9: Reward' },
+      { title: 'The Road Back', scene_goal: 'The hero begins the return, but faces pursuit or new complications.', theme: 'Pursuit', pov: 'first_person', emotional_state_start: 'urgent', emotional_state_end: 'hunted', chapter_notes: 'Stage 10: Road Back' },
+      { title: 'Resurrection', scene_goal: 'A final test where the hero must use everything they\'ve learned. True transformation.', theme: 'Transformation', pov: 'first_person', emotional_state_start: 'cornered', emotional_state_end: 'transcendent', chapter_notes: 'Stage 11: Resurrection — climax' },
+      { title: 'Return with the Elixir', scene_goal: 'The hero returns home, changed. They bring back something that heals or improves the world.', theme: 'Wholeness', pov: 'first_person', emotional_state_start: 'weary', emotional_state_end: 'whole', chapter_notes: 'Stage 12: Return' },
+    ]
+  },
+  character_driven: {
+    name: 'Character-Driven Arc',
+    desc: 'Internal transformation over plot. Best for literary fiction, memoir, drama.',
+    chapters: [
+      { title: 'The Mask', scene_goal: 'Show the character\'s public face — who they pretend to be and what they avoid.', theme: 'Persona', pov: 'first_person', emotional_state_start: 'performative', emotional_state_end: 'privately hollow', chapter_notes: 'Establish the lie the character tells themselves.' },
+      { title: 'The Crack', scene_goal: 'Something small but meaningful begins to expose the gap between mask and truth.', theme: 'Vulnerability', pov: 'first_person', emotional_state_start: 'guarded', emotional_state_end: 'unsettled', chapter_notes: 'First hint that the mask won\'t hold.' },
+      { title: 'The Mirror', scene_goal: 'Another person or event forces the character to see themselves clearly.', theme: 'Reflection', pov: 'first_person', emotional_state_start: 'defensive', emotional_state_end: 'exposed', chapter_notes: 'Confronted with their own pattern.' },
+      { title: 'The Wound', scene_goal: 'The root of the character\'s pain is revealed — the original injury driving everything.', theme: 'Origin', pov: 'first_person', emotional_state_start: 'raw', emotional_state_end: 'devastated', chapter_notes: 'Backstory or flashback to the core wound.' },
+      { title: 'The Relapse', scene_goal: 'Knowing the truth, the character retreats into old patterns. Easier to hide than change.', theme: 'Regression', pov: 'first_person', emotional_state_start: 'numb', emotional_state_end: 'self-destructive', chapter_notes: 'Change is not linear. Show the setback.' },
+      { title: 'The Cost', scene_goal: 'The character\'s refusal to change damages the people or things they love.', theme: 'Consequence', pov: 'first_person', emotional_state_start: 'reckless', emotional_state_end: 'guilty', chapter_notes: 'Stakes become personal and immediate.' },
+      { title: 'The Reckoning', scene_goal: 'A moment of honest self-assessment. The character decides who they want to be.', theme: 'Accountability', pov: 'first_person', emotional_state_start: 'ashamed', emotional_state_end: 'quietly determined', chapter_notes: 'The internal turning point. Not dramatic — quiet.' },
+      { title: 'The Repair', scene_goal: 'The character takes action to repair what they broke — not for redemption, but because it\'s right.', theme: 'Amends', pov: 'first_person', emotional_state_start: 'humble', emotional_state_end: 'hopeful', chapter_notes: 'Show change through action, not declaration.' },
+      { title: 'The New Truth', scene_goal: 'The character lives from their authentic self. Not perfect — but honest.', theme: 'Integration', pov: 'first_person', emotional_state_start: 'vulnerable', emotional_state_end: 'at peace', chapter_notes: 'The character embodies who they chose to become.' },
+    ]
+  },
+  five_act: {
+    name: 'Five-Act (Shakespeare)',
+    desc: 'Exposition, rising action, climax, falling action, resolution.',
+    chapters: [
+      { title: 'Exposition', scene_goal: 'Introduce the setting, characters, and the seeds of conflict.', theme: 'Introduction', pov: 'first_person', emotional_state_start: 'neutral', emotional_state_end: 'curious', chapter_notes: 'Act I — Exposition' },
+      { title: 'Complication', scene_goal: 'The conflict deepens. Obstacles appear and the protagonist is drawn in.', theme: 'Entanglement', pov: 'first_person', emotional_state_start: 'engaged', emotional_state_end: 'concerned', chapter_notes: 'Act II — Rising Action' },
+      { title: 'Rising Action', scene_goal: 'Tension builds through confrontations, revelations, and growing stakes.', theme: 'Escalation', pov: 'first_person', emotional_state_start: 'invested', emotional_state_end: 'anxious', chapter_notes: 'Building toward the crisis.' },
+      { title: 'Climax', scene_goal: 'The turning point. The protagonist faces the central conflict directly.', theme: 'Crisis', pov: 'first_person', emotional_state_start: 'all-in', emotional_state_end: 'shattered or triumphant', chapter_notes: 'Act III — Climax. The story\'s fulcrum.' },
+      { title: 'Falling Action', scene_goal: 'The consequences of the climax unfold. Characters react, regroup, or unravel.', theme: 'Aftermath', pov: 'first_person', emotional_state_start: 'dazed', emotional_state_end: 'reflective', chapter_notes: 'Act IV — Falling Action' },
+      { title: 'Resolution', scene_goal: 'Threads are tied. The world settles into its new shape.', theme: 'Closure', pov: 'first_person', emotional_state_start: 'contemplative', emotional_state_end: 'resolved', chapter_notes: 'Act V — Denouement. The new normal.' },
+    ]
+  },
+  memoir: {
+    name: 'Memoir / Personal Narrative',
+    desc: 'Reflective structure for true stories, essays, and personal journeys.',
+    chapters: [
+      { title: 'Before', scene_goal: 'Set the scene of your life before the central event or period.', theme: 'Context', pov: 'first_person', emotional_state_start: 'nostalgic', emotional_state_end: 'uneasy', chapter_notes: 'Who were you then? What did you believe?' },
+      { title: 'The Moment Everything Changed', scene_goal: 'Describe the event, realization, or encounter that cracked your world open.', theme: 'Disruption', pov: 'first_person', emotional_state_start: 'unprepared', emotional_state_end: 'reeling', chapter_notes: 'The inciting moment. Be specific and sensory.' },
+      { title: 'In the Thick of It', scene_goal: 'The messiest part. Show the confusion, struggle, and raw experience.', theme: 'Chaos', pov: 'first_person', emotional_state_start: 'overwhelmed', emotional_state_end: 'barely surviving', chapter_notes: 'Don\'t clean this up. Let it be messy.' },
+      { title: 'What I Didn\'t See', scene_goal: 'Reflect on what you missed, denied, or misunderstood in the moment.', theme: 'Blindness', pov: 'first_person', emotional_state_start: 'defensive', emotional_state_end: 'humbled', chapter_notes: 'The gift of hindsight. Be honest.' },
+      { title: 'The Turning', scene_goal: 'The moment of shift — when you began to see, heal, or choose differently.', theme: 'Awakening', pov: 'first_person', emotional_state_start: 'exhausted', emotional_state_end: 'clear-eyed', chapter_notes: 'Not a movie moment. Something quiet and real.' },
+      { title: 'After', scene_goal: 'Who are you now? What did you carry forward? What did you leave behind?', theme: 'Integration', pov: 'first_person', emotional_state_start: 'tender', emotional_state_end: 'whole', chapter_notes: 'The meaning you made from the experience.' },
+    ]
+  },
+};
+
 export default function BookOverview() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -63,6 +141,13 @@ export default function BookOverview() {
   const [editingBook, setEditingBook] = useState(false);
   const [bookTitle, setBookTitle] = useState('');
   const [bookDescription, setBookDescription] = useState('');
+
+  // Outline generator
+  const [showGenerator, setShowGenerator] = useState(false);
+  const [selectedTemplate, setSelectedTemplate] = useState(null);
+  const [generatedOutline, setGeneratedOutline] = useState(null); // preview data
+  const [generatorStep, setGeneratorStep] = useState('pick'); // 'pick' | 'preview'
+  const [approving, setApproving] = useState(false);
 
   // ── Load book & chapters ──
   const loadBook = useCallback(async () => {
@@ -157,6 +242,84 @@ export default function BookOverview() {
   useEffect(() => {
     if (showBatchAdd && batchRef.current) batchRef.current.focus();
   }, [showBatchAdd]);
+
+  // ── Outline Generator ──
+  const openGenerator = () => {
+    setShowGenerator(true);
+    setGeneratorStep('pick');
+    setSelectedTemplate(null);
+    setGeneratedOutline(null);
+  };
+
+  const selectTemplate = (key) => {
+    setSelectedTemplate(key);
+    const tmpl = STORY_TEMPLATES[key];
+    // Deep-copy chapters so user can edit preview without mutating templates
+    setGeneratedOutline(tmpl.chapters.map((ch, i) => ({ ...ch, _idx: i })));
+    setGeneratorStep('preview');
+  };
+
+  const updatePreviewChapter = (idx, field, value) => {
+    setGeneratedOutline(prev => prev.map((ch, i) =>
+      i === idx ? { ...ch, [field]: value } : ch
+    ));
+  };
+
+  const removePreviewChapter = (idx) => {
+    setGeneratedOutline(prev => prev.filter((_, i) => i !== idx));
+  };
+
+  const approveOutline = async () => {
+    if (!generatedOutline || generatedOutline.length === 0) return;
+    try {
+      setApproving(true);
+      const startNum = chapters.length + 1;
+      const results = [];
+
+      for (let i = 0; i < generatedOutline.length; i++) {
+        const ch = generatedOutline[i];
+        // Create the chapter
+        const data = await api(`/books/${id}/chapters`, {
+          method: 'POST',
+          body: JSON.stringify({
+            chapter_number: startNum + i,
+            title: ch.title,
+          }),
+        });
+        const created = data.chapter || data;
+
+        // Update with planning fields
+        await api(`/chapters/${created.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            scene_goal: ch.scene_goal || '',
+            theme: ch.theme || '',
+            pov: ch.pov || 'first_person',
+            emotional_state_start: ch.emotional_state_start || '',
+            emotional_state_end: ch.emotional_state_end || '',
+            chapter_notes: ch.chapter_notes || '',
+          }),
+        });
+
+        results.push({
+          ...created,
+          scene_goal: ch.scene_goal,
+          theme: ch.theme,
+          pov: ch.pov,
+          emotional_state_start: ch.emotional_state_start,
+          emotional_state_end: ch.emotional_state_end,
+          chapter_notes: ch.chapter_notes,
+        });
+      }
+
+      setChapters(prev => [...prev, ...results]);
+      setShowGenerator(false);
+      setGeneratedOutline(null);
+      setSelectedTemplate(null);
+      flash(`${results.length} chapters added from outline`);
+    } catch { flash('Failed to create outline', 'error'); }
+    finally { setApproving(false); }
+  };
 
   // ── Outline stats ──
   const outlineStats = useMemo(() => {
@@ -909,9 +1072,121 @@ export default function BookOverview() {
             <button className="bo-add-chapter-btn bo-add-batch-btn" onClick={() => setShowBatchAdd(true)}>
               + Plan Multiple Chapters
             </button>
+            <button className="bo-add-chapter-btn bo-add-gen-btn" onClick={openGenerator}>
+              + Generate Outline
+            </button>
           </div>
         )}
       </div>
+
+      {/* ── Outline Generator Modal ── */}
+      {showGenerator && (
+        <div className="bo-gen-overlay" onClick={() => !approving && setShowGenerator(false)}>
+          <div className="bo-gen-modal" onClick={e => e.stopPropagation()}>
+            <button className="bo-gen-close" onClick={() => !approving && setShowGenerator(false)}>x</button>
+
+            {generatorStep === 'pick' && (
+              <>
+                <h2 className="bo-gen-heading">Choose a Story Structure</h2>
+                <p className="bo-gen-sub">Pick a template to generate a chapter outline for <strong>{book?.title}</strong>. You can edit every chapter before adding them.</p>
+                <div className="bo-gen-templates">
+                  {Object.entries(STORY_TEMPLATES).map(([key, tmpl]) => (
+                    <button key={key} className="bo-gen-tmpl-card" onClick={() => selectTemplate(key)}>
+                      <span className="bo-gen-tmpl-name">{tmpl.name}</span>
+                      <span className="bo-gen-tmpl-count">{tmpl.chapters.length} chapters</span>
+                      <span className="bo-gen-tmpl-desc">{tmpl.desc}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+
+            {generatorStep === 'preview' && generatedOutline && (
+              <>
+                <div className="bo-gen-preview-header">
+                  <h2 className="bo-gen-heading">Review Your Outline</h2>
+                  <button className="bo-btn bo-btn-ghost bo-gen-back" onClick={() => setGeneratorStep('pick')}>Back to templates</button>
+                </div>
+                <p className="bo-gen-sub">
+                  {STORY_TEMPLATES[selectedTemplate]?.name} \u2014 {generatedOutline.length} chapter{generatedOutline.length !== 1 ? 's' : ''}. Edit titles, goals, and notes below. Remove chapters you don't need.
+                </p>
+
+                <div className="bo-gen-preview-list">
+                  {generatedOutline.map((ch, i) => (
+                    <div key={i} className="bo-gen-ch-card">
+                      <div className="bo-gen-ch-num-col">
+                        <span className="bo-gen-ch-num">{chapters.length + 1 + i}</span>
+                        <button className="bo-gen-ch-remove" title="Remove chapter" onClick={() => removePreviewChapter(i)}>x</button>
+                      </div>
+                      <div className="bo-gen-ch-fields">
+                        <input
+                          className="bo-gen-ch-title"
+                          value={ch.title}
+                          onChange={e => updatePreviewChapter(i, 'title', e.target.value)}
+                          placeholder="Chapter title"
+                        />
+                        <textarea
+                          className="bo-gen-ch-input"
+                          value={ch.scene_goal}
+                          onChange={e => updatePreviewChapter(i, 'scene_goal', e.target.value)}
+                          placeholder="Scene goal"
+                          rows={2}
+                        />
+                        <div className="bo-gen-ch-row">
+                          <input
+                            className="bo-gen-ch-input bo-gen-ch-half"
+                            value={ch.theme}
+                            onChange={e => updatePreviewChapter(i, 'theme', e.target.value)}
+                            placeholder="Theme"
+                          />
+                          <select
+                            className="bo-gen-ch-input bo-gen-ch-half"
+                            value={ch.pov}
+                            onChange={e => updatePreviewChapter(i, 'pov', e.target.value)}
+                          >
+                            <option value="first_person">First Person</option>
+                            <option value="third_person_limited">Third Limited</option>
+                            <option value="third_person_omniscient">Third Omniscient</option>
+                            <option value="second_person">Second Person</option>
+                          </select>
+                        </div>
+                        <div className="bo-gen-ch-row">
+                          <input
+                            className="bo-gen-ch-input bo-gen-ch-half"
+                            value={ch.emotional_state_start}
+                            onChange={e => updatePreviewChapter(i, 'emotional_state_start', e.target.value)}
+                            placeholder="Emotional start"
+                          />
+                          <input
+                            className="bo-gen-ch-input bo-gen-ch-half"
+                            value={ch.emotional_state_end}
+                            onChange={e => updatePreviewChapter(i, 'emotional_state_end', e.target.value)}
+                            placeholder="Emotional end"
+                          />
+                        </div>
+                        <textarea
+                          className="bo-gen-ch-input"
+                          value={ch.chapter_notes}
+                          onChange={e => updatePreviewChapter(i, 'chapter_notes', e.target.value)}
+                          placeholder="Notes"
+                          rows={1}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="bo-gen-approve-bar">
+                  <button className="bo-btn bo-btn-gold bo-gen-approve-btn" onClick={approveOutline} disabled={approving || generatedOutline.length === 0}>
+                    {approving ? 'Creating chapters\u2026' : `Approve & Add ${generatedOutline.length} Chapter${generatedOutline.length !== 1 ? 's' : ''}`}
+                  </button>
+                  <button className="bo-btn bo-btn-ghost" onClick={() => setShowGenerator(false)} disabled={approving}>Cancel</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
