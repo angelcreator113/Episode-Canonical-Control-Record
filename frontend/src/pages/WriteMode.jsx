@@ -48,6 +48,7 @@ export default function WriteMode() {
   const [nudgeText,    setNudgeText]    = useState(null);
   const [proseBeforeAi, setProseBeforeAi] = useState(null); // for undo
   const [genLength,    setGenLength]    = useState('paragraph'); // 'sentence'|'paragraph'
+  const [streamingText, setStreamingText] = useState(''); // live text while streaming
 
   // Character sidebar state
   const [characters,        setCharacters]        = useState([]);
@@ -189,6 +190,7 @@ export default function WriteMode() {
 
   const generateProse = useCallback(async (spoken) => {
     setGenerating(true);
+    setStreamingText('');
     try {
       const res = await fetch(`${API}/memories/voice-to-story`, {
         method: 'POST',
@@ -203,32 +205,59 @@ export default function WriteMode() {
           session_log:     sessionLog.slice(-4),
           character_id:    selectedCharacter?.id || null,
           gen_length:      genLength,
+          stream:          true,
         }),
       });
-      const data = await res.json();
-      if (data.prose) {
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+      let hintData = null;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === 'text') {
+              fullText += evt.text;
+              setStreamingText(fullText);
+              // Auto-scroll while streaming
+              if (proseRef.current) {
+                proseRef.current.scrollTop = proseRef.current.scrollHeight;
+              }
+            } else if (evt.type === 'done') {
+              hintData = evt.hint || null;
+            } else if (evt.type === 'error') {
+              console.error('voice-to-story stream error:', evt.error);
+            }
+          } catch {}
+        }
+      }
+
+      if (fullText) {
         const newProse = prose
-          ? prose.trimEnd() + '\n\n' + data.prose
-          : data.prose;
+          ? prose.trimEnd() + '\n\n' + fullText
+          : fullText;
         setProse(newProse);
         setWordCount(newProse.split(/\s+/).filter(Boolean).length);
         setSaved(false);
-        setSessionLog(prev => [...prev, { spoken, generated: data.prose }]);
-        if (data.hint) {
-          setHint(data.hint);
+        setSessionLog(prev => [...prev, { spoken, generated: fullText }]);
+        if (hintData) {
+          setHint(hintData);
           setTimeout(() => setHint(null), 6000);
         }
-        setTimeout(() => {
-          if (proseRef.current) {
-            proseRef.current.scrollTop = proseRef.current.scrollHeight;
-          }
-        }, 100);
       }
     } catch (err) {
       console.error('voice-to-story error:', err);
     }
+    setStreamingText('');
     setGenerating(false);
-  }, [prose, chapter, book, sessionLog, genLength]);
+  }, [prose, chapter, book, sessionLog, genLength, selectedCharacter]);
 
   const toggleListening = useCallback(async () => {
     if (listening) {
@@ -316,6 +345,7 @@ export default function WriteMode() {
     setGenerating(true);
     setProseBeforeAi(prose);
     setNudgeText(null);
+    setStreamingText('');
     try {
       const res = await fetch(`${API}/memories/story-continue`, {
         method: 'POST',
@@ -328,27 +358,50 @@ export default function WriteMode() {
           book_character: book?.character || 'JustAWoman',
           character_id:   selectedCharacter?.id || null,
           gen_length:     genLength,
+          stream:         true,
         }),
       });
-      const data = await res.json();
-      if (data.prose) {
-        const newProse = prose.trimEnd() + '\n\n' + data.prose;
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk.split('\n');
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const evt = JSON.parse(line.slice(6));
+            if (evt.type === 'text') {
+              fullText += evt.text;
+              setStreamingText(fullText);
+              if (proseRef.current) {
+                proseRef.current.scrollTop = proseRef.current.scrollHeight;
+              }
+            } else if (evt.type === 'error') {
+              setHint(evt.error);
+              setTimeout(() => setHint(null), 5000);
+            }
+          } catch {}
+        }
+      }
+
+      if (fullText) {
+        const newProse = prose.trimEnd() + '\n\n' + fullText;
         setProse(newProse);
         setWordCount(newProse.split(/\s+/).filter(Boolean).length);
         setSaved(false);
-        setTimeout(() => {
-          if (proseRef.current) proseRef.current.scrollTop = proseRef.current.scrollHeight;
-        }, 100);
-      } else if (data.error) {
-        setHint(data.error);
-        setTimeout(() => setHint(null), 5000);
       }
     } catch (err) {
       console.error('story-continue error:', err);
     }
+    setStreamingText('');
     setGenerating(false);
     setAiAction(null);
-  }, [prose, chapter, book, generating, genLength]);
+  }, [prose, chapter, book, generating, genLength, selectedCharacter]);
 
   const handleDeepen = useCallback(async () => {
     if (!prose.trim() || generating) return;
@@ -518,14 +571,14 @@ export default function WriteMode() {
         <div className="wm-prose-wrap" ref={proseRef}>
           <textarea
             className="wm-prose-area"
-            value={prose}
+            value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}
             onChange={handleProseChange}
             placeholder={editMode ? '' : "Type your story here, or use the AI tools below \u2014 Continue, Deepen, Nudge."}
             spellCheck={false}
             readOnly={generating}
           />
 
-          {generating && (
+          {generating && !streamingText && (
             <div className="wm-generating">
               <div className="wm-generating-dots">
                 <span className="wm-generating-dot" />
