@@ -34,8 +34,14 @@ export default function BookOverview() {
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState(null);
 
-  // View mode: 'cards' | 'outline'
+  // View mode: 'cards' | 'outline' | 'blueprint'
   const [viewMode, setViewMode] = useState('cards');
+
+  // Blueprint inline editing
+  const [blueprintEditId, setBlueprintEditId] = useState(null);
+  const [blueprintEditField, setBlueprintEditField] = useState(null);
+  const [blueprintEditValue, setBlueprintEditValue] = useState('');
+  const blueprintInputRef = useRef(null);
 
   // Batch chapter planning
   const [showBatchAdd, setShowBatchAdd] = useState(false);
@@ -238,6 +244,87 @@ export default function BookOverview() {
     if (showNewChapter && newTitleRef.current) newTitleRef.current.focus();
   }, [showNewChapter]);
 
+  // ── Focus blueprint inline edit ──
+  useEffect(() => {
+    if (blueprintEditId && blueprintInputRef.current) blueprintInputRef.current.focus();
+  }, [blueprintEditId, blueprintEditField]);
+
+  // ── Blueprint inline edit helpers ──
+  const startBlueprintEdit = (ch, field) => {
+    setBlueprintEditId(ch.id);
+    setBlueprintEditField(field);
+    setBlueprintEditValue(ch[field] || '');
+  };
+
+  const saveBlueprintEdit = async () => {
+    if (!blueprintEditId || !blueprintEditField) return;
+    try {
+      await api(`/chapters/${blueprintEditId}`, {
+        method: 'PUT',
+        body: JSON.stringify({ [blueprintEditField]: blueprintEditValue }),
+      });
+      setChapters(prev => prev.map(c =>
+        c.id === blueprintEditId ? { ...c, [blueprintEditField]: blueprintEditValue } : c
+      ));
+      flash('Saved');
+    } catch { flash('Failed to save', 'error'); }
+    finally {
+      setBlueprintEditId(null);
+      setBlueprintEditField(null);
+    }
+  };
+
+  const cancelBlueprintEdit = () => {
+    setBlueprintEditId(null);
+    setBlueprintEditField(null);
+    setBlueprintEditValue('');
+  };
+
+  // ── Export outline to clipboard ──
+  const exportOutline = async () => {
+    const lines = [];
+    lines.push(`# ${book.title || 'Untitled Book'}`);
+    if (book.description) lines.push(`\n> ${book.description}`);
+    lines.push(`\n---\n`);
+    lines.push(`**${chapters.length} Chapters** | ${outlineStats.planned} Planned | ${outlineStats.withProse} Written\n`);
+
+    chapters.forEach((ch, idx) => {
+      const num = ch.chapter_number || idx + 1;
+      lines.push(`## Chapter ${num}: ${ch.title || 'Untitled'}`);
+      lines.push('');
+      if (ch.scene_goal) lines.push(`**Scene Goal:** ${ch.scene_goal}`);
+      const parts = [];
+      if (ch.theme) parts.push(`**Theme:** ${ch.theme}`);
+      if (ch.pov) {
+        const povLabel = { first_person: 'First Person', third_person_limited: 'Third Person Limited', third_person_omniscient: 'Third Person Omniscient', second_person: 'Second Person' };
+        parts.push(`**POV:** ${povLabel[ch.pov] || ch.pov}`);
+      }
+      if (parts.length) lines.push(parts.join(' | '));
+      if (ch.emotional_state_start || ch.emotional_state_end) {
+        lines.push(`**Emotional Arc:** ${ch.emotional_state_start || '?'} \u2192 ${ch.emotional_state_end || '?'}`);
+      }
+      if (ch.chapter_notes) lines.push(`\n*Notes:* ${ch.chapter_notes}`);
+      if (ch.draft_prose?.trim()) lines.push(`\n\u2713 *Has draft prose*`);
+      lines.push('');
+      lines.push('---\n');
+    });
+
+    const text = lines.join('\n');
+    try {
+      await navigator.clipboard.writeText(text);
+      flash('Outline copied to clipboard');
+    } catch {
+      // Fallback
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+      flash('Outline copied to clipboard');
+    }
+  };
+
   // ── Render ──
   if (loading) {
     return (
@@ -312,9 +399,19 @@ export default function BookOverview() {
             <button
               className={`bo-view-btn${viewMode === 'outline' ? ' active' : ''}`}
               onClick={() => setViewMode('outline')}
-              title="Outline view"
+              title="Outline table"
             >Outline</button>
+            <button
+              className={`bo-view-btn${viewMode === 'blueprint' ? ' active' : ''}`}
+              onClick={() => setViewMode('blueprint')}
+              title="Manuscript blueprint"
+            >Blueprint</button>
           </div>
+          {chapters.length > 0 && (
+            <button className="bo-export-btn" onClick={exportOutline} title="Copy outline to clipboard">
+              Export
+            </button>
+          )}
         </div>
 
         {/* ── Outline Progress Bar ── */}
@@ -394,6 +491,166 @@ export default function BookOverview() {
                     <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => startEdit(ch)}>Plan</button>
                     <button className="bo-btn bo-btn-write bo-btn-sm" onClick={() => navigate(`/write/${id}/${ch.id}`)}>Write</button>
                   </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* ───── BLUEPRINT VIEW ───── */}
+        {viewMode === 'blueprint' && chapters.length > 0 && (
+          <div className="bo-blueprint">
+            <div className="bo-bp-title-block">
+              <h2 className="bo-bp-doc-title">Manuscript Outline</h2>
+              <p className="bo-bp-doc-subtitle">{book.title}</p>
+              <div className="bo-bp-doc-stats">
+                {chapters.length} chapters &middot; {outlineStats.planned} planned &middot; {outlineStats.withProse} with prose
+              </div>
+            </div>
+
+            {chapters.map((ch, idx) => {
+              const num = ch.chapter_number || idx + 1;
+              const score = planScore(ch);
+              const hasProse = ch.draft_prose?.trim();
+              const isInlineEditing = blueprintEditId === ch.id;
+
+              const renderField = (field, label, placeholder, isTextarea = false) => {
+                const value = ch[field];
+                const isEditingThis = isInlineEditing && blueprintEditField === field;
+
+                if (isEditingThis) {
+                  return (
+                    <div className="bo-bp-field editing">
+                      <span className="bo-bp-field-label">{label}</span>
+                      {isTextarea ? (
+                        <textarea
+                          ref={blueprintInputRef}
+                          className="bo-bp-inline-input"
+                          value={blueprintEditValue}
+                          onChange={e => setBlueprintEditValue(e.target.value)}
+                          placeholder={placeholder}
+                          rows={3}
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') cancelBlueprintEdit();
+                            if (e.key === 'Enter' && e.ctrlKey) saveBlueprintEdit();
+                          }}
+                        />
+                      ) : (
+                        <input
+                          ref={blueprintInputRef}
+                          className="bo-bp-inline-input"
+                          value={blueprintEditValue}
+                          onChange={e => setBlueprintEditValue(e.target.value)}
+                          placeholder={placeholder}
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') cancelBlueprintEdit();
+                            if (e.key === 'Enter') saveBlueprintEdit();
+                          }}
+                        />
+                      )}
+                      <div className="bo-bp-inline-actions">
+                        <button className="bo-btn bo-btn-gold bo-btn-sm" onClick={saveBlueprintEdit}>Save</button>
+                        <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={cancelBlueprintEdit}>Cancel</button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                return (
+                  <div
+                    className={`bo-bp-field${value?.trim() ? '' : ' empty'}`}
+                    onClick={() => startBlueprintEdit(ch, field)}
+                    title="Click to edit"
+                  >
+                    <span className="bo-bp-field-label">{label}</span>
+                    <span className="bo-bp-field-value">
+                      {value?.trim() || <span className="bo-bp-placeholder">{placeholder}</span>}
+                    </span>
+                  </div>
+                );
+              };
+
+              return (
+                <div key={ch.id} className="bo-bp-chapter">
+                  <div className="bo-bp-chapter-header">
+                    <span className="bo-bp-chapter-num">Chapter {num}</span>
+                    <h3 className="bo-bp-chapter-title"
+                        onClick={() => startBlueprintEdit(ch, 'title')}
+                        title="Click to edit title">
+                      {isInlineEditing && blueprintEditField === 'title' ? (
+                        <input
+                          ref={blueprintInputRef}
+                          className="bo-bp-inline-input bo-bp-title-input"
+                          value={blueprintEditValue}
+                          onChange={e => setBlueprintEditValue(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Escape') cancelBlueprintEdit();
+                            if (e.key === 'Enter') saveBlueprintEdit();
+                          }}
+                        />
+                      ) : (
+                        ch.title || 'Untitled'
+                      )}
+                    </h3>
+                    <div className="bo-bp-chapter-actions">
+                      <span className="bo-bp-score" title={`${score}/${PLAN_FIELDS.length} fields`}>
+                        {PLAN_FIELDS.map((_, i) => (
+                          <span key={i} className={`bo-plan-dot${i < score ? ' filled' : ''}`} />
+                        ))}
+                      </span>
+                      {hasProse && <span className="bo-bp-written">\u2713 Written</span>}
+                      <button
+                        className="bo-btn bo-btn-write bo-btn-sm"
+                        onClick={() => navigate(`/write/${id}/${ch.id}`)}
+                      >Write</button>
+                    </div>
+                  </div>
+
+                  <div className="bo-bp-fields">
+                    {renderField('scene_goal', 'Scene Goal', 'What happens in this chapter?', true)}
+
+                    <div className="bo-bp-field-row">
+                      {renderField('theme', 'Theme', 'e.g. invisibility, self-doubt')}
+                      <div
+                        className={`bo-bp-field${ch.pov?.trim() ? '' : ' empty'}`}
+                        onClick={() => startBlueprintEdit(ch, 'pov')}
+                        title="Click to edit"
+                      >
+                        <span className="bo-bp-field-label">POV</span>
+                        {isInlineEditing && blueprintEditField === 'pov' ? (
+                          <>
+                            <select
+                              ref={blueprintInputRef}
+                              className="bo-bp-inline-input bo-field-select"
+                              value={blueprintEditValue || 'first_person'}
+                              onChange={e => setBlueprintEditValue(e.target.value)}
+                            >
+                              <option value="first_person">First Person</option>
+                              <option value="third_person_limited">Third Person Limited</option>
+                              <option value="third_person_omniscient">Third Person Omniscient</option>
+                              <option value="second_person">Second Person</option>
+                            </select>
+                            <div className="bo-bp-inline-actions">
+                              <button className="bo-btn bo-btn-gold bo-btn-sm" onClick={saveBlueprintEdit}>Save</button>
+                              <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={cancelBlueprintEdit}>Cancel</button>
+                            </div>
+                          </>
+                        ) : (
+                          <span className="bo-bp-field-value">
+                            {ch.pov ? { first_person: 'First Person', third_person_limited: '3rd Limited', third_person_omniscient: '3rd Omniscient', second_person: 'Second Person' }[ch.pov] || ch.pov : <span className="bo-bp-placeholder">Set POV</span>}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="bo-bp-field-row">
+                      {renderField('emotional_state_start', 'Emotional Start', 'e.g. hopeful, anxious')}
+                      <span className="bo-bp-arc-arrow">\u2192</span>
+                      {renderField('emotional_state_end', 'Emotional End', 'e.g. devastated, resolved')}
+                    </div>
+
+                    {renderField('chapter_notes', 'Notes', 'Anything to remember about this chapter\u2026', true)}
+                  </div>
                 </div>
               );
             })}

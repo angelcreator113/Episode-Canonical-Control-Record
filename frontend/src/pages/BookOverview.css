@@ -756,3 +756,263 @@ textarea.bo-field-input { min-height: 40px; }
 .bo-add-batch-btn:hover {
   background: rgba(198, 168, 94, 0.08) !important;
 }
+
+/* ── Export Button ── */
+.bo-export-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: none;
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius);
+  padding: 5px 14px;
+  font-family: var(--bo-font-mono);
+  font-size: 12px;
+  color: var(--bo-ink-soft);
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-left: 8px;
+}
+.bo-export-btn:hover {
+  border-color: var(--bo-gold);
+  color: var(--bo-gold-dark);
+  background: rgba(198, 168, 94, 0.06);
+}
+
+/* ═══════════════════════════════════════════
+   ── BLUEPRINT VIEW (Manuscript Outline) ──
+   ═══════════════════════════════════════════ */
+
+.bo-blueprint {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 8px;
+}
+
+/* Title block */
+.bo-bp-title-block {
+  text-align: center;
+  padding: 32px 0 24px;
+  border-bottom: 2px solid var(--bo-ink);
+  margin-bottom: 32px;
+}
+.bo-bp-doc-title {
+  font-family: var(--bo-font-serif);
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--bo-ink-soft);
+  margin: 0 0 6px;
+}
+.bo-bp-doc-subtitle {
+  font-family: var(--bo-font-serif);
+  font-size: 26px;
+  font-weight: 600;
+  color: var(--bo-ink);
+  margin: 0 0 10px;
+  line-height: 1.25;
+}
+.bo-bp-doc-stats {
+  font-family: var(--bo-font-mono);
+  font-size: 12px;
+  color: var(--bo-ink-soft);
+  letter-spacing: 0.04em;
+}
+
+/* Chapter entry */
+.bo-bp-chapter {
+  padding: 24px 0;
+  border-bottom: 1px solid var(--bo-border);
+}
+.bo-bp-chapter:last-child {
+  border-bottom: none;
+}
+
+.bo-bp-chapter-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.bo-bp-chapter-num {
+  font-family: var(--bo-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--bo-gold-dark);
+  flex-shrink: 0;
+  padding-top: 3px;
+}
+.bo-bp-chapter-title {
+  font-family: var(--bo-font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--bo-ink);
+  margin: 0;
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+  padding: 2px 6px;
+  margin: -2px -6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.bo-bp-chapter-title:hover {
+  background: rgba(198, 168, 94, 0.08);
+}
+.bo-bp-chapter-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.bo-bp-score {
+  display: inline-flex;
+  gap: 3px;
+  align-items: center;
+}
+.bo-bp-written {
+  font-family: var(--bo-font-mono);
+  font-size: 11px;
+  color: var(--bo-success);
+  letter-spacing: 0.03em;
+}
+
+/* Fields container */
+.bo-bp-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-left: 0;
+}
+
+/* Single field */
+.bo-bp-field {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+  min-height: 28px;
+}
+.bo-bp-field:hover {
+  background: rgba(198, 168, 94, 0.06);
+}
+.bo-bp-field.editing {
+  background: rgba(198, 168, 94, 0.08);
+  cursor: default;
+  flex-direction: column;
+  gap: 6px;
+}
+.bo-bp-field.empty {
+  opacity: 0.5;
+}
+.bo-bp-field.empty:hover {
+  opacity: 0.8;
+}
+
+.bo-bp-field-label {
+  font-family: var(--bo-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--bo-ink-soft);
+  flex-shrink: 0;
+  min-width: 105px;
+  padding-top: 2px;
+}
+.bo-bp-field-value {
+  font-family: var(--bo-font-serif);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--bo-ink);
+  white-space: pre-wrap;
+}
+.bo-bp-placeholder {
+  font-style: italic;
+  color: var(--bo-border);
+}
+
+/* Field row (side-by-side) */
+.bo-bp-field-row {
+  display: flex;
+  gap: 6px;
+  align-items: flex-start;
+}
+.bo-bp-field-row > .bo-bp-field {
+  flex: 1;
+  min-width: 0;
+}
+.bo-bp-arc-arrow {
+  font-size: 18px;
+  color: var(--bo-gold);
+  padding-top: 6px;
+  flex-shrink: 0;
+  align-self: center;
+}
+
+/* Inline editing input */
+.bo-bp-inline-input {
+  font-family: var(--bo-font-serif);
+  font-size: 15px;
+  line-height: 1.5;
+  color: var(--bo-ink);
+  border: 1px solid var(--bo-gold);
+  border-radius: 4px;
+  background: #fff;
+  padding: 6px 10px;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+}
+.bo-bp-inline-input:focus {
+  box-shadow: 0 0 0 2px rgba(198, 168, 94, 0.2);
+}
+textarea.bo-bp-inline-input {
+  resize: vertical;
+  min-height: 48px;
+}
+.bo-bp-title-input {
+  font-size: 20px;
+  font-weight: 600;
+}
+.bo-bp-inline-actions {
+  display: flex;
+  gap: 6px;
+  padding-top: 2px;
+}
+
+/* ── Blueprint responsive ── */
+@media (max-width: 600px) {
+  .bo-blueprint {
+    padding: 0 4px;
+  }
+  .bo-bp-doc-subtitle {
+    font-size: 20px;
+  }
+  .bo-bp-chapter-header {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .bo-bp-chapter-title {
+    font-size: 17px;
+  }
+  .bo-bp-field-row {
+    flex-direction: column;
+    gap: 4px;
+  }
+  .bo-bp-arc-arrow {
+    display: none;
+  }
+  .bo-bp-field-label {
+    min-width: 80px;
+    font-size: 10px;
+  }
+  .bo-bp-field-value {
+    font-size: 14px;
+  }
+}
