@@ -766,14 +766,6 @@ export default function CharacterRegistryPage() {
                     </button>
                   ))}
                 </div>
-                {!editSection && (
-                  <button
-                    className="cr-tab-edit-btn"
-                    onClick={() => startEdit(dossierTab)}
-                  >
-                    ✎ Edit Section
-                  </button>
-                )}
               </div>
 
               {/* Tab Content */}
