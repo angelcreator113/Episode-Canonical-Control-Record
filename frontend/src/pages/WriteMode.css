@@ -202,12 +202,20 @@
   transition: margin-right 0.3s ease;
 }
 
-/* When character sidebar is open, shrink prose area so it doesn't hide behind the panel */
+/* When character sidebar is open on mobile/tablet (below 1024px),
+   push prose left so it doesn't hide behind the absolutely-positioned panel */
 .wm-panel-open .wm-prose-wrap {
   margin-right: 280px;
 }
 
-/* When panel is open, widen prose to fill the space — no dead zone */
+/* On desktop (≥1024px) sidebar is a flex child — no extra margin needed */
+@media (min-width: 1024px) {
+  .wm-panel-open .wm-prose-wrap {
+    margin-right: 0;
+  }
+}
+
+/* When panel is open, fill the available space — no dead zone */
 .wm-panel-open .wm-prose-area {
   max-width: 100%;
   padding-left: 48px;
