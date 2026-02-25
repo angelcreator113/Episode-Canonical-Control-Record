@@ -882,60 +882,181 @@
   position: relative;
   scroll-behavior: smooth;
   min-width: 0;
+  /* Slightly darker desk surface behind the page */
+  background:
+    linear-gradient(180deg, rgba(237,232,221,0.45) 0%, rgba(245,240,232,0.6) 40%, rgba(237,232,221,0.35) 100%);
 }
 
+/* ═══  MANUSCRIPT PAGE  ═══ */
 
+.wm-manuscript-page {
+  width: 100%;
+  max-width: 680px;
+  margin: 32px auto 80px;
+  padding: 0;
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.022'/%3E%3C/svg%3E"),
+    linear-gradient(180deg, #FFFCF6 0%, #FAF7F0 30%, #F8F4EC 100%);
+  border-radius: 3px 3px 2px 2px;
+  box-shadow:
+    0 1px 3px rgba(28,24,20,0.06),
+    0 4px 16px rgba(28,24,20,0.045),
+    0 12px 48px rgba(28,24,20,0.035),
+    -1px 0 0 rgba(28,24,20,0.03),
+    1px 0 0 rgba(28,24,20,0.03);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 160px);
+  animation: wmPageRise 0.5s ease both;
+}
 
+@keyframes wmPageRise {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Subtle page-top highlight edge */
+.wm-manuscript-page::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 5%, rgba(255,255,255,0.7) 30%, rgba(255,255,255,0.8) 50%, rgba(255,255,255,0.7) 70%, transparent 95%);
+  border-radius: 3px 3px 0 0;
+}
+
+/* Left margin line (like a manuscript) */
+.wm-manuscript-page::after {
+  content: '';
+  position: absolute;
+  top: 80px;
+  bottom: 40px;
+  left: 72px;
+  width: 1px;
+  background: rgba(184,150,46,0.06);
+  pointer-events: none;
+}
+
+/* ── Running header ── */
+.wm-manuscript-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 20px 48px 0;
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+.wm-manuscript-header:hover {
+  opacity: 0.55;
+}
+.wm-mh-book {
+  font-family: 'DM Mono', monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: rgba(28,24,20,0.6);
+}
+.wm-mh-chapter {
+  font-family: 'Lora', serif;
+  font-size: 9px;
+  font-style: italic;
+  color: rgba(28,24,20,0.5);
+  letter-spacing: 0.04em;
+}
+
+/* ── Chapter opening ── */
+.wm-chapter-opening {
+  text-align: center;
+  padding: 48px 48px 8px;
+  flex-shrink: 0;
+}
+.wm-chapter-num {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  letter-spacing: 0.35em;
+  color: rgba(184,150,46,0.45);
+  text-transform: uppercase;
+  margin-bottom: 10px;
+}
+.wm-chapter-heading {
+  font-family: 'Lora', Georgia, serif;
+  font-size: 26px;
+  font-weight: 600;
+  color: #1C1814;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  margin: 0 0 14px;
+}
+.wm-chapter-ornament {
+  font-size: 12px;
+  color: rgba(184,150,46,0.3);
+  letter-spacing: 0.4em;
+  line-height: 1;
+}
+
+/* ── Prose textarea (inside manuscript page) ── */
 .wm-prose-area {
   display: block;
   width: 100%;
-  max-width: 580px;
-  margin: 0 auto;
-  min-height: 100%;
-  padding: 36px 24px 160px;
+  padding: 24px 80px 120px;
   background: transparent;
   border: none;
   resize: none;
   font-family: 'Lora', Georgia, serif;
-  font-size: 18px;
-  line-height: 2.2;
+  font-size: 17.5px;
+  line-height: 2.0;
   color: #1C1814;
   caret-color: #B8962E;
-  letter-spacing: 0.015em;
+  letter-spacing: 0.018em;
   -webkit-font-smoothing: antialiased;
-  transition: opacity 0.2s ease, box-shadow 0.8s ease;
-  box-shadow:
-    0 1px 4px rgba(28,24,20,0.03),
-    0 4px 24px rgba(28,24,20,0.025),
-    0 8px 48px rgba(28,24,20,0.018);
-  border-radius: 2px;
+  transition: opacity 0.2s ease;
+  flex: 1;
+  min-height: 400px;
+  text-indent: 2em;
+  word-spacing: 0.04em;
 }
 
 .wm-prose-area::placeholder {
-  color: rgba(28,24,20,0.2);
+  color: rgba(28,24,20,0.18);
   font-style: italic;
+  text-indent: 0;
 }
 
-/* ── Ambient typing glow ── */
+/* ── Ambient typing glow (on the page, not the textarea) ── */
 .wm-prose-area:focus {
+  outline: none;
+}
+.wm-manuscript-page:has(.wm-prose-area:focus) {
   box-shadow:
+    0 1px 3px rgba(28,24,20,0.06),
+    0 4px 16px rgba(28,24,20,0.045),
+    0 12px 48px rgba(28,24,20,0.035),
     0 0 0 1px rgba(184,150,46,0.04),
-    0 0 40px rgba(184,150,46,0.035),
-    0 0 80px rgba(184,150,46,0.02);
+    0 0 60px rgba(184,150,46,0.03),
+    0 0 120px rgba(184,150,46,0.015);
   animation: wmTypingGlow 4s ease-in-out infinite;
 }
 @keyframes wmTypingGlow {
   0%, 100% {
     box-shadow:
+      0 1px 3px rgba(28,24,20,0.06),
+      0 4px 16px rgba(28,24,20,0.045),
+      0 12px 48px rgba(28,24,20,0.035),
       0 0 0 1px rgba(184,150,46,0.04),
-      0 0 40px rgba(184,150,46,0.035),
-      0 0 80px rgba(184,150,46,0.02);
+      0 0 60px rgba(184,150,46,0.03),
+      0 0 120px rgba(184,150,46,0.015);
   }
   50% {
     box-shadow:
+      0 1px 3px rgba(28,24,20,0.06),
+      0 4px 16px rgba(28,24,20,0.045),
+      0 12px 48px rgba(28,24,20,0.035),
       0 0 0 1px rgba(184,150,46,0.06),
-      0 0 50px rgba(184,150,46,0.05),
-      0 0 100px rgba(184,150,46,0.028);
+      0 0 70px rgba(184,150,46,0.04),
+      0 0 140px rgba(184,150,46,0.02);
   }
 }
 
@@ -943,11 +1064,36 @@
   opacity: 0.75;
 }
 
-/* ── Contextual paragraph hint: floats on left margin ── */
+/* ── Running footer ── */
+.wm-manuscript-footer {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 48px 24px;
+  opacity: 0.22;
+  transition: opacity 0.3s ease;
+}
+.wm-manuscript-footer:hover {
+  opacity: 0.45;
+}
+.wm-mf-words,
+.wm-mf-page {
+  font-family: 'DM Mono', monospace;
+  font-size: 8.5px;
+  letter-spacing: 0.12em;
+  color: rgba(28,24,20,0.5);
+}
+.wm-mf-ornament {
+  font-size: 8px;
+  color: rgba(28,24,20,0.2);
+}
+
+/* ── Contextual paragraph hint: floats on left margin of manuscript ── */
 .wm-para-float-hint {
   position: absolute;
-  left: calc(50% - 310px);
-  top: 40%;
+  left: calc(50% - 370px);
+  top: 45%;
   transform: translateY(-50%);
   width: 28px;
   height: 28px;
@@ -982,7 +1128,6 @@
   border-color: #B8962E;
   color: #B8962E;
 }
-/* Hide on small screens where there's no margin space */
 @media (max-width: 767px) {
   .wm-para-float-hint { display: none; }
 }
@@ -1202,25 +1347,27 @@
   animation: wmFadeIn 0.2s ease;
 }
 
-/* ═══════════════════════  AI TOOLBAR  ═════════════════════════ */
+/* ═══════════════════════  AI TOOLBAR (floating)  ═════════════ */
 
 .wm-ai-toolbar {
   display: flex;
   justify-content: center;
   align-items: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 10px 20px;
   flex-wrap: wrap;
   background: linear-gradient(
     180deg,
-    rgba(250,247,240,0.7) 0%,
-    rgba(248,244,235,0.8) 100%
+    rgba(250,247,240,0.82) 0%,
+    rgba(248,244,235,0.92) 100%
   );
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border-top: 1px solid rgba(28,24,20,0.025);
-  box-shadow: none;
+  backdrop-filter: blur(18px) saturate(1.1);
+  -webkit-backdrop-filter: blur(18px) saturate(1.1);
+  border-top: 1px solid rgba(28,24,20,0.03);
+  border-radius: 0;
+  box-shadow: 0 -4px 20px rgba(28,24,20,0.03);
   flex-shrink: 0;
+  transition: opacity 0.3s ease;
 }
 
 .wm-ai-btn {
@@ -1732,10 +1879,13 @@
     padding: 16px 32px 14px;
     gap: 16px;
   }
+  .wm-manuscript-page {
+    margin: 40px auto 100px;
+  }
   .wm-prose-area {
-    padding: 48px 40px 180px;
-    font-size: 19px;
-    line-height: 2.25;
+    padding: 28px 80px 160px;
+    font-size: 18px;
+    line-height: 2.1;
   }
   .wm-bottom-bar {
     padding: 20px 32px 24px;
@@ -1761,10 +1911,17 @@
   .wm-topbar {
     padding: 18px 48px 16px;
   }
+  .wm-manuscript-page {
+    margin: 48px auto 120px;
+    max-width: 720px;
+  }
   .wm-prose-area {
-    padding: 64px 48px 200px;
-    font-size: 20px;
-    line-height: 2.3;
+    padding: 32px 90px 180px;
+    font-size: 19px;
+    line-height: 2.15;
+  }
+  .wm-chapter-heading {
+    font-size: 28px;
   }
   .wm-bottom-bar {
     padding: 22px 48px 28px;
@@ -1840,11 +1997,35 @@
     padding: 5px 10px;
     letter-spacing: 0.08em;
   }
-  /* ── Prose area: slightly smaller on phones ── */
+  /* ── Manuscript page: full-bleed on phones ── */
+  .wm-manuscript-page {
+    margin: 8px auto 60px;
+    max-width: 100%;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .wm-manuscript-page::after {
+    display: none;
+  }
+  .wm-chapter-opening {
+    padding: 32px 20px 6px;
+  }
+  .wm-chapter-heading {
+    font-size: 20px;
+  }
+  .wm-chapter-num {
+    font-size: 9px;
+  }
   .wm-prose-area {
-    padding: 20px 16px 140px;
+    padding: 16px 20px 120px;
     font-size: 16px;
-    line-height: 1.85;
+    line-height: 1.9;
+    text-indent: 1.5em;
+  }
+  .wm-manuscript-header,
+  .wm-manuscript-footer {
+    padding-left: 20px;
+    padding-right: 20px;
   }
 
   /* ── AI Toolbar: compact buttons, prominent sentence toggle ── */
@@ -1999,8 +2180,19 @@
   pointer-events: auto;
 }
 .wm-focus-mode .wm-prose-wrap {
-  padding-top: 20vh;
-  padding-bottom: 20vh;
+  padding-top: 8vh;
+  padding-bottom: 10vh;
+}
+/* Focus mode: manuscript page becomes the full world */
+.wm-focus-mode .wm-manuscript-page {
+  max-width: 740px;
+  box-shadow:
+    0 2px 8px rgba(28,24,20,0.05),
+    0 8px 40px rgba(28,24,20,0.04),
+    0 24px 80px rgba(28,24,20,0.03);
+}
+.wm-focus-mode .wm-manuscript-header {
+  opacity: 0.15;
 }
 /* ── Focus-mode vignette ── */
 .wm-focus-mode::after {
@@ -2021,8 +2213,7 @@
   to   { opacity: 1; }
 }
 .wm-focus-mode .wm-prose-area {
-  max-width: 620px;
-  margin: 0 auto;
+  /* let manuscript page control width */
 }
 
 .wm-focus-exit {

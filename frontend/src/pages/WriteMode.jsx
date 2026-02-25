@@ -1285,14 +1285,47 @@ export default function WriteMode() {
       <div className="wm-content-row">
         {/* ── PROSE SECTION ── */}
         <div className="wm-prose-wrap" ref={proseRef}>
-          <textarea
-            className="wm-prose-area"
-            value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}
-            onChange={handleProseChange}
-            placeholder={editMode ? '' : "Type your story here, or use the AI tools below \u2014 Continue, Deepen, Nudge."}
-            spellCheck={false}
-            readOnly={generating}
-          />
+
+          {/* ── Manuscript page container ── */}
+          <div className="wm-manuscript-page">
+
+            {/* ── Running header ── */}
+            <div className="wm-manuscript-header">
+              <span className="wm-mh-book">{book?.title || ''}</span>
+              <span className="wm-mh-chapter">
+                {chapter?.chapter_number ? `Chapter ${chapter.chapter_number}` : ''}
+              </span>
+            </div>
+
+            {/* ── Chapter opening ── */}
+            <div className="wm-chapter-opening">
+              <div className="wm-chapter-num">
+                {chapter?.chapter_number
+                  ? String(chapter.chapter_number).padStart(2, '0')
+                  : '\u2014'}
+              </div>
+              <h2 className="wm-chapter-heading">{chapter?.title || 'Untitled'}</h2>
+              <div className="wm-chapter-ornament">{'\u2756'}</div>
+            </div>
+
+            <textarea
+              className="wm-prose-area"
+              value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}
+              onChange={handleProseChange}
+              placeholder={editMode ? '' : "Begin writing\u2026"}
+              spellCheck={false}
+              readOnly={generating}
+            />
+
+            {/* ── Running footer ── */}
+            <div className="wm-manuscript-footer">
+              <span className="wm-mf-words">{wordCount > 0 ? `${wordCount.toLocaleString()} words` : ''}</span>
+              <span className="wm-mf-ornament">{'\u2014'}</span>
+              <span className="wm-mf-page">
+                {chapter?.chapter_number ? `Ch. ${chapter.chapter_number}` : ''}
+              </span>
+            </div>
+          </div>
 
           {/* ── Contextual paragraph hint ── */}
           {!editMode && prose.trim() && (
