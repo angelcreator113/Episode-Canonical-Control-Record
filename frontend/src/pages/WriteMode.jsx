@@ -429,7 +429,7 @@ export default function WriteMode() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw_text: lineMarked, mode: 'replace' }),
       });
-      navigate(`/storyteller?book=${bookId}&chapter=${chapterId}`);
+      navigate(`/book/${bookId}`);
     } catch (err) {
       console.error('sendToReview error:', err);
     }
@@ -755,7 +755,7 @@ export default function WriteMode() {
               <button className="wm-modal-cancel" onClick={() => setShowExit(false)}>Stay</button>
               <button className="wm-modal-leave" onClick={async () => {
                 if (prose) await saveDraft(prose);
-                navigate(`/storyteller?book=${bookId}&chapter=${chapterId}`);
+                navigate(`/book/${bookId}`);
               }}>
                 {prose ? 'Save & Leave' : 'Leave'}
               </button>
