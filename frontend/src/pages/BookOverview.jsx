@@ -149,6 +149,11 @@ export default function BookOverview() {
   const [generatorStep, setGeneratorStep] = useState('pick'); // 'pick' | 'preview'
   const [approving, setApproving] = useState(false);
 
+  // Book-to-Script bridge
+  const [generatingScript, setGeneratingScript] = useState(false);
+  const [scriptResult, setScriptResult] = useState(null);
+  const [showScriptModal, setShowScriptModal] = useState(false);
+
   // ── Load book & chapters ──
   const loadBook = useCallback(async () => {
     try {
@@ -488,6 +493,28 @@ export default function BookOverview() {
     }
   };
 
+  // ── Book-to-Script Bridge ──
+  const generateScript = useCallback(async (chapterId) => {
+    setGeneratingScript(true);
+    setScriptResult(null);
+    try {
+      const body = { book_id: id };
+      if (chapterId) body.chapter_id = chapterId;
+      const resp = await fetch('/api/v1/memories/generate-script-from-book', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || 'Script generation failed');
+      setScriptResult(data);
+      setShowScriptModal(true);
+    } catch (err) {
+      flash(err.message || 'Script generation failed');
+    }
+    setGeneratingScript(false);
+  }, [id]);
+
   // ── Render ──
   if (loading) {
     return (
@@ -573,6 +600,16 @@ export default function BookOverview() {
           {chapters.length > 0 && (
             <button className="bo-export-btn" onClick={exportOutline} title="Copy outline to clipboard">
               Export
+            </button>
+          )}
+          {chapters.length > 0 && (
+            <button
+              className="bo-export-btn bo-script-btn"
+              onClick={() => generateScript()}
+              disabled={generatingScript}
+              title="Generate episode script from book chapters"
+            >
+              {generatingScript ? 'Generating\u2026' : '\uD83C\uDFAC Script'}
             </button>
           )}
         </div>
@@ -1184,6 +1221,44 @@ export default function BookOverview() {
                 </div>
               </>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ── Script Result Modal ── */}
+      {showScriptModal && scriptResult && (
+        <div className="bo-script-overlay" onClick={() => setShowScriptModal(false)}>
+          <div className="bo-script-modal" onClick={e => e.stopPropagation()}>
+            <div className="bo-script-modal-header">
+              <h2 className="bo-script-modal-title">{'\uD83C\uDFAC'} Generated Script</h2>
+              <button className="bo-script-modal-close" onClick={() => setShowScriptModal(false)}>{'\u2715'}</button>
+            </div>
+            <div className="bo-script-modal-body">
+              {scriptResult.script ? (
+                <pre className="bo-script-content">{scriptResult.script}</pre>
+              ) : scriptResult.chapters ? (
+                scriptResult.chapters.map((ch, i) => (
+                  <div key={i} className="bo-script-chapter">
+                    <h3 className="bo-script-ch-title">{ch.title || `Chapter ${i + 1}`}</h3>
+                    <pre className="bo-script-content">{ch.script || ch.content || JSON.stringify(ch, null, 2)}</pre>
+                  </div>
+                ))
+              ) : (
+                <pre className="bo-script-content">{JSON.stringify(scriptResult, null, 2)}</pre>
+              )}
+            </div>
+            <div className="bo-script-modal-footer">
+              <button
+                className="bo-btn bo-btn-gold"
+                onClick={() => {
+                  const text = scriptResult.script || JSON.stringify(scriptResult, null, 2);
+                  navigator.clipboard.writeText(text);
+                }}
+              >
+                Copy to Clipboard
+              </button>
+              <button className="bo-btn bo-btn-ghost" onClick={() => setShowScriptModal(false)}>Close</button>
+            </div>
           </div>
         </div>
       )}

@@ -579,12 +579,62 @@ export default function CharacterRegistryPage() {
 
               {/* Full panel content — always on desktop, toggled on mobile */}
               <div className={`cr-dossier-left-inner ${isMobile && !dossierPanelOpen ? 'hidden' : ''}`}>
-                {/* Portrait */}
-                <div className={`cr-dossier-portrait ${isCore ? 'canon-core' : ''}`}>
-                  {c.icon ? (
+                {/* Portrait with upload support */}
+                <div className={`cr-dossier-portrait ${isCore ? 'canon-core' : ''} ${c.portrait_url ? 'has-image' : ''}`}>
+                  {c.portrait_url ? (
+                    <img src={c.portrait_url} alt={c.display_name} className="portrait-image" />
+                  ) : c.icon ? (
                     <span className="portrait-icon">{c.icon}</span>
                   ) : (
                     <span className="portrait-initial">{(c.display_name || '?')[0]}</span>
+                  )}
+                  <label className="portrait-upload-overlay" title="Upload portrait">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp,image/gif"
+                      className="portrait-file-input"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const form = new FormData();
+                        form.append('portrait', file);
+                        try {
+                          const resp = await fetch(`${API}/characters/${c.id}/portrait`, {
+                            method: 'POST',
+                            body: form,
+                          });
+                          const data = await resp.json();
+                          if (data.success && data.portrait_url) {
+                            setCharacters(prev => prev.map(ch =>
+                              ch.id === c.id ? { ...ch, portrait_url: data.portrait_url } : ch
+                            ));
+                          }
+                        } catch (err) {
+                          console.error('Portrait upload failed:', err);
+                        }
+                        e.target.value = '';
+                      }}
+                    />
+                    <span className="portrait-upload-icon">{'\uD83D\uDCF7'}</span>
+                  </label>
+                  {c.portrait_url && (
+                    <button
+                      className="portrait-remove-btn"
+                      title="Remove portrait"
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        try {
+                          await fetch(`${API}/characters/${c.id}/portrait`, { method: 'DELETE' });
+                          setCharacters(prev => prev.map(ch =>
+                            ch.id === c.id ? { ...ch, portrait_url: null } : ch
+                          ));
+                        } catch (err) {
+                          console.error('Portrait remove failed:', err);
+                        }
+                      }}
+                    >
+                      {'\u2715'}
+                    </button>
                   )}
                 </div>
 

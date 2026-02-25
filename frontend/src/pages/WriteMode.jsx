@@ -10,6 +10,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import LoadingSkeleton from '../components/LoadingSkeleton';
 import './WriteMode.css';
 
 const API = '/api/v1';
@@ -668,7 +669,7 @@ export default function WriteMode() {
 
   // ── RENDER ────────────────────────────────────────────────────────────
 
-  if (loading) return <div className="wm-load-screen">Loading...</div>;
+  if (loading) return <div className="wm-load-screen"><LoadingSkeleton variant="editor" /></div>;
 
   return (
     <div className={`wm-root${focusMode ? ' wm-focus-mode' : ''}`}>

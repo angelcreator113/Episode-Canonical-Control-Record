@@ -248,7 +248,7 @@ router.put('/characters/:id', async (req, res) => {
       'character_key', 'icon', 'display_name', 'subtitle', 'role_type', 'role_label',
       'appearance_mode', 'status', 'core_belief', 'pressure_type', 'pressure_quote',
       'personality', 'job_options', 'description', 'name_options', 'selected_name',
-      'personality_matrix', 'extra_fields', 'sort_order',
+      'personality_matrix', 'extra_fields', 'sort_order', 'portrait_url',
       // Section 1: Core Identity
       'canon_tier', 'first_appearance', 'era_introduced', 'creator',
       // Section 2: Essence Profile
@@ -632,6 +632,84 @@ router.post('/characters/:charId/promote-to-canon', async (req, res) => {
   } catch (err) {
     console.error('POST /promote-to-canon error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+/* ================================================================== */
+/*  PORTRAIT UPLOAD                                                    */
+/* ================================================================== */
+
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+
+const portraitStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const dir = path.join(__dirname, '../../uploads/portraits');
+    fs.mkdirSync(dir, { recursive: true });
+    cb(null, dir);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `portrait-${req.params.id}-${Date.now()}${ext}`);
+  },
+});
+
+const portraitUpload = multer({
+  storage: portraitStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  fileFilter: (req, file, cb) => {
+    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
+
+/**
+ * POST /characters/:id/portrait
+ * Upload a portrait image for a character
+ */
+router.post('/characters/:id/portrait', portraitUpload.single('portrait'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: 'No image uploaded' });
+
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+
+    const portrait_url = `/uploads/portraits/${req.file.filename}`;
+    character.portrait_url = portrait_url;
+    await character.save();
+
+    return res.json({ success: true, portrait_url });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST portrait error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /characters/:id/portrait
+ * Remove portrait image
+ */
+router.delete('/characters/:id/portrait', async (req, res) => {
+  try {
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+
+    // Delete file from disk if it exists
+    if (character.portrait_url) {
+      const filePath = path.join(__dirname, '../..', character.portrait_url);
+      try { fs.unlinkSync(filePath); } catch {}
+    }
+
+    character.portrait_url = null;
+    await character.save();
+
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('[CharacterRegistry] DELETE portrait error:', err);
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

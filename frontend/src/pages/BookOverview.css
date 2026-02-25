@@ -1276,3 +1276,110 @@ textarea.bo-bp-inline-input {
     font-size: 20px;
   }
 }
+
+/* ── Script Bridge ── */
+.bo-script-btn {
+  background: linear-gradient(135deg, #3a3632, #2a2622) !important;
+  border-color: #B8962E !important;
+}
+.bo-script-btn:hover:not(:disabled) {
+  background: linear-gradient(135deg, #B8962E, #a07e20) !important;
+  color: #FAF7F0 !important;
+}
+.bo-script-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Script Modal Overlay */
+.bo-script-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  animation: bo-fade-in 0.2s ease;
+}
+@keyframes bo-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.bo-script-modal {
+  background: var(--bo-surface, #2a2622);
+  border: 1px solid var(--bo-border, #3d3630);
+  border-radius: 12px;
+  width: 100%;
+  max-width: 860px;
+  max-height: 85vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 60px rgba(0,0,0,0.5);
+}
+
+.bo-script-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid var(--bo-border, #3d3630);
+}
+.bo-script-modal-title {
+  font-family: 'Lora', serif;
+  font-size: 20px;
+  color: var(--bo-gold, #C6A85E);
+  margin: 0;
+}
+.bo-script-modal-close {
+  background: none;
+  border: none;
+  color: var(--bo-muted, #8a8078);
+  font-size: 20px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s, background 0.15s;
+}
+.bo-script-modal-close:hover {
+  color: var(--bo-text, #FAF7F0);
+  background: rgba(255,255,255,0.05);
+}
+
+.bo-script-modal-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+}
+.bo-script-content {
+  font-family: 'DM Mono', 'Courier New', monospace;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--bo-text, #e8e0d4);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  margin: 0;
+  background: rgba(0,0,0,0.15);
+  padding: 16px;
+  border-radius: 8px;
+  border: 1px solid var(--bo-border, #3d3630);
+}
+.bo-script-chapter {
+  margin-bottom: 24px;
+}
+.bo-script-ch-title {
+  font-family: 'Lora', serif;
+  font-size: 16px;
+  color: var(--bo-gold, #C6A85E);
+  margin: 0 0 8px;
+}
+
+.bo-script-modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--bo-border, #3d3630);
+}

@@ -17,6 +17,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import LoadingSkeleton from './LoadingSkeleton';
 
 const STORAGE_KEY_PREFIX = 'quick_episode_draft_';
 
@@ -438,8 +439,7 @@ Lala arrives at ${evName}.
     return (
       <div style={S.page}>
         <div style={S.loadingBox}>
-          <div style={{ fontSize: 32 }}>⚡</div>
-          <div style={{ fontSize: 16, fontWeight: 600, marginTop: 8 }}>Loading...</div>
+          <LoadingSkeleton variant="page" />
         </div>
       </div>
     );
