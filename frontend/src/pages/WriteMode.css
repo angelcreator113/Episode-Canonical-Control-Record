@@ -194,6 +194,9 @@
 
 .wm-prose-wrap {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   overflow-y: auto;
   overflow-x: hidden;
   position: relative;
@@ -238,6 +241,7 @@
 
 .wm-generating {
   position: absolute;
+  align-self: center;
   bottom: 120px;
   left: 50%;
   transform: translateX(-50%);
