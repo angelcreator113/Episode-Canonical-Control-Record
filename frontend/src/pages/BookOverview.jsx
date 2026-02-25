@@ -571,6 +571,11 @@ export default function BookOverview() {
           <div className="bo-book-info" onClick={() => setEditingBook(true)}>
             <h1 className="bo-book-title">{book.title}</h1>
             {book.description && <p className="bo-book-desc">{book.description}</p>}
+            {!book.description && chapters.length > 0 && (
+              <p className="bo-book-desc" style={{ fontStyle: 'italic', opacity: 0.5 }}>
+                {chapters.length} chapter{chapters.length !== 1 ? 's' : ''} &middot; {outlineStats.planned} planned &middot; {outlineStats.withProse} written
+              </p>
+            )}
             <span className="bo-book-edit-hint">click to edit</span>
           </div>
         )}

@@ -2,18 +2,21 @@
  * WriteMode.jsx
  * frontend/src/pages/WriteMode.jsx
  *
- * Voice-first writing mode. You talk, the story appears.
- * Light theme. Mobile-first. No approve/reject while writing.
+ * Unified Writing Hub — TOC sidebar + prose editor + context panel.
+ * Voice-first writing mode with full book awareness.
  *
  * ROUTE: /write/:bookId/:chapterId
  */
 
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import LoadingSkeleton from '../components/LoadingSkeleton';
 import './WriteMode.css';
 
 const API = '/api/v1';
+
+/* Planning-field completeness helper */
+const PLAN_FIELDS = ['scene_goal', 'theme', 'chapter_notes', 'pov', 'emotional_state_start', 'emotional_state_end'];
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────
 
@@ -24,7 +27,29 @@ export default function WriteMode() {
   // Chapter / book state
   const [chapter,    setChapter]    = useState(null);
   const [book,       setBook]       = useState(null);
+  const [allChapters, setAllChapters] = useState([]);
   const [loading,    setLoading]    = useState(true);
+
+  // Sidebar state
+  const [showToc,    setShowToc]    = useState(() => {
+    const saved = localStorage.getItem('wm-show-toc');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [showContext, setShowContext] = useState(() => {
+    const saved = localStorage.getItem('wm-show-context');
+    return saved !== null ? saved === 'true' : true;
+  });
+  const [tocDragIdx,     setTocDragIdx]     = useState(null);
+  const [tocDragOverIdx, setTocDragOverIdx] = useState(null);
+  const [editingTocId,   setEditingTocId]   = useState(null);
+  const [tocEditTitle,   setTocEditTitle]   = useState('');
+  const [addingTocChapter, setAddingTocChapter] = useState(false);
+  const [newTocTitle,    setNewTocTitle]    = useState('');
+
+  // Context panel state
+  const [editingContext,  setEditingContext]  = useState(null); // field name being edited
+  const [contextEditVal,  setContextEditVal]  = useState('');
+  const [prevChapterSummary, setPrevChapterSummary] = useState(null);
 
   // Prose state
   const [prose,      setProse]      = useState('');
@@ -92,23 +117,51 @@ export default function WriteMode() {
   const transcriptRef   = useRef('');
   const editTransRef    = useRef('');
 
-  // ── LOAD CHAPTER ─────────────────────────────────────────────────────
+  // ── LOAD BOOK + ALL CHAPTERS ──────────────────────────────────────────
 
   useEffect(() => {
     async function load() {
       try {
-        const [chRes] = await Promise.all([
-          fetch(`${API}/storyteller/books/${bookId}`),
-        ]);
-        const data = await chRes.json();
+        const res = await fetch(`${API}/storyteller/books/${bookId}`);
+        const data = await res.json();
         const bookData = data?.book || data;
         setBook(bookData);
-        const ch = bookData.chapters?.find(c => c.id === chapterId);
+
+        const chapters = (bookData.chapters || []).sort((a, b) =>
+          (a.sort_order ?? a.chapter_number ?? 0) - (b.sort_order ?? b.chapter_number ?? 0)
+        );
+        setAllChapters(chapters);
+
+        const ch = chapters.find(c => c.id === chapterId);
         setChapter(ch || { id: chapterId, title: 'Chapter' });
+
         // Load any existing draft prose
         if (ch?.draft_prose) {
           setProse(ch.draft_prose);
           setWordCount(ch.draft_prose.split(/\s+/).filter(Boolean).length);
+        }
+
+        // Build previous chapter summary
+        const currentIdx = chapters.findIndex(c => c.id === chapterId);
+        if (currentIdx > 0) {
+          const prev = chapters[currentIdx - 1];
+          const prevProse = prev.draft_prose?.trim();
+          if (prevProse) {
+            // First ~200 chars of last paragraph
+            const paragraphs = prevProse.split(/\n\n+/).filter(Boolean);
+            const lastPara = paragraphs[paragraphs.length - 1];
+            setPrevChapterSummary({
+              title: prev.title,
+              excerpt: lastPara.length > 200 ? lastPara.slice(0, 200) + '\u2026' : lastPara,
+              wordCount: prevProse.split(/\s+/).filter(Boolean).length,
+            });
+          } else {
+            setPrevChapterSummary({
+              title: prev.title,
+              excerpt: null,
+              wordCount: 0,
+            });
+          }
         }
       } catch {
         setChapter({ id: chapterId, title: 'Chapter' });
@@ -656,16 +709,148 @@ export default function WriteMode() {
         if (showGoalInput) { setShowGoalInput(false); return; }
         if (focusMode) { setFocusMode(false); return; }
         if (selectedParagraph !== null) { setSelectedParagraph(null); setParaAction(null); return; }
+        if (editingTocId) { setEditingTocId(null); return; }
+        if (addingTocChapter) { setAddingTocChapter(false); return; }
+        if (editingContext) { setEditingContext(null); return; }
       }
       // F11 → toggle focus mode (prevent browser fullscreen)
       if (e.key === 'F11') {
         e.preventDefault();
         setFocusMode(f => !f);
       }
+      // Ctrl+[ → previous chapter, Ctrl+] → next chapter
+      if ((e.ctrlKey || e.metaKey) && e.key === '[') {
+        e.preventDefault();
+        goAdjacentChapter(-1);
+      }
+      if ((e.ctrlKey || e.metaKey) && e.key === ']') {
+        e.preventDefault();
+        goAdjacentChapter(1);
+      }
+      // Ctrl+B → toggle TOC sidebar
+      if ((e.ctrlKey || e.metaKey) && e.key === 'b') {
+        e.preventDefault();
+        setShowToc(t => !t);
+      }
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [editMode, prose, generating, focusMode, showHistory, showGoalInput, selectedParagraph, handleContinue, handleDeepen, saveDraft]);
+
+  // ── TOC / CONTEXT — PERSIST TOGGLES ─────────────────────────────────
+
+  useEffect(() => { localStorage.setItem('wm_showToc', JSON.stringify(showToc)); }, [showToc]);
+  useEffect(() => { localStorage.setItem('wm_showContext', JSON.stringify(showContext)); }, [showContext]);
+
+  // ── SWITCH CHAPTER ────────────────────────────────────────────────────
+
+  const switchChapter = useCallback(async (targetId) => {
+    if (targetId === chapterId) return;
+    // auto-save current
+    if (prose) await saveDraft(prose);
+    navigate(`/write/${bookId}/${targetId}`);
+  }, [chapterId, bookId, prose, saveDraft, navigate]);
+
+  // ── PREV / NEXT CHAPTER ───────────────────────────────────────────────
+
+  const goAdjacentChapter = useCallback((direction) => {
+    const idx = allChapters.findIndex(c => c.id === chapterId);
+    if (idx < 0) return;
+    const target = allChapters[idx + direction];
+    if (target) switchChapter(target.id);
+  }, [allChapters, chapterId, switchChapter]);
+
+  // ── TOC: REORDER (drag & drop) ────────────────────────────────────────
+
+  const handleTocDrop = useCallback(async () => {
+    if (tocDragIdx === null || tocDragOverIdx === null || tocDragIdx === tocDragOverIdx) {
+      setTocDragIdx(null);
+      setTocDragOverIdx(null);
+      return;
+    }
+    const reordered = [...allChapters];
+    const [moved] = reordered.splice(tocDragIdx, 1);
+    reordered.splice(tocDragOverIdx, 0, moved);
+    // optimistic update
+    setAllChapters(reordered);
+    setTocDragIdx(null);
+    setTocDragOverIdx(null);
+    // persist new sort_order
+    try {
+      await Promise.all(reordered.map((ch, i) =>
+        fetch(`${API}/storyteller/chapters/${ch.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sort_order: i + 1 }),
+        })
+      ));
+    } catch (err) {
+      console.error('reorder error', err);
+    }
+  }, [allChapters, tocDragIdx, tocDragOverIdx]);
+
+  // ── TOC: RENAME CHAPTER ───────────────────────────────────────────────
+
+  const commitTocRename = useCallback(async () => {
+    if (!editingTocId || !tocEditTitle.trim()) { setEditingTocId(null); return; }
+    setAllChapters(prev => prev.map(c => c.id === editingTocId ? { ...c, title: tocEditTitle.trim() } : c));
+    if (editingTocId === chapterId) setChapter(prev => ({ ...prev, title: tocEditTitle.trim() }));
+    setEditingTocId(null);
+    try {
+      await fetch(`${API}/storyteller/chapters/${editingTocId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: tocEditTitle.trim() }),
+      });
+    } catch (err) { console.error('rename error', err); }
+  }, [editingTocId, tocEditTitle, chapterId]);
+
+  // ── TOC: ADD NEW CHAPTER ──────────────────────────────────────────────
+
+  const commitAddChapter = useCallback(async () => {
+    const title = newTocTitle.trim() || `Chapter ${allChapters.length + 1}`;
+    setAddingTocChapter(false);
+    setNewTocTitle('');
+    try {
+      const res = await fetch(`${API}/storyteller/books/${bookId}/chapters`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title,
+          chapter_number: allChapters.length + 1,
+          sort_order: allChapters.length + 1,
+        }),
+      });
+      const data = await res.json();
+      const newCh = data.chapter || data;
+      setAllChapters(prev => [...prev, newCh]);
+    } catch (err) { console.error('add chapter error', err); }
+  }, [bookId, allChapters.length, newTocTitle]);
+
+  // ── CONTEXT: SAVE PLANNING FIELD ──────────────────────────────────────
+
+  const saveContextField = useCallback(async (field, value) => {
+    // optimistic
+    setChapter(prev => ({ ...prev, [field]: value }));
+    setAllChapters(prev => prev.map(c => c.id === chapterId ? { ...c, [field]: value } : c));
+    setEditingContext(null);
+    try {
+      await fetch(`${API}/storyteller/chapters/${chapterId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ [field]: value }),
+      });
+    } catch (err) { console.error('save context field error', err); }
+  }, [chapterId]);
+
+  // ── COMPUTED: chapter progress stats ──────────────────────────────────
+
+  const chapterStats = useMemo(() => {
+    const total = allChapters.length;
+    const written = allChapters.filter(c => c.draft_prose?.trim()).length;
+    const totalWords = allChapters.reduce((sum, c) => sum + (c.draft_prose ? c.draft_prose.split(/\s+/).filter(Boolean).length : 0), 0);
+    return { total, written, totalWords };
+  }, [allChapters]);
 
   // ── RENDER ────────────────────────────────────────────────────────────
 
@@ -684,6 +869,14 @@ export default function WriteMode() {
       <header className="wm-topbar">
         <button className="wm-back-btn" onClick={() => setShowExit(true)}>
           {'\u2190'}
+        </button>
+
+        <button
+          className={`wm-sidebar-toggle${showToc ? ' active' : ''}`}
+          onClick={() => setShowToc(t => !t)}
+          title="Table of Contents (Ctrl+B)"
+        >
+          {'\u2630'}
         </button>
         <div className="wm-chapter-info">
           <div className="wm-chapter-title">{chapter?.title || 'Untitled'}</div>
@@ -770,6 +963,14 @@ export default function WriteMode() {
           >
             {editMode ? 'Write' : 'Edit'}
           </button>
+
+          <button
+            className={`wm-sidebar-toggle wm-ctx-toggle${showContext ? ' active' : ''}`}
+            onClick={() => setShowContext(c => !c)}
+            title="Chapter context panel"
+          >
+            {'\u2139'}
+          </button>
         </div>
       </header>
 
@@ -808,6 +1009,99 @@ export default function WriteMode() {
           <button className="wm-goal-input-close" onClick={() => setShowGoalInput(false)}>{'\u2713'}</button>
         </div>
       )}
+
+      {/* ── MAIN HUB LAYOUT ── */}
+      <div className="wm-hub-layout">
+
+        {/* ── LEFT: TOC SIDEBAR ── */}
+        {showToc && (
+          <aside className="wm-toc-sidebar">
+            <div className="wm-toc-header">
+              <span className="wm-toc-header-title">Contents</span>
+              <span className="wm-toc-stats">{chapterStats.written}/{chapterStats.total} &middot; {chapterStats.totalWords.toLocaleString()}w</span>
+            </div>
+
+            <div className="wm-toc-list">
+              {allChapters.map((ch, i) => {
+                const isCurrent = ch.id === chapterId;
+                const chWords = ch.draft_prose ? ch.draft_prose.split(/\s+/).filter(Boolean).length : 0;
+                return (
+                  <div
+                    key={ch.id}
+                    className={`wm-toc-item${isCurrent ? ' current' : ''}${tocDragOverIdx === i ? ' drag-over' : ''}`}
+                    draggable
+                    onDragStart={() => setTocDragIdx(i)}
+                    onDragOver={(e) => { e.preventDefault(); setTocDragOverIdx(i); }}
+                    onDragEnd={handleTocDrop}
+                    onClick={() => !editingTocId && switchChapter(ch.id)}
+                  >
+                    <span className="wm-toc-drag">{'\u2261'}</span>
+                    <span className="wm-toc-num">{ch.chapter_number || i + 1}</span>
+                    {editingTocId === ch.id ? (
+                      <input
+                        className="wm-toc-edit-input"
+                        value={tocEditTitle}
+                        onChange={e => setTocEditTitle(e.target.value)}
+                        onBlur={commitTocRename}
+                        onKeyDown={e => { if (e.key === 'Enter') commitTocRename(); if (e.key === 'Escape') setEditingTocId(null); }}
+                        autoFocus
+                        onClick={e => e.stopPropagation()}
+                      />
+                    ) : (
+                      <span
+                        className="wm-toc-title"
+                        onDoubleClick={(e) => { e.stopPropagation(); setEditingTocId(ch.id); setTocEditTitle(ch.title || ''); }}
+                      >
+                        {ch.title || 'Untitled'}
+                      </span>
+                    )}
+                    <span className="wm-toc-words">{chWords > 0 ? `${chWords}w` : '\u2014'}</span>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Add chapter */}
+            {addingTocChapter ? (
+              <div className="wm-toc-add-row">
+                <input
+                  className="wm-toc-add-input"
+                  value={newTocTitle}
+                  onChange={e => setNewTocTitle(e.target.value)}
+                  onBlur={commitAddChapter}
+                  onKeyDown={e => { if (e.key === 'Enter') commitAddChapter(); if (e.key === 'Escape') setAddingTocChapter(false); }}
+                  placeholder={`Chapter ${allChapters.length + 1}`}
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <button className="wm-toc-add-btn" onClick={() => setAddingTocChapter(true)}>
+                + Add Chapter
+              </button>
+            )}
+
+            {/* Prev/Next nav */}
+            <div className="wm-toc-nav">
+              <button
+                className="wm-toc-nav-btn"
+                disabled={allChapters.findIndex(c => c.id === chapterId) <= 0}
+                onClick={() => goAdjacentChapter(-1)}
+              >
+                {'\u2190'} Prev
+              </button>
+              <button
+                className="wm-toc-nav-btn"
+                disabled={allChapters.findIndex(c => c.id === chapterId) >= allChapters.length - 1}
+                onClick={() => goAdjacentChapter(1)}
+              >
+                Next {'\u2192'}
+              </button>
+            </div>
+          </aside>
+        )}
+
+        {/* ── CENTER: MAIN WRITING COLUMN ── */}
+        <div className="wm-main-col">
 
       {/* ── MAIN CONTENT AREA ── */}
       <div className="wm-content-row">
@@ -1091,6 +1385,178 @@ export default function WriteMode() {
           )}
         </div>
       )}
+
+        </div>{/* end wm-main-col */}
+
+        {/* ── RIGHT: CONTEXT PANEL ── */}
+        {showContext && (
+          <aside className="wm-context-panel">
+            <div className="wm-ctx-header">
+              <span className="wm-ctx-header-title">Chapter Plan</span>
+            </div>
+
+            {/* Scene Goal */}
+            <div className="wm-ctx-field">
+              <label className="wm-ctx-label">Scene Goal</label>
+              {editingContext === 'scene_goal' ? (
+                <textarea
+                  className="wm-ctx-input"
+                  value={contextEditVal}
+                  onChange={e => setContextEditVal(e.target.value)}
+                  onBlur={() => saveContextField('scene_goal', contextEditVal)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveContextField('scene_goal', contextEditVal); } if (e.key === 'Escape') setEditingContext(null); }}
+                  rows={3}
+                  autoFocus
+                />
+              ) : (
+                <div
+                  className="wm-ctx-value"
+                  onClick={() => { setEditingContext('scene_goal'); setContextEditVal(chapter?.scene_goal || ''); }}
+                  title="Click to edit"
+                >
+                  {chapter?.scene_goal || <span className="wm-ctx-empty">What happens in this chapter?</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Theme */}
+            <div className="wm-ctx-field">
+              <label className="wm-ctx-label">Theme</label>
+              {editingContext === 'theme' ? (
+                <input
+                  className="wm-ctx-input"
+                  value={contextEditVal}
+                  onChange={e => setContextEditVal(e.target.value)}
+                  onBlur={() => saveContextField('theme', contextEditVal)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveContextField('theme', contextEditVal); if (e.key === 'Escape') setEditingContext(null); }}
+                  autoFocus
+                />
+              ) : (
+                <div
+                  className="wm-ctx-value"
+                  onClick={() => { setEditingContext('theme'); setContextEditVal(chapter?.theme || ''); }}
+                >
+                  {chapter?.theme || <span className="wm-ctx-empty">Central theme</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Emotional Arc */}
+            <div className="wm-ctx-field">
+              <label className="wm-ctx-label">Emotional Arc</label>
+              <div className="wm-ctx-arc">
+                {editingContext === 'emotional_state_start' ? (
+                  <input
+                    className="wm-ctx-input wm-ctx-input-sm"
+                    value={contextEditVal}
+                    onChange={e => setContextEditVal(e.target.value)}
+                    onBlur={() => saveContextField('emotional_state_start', contextEditVal)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveContextField('emotional_state_start', contextEditVal); if (e.key === 'Escape') setEditingContext(null); }}
+                    placeholder="Start"
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="wm-ctx-arc-point"
+                    onClick={() => { setEditingContext('emotional_state_start'); setContextEditVal(chapter?.emotional_state_start || ''); }}
+                  >
+                    {chapter?.emotional_state_start || 'Start'}
+                  </span>
+                )}
+                <span className="wm-ctx-arc-arrow">{'\u2192'}</span>
+                {editingContext === 'emotional_state_end' ? (
+                  <input
+                    className="wm-ctx-input wm-ctx-input-sm"
+                    value={contextEditVal}
+                    onChange={e => setContextEditVal(e.target.value)}
+                    onBlur={() => saveContextField('emotional_state_end', contextEditVal)}
+                    onKeyDown={e => { if (e.key === 'Enter') saveContextField('emotional_state_end', contextEditVal); if (e.key === 'Escape') setEditingContext(null); }}
+                    placeholder="End"
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="wm-ctx-arc-point"
+                    onClick={() => { setEditingContext('emotional_state_end'); setContextEditVal(chapter?.emotional_state_end || ''); }}
+                  >
+                    {chapter?.emotional_state_end || 'End'}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* POV */}
+            <div className="wm-ctx-field">
+              <label className="wm-ctx-label">POV</label>
+              {editingContext === 'pov' ? (
+                <input
+                  className="wm-ctx-input"
+                  value={contextEditVal}
+                  onChange={e => setContextEditVal(e.target.value)}
+                  onBlur={() => saveContextField('pov', contextEditVal)}
+                  onKeyDown={e => { if (e.key === 'Enter') saveContextField('pov', contextEditVal); if (e.key === 'Escape') setEditingContext(null); }}
+                  autoFocus
+                />
+              ) : (
+                <div
+                  className="wm-ctx-value"
+                  onClick={() => { setEditingContext('pov'); setContextEditVal(chapter?.pov || ''); }}
+                >
+                  {chapter?.pov || <span className="wm-ctx-empty">Perspective</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Chapter Notes */}
+            <div className="wm-ctx-field">
+              <label className="wm-ctx-label">Notes</label>
+              {editingContext === 'chapter_notes' ? (
+                <textarea
+                  className="wm-ctx-input"
+                  value={contextEditVal}
+                  onChange={e => setContextEditVal(e.target.value)}
+                  onBlur={() => saveContextField('chapter_notes', contextEditVal)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveContextField('chapter_notes', contextEditVal); } if (e.key === 'Escape') setEditingContext(null); }}
+                  rows={4}
+                  autoFocus
+                />
+              ) : (
+                <div
+                  className="wm-ctx-value wm-ctx-notes"
+                  onClick={() => { setEditingContext('chapter_notes'); setContextEditVal(chapter?.chapter_notes || ''); }}
+                >
+                  {chapter?.chapter_notes || <span className="wm-ctx-empty">Reminders, ideas, references&hellip;</span>}
+                </div>
+              )}
+            </div>
+
+            {/* Previous Chapter Summary */}
+            {prevChapterSummary && (
+              <div className="wm-ctx-prev">
+                <label className="wm-ctx-label">Previous: {prevChapterSummary.title}</label>
+                <div className="wm-ctx-prev-stats">{prevChapterSummary.wordCount.toLocaleString()} words</div>
+                {prevChapterSummary.excerpt ? (
+                  <div className="wm-ctx-prev-excerpt">&ldquo;{prevChapterSummary.excerpt}&rdquo;</div>
+                ) : (
+                  <div className="wm-ctx-prev-excerpt wm-ctx-empty">Not yet written</div>
+                )}
+              </div>
+            )}
+
+            {/* Quick link to structure editor */}
+            <button
+              className="wm-ctx-structure-link"
+              onClick={async () => {
+                if (prose) await saveDraft(prose);
+                navigate(`/chapter-structure/${bookId}/${chapterId}`);
+              }}
+            >
+              {'\u2699'} Open Structure Editor
+            </button>
+          </aside>
+        )}
+
+      </div>{/* end wm-hub-layout */}
 
       {/* ── EXIT MODAL ── */}
       {showExit && (
