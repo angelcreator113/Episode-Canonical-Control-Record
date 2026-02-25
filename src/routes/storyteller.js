@@ -30,6 +30,11 @@ try {
   thresholdDetection = require('../services/thresholdDetection');
 } catch { thresholdDetection = null; }
 
+let emotionalImpact;
+try {
+  emotionalImpact = require('../services/emotionalImpact');
+} catch { emotionalImpact = null; }
+
 // Optional auth
 let optionalAuth;
 try {
@@ -802,6 +807,41 @@ router.post('/chapters/:chapterId/save-draft', optionalAuth, async (req, res) =>
   } catch (err) {
     console.error('POST /chapters/:id/save-draft error:', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════
+// POST /chapters/:id/emotional-impact — Analyze prose impact on character
+// ═══════════════════════════════════════════
+// Called when prose is sent to review from WriteMode.
+// The system reads what happened to the character in the scene
+// and shifts their emotional state accordingly.
+// If thresholds cross — the character knocks. You get the email.
+router.post('/chapters/:id/emotional-impact', optionalAuth, async (req, res) => {
+  try {
+    const { prose, character_id } = req.body;
+    const chapterId = req.params.id;
+
+    if (!prose || !character_id) {
+      return res.json({ skipped: true, reason: 'No prose or character_id provided' });
+    }
+
+    if (!emotionalImpact) {
+      return res.json({ skipped: true, reason: 'Emotional impact service not available' });
+    }
+
+    const result = await emotionalImpact.processChapterProse({
+      prose,
+      characterId: character_id,
+      chapterId,
+    });
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('POST /chapters/:id/emotional-impact error:', err);
+    // Non-fatal — never block the writing flow
+    return res.json({ skipped: true, reason: err.message });
   }
 });
 

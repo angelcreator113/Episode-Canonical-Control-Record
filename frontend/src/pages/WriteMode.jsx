@@ -429,12 +429,25 @@ export default function WriteMode() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw_text: lineMarked, mode: 'replace' }),
       });
+
+      // ── Emotional Impact — the character carries the scene ──
+      if (selectedCharacter?.id && prose) {
+        fetch(`${API}/storyteller/chapters/${chapterId}/emotional-impact`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prose,
+            character_id: selectedCharacter.id,
+          }),
+        }).catch(() => {}); // Fire-and-forget — never block navigation
+      }
+
       navigate(`/book/${bookId}`);
     } catch (err) {
       console.error('sendToReview error:', err);
     }
     setSaving(false);
-  }, [prose, chapterId, bookId, navigate]);
+  }, [prose, chapterId, bookId, navigate, selectedCharacter]);
 
   // ── PROSE EDIT (direct typing) ────────────────────────────────────────
 
