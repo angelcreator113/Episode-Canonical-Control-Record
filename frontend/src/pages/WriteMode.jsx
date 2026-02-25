@@ -47,11 +47,12 @@ export default function WriteMode() {
   const [aiAction,     setAiAction]     = useState(null); // 'continue'|'deepen'|'nudge'
   const [nudgeText,    setNudgeText]    = useState(null);
   const [proseBeforeAi, setProseBeforeAi] = useState(null); // for undo
+  const [genLength,    setGenLength]    = useState('paragraph'); // 'sentence'|'paragraph'
 
   // Character sidebar state
   const [characters,        setCharacters]        = useState([]);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
-  const [charPanelOpen,     setCharPanelOpen]     = useState(true);
+  const [charPanelOpen,     setCharPanelOpen]     = useState(() => window.innerWidth >= 768);
   const [charLoading,       setCharLoading]       = useState(false);
 
   // UI state
@@ -184,14 +185,20 @@ export default function WriteMode() {
     transcriptRef.current = '';
   }, []);
 
-  const stopListeningAndGenerate = useCallback(async () => {
-    recognitionRef.current?.stop();
-    setListening(false);
-    const spoken = transcriptRef.current.trim();
-    if (!spoken) return;
-    setTranscript('');
-    await generateProse(spoken);
-  }, [chapter, book, prose]);
+  const toggleListening = useCallback(async () => {
+    if (listening) {
+      // Stop and generate
+      recognitionRef.current?.stop();
+      setListening(false);
+      const spoken = transcriptRef.current.trim();
+      if (!spoken) return;
+      setTranscript('');
+      await generateProse(spoken);
+    } else {
+      // Start listening
+      startListening();
+    }
+  }, [listening, startListening, generateProse]);
 
   // ── GENERATE PROSE FROM SPEECH ────────────────────────────────────────
 
@@ -210,6 +217,7 @@ export default function WriteMode() {
           book_character:  book?.character || 'JustAWoman',
           session_log:     sessionLog.slice(-4),
           character_id:    selectedCharacter?.id || null,
+          gen_length:      genLength,
         }),
       });
       const data = await res.json();
@@ -235,7 +243,7 @@ export default function WriteMode() {
       console.error('voice-to-story error:', err);
     }
     setGenerating(false);
-  }, [prose, chapter, book, sessionLog]);
+  }, [prose, chapter, book, sessionLog, genLength]);
 
   // ── EDIT LOOP — VOICE ─────────────────────────────────────────────────
 
@@ -319,6 +327,7 @@ export default function WriteMode() {
           pnos_act:       chapter?.pnos_act || 'act_1',
           book_character: book?.character || 'JustAWoman',
           character_id:   selectedCharacter?.id || null,
+          gen_length:     genLength,
         }),
       });
       const data = await res.json();
@@ -339,7 +348,7 @@ export default function WriteMode() {
     }
     setGenerating(false);
     setAiAction(null);
-  }, [prose, chapter, book, generating]);
+  }, [prose, chapter, book, generating, genLength]);
 
   const handleDeepen = useCallback(async () => {
     if (!prose.trim() || generating) return;
@@ -429,12 +438,25 @@ export default function WriteMode() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw_text: lineMarked, mode: 'replace' }),
       });
+
+      // ── Emotional Impact — the character carries the scene ──
+      if (selectedCharacter?.id && prose) {
+        fetch(`${API}/storyteller/chapters/${chapterId}/emotional-impact`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            prose,
+            character_id: selectedCharacter.id,
+          }),
+        }).catch(() => {}); // Fire-and-forget — never block navigation
+      }
+
       navigate(`/book/${bookId}`);
     } catch (err) {
       console.error('sendToReview error:', err);
     }
     setSaving(false);
-  }, [prose, chapterId, bookId, navigate]);
+  }, [prose, chapterId, bookId, navigate, selectedCharacter]);
 
   // ── PROSE EDIT (direct typing) ────────────────────────────────────────
 
@@ -658,6 +680,13 @@ export default function WriteMode() {
               <span className="wm-ai-icon">{"\u21A9"}</span> Undo
             </button>
           )}
+          <button
+            className={`wm-len-toggle${genLength === 'sentence' ? ' sentence' : ''}`}
+            onClick={() => setGenLength(g => g === 'paragraph' ? 'sentence' : 'paragraph')}
+            title={genLength === 'sentence' ? 'Generating one sentence at a time' : 'Generating full paragraphs'}
+          >
+            {genLength === 'sentence' ? '1\u2009line' : '\u00B6\u2009full'}
+          </button>
         </div>
       )}
 
@@ -704,9 +733,7 @@ export default function WriteMode() {
         <div className="wm-bottom-bar">
           <button
             className={`wm-mic-btn${listening ? ' listening' : ''}`}
-            onPointerDown={startListening}
-            onPointerUp={stopListeningAndGenerate}
-            onPointerLeave={listening ? stopListeningAndGenerate : undefined}
+            onClick={toggleListening}
             disabled={generating}
           >
             <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
@@ -723,12 +750,12 @@ export default function WriteMode() {
 
           <div className="wm-bottom-hint">
             {listening
-              ? 'Release to write'
+              ? 'Tap mic to stop & write'
               : generating
               ? (aiAction === 'continue' ? 'Continuing\u2026' : aiAction === 'deepen' ? 'Deepening\u2026' : 'Writing your story\u2026')
               : prose
-              ? 'Hold mic to speak \u2014 or use AI tools above'
-              : 'Hold to speak, or type and use AI tools'}
+              ? 'Tap mic to speak \u2014 or use AI tools above'
+              : 'Tap mic to speak, or type and use AI tools'}
           </div>
 
           {prose.length > 20 && (

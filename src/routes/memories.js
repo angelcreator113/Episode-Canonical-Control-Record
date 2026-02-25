@@ -2776,6 +2776,7 @@ router.post('/voice-to-story', optionalAuth, async (req, res) => {
       book_character = 'JustAWoman',
       session_log    = [],
       character_id   = null,
+      gen_length     = 'paragraph',
     } = req.body;
 
     if (!spoken?.trim()) {
@@ -2819,7 +2820,7 @@ ${sessionContext}
 ${charRules}
 
 WRITING RULES:
-- Write 2–5 paragraphs. Not more.
+- ${gen_length === 'sentence' ? 'Write exactly 1–2 sentences. That\'s it. One moment, one image, one breath.' : 'Write 2–5 paragraphs. Not more.'}
 - Stay close to what they said — the truth of it — but give it the shape of prose.
 - If they mentioned a feeling, find the image underneath it.
 - If they described what happened, find what it cost.
@@ -3044,7 +3045,7 @@ ${recentProse}
 ${charRules}
 
 CONTINUATION RULES:
-- Write 2–4 paragraphs. Not more.
+- ${gen_length === 'sentence' ? 'Write exactly 1–2 sentences. One beat. One moment. That\'s all.' : 'Write 2–4 paragraphs. Not more.'}
 - Continue the exact emotional arc and rhythm. Don't restart. Don't summarize.
 - If the last paragraph ended mid-thought, finish that thought first.
 - If the last paragraph landed on something, let the next beat come naturally from it.

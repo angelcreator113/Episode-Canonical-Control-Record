@@ -202,6 +202,26 @@
   transition: margin-right 0.3s ease;
 }
 
+/* When character sidebar is open on mobile/tablet (below 1024px),
+   push prose left so it doesn't hide behind the absolutely-positioned panel */
+.wm-panel-open .wm-prose-wrap {
+  margin-right: 280px;
+}
+
+/* On desktop (≥1024px) sidebar is a flex child — no extra margin needed */
+@media (min-width: 1024px) {
+  .wm-panel-open .wm-prose-wrap {
+    margin-right: 0;
+  }
+}
+
+/* When panel is open, fill the available space — no dead zone */
+.wm-panel-open .wm-prose-area {
+  max-width: 100%;
+  padding-left: 48px;
+  padding-right: 48px;
+}
+
 .wm-prose-area {
   width: 100%;
   max-width: 680px;
@@ -720,8 +740,10 @@
 .wm-ai-toolbar {
   display: flex;
   justify-content: center;
+  align-items: center;
   gap: 8px;
   padding: 10px 16px;
+  flex-wrap: wrap;
   background: linear-gradient(
     180deg,
     rgba(250,247,240,0.92) 0%,
@@ -832,6 +854,36 @@
     0 1px 3px rgba(184,92,56,0.06) !important;
 }
 .wm-undo-ai .wm-ai-icon { color: #B85C38 !important; }
+
+/* ─── LENGTH TOGGLE ──────────────────────────────────────── */
+
+.wm-len-toggle {
+  display: inline-flex;
+  align-items: center;
+  padding: 5px 10px;
+  border: 1px solid rgba(28,24,20,0.1);
+  border-radius: 14px;
+  background: rgba(28,24,20,0.03);
+  color: rgba(28,24,20,0.45);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.65rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+  margin-left: 4px;
+}
+.wm-len-toggle:hover {
+  background: rgba(184,150,46,0.08);
+  border-color: rgba(184,150,46,0.25);
+  color: #5A4A1E;
+}
+.wm-len-toggle.sentence {
+  background: rgba(184,150,46,0.1);
+  border-color: rgba(184,150,46,0.3);
+  color: #5A4A1E;
+}
 
 /* ─── NUDGE DISPLAY ──────────────────────────────────────── */
 
@@ -1319,12 +1371,29 @@
   }
 }
 
-/* On mobile — hide the toggle, sidebar is full-height overlay */
+/* On mobile — sidebar is full-height dismissible overlay */
 @media (max-width: 767px) {
+  .wm-panel-open .wm-prose-wrap {
+    margin-right: 0;
+  }
   .wm-char-sidebar {
     width: 100%;
     max-width: 100%;
     min-width: 100%;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    border-left: none;
+    border-radius: 0;
+  }
+  .wm-char-sidebar.open {
+    transform: translateX(0);
+  }
+  .wm-char-sidebar:not(.open) {
+    transform: translateX(100%);
   }
   .wm-active-char-pill {
     max-width: 120px;
