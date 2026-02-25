@@ -202,6 +202,11 @@
   transition: margin-right 0.3s ease;
 }
 
+/* When character sidebar is open, shrink prose area so it doesn't hide behind the panel */
+.wm-panel-open .wm-prose-wrap {
+  margin-right: 280px;
+}
+
 .wm-prose-area {
   width: 100%;
   max-width: 680px;
