@@ -26,6 +26,32 @@ jest.mock('uuid', () => ({
   NIL: '00000000-0000-0000-0000-000000000000',
 }));
 
+// Mock Bull / videoQueue to prevent Redis connections in tests
+jest.mock('../src/queues/videoQueue', () => {
+  const mockQueue = {
+    on: jest.fn(),
+    process: jest.fn(),
+    add: jest.fn().mockResolvedValue({ id: 'mock-job-1' }),
+    close: jest.fn().mockResolvedValue(),
+    getWaitingCount: jest.fn().mockResolvedValue(0),
+    getActiveCount: jest.fn().mockResolvedValue(0),
+    getCompletedCount: jest.fn().mockResolvedValue(0),
+    getFailedCount: jest.fn().mockResolvedValue(0),
+    getDelayedCount: jest.fn().mockResolvedValue(0),
+    getJob: jest.fn().mockResolvedValue(null),
+    clean: jest.fn().mockResolvedValue(),
+  };
+  return {
+    videoQueue: mockQueue,
+    addExportJob: jest.fn().mockResolvedValue({ id: 'mock-job-1' }),
+    getQueueStats: jest.fn().mockResolvedValue({ waiting: 0, active: 0, completed: 0, failed: 0, delayed: 0 }),
+    getExportJob: jest.fn().mockResolvedValue(null),
+    cancelExportJob: jest.fn().mockResolvedValue(),
+    cleanOldJobs: jest.fn().mockResolvedValue(),
+    closeQueue: jest.fn().mockResolvedValue(),
+  };
+});
+
 // Mock AWS SDK before any imports
 jest.mock('aws-sdk', () => ({
   CognitoIdentityServiceProvider: jest.fn(() => ({
