@@ -43,6 +43,17 @@ export default function WriteMode() {
   const [editListening, setEditListening] = useState(false);
   const [editTranscript, setEditTranscript] = useState('');
 
+  // AI toolbar state
+  const [aiAction,     setAiAction]     = useState(null); // 'continue'|'deepen'|'nudge'
+  const [nudgeText,    setNudgeText]    = useState(null);
+  const [proseBeforeAi, setProseBeforeAi] = useState(null); // for undo
+
+  // Character sidebar state
+  const [characters,        setCharacters]        = useState([]);
+  const [selectedCharacter, setSelectedCharacter] = useState(null);
+  const [charPanelOpen,     setCharPanelOpen]     = useState(true);
+  const [charLoading,       setCharLoading]       = useState(false);
+
   // UI state
   const [showExit,   setShowExit]   = useState(false);
   const [hint,       setHint]       = useState(null);
@@ -81,6 +92,31 @@ export default function WriteMode() {
     }
     load();
   }, [bookId, chapterId]);
+
+  // ── LOAD CHARACTERS ───────────────────────────────────────────────────
+
+  useEffect(() => {
+    async function loadCharacters() {
+      setCharLoading(true);
+      try {
+        const res = await fetch(`${API}/character-registry/registries`);
+        const data = await res.json();
+        const regs = data.registries || data || [];
+        const allChars = [];
+        for (const reg of regs) {
+          const rRes = await fetch(`${API}/character-registry/registries/${reg.id}`);
+          const rData = await rRes.json();
+          const chars = rData.characters || rData.registry?.characters || [];
+          chars.forEach(c => allChars.push({ ...c, _registryTitle: reg.title || reg.book_tag }));
+        }
+        setCharacters(allChars.filter(c => c.status !== 'declined'));
+      } catch (err) {
+        console.error('Failed to load characters:', err);
+      }
+      setCharLoading(false);
+    }
+    loadCharacters();
+  }, []);
 
   // ── AUTOSAVE ─────────────────────────────────────────────────────────
 
@@ -173,6 +209,7 @@ export default function WriteMode() {
           pnos_act:        chapter?.pnos_act || 'act_1',
           book_character:  book?.character || 'JustAWoman',
           session_log:     sessionLog.slice(-4),
+          character_id:    selectedCharacter?.id || null,
         }),
       });
       const data = await res.json();
@@ -263,6 +300,117 @@ export default function WriteMode() {
     setGenerating(false);
   }, [prose, editNote, chapter]);
 
+  // ── AI TOOLBAR ACTIONS ─────────────────────────────────────────────────
+
+  const handleContinue = useCallback(async () => {
+    if (!prose.trim() || generating) return;
+    setAiAction('continue');
+    setGenerating(true);
+    setProseBeforeAi(prose);
+    setNudgeText(null);
+    try {
+      const res = await fetch(`${API}/memories/story-continue`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_prose:  prose,
+          chapter_title:  chapter?.title,
+          chapter_brief:  chapter?.scene_goal || chapter?.chapter_notes,
+          pnos_act:       chapter?.pnos_act || 'act_1',
+          book_character: book?.character || 'JustAWoman',
+          character_id:   selectedCharacter?.id || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.prose) {
+        const newProse = prose.trimEnd() + '\n\n' + data.prose;
+        setProse(newProse);
+        setWordCount(newProse.split(/\s+/).filter(Boolean).length);
+        setSaved(false);
+        setTimeout(() => {
+          if (proseRef.current) proseRef.current.scrollTop = proseRef.current.scrollHeight;
+        }, 100);
+      } else if (data.error) {
+        setHint(data.error);
+        setTimeout(() => setHint(null), 5000);
+      }
+    } catch (err) {
+      console.error('story-continue error:', err);
+    }
+    setGenerating(false);
+    setAiAction(null);
+  }, [prose, chapter, book, generating]);
+
+  const handleDeepen = useCallback(async () => {
+    if (!prose.trim() || generating) return;
+    setAiAction('deepen');
+    setGenerating(true);
+    setProseBeforeAi(prose);
+    setNudgeText(null);
+    try {
+      const res = await fetch(`${API}/memories/story-deepen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_prose:  prose,
+          pnos_act:       chapter?.pnos_act || 'act_1',
+          chapter_title:  chapter?.title,
+          character_id:   selectedCharacter?.id || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.prose) {
+        setProse(data.prose);
+        setWordCount(data.prose.split(/\s+/).filter(Boolean).length);
+        setSaved(false);
+      } else if (data.error) {
+        setHint(data.error);
+        setTimeout(() => setHint(null), 5000);
+      }
+    } catch (err) {
+      console.error('story-deepen error:', err);
+    }
+    setGenerating(false);
+    setAiAction(null);
+  }, [prose, chapter, generating]);
+
+  const handleNudge = useCallback(async () => {
+    if (generating) return;
+    setAiAction('nudge');
+    setGenerating(true);
+    setNudgeText(null);
+    try {
+      const res = await fetch(`${API}/memories/story-nudge`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          current_prose:  prose,
+          chapter_title:  chapter?.title,
+          chapter_brief:  chapter?.scene_goal || chapter?.chapter_notes,
+          pnos_act:       chapter?.pnos_act || 'act_1',
+          character_id:   selectedCharacter?.id || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.nudge) {
+        setNudgeText(data.nudge);
+      }
+    } catch (err) {
+      console.error('story-nudge error:', err);
+    }
+    setGenerating(false);
+    setAiAction(null);
+  }, [prose, chapter, generating]);
+
+  const undoAi = useCallback(() => {
+    if (proseBeforeAi !== null) {
+      setProse(proseBeforeAi);
+      setWordCount(proseBeforeAi.split(/\s+/).filter(Boolean).length);
+      setSaved(false);
+      setProseBeforeAi(null);
+    }
+  }, [proseBeforeAi]);
+
   // ── SEND TO REVIEW ────────────────────────────────────────────────────
 
   const sendToReview = useCallback(async () => {
@@ -281,7 +429,7 @@ export default function WriteMode() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ raw_text: lineMarked, mode: 'replace' }),
       });
-      navigate(`/storyteller?book=${bookId}&chapter=${chapterId}`);
+      navigate(`/book/${bookId}`);
     } catch (err) {
       console.error('sendToReview error:', err);
     }
@@ -302,7 +450,7 @@ export default function WriteMode() {
   if (loading) return <div className="wm-load-screen">Loading...</div>;
 
   return (
-    <div className="wm-root">
+    <div className={`wm-root${charPanelOpen ? ' wm-panel-open' : ''}`}>
       {/* ── TOP BAR ── */}
       <header className="wm-topbar">
         <button className="wm-back-btn" onClick={() => setShowExit(true)}>
@@ -313,12 +461,25 @@ export default function WriteMode() {
           <div className="wm-book-title">{book?.title || book?.character || ''}</div>
         </div>
         <div className="wm-top-right">
+          {selectedCharacter && (
+            <div className="wm-active-char-pill" onClick={() => setCharPanelOpen(!charPanelOpen)}>
+              <span className="wm-active-char-icon">{selectedCharacter.icon || '\uD83D\uDC64'}</span>
+              <span className="wm-active-char-name">{selectedCharacter.display_name || selectedCharacter.selected_name}</span>
+            </div>
+          )}
           {wordCount > 0 && (
             <div className="wm-word-count">{wordCount}w</div>
           )}
           <div className="wm-save-status">
             {saving ? '\u00B7\u00B7 saving' : saved ? '' : '\u00B7 unsaved'}
           </div>
+          <button
+            className={`wm-char-toggle${charPanelOpen ? ' active' : ''}`}
+            onClick={() => setCharPanelOpen(!charPanelOpen)}
+            title="Characters"
+          >
+            {'\uD83D\uDC65'}
+          </button>
           <button
             className={`wm-mode-btn${editMode ? ' active' : ''}`}
             style={{ opacity: prose.length > 10 ? 1 : 0.3 }}
@@ -329,40 +490,174 @@ export default function WriteMode() {
         </div>
       </header>
 
-      {/* ── PROSE AREA ── */}
-      <div className="wm-prose-wrap" ref={proseRef}>
-        <textarea
-          className="wm-prose-area"
-          value={prose}
-          onChange={handleProseChange}
-          placeholder={editMode ? '' : "Start speaking or type here \u2014 your story will appear."}
-          spellCheck={false}
-          readOnly={generating}
-        />
+      {/* ── MAIN CONTENT AREA ── */}
+      <div className="wm-content-row">
+        {/* ── PROSE SECTION ── */}
+        <div className="wm-prose-wrap" ref={proseRef}>
+          <textarea
+            className="wm-prose-area"
+            value={prose}
+            onChange={handleProseChange}
+            placeholder={editMode ? '' : "Type your story here, or use the AI tools below \u2014 Continue, Deepen, Nudge."}
+            spellCheck={false}
+            readOnly={generating}
+          />
 
-        {generating && (
-          <div className="wm-generating">
-            <div className="wm-generating-dots">
-              <span className="wm-generating-dot" />
-              <span className="wm-generating-dot" />
-              <span className="wm-generating-dot" />
+          {generating && (
+            <div className="wm-generating">
+              <div className="wm-generating-dots">
+                <span className="wm-generating-dot" />
+                <span className="wm-generating-dot" />
+                <span className="wm-generating-dot" />
+              </div>
+              <div className="wm-generating-label">
+                {aiAction === 'continue' ? 'continuing your story' :
+                 aiAction === 'deepen' ? 'deepening the moment' :
+                 aiAction === 'nudge' ? 'thinking' :
+                 'writing'}
+              </div>
             </div>
-            <div className="wm-generating-label">writing</div>
-          </div>
-        )}
+          )}
 
-        {hint && !generating && (
-          <div className="wm-hint">
-            <div className="wm-hint-dot" />
-            <div className="wm-hint-text">{hint}</div>
+          {hint && !generating && (
+            <div className="wm-hint">
+              <div className="wm-hint-dot" />
+              <div className="wm-hint-text">{hint}</div>
+            </div>
+          )}
+        </div>
+
+        {/* ── CHARACTER SIDEBAR ── */}
+        <aside className={`wm-char-sidebar${charPanelOpen ? ' open' : ''}`}>
+          <div className="wm-char-sidebar-header">
+            <span className="wm-char-sidebar-title">Characters</span>
+            <button className="wm-char-sidebar-close" onClick={() => setCharPanelOpen(false)}>{'\u00D7'}</button>
           </div>
-        )}
+
+          {/* Active voice card */}
+          {selectedCharacter && (
+            <div className="wm-voice-card">
+              <div className="wm-voice-card-name">
+                <span className="wm-voice-card-icon">{selectedCharacter.icon || '\uD83D\uDC64'}</span>
+                {selectedCharacter.display_name || selectedCharacter.selected_name}
+              </div>
+              {selectedCharacter.character_archetype && (
+                <div className="wm-voice-card-archetype">{selectedCharacter.character_archetype}</div>
+              )}
+              {selectedCharacter.voice_signature?.speech_pattern && (
+                <div className="wm-voice-card-field">
+                  <span className="wm-voice-card-label">Speech</span>
+                  <span className="wm-voice-card-value">{selectedCharacter.voice_signature.speech_pattern}</span>
+                </div>
+              )}
+              {selectedCharacter.emotional_baseline && (
+                <div className="wm-voice-card-field">
+                  <span className="wm-voice-card-label">Baseline</span>
+                  <span className="wm-voice-card-value">{selectedCharacter.emotional_baseline}</span>
+                </div>
+              )}
+              {selectedCharacter.signature_trait && (
+                <div className="wm-voice-card-field">
+                  <span className="wm-voice-card-label">Trait</span>
+                  <span className="wm-voice-card-value">{selectedCharacter.signature_trait}</span>
+                </div>
+              )}
+              {selectedCharacter.voice_signature?.vocabulary_tone && (
+                <div className="wm-voice-card-field">
+                  <span className="wm-voice-card-label">Tone</span>
+                  <span className="wm-voice-card-value">{selectedCharacter.voice_signature.vocabulary_tone}</span>
+                </div>
+              )}
+              {selectedCharacter.voice_signature?.catchphrases?.length > 0 && (
+                <div className="wm-voice-card-field">
+                  <span className="wm-voice-card-label">Catchphrases</span>
+                  <span className="wm-voice-card-value">
+                    {selectedCharacter.voice_signature.catchphrases.slice(0, 3).map((c, i) => (
+                      <span key={i} className="wm-voice-catchphrase">{'\u201C'}{c}{'\u201D'}</span>
+                    ))}
+                  </span>
+                </div>
+              )}
+              <button className="wm-voice-card-clear" onClick={() => setSelectedCharacter(null)}>
+                Clear voice
+              </button>
+            </div>
+          )}
+
+          {/* Character list */}
+          <div className="wm-char-list">
+            {charLoading ? (
+              <div className="wm-char-loading">Loading characters{'\u2026'}</div>
+            ) : characters.length === 0 ? (
+              <div className="wm-char-empty">No characters found. Create characters in the Character Registry.</div>
+            ) : (
+              characters.map(c => (
+                <div
+                  key={c.id}
+                  className={`wm-char-item${selectedCharacter?.id === c.id ? ' selected' : ''}`}
+                  onClick={() => setSelectedCharacter(selectedCharacter?.id === c.id ? null : c)}
+                >
+                  <span className="wm-char-item-icon">{c.icon || '\uD83D\uDC64'}</span>
+                  <div className="wm-char-item-info">
+                    <div className="wm-char-item-name">{c.display_name || c.selected_name}</div>
+                    {c.story_role && <div className="wm-char-item-role">{c.story_role}</div>}
+                    {c._registryTitle && <div className="wm-char-item-registry">{c._registryTitle}</div>}
+                  </div>
+                  {selectedCharacter?.id === c.id && (
+                    <span className="wm-char-item-check">{'\u2713'}</span>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
       </div>
 
       {/* ── TRANSCRIPT PREVIEW (while listening) ── */}
       {listening && transcript && (
         <div className="wm-transcript">
           <div className="wm-transcript-text">{transcript}</div>
+        </div>
+      )}
+
+      {/* ── NUDGE DISPLAY ── */}
+      {nudgeText && !generating && (
+        <div className="wm-nudge">
+          <div className="wm-nudge-icon">{"\uD83D\uDCA1"}</div>
+          <div className="wm-nudge-text">{nudgeText}</div>
+          <button className="wm-nudge-close" onClick={() => setNudgeText(null)}>{"\u00D7"}</button>
+        </div>
+      )}
+
+      {/* ── AI TOOLBAR ── */}
+      {!editMode && (
+        <div className="wm-ai-toolbar">
+          <button
+            className={`wm-ai-btn${aiAction === 'continue' ? ' active' : ''}`}
+            onClick={handleContinue}
+            disabled={generating || !prose.trim()}
+          >
+            <span className="wm-ai-icon">{"\u2728"}</span> Continue
+          </button>
+          <button
+            className={`wm-ai-btn${aiAction === 'deepen' ? ' active' : ''}`}
+            onClick={handleDeepen}
+            disabled={generating || !prose.trim()}
+          >
+            <span className="wm-ai-icon">{"\uD83D\uDD0D"}</span> Deepen
+          </button>
+          <button
+            className={`wm-ai-btn${aiAction === 'nudge' ? ' active' : ''}`}
+            onClick={handleNudge}
+            disabled={generating}
+          >
+            <span className="wm-ai-icon">{"\uD83D\uDCA1"}</span> Nudge
+          </button>
+          {proseBeforeAi !== null && !generating && (
+            <button className="wm-ai-btn wm-undo-ai" onClick={undoAi}>
+              <span className="wm-ai-icon">{"\u21A9"}</span> Undo
+            </button>
+          )}
         </div>
       )}
 
@@ -430,10 +725,10 @@ export default function WriteMode() {
             {listening
               ? 'Release to write'
               : generating
-              ? 'Writing your story\u2026'
+              ? (aiAction === 'continue' ? 'Continuing\u2026' : aiAction === 'deepen' ? 'Deepening\u2026' : 'Writing your story\u2026')
               : prose
-              ? 'Hold to keep going'
-              : 'Hold to speak \u2014 release to write'}
+              ? 'Hold mic to speak \u2014 or use AI tools above'
+              : 'Hold to speak, or type and use AI tools'}
           </div>
 
           {prose.length > 20 && (
@@ -460,7 +755,7 @@ export default function WriteMode() {
               <button className="wm-modal-cancel" onClick={() => setShowExit(false)}>Stay</button>
               <button className="wm-modal-leave" onClick={async () => {
                 if (prose) await saveDraft(prose);
-                navigate(`/storyteller?book=${bookId}&chapter=${chapterId}`);
+                navigate(`/book/${bookId}`);
               }}>
                 {prose ? 'Save & Leave' : 'Leave'}
               </button>

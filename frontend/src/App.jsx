@@ -51,6 +51,7 @@ import ContinuityEnginePage from './pages/ContinuityEnginePage';
 import UniversePage from './pages/UniversePage';
 import ReadingMode from './pages/ReadingMode';
 import WriteMode from './pages/WriteMode';
+import BookOverview from './pages/BookOverview';
 import RelationshipMap from './pages/RelationshipMap';
 import SessionStart from './pages/SessionStart';
 import CharacterTherapy from './pages/CharacterTherapy';
@@ -284,6 +285,7 @@ function AppContent() {
           
           {/* StoryTeller Book Editor */}
           <Route path="/storyteller" element={<StorytellerPage />} />
+          <Route path="/book/:id" element={<BookOverview />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />
           <Route path="/write/:bookId/:chapterId" element={<WriteMode />} />
           

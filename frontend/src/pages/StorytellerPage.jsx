@@ -114,6 +114,7 @@ const numberWord = n => NUM_WORDS[n] || String(n);
    ═══════════════════════════════════════ */
 
 function StorytellerPage() {
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [books, setBooks] = useState([]);
   const [activeBook, setActiveBook] = useState(null);
@@ -199,7 +200,7 @@ function StorytellerPage() {
       ) : (
         <BookList
           books={books}
-          onOpen={openBook}
+          onOpen={(bookId) => navigate(`/book/${bookId}`)}
           onDelete={deleteBook}
           onNew={() => setShowCreate(true)}
         />

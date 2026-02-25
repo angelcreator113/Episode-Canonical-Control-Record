@@ -749,21 +749,22 @@ export default function CharacterRegistryPage() {
       {/* Content */}
       <div className="cr-content">
 
-        {/* Registry selector if multiple */}
-        {registries.length > 1 && (
-          <div className="cr-registry-bar">
-            <select
-              className="cr-registry-select"
-              value={activeRegistry?.id || ''}
-              onChange={e => fetchRegistry(e.target.value)}
-            >
-              {registries.map(r => (
-                <option key={r.id} value={r.id}>{r.title || 'Untitled'}</option>
-              ))}
-            </select>
-            <span className="cr-registry-meta">
-              {activeRegistry?.book_tag} · {activeRegistry?.core_rule}
-            </span>
+        {/* Registry tabs */}
+        {registries.length > 0 && (
+          <div className="cr-registry-tabs">
+            {registries.map(r => (
+              <button
+                key={r.id}
+                className={`cr-registry-pill${activeRegistry?.id === r.id ? ' active' : ''}`}
+                onClick={() => fetchRegistry(r.id)}
+              >
+                <span className="cr-pill-title">{r.title || 'Untitled'}</span>
+                {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
+              </button>
+            ))}
+            <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
+              +
+            </button>
           </div>
         )}
 
