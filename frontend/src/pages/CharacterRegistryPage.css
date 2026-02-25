@@ -1721,15 +1721,24 @@
   .cr-header-right {
     gap: 6px;
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .cr-header-btn {
-    padding: 10px 12px;
+    padding: 8px 12px;
     font-size: 13px;
-    min-height: 42px;
-    flex: 1;
+    min-height: 38px;
+    flex: 0 0 auto;
     justify-content: center;
     text-align: center;
+  }
+
+  /* Single-character buttons (+ and ⚙) should be compact squares */
+  .cr-header-btn.primary {
+    min-width: 38px;
+    min-height: 38px;
+    padding: 8px;
+    flex: 0 0 auto;
   }
 
   .cr-search-wrap { width: 100%; flex: unset; order: 10; }
@@ -1737,7 +1746,7 @@
     width: 100%;
     font-size: 16px; /* prevent iOS zoom */
     padding: 10px 12px 10px 30px;
-    min-height: 42px;
+    min-height: 40px;
   }
   .cr-search-input:focus { width: 100%; }
 
@@ -3217,8 +3226,23 @@
   }
 
   .cr-header-dossier .cr-header-title {
-    font-size: 16px;
+    font-size: 15px;
     text-align: center;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Compact the dossier header right buttons */
+  .cr-header-dossier .cr-header-right {
+    width: auto;
+    flex-wrap: nowrap;
+  }
+  .cr-header-dossier .cr-header-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 36px;
+    flex: 0 0 auto;
   }
 }
 

@@ -1399,3 +1399,207 @@
     max-width: 120px;
   }
 }
+
+/* ═══════════════════════  MOBILE FIXES  ════════════════════════ */
+
+@media (max-width: 767px) {
+
+  /* ── Top Bar: compact layout ── */
+  .wm-topbar {
+    padding: 10px 14px 8px;
+    gap: 8px;
+  }
+  .wm-chapter-info {
+    flex: 1;
+    min-width: 0;
+  }
+  .wm-chapter-title {
+    font-size: 12px;
+  }
+  .wm-book-title {
+    font-size: 8px;
+  }
+  .wm-top-right {
+    gap: 6px;
+  }
+  .wm-word-count {
+    font-size: 9px;
+    padding: 2px 7px;
+  }
+  .wm-save-status {
+    font-size: 9px;
+    min-width: 40px;
+  }
+  .wm-mode-btn {
+    font-size: 9px;
+    padding: 5px 10px;
+    letter-spacing: 0.08em;
+  }
+  .wm-char-toggle {
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+  }
+  .wm-active-char-pill {
+    padding: 3px 8px 3px 6px;
+    font-size: 0.65rem;
+    gap: 4px;
+    max-width: 100px;
+  }
+  .wm-active-char-icon {
+    font-size: 12px;
+  }
+
+  /* ── Prose area: slightly smaller on phones ── */
+  .wm-prose-area {
+    padding: 20px 16px 140px;
+    font-size: 16px;
+    line-height: 1.85;
+  }
+
+  /* ── Character sidebar: bigger close button ── */
+  .wm-char-sidebar-close {
+    width: 44px;
+    height: 44px;
+    font-size: 24px;
+    background: rgba(28,24,20,0.05);
+    border-radius: 50%;
+  }
+  .wm-char-sidebar-header {
+    padding: 16px 16px 14px;
+  }
+  .wm-char-sidebar-title {
+    font-size: 0.8rem;
+  }
+
+  /* ── AI Toolbar: compact buttons, prominent sentence toggle ── */
+  .wm-ai-toolbar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+  .wm-ai-btn {
+    padding: 7px 12px;
+    font-size: 0.72rem;
+    gap: 4px;
+    border-radius: 18px;
+  }
+  .wm-ai-icon {
+    font-size: 0.85rem;
+  }
+
+  /* Sentence/paragraph toggle: larger and more visible on mobile */
+  .wm-len-toggle {
+    padding: 7px 14px;
+    font-size: 0.72rem;
+    border-radius: 18px;
+    background: rgba(184,150,46,0.08);
+    border-color: rgba(184,150,46,0.2);
+    color: #5A4A1E;
+    font-weight: 600;
+    order: -1;
+    margin-left: 0;
+    margin-right: auto;
+  }
+  .wm-len-toggle.sentence {
+    background: rgba(184,150,46,0.15);
+    border-color: rgba(184,150,46,0.4);
+    box-shadow: 0 0 0 2px rgba(184,150,46,0.08);
+  }
+
+  /* ── Bottom Bar: reduce mic size, tighter spacing ── */
+  .wm-bottom-bar {
+    padding: 10px 14px 14px;
+    gap: 12px;
+    padding-bottom: max(14px, env(safe-area-inset-bottom));
+  }
+  .wm-mic-btn {
+    width: 52px;
+    height: 52px;
+  }
+  .wm-mic-btn svg {
+    width: 22px;
+    height: 22px;
+  }
+  .wm-bottom-hint {
+    font-size: 9px;
+    letter-spacing: 0.06em;
+    line-height: 1.5;
+  }
+  .wm-send-btn {
+    padding: 8px 14px;
+    font-size: 9px;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── Nudge: compact ── */
+  .wm-nudge {
+    margin: 0 10px;
+    padding: 10px 12px;
+    font-size: 0.8rem;
+    border-radius: 12px;
+  }
+
+  /* ── Edit mode panel: compact ── */
+  .wm-edit-panel {
+    padding: 12px 14px 14px;
+  }
+  .wm-edit-input {
+    font-size: 13px;
+    padding: 8px 12px;
+  }
+  .wm-edit-mic-btn {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+  .wm-apply-btn {
+    padding: 10px 16px;
+    font-size: 10px;
+  }
+
+  /* ── Generating overlay: compact ── */
+  .wm-generating {
+    bottom: 100px;
+    padding: 12px 20px;
+  }
+
+  /* ── Transcript: compact ── */
+  .wm-transcript {
+    padding: 8px 14px;
+  }
+  .wm-transcript-text {
+    font-size: 13px;
+  }
+}
+
+/* ── Extra small phones (≤380px) ── */
+@media (max-width: 380px) {
+  .wm-topbar {
+    padding: 8px 10px 6px;
+    gap: 6px;
+  }
+  .wm-chapter-title {
+    font-size: 11px;
+  }
+  .wm-active-char-pill {
+    max-width: 80px;
+    padding: 2px 6px 2px 4px;
+    font-size: 0.6rem;
+  }
+  .wm-ai-btn {
+    padding: 6px 10px;
+    font-size: 0.68rem;
+  }
+  .wm-mic-btn {
+    width: 48px;
+    height: 48px;
+  }
+  .wm-mic-btn svg {
+    width: 20px;
+    height: 20px;
+  }
+  .wm-bottom-bar {
+    padding: 8px 10px 12px;
+    gap: 10px;
+  }
+}

@@ -670,7 +670,10 @@ export default function WriteMode() {
                 <div
                   key={c.id}
                   className={`wm-char-item${selectedCharacter?.id === c.id ? ' selected' : ''}`}
-                  onClick={() => setSelectedCharacter(selectedCharacter?.id === c.id ? null : c)}
+                  onClick={() => {
+                    setSelectedCharacter(selectedCharacter?.id === c.id ? null : c);
+                    if (window.innerWidth < 768) setCharPanelOpen(false);
+                  }}
                 >
                   <span className="wm-char-item-icon">{c.icon || '\uD83D\uDC64'}</span>
                   <div className="wm-char-item-info">
