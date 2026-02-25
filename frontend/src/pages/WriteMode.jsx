@@ -117,6 +117,7 @@ export default function WriteMode() {
 
   // Focus mode
   const [focusMode,  setFocusMode]  = useState(false);
+  const preFocusSidebarRef = useRef({ toc: true, ctx: true });
 
   // Session timer & goal
   const [sessionStart]             = useState(() => Date.now());
@@ -771,6 +772,24 @@ export default function WriteMode() {
     });
   }, [chapter?.sections]);
 
+  // ── TOGGLE FOCUS MODE ─────────────────────────────────────────────────
+
+  const toggleFocusMode = useCallback(() => {
+    setFocusMode(prev => {
+      if (!prev) {
+        // Entering focus mode — save sidebar state, then close them
+        preFocusSidebarRef.current = { toc: showToc, ctx: showContext };
+        setShowToc(false);
+        setShowContext(false);
+      } else {
+        // Exiting focus mode — restore previous sidebar state
+        setShowToc(preFocusSidebarRef.current.toc);
+        setShowContext(preFocusSidebarRef.current.ctx);
+      }
+      return !prev;
+    });
+  }, [showToc, showContext]);
+
   // ── KEYBOARD SHORTCUTS ────────────────────────────────────────────────
 
   useEffect(() => {
@@ -795,7 +814,7 @@ export default function WriteMode() {
         if (editMode) { setEditMode(false); return; }
         if (showHistory) { setShowHistory(false); return; }
         if (showGoalInput) { setShowGoalInput(false); return; }
-        if (focusMode) { setFocusMode(false); return; }
+        if (focusMode) { toggleFocusMode(); return; }
         if (selectedParagraph !== null) { setSelectedParagraph(null); setParaAction(null); return; }
         if (editingTocId) { setEditingTocId(null); return; }
         if (addingTocChapter) { setAddingTocChapter(false); return; }
@@ -804,7 +823,7 @@ export default function WriteMode() {
       // F11 → toggle focus mode (prevent browser fullscreen)
       if (e.key === 'F11') {
         e.preventDefault();
-        setFocusMode(f => !f);
+        toggleFocusMode();
       }
       // Ctrl+[ → previous chapter, Ctrl+] → next chapter
       if ((e.ctrlKey || e.metaKey) && e.key === '[') {
@@ -823,7 +842,7 @@ export default function WriteMode() {
     };
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [editMode, prose, generating, focusMode, showHistory, showGoalInput, selectedParagraph, handleContinue, handleDeepen, saveDraft]);
+  }, [editMode, prose, generating, focusMode, showHistory, showGoalInput, selectedParagraph, handleContinue, handleDeepen, saveDraft, toggleFocusMode]);
 
   // ── TOC / CONTEXT — PERSIST TOGGLES ─────────────────────────────────
 
@@ -1032,7 +1051,7 @@ export default function WriteMode() {
     <div className={`wm-root${focusMode ? ' wm-focus-mode' : ''}`}>
       {/* ── FOCUS MODE EXIT ── */}
       {focusMode && (
-        <button className="wm-focus-exit" onClick={() => setFocusMode(false)} title="Exit focus mode (F11)">
+        <button className="wm-focus-exit" onClick={toggleFocusMode} title="Exit focus mode (F11)">
           {'\u2715'}
         </button>
       )}
@@ -1122,7 +1141,7 @@ export default function WriteMode() {
 
           <button
             className={`wm-focus-btn${focusMode ? ' active' : ''}`}
-            onClick={() => setFocusMode(f => !f)}
+            onClick={toggleFocusMode}
             title="Focus mode (F11)"
           >
             {focusMode ? '\u26F6' : '\u26F6'}

@@ -2296,6 +2296,10 @@
   pointer-events: none;
   transition: opacity 0.35s ease;
 }
+.wm-focus-mode .wm-toc-sidebar,
+.wm-focus-mode .wm-context-panel {
+  display: none;
+}
 .wm-focus-mode:hover .wm-topbar,
 .wm-focus-mode:hover .wm-ai-toolbar,
 .wm-focus-mode:hover .wm-bottom-bar {
