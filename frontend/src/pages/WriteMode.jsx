@@ -50,7 +50,7 @@ export default function WriteMode() {
   const [genLength,    setGenLength]    = useState('paragraph'); // 'sentence'|'paragraph'
   const [streamingText, setStreamingText] = useState(''); // live text while streaming
 
-  // Character sidebar state
+  // Character state
   const [characters,        setCharacters]        = useState([]);
   const [selectedCharacter, setSelectedCharacter] = useState(null);
   const [charLoading,       setCharLoading]       = useState(false);

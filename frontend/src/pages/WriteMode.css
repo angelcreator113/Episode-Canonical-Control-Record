@@ -183,7 +183,7 @@
 
 /* ═══════════════════════  PROSE AREA  ═════════════════════════ */
 
-/* ═══════════════════════  CONTENT ROW & SIDEBAR  ═════════════ */
+/* ═══════════════════════  CONTENT ROW  ════════════════════════ */
 
 .wm-content-row {
   display: flex;
@@ -199,12 +199,12 @@
   position: relative;
   scroll-behavior: smooth;
   min-width: 0;
-  transition: margin-right 0.3s ease;
 }
 
 
 
 .wm-prose-area {
+  display: block;
   width: 100%;
   max-width: 680px;
   margin: 0 auto;
@@ -231,39 +231,6 @@
 .wm-prose-area:read-only {
   opacity: 0.75;
 }
-
-/* ── Active Character Pill (top bar) ── */
-.wm-active-char-pill {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 4px 12px 4px 8px;
-  background: rgba(184,150,46,0.1);
-  border: 1px solid rgba(184,150,46,0.25);
-  border-radius: 20px;
-  cursor: pointer;
-  font-family: 'DM Mono', monospace;
-  font-size: 0.72rem;
-  color: #1C1814;
-  letter-spacing: 0.02em;
-  transition: all 0.2s ease;
-  white-space: nowrap;
-  max-width: 180px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.wm-active-char-pill:hover {
-  background: rgba(184,150,46,0.18);
-  border-color: rgba(184,150,46,0.4);
-}
-.wm-active-char-icon { font-size: 14px; line-height: 1; }
-.wm-active-char-name {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-
 
 /* ═══════════════════════  RESPONSIVE — DESKTOP  ══════════════ */
 
@@ -1126,21 +1093,6 @@
     padding: 5px 10px;
     letter-spacing: 0.08em;
   }
-  .wm-char-toggle {
-    width: 30px;
-    height: 30px;
-    font-size: 14px;
-  }
-  .wm-active-char-pill {
-    padding: 3px 8px 3px 6px;
-    font-size: 0.65rem;
-    gap: 4px;
-    max-width: 100px;
-  }
-  .wm-active-char-icon {
-    font-size: 12px;
-  }
-
   /* ── Prose area: slightly smaller on phones ── */
   .wm-prose-area {
     padding: 20px 16px 140px;
@@ -1256,11 +1208,6 @@
   }
   .wm-chapter-title {
     font-size: 11px;
-  }
-  .wm-active-char-pill {
-    max-width: 80px;
-    padding: 2px 6px 2px 4px;
-    font-size: 0.6rem;
   }
   .wm-ai-btn {
     padding: 6px 10px;
