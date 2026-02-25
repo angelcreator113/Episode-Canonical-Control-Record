@@ -13,7 +13,7 @@
  * Location: frontend/src/pages/CharacterRegistryPage.jsx
  */
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterVoiceInterview from './CharacterVoiceInterview';
@@ -89,9 +89,18 @@ export default function CharacterRegistryPage() {
 
   const navigate = useNavigate();
 
+  /* ── Mobile Detection ── */
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 767px)');
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+
   /* ── State ── */
   const [view, setView]             = useState('browse');      // 'browse' | 'dossier'
-  const [viewMode, setViewMode]     = useState('grid');        // 'grid' | 'list'
+  const [viewMode, setViewMode]     = useState(() => window.innerWidth < 768 ? 'grid' : 'grid'); // always grid default
   const [registries, setRegistries] = useState([]);
   const [activeRegistry, setActiveRegistry] = useState(null);
   const [loading, setLoading]       = useState(true);
@@ -459,6 +468,7 @@ export default function CharacterRegistryPage() {
           viewMode={viewMode} onViewMode={setViewMode}
           showFilters={showFilters} onToggleFilters={() => setShowFilters(f => !f)}
           onNewChar={() => {}}
+          isMobile={isMobile}
         />
         <div className="cr-content">
           <div className="cr-empty-state">
@@ -489,17 +499,17 @@ export default function CharacterRegistryPage() {
         <div className="cr-header">
           <div className="cr-header-left">
             <div className="cr-header-brand">LaLaPlace</div>
-            <div className="cr-header-breadcrumb">Universe → Registry → Dossier</div>
+            {!isMobile && <div className="cr-header-breadcrumb">Universe → Registry → Dossier</div>}
           </div>
           <div className="cr-header-center">
             <h1 className="cr-header-title">{c.selected_name || c.display_name}</h1>
           </div>
           <div className="cr-header-right">
             <button className="cr-header-btn" onClick={() => setInterviewTarget(c)}>
-              Interview
+              {isMobile ? '🎙' : 'Interview'}
             </button>
             <button className="cr-header-btn" onClick={() => navigate(`/therapy/${activeRegistry?.id || 'default'}`)}>
-              ◈ Therapy
+              {isMobile ? '◈' : '◈ Therapy'}
             </button>
           </div>
         </div>
@@ -705,6 +715,7 @@ export default function CharacterRegistryPage() {
         showFilters={showFilters}
         onToggleFilters={() => setShowFilters(f => !f)}
         onNewChar={() => activeRegistry ? setShowNewChar(true) : null}
+        isMobile={isMobile}
       />
 
       {/* Filters */}
@@ -805,7 +816,7 @@ export default function CharacterRegistryPage() {
               Clear Filters
             </button>
           </div>
-        ) : viewMode === 'grid' ? (
+        ) : (viewMode === 'grid' || isMobile) ? (
           /* ── GRID VIEW ── */
           <div className="cr-grid">
             {filtered.map(c => (
@@ -887,28 +898,30 @@ export default function CharacterRegistryPage() {
 /* ================================================================
    HEADER BAR
    ================================================================ */
-function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onToggleFilters, onNewChar }) {
+function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onToggleFilters, onNewChar, isMobile }) {
   return (
     <div className="cr-header">
       <div className="cr-header-left">
         <div className="cr-header-brand">LaLaPlace</div>
-        <div className="cr-header-breadcrumb">World → Characters</div>
+        {!isMobile && <div className="cr-header-breadcrumb">World → Characters</div>}
       </div>
 
       <div className="cr-header-center">
         <h1 className="cr-header-title">Characters</h1>
-        <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
-          Your character development bible
-        </div>
+        {!isMobile && (
+          <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
+            Your character development bible
+          </div>
+        )}
       </div>
 
       <div className="cr-header-right">
         <button className="cr-header-btn primary" onClick={onNewChar}>
-          + New Character
+          {isMobile ? '+' : '+ New Character'}
         </button>
 
         <button className={`cr-header-btn ${showFilters ? 'active' : ''}`} onClick={onToggleFilters}>
-          Filter
+          {isMobile ? '⚙' : 'Filter'}
         </button>
 
         <div className="cr-search-wrap">
@@ -916,18 +929,20 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
           <input
             className="cr-search-input"
             type="text"
-            placeholder="Search characters…"
+            placeholder={isMobile ? 'Search…' : 'Search characters…'}
             value={search}
             onChange={e => onSearch(e.target.value)}
           />
         </div>
 
-        <div className="cr-view-toggle">
-          <button className={viewMode === 'grid' ? 'active' : ''} onClick={() => onViewMode('grid')}
-            title="Grid view">▦</button>
-          <button className={viewMode === 'list' ? 'active' : ''} onClick={() => onViewMode('list')}
-            title="List view">☰</button>
-        </div>
+        {!isMobile && (
+          <div className="cr-view-toggle">
+            <button className={viewMode === 'grid' ? 'active' : ''} onClick={() => onViewMode('grid')}
+              title="Grid view">▦</button>
+            <button className={viewMode === 'list' ? 'active' : ''} onClick={() => onViewMode('list')}
+              title="List view">☰</button>
+          </div>
+        )}
       </div>
     </div>
   );

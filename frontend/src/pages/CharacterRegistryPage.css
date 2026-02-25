@@ -1757,7 +1757,7 @@
   .cr-stat-label { font-size: 10px; }
 
   .cr-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
     gap: 12px;
   }
 
@@ -1997,6 +1997,23 @@
   .cr-edit-input.cr-edit-select,
   select.cr-edit-select {
     min-height: 44px;
+  }
+
+  /* Hide the left brand+breadcrumb since header is tight on mobile */
+  .cr-header-left {
+    display: none;
+  }
+
+  /* Let header center take natural position on mobile */
+  .cr-header-center {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cr-header-title {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
@@ -2848,6 +2865,316 @@
 
   .ai-writer-beat-num {
     align-self: flex-start;
+  }
+
+  .ai-writer-header-title {
+    font-size: 18px;
+  }
+
+  .ai-writer-prose {
+    padding: 18px 16px;
+    font-size: 14px;
+  }
+
+  .ai-writer-result-header {
+    padding: 12px 14px;
+  }
+
+  .ai-writer-gap {
+    padding: 14px 16px;
+  }
+
+  .ai-writer-scene-prompts {
+    padding: 14px 16px;
+  }
+}
+
+/* ── AI Writer Phone (≤480px) ── */
+@media (max-width: 480px) {
+  .ai-writer-tab {
+    padding: 0;
+  }
+
+  .ai-writer-header {
+    padding: 16px 14px;
+  }
+
+  .ai-writer-header-title {
+    font-size: 17px;
+  }
+
+  .ai-writer-header-sub {
+    font-size: 12px;
+  }
+
+  .ai-writer-modes {
+    gap: 6px;
+    margin-bottom: 16px;
+  }
+
+  .ai-writer-mode {
+    padding: 12px 14px;
+    column-gap: 10px;
+  }
+
+  .ai-writer-mode-icon {
+    font-size: 16px;
+  }
+
+  .ai-writer-mode-label {
+    font-size: 13px;
+  }
+
+  .ai-writer-mode-desc {
+    font-size: 11px;
+  }
+
+  .ai-writer-field label {
+    font-size: 11px;
+  }
+
+  .ai-writer-field textarea,
+  .ai-writer-field input {
+    padding: 10px 12px;
+    font-size: 16px; /* prevent iOS zoom */
+  }
+
+  .ai-writer-length-row {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .ai-writer-length-btn {
+    padding: 8px 12px;
+    font-size: 12px;
+    min-height: 36px;
+  }
+
+  .ai-writer-generate-btn {
+    padding: 14px 20px;
+    font-size: 14px;
+    min-height: 48px;
+  }
+
+  .ai-writer-loading {
+    padding: 32px 16px;
+  }
+
+  .ai-writer-loading-icon {
+    font-size: 28px;
+  }
+
+  .ai-writer-loading-text {
+    font-size: 14px;
+  }
+
+  .ai-writer-error {
+    padding: 16px;
+    flex-direction: column;
+    text-align: center;
+    gap: 10px;
+  }
+
+  .ai-writer-retry-btn {
+    width: 100%;
+    min-height: 40px;
+    font-size: 13px;
+  }
+
+  .ai-writer-result-header {
+    padding: 10px 12px;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .ai-writer-result-label {
+    font-size: 11px;
+  }
+
+  .ai-writer-result-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .ai-writer-copy-btn,
+  .ai-writer-clear-btn {
+    padding: 8px 12px;
+    min-height: 36px;
+    font-size: 11px;
+  }
+
+  .ai-writer-prose {
+    padding: 16px 14px;
+    font-size: 14px;
+    line-height: 1.7;
+  }
+
+  .ai-writer-context-badge {
+    padding: 8px 14px;
+    font-size: 10px;
+  }
+
+  .ai-writer-tension {
+    padding: 12px 14px;
+    font-size: 13px;
+  }
+
+  .ai-writer-beat {
+    padding: 16px 14px;
+  }
+
+  .ai-writer-beat-title {
+    font-size: 14px;
+  }
+
+  .ai-writer-beat-desc {
+    font-size: 12px;
+  }
+
+  .ai-writer-beat-why {
+    font-size: 11px;
+  }
+
+  .ai-writer-beat-preview {
+    font-size: 12px;
+    padding: 8px 12px;
+  }
+
+  .ai-writer-beat-meta {
+    flex-wrap: wrap;
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .ai-writer-score-row {
+    padding: 16px 14px;
+    gap: 16px;
+  }
+
+  .ai-writer-score-num {
+    font-size: 28px;
+  }
+
+  .ai-writer-score-details {
+    font-size: 12px;
+  }
+
+  .ai-writer-gap {
+    padding: 12px 14px;
+  }
+
+  .ai-writer-gap-title {
+    font-size: 13px;
+  }
+
+  .ai-writer-gap-detail {
+    font-size: 12px;
+  }
+
+  .ai-writer-gap-suggestion {
+    font-size: 11px;
+    padding: 6px 10px;
+  }
+
+  .ai-writer-scene-prompts {
+    padding: 12px 14px;
+  }
+
+  .ai-writer-scene-prompt {
+    padding: 10px 12px;
+    font-size: 12px;
+    min-height: 44px;
+    display: flex;
+    align-items: center;
+  }
+
+  .ai-writer-profile-summary {
+    padding: 14px;
+    font-size: 13px;
+  }
+
+  .ai-writer-profile-item {
+    padding: 12px 14px;
+  }
+
+  .ai-writer-profile-item strong {
+    font-size: 10px;
+  }
+
+  .ai-writer-profile-item span {
+    font-size: 12px;
+  }
+
+  .ai-writer-profile-desc {
+    padding: 12px 14px;
+    font-size: 12px;
+  }
+
+  .ai-writer-evidence {
+    padding: 12px 14px;
+  }
+
+  .ai-writer-evidence-item {
+    font-size: 11px;
+  }
+
+  .ai-writer-auto-note {
+    font-size: 12px;
+    padding: 12px;
+  }
+}
+
+/* ── AI Writer Tiny Phone (≤360px) ── */
+@media (max-width: 360px) {
+  .ai-writer-header {
+    padding: 12px 10px;
+  }
+
+  .ai-writer-header-title {
+    font-size: 16px;
+  }
+
+  .ai-writer-mode {
+    padding: 10px 12px;
+    column-gap: 8px;
+  }
+
+  .ai-writer-mode-icon {
+    font-size: 14px;
+  }
+
+  .ai-writer-mode-label {
+    font-size: 12px;
+  }
+
+  .ai-writer-mode-desc {
+    display: none; /* hide descriptions on tiny screens */
+  }
+
+  .ai-writer-generate-btn {
+    font-size: 13px;
+    padding: 12px 16px;
+  }
+
+  .ai-writer-prose {
+    padding: 12px;
+    font-size: 13px;
+  }
+
+  .ai-writer-beat {
+    padding: 12px 10px;
+  }
+
+  .ai-writer-score-row {
+    padding: 12px 10px;
+  }
+
+  .ai-writer-score-num {
+    font-size: 24px;
+  }
+
+  .ai-writer-gap {
+    padding: 10px 12px;
   }
 }
 
