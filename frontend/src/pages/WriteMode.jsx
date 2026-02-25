@@ -185,21 +185,6 @@ export default function WriteMode() {
     transcriptRef.current = '';
   }, []);
 
-  const toggleListening = useCallback(async () => {
-    if (listening) {
-      // Stop and generate
-      recognitionRef.current?.stop();
-      setListening(false);
-      const spoken = transcriptRef.current.trim();
-      if (!spoken) return;
-      setTranscript('');
-      await generateProse(spoken);
-    } else {
-      // Start listening
-      startListening();
-    }
-  }, [listening, startListening, generateProse]);
-
   // ── GENERATE PROSE FROM SPEECH ────────────────────────────────────────
 
   const generateProse = useCallback(async (spoken) => {
@@ -244,6 +229,21 @@ export default function WriteMode() {
     }
     setGenerating(false);
   }, [prose, chapter, book, sessionLog, genLength]);
+
+  const toggleListening = useCallback(async () => {
+    if (listening) {
+      // Stop and generate
+      recognitionRef.current?.stop();
+      setListening(false);
+      const spoken = transcriptRef.current.trim();
+      if (!spoken) return;
+      setTranscript('');
+      await generateProse(spoken);
+    } else {
+      // Start listening
+      startListening();
+    }
+  }, [listening, startListening, generateProse]);
 
   // ── EDIT LOOP — VOICE ─────────────────────────────────────────────────
 
