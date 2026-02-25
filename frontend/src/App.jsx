@@ -57,6 +57,7 @@ import SessionStart from './pages/SessionStart';
 import CharacterTherapy from './pages/CharacterTherapy';
 import PressPublisher from './pages/PressPublisher';
 import SettingsPage from './pages/SettingsPage';
+import EpisodeWorkspace from './pages/EpisodeWorkspace';
 import QuickEpisodeCreator from './components/QuickEpisodeCreator';
 
 // Components
@@ -204,7 +205,7 @@ function AppContent() {
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
           
           {/* Episodes */}
-
+          <Route path="/episodes" element={<EpisodeWorkspace />} />
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
