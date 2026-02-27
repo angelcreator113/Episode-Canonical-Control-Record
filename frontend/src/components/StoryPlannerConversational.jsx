@@ -75,16 +75,16 @@ function useVoiceInput() {
   const recRef = useRef(null);
   const wantListeningRef = useRef(false);
   const onResultRef = useRef(null);
-  const committedRef = useRef('');     // finalized text from ALL previous recognition sessions
-  const sessionFinalRef = useRef('');  // final text snapshot from CURRENT session (rebuilt each event, never accumulated)
-  const interimRef = useRef('');       // current in-progress segment
-  const restartCountRef = useRef(0);   // track restart attempts for backoff
-
-  // Detect mobile for recognition strategy
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const segments = useRef([]);         // one entry per completed recognition session
+  const restartCountRef = useRef(0);
 
   useEffect(() => {
     setSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
+  }, []);
+
+  // Build display text: all committed segments + optional interim
+  const buildText = useCallback((interim = '') => {
+    return [...segments.current, interim].filter(Boolean).join(' ').trim();
   }, []);
 
   const startRec = useCallback(() => {
@@ -96,42 +96,40 @@ function useVoiceInput() {
     }
 
     const rec = new SR();
-    // On mobile, use continuous mode with careful handling;
-    // on desktop, non-continuous with auto-restart works fine
-    rec.continuous     = isMobile;
+    // ALWAYS non-continuous: one utterance per session, auto-restart between.
+    // This eliminates all duplicate-result bugs from continuous mode.
+    rec.continuous     = false;
     rec.interimResults = true;
     rec.lang           = 'en-US';
     recRef.current     = rec;
 
+    // Local flag — unique to THIS session closure. Once committed, ignore all
+    // further onresult events from this session. This makes duplication
+    // structurally impossible.
+    let committed = false;
+
     rec.onresult = (e) => {
-      // Rebuild session text from scratch each event — NEVER accumulate.
-      // e.results is the full list of results for THIS recognition session.
-      // Final results stay in the list; we just snapshot them each time.
-      let sessionFinal = '';
-      let interim = '';
-      for (let i = 0; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          sessionFinal += (sessionFinal ? ' ' : '') + t.trim();
-        } else {
-          interim += t;
-        }
+      if (committed) return;
+
+      const last = e.results[e.results.length - 1];
+      if (last.isFinal) {
+        const text = last[0].transcript.trim();
+        if (text) segments.current.push(text);
+        committed = true;
+        const full = buildText();
+        setTranscript(full);
+        if (onResultRef.current) onResultRef.current(full);
+      } else {
+        const full = buildText(last[0].transcript);
+        setTranscript(full);
+        if (onResultRef.current) onResultRef.current(full);
       }
-      // Store snapshot (not accumulated — safe to overwrite)
-      sessionFinalRef.current = sessionFinal;
-      interimRef.current = interim;
-      // Combine: previous sessions + this session's finals + current interim
-      const full = [committedRef.current, sessionFinal, interim]
-        .filter(Boolean).join(' ').trim();
-      setTranscript(full);
-      if (onResultRef.current) onResultRef.current(full);
-      // Reset restart counter on successful result
       restartCountRef.current = 0;
     };
 
     rec.onerror = (e) => {
       if (wantListeningRef.current && (e.error === 'no-speech' || e.error === 'aborted')) {
-        return;
+        return; // will auto-restart via onend
       }
       console.warn('SpeechRecognition error:', e.error);
       wantListeningRef.current = false;
@@ -140,31 +138,18 @@ function useVoiceInput() {
 
     rec.onend = () => {
       if (wantListeningRef.current) {
-        // Before restart, commit this session's final text to committedRef
-        if (sessionFinalRef.current) {
-          committedRef.current = [committedRef.current, sessionFinalRef.current]
-            .filter(Boolean).join(' ');
-          sessionFinalRef.current = '';
-        }
-        // Auto-restart for next utterance
-        // On mobile, add a small delay to prevent rapid restart failures
         restartCountRef.current++;
-        const delay = isMobile ? Math.min(restartCountRef.current * 150, 800) : 0;
-        if (restartCountRef.current > 8) {
-          // Too many restarts — stop gracefully
+        if (restartCountRef.current > 12) {
           wantListeningRef.current = false;
           setListening(false);
           return;
         }
-        if (delay > 0) {
-          setTimeout(() => {
-            if (wantListeningRef.current) {
-              try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
-            }
-          }, delay);
-        } else {
-          try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
-        }
+        // Brief delay for browser cleanup before next session
+        setTimeout(() => {
+          if (wantListeningRef.current) {
+            try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
+          }
+        }, 120);
         return;
       }
       setListening(false);
@@ -172,7 +157,7 @@ function useVoiceInput() {
 
     rec.start();
     setListening(true);
-  }, [isMobile]);
+  }, [buildText]);
 
   // Auto-stop when screen goes off (phone sleep / lock)
   useEffect(() => {
@@ -190,9 +175,7 @@ function useVoiceInput() {
   const start = useCallback((onResult) => {
     onResultRef.current = onResult;
     wantListeningRef.current = true;
-    committedRef.current = '';
-    sessionFinalRef.current = '';
-    interimRef.current = '';
+    segments.current = [];
     setTranscript('');
     startRec();
   }, [startRec]);
