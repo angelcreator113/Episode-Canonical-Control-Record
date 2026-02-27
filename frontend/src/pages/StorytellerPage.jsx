@@ -57,10 +57,15 @@ function useToasts() {
   return { toasts, add };
 }
 
+function authHeader() {
+  const token = localStorage.getItem('authToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...opts,
+    headers: { 'Content-Type': 'application/json', ...authHeader(), ...(opts.headers || {}) },
   });
   if (!res.ok) {
     const err = await res.text().catch(() => 'Request failed');
@@ -676,7 +681,7 @@ function SectionEditor({ chapter, onSave, onGoToSection, toast }) {
       const cleaned = updated.map(({ _key, ...rest }) => rest);
       await fetch(`/api/v1/storyteller/chapters/${chapter.id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify({ sections: cleaned }),
       });
       onSave?.(cleaned);
@@ -951,7 +956,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     try {
       const res = await fetch(`${API}/chapters/${chId}/save-draft`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify({ draft_prose: text }),
       });
       if (res.ok) {
@@ -996,7 +1001,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   }, []);
 
   useEffect(() => {
-    fetch('/api/v1/character-registry/registries')
+    fetch('/api/v1/character-registry/registries', { headers: authHeader() })
       .then(r => r.json())
       .then(data => {
         // API returns { registries: [{ characters: [...] }, ...] } — flatten to character list
@@ -1012,7 +1017,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   // Fetch incoming echoes for the active chapter
   useEffect(() => {
     if (!activeChapterId || !book?.id) return;
-    fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`)
+    fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`, { headers: authHeader() })
       .then(r => r.json())
       .then(data => setIncomingEchoes(Array.isArray(data) ? data : []))
       .catch(() => setIncomingEchoes([]));
@@ -1099,7 +1104,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     try {
       const res = await fetch(action.endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
         body: JSON.stringify(payload),
       });
       const data = await res.json();
@@ -1400,7 +1405,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                 try {
                   await fetch(`/api/v1/memories/confirm-voice`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: { 'Content-Type': 'application/json', ...authHeader() },
                     body: JSON.stringify({ line_id: lineId, voice_type: newType }),
                   });
                 } catch (e) { console.error('Voice confirm failed:', e); }
@@ -1466,7 +1471,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                     chapters={chapters}
                     bookId={book.id}
                     onPlanted={() => {
-                      fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`)
+                      fetch(`/api/v1/storyteller/echoes?book_id=${book.id}&target_chapter_id=${activeChapterId}`, { headers: authHeader() })
                         .then(r => r.json()).then(d => setIncomingEchoes(d.echoes || []));
                     }}
                   />

@@ -13,10 +13,15 @@ import './PlanWithVoicePage.css';
 const API = '/api/v1/storyteller';
 
 /* ─── tiny api helper (mirrors StorytellerPage) ─── */
+function authHeader() {
+  const token = localStorage.getItem('authToken');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 async function api(path, opts = {}) {
   const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
     ...opts,
+    headers: { 'Content-Type': 'application/json', ...authHeader(), ...(opts.headers || {}) },
   });
   if (!res.ok) {
     const err = await res.text().catch(() => 'Request failed');
@@ -89,7 +94,7 @@ export default function PlanWithVoicePage() {
 
       // try to load characters from registry
       try {
-        const charRes = await fetch('/api/v1/character-registry/registries');
+        const charRes = await fetch('/api/v1/character-registry/registries', { headers: authHeader() });
         const charData = await charRes.json();
         const regs = charData?.registries || [];
         const chars = Array.isArray(regs)
