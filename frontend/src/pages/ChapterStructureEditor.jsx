@@ -23,14 +23,14 @@ function uuid() {
 
 /* ── Section Types ── */
 const SECTION_TYPES = [
-  { type: 'h1',         label: 'Book Title',       shortcut: 'H1', placeholder: 'Book title\u2026' },
-  { type: 'h2',         label: 'Chapter Title',    shortcut: 'H2', placeholder: 'Chapter title\u2026' },
-  { type: 'h3',         label: 'Section Header',   shortcut: 'H3', placeholder: 'Section header\u2026' },
-  { type: 'h4',         label: 'Subsection',       shortcut: 'H4', placeholder: 'Subsection\u2026' },
-  { type: 'body',       label: 'Body Text',        shortcut: 'P',  placeholder: 'Write your prose\u2026' },
-  { type: 'quote',      label: 'Quote / Epigraph', shortcut: 'Q',  placeholder: 'A quote or reflection\u2026' },
-  { type: 'reflection', label: 'Reflection Prompt', shortcut: 'R', placeholder: 'A question to explore\u2026' },
-  { type: 'divider',    label: 'Divider',          shortcut: '\u2500', placeholder: '' },
+  { type: 'h1',         label: 'Book Title',       shortcut: 'H1', placeholder: 'Book title…' },
+  { type: 'h2',         label: 'Chapter Title',    shortcut: 'H2', placeholder: 'Chapter title…' },
+  { type: 'h3',         label: 'Section Header',   shortcut: 'H3', placeholder: 'Section header…' },
+  { type: 'h4',         label: 'Subsection',       shortcut: 'H4', placeholder: 'Subsection…' },
+  { type: 'body',       label: 'Body Text',        shortcut: 'P',  placeholder: 'Write your prose…' },
+  { type: 'quote',      label: 'Quote / Epigraph', shortcut: 'Q',  placeholder: 'A quote or reflection…' },
+  { type: 'reflection', label: 'Reflection Prompt', shortcut: 'R', placeholder: 'A question to explore…' },
+  { type: 'divider',    label: 'Divider',          shortcut: '─', placeholder: '' },
 ];
 
 const HEADER_TYPES = ['h1', 'h2', 'h3', 'h4'];
@@ -418,7 +418,7 @@ export default function ChapterStructureEditor() {
   // ── Render ────────────────────────────────────────────────────────────
 
   if (loading) {
-    return <div className="cse-loading">Loading chapter structure\u2026</div>;
+    return <div className="cse-loading">Loading chapter structure…</div>;
   }
 
   const chapterTitle = chapter?.title || 'Untitled';
@@ -442,7 +442,7 @@ export default function ChapterStructureEditor() {
         </div>
         <div className="cse-header-actions">
           <span className={`cse-save-status ${saving ? 'saving' : saved ? 'saved' : ''}`}>
-            {saving ? 'Saving\u2026' : saved ? '\u2713 Saved' : 'Unsaved'}
+            {saving ? 'Saving…' : saved ? '✓ Saved' : 'Unsaved'}
           </span>
           <button
             className="cse-add-btn"
@@ -592,7 +592,7 @@ export default function ChapterStructureEditor() {
                         }}
                         className="cse-block-input"
                         value={section.content}
-                        placeholder={typeInfo?.placeholder || 'Type here\u2026'}
+                        placeholder={typeInfo?.placeholder || 'Type here…'}
                         rows={1}
                         onFocus={() => setFocusedId(section.id)}
                         onChange={e => {

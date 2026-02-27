@@ -59,9 +59,9 @@ export function PlantEchoButton({ line, chapters = [], bookId, onPlanted }) {
       <button
         style={st.plantBtn}
         onClick={() => setOpen(true)}
-        title="This moment reverberates later \u2014 plant an echo"
+        title="This moment reverberates later — plant an echo"
       >
-        \u27F3
+        ⟳
       </button>
 
       {open && (
@@ -69,11 +69,11 @@ export function PlantEchoButton({ line, chapters = [], bookId, onPlanted }) {
           <div style={st.plantModal}>
             <div style={st.plantHeader}>
               <div style={st.plantLabel}>PLANT ECHO</div>
-              <button style={st.plantClose} onClick={() => setOpen(false)}>\u2715</button>
+              <button style={st.plantClose} onClick={() => setOpen(false)}>✕</button>
             </div>
 
             <div style={st.plantSourceLine}>
-              "{line.content?.slice(0, 120)}{line.content?.length > 120 ? '\u2026' : ''}"
+              "{line.content?.slice(0, 120)}{line.content?.length > 120 ? '…' : ''}"
             </div>
 
             <div style={st.plantField}>
@@ -83,7 +83,7 @@ export function PlantEchoButton({ line, chapters = [], bookId, onPlanted }) {
                 value={targetChapter}
                 onChange={e => setTargetChapter(e.target.value)}
               >
-                <option value="">Select chapter\u2026</option>
+                <option value="">Select chapter…</option>
                 {chapters.map(ch => (
                   <option key={ch.id} value={ch.id}>{ch.title}</option>
                 ))}
@@ -105,7 +105,7 @@ export function PlantEchoButton({ line, chapters = [], bookId, onPlanted }) {
               <label style={st.fieldLabel}>HOW IT SHOULD LAND (optional)</label>
               <textarea
                 style={st.textarea}
-                placeholder="What should the reader feel when this echoes? e.g. 'A quiet recognition \u2014 not shock, just: of course.'"
+                placeholder="What should the reader feel when this echoes? e.g. 'A quiet recognition — not shock, just: of course.'"
                 value={landingNote}
                 onChange={e => setLandingNote(e.target.value)}
                 rows={2}
@@ -119,7 +119,7 @@ export function PlantEchoButton({ line, chapters = [], bookId, onPlanted }) {
                 onClick={handlePlant}
                 disabled={!targetChapter || !note.trim() || saving}
               >
-                {saving ? 'Planting\u2026' : 'Plant echo \u2192'}
+                {saving ? 'Planting…' : 'Plant echo →'}
               </button>
             </div>
           </div>
@@ -145,12 +145,12 @@ export function IncomingEchoes({ echoes = [], onMarkLanded }) {
     <div style={st.incomingPanel}>
       <div style={st.incomingHeader} onClick={() => setExpanded(!expanded)}>
         <div style={st.incomingLeft}>
-          <div style={st.incomingLabel}>\u27F3 INCOMING ECHOES</div>
+          <div style={st.incomingLabel}>⟳ INCOMING ECHOES</div>
           <div style={st.incomingCount}>
-            {pending.length} pending{landed.length > 0 ? ` \u00B7 ${landed.length} landed` : ''}
+            {pending.length} pending{landed.length > 0 ? ` · ${landed.length} landed` : ''}
           </div>
         </div>
-        <div style={st.incomingCaret}>{expanded ? '\u25B2' : '\u25BC'}</div>
+        <div style={st.incomingCaret}>{expanded ? '▲' : '▼'}</div>
       </div>
 
       {expanded && (
@@ -186,7 +186,7 @@ function EchoCard({ echo, onMarkLanded, isLanded }) {
         )}
       </div>
       <div style={st.echoLine}>
-        "{echo.source_line_content?.slice(0, 100)}{echo.source_line_content?.length > 100 ? '\u2026' : ''}"
+        "{echo.source_line_content?.slice(0, 100)}{echo.source_line_content?.length > 100 ? '…' : ''}"
       </div>
       <div style={st.echoNote}>{echo.note}</div>
       {echo.landing_note && (
@@ -215,7 +215,7 @@ export function EchoHealthPanel({ echoes = [], chapters = [] }) {
 
   return (
     <div style={st.healthPanel}>
-      <div style={st.healthLabel}>\u27F3 ECHO HEALTH</div>
+      <div style={st.healthLabel}>⟳ ECHO HEALTH</div>
       <div style={st.healthStats}>
         <div style={st.healthStat}>
           <div style={{ ...st.healthNum, color: '#C9A84C' }}>{planted.length}</div>

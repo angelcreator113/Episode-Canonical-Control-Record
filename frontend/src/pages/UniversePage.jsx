@@ -16,7 +16,10 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ProducerModeFrame from './ProducerModeFrame';
+import Wardrobe from './Wardrobe';
+import AssetLibrary from './AssetLibrary';
 
 function useWindowWidth() {
   const [w, setW] = useState(window.innerWidth);
@@ -41,7 +44,15 @@ export default function UniversePage() {
   const width = useWindowWidth();
   const isMobile = width < 640;
   const isTablet = width >= 640 && width < 1024;
-  const [activeTab, setActiveTab] = useState('universe');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const initialTab = ['universe','series','shows','wardrobe','assets'].includes(searchParams.get('tab'))
+    ? searchParams.get('tab') : 'universe';
+  const [activeTab, setActiveTab] = useState(initialTab);
+
+  function switchTab(tab) {
+    setActiveTab(tab);
+    setSearchParams({ tab }, { replace: true });
+  }
   const [universe, setUniverse]   = useState(null);
   const [series, setSeries]       = useState([]);
   const [shows, setShows]         = useState([]);
@@ -108,7 +119,7 @@ export default function UniversePage() {
 
       {/* Tab bar */}
       <div style={{ ...s.tabBar, padding: `0 ${px}px` }}>
-        {['universe', 'series', 'shows'].map(tab => (
+        {['universe', 'series', 'shows', 'wardrobe', 'assets'].map(tab => (
           <button
             key={tab}
             style={{
@@ -122,10 +133,12 @@ export default function UniversePage() {
                 ? '2px solid #C9A84C'
                 : '2px solid transparent',
             }}
-            onClick={() => setActiveTab(tab)}
+            onClick={() => switchTab(tab)}
           >
             {tab === 'universe' ? '🌌 Universe' :
-             tab === 'series'   ? '📚 Series' : '📺 Shows'}
+             tab === 'series'   ? '📚 Series' :
+             tab === 'shows'    ? '📺 Shows' :
+             tab === 'wardrobe' ? '👗 Wardrobe' : '📁 Assets'}
           </button>
         ))}
       </div>
@@ -163,6 +176,12 @@ export default function UniversePage() {
             isMobile={isMobile}
             isTablet={isTablet}
           />
+        )}
+        {activeTab === 'wardrobe' && (
+          <Wardrobe embedded={true} />
+        )}
+        {activeTab === 'assets' && (
+          <AssetLibrary embedded={true} />
         )}
       </div>
 

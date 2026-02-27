@@ -24,6 +24,13 @@
 const express = require('express');
 const router  = express.Router();
 
+/* ── Lazy model loader ── */
+let _models = null;
+function getModels() {
+  if (!_models) _models = require('../models');
+  return _models;
+}
+
 let optionalAuth;
 try {
   const m = require('../middleware/auth');
@@ -354,21 +361,29 @@ function isLalaStageReached(character, careerData) {
 
 router.post('/seed-characters', optionalAuth, async (req, res) => {
   try {
-    const { show_id, registry_id } = req.body;
-    const models = req.app.get('models');
-    const { RegistryCharacter, CharacterRegistry } = models;
+    let { show_id, registry_id } = req.body || {};
+    const models = getModels();
+    const { RegistryCharacter, CharacterRegistry, Show } = models;
+
+    // If no show_id provided, look up the first available show
+    if (!show_id && !registry_id && Show) {
+      const defaultShow = await Show.findOne({ order: [['created_at', 'ASC']] });
+      if (defaultShow) show_id = defaultShow.id;
+    }
 
     let registry;
     if (registry_id) {
       registry = await CharacterRegistry.findByPk(registry_id);
     } else {
-      registry = await CharacterRegistry.findOne({
-        where: { show_id, name: 'The LalaVerse Press' },
-      });
+      // Find existing press registry — try with show_id first, then by title alone
+      const whereClause = show_id
+        ? { show_id, title: 'The LalaVerse Press' }
+        : { title: 'The LalaVerse Press' };
+      registry = await CharacterRegistry.findOne({ where: whereClause });
       if (!registry) {
         registry = await CharacterRegistry.create({
-          show_id,
-          name:        'The LalaVerse Press',
+          show_id:     show_id || null,
+          title:       'The LalaVerse Press',
           description: 'Four independent bloggers in LalaVerse. Each has a career, a wound, a publication, and a limited perspective on the world. They don\'t know each other at launch. They don\'t know Lala yet. They find her the way anyone finds someone worth covering \u2014 because she earns it.',
         });
       }
@@ -378,22 +393,23 @@ router.post('/seed-characters', optionalAuth, async (req, res) => {
 
     for (const pc of PRESS_CHARACTERS) {
       const existing = await RegistryCharacter.findOne({
-        where: { registry_id: registry.id, name: pc.slug },
+        where: { registry_id: registry.id, character_key: pc.slug },
       });
       if (existing) { seeded.push(existing); continue; }
 
       const char = await RegistryCharacter.create({
         registry_id:       registry.id,
-        name:              pc.slug,
+        character_key:     pc.slug,
+        display_name:      pc.name,
         selected_name:     pc.name,
-        type:              pc.type,
-        role:              `Publisher of ${pc.publication} \u2014 "${pc.tagline}"`,
-        appearance_mode:   'On-Page',
-        belief_pressured:  pc.unsayable,
+        role_type:         'pressure',
+        role_label:        `Publisher of ${pc.publication} \u2014 "${pc.tagline}"`,
+        appearance_mode:   'on_page',
+        core_belief:       pc.unsayable,
 
-        nature:            pc.nature,
-        wound:             pc.wound,
-        primary_defense:   pc.primary_defense,
+        personality:       pc.nature,
+        core_wound:        pc.wound,
+        pressure_type:     pc.primary_defense,
 
         personality_matrix: {
           tone:       pc.voice.tone,
@@ -403,16 +419,16 @@ router.post('/seed-characters', optionalAuth, async (req, res) => {
           sounds_like: pc.voice.sounds_like,
         },
 
-        writer_notes: JSON.stringify({
+        extra_fields: {
           publication:   pc.publication,
           tagline:       pc.tagline,
           background:    pc.background,
           sources:       pc.sources,
           lala_coverage: pc.lala_coverage,
           career_stages: pc.career_stages,
-        }),
+        },
 
-        emotional_function: `Documents ${['the business', 'the aesthetics', 'the culture', 'the interior life'][PRESS_CHARACTERS.indexOf(pc)]} of the LalaVerse world. Covers Lala when she earns it. Each coverage moment is a story beat and a real-world publication.`,
+        description: `Documents ${['the business', 'the aesthetics', 'the culture', 'the interior life'][PRESS_CHARACTERS.indexOf(pc)]} of the LalaVerse world. Covers Lala when she earns it. Each coverage moment is a story beat and a real-world publication.`,
 
         status: 'accepted',
       });
@@ -439,7 +455,7 @@ router.post('/seed-characters', optionalAuth, async (req, res) => {
 
 router.get('/characters', optionalAuth, async (req, res) => {
   try {
-    const models  = req.app.get('models');
+    const models  = getModels();
     const careers = await models.PressCareer?.findAll() || [];
 
     const result = PRESS_CHARACTERS.map(pc => {
@@ -488,7 +504,7 @@ router.get('/characters/:slug', optionalAuth, async (req, res) => {
     const pc = PRESS_CHARACTERS.find(c => c.slug === req.params.slug);
     if (!pc) return res.status(404).json({ error: 'Character not found' });
 
-    const models = req.app.get('models');
+    const models = getModels();
     const career = await models.PressCareer?.findOne({
       where: { character_slug: pc.slug },
     });
@@ -519,7 +535,7 @@ router.post('/advance-career', optionalAuth, async (req, res) => {
     const pc = PRESS_CHARACTERS.find(c => c.slug === character_slug);
     if (!pc) return res.status(404).json({ error: 'Character not found' });
 
-    const models = req.app.get('models');
+    const models = getModels();
 
     let career = await models.PressCareer?.findOne({
       where: { character_slug },
@@ -648,7 +664,7 @@ Write only the post. No preamble. No explanation. Start immediately with the con
       || `[${pc.name} has something to say about this. The generation failed \u2014 check the AI connection and try again.]`;
 
     try {
-      const models = req.app.get('models');
+      const models = getModels();
       if (models.PressCareer) {
         await models.PressCareer.increment('content_generated', {
           where: { character_slug },

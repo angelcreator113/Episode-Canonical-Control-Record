@@ -69,6 +69,24 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    /* ── Book Structure: Front / Back Matter ── */
+    front_matter: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Front matter: { dedication, epigraph, foreword, preface, copyright }',
+    },
+    back_matter: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: null,
+      comment: 'Back matter: { appendix, glossary, bibliography, notes, about_author, acknowledgments }',
+    },
+    author_name: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Author display name for title page and About the Author',
+    },
   }, {
     tableName: 'storyteller_books',
     timestamps: true,

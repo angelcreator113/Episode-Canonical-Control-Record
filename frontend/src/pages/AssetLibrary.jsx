@@ -18,7 +18,7 @@ const ASSET_CATEGORIES = {
   other: { icon: '📎', color: '#94a3b8', label: 'Other' }
 };
 
-function AssetLibrary() {
+function AssetLibrary({ embedded = false }) {
   const navigate = useNavigate();
   const [assets, setAssets] = useState([]);
   const [shows, setShows] = useState([]);
@@ -185,7 +185,7 @@ function AssetLibrary() {
 
   if (loading) {
     return (
-      <div className="asset-library-page">
+      <div className={`asset-library-page${embedded ? ' asset-library-embedded' : ''}`}>
         <div className="asset-library-loading">
           <div className="loading-spinner"></div>
           <p>Loading assets...</p>
@@ -195,8 +195,9 @@ function AssetLibrary() {
   }
 
   return (
-    <div className="asset-library-page">
+    <div className={`asset-library-page${embedded ? ' asset-library-embedded' : ''}`}>
       {/* Page Header */}
+      {!embedded && (
       <div className="asset-library-header">
         <div className="header-left">
           <h1>📁 Asset Library</h1>
@@ -213,6 +214,21 @@ function AssetLibrary() {
           </button>
         </div>
       </div>
+      )}
+      {embedded && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <span style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, letterSpacing: '0.08em', color: 'rgba(26,21,16,0.4)' }}>
+            {assets.length} asset{assets.length !== 1 ? 's' : ''}
+          </span>
+          <button
+            className="btn-primary btn-upload-main"
+            onClick={() => setShowUploader(true)}
+            style={{ fontSize: 12, padding: '6px 14px' }}
+          >
+            📤 Upload
+          </button>
+        </div>
+      )}
 
       {/* Filters Bar */}
       <div className="asset-library-filters">

@@ -189,6 +189,25 @@ module.exports = (sequelize) => {
       type: DataTypes.JSONB,
       allowNull: true,
     },
+
+    /* ── Section 9: Registry Sync fields ── */
+    wound_depth: {
+      type: DataTypes.FLOAT,
+      defaultValue: 0,
+      allowNull: true,
+    },
+    belief_pressured: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    emotional_function: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    writer_notes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   }, {
     tableName: 'registry_characters',
     underscored: true,

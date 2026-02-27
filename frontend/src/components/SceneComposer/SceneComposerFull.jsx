@@ -818,7 +818,7 @@ function SceneComposerFull() {
           await navigator.clipboard.write([
             new ClipboardItem({ 'image/png': blob })
           ]);
-          console.log('\u2705 Scene copied to clipboard');
+          console.log('✅ Scene copied to clipboard');
         } catch (clipErr) {
           console.error('Clipboard write failed:', clipErr);
           alert('Clipboard access denied — try Save as PNG instead.');
@@ -855,7 +855,7 @@ function SceneComposerFull() {
         console.error(`Export scene ${i + 1} failed:`, err);
       }
     }
-    console.log(`\u2705 Exported ${scenes.length} scenes`);
+    console.log(`✅ Exported ${scenes.length} scenes`);
   };
 
 

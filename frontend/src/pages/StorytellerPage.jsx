@@ -33,6 +33,9 @@ import CharacterAppearanceRules from '../components/CharacterAppearanceRules';
 import ChapterExitEmotion from '../components/ChapterExitEmotion';
 import PacingArc from '../components/PacingArc';
 import AbsenceTracker from '../components/AbsenceTracker';
+import ChapterWardrobePanel from '../components/ChapterWardrobePanel';
+import StoryPlannerConversational from '../components/StoryPlannerConversational';
+import { VoiceAttributionButton, VoiceTypeTag } from '../components/VoiceAttributionButton';
 import { getLalaSessionPrompt } from '../data/lalaVoiceData';
 import { getCharacterRulesPrompt } from '../data/characterAppearanceRules';
 import { getVentureContext, getThreadContext } from '../data/ventureData';
@@ -122,6 +125,7 @@ function StorytellerPage() {
   const [showCreate, setShowCreate] = useState(false);
   const [initialChapterId, setInitialChapterId] = useState(null);
   const toast = useToasts();
+  const openingRef = useRef(false); // guard against re-entrant openBook calls
 
   const loadBooks = useCallback(async () => {
     try {
@@ -136,6 +140,8 @@ function StorytellerPage() {
   }, []);
 
   const openBook = useCallback(async (id, chapterId) => {
+    if (openingRef.current) return; // prevent re-entrant calls from searchParams effect
+    openingRef.current = true;
     try {
       setLoading(true);
       const data = await api(`/books/${id}`);
@@ -145,10 +151,14 @@ function StorytellerPage() {
       const params = { book: String(id) };
       if (chapterId) params.chapter = String(chapterId);
       setSearchParams(params, { replace: true });
+      // Also persist in sessionStorage so a hard refresh can recover
+      try { sessionStorage.setItem('st_book', String(id)); } catch {}
+      if (chapterId) try { sessionStorage.setItem('st_chapter', String(chapterId)); } catch {}
     } catch (e) {
       toast.add('Failed to open archive', 'error');
     } finally {
       setLoading(false);
+      openingRef.current = false;
     }
   }, [setSearchParams]);
 
@@ -175,36 +185,87 @@ function StorytellerPage() {
   useEffect(() => { loadBooks(); }, [loadBooks]);
 
   // Auto-open book from URL query params (?book=xxx&chapter=yyy)
+  // Falls back to sessionStorage if URL params are missing
   useEffect(() => {
-    const bookParam = searchParams.get('book');
-    const chapterParam = searchParams.get('chapter');
+    let bookParam = searchParams.get('book');
+    let chapterParam = searchParams.get('chapter');
+    // Fallback: recover from sessionStorage if URL params were lost
+    if (!bookParam) {
+      try {
+        bookParam = sessionStorage.getItem('st_book');
+        chapterParam = chapterParam || sessionStorage.getItem('st_chapter');
+      } catch {}
+    }
     if (bookParam && !activeBook) {
       openBook(bookParam, chapterParam);
     }
   }, [searchParams]);
 
+  // Auto-open the first book when the list loads (skip book list page)
+  useEffect(() => {
+    if (!loading && !activeBook && books.length > 0 && !searchParams.get('book')) {
+      openBook(books[0].id);
+    }
+  }, [loading, books, activeBook]);
+
+  // Go back to chapter selection (clear chapter but keep book)
+  const backToChapters = () => {
+    setInitialChapterId(null);
+    if (activeBook) {
+      setSearchParams({ book: String(activeBook.id) }, { replace: true });
+    }
+  };
+
   if (loading && !activeBook && !books.length) {
     return <div className="storyteller-page"><div className="st-loading"><div className="st-spinner" /> Loading archives…</div></div>;
   }
 
+  // If no books exist yet, show create prompt
+  if (!loading && books.length === 0 && !activeBook) {
+    return (
+      <div className="storyteller-page">
+        <div className="st-book-list" style={{ textAlign: 'center', paddingTop: '120px' }}>
+          <h2 style={{ fontFamily: 'var(--st-serif)', color: 'var(--st-ink)', marginBottom: '12px' }}>No archives yet</h2>
+          <p style={{ color: 'var(--st-muted)', marginBottom: '24px' }}>Create your first book to begin writing.</p>
+          <button className="st-btn st-btn-primary" onClick={() => setShowCreate(true)}>+ New Archive</button>
+        </div>
+        {showCreate && (
+          <NewBookModal
+            onClose={() => setShowCreate(false)}
+            onCreated={(b) => { setShowCreate(false); loadBooks(); if (b?.id) openBook(b.id); }}
+          />
+        )}
+        <ToastContainer toasts={toast.toasts} />
+      </div>
+    );
+  }
+
+  // Determine if we should show chapter selection or the editor
+  const showEditor = activeBook && initialChapterId;
+
   return (
     <div className="storyteller-page">
-      {activeBook ? (
+      {showEditor ? (
         <BookEditor
           book={activeBook}
-          onClose={closeBook}
+          onClose={backToChapters}
           toast={toast}
           onRefresh={() => openBook(activeBook.id)}
           initialChapterId={initialChapterId}
         />
-      ) : (
-        <BookList
-          books={books}
-          onOpen={(bookId) => navigate(`/book/${bookId}`)}
-          onDelete={deleteBook}
-          onNew={() => setShowCreate(true)}
+      ) : activeBook ? (
+        <ChapterSelection
+          book={activeBook}
+          onSelectChapter={(chapterId) => {
+            setInitialChapterId(chapterId);
+            setSearchParams({ book: String(activeBook.id), chapter: String(chapterId) }, { replace: true });
+            try { sessionStorage.setItem('st_chapter', String(chapterId)); } catch {}
+          }}
+          onHome={() => navigate('/')}
+          onRefresh={() => openBook(activeBook.id)}
+          toast={toast}
         />
-      )}
+      ) : null}
       {showCreate && (
         <NewBookModal
           onClose={() => setShowCreate(false)}
@@ -217,11 +278,108 @@ function StorytellerPage() {
 }
 
 /* ═══════════════════════════════════════
-   BookList — Archive Grid
+   BookList — Literary Table of Contents
+   Single book → elegant TOC. Multiple → card grid.
    ═══════════════════════════════════════ */
 
 function BookList({ books, onOpen, onDelete, onNew }) {
   const list = Array.isArray(books) ? books : [];
+  const [bookDetail, setBookDetail] = useState(null);
+
+  // When single book exists, fetch full detail for TOC chapter listing
+  useEffect(() => {
+    if (list.length === 1 && list[0]?.id) {
+      api(`/books/${list[0].id}`)
+        .then(data => setBookDetail(data?.book || data))
+        .catch(() => {});
+    }
+  }, [list.length === 1 ? list[0]?.id : null]);
+
+  // ── Single Book → Literary Table of Contents ──
+  if (list.length === 1) {
+    const book = bookDetail || list[0];
+    const chapters = bookDetail
+      ? (bookDetail.chapters || []).slice().sort((a, b) => (a.chapter_number || 0) - (b.chapter_number || 0))
+      : [];
+    const totalWords = chapters.reduce((sum, ch) => {
+      return sum + (ch.draft_prose || '').split(/\s+/).filter(Boolean).length;
+    }, 0);
+    const chapterCount = bookDetail ? chapters.length : (book.chapter_count ?? 0);
+
+    return (
+      <div className="st-book-toc">
+        {/* ── Title Page ── */}
+        <div className="st-toc-title-page">
+          <div className="st-toc-ornament">✦</div>
+          <h1 className="st-toc-book-title">{book.title}</h1>
+          {book.subtitle && <p className="st-toc-subtitle">{book.subtitle}</p>}
+          {book.character_name && (
+            <p className="st-toc-author">{book.character_name}</p>
+          )}
+          <div className="st-toc-stats">
+            <span>{chapterCount} {chapterCount === 1 ? 'Chapter' : 'Chapters'}</span>
+            <span className="st-toc-stats-sep">·</span>
+            <span>{totalWords.toLocaleString()} Words</span>
+          </div>
+          <div className="st-toc-ornament">✦</div>
+        </div>
+
+        {/* ── Chapter Listing ── */}
+        {chapters.length > 0 ? (
+          <>
+            <div className="st-toc-heading">Contents</div>
+            <div className="st-toc-chapters">
+              {chapters.map((ch, i) => {
+                const wordCount = (ch.draft_prose || '').split(/\s+/).filter(Boolean).length;
+                const hasContent = wordCount > 0 || (ch.lines && ch.lines.length > 0);
+                return (
+                  <button
+                    key={ch.id}
+                    className="st-toc-chapter-row"
+                    onClick={() => onOpen(book.id, ch.id)}
+                    style={{ '--toc-index': i }}
+                  >
+                    <span className="st-toc-ch-num">{numberWord(i + 1)}</span>
+                    <span className="st-toc-ch-dot" />
+                    <span className="st-toc-ch-title">{ch.title || 'Untitled'}</span>
+                    <span className="st-toc-ch-meta">
+                      {hasContent ? `${wordCount.toLocaleString()} words` : '—'}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        ) : !bookDetail ? (
+          <div className="st-toc-loading">
+            <div className="st-spinner" /> Loading contents…
+          </div>
+        ) : (
+          <div className="st-toc-empty">No chapters yet. Create one to begin.</div>
+        )}
+
+        {/* ── Footer ── */}
+        <div className="st-toc-footer">
+          {chapters.length > 0 && (
+            <button
+              className="st-toc-begin-btn"
+              onClick={() => onOpen(book.id, chapters[0]?.id)}
+            >
+              Begin Writing →
+            </button>
+          )}
+          <button
+            className="st-toc-new-btn"
+            onClick={() => onOpen(book.id)}
+          >
+            + Add Chapter
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Multiple Books → Card Grid ──
   return (
     <div className="st-book-list">
       <div className="st-book-list-header">
@@ -230,7 +388,6 @@ function BookList({ books, onOpen, onDelete, onNew }) {
       </div>
       <div className="st-book-grid">
         {list.map(book => {
-          // The list endpoint provides pre-computed counts (chapters stripped)
           const chapterCount = book.chapter_count ?? (book.chapters || []).length;
           const lineCount = book.line_count ?? 0;
           const pending = book.pending_count ?? 0;
@@ -288,21 +445,407 @@ function BookList({ books, onOpen, onDelete, onNew }) {
 }
 
 /* ═══════════════════════════════════════
+   ChapterSelection — Creator Dashboard
+   Simple, clean entry point: pick a chapter, start writing.
+   ═══════════════════════════════════════ */
+
+function ChapterSelection({ book, onSelectChapter, onHome, onRefresh, toast }) {
+  const [chapters, setChapters] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showAddChapter, setShowAddChapter] = useState(false);
+  const [newChapterTitle, setNewChapterTitle] = useState('');
+  const [showPlanner, setShowPlanner] = useState(() => {
+    try { return new URLSearchParams(window.location.search).get('view') === 'planner'; } catch { return false; }
+  });
+
+  const refreshChapters = async () => {
+    const data = await api(`/books/${book.id}`);
+    const b = data?.book || data;
+    setChapters((b.chapters || []).slice().sort((a, b2) => (a.chapter_number || 0) - (b2.chapter_number || 0)));
+  };
+
+  useEffect(() => {
+    if (!book?.id) return;
+    setLoading(true);
+    refreshChapters()
+      .catch(() => toast.add('Failed to load chapters', 'error'))
+      .finally(() => setLoading(false));
+  }, [book?.id]);
+
+  const createChapter = async () => {
+    if (!newChapterTitle.trim()) return;
+    try {
+      await api(`/books/${book.id}/chapters`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: newChapterTitle.trim(), chapter_number: chapters.length + 1 }),
+      });
+      setNewChapterTitle('');
+      setShowAddChapter(false);
+      await refreshChapters();
+      toast.add('Chapter created');
+    } catch {
+      toast.add('Failed to create chapter', 'error');
+    }
+  };
+
+  /* ── Computed project stats ── */
+  const totalWords = chapters.reduce((sum, ch) => {
+    return sum + (ch.draft_prose || '').split(/\s+/).filter(Boolean).length;
+  }, 0);
+
+  // Find most recently edited chapter
+  const lastEditedChapter = chapters.length > 0
+    ? chapters.slice().sort((a, b) => {
+        const aTime = new Date(a.updated_at || 0).getTime();
+        const bTime = new Date(b.updated_at || 0).getTime();
+        return bTime - aTime;
+      })[0]
+    : null;
+
+  const chaptersWithContent = chapters.filter(ch =>
+    (ch.draft_prose || '').split(/\s+/).filter(Boolean).length > 0
+  ).length;
+
+  return (
+    <div className="st-dash">
+      {/* ── Top bar with branding ── */}
+      <div className="st-dash-topbar">
+        <button className="st-dash-back" onClick={onHome}>← Home</button>
+        <span className="st-dash-brand">Storyteller</span>
+      </div>
+
+      {/* ── Project Header ── */}
+      <div className="st-dash-header">
+        <h1 className="st-dash-title">{book.title}</h1>
+        {book.subtitle && <p className="st-dash-subtitle">{book.subtitle}</p>}
+
+        <div className="st-dash-meta">
+          <span className="st-dash-meta-item">
+            <strong>{chapters.length}</strong> {chapters.length === 1 ? 'chapter' : 'chapters'}
+          </span>
+          <span className="st-dash-meta-sep">·</span>
+          <span className="st-dash-meta-item">
+            <strong>{totalWords.toLocaleString()}</strong> words
+          </span>
+          {book.updated_at && (
+            <>
+              <span className="st-dash-meta-sep">·</span>
+              <span className="st-dash-meta-item">edited {timeAgo(book.updated_at)}</span>
+            </>
+          )}
+        </div>
+
+        {/* Primary CTA */}
+        <div className="st-dash-actions">
+          {lastEditedChapter && chaptersWithContent > 0 ? (
+            <button className="st-dash-cta" onClick={() => onSelectChapter(lastEditedChapter.id)}>
+              Continue Writing →
+            </button>
+          ) : chapters.length > 0 ? (
+            <button className="st-dash-cta" onClick={() => onSelectChapter(chapters[0].id)}>
+              Start Writing →
+            </button>
+          ) : null}
+          <button className="st-dash-plan-btn" onClick={() => setShowPlanner(true)}>
+            🎙️ Plan with Voice
+          </button>
+          {!showAddChapter ? (
+            <button className="st-dash-add-btn" onClick={() => setShowAddChapter(true)}>
+              + New Chapter
+            </button>
+          ) : (
+            <div className="st-dash-add-form">
+              <input
+                className="st-dash-add-input"
+                placeholder="Chapter title…"
+                value={newChapterTitle}
+                onChange={e => setNewChapterTitle(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && createChapter()}
+                autoFocus
+              />
+              <button className="st-dash-add-confirm" onClick={createChapter}>Create</button>
+              <button className="st-dash-add-cancel" onClick={() => { setShowAddChapter(false); setNewChapterTitle(''); }}>×</button>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Chapter List ── */}
+      {loading ? (
+        <div className="st-dash-loading">
+          <div className="st-spinner" /> Loading…
+        </div>
+      ) : chapters.length > 0 ? (
+        <div className="st-dash-chapters">
+          {chapters.map((ch, i) => {
+            const words = (ch.draft_prose || '').split(/\s+/).filter(Boolean).length;
+            const hasContent = words > 0;
+            const rawSections = Array.isArray(ch.sections) ? ch.sections : [];
+            const sections = rawSections.filter(s => ['h2','h3'].includes(s.type) && s.content);
+
+            return (
+              <button
+                key={ch.id}
+                className="st-dash-chapter-row"
+                onClick={() => onSelectChapter(ch.id)}
+                style={{ '--card-index': i }}
+              >
+                <span className="st-dash-ch-num">{i + 1}</span>
+                <div className="st-dash-ch-body">
+                  <span className="st-dash-ch-title">{ch.title || 'Untitled'}</span>
+                  {sections.length > 0 && (
+                    <div className="st-dash-ch-sections">
+                      {sections.map((s, si) => (
+                        <span key={si} className="st-dash-ch-section-tag">{s.content}</span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="st-dash-ch-info">
+                  <span className="st-dash-ch-words">{hasContent ? `${words.toLocaleString()} words` : 'Empty'}</span>
+                  {ch.updated_at && <span className="st-dash-ch-time">{timeAgo(ch.updated_at)}</span>}
+                </div>
+                <span className="st-dash-ch-arrow">→</span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="st-dash-empty">
+          <p className="st-dash-empty-title">No chapters yet</p>
+          <p className="st-dash-empty-sub">Create your first chapter to start writing.</p>
+        </div>
+      )}
+
+      {/* ── Voice Story Planner overlay ── */}
+      {showPlanner && (
+        <div className="st-dash-planner-overlay">
+          <StoryPlannerConversational
+            book={book}
+            chapters={chapters}
+            characters={[]}
+            onApply={() => { refreshChapters(); setShowPlanner(false); }}
+            onClose={() => setShowPlanner(false)}
+            toast={toast}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════
+   SectionEditor — Manage sections for a chapter
+   Add, edit, delete, reorder sections.
+   ═══════════════════════════════════════ */
+
+function SectionEditor({ chapter, onSave, onGoToSection, toast }) {
+  const [sections, setSections] = useState(() =>
+    Array.isArray(chapter?.sections) ? chapter.sections.map((s, i) => ({ ...s, _key: s.id || `sec-${i}` })) : []
+  );
+  const [editIdx, setEditIdx] = useState(null);
+  const [editContent, setEditContent] = useState('');
+  const [editType, setEditType] = useState('body');
+  const [editDesc, setEditDesc] = useState('');
+  const [addOpen, setAddOpen] = useState(false);
+  const [newContent, setNewContent] = useState('');
+  const [newType, setNewType] = useState('scene');
+  const [saving, setSaving] = useState(false);
+
+  // Reset when chapter changes
+  useEffect(() => {
+    setSections(
+      Array.isArray(chapter?.sections) ? chapter.sections.map((s, i) => ({ ...s, _key: s.id || `sec-${i}` })) : []
+    );
+    setEditIdx(null);
+    setAddOpen(false);
+  }, [chapter?.id]);
+
+  const SECTION_TYPES = [
+    { value: 'scene', label: 'Scene', dot: '🟢' },
+    { value: 'beat', label: 'Beat', dot: '🔵' },
+    { value: 'transition', label: 'Transition', dot: '🟡' },
+    { value: 'body', label: 'Body', dot: '⚪' },
+  ];
+
+  const save = async (updated) => {
+    setSaving(true);
+    try {
+      const cleaned = updated.map(({ _key, ...rest }) => rest);
+      await fetch(`/api/v1/storyteller/chapters/${chapter.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sections: cleaned }),
+      });
+      onSave?.(cleaned);
+      toast.add('Sections saved');
+    } catch {
+      toast.add('Failed to save sections', 'error');
+    }
+    setSaving(false);
+  };
+
+  const addSection = () => {
+    if (!newContent.trim()) return;
+    const sec = {
+      _key: `sec-${Date.now()}`,
+      type: 'h3',
+      content: newContent.trim(),
+      meta: { section_type: newType, description: '' },
+    };
+    const next = [...sections, sec];
+    setSections(next);
+    save(next);
+    setNewContent('');
+    setAddOpen(false);
+  };
+
+  const startEdit = (i) => {
+    const s = sections[i];
+    setEditIdx(i);
+    setEditContent(s.content || '');
+    setEditType(s.meta?.section_type || s.type || 'body');
+    setEditDesc(s.meta?.description || '');
+  };
+
+  const saveEdit = () => {
+    if (editIdx === null) return;
+    const next = sections.map((s, i) =>
+      i === editIdx
+        ? { ...s, content: editContent, meta: { ...s.meta, section_type: editType, description: editDesc } }
+        : s
+    );
+    setSections(next);
+    save(next);
+    setEditIdx(null);
+  };
+
+  const deleteSection = (i) => {
+    const next = sections.filter((_, idx) => idx !== i);
+    setSections(next);
+    save(next);
+  };
+
+  const moveSection = (i, dir) => {
+    const j = i + dir;
+    if (j < 0 || j >= sections.length) return;
+    const next = [...sections];
+    [next[i], next[j]] = [next[j], next[i]];
+    setSections(next);
+    save(next);
+  };
+
+  const typeLabel = (t) => SECTION_TYPES.find(st => st.value === t)?.label || t;
+  const typeDot = (t) => SECTION_TYPES.find(st => st.value === t)?.dot || '⚪';
+
+  return (
+    <div className="st-section-editor">
+      <div className="st-section-editor-header">
+        <h2 className="st-section-editor-title">Sections — {chapter?.title || 'Untitled'}</h2>
+        <p className="st-section-editor-sub">Break this chapter into scenes, beats, and transitions.</p>
+      </div>
+
+      {sections.length === 0 && !addOpen && (
+        <div className="st-section-editor-empty">
+          <p>No sections yet. Add your first section to structure this chapter.</p>
+        </div>
+      )}
+
+      <div className="st-section-list">
+        {sections.map((sec, i) => (
+          <div key={sec._key} className={`st-section-item${editIdx === i ? ' editing' : ''}`}>
+            {editIdx === i ? (
+              <div className="st-section-edit-form">
+                <input
+                  className="st-section-edit-input"
+                  value={editContent}
+                  onChange={e => setEditContent(e.target.value)}
+                  placeholder="Section title…"
+                  autoFocus
+                />
+                <select className="st-section-edit-select" value={editType} onChange={e => setEditType(e.target.value)}>
+                  {SECTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.dot} {t.label}</option>)}
+                </select>
+                <textarea
+                  className="st-section-edit-desc"
+                  value={editDesc}
+                  onChange={e => setEditDesc(e.target.value)}
+                  placeholder="Description / notes (optional)…"
+                  rows={2}
+                />
+                <div className="st-section-edit-actions">
+                  <button className="st-section-btn-save" onClick={saveEdit}>Save</button>
+                  <button className="st-section-btn-cancel" onClick={() => setEditIdx(null)}>Cancel</button>
+                </div>
+              </div>
+            ) : (
+              <div className="st-section-row">
+                <span className="st-section-dot">{typeDot(sec.meta?.section_type || sec.type)}</span>
+                <div className="st-section-body" style={{ cursor: 'pointer' }} onClick={() => onGoToSection?.(sec.content || `Section ${i + 1}`)}>
+                  <span className="st-section-name">{sec.content || 'Untitled section'}</span>
+                  <span className="st-section-type-label">{typeLabel(sec.meta?.section_type || sec.type)}</span>
+                  {sec.meta?.description && <span className="st-section-desc">{sec.meta.description}</span>}
+                  <span className="st-section-write-hint">Click to write →</span>
+                </div>
+                <div className="st-section-actions">
+                  <button onClick={() => moveSection(i, -1)} disabled={i === 0} title="Move up">↑</button>
+                  <button onClick={() => moveSection(i, 1)} disabled={i === sections.length - 1} title="Move down">↓</button>
+                  <button onClick={() => startEdit(i)} title="Edit">✎</button>
+                  <button onClick={() => deleteSection(i)} title="Delete" className="st-section-delete">×</button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {addOpen ? (
+        <div className="st-section-add-form">
+          <input
+            className="st-section-add-input"
+            value={newContent}
+            onChange={e => setNewContent(e.target.value)}
+            placeholder="Section title…"
+            onKeyDown={e => e.key === 'Enter' && addSection()}
+            autoFocus
+          />
+          <select className="st-section-add-select" value={newType} onChange={e => setNewType(e.target.value)}>
+            {SECTION_TYPES.map(t => <option key={t.value} value={t.value}>{t.dot} {t.label}</option>)}
+          </select>
+          <button className="st-section-btn-save" onClick={addSection}>Add</button>
+          <button className="st-section-btn-cancel" onClick={() => { setAddOpen(false); setNewContent(''); }}>Cancel</button>
+        </div>
+      ) : (
+        <button className="st-section-add-btn" onClick={() => setAddOpen(true)}>
+          + Add Section
+        </button>
+      )}
+
+      {saving && <div className="st-section-saving">Saving…</div>}
+    </div>
+  );
+}
+
+
+/* ═══════════════════════════════════════
    BookEditor — The Quiet Room
    All business logic preserved.
    Render redesigned for editorial calm.
    ═══════════════════════════════════════ */
 
 function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
-  const navigate = useNavigate();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   /* ── State ── */
   const [chapters, setChapters] = useState(book.chapters || []);
   const [activeChapterId, setActiveChapterId] = useState(
     initialChapterId || (book.chapters && book.chapters[0]?.id) || null
   );
-  const [activeView, setActiveView] = useState(searchParams.get('view') || 'book');
+  const [activeView, setActiveView] = useState(() => {
+    // Restore view from sessionStorage (no longer synced to URL)
+    try { return sessionStorage.getItem('st_view') || 'book'; } catch { return 'book'; }
+  });
   const [registryCharacters, setRegistryCharacters] = useState([]);
 
   // UI state
@@ -325,9 +868,20 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
   const [proseText, setProseText] = useState('');
   const [proseSaved, setProseSaved] = useState(true);
   const proseSaveTimer = useRef(null);
+  const proseRef = useRef('');         // always-current prose (avoids stale closures)
+  const chapterIdRef = useRef(null);   // always-current chapter id
+  const proseSavedRef = useRef(true);  // always-current saved flag
+
+  // AI Tools state
+  const [aiAction, setAiAction] = useState(null);
+  const [aiResult, setAiResult] = useState(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState(null);
+
   const [canonOpen, setCanonOpen] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [briefOpen, setBriefOpen] = useState(false);
+  const [wardrobeAssignOpen, setWardrobeAssignOpen] = useState(false);
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Editing state
@@ -359,47 +913,80 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
 
   /* ── Effects ── */
 
-  // Sync activeView to URL so refresh preserves the tab
+  // Persist activeView in sessionStorage (not URL — avoids interfering with parent searchParams)
   useEffect(() => {
-    setSearchParams(prev => {
-      const next = new URLSearchParams(prev);
-      if (activeView === 'book') next.delete('view');
-      else next.set('view', activeView);
-      return next;
-    }, { replace: true });
-  }, [activeView, setSearchParams]);
+    try { sessionStorage.setItem('st_view', activeView); } catch {}
+  }, [activeView]);
 
-  // Load prose when chapter changes
+  // Keep refs in sync with state (used by timer callbacks & beforeunload)
+  useEffect(() => { proseRef.current = proseText; }, [proseText]);
+  useEffect(() => { chapterIdRef.current = activeChapterId; }, [activeChapterId]);
+  useEffect(() => { proseSavedRef.current = proseSaved; }, [proseSaved]);
+
+  // Load prose ONLY when the active chapter *ID* changes (not when chapters array mutates)
+  const prevChapterIdRef = useRef(null);
   useEffect(() => {
-    if (!activeChapterId) return;
+    if (!activeChapterId || activeChapterId === prevChapterIdRef.current) return;
+    prevChapterIdRef.current = activeChapterId;
     const ch = chapters.find(c => c.id === activeChapterId);
     if (ch?.draft_prose) {
       setProseText(ch.draft_prose);
+      proseRef.current = ch.draft_prose;
     } else {
       // Fallback: join approved lines into prose
       const lns = (ch?.lines || []).filter(l => l.status === 'approved' || l.status === 'edited');
-      setProseText(lns.map(l => l.text).join('\n\n'));
+      const text = lns.map(l => l.text).join('\n\n');
+      setProseText(text);
+      proseRef.current = text;
     }
     setProseSaved(true);
+    proseSavedRef.current = true;
   }, [activeChapterId, chapters]);
 
-  // Autosave prose
+  // Core save function — reads from refs, never stale
+  const doSave = useCallback(async () => {
+    const text = proseRef.current;
+    const chId = chapterIdRef.current;
+    if (!text || !chId) return;
+    try {
+      const res = await fetch(`${API}/chapters/${chId}/save-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft_prose: text }),
+      });
+      if (res.ok) {
+        setProseSaved(true);
+        proseSavedRef.current = true;
+        markSaved();
+      } else {
+        console.error('Prose save failed:', res.status);
+      }
+    } catch (e) { console.error('Prose autosave failed:', e); }
+  }, []);  // no deps — reads from refs
+
+  // Autosave prose (debounced 2s after last edit)
   useEffect(() => {
     if (proseSaved || !proseText || !activeChapterId) return;
     if (proseSaveTimer.current) clearTimeout(proseSaveTimer.current);
-    proseSaveTimer.current = setTimeout(async () => {
-      try {
-        await fetch(`${API}/chapters/${activeChapterId}/save-draft`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ draft_prose: proseText }),
-        });
-        setProseSaved(true);
-        markSaved();
-      } catch (e) { console.error('Prose autosave failed:', e); }
-    }, 3000);
+    proseSaveTimer.current = setTimeout(() => { doSave(); }, 2000);
     return () => clearTimeout(proseSaveTimer.current);
-  }, [proseText, proseSaved, activeChapterId]);
+  }, [proseText, proseSaved, activeChapterId, doSave]);
+
+  // Save immediately before page unload (handles refresh / tab close)
+  useEffect(() => {
+    const handleBeforeUnload = (e) => {
+      if (!proseSavedRef.current && proseRef.current && chapterIdRef.current) {
+        // Use sendBeacon for reliable save during unload
+        const url = `${API}/chapters/${chapterIdRef.current}/save-draft`;
+        const blob = new Blob([JSON.stringify({ draft_prose: proseRef.current })], { type: 'application/json' });
+        navigator.sendBeacon(url, blob);
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);  // stable — reads from refs
 
   useEffect(() => {
     const style = document.createElement('style');
@@ -467,6 +1054,118 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
     exit_emotion_note: exitEmotionData.exit_emotion_note || '',
     lala_session_prompt: getLalaSessionPrompt ? getLalaSessionPrompt() : '',
   }), [pnosAct, incomingEchoes, activeThreads, chapterCharacters, book, activeChapter, exitEmotionData]);
+
+  /* ── AI Tools ── */
+
+  const AI_ACTIONS = [
+    { id: 'continue',  icon: '→', label: 'Continue',           sub: 'Write what comes next',          endpoint: '/api/v1/memories/story-continue' },
+    { id: 'deepen',    icon: '◌', label: 'Deepen',             sub: 'Add sensory & emotional depth',  endpoint: '/api/v1/memories/story-deepen' },
+    { id: 'dialogue',  icon: '"', label: 'Dialogue',           sub: 'Generate natural dialogue',      endpoint: '/api/v1/memories/ai-writer-action', action: 'dialogue' },
+    { id: 'interior',  icon: '∞', label: 'Interior Monologue', sub: 'What they think but don\'t say', endpoint: '/api/v1/memories/ai-writer-action', action: 'interior' },
+    { id: 'rewrite',   icon: '↻', label: 'Rewrite',            sub: 'Three alternative takes',        endpoint: '/api/v1/memories/rewrite-options' },
+  ];
+
+  const runAiAction = async (action) => {
+    setAiAction(action.id);
+    setAiResult(null);
+    setAiError(null);
+    setAiLoading(true);
+
+    const recentProse = proseText ? proseText.slice(-800) : '';
+    const narrativeCtx = buildNarrativePayload();
+
+    const payload = {
+      chapter_id: activeChapterId,
+      book_id: book.id,
+      current_prose: recentProse,
+      recent_prose: recentProse,
+      pnos_act: narrativeCtx.pnos_act,
+      chapter_title: activeChapter?.title || '',
+      book_title: book.title || '',
+      character_rules: narrativeCtx.character_rules,
+      exit_emotion: narrativeCtx.exit_emotion,
+      venture_context: narrativeCtx.venture_context,
+      action: action.action || action.id,
+      length: 'paragraph',
+    };
+
+    // For rewrite, pass the last paragraph as "text"
+    if (action.id === 'rewrite') {
+      const paragraphs = proseText.split('\n\n').filter(p => p.trim());
+      payload.text = paragraphs[paragraphs.length - 1] || proseText.slice(-300);
+      payload.book_id = book.id;
+    }
+
+    try {
+      const res = await fetch(action.endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+
+      if (action.id === 'rewrite') {
+        // rewrite-options returns { rewrites: [...] }
+        const rewrites = data.rewrites || data.options || [];
+        setAiResult(rewrites.length > 0
+          ? rewrites.map((r, i) => `${i + 1}. ${r.label || r.type || 'Option ' + (i+1)}\n${r.text}`).join('\n\n---\n\n')
+          : data.text || data.content || 'No rewrites generated.');
+      } else {
+        setAiResult(
+          data.continuation || data.content || data.text || data.prose ||
+          data.result || data.suggestion || 'No result generated.'
+        );
+      }
+    } catch (e) {
+      setAiError('Generation failed — check that the backend is running.');
+    }
+    setAiLoading(false);
+  };
+
+  const insertAiResult = () => {
+    if (!aiResult) return;
+    // For rewrite, replace the last paragraph
+    if (aiAction === 'rewrite') {
+      // Don't auto-insert rewrites — user should copy what they want
+      navigator.clipboard?.writeText(aiResult).catch(() => {});
+      toast.add('Copied to clipboard — paste where you like');
+    } else {
+      setProseText(prev => {
+        const trimmed = prev.trimEnd();
+        return trimmed + (trimmed ? '\n\n' : '') + aiResult;
+      });
+      setProseSaved(false);
+    }
+    setAiResult(null);
+    setAiAction(null);
+  };
+
+  const discardAiResult = () => {
+    setAiResult(null);
+    setAiAction(null);
+    setAiError(null);
+  };
+
+  /* ── Section → Prose insertion ── */
+  const insertSectionHeading = (sectionTitle) => {
+    // Insert section title as a bold heading line in prose, then switch to manuscript view
+    setProseText(prev => {
+      const trimmed = prev.trimEnd();
+      const heading = sectionTitle;
+      // Check if this heading is already in the prose
+      if (trimmed.includes(heading)) {
+        // Already exists — just switch view, don't duplicate
+        return prev;
+      }
+      const updated = trimmed + (trimmed ? '\n\n' : '') + heading + '\n\n';
+      proseRef.current = updated;
+      return updated;
+    });
+    setProseSaved(false);
+    proseSavedRef.current = false;
+    setActiveView('book');
+    setMobileNavOpen(false);
+  };
 
   /* ── Handlers ── */
 
@@ -688,7 +1387,25 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
         {/* Review mode status badge */}
         {reviewMode && (
           <div className={`st-review-badge st-review-badge-${ln.status}`}>
-            {ln.status === 'approved' ? '\u2713' : ln.status === 'pending' ? '\u25CB' : ln.status === 'edited' ? '\u270E' : '\u2022'}
+            {ln.status === 'approved' ? '✓' : ln.status === 'pending' ? '○' : ln.status === 'edited' ? '✎' : '•'}
+          </div>
+        )}
+        {/* Voice type gutter tag */}
+        {!reviewMode && ln.voice_type && ln.voice_type !== 'unattributed' && (
+          <div style={{ position: 'absolute', left: -54, top: 4 }}>
+            <VoiceTypeTag
+              line={ln}
+              onConfirm={async (lineId, newType) => {
+                updateLineLocal(lineId, { voice_type: newType, voice_confirmed: true });
+                try {
+                  await fetch(`/api/v1/memories/confirm-voice`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ line_id: lineId, voice_type: newType }),
+                  });
+                } catch (e) { console.error('Voice confirm failed:', e); }
+              }}
+            />
           </div>
         )}
         <div className="st-line-content">
@@ -727,23 +1444,23 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
           {reviewMode && !isEditing ? (
             <>
               {ln.status !== 'approved' && (
-                <button className="st-line-action st-action-approve" onClick={() => approveLine(ln.id)} title="Approve">{'\u2713'}</button>
+                <button className="st-line-action st-action-approve" onClick={() => approveLine(ln.id)} title="Approve">{'✓'}</button>
               )}
-              <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)} title="Edit">{'\u270E'}</button>
-              <button className="st-line-action st-action-reject" onClick={() => rejectLine(ln.id)} title="Reject">{'\u2715'}</button>
+              <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)} title="Edit">{'✎'}</button>
+              <button className="st-line-action st-action-reject" onClick={() => rejectLine(ln.id)} title="Reject">{'✕'}</button>
             </>
           ) : (
             <>
               {isPending && (
                 <>
-                  <button className="st-line-action st-action-approve" onClick={() => approveLine(ln.id)}>{'\u2713'}</button>
-                  <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>{'\u270E'}</button>
-                  <button className="st-line-action st-action-reject" onClick={() => rejectLine(ln.id)}>{'\u2715'}</button>
+                  <button className="st-line-action st-action-approve" onClick={() => approveLine(ln.id)}>{'✓'}</button>
+                  <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>{'✎'}</button>
+                  <button className="st-line-action st-action-reject" onClick={() => rejectLine(ln.id)}>{'✕'}</button>
                 </>
               )}
               {!isPending && !isEditing && (
                 <>
-                  <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>{'\u270E'}</button>
+                  <button className="st-line-action st-action-edit" onClick={() => startEdit(ln)}>{'✎'}</button>
                   <PlantEchoButton
                     line={ln}
                     chapters={chapters}
@@ -781,9 +1498,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
       {/* ── Top Bar ── */}
       <div className="st-topbar">
         <div className="st-topbar-left">
-          <button className="st-topbar-back" onClick={onClose}>← Library</button>
-          <div className="st-topbar-sep" />
-          <span className="st-topbar-brand">Prime Studios</span>
+          <button className="st-topbar-back" onClick={onClose}>← Chapters</button>
           <button
             className="st-mobile-nav-toggle"
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
@@ -815,71 +1530,88 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
             </span>
           )}
           <button
-            className={`st-mode-toggle${writingMode ? ' active' : ''}`}
-            onClick={() => setWritingMode(!writingMode)}
-          >
-            Focus
-          </button>
-          <button
-            className={`st-workspace-toggle${activeView !== 'book' ? ' has-active' : ''}`}
+            className={`st-tools-btn${drawerOpen ? ' active' : ''}`}
             onClick={e => { e.stopPropagation(); setDrawerOpen(!drawerOpen); }}
           >
-            Workspace ▾
+            ☰ Tools
           </button>
         </div>
       </div>
 
-      {/* ── Workspace Drawer ── */}
+      {/* ── Tools Panel — right side slide-out ── */}
       {drawerOpen && (
         <>
-          <div
-            style={{ position: 'fixed', inset: 0, zIndex: 25 }}
-            onClick={() => setDrawerOpen(false)}
-          />
-          <div className="st-workspace-drawer" onClick={e => e.stopPropagation()}>
-            <button
-              className={`st-workspace-item${activeView === 'book' ? ' active' : ''}`}
-              onClick={() => openWorkspace('book')}
-            >
-              <span className="st-workspace-item-icon">✦</span> Manuscript
-            </button>
-            <button
-              className={`st-workspace-item${activeView === 'toc' ? ' active' : ''}`}
-              onClick={() => openWorkspace('toc')}
-            >
-              <span className="st-workspace-item-icon">≡</span> Table of Contents
-            </button>
-            <button
-              className={`st-workspace-item${activeView === 'memory' ? ' active' : ''}`}
-              onClick={() => openWorkspace('memory')}
-            >
-              <span className="st-workspace-item-icon">◉</span> Memory Bank
-            </button>
-            <button
-              className={`st-workspace-item${activeView === 'scenes' ? ' active' : ''}`}
-              onClick={() => openWorkspace('scenes')}
-            >
-              <span className="st-workspace-item-icon">▦</span> Scenes
-            </button>
-            <button
-              className={`st-workspace-item${activeView === 'lala' ? ' active' : ''}`}
-              onClick={() => openWorkspace('lala')}
-            >
-              <span className="st-workspace-item-icon">✦</span> Lala Detection
-            </button>
-            <button
-              className={`st-workspace-item${activeView === 'script' ? ' active' : ''}`}
-              onClick={() => openWorkspace('script')}
-            >
-              <span className="st-workspace-item-icon">⟶</span> Script
-            </button>
-            <button
-              className={`st-workspace-item${activeView === 'export' ? ' active' : ''}`}
-              onClick={() => openWorkspace('export')}
-            >
-              <span className="st-workspace-item-icon">↓</span> Export
-            </button>
-          </div>
+          <div className="st-tools-backdrop" onClick={() => setDrawerOpen(false)} />
+          <aside className="st-tools-panel" onClick={e => e.stopPropagation()}>
+            <div className="st-tools-header">
+              <span className="st-tools-heading">Tools</span>
+              <button className="st-tools-close" onClick={() => setDrawerOpen(false)}>✕</button>
+            </div>
+
+            <div className="st-tools-group">
+              <div className="st-tools-group-label">Workspaces</div>
+              <button className={`st-tools-item${activeView === 'book' ? ' active' : ''}`} onClick={() => openWorkspace('book')}>
+                <span className="st-tools-icon">✦</span> Manuscript
+              </button>
+              <button className={`st-tools-item${activeView === 'planner' ? ' active' : ''}`} onClick={() => openWorkspace('planner')}>
+                <span className="st-tools-icon">⌗</span> Story Planner
+              </button>
+              <button className={`st-tools-item${activeView === 'memory' ? ' active' : ''}`} onClick={() => openWorkspace('memory')}>
+                <span className="st-tools-icon">◉</span> Memory Bank
+              </button>
+              <button className={`st-tools-item${activeView === 'toc' ? ' active' : ''}`} onClick={() => openWorkspace('toc')}>
+                <span className="st-tools-icon">≡</span> Table of Contents
+              </button>
+              <button className={`st-tools-item${activeView === 'sections' ? ' active' : ''}`} onClick={() => openWorkspace('sections')}>
+                <span className="st-tools-icon">§</span> Sections
+              </button>
+              <button className={`st-tools-item${activeView === 'scenes' ? ' active' : ''}`} onClick={() => openWorkspace('scenes')}>
+                <span className="st-tools-icon">▦</span> Scenes
+              </button>
+              <button className={`st-tools-item${activeView === 'script' ? ' active' : ''}`} onClick={() => openWorkspace('script')}>
+                <span className="st-tools-icon">⟶</span> Script Bridge
+              </button>
+              <button className={`st-tools-item${activeView === 'lala' ? ' active' : ''}`} onClick={() => openWorkspace('lala')}>
+                <span className="st-tools-icon">✧</span> Lala Detection
+              </button>
+              <button className={`st-tools-item${activeView === 'export' ? ' active' : ''}`} onClick={() => openWorkspace('export')}>
+                <span className="st-tools-icon">↓</span> Export
+              </button>
+            </div>
+
+            {activeChapter && (
+              <div className="st-tools-group">
+                <div className="st-tools-group-label">This Chapter</div>
+                <button className="st-tools-item" onClick={() => { setProseMode(!proseMode); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">{proseMode ? '¶' : '✍'}</span> {proseMode ? 'Switch to Lines' : 'Switch to Prose'}
+                </button>
+                <button className="st-tools-item" onClick={() => { setBriefOpen(true); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">✎</span> Define Intention
+                </button>
+                <button className="st-tools-item" onClick={() => { setImportTarget(activeChapter); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">↓</span> Import Draft
+                </button>
+                <button className={`st-tools-item${reviewMode ? ' active' : ''}`} onClick={() => { setReviewMode(!reviewMode); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">👁</span> Review Mode
+                </button>
+                <button className={`st-tools-item${canonOpen ? ' active' : ''}`} onClick={() => { setCanonOpen(!canonOpen); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">⊞</span> Canon Panel
+                </button>
+                <button className={`st-tools-item${writingMode ? ' active' : ''}`} onClick={() => { setWritingMode(!writingMode); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">◯</span> Focus Mode
+                </button>
+                <button className="st-tools-item" onClick={() => { setRedoInterview(true); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">⟳</span> Scene Interview
+                </button>
+                <button className="st-tools-item" onClick={() => { setContextExpanded(true); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">⚙</span> Chapter Settings
+                </button>
+                <button className="st-tools-item st-tools-danger" onClick={() => { resetChapter(); setDrawerOpen(false); }}>
+                  <span className="st-tools-icon">✕</span> Reset Chapter
+                </button>
+              </div>
+            )}
+          </aside>
         </>
       )}
 
@@ -891,53 +1623,40 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
           <div className="st-mobile-nav-backdrop" onClick={() => setMobileNavOpen(false)} />
         )}
 
-        {/* Left Navigation — Quiet */}
-        <nav
-          className={`st-nav${mobileNavOpen ? ' st-nav-mobile-open' : ''}${navCollapsed ? ' st-nav-collapsed' : ''}`}
-          style={navCollapsed ? { width: 44, minWidth: 44, overflow: 'hidden', padding: '8px 4px' } : {}}
-        >
-          <button
-            onClick={() => setNavCollapsed(!navCollapsed)}
-            title={navCollapsed ? 'Expand archive' : 'Collapse archive'}
-            style={{
-              display: 'block', width: '100%', background: 'none', border: 'none',
-              cursor: 'pointer', fontSize: 16, color: '#b0a48c', padding: '6px',
-              textAlign: navCollapsed ? 'center' : 'right', marginBottom: 4,
-            }}
-          >
-            {navCollapsed ? '\u25B8' : '\u25C2'}
-          </button>
-          {!navCollapsed && (<>
+        {/* Left Navigation */}
+        <nav className={`st-nav${mobileNavOpen ? ' st-nav-mobile-open' : ''}`}>
           <div className="st-nav-brand">
-            <div className="st-nav-brand-label">Archive</div>
-            {editingBookTitle ? (
-              <input
-                className="st-inline-edit st-inline-edit-book"
-                value={bookTitleDraft}
-                onChange={e => setBookTitleDraft(e.target.value)}
-                onBlur={saveBookTitle}
-                onKeyDown={e => { if (e.key === 'Enter') saveBookTitle(); if (e.key === 'Escape') setEditingBookTitle(false); }}
-                autoFocus
-              />
-            ) : (
-              <div className="st-nav-brand-row">
-                <h3
-                  className="st-nav-brand-title"
-                  onDoubleClick={() => { setEditingBookTitle(true); setBookTitleDraft(book.title || ''); }}
-                >
-                  {book.title}
-                </h3>
-                <button
-                  className="st-nav-edit-btn"
-                  onClick={() => { setEditingBookTitle(true); setBookTitleDraft(book.title || ''); }}
-                  title="Edit book title"
-                >
-                  ✎
-                </button>
-              </div>
-            )}
-            {book.subtitle && <div className="st-nav-brand-sub">{book.subtitle}</div>}
-          </div>
+              <div className="st-nav-brand-label">Archive</div>
+              {editingBookTitle ? (
+                <input
+                  className="st-inline-edit st-inline-edit-book"
+                  value={bookTitleDraft}
+                  onChange={e => setBookTitleDraft(e.target.value)}
+                  onBlur={saveBookTitle}
+                  onKeyDown={e => { if (e.key === 'Enter') saveBookTitle(); if (e.key === 'Escape') setEditingBookTitle(false); }}
+                  autoFocus
+                />
+              ) : (
+                <div className="st-nav-brand-row">
+                  <h3
+                    className="st-nav-brand-title"
+                    onDoubleClick={() => { setEditingBookTitle(true); setBookTitleDraft(book.title || ''); }}
+                  >
+                    {book.title}
+                  </h3>
+                  <button
+                    className="st-nav-edit-btn"
+                    onClick={() => { setEditingBookTitle(true); setBookTitleDraft(book.title || ''); }}
+                    title="Edit book title"
+                  >
+                    ✎
+                  </button>
+                </div>
+              )}
+              {book.subtitle && <div className="st-nav-brand-sub">{book.subtitle}</div>}
+            </div>
+
+          <div className="st-nav-scroll">
 
           <div className="st-nav-section">
             <div className="st-nav-section-label">Chapters</div>
@@ -997,6 +1716,28 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                       ×
                     </button>
                   </div>
+                  {/* Section names beneath active chapter — clickable to insert heading */}
+                  {ch.id === activeChapterId && Array.isArray(ch.sections) && ch.sections.length > 0 && (
+                    <div className="st-nav-sections">
+                      {ch.sections.map((sec, si) => {
+                        const sectionTitle = sec.content?.substring(0, 36) || sec.meta?.description?.substring(0, 36) || `Section ${si + 1}`;
+                        return (
+                          <button
+                            key={sec.id || si}
+                            className="st-nav-section-item st-nav-section-clickable"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              insertSectionHeading(sectionTitle);
+                            }}
+                            title={`Write: ${sectionTitle}`}
+                          >
+                            <span className={`st-nav-section-dot st-dot-${sec.meta?.section_type || sec.type || 'body'}`} />
+                            <span className="st-nav-section-label">{sectionTitle}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1006,64 +1747,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
             <button onClick={() => setShowAddChapter(true)}>+ New Chapter</button>
           </div>
 
-          {/* Venture Registry — sidebar panel */}
-          <VentureRegistry
-            activeAct={pnosAct}
-            onVentureSelect={(v) => console.log('Selected venture:', v.id)}
-          />
-
-          <div className="st-nav-stats">
-            <div className="st-stat-row">
-              <span className="st-stat-label">Lines</span>
-              <span className="st-stat-val">{allLines.length}</span>
-            </div>
-            <div className="st-stat-row">
-              <span className="st-stat-label">Pending</span>
-              <span className="st-stat-val st-stat-pending">
-                {allLines.filter(l => l.status === 'pending').length}
-              </span>
-            </div>
-            <div className="st-stat-row">
-              <span className="st-stat-label">Approved</span>
-              <span className="st-stat-val st-stat-approved">
-                {allLines.filter(l => l.status === 'approved' || l.status === 'edited').length}
-              </span>
-            </div>
-          </div>
-
-          {/* Echo Health — book-level echo overview */}
-          <EchoHealthPanel
-            echoes={incomingEchoes}
-            chapters={chapters}
-          />
-
-          {/* Pacing Arc — emotional temperature across chapters */}
-          <PacingArc
-            chapters={chapters}
-            onTemperatureChange={async (chapterId, temp) => {
-              try {
-                await api(`/chapters/${chapterId}`, {
-                  method: 'PUT',
-                  body: JSON.stringify({ emotional_temperature: temp }),
-                });
-                setChapters(prev => prev.map(ch =>
-                  ch.id === chapterId ? { ...ch, emotional_temperature: temp } : ch
-                ));
-              } catch (e) {
-                toast.add('Failed to save temperature', 'error');
-              }
-            }}
-          />
-
-          {/* Absence Tracker — character disappearance windows */}
-          <AbsenceTracker
-            chapters={chapters}
-            currentChapterId={activeChapterId}
-            onAcknowledge={(charId, sourceChapterId) => {
-              console.log('Acknowledged absence:', charId, 'from chapter:', sourceChapterId);
-            }}
-          />
-          </>)}
+          </div>{/* end st-nav-scroll */}
         </nav>
 
         {/* ── Main Content ── */}
@@ -1107,7 +1791,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
               <div className="st-manuscript-wrapper">
                 <div className="st-manuscript">
 
-                  {/* Literary Chapter Header */}
+                  {/* Chapter Header — minimal */}
                   <div className="st-chapter-header">
                     <div className="st-chapter-header-label">
                       Chapter {numberWord(chapterIndex)}
@@ -1125,238 +1809,22 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                         autoFocus
                       />
                     ) : (
-                      <div className="st-chapter-header-title-row">
-                        <h2
-                          className="st-chapter-header-title"
-                          onDoubleClick={() => {
-                            setEditingChapterId(activeChapter.id);
-                            setChapterTitleDraft(activeChapter.title || '');
-                          }}
-                        >
-                          {activeChapter.title || 'Untitled Chapter'}
-                        </h2>
-                        <button
-                          className="st-chapter-title-edit-btn"
-                          onClick={() => {
-                            setEditingChapterId(activeChapter.id);
-                            setChapterTitleDraft(activeChapter.title || '');
-                          }}
-                          title="Edit chapter title"
-                        >
-                          ✎
-                        </button>
-                      </div>
+                      <h2
+                        className="st-chapter-header-title"
+                        onDoubleClick={() => {
+                          setEditingChapterId(activeChapter.id);
+                          setChapterTitleDraft(activeChapter.title || '');
+                        }}
+                      >
+                        {activeChapter.title || 'Untitled Chapter'}
+                      </h2>
                     )}
-                    <div className="st-chapter-header-meta">
-                      {activeChapter.badge && <span>{activeChapter.badge}</span>}
-                      {activeChapter.badge && <span>·</span>}
-                      {lines.length > 0 ? (
-                        <>
-                          <span>{approvedLines.length} approved</span>
-                          {pendingCount > 0 && (
-                            <>
-                              <span>·</span>
-                              <span>{pendingCount} pending</span>
-                            </>
-                          )}
-                        </>
-                      ) : (
-                        <span className="st-chapter-header-new">New chapter — ready to begin</span>
-                      )}
-                    </div>
-
-                    {/* Chapter Actions — icons, appear on hover */}
-                    <div className="st-chapter-actions">
-                      <button
-                        className={`st-chapter-icon-btn${proseMode ? ' active' : ''}`}
-                        onClick={() => setProseMode(!proseMode)}
-                        title={proseMode ? 'Switch to line view' : 'Switch to prose view'}
-                        style={proseMode ? { color: 'var(--st-gold)', opacity: 1 } : {}}
-                      >
-                        {proseMode ? '\u00B6' : '\u270D'}
-                      </button>
-                      <button
-                        className="st-chapter-icon-btn"
-                        onClick={() => setBriefOpen(true)}
-                        title="Define intention"
-                      >
-                        ✎
-                      </button>
-                      <button
-                        className="st-chapter-icon-btn"
-                        onClick={() => setImportTarget(activeChapter)}
-                        title="Import draft"
-                      >
-                        ↓
-                      </button>
-                      <button
-                        className={`st-chapter-icon-btn${reviewMode ? ' active' : ''}`}
-                        onClick={() => setReviewMode(!reviewMode)}
-                        title={reviewMode ? 'Exit review' : 'Review mode'}
-                        style={reviewMode ? { color: 'var(--st-gold)', opacity: 1 } : {}}
-                      >
-                        👁
-                      </button>
-                      <button
-                        className="st-chapter-icon-btn"
-                        onClick={() => setRedoInterview(true)}
-                        title="Redo interview"
-                      >
-                        ⟳
-                      </button>
-                      <button
-                        className="st-chapter-icon-btn"
-                        onClick={() => setCanonOpen(!canonOpen)}
-                        title={canonOpen ? 'Close canon' : 'Canon panel'}
-                        style={canonOpen ? { color: 'var(--st-gold)', opacity: 1 } : {}}
-                      >
-                        ⊞
-                      </button>
-                      <button
-                        className="st-chapter-icon-btn danger"
-                        onClick={resetChapter}
-                        title="Reset draft"
-                      >
-                        ✕
-                      </button>
-                    </div>
                   </div>
 
-                  {/* ── Workflow Stepper — shows progress for empty chapters ── */}
-                  {lines.length === 0 && (
-                    <div className="st-workflow-stepper">
-                      <div className={`st-workflow-step${!interviewDone ? ' active' : ' done'}`}>
-                        <div className="st-workflow-step-num">{interviewDone ? '✓' : '1'}</div>
-                        <div className="st-workflow-step-info">
-                          <div className="st-workflow-step-title">Set the Scene</div>
-                          <div className="st-workflow-step-desc">Answer 7 quick questions about this chapter</div>
-                        </div>
-                      </div>
-                      <div className="st-workflow-step-line" />
-                      <div className={`st-workflow-step${interviewDone && lines.length === 0 ? ' active' : interviewDone ? ' done' : ''}`}>
-                        <div className="st-workflow-step-num">{lines.length > 0 ? '✓' : '2'}</div>
-                        <div className="st-workflow-step-info">
-                          <div className="st-workflow-step-title">Generate Draft</div>
-                          <div className="st-workflow-step-desc">AI creates opening lines from your brief</div>
-                        </div>
-                      </div>
-                      <div className="st-workflow-step-line" />
-                      <div className={`st-workflow-step${lines.length > 0 ? ' active' : ''}`}>
-                        <div className="st-workflow-step-num">3</div>
-                        <div className="st-workflow-step-info">
-                          <div className="st-workflow-step-title">Write & Refine</div>
-                          <div className="st-workflow-step-desc">Review, approve, and continue writing</div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
 
-                  {/* ── Context Layers — visible for active chapters, collapsed for empty ── */}
-                  {lines.length > 0 ? (
-                    <>
-                      {/* Belief Tracker — PNOS act + threads */}
-                      <BeliefTracker
-                        chapter={activeChapter}
-                        onActChange={act => setPnosAct(act)}
-                        onThreadChange={threads => setActiveThreads(threads)}
-                      />
 
-                      {/* Book Question Layer — the central question + direction */}
-                      <BookQuestionLayer
-                        book={book}
-                        chapter={activeChapter}
-                        onDirectionChange={(dir) => setQuestionDirection(dir)}
-                      />
-
-                      {/* Character Appearance Rules — who can appear & how */}
-                      <CharacterAppearanceRules
-                        chapterCharacters={chapterCharacters}
-                        onCharacterToggle={(charIds) => setChapterCharacters(charIds)}
-                      />
-
-                      {/* Chapter Exit Emotion — where this chapter should land */}
-                      <ChapterExitEmotion
-                        chapter={activeChapter}
-                        onExitChange={(data) => setExitEmotionData(data)}
-                      />
-
-                      {/* Incoming Echoes — planted moments that reverberate here */}
-                      <IncomingEchoes
-                        echoes={incomingEchoes}
-                        onMarkLanded={async (echoId) => {
-                          try {
-                            await fetch(`/api/v1/storyteller/echoes/${echoId}`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ status: 'landed' }),
-                            });
-                            setIncomingEchoes(prev => prev.map(e => e.id === echoId ? { ...e, status: 'landed' } : e));
-                          } catch (err) { console.error('Failed to mark echo landed:', err); }
-                        }}
-                      />
-
-                      {/* Pre-writing character check-in */}
-                      {showCheckin && registryCharacters?.length > 0 && (
-                        <PreWritingCheckin
-                          characters={registryCharacters}
-                          chapterContext={activeChapter?.scene_goal || activeChapter?.title || null}
-                          onDismiss={() => setShowCheckin(false)}
-                        />
-                      )}
-                    </>
-                  ) : (
-                    /* Collapsed context toggle for empty chapters */
-                    <div className="st-context-collapse">
-                      <button
-                        className="st-context-collapse-toggle"
-                        onClick={() => setContextExpanded(!contextExpanded)}
-                      >
-                        <span className={`st-context-collapse-arrow${contextExpanded ? ' open' : ''}`}>▸</span>
-                        Chapter settings
-                        <span className="st-context-collapse-hint">
-                          (act pattern, characters, exit emotion)
-                        </span>
-                      </button>
-                      {contextExpanded && (
-                        <div className="st-context-collapse-body">
-                          <BeliefTracker
-                            chapter={activeChapter}
-                            onActChange={act => setPnosAct(act)}
-                            onThreadChange={threads => setActiveThreads(threads)}
-                          />
-                          <BookQuestionLayer
-                            book={book}
-                            chapter={activeChapter}
-                            onDirectionChange={(dir) => setQuestionDirection(dir)}
-                          />
-                          <CharacterAppearanceRules
-                            chapterCharacters={chapterCharacters}
-                            onCharacterToggle={(charIds) => setChapterCharacters(charIds)}
-                          />
-                          <ChapterExitEmotion
-                            chapter={activeChapter}
-                            onExitChange={(data) => setExitEmotionData(data)}
-                          />
-                          <IncomingEchoes
-                            echoes={incomingEchoes}
-                            onMarkLanded={async (echoId) => {
-                              try {
-                                await fetch(`/api/v1/storyteller/echoes/${echoId}`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ status: 'landed' }),
-                                });
-                                setIncomingEchoes(prev => prev.map(e => e.id === echoId ? { ...e, status: 'landed' } : e));
-                              } catch (err) { console.error('Failed to mark echo landed:', err); }
-                            }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Scene Interview — empty chapter, not yet interviewed */}
-                  {((lines.length === 0 && !interviewDone) || redoInterview) && (
+                  {/* ── Scene Interview (on demand) ── */}
+                  {redoInterview && (
                     <SceneInterview
                       book={book}
                       chapter={activeChapter}
@@ -1374,23 +1842,14 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                     />
                   )}
 
-                  {/* Chapter Draft Generator — after interview, before lines */}
-                  {interviewDone && lines.length === 0 && (
-                    <ChapterDraftGenerator
-                      chapter={activeChapter}
-                      book={book}
-                      onDraftGenerated={onRefresh}
-                    />
-                  )}
-
                   {/* Review Mode Banner */}
                   {reviewMode && (
                     <div className="st-review-banner">
                       <div className="st-review-banner-left">
-                        <span className="st-review-banner-icon">{'\uD83D\uDC41'}</span>
+                        <span className="st-review-banner-icon">{'👁'}</span>
                         <span className="st-review-banner-title">Review Mode</span>
                         <span className="st-review-banner-stats">
-                          {approvedLines.length} approved {'\u00B7'} {pendingLines.length} pending {'\u00B7'} {lines.length} total
+                          {approvedLines.length} approved {'·'} {pendingLines.length} pending {'·'} {lines.length} total
                         </span>
                       </div>
                       <div className="st-review-banner-actions">
@@ -1413,29 +1872,30 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                       /* ── Prose Mode (WriteMode-style textarea) ── */
                       <>
                         <textarea
+                          className="st-prose-textarea"
                           value={proseText}
-                          onChange={e => { setProseText(e.target.value); setProseSaved(false); }}
-                          placeholder="Start writing your story here\u2026"
-                          style={{
-                            width: '100%',
-                            minHeight: 420,
-                            border: 'none',
-                            outline: 'none',
-                            resize: 'vertical',
-                            fontFamily: "'Spectral', 'Georgia', serif",
-                            fontSize: 17,
-                            lineHeight: 1.85,
-                            color: '#1a1816',
-                            background: 'transparent',
-                            padding: '20px 0',
+                          onChange={e => {
+                            setProseText(e.target.value);
+                            proseRef.current = e.target.value;
+                            setProseSaved(false);
+                            proseSavedRef.current = false;
                           }}
+                          onBlur={() => { if (!proseSavedRef.current) doSave(); }}
+                          onKeyDown={e => {
+                            if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                              e.preventDefault();
+                              doSave();
+                            }
+                          }}
+                          placeholder="Start writing your story here…"
                         />
-                        <div style={{
-                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                          padding: '8px 0', fontSize: 12, color: '#b0a48c', borderTop: '1px solid #ece6da',
-                        }}>
+                        <div className="st-prose-status">
                           <span>{proseText.split(/\s+/).filter(Boolean).length} words</span>
-                          <span>{proseSaved ? '\u2713 Saved' : 'Saving\u2026'}</span>
+                          {proseSaved ? (
+                            <span className="st-prose-saved">✓ Saved</span>
+                          ) : (
+                            <button className="st-prose-save-btn" onClick={doSave}>Save now</button>
+                          )}
                         </div>
                       </>
                     ) : (
@@ -1500,7 +1960,7 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                         <input
                           value={newLineText}
                           onChange={e => setNewLineText(e.target.value)}
-                          placeholder="Continue writing\u2026"
+                          placeholder="Continue writing…"
                           onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) addLine(activeChapterId); }}
                           autoFocus
                         />
@@ -1516,41 +1976,14 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                         className="st-add-line-trigger"
                         onClick={() => setAddingLineTo(activeChapterId)}
                       >
-                        Continue writing\u2026
+                        Continue writing…
                       </button>
                     )}
                       </>
                     )}
                   </div>
 
-                  {/* Action Bar — quiet footer */}
-                  <div className="st-action-bar">
-                    <span className="st-action-hint">
-                      {pendingCount > 0 ? `${pendingCount} pending` : 'All lines approved'}
-                    </span>
-                    <div className="st-action-bar-btns">
-                      {pendingCount > 0 && (
-                        <button
-                          className="st-btn st-btn-sm st-btn-ghost"
-                          onClick={approveAll}
-                        >
-                          Approve All
-                        </button>
-                      )}
-                      <button
-                        className="st-btn st-btn-sm st-btn-ghost"
-                        onClick={() => setImportTarget(activeChapter)}
-                      >
-                        Import
-                      </button>
-                      <button
-                        className="st-btn st-btn-sm st-btn-primary"
-                        onClick={() => navigate(`/books/${book.id}/read`)}
-                      >
-                        Publish Draft
-                      </button>
-                    </div>
-                  </div>
+
                 </div>
 
                 {/* Canon Panel — right side, sticky */}
@@ -1585,8 +2018,11 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
                 )}
               </div>
             ) : (
-              <div className="st-no-selection">
-                Select a chapter to begin writing
+              <div className="st-welcome">
+                <div className="st-welcome-icon">✦</div>
+                <h2 className="st-welcome-title">Select a chapter to start writing</h2>
+                <p className="st-welcome-sub">Pick a chapter from the sidebar, or create a new one.</p>
+                <button className="st-btn st-btn-sm st-btn-gold" onClick={() => setShowAddChapter(true)}>+ New Chapter</button>
               </div>
             )
 
@@ -1608,6 +2044,34 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
               chapterId={activeChapter?.id}
               chapterTitle={activeChapter?.title}
               showId={book.show_id}
+            />
+          ) : activeView === 'sections' ? (
+            activeChapter ? (
+              <SectionEditor
+                chapter={activeChapter}
+                onSave={(updated) => {
+                  setChapters(prev => prev.map(ch =>
+                    ch.id === activeChapter.id ? { ...ch, sections: updated } : ch
+                  ));
+                }}
+                onGoToSection={(title) => insertSectionHeading(title)}
+                toast={toast}
+              />
+            ) : (
+              <div className="st-welcome">
+                <div className="st-welcome-icon">§</div>
+                <h2 className="st-welcome-title">Select a chapter first</h2>
+                <p className="st-welcome-sub">Pick a chapter from the sidebar to edit its sections.</p>
+              </div>
+            )
+          ) : activeView === 'planner' ? (
+            <StoryPlannerConversational
+              book={book}
+              chapters={chapters}
+              characters={registryCharacters}
+              onApply={() => { onRefresh?.(); setActiveView('book'); }}
+              onClose={() => setActiveView('book')}
+              toast={toast}
             />
           ) : null}
         </div>
@@ -1640,6 +2104,77 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
           onClose={() => setImportTarget(null)}
           onImported={() => { setImportTarget(null); onRefresh(); }}
         />
+      )}
+
+      {/* ═══ AI Bottom Bar — fixed to viewport bottom ═══ */}
+      {activeView === 'book' && activeChapter && (
+        <div className={`st-bottombar${aiResult || aiError ? ' st-bottombar-expanded' : ''}`}>
+
+          {/* Result slide-up panel */}
+          {(aiResult || aiError) && (
+            <div className="st-bottombar-result">
+              {aiError ? (
+                <div className="st-bottombar-error">
+                  <span>{aiError}</span>
+                  <button onClick={discardAiResult}>Dismiss</button>
+                </div>
+              ) : (
+                <>
+                  <div className="st-bottombar-result-header">
+                    <span className="st-bottombar-result-label">
+                      ✦ {AI_ACTIONS.find(a => a.id === aiAction)?.label || 'Generated'}
+                    </span>
+                    <button className="st-bottombar-result-close" onClick={discardAiResult}>✕</button>
+                  </div>
+                  <div className="st-bottombar-result-text">{aiResult}</div>
+                  <div className="st-bottombar-result-actions">
+                    <button className="st-bottombar-insert" onClick={insertAiResult}>
+                      {aiAction === 'rewrite' ? 'Copy to clipboard' : 'Insert into manuscript'}
+                    </button>
+                    <button className="st-bottombar-retry" onClick={() => {
+                      const a = AI_ACTIONS.find(x => x.id === aiAction);
+                      if (a) runAiAction(a);
+                    }}>
+                      Try again
+                    </button>
+                    <button className="st-bottombar-discard" onClick={discardAiResult}>Discard</button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Action buttons row */}
+          <div className="st-bottombar-actions">
+            <div className="st-bottombar-label">
+              <span className="st-bottombar-icon">✦</span>
+              AI
+            </div>
+            {AI_ACTIONS.map(action => (
+              <button
+                key={action.id}
+                className={`st-bottombar-btn${aiAction === action.id && aiLoading ? ' loading' : ''}`}
+                onClick={() => runAiAction(action)}
+                disabled={aiLoading}
+                title={action.sub}
+              >
+                <span className="st-bottombar-btn-icon">{action.icon}</span>
+                <span className="st-bottombar-btn-label">{action.label}</span>
+                {aiLoading && aiAction === action.id && (
+                  <span className="st-bottombar-spinner">◌</span>
+                )}
+              </button>
+            ))}
+            <div className="st-bottombar-meta">
+              <span className="st-bottombar-wordcount">
+                {proseText.split(/\s+/).filter(Boolean).length} w
+              </span>
+              <span className={`st-bottombar-save${proseSaved ? ' saved' : ''}`}>
+                {proseSaved ? '✓' : '…'}
+              </span>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

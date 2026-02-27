@@ -6,6 +6,12 @@
   margin: 0 auto;
 }
 
+/* Embedded mode (inside Universe page tab) */
+.asset-library-page.asset-library-embedded {
+  padding: 0;
+  max-width: none;
+}
+
 /* ==================== HEADER ==================== */
 .asset-library-header {
   display: flex;

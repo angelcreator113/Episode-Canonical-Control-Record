@@ -1,5 +1,5 @@
 /**
- * CharacterTherapy.jsx \u2014 Psychological Narrative Engine
+ * CharacterTherapy.jsx — Psychological Narrative Engine
  *
  * A character arrives carrying the emotional residue of story events.
  * The author can listen, respond, reveal truths, or withhold them.
@@ -14,18 +14,18 @@ import './CharacterTherapy.css';
 
 const API = '/api/v1/therapy';
 
-/* \u2500\u2500 Character Nature Map \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Character Nature Map ───────────────────────────────────── */
 
 const CHARACTER_NATURES = {
-  the_husband:             { icon: '\u25C7', label: 'The Husband',             defense: 'Quiet withdrawal' },
-  justawoman:              { icon: '\u25C8', label: 'JustaWoman',              defense: 'Deflection through competence' },
-  lala:                    { icon: '\u25C9', label: 'LaLa',                    defense: 'Controlled presentation' },
-  the_comparison_creator:  { icon: '\u25CA', label: 'The Comparison Creator',  defense: 'Weaponized comparison' },
-  the_almost_mentor:       { icon: '\u25CB', label: 'The Almost Mentor',       defense: 'Strategic disappearance' },
-  the_witness:             { icon: '\u25CC', label: 'The Witness',             defense: 'Strategic silence' },
+  the_husband:             { icon: '◇', label: 'The Husband',             defense: 'Quiet withdrawal' },
+  justawoman:              { icon: '◈', label: 'JustaWoman',              defense: 'Deflection through competence' },
+  lala:                    { icon: '◉', label: 'LaLa',                    defense: 'Controlled presentation' },
+  the_comparison_creator:  { icon: '◊', label: 'The Comparison Creator',  defense: 'Weaponized comparison' },
+  the_almost_mentor:       { icon: '○', label: 'The Almost Mentor',       defense: 'Strategic disappearance' },
+  the_witness:             { icon: '◌', label: 'The Witness',             defense: 'Strategic silence' },
 };
 
-/* \u2500\u2500 Defense Mechanisms \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Defense Mechanisms ────────────────────────────────────── */
 
 const DEFENSE_MECHANISMS = [
   'Quiet withdrawal',
@@ -39,7 +39,7 @@ const DEFENSE_MECHANISMS = [
   'Strategic silence',
 ];
 
-/* \u2500\u2500 Emotional Dimensions \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Emotional Dimensions ──────────────────────────────────── */
 
 const EMOTIONAL_DIMENSIONS = [
   { key: 'trust', label: 'Trust',  color: '#d4af37' },
@@ -54,7 +54,7 @@ const EMOTIONAL_DIMENSIONS = [
    SUB-COMPONENTS
    ================================================================ */
 
-/* \u2500\u2500 Event Trigger Input \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Event Trigger Input ─────────────────────────────────── */
 
 function EventTrigger({ onTrigger, disabled }) {
   const [event, setEvent] = useState('');
@@ -67,7 +67,7 @@ function EventTrigger({ onTrigger, disabled }) {
     <div className="therapy-event-trigger">
       <input
         className="therapy-event-input"
-        placeholder="Describe the story event that just happened\u2026"
+        placeholder="Describe the story event that just happened…"
         value={event}
         onChange={e => setEvent(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && submit()}
@@ -84,7 +84,7 @@ function EventTrigger({ onTrigger, disabled }) {
   );
 }
 
-/* \u2500\u2500 Message Bubble \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Message Bubble ────────────────────────────────────── */
 
 function Message({ msg }) {
   const type = msg.role; // 'character' | 'author' | 'system'
@@ -104,7 +104,7 @@ function Message({ msg }) {
   );
 }
 
-/* \u2500\u2500 Typing Indicator \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Typing Indicator ──────────────────────────────────── */
 
 function TypingIndicator({ name }) {
   return (
@@ -117,7 +117,7 @@ function TypingIndicator({ name }) {
   );
 }
 
-/* \u2500\u2500 Psychological State Panel \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Psychological State Panel ────────────────────────────── */
 
 function PsychologicalState({ profile }) {
   if (!profile) return null;
@@ -159,7 +159,7 @@ function PsychologicalState({ profile }) {
   );
 }
 
-/* \u2500\u2500 Knowledge Tier \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Knowledge Tier ───────────────────────────────────── */
 
 function KnowledgeTier({ tier, label, items }) {
   return (
@@ -176,7 +176,7 @@ function KnowledgeTier({ tier, label, items }) {
   );
 }
 
-/* \u2500\u2500 Reveal Modal \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Reveal Modal ────────────────────────────────────── */
 
 function RevealModal({ onClose, onSend, charName, loading }) {
   const [truth, setTruth] = useState('');
@@ -212,7 +212,7 @@ function RevealModal({ onClose, onSend, charName, loading }) {
             disabled={!truth.trim() || loading}
             onClick={() => onSend(truth.trim(), type)}
           >
-            {loading ? 'Revealing\u2026' : 'Reveal'}
+            {loading ? 'Revealing…' : 'Reveal'}
           </button>
         </div>
       </div>
@@ -220,7 +220,7 @@ function RevealModal({ onClose, onSend, charName, loading }) {
   );
 }
 
-/* \u2500\u2500 D\u00e9j\u00e0 Vu Overlay \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Déjà Vu Overlay ──────────────────────────────────── */
 
 function DejaVuOverlay({ text, onDone }) {
   useEffect(() => {
@@ -230,17 +230,17 @@ function DejaVuOverlay({ text, onDone }) {
 
   return (
     <div className="therapy-dejavu-overlay">
-      <div className="therapy-dejavu-text">{text || 'D\u00e9j\u00e0 vu\u2026'}</div>
+      <div className="therapy-dejavu-text">{text || 'Déjà vu…'}</div>
     </div>
   );
 }
 
-/* \u2500\u2500 Empty State \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Empty State ─────────────────────────────────────── */
 
 function EmptyState() {
   return (
     <div className="therapy-empty">
-      <div className="therapy-empty-icon">{'\u25C7'}</div>
+      <div className="therapy-empty-icon">{'◇'}</div>
       <div className="therapy-empty-title">Psychological Narrative Engine</div>
       <div className="therapy-empty-sub">
         Select a character from the sidebar, then describe a story event to begin a therapy session.
@@ -249,13 +249,13 @@ function EmptyState() {
   );
 }
 
-/* \u2500\u2500 Load Screen \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500 */
+/* ── Load Screen ─────────────────────────────────────── */
 
 function LoadScreen() {
   return (
     <div className="therapy-loading">
       <div className="therapy-loading-spinner" />
-      <div className="therapy-loading-text">Loading psychological profiles\u2026</div>
+      <div className="therapy-loading-text">Loading psychological profiles…</div>
     </div>
   );
 }
@@ -370,7 +370,7 @@ export default function CharacterTherapy() {
       if (data.success) {
         setSessionOpen(true);
         // Add system message about the event
-        addMessage('system', `Session opened \u2014 ${event}`);
+        addMessage('system', `Session opened — ${event}`);
         // Add character arrival
         if (data.character_response) {
           addMessage('character', data.character_response, {
@@ -540,13 +540,13 @@ export default function CharacterTherapy() {
     return Object.entries(shift)
       .filter(([, v]) => v !== 0)
       .map(([k, v]) => `${k} ${v > 0 ? '+' : ''}${v}`)
-      .join(' \u00b7 ');
+      .join(' · ');
   };
 
   const getCharNature = (char) => {
     const key = (char.selected_name || char.display_name || '')
       .toLowerCase().replace(/\s+/g, '_');
-    return CHARACTER_NATURES[key] || { icon: '\u25C7', label: char.display_name, defense: '' };
+    return CHARACTER_NATURES[key] || { icon: '◇', label: char.display_name, defense: '' };
   };
 
   /* == Render ======================================================= */
@@ -562,7 +562,7 @@ export default function CharacterTherapy() {
         onClick={() => setSidebarOpen(!sidebarOpen)}
         aria-label="Toggle character list"
       >
-        {sidebarOpen ? '\u2715' : '\u25C7'}
+        {sidebarOpen ? '✕' : '◇'}
       </button>
 
       {/* Mobile backdrop */}
@@ -674,7 +674,7 @@ export default function CharacterTherapy() {
                 className="therapy-back-btn"
                 onClick={() => navigate('/character-registry')}
               >
-                \u2190 Registry
+                ← Registry
               </button>
               <div className="therapy-header-info">
                 <div className="therapy-header-name">
@@ -720,7 +720,7 @@ export default function CharacterTherapy() {
                   <div className="therapy-respond-row">
                     <input
                       className="therapy-respond-input"
-                      placeholder="Respond as the author\u2026"
+                      placeholder="Respond as the author…"
                       value={response}
                       onChange={e => setResponse(e.target.value)}
                       onKeyDown={e => e.key === 'Enter' && sendResponse()}
@@ -771,7 +771,7 @@ export default function CharacterTherapy() {
         />
       )}
 
-      {/* D\u00e9j\u00e0 Vu Overlay */}
+      {/* Déjà Vu Overlay */}
       {dejaVu && (
         <DejaVuOverlay
           text={dejaVu}

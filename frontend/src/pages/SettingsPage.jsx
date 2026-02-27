@@ -68,10 +68,10 @@ function SettingsPage() {
   }, [settings.theme, settings.fontSize, settings.fontFamily]);
 
   const tabs = [
-    { id: 'appearance', label: 'Appearance', icon: '\uD83C\uDFA8' },
-    { id: 'writing', label: 'Writing', icon: '\u270E' },
-    { id: 'account', label: 'Account', icon: '\uD83D\uDC64' },
-    { id: 'about', label: 'About', icon: '\u2139\uFE0F' },
+    { id: 'appearance', label: 'Appearance', icon: '🎨' },
+    { id: 'writing', label: 'Writing', icon: '✎' },
+    { id: 'account', label: 'Account', icon: '👤' },
+    { id: 'about', label: 'About', icon: 'ℹ️' },
   ];
 
   return (
@@ -283,7 +283,7 @@ function SettingsPage() {
           <div className="settings-section">
             <h2>Creative Engine</h2>
             <div className="about-card">
-              <div className="about-logo">{'\uD83C\uDFAC'}</div>
+              <div className="about-logo">{'🎬'}</div>
               <div className="about-version">v2.0.0</div>
               <p className="about-desc">
                 A narrative studio for creators. Write books, build characters,

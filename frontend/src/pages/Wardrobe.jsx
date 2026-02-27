@@ -11,7 +11,7 @@ import OutfitSets from './OutfitSets';
 import WardrobeAnalytics from './WardrobeAnalytics';
 import './Wardrobe.css';
 
-const Wardrobe = () => {
+const Wardrobe = ({ embedded = false }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const defaultTab = searchParams.get('tab') || 'items';
@@ -19,7 +19,7 @@ const Wardrobe = () => {
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
-    setSearchParams({ tab });
+    if (!embedded) setSearchParams({ tab });
   };
 
   const getPrimaryAction = () => {
@@ -37,7 +37,8 @@ const Wardrobe = () => {
 
   return (
     <div className="wardrobe-unified">
-      {/* Header */}
+      {/* Header — hidden when embedded inside another page (e.g. UniversePage) */}
+      {!embedded && (
       <div className="wardrobe-header">
         <button 
           onClick={() => navigate(-1)} 
@@ -58,6 +59,7 @@ const Wardrobe = () => {
           </button>
         )}
       </div>
+      )}
 
       {/* Tab Navigation */}
       <div className="wardrobe-tabs">

@@ -11,6 +11,26 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import LoadingSkeleton from '../components/LoadingSkeleton';
+import WriteModeAIWriter from '../components/WriteModeAIWriter';
+
+// ── Merged from StorytellerPage ──
+import ScenesPanel from '../components/ScenesPanel';
+import BookStructurePanel from '../components/BookStructurePanel';
+import MemoryBankView from './MemoryBankView';
+import LalaSceneDetection from '../components/LalaSceneDetection';
+import ExportPanel from '../components/ExportPanel';
+import SceneInterview from './SceneInterview';
+import NarrativeIntelligence from './NarrativeIntelligence';
+import { ContinuityGuard } from './ContinuityGuard';
+import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
+import { PlantEchoButton, IncomingEchoes, EchoHealthPanel } from '../components/DecisionEchoPanel';
+import BeliefTracker from '../components/BeliefTracker';
+import BookQuestionLayer, { getBookQuestionContext } from '../components/BookQuestionLayer';
+import CharacterAppearanceRules from '../components/CharacterAppearanceRules';
+import ChapterExitEmotion from '../components/ChapterExitEmotion';
+import { getLalaSessionPrompt } from '../data/lalaVoiceData';
+import { getCharacterRulesPrompt } from '../data/characterAppearanceRules';
+
 import './WriteMode.css';
 
 const API = '/api/v1';
@@ -23,16 +43,27 @@ const SECTION_TYPES = [
   { type: 'h2',         label: 'Chapter Title',  icon: 'H2' },
   { type: 'h3',         label: 'Section',        icon: 'H3' },
   { type: 'h4',         label: 'Subsection',     icon: 'H4' },
-  { type: 'body',       label: 'Body',           icon: '\u00B6' },
-  { type: 'quote',      label: 'Quote',          icon: '\u201C' },
+  { type: 'body',       label: 'Body',           icon: '¶' },
+  { type: 'quote',      label: 'Quote',          icon: '“' },
   { type: 'reflection', label: 'Reflection',     icon: '?' },
-  { type: 'divider',    label: 'Divider',        icon: '\u2500' },
+  { type: 'divider',    label: 'Divider',        icon: '─' },
 ];
 const HEADER_TYPES = ['h1', 'h2', 'h3', 'h4'];
 
 function tocUuid() {
   return crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
 }
+
+// ── CENTER TABS ──────────────────────────────────────────────────────────
+const CENTER_TABS = [
+  { id: 'write',     label: 'Write'     },
+  { id: 'review',    label: 'Review'    },
+  { id: 'structure', label: 'Structure' },
+  { id: 'scenes',    label: 'Scenes'    },
+  { id: 'memory',    label: 'Memory'    },
+  { id: 'lala',      label: 'Lala'      },
+  { id: 'export',    label: 'Export'    },
+];
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────
 
@@ -79,6 +110,7 @@ export default function WriteMode() {
   const [editingContext,  setEditingContext]  = useState(null); // field name being edited
   const [contextEditVal,  setContextEditVal]  = useState('');
   const [prevChapterSummary, setPrevChapterSummary] = useState(null);
+  const [contextTab, setContextTab] = useState('plan'); // 'plan' | 'ai-writer'
 
   // Prose state
   const [prose,      setProse]      = useState('');
@@ -140,12 +172,50 @@ export default function WriteMode() {
   // Quick character switch
   const [showCharQuick,  setShowCharQuick]  = useState(false);
 
+  // ── NEW: Center tab state ──
+  const [centerTab,    setCenterTab]    = useState('write');
+
+  // ── NEW: Review tab state (from StorytellerPage) ──
+  const [reviewLines,      setReviewLines]      = useState([]);
+  const [editingLine,      setEditingLine]      = useState(null);
+  const [editText,         setEditText]         = useState('');
+  const [lastApprovedLine, setLastApprovedLine] = useState(null);
+  const [reviewLoading,    setReviewLoading]    = useState(false);
+
+  // ── NEW: Alive systems state (from StorytellerPage) ──
+  const [registryCharacters, setRegistryCharacters] = useState([]);
+  const [chapterCharacters,  setChapterCharacters]  = useState([]);
+  const [exitEmotionData,    setExitEmotionData]    = useState({ exit_emotion: '', exit_emotion_note: '' });
+  const [pnosAct,            setPnosAct]            = useState('act_1');
+  const [activeThreads,      setActiveThreads]      = useState([]);
+  const [incomingEchoes,     setIncomingEchoes]     = useState([]);
+  const [interviewDone,      setInterviewDone]      = useState(false);
+
+  // ── NEW: NI — count prose lines, show panel after 5+ ──
+  const proseLineCount = prose.split(/\n\n+/).filter(s => s.trim().length > 20).length;
+  const niShouldShow   = proseLineCount >= 5 && centerTab === 'write';
+
   const recognitionRef  = useRef(null);
   const editRecRef      = useRef(null);
   const proseRef        = useRef(null);
   const autoSaveRef     = useRef(null);
   const transcriptRef   = useRef('');
   const editTransRef    = useRef('');
+
+  // ── RELOAD CHAPTERS (callable from child components) ────────────────
+  const reloadChapters = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/storyteller/books/${bookId}`);
+      const data = await res.json();
+      const bookData = data?.book || data;
+      setBook(bookData);
+      const chapters = (bookData.chapters || []).sort((a, b) =>
+        (a.sort_order ?? a.chapter_number ?? 0) - (b.sort_order ?? b.chapter_number ?? 0)
+      );
+      setAllChapters(chapters);
+      return chapters;
+    } catch { return null; }
+  }, [bookId]);
 
   // ── LOAD BOOK + ALL CHAPTERS ──────────────────────────────────────────
 
@@ -199,7 +269,7 @@ export default function WriteMode() {
             const lastPara = paragraphs[paragraphs.length - 1];
             setPrevChapterSummary({
               title: prev.title,
-              excerpt: lastPara.length > 200 ? lastPara.slice(0, 200) + '\u2026' : lastPara,
+              excerpt: lastPara.length > 200 ? lastPara.slice(0, 200) + '…' : lastPara,
               wordCount: prevProse.split(/\s+/).filter(Boolean).length,
             });
           } else {
@@ -259,6 +329,47 @@ export default function WriteMode() {
       startingWordCountRef.current = wordCount;
     }
   }, [wordCount]);
+
+  // ── NEW: Load registry characters (for alive systems + NI) ────────────
+
+  useEffect(() => {
+    fetch(`${API}/character-registry/registries`)
+      .then(r => r.json())
+      .then(data => {
+        const regs = data?.registries || data || [];
+        const chars = Array.isArray(regs)
+          ? regs.flatMap(r => (r.characters || []))
+          : [];
+        setRegistryCharacters(chars);
+      })
+      .catch(() => {});
+  }, []);
+
+  // ── NEW: Load review lines when switching to Review tab ───────────────
+
+  useEffect(() => {
+    if (centerTab !== 'review' || !chapterId) return;
+    loadReviewLines();
+  }, [centerTab, chapterId]);
+
+  // ── NEW: Load incoming echoes ─────────────────────────────────────────
+
+  useEffect(() => {
+    if (!chapterId || !bookId) return;
+    fetch(`${API}/storyteller/echoes?book_id=${bookId}&target_chapter_id=${chapterId}`)
+      .then(r => r.json())
+      .then(data => setIncomingEchoes(Array.isArray(data) ? data : []))
+      .catch(() => {});
+  }, [chapterId, bookId]);
+
+  // ── NEW: MEMORY_STYLES injection ──────────────────────────────────────
+
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = MEMORY_STYLES;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
   // ── SNAPSHOT HELPER ───────────────────────────────────────────────────
 
@@ -703,6 +814,66 @@ export default function WriteMode() {
     }
   }, [proseBeforeAi]);
 
+  // ── REVIEW LINES LOADER ─────────────────────────────────────────────
+
+  const loadReviewLines = useCallback(async () => {
+    setReviewLoading(true);
+    try {
+      const res  = await fetch(`${API}/storyteller/books/${bookId}`);
+      const data = await res.json();
+      const bookData = data?.book || data;
+      const ch = (bookData.chapters || []).find(c => c.id === chapterId);
+      setReviewLines(ch?.lines || []);
+    } catch {}
+    setReviewLoading(false);
+  }, [bookId, chapterId]);
+
+  // ── REVIEW LINE ACTIONS ─────────────────────────────────────────────
+
+  const updateLineLocal = (lineId, updates) => {
+    setReviewLines(prev => prev.map(ln => ln.id === lineId ? { ...ln, ...updates } : ln));
+  };
+
+  const approveLine = async (lineId) => {
+    try {
+      await fetch(`${API}/storyteller/lines/${lineId}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ status: 'approved' }),
+      });
+      updateLineLocal(lineId, { status: 'approved' });
+      const line = reviewLines.find(l => l.id === lineId);
+      if (line) setLastApprovedLine({ ...line, status: 'approved' });
+    } catch {}
+  };
+
+  const rejectLine = async (lineId) => {
+    try {
+      await fetch(`${API}/storyteller/lines/${lineId}`, { method: 'DELETE' });
+      setReviewLines(prev => prev.filter(l => l.id !== lineId));
+    } catch {}
+  };
+
+  const startLineEdit = (line) => { setEditingLine(line.id); setEditText(line.text || line.content || ''); };
+
+  const saveLineEdit = async () => {
+    try {
+      await fetch(`${API}/storyteller/lines/${editingLine}`, {
+        method:  'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ text: editText, content: editText, status: 'edited' }),
+      });
+      updateLineLocal(editingLine, { text: editText, content: editText, status: 'edited' });
+      setEditingLine(null);
+      setEditText('');
+    } catch {}
+  };
+
+  const approveAll = async () => {
+    const pending = reviewLines.filter(l => l.status === 'pending');
+    for (const ln of pending) await approveLine(ln.id);
+  };
+
   // ── SEND TO REVIEW ────────────────────────────────────────────────────
 
   const sendToReview = useCallback(async () => {
@@ -731,15 +902,17 @@ export default function WriteMode() {
             prose,
             character_id: selectedCharacter.id,
           }),
-        }).catch(() => {}); // Fire-and-forget — never block navigation
+        }).catch(() => {}); // Fire-and-forget
       }
 
-      navigate(`/book/${bookId}`);
+      // Switch to Review tab instead of navigating away
+      setCenterTab('review');
+      await loadReviewLines();
     } catch (err) {
       console.error('sendToReview error:', err);
     }
     setSaving(false);
-  }, [prose, chapterId, bookId, navigate, selectedCharacter]);
+  }, [prose, chapterId, bookId, selectedCharacter, loadReviewLines]);
 
   // ── PROSE EDIT (direct typing) ────────────────────────────────────────
 
@@ -1047,19 +1220,64 @@ export default function WriteMode() {
 
   if (loading) return <div className="wm-load-screen"><LoadingSkeleton variant="editor" /></div>;
 
+  const approvedLines = reviewLines.filter(l => l.status === 'approved' || l.status === 'edited');
+  const pendingLines  = reviewLines.filter(l => l.status === 'pending');
+
+  // ── REVIEW LINE RENDERER ──────────────────────────────────────────────
+  function renderReviewLine(ln, isPending) {
+    const isEditing = editingLine === ln.id;
+    const text = ln.text || ln.content || '';
+    return (
+      <div
+        key={ln.id}
+        className={`wm-review-line wm-review-line--${ln.status}${isEditing ? ' editing' : ''}`}
+      >
+        <div className="wm-review-line-content">
+          {isEditing ? (
+            <>
+              <textarea
+                className="wm-review-line-edit"
+                value={editText}
+                onChange={e => setEditText(e.target.value)}
+                autoFocus
+              />
+              <div className="wm-review-line-edit-actions">
+                <button className="wm-review-save" onClick={saveLineEdit}>Save</button>
+                <button className="wm-review-cancel" onClick={() => setEditingLine(null)}>Cancel</button>
+              </div>
+            </>
+          ) : (
+            <p className={`wm-review-line-text${isPending ? ' pending' : ''}`}>{text}</p>
+          )}
+        </div>
+        {!isEditing && (
+          <div className="wm-review-line-actions">
+            {isPending && (
+              <button className="wm-line-approve" onClick={() => approveLine(ln.id)} title="Approve">{'✓'}</button>
+            )}
+            <button className="wm-line-edit" onClick={() => startLineEdit(ln)} title="Edit">{'✎'}</button>
+            {isPending && (
+              <button className="wm-line-reject" onClick={() => rejectLine(ln.id)} title="Reject">{'✕'}</button>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`wm-root${focusMode ? ' wm-focus-mode' : ''}`}>
       {/* ── FOCUS MODE EXIT ── */}
       {focusMode && (
         <button className="wm-focus-exit" onClick={toggleFocusMode} title="Exit focus mode (F11)">
-          {'\u2715'}
+          {'✕'}
         </button>
       )}
 
       {/* ── TOP BAR ── */}
       <header className="wm-topbar">
         <button className="wm-back-btn" onClick={() => setShowExit(true)}>
-          {'\u2190'}
+          {'←'}
         </button>
 
         <button
@@ -1067,7 +1285,7 @@ export default function WriteMode() {
           onClick={() => setShowToc(t => !t)}
           title="Table of Contents (Ctrl+B)"
         >
-          {'\u2630'}
+          {'☰'}
         </button>
         <div className="wm-chapter-info">
           <div className="wm-chapter-title">{chapter?.title || 'Untitled'}</div>
@@ -1076,7 +1294,7 @@ export default function WriteMode() {
 
         {/* ── Session timer ── */}
         <div className="wm-session-timer">
-          <span className="wm-timer-icon">{'\u23F1'}</span>
+          <span className="wm-timer-icon">{'⏱'}</span>
           <span className="wm-timer-value">
             {Math.floor(sessionElapsed / 3600) > 0 && `${Math.floor(sessionElapsed / 3600)}:`}
             {String(Math.floor((sessionElapsed % 3600) / 60)).padStart(2, '0')}:{String(sessionElapsed % 60).padStart(2, '0')}
@@ -1091,8 +1309,8 @@ export default function WriteMode() {
               onClick={() => setShowCharQuick(q => !q)}
               title="Quick switch character"
             >
-              <span>{selectedCharacter?.icon || '\uD83D\uDC64'}</span>
-              <span className="wm-quick-char-caret">{showCharQuick ? '\u25B2' : '\u25BC'}</span>
+              <span>{selectedCharacter?.icon || '👤'}</span>
+              <span className="wm-quick-char-caret">{showCharQuick ? '▲' : '▼'}</span>
             </button>
             {showCharQuick && (
               <div className="wm-quick-char-dropdown">
@@ -1100,7 +1318,7 @@ export default function WriteMode() {
                   className={`wm-quick-char-option${!selectedCharacter ? ' selected' : ''}`}
                   onClick={() => { setSelectedCharacter(null); setShowCharQuick(false); }}
                 >
-                  <span className="wm-quick-char-option-icon">{'\u2014'}</span>
+                  <span className="wm-quick-char-option-icon">{'—'}</span>
                   <span>No character voice</span>
                 </div>
                 {characters.map(c => (
@@ -1109,7 +1327,7 @@ export default function WriteMode() {
                     className={`wm-quick-char-option${selectedCharacter?.id === c.id ? ' selected' : ''}`}
                     onClick={() => { setSelectedCharacter(c); setShowCharQuick(false); }}
                   >
-                    <span className="wm-quick-char-option-icon">{c.icon || '\uD83D\uDC64'}</span>
+                    <span className="wm-quick-char-option-icon">{c.icon || '👤'}</span>
                     <span>{c.display_name || c.selected_name}</span>
                   </div>
                 ))}
@@ -1128,7 +1346,7 @@ export default function WriteMode() {
             </div>
           )}
           <div className="wm-save-status">
-            {saving ? '\u00B7\u00B7 saving' : saved ? '' : '\u00B7 unsaved'}
+            {saving ? '·· saving' : saved ? '' : '· unsaved'}
           </div>
 
           <button
@@ -1136,7 +1354,7 @@ export default function WriteMode() {
             onClick={() => setShowHistory(h => !h)}
             title={`Snapshots (${history.length})`}
           >
-            {'\uD83D\uDCDC'}{history.length > 0 && <span className="wm-history-badge">{history.length}</span>}
+            {'📜'}{history.length > 0 && <span className="wm-history-badge">{history.length}</span>}
           </button>
 
           <button
@@ -1144,15 +1362,7 @@ export default function WriteMode() {
             onClick={toggleFocusMode}
             title="Focus mode (F11)"
           >
-            {focusMode ? '\u26F6' : '\u26F6'}
-          </button>
-
-          <button
-            className={`wm-mode-btn${editMode ? ' active' : ''}`}
-            style={{ opacity: prose.length > 10 ? 1 : 0.3 }}
-            onClick={() => prose.length > 10 && setEditMode(!editMode)}
-          >
-            {editMode ? 'Write' : 'Edit'}
+            {focusMode ? '⛶' : '⛶'}
           </button>
 
           <button
@@ -1160,7 +1370,7 @@ export default function WriteMode() {
             onClick={() => setShowContext(c => !c)}
             title="Chapter context panel"
           >
-            {'\u2139'}
+            {'ℹ'}
           </button>
         </div>
       </header>
@@ -1197,7 +1407,7 @@ export default function WriteMode() {
             }}
             placeholder="e.g. 500"
           />
-          <button className="wm-goal-input-close" onClick={() => setShowGoalInput(false)}>{'\u2713'}</button>
+          <button className="wm-goal-input-close" onClick={() => setShowGoalInput(false)}>{'✓'}</button>
         </div>
       )}
 
@@ -1218,8 +1428,16 @@ export default function WriteMode() {
                 const chWords = ch.draft_prose ? ch.draft_prose.split(/\s+/).filter(Boolean).length : 0;
                 const isExpanded = expandedTocId === ch.id;
                 const hasSections = ch.sections && Array.isArray(ch.sections) && ch.sections.length > 0;
+                const cType = ch.chapter_type || 'chapter';
+                const typeIcon = cType === 'prologue' ? '◈' : cType === 'epilogue' ? '◇' : cType === 'interlude' ? '~' : cType === 'afterword' ? '∗' : null;
+                const showPartDivider = ch.part_number && (i === 0 || ch.part_number !== allChapters[i - 1]?.part_number);
                 return (
                   <div key={ch.id} className="wm-toc-chapter-group">
+                    {showPartDivider && (
+                      <div className="wm-toc-part-divider">
+                        <span className="wm-toc-part-label">Part {ch.part_number}{ch.part_title ? ` — ${ch.part_title}` : ''}</span>
+                      </div>
+                    )}
                     <div
                       className={`wm-toc-item${isCurrent ? ' current' : ''}${tocDragOverIdx === i ? ' drag-over' : ''}`}
                       draggable
@@ -1228,15 +1446,16 @@ export default function WriteMode() {
                       onDragEnd={handleTocDrop}
                       onClick={() => !editingTocId && switchChapter(ch.id)}
                     >
-                      <span className="wm-toc-drag">{'\u2261'}</span>
+                      <span className="wm-toc-drag">{'≡'}</span>
                       <button
                         className={`wm-toc-expand${isExpanded ? ' expanded' : ''}`}
                         onClick={(e) => { e.stopPropagation(); toggleExpandChapter(ch.id); }}
                         title={isExpanded ? 'Collapse sections' : 'Show sections'}
                       >
-                        {'\u25B8'}
+                        {'▸'}
                       </button>
                       <span className="wm-toc-num">{ch.chapter_number || i + 1}</span>
+                      {typeIcon && <span className="wm-toc-type-badge" title={cType}>{typeIcon}</span>}
                       {editingTocId === ch.id ? (
                         <input
                           className="wm-toc-edit-input"
@@ -1255,7 +1474,7 @@ export default function WriteMode() {
                           {ch.title || 'Untitled'}
                         </span>
                       )}
-                      <span className="wm-toc-words">{chWords > 0 ? `${chWords}w` : '\u2014'}</span>
+                      <span className="wm-toc-words">{chWords > 0 ? `${chWords}w` : '—'}</span>
                     </div>
 
                     {/* ── Sections inside this chapter ── */}
@@ -1280,7 +1499,7 @@ export default function WriteMode() {
                                   onChange={e => setSectionEditVal(e.target.value)}
                                   onBlur={commitSectionEdit}
                                   onKeyDown={e => { if (e.key === 'Enter') commitSectionEdit(); if (e.key === 'Escape') setEditingSectionId(null); }}
-                                  placeholder={typeInfo.label + '\u2026'}
+                                  placeholder={typeInfo.label + '…'}
                                   autoFocus
                                 />
                               ) : (
@@ -1292,9 +1511,9 @@ export default function WriteMode() {
                                 </span>
                               )}
                               <div className="wm-toc-sec-actions">
-                                <button onClick={(e) => { e.stopPropagation(); moveTocSection(sec.id, -1); }} title="Move up">{'\u2191'}</button>
-                                <button onClick={(e) => { e.stopPropagation(); moveTocSection(sec.id, 1); }} title="Move down">{'\u2193'}</button>
-                                <button className="wm-toc-sec-del" onClick={(e) => { e.stopPropagation(); deleteTocSection(sec.id); }} title="Delete">{'\u00D7'}</button>
+                                <button onClick={(e) => { e.stopPropagation(); moveTocSection(sec.id, -1); }} title="Move up">{'↑'}</button>
+                                <button onClick={(e) => { e.stopPropagation(); moveTocSection(sec.id, 1); }} title="Move down">{'↓'}</button>
+                                <button className="wm-toc-sec-del" onClick={(e) => { e.stopPropagation(); deleteTocSection(sec.id); }} title="Delete">{'×'}</button>
                               </div>
                             </div>
                           );
@@ -1347,14 +1566,14 @@ export default function WriteMode() {
                 disabled={allChapters.findIndex(c => c.id === chapterId) <= 0}
                 onClick={() => goAdjacentChapter(-1)}
               >
-                {'\u2190'} Prev
+                {'←'} Prev
               </button>
               <button
                 className="wm-toc-nav-btn"
                 disabled={allChapters.findIndex(c => c.id === chapterId) >= allChapters.length - 1}
                 onClick={() => goAdjacentChapter(1)}
               >
-                Next {'\u2192'}
+                Next {'→'}
               </button>
             </div>
           </aside>
@@ -1363,10 +1582,83 @@ export default function WriteMode() {
         {/* ── CENTER: MAIN WRITING COLUMN ── */}
         <div className="wm-main-col">
 
+      {/* ══ CENTER TAB BAR ══ */}
+      <div className="wm-center-tabs">
+        {CENTER_TABS.map(tab => (
+          <button
+            key={tab.id}
+            className={`wm-center-tab${centerTab === tab.id ? ' wm-center-tab--active' : ''}`}
+            onClick={() => setCenterTab(tab.id)}
+          >
+            {tab.label}
+            {tab.id === 'review' && pendingLines.length > 0 && (
+              <span className="wm-tab-badge">{pendingLines.length}</span>
+            )}
+          </button>
+        ))}
+      </div>
+
+      {/* ══ WRITE TAB ══ */}
+      {centerTab === 'write' && (
+      <>
+
       {/* ── MAIN CONTENT AREA ── */}
       <div className="wm-content-row">
         {/* ── PROSE SECTION ── */}
         <div className="wm-prose-wrap" ref={proseRef}>
+
+          {/* Scene Interview — empty chapter */}
+          {!prose.trim() && !interviewDone && (
+            <div className="wm-scene-interview-wrap">
+              <SceneInterview
+                book={book}
+                chapter={chapter}
+                characters={registryCharacters}
+                onComplete={() => setInterviewDone(true)}
+                onSkip={() => setInterviewDone(true)}
+                onLineAdded={() => { setCenterTab('review'); loadReviewLines(); }}
+              />
+            </div>
+          )}
+
+          {/* Alive system context layers */}
+          {prose.trim() && (
+            <div className="wm-alive-systems">
+              <BeliefTracker
+                chapter={chapter}
+                onActChange={act => setPnosAct(act)}
+                onThreadChange={threads => setActiveThreads(threads)}
+              />
+              <BookQuestionLayer
+                book={book}
+                chapter={chapter}
+                onDirectionChange={() => {}}
+              />
+              <CharacterAppearanceRules
+                chapterCharacters={chapterCharacters}
+                onCharacterToggle={(ids) => setChapterCharacters(ids)}
+              />
+              <ChapterExitEmotion
+                chapter={chapter}
+                onExitChange={(data) => setExitEmotionData(data)}
+              />
+              <IncomingEchoes
+                echoes={incomingEchoes}
+                onMarkLanded={async (echoId) => {
+                  try {
+                    await fetch(`${API}/storyteller/echoes/${echoId}`, {
+                      method: 'PUT',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ status: 'landed' }),
+                    });
+                    setIncomingEchoes(prev =>
+                      prev.map(e => e.id === echoId ? { ...e, status: 'landed' } : e)
+                    );
+                  } catch {}
+                }}
+              />
+            </div>
+          )}
 
           {/* ── Manuscript page container ── */}
           <div className="wm-manuscript-page">
@@ -1384,10 +1676,10 @@ export default function WriteMode() {
               <div className="wm-chapter-num">
                 {chapter?.chapter_number
                   ? String(chapter.chapter_number).padStart(2, '0')
-                  : '\u2014'}
+                  : '—'}
               </div>
               <h2 className="wm-chapter-heading">{chapter?.title || 'Untitled'}</h2>
-              <div className="wm-chapter-ornament">{'\u2756'}</div>
+              <div className="wm-chapter-ornament">{'❖'}</div>
             </div>
 
             {/* ── Section-aware writing area ── */}
@@ -1425,7 +1717,7 @@ export default function WriteMode() {
                           className="wm-prose-area wm-section-prose"
                           value={sectionProse[sec.id] || ''}
                           onChange={(e) => handleSectionProseChange(sec.id, e.target.value)}
-                          placeholder={`Write under ${sec.content || 'this section'}\u2026`}
+                          placeholder={`Write under ${sec.content || 'this section'}…`}
                           spellCheck={false}
                           readOnly={generating}
                         />
@@ -1439,7 +1731,7 @@ export default function WriteMode() {
                 className="wm-prose-area"
                 value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}
                 onChange={handleProseChange}
-                placeholder={editMode ? '' : "Begin writing\u2026"}
+                placeholder={editMode ? '' : "Begin writing…"}
                 spellCheck={false}
                 readOnly={generating}
               />
@@ -1448,12 +1740,33 @@ export default function WriteMode() {
             {/* ── Running footer ── */}
             <div className="wm-manuscript-footer">
               <span className="wm-mf-words">{wordCount > 0 ? `${wordCount.toLocaleString()} words` : ''}</span>
-              <span className="wm-mf-ornament">{'\u2014'}</span>
+              <span className="wm-mf-ornament">{'—'}</span>
               <span className="wm-mf-page">
                 {chapter?.chapter_number ? `Ch. ${chapter.chapter_number}` : ''}
               </span>
             </div>
           </div>
+
+          {/* ── Narrative Intelligence panel — appears after 5+ prose lines ── */}
+          {niShouldShow && (
+            <div className="wm-ni-panel">
+              <div className="wm-ni-panel-header">
+                <span className="wm-ni-label">Narrative Intelligence</span>
+              </div>
+              <NarrativeIntelligence
+                chapter={chapter}
+                lines={prose.split(/\n\n+/).filter(s => s.trim()).map((text, i) => ({
+                  id:      `prose-${i}`,
+                  content: text,
+                  text:    text,
+                  status:  'approved',
+                }))}
+                lineIndex={proseLineCount - 1}
+                book={book}
+                characters={registryCharacters}
+              />
+            </div>
+          )}
 
           {/* ── Contextual paragraph hint ── */}
           {!editMode && prose.trim() && (
@@ -1469,7 +1782,7 @@ export default function WriteMode() {
               }}
               title="Paragraph actions"
             >
-              {'\u00B6'}
+              {'¶'}
             </div>
           )}
 
@@ -1486,16 +1799,16 @@ export default function WriteMode() {
                   {i === selectedParagraph && (
                     <div className="wm-para-actions">
                       <button onClick={(e) => { e.stopPropagation(); handleParagraphAction('rewrite'); }} disabled={generating}>
-                        {generating && paraAction === 'rewrite' ? 'Rewriting\u2026' : '\u270E Rewrite'}
+                        {generating && paraAction === 'rewrite' ? 'Rewriting…' : '✎ Rewrite'}
                       </button>
                       <button onClick={(e) => { e.stopPropagation(); handleParagraphAction('expand'); }} disabled={generating}>
-                        {generating && paraAction === 'expand' ? 'Expanding\u2026' : '\u2194 Expand'}
+                        {generating && paraAction === 'expand' ? 'Expanding…' : '↔ Expand'}
                       </button>
                       <button className="wm-para-delete" onClick={(e) => { e.stopPropagation(); handleParagraphAction('delete'); }} disabled={generating}>
-                        {'\u2717 Delete'}
+                        {'✗ Delete'}
                       </button>
                       <button className="wm-para-cancel" onClick={(e) => { e.stopPropagation(); setSelectedParagraph(null); setParaAction(null); }}>
-                        {'\u2715'}
+                        {'✕'}
                       </button>
                     </div>
                   )}
@@ -1540,9 +1853,9 @@ export default function WriteMode() {
       {/* ── NUDGE DISPLAY ── */}
       {nudgeText && !generating && (
         <div className="wm-nudge">
-          <div className="wm-nudge-icon">{"\uD83D\uDCA1"}</div>
+          <div className="wm-nudge-icon">{"💡"}</div>
           <div className="wm-nudge-text">{nudgeText}</div>
-          <button className="wm-nudge-close" onClick={() => setNudgeText(null)}>{"\u00D7"}</button>
+          <button className="wm-nudge-close" onClick={() => setNudgeText(null)}>{"×"}</button>
         </div>
       )}
 
@@ -1554,25 +1867,25 @@ export default function WriteMode() {
             onClick={handleContinue}
             disabled={generating || !prose.trim()}
           >
-            <span className="wm-ai-icon">{"\u2728"}</span> Continue
+            <span className="wm-ai-icon">{"✨"}</span> Continue
           </button>
           <button
             className={`wm-ai-btn${aiAction === 'deepen' ? ' active' : ''}`}
             onClick={handleDeepen}
             disabled={generating || !prose.trim()}
           >
-            <span className="wm-ai-icon">{"\uD83D\uDD0D"}</span> Deepen
+            <span className="wm-ai-icon">{"🔍"}</span> Deepen
           </button>
           <button
             className={`wm-ai-btn${aiAction === 'nudge' ? ' active' : ''}`}
             onClick={handleNudge}
             disabled={generating}
           >
-            <span className="wm-ai-icon">{"\uD83D\uDCA1"}</span> Nudge
+            <span className="wm-ai-icon">{"💡"}</span> Nudge
           </button>
           {proseBeforeAi !== null && !generating && (
             <button className="wm-ai-btn wm-undo-ai" onClick={undoAi}>
-              <span className="wm-ai-icon">{"\u21A9"}</span> Undo
+              <span className="wm-ai-icon">{"↩"}</span> Undo
             </button>
           )}
           <button
@@ -1580,7 +1893,7 @@ export default function WriteMode() {
             onClick={() => setGenLength(g => g === 'paragraph' ? 'sentence' : 'paragraph')}
             title={genLength === 'sentence' ? 'Generating one sentence at a time' : 'Generating full paragraphs'}
           >
-            {genLength === 'sentence' ? '1\u2009line' : '\u00B6\u2009full'}
+            {genLength === 'sentence' ? '1 line' : '¶ full'}
           </button>
           {prose.trim() && (
             <button
@@ -1595,7 +1908,7 @@ export default function WriteMode() {
               }}
               title="Paragraph-level actions"
             >
-              <span className="wm-ai-icon">{'\u00B6'}</span> Paragraphs
+              <span className="wm-ai-icon">{'¶'}</span> Paragraphs
             </button>
           )}
         </div>
@@ -1606,7 +1919,7 @@ export default function WriteMode() {
         <div className="wm-history-panel">
           <div className="wm-history-header">
             <span className="wm-history-title">Snapshots</span>
-            <button className="wm-history-close" onClick={() => setShowHistory(false)}>{'\u00D7'}</button>
+            <button className="wm-history-close" onClick={() => setShowHistory(false)}>{'×'}</button>
           </div>
           {history.length === 0 ? (
             <div className="wm-history-empty">No snapshots yet. Snapshots are taken automatically before each AI action.</div>
@@ -1620,10 +1933,10 @@ export default function WriteMode() {
                   <div key={i} className="wm-history-item">
                     <div className="wm-history-item-header">
                       <span className="wm-history-item-label">{snap.label}</span>
-                      <span className="wm-history-item-meta">{timeStr} \u00B7 {snap.wordCount}w</span>
+                      <span className="wm-history-item-meta">{timeStr} · {snap.wordCount}w</span>
                     </div>
                     <div className="wm-history-item-preview">
-                      {snap.prose.length > 200 ? snap.prose.slice(0, 200) + '\u2026' : snap.prose}
+                      {snap.prose.length > 200 ? snap.prose.slice(0, 200) + '…' : snap.prose}
                     </div>
                     <button
                       className="wm-history-restore"
@@ -1663,8 +1976,8 @@ export default function WriteMode() {
               onPointerUp={stopEditListening}
             >
               {editListening
-                ? <span className="wm-mic-active-ring">{'\uD83C\uDF99'}</span>
-                : '\uD83C\uDF99'}
+                ? <span className="wm-mic-active-ring">{'🎙'}</span>
+                : '🎙'}
             </button>
           </div>
           <button
@@ -1673,7 +1986,7 @@ export default function WriteMode() {
             onClick={applyEdit}
             disabled={!editNote.trim() || generating}
           >
-            {generating ? 'Rewriting\u2026' : 'Apply \u2192'}
+            {generating ? 'Rewriting…' : 'Apply →'}
           </button>
         </div>
       )}
@@ -1707,9 +2020,9 @@ export default function WriteMode() {
             {listening
               ? 'Tap mic to stop & write'
               : generating
-              ? (aiAction === 'continue' ? 'Continuing\u2026' : aiAction === 'deepen' ? 'Deepening\u2026' : 'Writing your story\u2026')
+              ? (aiAction === 'continue' ? 'Continuing…' : aiAction === 'deepen' ? 'Deepening…' : 'Writing your story…')
               : prose
-              ? 'Tap mic to speak \u2014 or use AI tools above'
+              ? 'Tap mic to speak — or use AI tools above'
               : 'Tap mic to speak, or type and use AI tools'}
           </div>
 
@@ -1719,9 +2032,120 @@ export default function WriteMode() {
               onClick={sendToReview}
               disabled={saving}
             >
-              {saving ? '\u2026' : '\u2192 Review'}
+              {saving ? '…' : '→ Review'}
             </button>
           )}
+        </div>
+      )}
+
+      </>)}{/* end write tab */}
+
+      {/* ══ REVIEW TAB ══ */}
+      {centerTab === 'review' && (
+        <div className="wm-review-tab">
+          <div className="wm-review-header">
+            <div className="wm-review-stats">
+              <span className="wm-review-stat approved">{approvedLines.length} approved</span>
+              {pendingLines.length > 0 && (
+                <span className="wm-review-stat pending">{pendingLines.length} pending</span>
+              )}
+              <span className="wm-review-stat total">{reviewLines.length} total</span>
+            </div>
+            {pendingLines.length > 0 && (
+              <button className="wm-approve-all-btn" onClick={approveAll}>
+                Approve all ({pendingLines.length})
+              </button>
+            )}
+          </div>
+
+          {reviewLoading ? (
+            <div className="wm-review-loading">Loading lines{'…'}</div>
+          ) : reviewLines.length === 0 ? (
+            <div className="wm-review-empty">
+              <div className="wm-review-empty-icon">{'◌'}</div>
+              <div className="wm-review-empty-text">
+                No lines yet. Write in the Write tab and click {'→'} Review to send them here.
+              </div>
+              <button className="wm-review-go-write" onClick={() => setCenterTab('write')}>
+                Go to Write tab {'→'}
+              </button>
+            </div>
+          ) : (
+            <div className="wm-review-manuscript">
+              {approvedLines.map((ln, i) => (
+                <div key={ln.id}>
+                  {renderReviewLine(ln, false)}
+                  {(i + 1) % 5 === 0 && i < approvedLines.length - 1 && (
+                    <div className="wm-ni-inline">
+                      <NarrativeIntelligence
+                        chapter={chapter}
+                        lines={approvedLines.slice(Math.max(0, i - 4), i + 1)}
+                        lineIndex={i}
+                        book={book}
+                        characters={registryCharacters}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              <ContinuityGuard
+                chapter={chapter}
+                lines={approvedLines}
+                book={book}
+                triggerLine={lastApprovedLine}
+              />
+
+              {pendingLines.length > 0 && (
+                <div className="wm-pending-section">
+                  <div className="wm-pending-label">{pendingLines.length} pending</div>
+                  {pendingLines.map(ln => renderReviewLine(ln, true))}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ STRUCTURE TAB ══ */}
+      {centerTab === 'structure' && (
+        <div className="wm-panel-tab">
+          <BookStructurePanel
+            bookId={bookId}
+            allChapters={allChapters}
+            onChapterUpdate={(chId, updates) => {
+              setAllChapters(prev => prev.map(c => c.id === chId ? { ...c, ...updates } : c));
+            }}
+            onReloadChapters={reloadChapters}
+          />
+        </div>
+      )}
+
+      {/* ══ SCENES TAB ══ */}
+      {centerTab === 'scenes' && (
+        <div className="wm-panel-tab">
+          <ScenesPanel bookId={bookId} chapters={allChapters} onChaptersChange={reloadChapters} book={book} />
+        </div>
+      )}
+
+      {/* ══ MEMORY TAB ══ */}
+      {centerTab === 'memory' && (
+        <div className="wm-panel-tab">
+          <MemoryBankView bookId={bookId} />
+        </div>
+      )}
+
+      {/* ══ LALA TAB ══ */}
+      {centerTab === 'lala' && (
+        <div className="wm-panel-tab">
+          <LalaSceneDetection bookId={bookId} />
+        </div>
+      )}
+
+      {/* ══ EXPORT TAB ══ */}
+      {centerTab === 'export' && (
+        <div className="wm-panel-tab">
+          <ExportPanel bookId={bookId} />
         </div>
       )}
 
@@ -1731,8 +2155,44 @@ export default function WriteMode() {
         {showContext && (
           <aside className="wm-context-panel">
             <div className="wm-ctx-header">
-              <span className="wm-ctx-header-title">Chapter Plan</span>
+              <div className="wm-ctx-tabs">
+                <button
+                  className={`wm-ctx-tab${contextTab === 'plan' ? ' wm-ctx-tab--active' : ''}`}
+                  onClick={() => setContextTab('plan')}
+                >
+                  Chapter Plan
+                </button>
+                <button
+                  className={`wm-ctx-tab${contextTab === 'ai-writer' ? ' wm-ctx-tab--active' : ''}`}
+                  onClick={() => setContextTab('ai-writer')}
+                >
+                  {"✦"} Write
+                </button>
+              </div>
             </div>
+
+            {/* ── AI WRITER TAB ── */}
+            {contextTab === 'ai-writer' && (
+              <WriteModeAIWriter
+                chapterId={chapterId}
+                bookId={bookId}
+                selectedCharacter={null}
+                currentProse={prose}
+                chapterContext={{
+                  scene_goal:          chapter?.scene_goal,
+                  theme:               chapter?.theme,
+                  emotional_arc_start: chapter?.emotional_state_start,
+                  emotional_arc_end:   chapter?.emotional_state_end,
+                  pov:                 chapter?.pov,
+                }}
+                onInsert={(text) => {
+                  setProse(prev => prev ? prev + '\n\n' + text : text);
+                }}
+              />
+            )}
+
+            {/* ── CHAPTER PLAN TAB ── */}
+            {contextTab === 'plan' && (<>
 
             {/* Scene Goal */}
             <div className="wm-ctx-field">
@@ -1802,7 +2262,7 @@ export default function WriteMode() {
                     {chapter?.emotional_state_start || 'Start'}
                   </span>
                 )}
-                <span className="wm-ctx-arc-arrow">{'\u2192'}</span>
+                <span className="wm-ctx-arc-arrow">{'→'}</span>
                 {editingContext === 'emotional_state_end' ? (
                   <input
                     className="wm-ctx-input wm-ctx-input-sm"
@@ -1897,8 +2357,10 @@ export default function WriteMode() {
                 });
               }}
             >
-              {'\u2630'} Show Chapter Structure
+              {'☰'} Show Chapter Structure
             </button>
+
+            </>)}{/* end plan tab */}
           </aside>
         )}
 

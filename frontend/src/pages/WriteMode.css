@@ -86,6 +86,8 @@
     0 4px 20px rgba(28,24,20,0.025);
   flex-shrink: 0;
   transition: box-shadow 0.3s ease;
+  position: relative;
+  z-index: 10;
 }
 
 .wm-back-btn {
@@ -319,6 +321,36 @@
   min-width: 16px;
   text-align: center;
   flex-shrink: 0;
+}
+
+.wm-toc-type-badge {
+  font-size: 10px;
+  color: #C6A85E;
+  margin-right: 2px;
+  flex-shrink: 0;
+}
+
+.wm-toc-part-divider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px 4px;
+  margin-top: 4px;
+}
+.wm-toc-part-divider::before,
+.wm-toc-part-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: #E8E2DA;
+}
+.wm-toc-part-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #C6A85E;
+  white-space: nowrap;
 }
 
 .wm-toc-title {
@@ -676,7 +708,7 @@
 }
 
 .wm-ctx-header {
-  padding: 16px 16px 12px;
+  padding: 0;
   border-bottom: 1px solid rgba(28,24,20,0.04);
 }
 
@@ -687,6 +719,38 @@
   text-transform: uppercase;
   color: rgba(28,24,20,0.35);
   font-weight: 500;
+}
+
+/* Context panel tabs */
+.wm-ctx-tabs {
+  display: flex;
+  gap: 0;
+}
+
+.wm-ctx-tab {
+  flex: 1;
+  padding: 12px 8px 10px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: 'DM Mono', monospace;
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(28,24,20,0.3);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.wm-ctx-tab:hover {
+  color: rgba(28,24,20,0.5);
+  background: rgba(28,24,20,0.02);
+}
+
+.wm-ctx-tab--active {
+  color: #1C1814;
+  border-bottom-color: #B8962E;
 }
 
 .wm-ctx-field {
@@ -1481,6 +1545,8 @@
   box-shadow: 0 -4px 20px rgba(28,24,20,0.03);
   flex-shrink: 0;
   transition: opacity 0.3s ease;
+  position: relative;
+  z-index: 101;
 }
 
 .wm-ai-btn {
@@ -1778,6 +1844,8 @@
   flex-shrink: 0;
   padding-bottom: max(20px, env(safe-area-inset-bottom));
   box-shadow: none;
+  position: relative;
+  z-index: 101;
 }
 
 /* ─── MIC BUTTON ─────────────────────────────────────────── */
@@ -2810,5 +2878,616 @@
   .wm-focus-mode .wm-prose-wrap {
     padding-top: 10vh;
     padding-bottom: 10vh;
+  }
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+ * CENTER TAB BAR + REVIEW TAB + MOBILE-FIRST RESPONSIVE
+ * Appended for WriteMode merge (StorytellerPage → WriteMode)
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/* ══ CENTER TAB BAR ══════════════════════════════════════════════════════ */
+
+.wm-center-tabs {
+  display:          flex;
+  align-items:      center;
+  gap:              0;
+  border-bottom:    1px solid rgba(28, 24, 20, 0.1);
+  background:       #FAF7F0;
+  padding:          0 12px;
+  flex-shrink:      0;
+  overflow-x:       auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.wm-center-tab {
+  position:         relative;
+  background:       none;
+  border:           none;
+  border-bottom:    2px solid transparent;
+  padding:          10px 12px 9px;
+  font-family:      'DM Mono', monospace;
+  font-size:        10px;
+  letter-spacing:   0.1em;
+  color:            rgba(28, 24, 20, 0.4);
+  cursor:           pointer;
+  transition:       all 0.15s ease;
+  white-space:      nowrap;
+}
+
+.wm-center-tab:hover {
+  color:            rgba(28, 24, 20, 0.7);
+}
+
+.wm-center-tab--active {
+  color:            #1C1814;
+  border-bottom-color: #B8962E;
+}
+
+/* Pending badge on Review tab */
+.wm-tab-badge {
+  display:          inline-flex;
+  align-items:      center;
+  justify-content:  center;
+  background:       #B85C38;
+  color:            #FAF7F0;
+  font-size:        8px;
+  font-family:      'DM Mono', monospace;
+  border-radius:    10px;
+  padding:          1px 5px;
+  margin-left:      5px;
+  min-width:        16px;
+}
+
+/* ══ PANEL TABS (Scenes / Memory / Lala / Export) ════════════════════════ */
+
+.wm-panel-tab {
+  flex:             1;
+  overflow-y:       auto;
+  padding:          0;
+}
+
+/* ══ WRITE TAB ADDITIONS ═════════════════════════════════════════════════ */
+
+/* Scene Interview wrapper */
+.wm-scene-interview-wrap {
+  max-width:        680px;
+  margin:           24px auto;
+  padding:          0 16px;
+}
+
+/* Alive systems — collapsible row above manuscript */
+.wm-alive-systems {
+  max-width:        680px;
+  margin:           0 auto 16px;
+  padding:          0 16px;
+  display:          flex;
+  flex-direction:   column;
+  gap:              8px;
+}
+
+/* Narrative Intelligence panel */
+.wm-ni-panel {
+  max-width:        680px;
+  margin:           24px auto 0;
+  padding:          0 16px;
+  background:       #FAF7F0;
+  border:           1px solid rgba(28, 24, 20, 0.08);
+  border-radius:    4px;
+  overflow:         hidden;
+}
+
+.wm-ni-panel-header {
+  display:          flex;
+  align-items:      center;
+  justify-content:  space-between;
+  padding:          10px 16px;
+  border-bottom:    1px solid rgba(28, 24, 20, 0.06);
+}
+
+.wm-ni-label {
+  font-family:      'DM Mono', monospace;
+  font-size:        8px;
+  letter-spacing:   0.15em;
+  color:            rgba(28, 24, 20, 0.35);
+  text-transform:   uppercase;
+}
+
+/* NI inline in Review tab */
+.wm-ni-inline {
+  margin:           12px 0;
+  padding:          0 16px;
+}
+
+/* ══ REVIEW TAB ══════════════════════════════════════════════════════════ */
+
+.wm-review-tab {
+  flex:             1;
+  overflow-y:       auto;
+  display:          flex;
+  flex-direction:   column;
+}
+
+.wm-review-header {
+  display:          flex;
+  flex-wrap:        wrap;
+  align-items:      center;
+  justify-content:  space-between;
+  padding:          12px 16px;
+  border-bottom:    1px solid rgba(28, 24, 20, 0.07);
+  flex-shrink:      0;
+  background:       #FAF7F0;
+  position:         sticky;
+  top:              0;
+  z-index:          5;
+  gap:              8px;
+}
+
+.wm-review-stats {
+  display:          flex;
+  align-items:      center;
+  gap:              10px;
+  flex-wrap:        wrap;
+}
+
+.wm-review-stat {
+  font-family:      'DM Mono', monospace;
+  font-size:        9px;
+  letter-spacing:   0.1em;
+}
+
+.wm-review-stat.approved { color: #4A9B6F; }
+.wm-review-stat.pending  { color: #B85C38; }
+.wm-review-stat.total    { color: rgba(28, 24, 20, 0.35); }
+
+.wm-approve-all-btn {
+  background:       none;
+  border:           1px solid rgba(28, 24, 20, 0.15);
+  border-radius:    3px;
+  padding:          6px 14px;
+  font-family:      'DM Mono', monospace;
+  font-size:        9px;
+  letter-spacing:   0.08em;
+  color:            #1C1814;
+  cursor:           pointer;
+  transition:       all 0.12s ease;
+}
+
+.wm-approve-all-btn:hover {
+  background:       rgba(28, 24, 20, 0.04);
+  border-color:     rgba(28, 24, 20, 0.25);
+}
+
+/* Empty state */
+.wm-review-empty {
+  display:          flex;
+  flex-direction:   column;
+  align-items:      center;
+  justify-content:  center;
+  padding:          48px 16px;
+  gap:              16px;
+  text-align:       center;
+}
+
+.wm-review-empty-icon {
+  font-size:        28px;
+  color:            rgba(28, 24, 20, 0.15);
+}
+
+.wm-review-empty-text {
+  font-family:      'Lora', Georgia, serif;
+  font-style:       italic;
+  font-size:        14px;
+  color:            rgba(28, 24, 20, 0.4);
+  max-width:        380px;
+  line-height:      1.7;
+}
+
+.wm-review-go-write {
+  background:       none;
+  border:           1px solid rgba(28, 24, 20, 0.12);
+  border-radius:    3px;
+  padding:          8px 20px;
+  font-family:      'DM Mono', monospace;
+  font-size:        9px;
+  letter-spacing:   0.1em;
+  color:            rgba(28, 24, 20, 0.5);
+  cursor:           pointer;
+}
+
+.wm-review-loading {
+  padding:          32px 16px;
+  font-family:      'Lora', Georgia, serif;
+  font-style:       italic;
+  font-size:        13px;
+  color:            rgba(28, 24, 20, 0.4);
+}
+
+/* Review manuscript */
+.wm-review-manuscript {
+  padding:          16px;
+  max-width:        760px;
+  margin:           0 auto;
+  width:            100%;
+}
+
+/* Review lines */
+.wm-review-line {
+  display:          flex;
+  align-items:      flex-start;
+  gap:              8px;
+  padding:          12px 0;
+  border-bottom:    1px solid rgba(28, 24, 20, 0.05);
+  position:         relative;
+}
+
+.wm-review-line--approved .wm-review-line-text,
+.wm-review-line--edited .wm-review-line-text {
+  color:            #1C1814;
+  opacity:          0.9;
+}
+
+.wm-review-line--pending .wm-review-line-text,
+.wm-review-line-text.pending {
+  color:            rgba(28, 24, 20, 0.5);
+  font-style:       italic;
+}
+
+.wm-review-line--rejected {
+  opacity:          0.4;
+  text-decoration:  line-through;
+}
+
+.wm-review-line-content {
+  flex:             1;
+  min-width:        0;
+}
+
+.wm-review-line-text {
+  font-family:      'Spectral', Georgia, serif;
+  font-size:        15px;
+  line-height:      1.8;
+  margin:           0;
+  word-break:       break-word;
+}
+
+.wm-review-line-edit {
+  width:            100%;
+  min-height:       80px;
+  border:           1px solid rgba(28, 24, 20, 0.12);
+  border-radius:    3px;
+  padding:          10px 12px;
+  font-family:      'Spectral', Georgia, serif;
+  font-size:        15px;
+  line-height:      1.8;
+  color:            #1C1814;
+  background:       #F5F0E5;
+  resize:           vertical;
+  outline:          none;
+}
+
+.wm-review-line-edit-actions {
+  display:          flex;
+  gap:              8px;
+  margin-top:       8px;
+}
+
+.wm-review-save,
+.wm-review-cancel {
+  background:       none;
+  border:           1px solid rgba(28, 24, 20, 0.15);
+  border-radius:    3px;
+  padding:          5px 14px;
+  font-family:      'DM Mono', monospace;
+  font-size:        9px;
+  letter-spacing:   0.08em;
+  cursor:           pointer;
+  color:            #1C1814;
+}
+
+.wm-review-save {
+  background:       #1C1814;
+  color:            #FAF7F0;
+  border-color:     #1C1814;
+}
+
+/* Line action buttons */
+.wm-review-line-actions {
+  display:          flex;
+  align-items:      center;
+  gap:              2px;
+  flex-shrink:      0;
+  opacity:          1;
+}
+
+.wm-line-approve,
+.wm-line-edit,
+.wm-line-reject {
+  background:       none;
+  border:           none;
+  width:            32px;
+  height:           32px;
+  display:          flex;
+  align-items:      center;
+  justify-content:  center;
+  border-radius:    3px;
+  cursor:           pointer;
+  font-size:        14px;
+  transition:       all 0.1s ease;
+}
+
+.wm-line-approve { color: #4A9B6F; }
+.wm-line-approve:hover { background: rgba(74, 155, 111, 0.08); }
+
+.wm-line-edit    { color: rgba(28, 24, 20, 0.4); }
+.wm-line-edit:hover { background: rgba(28, 24, 20, 0.05); }
+
+.wm-line-reject  { color: #B85C38; }
+.wm-line-reject:hover { background: rgba(184, 92, 56, 0.08); }
+
+/* Pending section header */
+.wm-pending-section {
+  margin-top:       24px;
+  border-top:       1px solid rgba(28, 24, 20, 0.08);
+  padding-top:      16px;
+}
+
+.wm-pending-label {
+  font-family:      'DM Mono', monospace;
+  font-size:        8px;
+  letter-spacing:   0.2em;
+  color:            rgba(28, 24, 20, 0.3);
+  text-transform:   uppercase;
+  margin-bottom:    12px;
+  padding:          0 0 8px;
+  border-bottom:    1px solid rgba(28, 24, 20, 0.05);
+}
+
+
+/* ════════════════════════════════════════════════════════════════════════
+ * MOBILE-FIRST RESPONSIVE OVERRIDES
+ * ════════════════════════════════════════════════════════════════════════ */
+
+/* ── Small screens (up to 480px) ── */
+@media (max-width: 480px) {
+  .wm-topbar {
+    padding: 6px 8px;
+    gap: 4px;
+  }
+  .wm-chapter-info {
+    display: none;
+  }
+  .wm-session-timer {
+    display: none;
+  }
+  .wm-top-right {
+    gap: 4px;
+  }
+  .wm-history-btn,
+  .wm-focus-btn {
+    display: none;
+  }
+
+  .wm-center-tabs {
+    padding: 0 8px;
+  }
+  .wm-center-tab {
+    padding: 8px 8px 7px;
+    font-size: 9px;
+    letter-spacing: 0.05em;
+  }
+
+  .wm-hub-layout {
+    flex-direction: column;
+  }
+  .wm-toc-sidebar {
+    width: 100% !important;
+    max-width: 100%;
+    min-width: auto;
+    border-right: none;
+    border-bottom: 1px solid rgba(28, 24, 20, 0.08);
+    max-height: 40vh;
+    overflow-y: auto;
+  }
+  .wm-context-panel {
+    width: 100% !important;
+    max-width: 100%;
+    min-width: auto;
+    border-left: none;
+    border-top: 1px solid rgba(28, 24, 20, 0.08);
+    max-height: 50vh;
+    overflow-y: auto;
+  }
+
+  .wm-main-col {
+    min-width: 0;
+  }
+  .wm-manuscript-page {
+    padding: 16px 12px;
+    margin: 0;
+  }
+  .wm-manuscript-header {
+    padding: 0 0 8px;
+  }
+  .wm-chapter-opening {
+    padding: 16px 0;
+  }
+  .wm-chapter-num {
+    font-size: 32px;
+  }
+  .wm-chapter-heading {
+    font-size: 18px;
+  }
+  .wm-prose-area {
+    font-size: 15px;
+    line-height: 1.7;
+    padding: 0;
+    min-height: 40vh;
+  }
+
+  .wm-ai-toolbar {
+    padding: 8px;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .wm-ai-btn {
+    font-size: 10px;
+    padding: 6px 10px;
+  }
+  .wm-len-toggle {
+    font-size: 9px;
+    padding: 4px 8px;
+  }
+
+  .wm-bottom-bar {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+  .wm-bottom-hint {
+    font-size: 10px;
+  }
+  .wm-send-btn {
+    font-size: 10px;
+    padding: 6px 12px;
+  }
+
+  .wm-review-manuscript {
+    padding: 12px;
+  }
+  .wm-review-line-text {
+    font-size: 14px;
+    line-height: 1.7;
+  }
+  .wm-review-header {
+    padding: 10px 12px;
+  }
+
+  .wm-scene-interview-wrap,
+  .wm-alive-systems,
+  .wm-ni-panel {
+    padding: 0 12px;
+  }
+
+  .wm-goal-bar-wrap {
+    padding: 4px 12px;
+  }
+
+  /* Context panel fields */
+  .wm-ctx-field {
+    padding: 8px 12px;
+  }
+
+  /* TOC compact */
+  .wm-toc-item {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+  .wm-toc-drag {
+    display: none;
+  }
+  .wm-toc-nav {
+    padding: 6px 8px;
+  }
+}
+
+/* ── Medium screens (481px - 768px) ── */
+@media (min-width: 481px) and (max-width: 768px) {
+  .wm-center-tabs {
+    padding: 0 12px;
+  }
+  .wm-center-tab {
+    padding: 10px 10px 9px;
+    font-size: 10px;
+  }
+
+  .wm-hub-layout {
+    flex-direction: column;
+  }
+  .wm-toc-sidebar {
+    width: 100% !important;
+    max-width: 100%;
+    min-width: auto;
+    border-right: none;
+    border-bottom: 1px solid rgba(28, 24, 20, 0.08);
+    max-height: 35vh;
+    overflow-y: auto;
+  }
+  .wm-context-panel {
+    width: 100% !important;
+    max-width: 100%;
+    min-width: auto;
+    border-left: none;
+    border-top: 1px solid rgba(28, 24, 20, 0.08);
+    max-height: 45vh;
+    overflow-y: auto;
+  }
+  .wm-manuscript-page {
+    padding: 20px 16px;
+  }
+  .wm-prose-area {
+    font-size: 16px;
+    min-height: 45vh;
+  }
+
+  .wm-review-manuscript {
+    padding: 16px;
+  }
+
+  .wm-ai-toolbar {
+    flex-wrap: wrap;
+    padding: 8px 12px;
+  }
+}
+
+/* ── Large screens (769px+) — restore desktop layout ── */
+@media (min-width: 769px) {
+  .wm-center-tabs {
+    padding: 0 24px;
+  }
+  .wm-center-tab {
+    padding: 10px 16px 9px;
+  }
+
+  .wm-scene-interview-wrap {
+    padding: 0 24px;
+    margin: 32px auto;
+  }
+  .wm-alive-systems {
+    padding: 0 24px;
+  }
+  .wm-ni-panel {
+    padding: 0 24px;
+  }
+  .wm-ni-inline {
+    padding: 0 24px;
+  }
+
+  .wm-review-header {
+    padding: 14px 24px;
+  }
+  .wm-review-manuscript {
+    padding: 24px;
+  }
+  .wm-review-empty {
+    padding: 64px 24px;
+  }
+  .wm-review-loading {
+    padding: 32px 24px;
+  }
+  .wm-review-line {
+    gap: 12px;
+  }
+  .wm-review-line-text {
+    font-size: 16px;
+  }
+
+  /* Hide action buttons until hover on desktop */
+  .wm-review-line-actions {
+    opacity: 0;
+    transition: opacity 0.12s ease;
+  }
+  .wm-review-line:hover .wm-review-line-actions {
+    opacity: 1;
   }
 }

@@ -81,6 +81,7 @@ let PressCareer; // LalaVerse Press career tracking model
 let LalaverseBrand; // LalaVerse brand registry model
 let WardrobeBrandTag; // Wardrobe brand tag model
 let TherapyPendingSession; // Therapy pending session model
+let WardrobeContentAssignment; // Wardrobe content assignment model
 
 try {
   // Core models
@@ -241,6 +242,7 @@ try {
   LalaverseBrand = require('./LalaverseBrand')(sequelize);
   WardrobeBrandTag = require('./WardrobeBrandTag')(sequelize);
   TherapyPendingSession = require('./TherapyPendingSession')(sequelize);
+  WardrobeContentAssignment = require('./WardrobeContentAssignment')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -1257,6 +1259,7 @@ const db = {
     LalaverseBrand,
     WardrobeBrandTag,
     TherapyPendingSession,
+    WardrobeContentAssignment,
   },
 
   /**
@@ -1500,3 +1503,4 @@ module.exports.PressCareer = PressCareer;
 module.exports.LalaverseBrand = LalaverseBrand;
 module.exports.WardrobeBrandTag = WardrobeBrandTag;
 module.exports.TherapyPendingSession = TherapyPendingSession;
+module.exports.WardrobeContentAssignment = WardrobeContentAssignment;

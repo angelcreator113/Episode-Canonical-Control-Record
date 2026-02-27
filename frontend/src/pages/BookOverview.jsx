@@ -19,6 +19,16 @@ function planScore(ch) {
   return PLAN_FIELDS.filter(f => ch[f]?.toString().trim()).length;
 }
 
+/* Spelled-out chapter numbers for literary TOC */
+const NUMBER_WORDS = [
+  '', 'One', 'Two', 'Three', 'Four', 'Five', 'Six', 'Seven', 'Eight', 'Nine', 'Ten',
+  'Eleven', 'Twelve', 'Thirteen', 'Fourteen', 'Fifteen', 'Sixteen', 'Seventeen',
+  'Eighteen', 'Nineteen', 'Twenty', 'Twenty-One', 'Twenty-Two', 'Twenty-Three',
+  'Twenty-Four', 'Twenty-Five', 'Twenty-Six', 'Twenty-Seven', 'Twenty-Eight',
+  'Twenty-Nine', 'Thirty'
+];
+function numberWord(n) { return NUMBER_WORDS[n] || String(n); }
+
 /* ── Story Structure Templates ── */
 const STORY_TEMPLATES = {
   three_act: {
@@ -153,6 +163,27 @@ export default function BookOverview() {
   const [generatingScript, setGeneratingScript] = useState(false);
   const [scriptResult, setScriptResult] = useState(null);
   const [showScriptModal, setShowScriptModal] = useState(false);
+
+  // Expanded chapters (show scenes inline)
+  const [expandedChapters, setExpandedChapters] = useState(new Set());
+
+  /** Extract scene headers from a chapter's sections JSONB */
+  function getScenes(ch) {
+    if (!ch.sections || !Array.isArray(ch.sections)) return [];
+    return ch.sections.filter(s => s.type === 'h3').map(s => ({
+      id: s.id,
+      title: s.content || 'Untitled Scene',
+    }));
+  }
+
+  function toggleChapterExpand(chId) {
+    setExpandedChapters(prev => {
+      const next = new Set(prev);
+      if (next.has(chId)) next.delete(chId);
+      else next.add(chId);
+      return next;
+    });
+  }
 
   // ── Load book & chapters ──
   const loadBook = useCallback(async () => {
@@ -469,10 +500,10 @@ export default function BookOverview() {
       }
       if (parts.length) lines.push(parts.join(' | '));
       if (ch.emotional_state_start || ch.emotional_state_end) {
-        lines.push(`**Emotional Arc:** ${ch.emotional_state_start || '?'} \u2192 ${ch.emotional_state_end || '?'}`);
+        lines.push(`**Emotional Arc:** ${ch.emotional_state_start || '?'} → ${ch.emotional_state_end || '?'}`);
       }
       if (ch.chapter_notes) lines.push(`\n*Notes:* ${ch.chapter_notes}`);
-      if (ch.draft_prose?.trim()) lines.push(`\n\u2713 *Has draft prose*`);
+      if (ch.draft_prose?.trim()) lines.push(`\n✓ *Has draft prose*`);
       lines.push('');
       lines.push('---\n');
     });
@@ -519,7 +550,7 @@ export default function BookOverview() {
   if (loading) {
     return (
       <div className="bo-root">
-        <div className="bo-loading">Loading book\u2026</div>
+        <div className="bo-loading">Loading book…</div>
       </div>
     );
   }
@@ -528,7 +559,7 @@ export default function BookOverview() {
       <div className="bo-root">
         <div className="bo-error">
           <div>{error}</div>
-          <button onClick={() => navigate('/storyteller')}>{'\u2190'} Back to Archives</button>
+          <button onClick={() => navigate('/storyteller')}>{'←'} Back to Archives</button>
         </div>
       </div>
     );
@@ -544,7 +575,7 @@ export default function BookOverview() {
       {/* ── Header ── */}
       <header className="bo-header">
         <button className="bo-back" onClick={() => navigate('/storyteller')}>
-          {'\u2190'} Archives
+          {'←'} Archives
         </button>
 
         {editingBook ? (
@@ -559,7 +590,7 @@ export default function BookOverview() {
               className="bo-book-desc-input"
               value={bookDescription}
               onChange={e => setBookDescription(e.target.value)}
-              placeholder="A short description\u2026"
+              placeholder="A short description…"
               rows={2}
             />
             <div className="bo-book-edit-actions">
@@ -568,21 +599,26 @@ export default function BookOverview() {
             </div>
           </div>
         ) : (
-          <div className="bo-book-info" onClick={() => setEditingBook(true)}>
+          <div className="bo-title-page" onClick={() => setEditingBook(true)}>
+            <div className="bo-title-ornament">✦</div>
             <h1 className="bo-book-title">{book.title}</h1>
             {book.description && <p className="bo-book-desc">{book.description}</p>}
-            {!book.description && chapters.length > 0 && (
-              <p className="bo-book-desc" style={{ fontStyle: 'italic', opacity: 0.5 }}>
-                {chapters.length} chapter{chapters.length !== 1 ? 's' : ''} &middot; {outlineStats.planned} planned &middot; {outlineStats.withProse} written
-              </p>
+            {book.character_name && (
+              <p className="bo-title-author">{book.character_name}</p>
             )}
+            <div className="bo-title-stats">
+              <span>{chapters.length} {chapters.length === 1 ? 'Chapter' : 'Chapters'}</span>
+              <span className="bo-title-stats-sep">·</span>
+              <span>{outlineStats.planned} Planned</span>
+              <span className="bo-title-stats-sep">·</span>
+              <span>{outlineStats.withProse} Written</span>
+            </div>
+            <div className="bo-title-ornament">✦</div>
             <span className="bo-book-edit-hint">click to edit</span>
           </div>
         )}
 
         <div className="bo-header-meta">
-          <span className="bo-chapter-count">{chapters.length} chapter{chapters.length !== 1 ? 's' : ''}</span>
-          {book.status && <span className={`bo-status bo-status-${book.status}`}>{book.status}</span>}
 
           {/* View toggle */}
           <div className="bo-view-toggle">
@@ -614,7 +650,7 @@ export default function BookOverview() {
               disabled={generatingScript}
               title="Generate episode script from book chapters"
             >
-              {generatingScript ? 'Generating\u2026' : '\uD83C\uDFAC Script'}
+              {generatingScript ? 'Generating…' : '🎬 Script'}
             </button>
           )}
         </div>
@@ -644,7 +680,7 @@ export default function BookOverview() {
       <div className="bo-chapter-list">
         {chapters.length === 0 && !showNewChapter && !showBatchAdd && (
           <div className="bo-empty">
-            <div className="bo-empty-icon">{'\uD83D\uDCD6'}</div>
+            <div className="bo-empty-icon">{'📖'}</div>
             <div className="bo-empty-text">No chapters yet. Plan your book outline or add your first chapter.</div>
           </div>
         )}
@@ -676,13 +712,13 @@ export default function BookOverview() {
                   <span className="bo-outline-col bo-ol-num">{ch.chapter_number || idx + 1}</span>
                   <span className="bo-outline-col bo-ol-title" title={ch.title}>{ch.title}</span>
                   <span className="bo-outline-col bo-ol-goal" title={ch.scene_goal || ''}>
-                    {ch.scene_goal ? ch.scene_goal.substring(0, 60) + (ch.scene_goal.length > 60 ? '\u2026' : '') : '\u2014'}
+                    {ch.scene_goal ? ch.scene_goal.substring(0, 60) + (ch.scene_goal.length > 60 ? '…' : '') : '—'}
                   </span>
-                  <span className="bo-outline-col bo-ol-theme">{ch.theme || '\u2014'}</span>
+                  <span className="bo-outline-col bo-ol-theme">{ch.theme || '—'}</span>
                   <span className="bo-outline-col bo-ol-arc">
                     {ch.emotional_state_start || ch.emotional_state_end
-                      ? `${ch.emotional_state_start || '?'} \u2192 ${ch.emotional_state_end || '?'}`
-                      : '\u2014'}
+                      ? `${ch.emotional_state_start || '?'} → ${ch.emotional_state_end || '?'}`
+                      : '—'}
                   </span>
                   <span className="bo-outline-col bo-ol-status">
                     <span className={`bo-plan-dots`} title={`${score}/${PLAN_FIELDS.length} fields planned`}>
@@ -694,7 +730,7 @@ export default function BookOverview() {
                   </span>
                   <span className="bo-outline-col bo-ol-actions">
                     <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => startEdit(ch)}>Plan</button>
-                    <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}>Structure</button>
+                    <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}>Scenes</button>
                     <button className="bo-btn bo-btn-write bo-btn-sm" onClick={() => navigate(`/write/${id}/${ch.id}`)}>Write</button>
                   </span>
                 </div>
@@ -804,11 +840,11 @@ export default function BookOverview() {
                           <span key={i} className={`bo-plan-dot${i < score ? ' filled' : ''}`} />
                         ))}
                       </span>
-                      {hasProse && <span className="bo-bp-written">\u2713 Written</span>}
+                      {hasProse && <span className="bo-bp-written">✓ Written</span>}
                       <button
                         className="bo-btn bo-btn-ghost bo-btn-sm"
                         onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}
-                      >Structure</button>
+                      >Scenes</button>
                       <button
                         className="bo-btn bo-btn-write bo-btn-sm"
                         onClick={() => navigate(`/write/${id}/${ch.id}`)}
@@ -855,11 +891,11 @@ export default function BookOverview() {
 
                     <div className="bo-bp-field-row">
                       {renderField('emotional_state_start', 'Emotional Start', 'e.g. hopeful, anxious')}
-                      <span className="bo-bp-arc-arrow">\u2192</span>
+                      <span className="bo-bp-arc-arrow">→</span>
                       {renderField('emotional_state_end', 'Emotional End', 'e.g. devastated, resolved')}
                     </div>
 
-                    {renderField('chapter_notes', 'Notes', 'Anything to remember about this chapter\u2026', true)}
+                    {renderField('chapter_notes', 'Notes', 'Anything to remember about this chapter…', true)}
                   </div>
                 </div>
               );
@@ -867,188 +903,220 @@ export default function BookOverview() {
           </div>
         )}
 
-        {/* ───── CARD VIEW ───── */}
-        {viewMode === 'cards' && chapters.map((ch, idx) => {
-          const isEditing = editingId === ch.id;
-          const isDragging = dragIdx === idx;
-          const isDragOver = dragOverIdx === idx;
-          const hasGoal = ch.scene_goal?.trim();
-          const hasTheme = ch.theme?.trim();
-          const hasNotes = ch.chapter_notes?.trim();
-          const hasProse = ch.draft_prose?.trim();
-          const score = planScore(ch);
+        {/* ───── CARD VIEW (Table of Contents) ───── */}
+        {viewMode === 'cards' && chapters.length > 0 && (
+          <div className="bo-toc">
+            <div className="bo-toc-label">Contents</div>
+            {chapters.map((ch, idx) => {
+              const isEditing = editingId === ch.id;
+              const isDragging = dragIdx === idx;
+              const isDragOver = dragOverIdx === idx;
+              const hasProse = ch.draft_prose?.trim();
+              const score = planScore(ch);
+              const wordCount = (ch.draft_prose || '').split(/\s+/).filter(Boolean).length;
+              const scenes = getScenes(ch);
 
-          return (
-            <div
-              key={ch.id}
-              className={`bo-chapter-card${isEditing ? ' editing' : ''}${isDragging ? ' dragging' : ''}${isDragOver ? ' drag-over' : ''}`}
-              draggable={!isEditing}
-              onDragStart={() => handleDragStart(idx)}
-              onDragOver={e => handleDragOver(e, idx)}
-              onDragEnd={handleDragEnd}
-            >
-              {/* Card Header */}
-              <div className="bo-ch-header">
-                <div className="bo-ch-drag-handle" title="Drag to reorder">{'\u2261'}</div>
-                <span className="bo-ch-number">{ch.chapter_number || idx + 1}</span>
-
-                {isEditing ? (
-                  <input
-                    className="bo-ch-title-input"
-                    value={editFields.title}
-                    onChange={e => setEditFields(f => ({ ...f, title: e.target.value }))}
-                    placeholder="Chapter title"
-                    autoFocus
-                  />
-                ) : (
-                  <span className="bo-ch-title">{ch.title}</span>
-                )}
-
-                <div className="bo-ch-actions">
-                  {!isEditing && (
-                    <>
-                      <button
-                        className="bo-btn bo-btn-write"
-                        onClick={() => navigate(`/write/${id}/${ch.id}`)}
-                        title="Open in WriteMode"
-                      >
-                        {'\u270E'} Write
-                      </button>
-                      <button
-                        className="bo-btn bo-btn-ghost bo-btn-sm"
-                        onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}
-                        title="Edit chapter structure"
-                      >
-                        Structure
-                      </button>
-                      <button
-                        className="bo-btn bo-btn-ghost bo-btn-sm"
-                        onClick={() => startEdit(ch)}
-                        title="Edit chapter details"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        className="bo-btn bo-btn-danger bo-btn-sm"
-                        onClick={() => deleteChapter(ch.id)}
-                        title="Delete chapter"
-                      >
-                        {'\u2715'}
-                      </button>
-                    </>
-                  )}
-                </div>
-              </div>
-
-              {/* Tags / status pills */}
-              {!isEditing && (
-                <div className="bo-ch-tags">
-                  {hasProse && <span className="bo-ch-tag bo-tag-prose">has prose</span>}
-                  {hasGoal && <span className="bo-ch-tag bo-tag-goal">scene goal</span>}
-                  {hasTheme && <span className="bo-ch-tag bo-tag-theme">theme</span>}
-                  {hasNotes && <span className="bo-ch-tag bo-tag-notes">notes</span>}
-                  {score > 0 && (
-                    <span className="bo-ch-tag bo-tag-plan">{score}/{PLAN_FIELDS.length} planned</span>
-                  )}
-                  {!hasProse && !hasGoal && !hasTheme && !hasNotes && (
-                    <span className="bo-ch-tag bo-tag-empty">empty</span>
-                  )}
-                </div>
-              )}
-
-              {/* Quick preview (when not editing) */}
-              {!isEditing && hasGoal && (
-                <div className="bo-ch-preview">
-                  <span className="bo-ch-preview-label">Goal:</span> {ch.scene_goal}
-                </div>
-              )}
-
-              {/* Emotional arc preview */}
-              {!isEditing && (ch.emotional_state_start || ch.emotional_state_end) && (
-                <div className="bo-ch-preview">
-                  <span className="bo-ch-preview-label">Arc:</span>{' '}
-                  {ch.emotional_state_start || '?'} {'\u2192'} {ch.emotional_state_end || '?'}
-                </div>
-              )}
-
-              {/* Edit Form (expanded) */}
-              {isEditing && (
-                <div className="bo-ch-edit-form">
-                  <div className="bo-field">
-                    <label className="bo-field-label">Scene Goal</label>
-                    <textarea
-                      className="bo-field-input"
-                      value={editFields.scene_goal}
-                      onChange={e => setEditFields(f => ({ ...f, scene_goal: e.target.value }))}
-                      placeholder="What happens in this chapter? What does the character want?"
-                      rows={2}
-                    />
-                  </div>
-                  <div className="bo-field-row">
-                    <div className="bo-field bo-field-half">
-                      <label className="bo-field-label">Theme</label>
+              if (isEditing) {
+                return (
+                  <div key={ch.id} className="bo-chapter-card editing">
+                    <div className="bo-ch-header">
+                      <span className="bo-ch-number">{ch.chapter_number || idx + 1}</span>
                       <input
-                        className="bo-field-input"
-                        value={editFields.theme}
-                        onChange={e => setEditFields(f => ({ ...f, theme: e.target.value }))}
-                        placeholder="e.g. invisibility, self-doubt"
+                        className="bo-ch-title-input"
+                        value={editFields.title}
+                        onChange={e => setEditFields(f => ({ ...f, title: e.target.value }))}
+                        placeholder="Chapter title"
+                        autoFocus
                       />
                     </div>
-                    <div className="bo-field bo-field-half">
-                      <label className="bo-field-label">POV</label>
-                      <select
-                        className="bo-field-input bo-field-select"
-                        value={editFields.pov}
-                        onChange={e => setEditFields(f => ({ ...f, pov: e.target.value }))}
-                      >
-                        <option value="first_person">First Person</option>
-                        <option value="third_person_limited">Third Person Limited</option>
-                        <option value="third_person_omniscient">Third Person Omniscient</option>
-                        <option value="second_person">Second Person</option>
-                      </select>
+                    <div className="bo-ch-edit-form">
+                      <div className="bo-field">
+                        <label className="bo-field-label">Scene Goal</label>
+                        <textarea
+                          className="bo-field-input"
+                          value={editFields.scene_goal}
+                          onChange={e => setEditFields(f => ({ ...f, scene_goal: e.target.value }))}
+                          placeholder="What happens in this chapter? What does the character want?"
+                          rows={2}
+                        />
+                      </div>
+                      <div className="bo-field-row">
+                        <div className="bo-field bo-field-half">
+                          <label className="bo-field-label">Theme</label>
+                          <input
+                            className="bo-field-input"
+                            value={editFields.theme}
+                            onChange={e => setEditFields(f => ({ ...f, theme: e.target.value }))}
+                            placeholder="e.g. invisibility, self-doubt"
+                          />
+                        </div>
+                        <div className="bo-field bo-field-half">
+                          <label className="bo-field-label">POV</label>
+                          <select
+                            className="bo-field-input bo-field-select"
+                            value={editFields.pov}
+                            onChange={e => setEditFields(f => ({ ...f, pov: e.target.value }))}
+                          >
+                            <option value="first_person">First Person</option>
+                            <option value="third_person_limited">Third Person Limited</option>
+                            <option value="third_person_omniscient">Third Person Omniscient</option>
+                            <option value="second_person">Second Person</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="bo-field-row">
+                        <div className="bo-field bo-field-half">
+                          <label className="bo-field-label">Emotional Start</label>
+                          <input
+                            className="bo-field-input"
+                            value={editFields.emotional_state_start}
+                            onChange={e => setEditFields(f => ({ ...f, emotional_state_start: e.target.value }))}
+                            placeholder="e.g. hopeful, anxious, numb"
+                          />
+                        </div>
+                        <div className="bo-field bo-field-half">
+                          <label className="bo-field-label">Emotional End</label>
+                          <input
+                            className="bo-field-input"
+                            value={editFields.emotional_state_end}
+                            onChange={e => setEditFields(f => ({ ...f, emotional_state_end: e.target.value }))}
+                            placeholder="e.g. devastated, resolved"
+                          />
+                        </div>
+                      </div>
+                      <div className="bo-field">
+                        <label className="bo-field-label">Notes</label>
+                        <textarea
+                          className="bo-field-input"
+                          value={editFields.chapter_notes}
+                          onChange={e => setEditFields(f => ({ ...f, chapter_notes: e.target.value }))}
+                          placeholder="Anything you want to remember about this chapter…"
+                          rows={3}
+                        />
+                      </div>
+                      <div className="bo-ch-edit-actions">
+                        <button className="bo-btn bo-btn-gold" onClick={saveChapter} disabled={saving}>
+                          {saving ? 'Saving…' : 'Save'}
+                        </button>
+                        <button className="bo-btn bo-btn-ghost" onClick={() => setEditingId(null)}>Cancel</button>
+                      </div>
                     </div>
                   </div>
-                  <div className="bo-field-row">
-                    <div className="bo-field bo-field-half">
-                      <label className="bo-field-label">Emotional Start</label>
-                      <input
-                        className="bo-field-input"
-                        value={editFields.emotional_state_start}
-                        onChange={e => setEditFields(f => ({ ...f, emotional_state_start: e.target.value }))}
-                        placeholder="e.g. hopeful, anxious, numb"
-                      />
-                    </div>
-                    <div className="bo-field bo-field-half">
-                      <label className="bo-field-label">Emotional End</label>
-                      <input
-                        className="bo-field-input"
-                        value={editFields.emotional_state_end}
-                        onChange={e => setEditFields(f => ({ ...f, emotional_state_end: e.target.value }))}
-                        placeholder="e.g. devastated, resolved"
-                      />
-                    </div>
-                  </div>
-                  <div className="bo-field">
-                    <label className="bo-field-label">Notes</label>
-                    <textarea
-                      className="bo-field-input"
-                      value={editFields.chapter_notes}
-                      onChange={e => setEditFields(f => ({ ...f, chapter_notes: e.target.value }))}
-                      placeholder="Anything you want to remember about this chapter\u2026"
-                      rows={3}
-                    />
-                  </div>
-                  <div className="bo-ch-edit-actions">
-                    <button className="bo-btn bo-btn-gold" onClick={saveChapter} disabled={saving}>
-                      {saving ? 'Saving\u2026' : 'Save'}
+                );
+              }
+
+              return (
+                <React.Fragment key={ch.id}>
+                <div
+                  className={`bo-toc-row${isDragging ? ' dragging' : ''}${isDragOver ? ' drag-over' : ''}`}
+                  draggable
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={e => handleDragOver(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  style={{ '--toc-idx': idx }}
+                >
+                  <span className="bo-toc-num">{numberWord(idx + 1)}</span>
+                  <span className="bo-toc-dot" />
+                  <div className="bo-toc-info">
+                    <button
+                      className="bo-toc-expand-toggle"
+                      onClick={e => { e.stopPropagation(); toggleChapterExpand(ch.id); }}
+                      title={expandedChapters.has(ch.id) ? 'Collapse scenes' : 'Show scenes'}
+                    >
+                      {expandedChapters.has(ch.id) ? '▾' : '▸'}
                     </button>
-                    <button className="bo-btn bo-btn-ghost" onClick={() => setEditingId(null)}>Cancel</button>
+                    <span className="bo-toc-title">{ch.title || 'Untitled'}</span>
+                    {scenes.length > 0 && (
+                      <span className="bo-toc-scene-badge">{scenes.length} {scenes.length === 1 ? 'scene' : 'scenes'}</span>
+                    )}
+                    {ch.scene_goal && (
+                      <span className="bo-toc-goal">{ch.scene_goal.length > 80 ? ch.scene_goal.substring(0, 80) + '…' : ch.scene_goal}</span>
+                    )}
+                  </div>
+                  <div className="bo-toc-status">
+                    {hasProse && <span className="bo-toc-written">✓</span>}
+                    {score > 0 && (
+                      <span className="bo-toc-plan-dots">
+                        {PLAN_FIELDS.map((_, i) => (
+                          <span key={i} className={`bo-plan-dot${i < score ? ' filled' : ''}`} />
+                        ))}
+                      </span>
+                    )}
+                    <span className="bo-toc-words">{wordCount > 0 ? `${wordCount.toLocaleString()} words` : '—'}</span>
+                  </div>
+                  <div className="bo-toc-actions">
+                    <button
+                      className="bo-toc-write-btn"
+                      onClick={() => navigate(`/write/${id}/${ch.id}`)}
+                      title="Open in WriteMode"
+                    >
+                      Write
+                    </button>
+                    <button
+                      className="bo-toc-action-btn"
+                      onClick={() => startEdit(ch)}
+                      title="Plan chapter"
+                    >
+                      Plan
+                    </button>
+                    <button
+                      className="bo-toc-action-btn"
+                      onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}
+                      title="Edit scenes"
+                    >
+                      Scenes
+                    </button>
+                    <button
+                      className="bo-toc-action-btn bo-toc-delete-btn"
+                      onClick={() => deleteChapter(ch.id)}
+                      title="Delete chapter"
+                    >
+                      {'✕'}
+                    </button>
                   </div>
                 </div>
-              )}
-            </div>
-          );
-        })}
+
+                {/* ── Expanded scene list ── */}
+                {expandedChapters.has(ch.id) && scenes.length > 0 && (
+                  <div className="bo-toc-scenes">
+                    {scenes.map((scene, si) => (
+                      <div key={scene.id || si} className="bo-toc-scene-row">
+                        <span className="bo-toc-scene-num">{si + 1}</span>
+                        <span className="bo-toc-scene-dinkus">✦</span>
+                        <span className="bo-toc-scene-title">{scene.title}</span>
+                      </div>
+                    ))}
+                    <button
+                      className="bo-toc-scene-add"
+                      onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}
+                    >
+                      + Add Scene
+                    </button>
+                  </div>
+                )}
+                {expandedChapters.has(ch.id) && scenes.length === 0 && (
+                  <div className="bo-toc-scenes bo-toc-scenes-empty">
+                    <span className="bo-toc-scenes-empty-text">No scenes yet</span>
+                    <button
+                      className="bo-toc-scene-add"
+                      onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}
+                    >
+                      + Create Scenes
+                    </button>
+                  </div>
+                )}
+                </React.Fragment>
+              );
+            })}
+          </div>
+        )}
+
+        {viewMode === 'cards' && chapters.length === 0 && !showNewChapter && !showBatchAdd && (
+          <div className="bo-empty">
+            <div className="bo-empty-icon">{'📖'}</div>
+            <div className="bo-empty-text">No chapters yet. Plan your book outline or add your first chapter.</div>
+          </div>
+        )}
 
         {/* ── Batch Chapter Planner ── */}
         {showBatchAdd && (
@@ -1078,7 +1146,7 @@ export default function BookOverview() {
                   onClick={addBatchChapters}
                   disabled={!batchTitles.trim() || batchAdding}
                 >
-                  {batchAdding ? 'Creating\u2026' : 'Create All'}
+                  {batchAdding ? 'Creating…' : 'Create All'}
                 </button>
                 <button className="bo-btn bo-btn-ghost" onClick={() => { setShowBatchAdd(false); setBatchTitles(''); }}>
                   Cancel
@@ -1096,7 +1164,7 @@ export default function BookOverview() {
               className="bo-new-chapter-input"
               value={newTitle}
               onChange={e => setNewTitle(e.target.value)}
-              placeholder={`Chapter ${chapters.length + 1} title\u2026`}
+              placeholder={`Chapter ${chapters.length + 1} title…`}
               onKeyDown={e => {
                 if (e.key === 'Enter' && newTitle.trim()) addChapter();
                 if (e.key === 'Escape') { setShowNewChapter(false); setNewTitle(''); }
@@ -1108,7 +1176,7 @@ export default function BookOverview() {
                 onClick={addChapter}
                 disabled={!newTitle.trim() || addingChapter}
               >
-                {addingChapter ? 'Adding\u2026' : 'Add Chapter'}
+                {addingChapter ? 'Adding…' : 'Add Chapter'}
               </button>
               <button
                 className="bo-btn bo-btn-ghost"
@@ -1162,7 +1230,7 @@ export default function BookOverview() {
                   <button className="bo-btn bo-btn-ghost bo-gen-back" onClick={() => setGeneratorStep('pick')}>Back to templates</button>
                 </div>
                 <p className="bo-gen-sub">
-                  {STORY_TEMPLATES[selectedTemplate]?.name} \u2014 {generatedOutline.length} chapter{generatedOutline.length !== 1 ? 's' : ''}. Edit titles, goals, and notes below. Remove chapters you don't need.
+                  {STORY_TEMPLATES[selectedTemplate]?.name} — {generatedOutline.length} chapter{generatedOutline.length !== 1 ? 's' : ''}. Edit titles, goals, and notes below. Remove chapters you don't need.
                 </p>
 
                 <div className="bo-gen-preview-list">
@@ -1232,7 +1300,7 @@ export default function BookOverview() {
 
                 <div className="bo-gen-approve-bar">
                   <button className="bo-btn bo-btn-gold bo-gen-approve-btn" onClick={approveOutline} disabled={approving || generatedOutline.length === 0}>
-                    {approving ? 'Creating chapters\u2026' : `Approve & Add ${generatedOutline.length} Chapter${generatedOutline.length !== 1 ? 's' : ''}`}
+                    {approving ? 'Creating chapters…' : `Approve & Add ${generatedOutline.length} Chapter${generatedOutline.length !== 1 ? 's' : ''}`}
                   </button>
                   <button className="bo-btn bo-btn-ghost" onClick={() => setShowGenerator(false)} disabled={approving}>Cancel</button>
                 </div>
@@ -1247,8 +1315,8 @@ export default function BookOverview() {
         <div className="bo-script-overlay" onClick={() => setShowScriptModal(false)}>
           <div className="bo-script-modal" onClick={e => e.stopPropagation()}>
             <div className="bo-script-modal-header">
-              <h2 className="bo-script-modal-title">{'\uD83C\uDFAC'} Generated Script</h2>
-              <button className="bo-script-modal-close" onClick={() => setShowScriptModal(false)}>{'\u2715'}</button>
+              <h2 className="bo-script-modal-title">{'🎬'} Generated Script</h2>
+              <button className="bo-script-modal-close" onClick={() => setShowScriptModal(false)}>{'✕'}</button>
             </div>
             <div className="bo-script-modal-body">
               {scriptResult.script ? (

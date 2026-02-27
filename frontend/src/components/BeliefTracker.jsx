@@ -66,7 +66,7 @@ export default function BeliefTracker({ chapter, onActChange, onThreadChange }) 
               title={thread.label}
             />
           ))}
-          <div style={st.expandCaret}>{expanded ? '\u25B2' : '\u25BC'}</div>
+          <div style={st.expandCaret}>{expanded ? '▲' : '▼'}</div>
         </div>
       </div>
 
@@ -89,8 +89,8 @@ export default function BeliefTracker({ chapter, onActChange, onThreadChange }) 
                   }}
                   onClick={() => handleActChange(a.id)}
                 >
-                  {a.label.split(' \u2014 ')[0]}<br />
-                  <span style={{ fontWeight: 400, fontSize: 8 }}>{a.label.split(' \u2014 ')[1]}</span>
+                  {a.label.split(' — ')[0]}<br />
+                  <span style={{ fontWeight: 400, fontSize: 8 }}>{a.label.split(' — ')[1]}</span>
                 </button>
               ))}
             </div>

@@ -12,11 +12,11 @@ import LoadingSkeleton from '../components/LoadingSkeleton';
 import './EpisodeWorkspace.css';
 
 const STATUS_GROUPS = [
-  { key: 'active',    label: 'In Progress',  icon: '\uD83D\uDD25', statuses: ['in_progress', 'in_build', 'editing'] },
-  { key: 'draft',     label: 'Drafts',       icon: '\uD83D\uDCDD', statuses: ['draft'] },
-  { key: 'review',    label: 'In Review',    icon: '\uD83D\uDC41\uFE0F',  statuses: ['review', 'pending_review'] },
-  { key: 'published', label: 'Published',    icon: '\u2705',       statuses: ['published', 'completed', 'aired'] },
-  { key: 'archived',  label: 'Archived',     icon: '\uD83D\uDCE6', statuses: ['archived', 'cancelled'] },
+  { key: 'active',    label: 'In Progress',  icon: '🔥', statuses: ['in_progress', 'in_build', 'editing'] },
+  { key: 'draft',     label: 'Drafts',       icon: '📝', statuses: ['draft'] },
+  { key: 'review',    label: 'In Review',    icon: '👁️',  statuses: ['review', 'pending_review'] },
+  { key: 'published', label: 'Published',    icon: '✅',       statuses: ['published', 'completed', 'aired'] },
+  { key: 'archived',  label: 'Archived',     icon: '📦', statuses: ['archived', 'cancelled'] },
 ];
 
 function statusLabel(s) {
@@ -91,7 +91,7 @@ export default function EpisodeWorkspace() {
       {/* ── Header ── */}
       <div className="ew-header">
         <div className="ew-header-left">
-          <h1 className="ew-title">{'\uD83C\uDFAC'} Episode Workspace</h1>
+          <h1 className="ew-title">{'🎬'} Episode Workspace</h1>
           <p className="ew-subtitle">{episodes.length} episode{episodes.length !== 1 ? 's' : ''} across {shows.length} show{shows.length !== 1 ? 's' : ''}</p>
         </div>
         <button className="ew-btn ew-btn-gold" onClick={() => navigate('/episodes/create')}>
@@ -121,8 +121,8 @@ export default function EpisodeWorkspace() {
           ))}
         </select>
         <div className="ew-view-toggle">
-          <button className={`ew-vt-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title="Grid view">{'\u25A6'}</button>
-          <button className={`ew-vt-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="List view">{'\u2630'}</button>
+          <button className={`ew-vt-btn ${viewMode === 'grid' ? 'active' : ''}`} onClick={() => setViewMode('grid')} title="Grid view">{'▦'}</button>
+          <button className={`ew-vt-btn ${viewMode === 'list' ? 'active' : ''}`} onClick={() => setViewMode('list')} title="List view">{'☰'}</button>
         </div>
       </div>
 
@@ -147,7 +147,7 @@ export default function EpisodeWorkspace() {
       {/* ── Episode Cards ── */}
       {filtered.length === 0 ? (
         <div className="ew-empty">
-          <div className="ew-empty-icon">{'\uD83C\uDFAC'}</div>
+          <div className="ew-empty-icon">{'🎬'}</div>
           <h3>No episodes found</h3>
           <p>{searchQuery ? 'Try a different search.' : 'Create your first episode to get started.'}</p>
           <button className="ew-btn ew-btn-gold" onClick={() => navigate('/episodes/create')}>Create Episode</button>
@@ -196,9 +196,9 @@ function EpisodeCard({ ep, viewMode, navigate }) {
           <span className="ew-list-time">{relTime(ep.updated_at)}</span>
         </div>
         <div className="ew-list-actions" onClick={e => e.stopPropagation()}>
-          <button className="ew-action-btn" onClick={() => navigate(`/episodes/${ep.id}/scene-composer`)} title="Scene Composer">{'\uD83C\uDFAC'}</button>
-          <button className="ew-action-btn" onClick={() => navigate(`/episodes/${ep.id}/timeline`)} title="Timeline">{'\u23F1\uFE0F'}</button>
-          <button className="ew-action-btn" onClick={() => navigate(`/episodes/${ep.id}`)} title="Details">{'\uD83D\uDCCB'}</button>
+          <button className="ew-action-btn" onClick={() => navigate(`/episodes/${ep.id}/scene-composer`)} title="Scene Composer">{'🎬'}</button>
+          <button className="ew-action-btn" onClick={() => navigate(`/episodes/${ep.id}/timeline`)} title="Timeline">{'⏱️'}</button>
+          <button className="ew-action-btn" onClick={() => navigate(`/episodes/${ep.id}`)} title="Details">{'📋'}</button>
         </div>
       </div>
     );
@@ -215,15 +215,15 @@ function EpisodeCard({ ep, viewMode, navigate }) {
       <div className="ew-card-time">Last edited {relTime(ep.updated_at)}</div>
       <div className="ew-card-actions">
         <button className="ew-card-action" onClick={() => navigate(`/episodes/${ep.id}/scene-composer`)} title="Scene Composer">
-          <span className="ew-ca-icon">{'\uD83C\uDFAC'}</span>
+          <span className="ew-ca-icon">{'🎬'}</span>
           <span className="ew-ca-label">Compose</span>
         </button>
         <button className="ew-card-action" onClick={() => navigate(`/episodes/${ep.id}/timeline`)} title="Timeline Editor">
-          <span className="ew-ca-icon">{'\u23F1\uFE0F'}</span>
+          <span className="ew-ca-icon">{'⏱️'}</span>
           <span className="ew-ca-label">Timeline</span>
         </button>
         <button className="ew-card-action ew-card-action--primary" onClick={() => navigate(`/episodes/${ep.id}`)} title="Episode Details">
-          <span className="ew-ca-icon">{'\u27A1\uFE0F'}</span>
+          <span className="ew-ca-icon">{'➡️'}</span>
           <span className="ew-ca-label">Open</span>
         </button>
       </div>
