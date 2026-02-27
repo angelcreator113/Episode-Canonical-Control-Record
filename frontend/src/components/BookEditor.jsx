@@ -695,7 +695,10 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
       {/* ── Top Bar ── */}
       <div className="st-topbar">
         <div className="st-topbar-left">
-          <button className="st-topbar-back" onClick={onClose}>← Chapters</button>
+          <button className="st-topbar-back" onClick={onClose}>
+            <span className="st-topbar-back-arrow">←</span>
+            <span className="st-topbar-back-text">Chapters</span>
+          </button>
           <button
             className="st-mobile-nav-toggle"
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
@@ -730,7 +733,8 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
             className={`st-tools-btn${drawerOpen ? ' active' : ''}`}
             onClick={e => { e.stopPropagation(); setDrawerOpen(!drawerOpen); }}
           >
-            ☰ Tools
+            <span className="st-tools-btn-icon-m">⋯</span>
+            <span className="st-tools-btn-text">☰ Tools</span>
           </button>
         </div>
       </div>
@@ -1375,4 +1379,4 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
       )}
     </div>
   );
-}
+}

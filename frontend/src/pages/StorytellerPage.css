@@ -1628,8 +1628,16 @@
   padding: 4px 0;
   transition: color 0.15s;
   opacity: 0.8;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .st-topbar-back:hover { color: var(--st-gold); opacity: 1; }
+.st-topbar-back-arrow { font-size: 15px; line-height: 1; }
+.st-topbar-back-text { /* visible on desktop */ }
+
+/* Tools button: mobile icon hidden on desktop */
+.st-tools-btn-icon-m { display: none; }
 
 .st-topbar-brand {
   font-family: var(--st-sans);
@@ -3329,51 +3337,32 @@ button.st-nav-section-clickable:hover {
 
 /* ═══════════════════════════════════════
    Responsive — Small Tablet / Large Phone (≤768px)
-   Nav becomes slide-over overlay
+   DRAMATIC MOBILE OVERHAUL
+   Full-bleed writing, minimal chrome, maximum focus
    ═══════════════════════════════════════ */
 @media (max-width: 768px) {
   :root {
-    --st-nav-w: 260px;
-    --st-topbar-h: 52px;
+    --st-nav-w: 280px;
+    --st-topbar-h: 44px;
     --st-manuscript-w: 100%;
   }
 
+  /* ── Topbar: ultra-minimal ── */
+  .st-topbar {
+    padding: 0 12px;
+    gap: 0;
+    border-bottom-color: transparent;
+    background: var(--st-ambient-bg, var(--st-bg));
+  }
+  .st-topbar-left { gap: 8px; min-width: 0; flex-shrink: 0; }
+  .st-topbar-right { gap: 8px; min-width: 0; flex-shrink: 0; }
+  /* Hide "Chapters" text, show only ← arrow */
+  .st-topbar-back-text { display: none; }
+  .st-topbar-back-arrow { font-size: 18px; }
+  .st-topbar-back { padding: 8px 4px; }
   /* Show hamburger */
-  .st-mobile-nav-toggle { display: inline-flex; }
-
-  /* Hide nav by default, show as slide-over */
-  .st-nav {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: var(--st-nav-w);
-    height: 100vh;
-    z-index: 60;
-    background: var(--st-surface);
-    box-shadow: 4px 0 24px rgba(47, 42, 38, 0.12);
-    transform: translateX(-100%);
-    transition: transform 0.25s ease;
-    border-right: 1px solid var(--st-border);
-    pointer-events: none;
-  }
-  .st-nav.st-nav-mobile-open {
-    transform: translateX(0);
-    pointer-events: auto;
-  }
-
-  /* Backdrop for mobile nav */
-  .st-mobile-nav-backdrop {
-    display: block;
-    position: fixed;
-    inset: 0;
-    background: rgba(47, 42, 38, 0.2);
-    z-index: 55;
-    animation: st-sheet-bg-in 0.2s ease;
-  }
-
-  /* Topbar adjustments */
-  .st-topbar { padding: 0 14px; gap: 8px; }
-  /* Show truncated title on mobile instead of hiding it */
+  .st-mobile-nav-toggle { display: inline-flex; font-size: 20px; padding: 6px 8px; }
+  /* Center: chapter title, truncated */
   .st-topbar-center {
     position: static;
     transform: none;
@@ -3381,51 +3370,99 @@ button.st-nav-section-clickable:hover {
     min-width: 0;
     text-align: center;
     pointer-events: none;
+    padding: 0 4px;
   }
   .st-topbar-title {
-    font-size: 12px;
+    font-size: 13px;
+    font-weight: 500;
     display: block;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    opacity: 0.6;
+    opacity: 0.65;
   }
   .st-topbar-title-dim { display: none; }
   .st-topbar-wordcount { display: none; }
   .st-topbar-saved { display: none; }
+  .st-mode-toggle { display: none; }
+  /* Tools button: show ⋯ icon, hide "☰ Tools" text */
+  .st-tools-btn {
+    padding: 6px 10px;
+    font-size: 18px;
+    border: none;
+    background: none;
+    min-height: 36px;
+    min-width: 36px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .st-tools-btn.active {
+    background: var(--st-gold-soft);
+    border: none;
+    color: var(--st-gold);
+  }
+  .st-tools-btn-text { display: none; }
+  .st-tools-btn-icon-m { display: inline; }
 
-  /* Tools panel — full width on mobile */
+  /* ── Nav: slide-over ── */
+  .st-nav {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: var(--st-nav-w);
+    height: 100vh;
+    height: 100dvh;
+    z-index: 60;
+    background: var(--st-surface);
+    box-shadow: 4px 0 32px rgba(47, 42, 38, 0.15);
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-right: 1px solid var(--st-border);
+    pointer-events: none;
+  }
+  .st-nav.st-nav-mobile-open {
+    transform: translateX(0);
+    pointer-events: auto;
+  }
+  .st-mobile-nav-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(47, 42, 38, 0.25);
+    z-index: 55;
+    animation: st-sheet-bg-in 0.2s ease;
+  }
+
+  /* ── Tools panel: full width ── */
   .st-tools-panel {
     width: 100%;
     border-left: none;
     border-radius: 0;
   }
-  .st-tools-btn {
-    padding: 4px 10px;
-    font-size: 12px;
+
+  /* ── FULL-BLEED writing area ── */
+  .st-editor {
+    padding: 0;
+    flex: 1;
   }
+  .st-manuscript-wrapper { gap: 0; padding: 0; }
+  .st-manuscript { padding: 0; }
 
-  /* Topbar left / right: prevent overflow on small screens */
-  .st-topbar-left { gap: 10px; min-width: 0; flex-shrink: 1; }
-  .st-topbar-right { gap: 10px; min-width: 0; flex-shrink: 1; }
-  .st-topbar-back { white-space: nowrap; }
-
-  /* Editor fills width */
-  .st-editor { padding: 0 16px 40px; }
-  .st-manuscript-wrapper { gap: 0; }
-
-  /* Book list */
-  .st-book-list { padding: 32px 16px 48px; }
-  .st-book-grid {
-    grid-template-columns: 1fr;
-    gap: 14px;
+  /* ── Chapter header: super compact ── */
+  .st-chapter-header {
+    padding: 16px 20px 12px;
+    margin: 0;
   }
-  .st-book-card { padding: 20px; }
-
-  /* Chapter header — tighter on mobile */
-  .st-chapter-header { padding: 28px 0 20px; }
-  .st-chapter-header-title { font-size: 24px; }
-  .st-chapter-header-label { font-size: 10px; margin-bottom: 6px; }
+  .st-chapter-header-label {
+    font-size: 9px;
+    margin-bottom: 4px;
+    letter-spacing: 0.14em;
+  }
+  .st-chapter-header-title {
+    font-size: 22px;
+    letter-spacing: -0.3px;
+  }
   .st-chapter-actions {
     position: static;
     margin-top: 12px;
@@ -3445,27 +3482,49 @@ button.st-nav-section-clickable:hover {
     border-radius: 6px;
     background: var(--st-gold-soft);
   }
-  .st-chapter-icon-btn.danger {
-    background: rgba(192,122,92,0.06);
+  .st-chapter-icon-btn.danger { background: rgba(192,122,92,0.06); }
+
+  /* ── Prose textarea: full-bleed with internal padding ── */
+  .st-prose-textarea {
+    font-size: 16px;
+    line-height: 1.85;
+    padding: 12px 20px 40px;
+    min-height: 60vh;
+    min-height: 60dvh;
+    border-radius: 0;
+  }
+  .st-prose-status {
+    padding: 6px 20px;
+    font-size: 11px;
+    border-top: 1px solid var(--st-border-light);
+  }
+  .st-prose-save-btn {
+    padding: 4px 14px;
+    font-size: 12px;
+    min-height: 28px;
   }
 
-  /* Brief sheet full width */
+  /* ── Manuscript lines: full-bleed ── */
+  .st-book-page { padding: 0 20px; }
+  .st-line-text { font-size: 16px; line-height: 1.8; }
+  .st-line-actions { opacity: 1; }
+  .st-line-action { padding: 8px 14px; font-size: 14px; min-height: 36px; border-radius: 6px; }
+
+  /* ── Brief sheet: full screen bottom sheet ── */
   .st-brief-sheet {
     width: 100%;
     max-width: 100vw;
     border-left: none;
-    border-radius: 0;
+    border-radius: 16px 16px 0 0;
   }
-  .st-brief-sheet-overlay {
-    padding: 0;
-  }
+  .st-brief-sheet-overlay { padding: 0; align-items: flex-end; }
 
-  /* Modal */
-  .st-modal { max-width: 100%; border-radius: 0; min-height: 100vh; }
-  .st-modal-backdrop { padding: 0; }
+  /* ── Modal ── */
+  .st-modal { max-width: 100%; border-radius: 12px 12px 0 0; min-height: auto; max-height: 90vh; }
+  .st-modal-backdrop { padding: 0; align-items: flex-end; }
   .st-form-row { grid-template-columns: 1fr; }
 
-  /* Workspace drawer — full width bottom sheet style */
+  /* ── Workspace drawer: bottom sheet ── */
   .st-workspace-drawer {
     right: 0;
     left: 0;
@@ -3487,68 +3546,84 @@ button.st-nav-section-clickable:hover {
   }
   .st-workspace-item-icon { font-size: 16px; }
 
-  /* Touch-friendly line actions */
-  .st-line-actions { opacity: 1; }
-  .st-line-action { padding: 8px 14px; font-size: 14px; min-height: 36px; border-radius: 6px; }
+  /* ── Book list ── */
+  .st-book-list { padding: 32px 16px 48px; }
+  .st-book-grid { grid-template-columns: 1fr; gap: 14px; }
+  .st-book-card { padding: 20px; }
 
-  /* Touch-friendly action bar */
+  /* ── Touch-friendly action bar ── */
   .st-action-bar { flex-direction: column; gap: 12px; align-items: stretch; opacity: 1; }
   .st-action-bar-btns { justify-content: stretch; }
   .st-action-bar-btns .st-btn { flex: 1; justify-content: center; min-height: 44px; font-size: 14px; }
 
-  /* Touch add-line */
-  .st-add-line input { font-size: 16px; padding: 12px 0; }
-  .st-add-line-trigger { font-size: 16px; padding: 14px 0; }
+  /* ── Touch add-line ── */
+  .st-add-line input { font-size: 16px; padding: 12px 20px; }
+  .st-add-line-trigger { font-size: 16px; padding: 14px 20px; }
+  .st-add-line { padding: 0 20px; }
 
-  /* Touch-friendly pending toggle */
-  .st-pending-toggle { padding: 16px 0; font-size: 14px; }
+  /* ── Pending toggle ── */
+  .st-pending-toggle { padding: 16px 20px; font-size: 14px; }
 
-  /* Manuscript lines */
-  .st-line-text { font-size: 16px; line-height: 1.8; }
-
-  /* Writing mode */
-  .st-writing-mode .st-editor { padding: 20px 16px 40px; }
+  /* ── Writing mode ── */
+  .st-writing-mode .st-editor { padding: 0; }
   .st-writing-mode .st-line-text { font-size: 17px; line-height: 1.9; }
   .st-writing-mode-exit { top: 10px; right: 10px; }
 
-  /* Edit area */
-  .st-edit-area { font-size: 16px; min-height: 80px; }
-  .st-edit-actions { gap: 10px; }
+  /* ── Edit area ── */
+  .st-edit-area { font-size: 16px; min-height: 80px; margin: 0 20px; }
+  .st-edit-actions { gap: 10px; padding: 0 20px; }
   .st-edit-save, .st-edit-cancel { padding: 8px 18px; font-size: 14px; min-height: 40px; }
 
-  /* Nav chapter touch targets */
+  /* ── Nav touch targets ── */
   .st-nav-chapter { padding: 12px 20px; min-height: 48px; }
   .st-nav-chapter-actions { opacity: 1; }
   .st-nav-chapter-delete { font-size: 16px; }
   .st-nav-chapter-edit { font-size: 14px; }
 
-  /* Inline edit inputs sized for touch */
-  .st-inline-edit-chapter-bar { font-size: 24px; min-width: 100%; width: 100%; }
+  /* ── Inline edit ── */
+  .st-inline-edit-chapter-bar { font-size: 22px; min-width: 100%; width: 100%; padding: 2px 20px; }
 
-  /* Add chapter form stacks nicely */
-  .st-add-chapter-form { flex-direction: column; align-items: stretch; }
+  /* ── Add chapter form ── */
+  .st-add-chapter-form { flex-direction: column; align-items: stretch; margin: 0 16px; }
   .st-add-chapter-form .st-form-group { min-width: 100%; }
   .st-add-chapter-form .st-btn { min-height: 44px; font-size: 14px; }
+
+  /* ── Workflow stepper: vertical ── */
+  .st-workflow-stepper {
+    flex-direction: column;
+    gap: 0;
+    padding: 16px 20px 12px;
+  }
+  .st-workflow-step-line { width: 2px; height: 12px; margin: 0 0 0 13px; }
+  .st-workflow-step-desc { display: none; }
+  .st-workflow-step-num { width: 24px; height: 24px; min-width: 24px; font-size: 11px; }
+
+  /* ── Context collapse ── */
+  .st-context-collapse-toggle { font-size: 11px; padding: 8px 20px; }
+  .st-context-collapse-body { padding: 12px 20px 16px; }
+  .st-context-collapse-hint { display: none; }
 }
 
 /* ═══════════════════════════════════════
    Responsive — Mobile (≤480px)
+   Even tighter, minimal chrome
    ═══════════════════════════════════════ */
 @media (max-width: 480px) {
-  :root { --st-topbar-h: 48px; }
+  :root { --st-topbar-h: 42px; }
 
-  .st-topbar-left { gap: 6px; min-width: auto; }
-  .st-topbar-right { gap: 6px; min-width: auto; }
-  /* Abbreviate "← Chapters" to just "←" on small phones */
-  .st-topbar-back { font-size: 16px; padding: 6px 2px; overflow: hidden; max-width: 1.4em; text-overflow: clip; }
-  .st-topbar-title { font-size: 11px; }
-  .st-mode-toggle { display: none; }
-  .st-mobile-nav-toggle { font-size: 22px; padding: 6px 10px; }
+  .st-topbar { padding: 0 8px; }
+  .st-topbar-left { gap: 4px; }
+  .st-topbar-right { gap: 4px; }
+  .st-topbar-back { padding: 6px 2px; }
+  .st-topbar-back-arrow { font-size: 16px; }
+  .st-topbar-title { font-size: 12px; }
+  .st-mobile-nav-toggle { font-size: 18px; padding: 6px; }
+  .st-tools-btn { padding: 6px 8px; font-size: 16px; min-height: 32px; min-width: 32px; }
 
-  /* Workspace toggle shorter label */
-  .st-workspace-toggle { font-size: 12px; padding: 6px 10px; }
-  .st-tools-btn { padding: 6px 8px; font-size: 14px; letter-spacing: 0; }
+  /* Workspace toggle */
+  .st-workspace-toggle { font-size: 12px; padding: 6px 8px; }
 
+  /* Book list */
   .st-book-list { padding: 24px 12px 40px; }
   .st-book-list-header h1 { font-size: 24px; }
   .st-book-list-subtitle { font-size: 14px; }
@@ -3557,54 +3632,34 @@ button.st-nav-section-clickable:hover {
   .st-card-meta { font-size: 12px; }
   .st-card-insight { font-size: 13px; }
 
-  .st-editor { padding: 0 12px 32px; }
-  .st-chapter-header { padding: 20px 0 14px; }
+  /* Chapter header: even tighter */
+  .st-chapter-header { padding: 12px 16px 10px; }
   .st-chapter-header-title { font-size: 20px; }
-  .st-chapter-header-label { font-size: 10px; margin-bottom: 4px; }
+  .st-chapter-header-label { font-size: 9px; margin-bottom: 2px; }
   .st-chapter-header-meta { font-size: 12px; flex-wrap: wrap; }
 
-  /* Workflow stepper — vertical on mobile */
-  .st-workflow-stepper {
-    flex-direction: column;
-    gap: 0;
-    padding: 20px 0 16px;
-  }
-  .st-workflow-step-line {
-    width: 2px;
-    height: 16px;
-    margin: 0 0 0 13px;
-  }
-  .st-workflow-step-desc { display: none; }
-  .st-workflow-step-num { width: 24px; height: 24px; min-width: 24px; font-size: 11px; }
-  .st-context-collapse-toggle { font-size: 11px; padding: 8px 12px; }
-  .st-context-collapse-hint { display: none; }
+  /* Prose: tighter padding */
+  .st-prose-textarea { padding: 10px 16px 32px; line-height: 1.8; }
+  .st-prose-status { padding: 5px 16px; font-size: 10px; }
 
-  /* Chapter actions: smaller grid on tiny screens */
+  /* Chapter actions */
   .st-chapter-actions { gap: 6px; }
-  .st-chapter-icon-btn {
-    padding: 7px 10px;
-    font-size: 15px;
-    min-height: 36px;
-    min-width: 36px;
-  }
+  .st-chapter-icon-btn { padding: 7px 10px; font-size: 15px; min-height: 36px; min-width: 36px; }
 
+  /* Lines */
+  .st-book-page { padding: 0 16px; }
   .st-line-text { font-size: 15px; line-height: 1.75; }
-  .st-edit-area { font-size: 16px; } /* prevent iOS zoom */
-
-  /* Line actions: compact but still tappable */
+  .st-edit-area { font-size: 16px; margin: 0 16px; }
+  .st-edit-actions { padding: 0 16px; }
   .st-line-action { padding: 7px 12px; font-size: 13px; min-height: 34px; }
 
-  /* Stack action buttons vertically */
+  /* Stack action buttons */
   .st-action-bar-btns { flex-direction: column; }
   .st-action-bar-btns .st-btn { width: 100%; text-align: center; justify-content: center; }
 
-  /* Workspace drawer items bigger */
-  .st-workspace-item { padding: 12px 16px; font-size: 15px; }
-  .st-workspace-item-icon { font-size: 15px; }
-
-  /* Nav slide-over wider on small phones */
+  /* Nav: wider on small phones */
   .st-nav { width: 85vw; }
-  .st-nav-brand { padding: 16px 16px 14px; }
+  .st-nav-brand { padding: 14px 16px 12px; }
   .st-nav-brand-title { font-size: 16px; }
   .st-nav-chapter { padding: 14px 16px; min-height: 48px; }
   .st-nav-chapter-title { font-size: 15px; }
@@ -3612,59 +3667,75 @@ button.st-nav-section-clickable:hover {
   .st-nav-add button { font-size: 13px; padding: 8px 0; }
   .st-nav-stats { padding: 12px 16px; }
 
-  /* Tools strip: larger tap targets on mobile */
+  /* Tools strip */
   .st-nav-tools { padding: 8px 10px 10px; gap: 4px; }
   .st-nav-tool { padding: 8px 4px 7px; }
   .st-nav-tool-icon { font-size: 17px; }
   .st-nav-tool-label { font-size: 11px; }
 
-  /* Pending body */
-  .st-pending-toggle { font-size: 14px; padding: 18px 0; }
+  /* Pending */
+  .st-pending-toggle { font-size: 14px; padding: 16px 16px; }
 
-  /* Toast smaller */
+  /* Add line */
+  .st-add-line { padding: 0 16px; }
+  .st-add-line input { padding: 12px 0; }
+  .st-add-line-trigger { opacity: 0.4; font-size: 15px; padding: 14px 16px; }
+
+  /* Toast */
   .st-toast-container { bottom: 12px; right: 12px; left: 12px; }
   .st-toast { font-size: 13px; padding: 10px 14px; }
 
-  /* No selection message */
+  /* Empty state */
   .st-no-selection { min-height: 200px; font-size: 14px; padding: 20px; }
 
   /* Add chapter form */
-  .st-add-chapter-form { padding: 12px; gap: 8px; }
+  .st-add-chapter-form { padding: 12px; gap: 8px; margin: 0 12px; }
 
   /* Brief sheet */
-  .st-brief-sheet { padding: 24px 16px; }
+  .st-brief-sheet { padding: 20px 16px; }
   .st-brief-sheet-title { font-size: 15px; }
 
-  /* Edit actions — full width on tiny screens */
+  /* Edit actions full width */
   .st-edit-save, .st-edit-cancel { flex: 1; text-align: center; }
 
-  /* Add line trigger more visible */
-  .st-add-line-trigger { opacity: 0.4; font-size: 15px; padding: 16px 0; }
+  /* Inline edit */
+  .st-inline-edit-chapter-bar { font-size: 18px; padding: 2px 16px; }
 
-  /* Inline edit inputs */
-  .st-inline-edit-chapter-bar { font-size: 20px; }
+  /* Workflow stepper */
+  .st-workflow-stepper { padding: 12px 16px 8px; }
+  .st-context-collapse-toggle { padding: 8px 16px; }
+  .st-context-collapse-body { padding: 12px 16px; }
 }
 
 /* ═══════════════════════════════════════
    Responsive — Very small phones (≤360px)
    ═══════════════════════════════════════ */
 @media (max-width: 360px) {
+  :root { --st-topbar-h: 40px; }
+
   .st-book-list { padding: 20px 8px 32px; }
   .st-book-card { padding: 14px; }
   .st-card-title { font-size: 16px; }
 
-  .st-editor { padding: 0 8px 24px; }
-  .st-chapter-header { padding: 16px 0 10px; }
+  .st-chapter-header { padding: 10px 12px 8px; }
   .st-chapter-header-title { font-size: 18px; }
-  .st-chapter-header-label { font-size: 9px; }
-  .st-line-text { font-size: 14px; line-height: 1.7; }
-  .st-prose-textarea { font-size: 15px; line-height: 1.75; }
+  .st-chapter-header-label { display: none; }
 
-  .st-topbar { padding: 0 8px; }
-  .st-topbar-back { font-size: 14px; max-width: 1.2em; }
-  .st-topbar-title { font-size: 10px; }
+  .st-prose-textarea { padding: 8px 12px 24px; font-size: 15px; line-height: 1.75; }
+  .st-prose-status { padding: 4px 12px; }
+
+  .st-book-page { padding: 0 12px; }
+  .st-line-text { font-size: 14px; line-height: 1.7; }
+
+  .st-topbar { padding: 0 6px; }
+  .st-topbar-back-arrow { font-size: 14px; }
+  .st-topbar-title { font-size: 11px; }
 
   .st-nav { width: 90vw; }
+
+  .st-add-line { padding: 0 12px; }
+  .st-pending-toggle { padding: 14px 12px; }
+  .st-workflow-stepper { padding: 10px 12px 6px; }
 }
 
 /* ═══════════════════════════════════════
@@ -3749,7 +3820,7 @@ button.st-nav-section-clickable:hover {
     padding-top: env(safe-area-inset-top);
   }
   .st-editor-layout .st-manuscript-wrapper {
-    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+    padding-bottom: calc(56px + env(safe-area-inset-bottom));
   }
   .st-nav {
     padding-bottom: env(safe-area-inset-bottom);
@@ -4124,45 +4195,44 @@ button.st-nav-section-clickable:hover {
 
 /* ── Responsive bottom bar ── */
 @media (max-width: 768px) {
+  .st-bottombar {
+    border-top: none;
+    background: var(--st-ambient-bg, var(--st-bg));
+    box-shadow: 0 -1px 0 var(--st-border-light);
+  }
   /* Single scrollable row — icon-only buttons */
   .st-bottombar-actions {
-    padding: 8px 12px;
-    gap: 2px;
+    padding: 6px 16px;
+    gap: 0;
     flex-wrap: nowrap;
     justify-content: flex-start;
     overflow-x: auto;
     -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
   }
+  .st-bottombar-actions::-webkit-scrollbar { display: none; }
   .st-bottombar-label {
-    font-size: 11px;
-    padding: 6px 10px 6px 4px;
+    font-size: 10px;
+    padding: 4px 8px 4px 4px;
     margin-right: 4px;
-    border-right: 1px solid var(--st-border);
+    border-right: 1px solid var(--st-border-light);
     width: auto;
+    opacity: 0.5;
   }
-  .st-bottombar-icon {
-    font-size: 15px;
-  }
+  .st-bottombar-icon { font-size: 14px; }
   .st-bottombar-btn {
-    padding: 10px 14px;
-    font-size: 13px;
+    padding: 8px 12px;
+    font-size: 12px;
     border: none;
     border-radius: 8px;
-    gap: 4px;
+    gap: 2px;
   }
-  .st-bottombar-btn-label {
-    display: none; /* hide labels — icons only */
-  }
-  .st-bottombar-btn-icon {
-    font-size: 20px;
-  }
-  /* Hide meta in bottom bar — word count lives in prose-status already */
-  .st-bottombar-meta {
-    display: none;
-  }
+  .st-bottombar-btn-label { display: none; }
+  .st-bottombar-btn-icon { font-size: 18px; }
+  .st-bottombar-meta { display: none; }
   /* Result panel mobile */
   .st-bottombar-result {
-    padding: 14px;
+    padding: 14px 16px;
     max-height: 35vh;
   }
   .st-bottombar-result-text {
@@ -4171,12 +4241,8 @@ button.st-nav-section-clickable:hover {
     padding: 12px 14px;
     max-height: 180px;
   }
-  .st-bottombar-result-label {
-    font-size: 13px;
-  }
-  .st-bottombar-result-actions {
-    gap: 6px;
-  }
+  .st-bottombar-result-label { font-size: 13px; }
+  .st-bottombar-result-actions { gap: 6px; }
   .st-bottombar-insert {
     padding: 10px 18px;
     font-size: 14px;
@@ -4188,31 +4254,29 @@ button.st-nav-section-clickable:hover {
     padding: 10px 14px;
     font-size: 13px;
   }
-  /* Much less padding needed now — bar is ~52px instead of ~160px */
   .st-editor-layout .st-manuscript-wrapper {
-    padding-bottom: 72px;
+    padding-bottom: 56px;
   }
 }
 @media (max-width: 480px) {
   .st-bottombar-actions {
-    padding: 6px 8px;
+    padding: 5px 12px;
     gap: 0;
   }
-  .st-bottombar-label {
-    display: none; /* hide AI label on small phones */
-  }
+  .st-bottombar-label { display: none; }
   .st-bottombar-btn {
-    padding: 10px 12px;
+    padding: 8px 10px;
     border-radius: 6px;
   }
-  .st-bottombar-btn-icon {
-    font-size: 18px;
-  }
+  .st-bottombar-btn-icon { font-size: 17px; }
   .st-bottombar-result {
-    padding: 12px 10px;
+    padding: 12px;
   }
   .st-bottombar-result-text {
     padding: 10px 12px;
     font-size: 14px;
+  }
+  .st-editor-layout .st-manuscript-wrapper {
+    padding-bottom: 48px;
   }
 }
