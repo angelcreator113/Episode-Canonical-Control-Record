@@ -89,7 +89,7 @@ export default function PlanWithVoicePage() {
 
       // try to load characters from registry
       try {
-        const charRes = await fetch('/api/v1/character-registries');
+        const charRes = await fetch('/api/v1/character-registry/registries');
         const charData = await charRes.json();
         const regs = charData?.registries || [];
         const chars = Array.isArray(regs)
