@@ -120,17 +120,41 @@ export default function StoryPlannerConversational({
   onClose,
   toast,
 }) {
-  const [messages,    setMessages]    = useState(() => [makeOpeningMessage(book, chapters)]);
+  const bookKey = book?.id || 'default';
+
+  // ── Session persistence helpers ──────────────────────────────────
+  const loadSession = useCallback((key, fallback) => {
+    try {
+      const raw = sessionStorage.getItem(`spc_${key}_${bookKey}`);
+      return raw ? JSON.parse(raw) : fallback;
+    } catch { return fallback; }
+  }, [bookKey]);
+
+  const saveSession = useCallback((key, value) => {
+    try { sessionStorage.setItem(`spc_${key}_${bookKey}`, JSON.stringify(value)); } catch {}
+  }, [bookKey]);
+
+  // ── State (restored from session on mount) ───────────────────────
+  const [messages,    setMessages]    = useState(() =>
+    loadSession('msgs', null) || [makeOpeningMessage(book, chapters)]
+  );
   const [input,       setInput]       = useState('');
   const [sending,     setSending]     = useState(false);
-  const [plan,        setPlan]        = useState(() => planEmpty(chapters, book));
+  const [plan,        setPlan]        = useState(() =>
+    loadSession('plan', null) || planEmpty(chapters, book)
+  );
   const [applying,    setApplying]    = useState(false);
+  const [saved,       setSaved]       = useState(false);  // brief "Saved ✓" flash
   const [activeChIdx, setActiveChIdx] = useState(null);
   const [highlight,   setHighlight]   = useState(null);
   const [mobileTab,   setMobileTab]   = useState('chat'); // 'chat' | 'plan'
   const chatRef   = useRef(null);
   const inputRef  = useRef(null);
   const voice     = useVoiceInput();
+
+  // ── Persist messages + plan to sessionStorage on change ──────────
+  useEffect(() => { saveSession('msgs', messages); }, [messages, saveSession]);
+  useEffect(() => { saveSession('plan', plan); },     [plan, saveSession]);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -250,6 +274,19 @@ export default function StoryPlannerConversational({
     setApplying(true);
     let saved = 0;
     try {
+      // Save book-level fields (title, description) if changed
+      if (book?.id && (plan.bookTitle || plan.bookConcept)) {
+        const bookUpdates = {};
+        if (plan.bookTitle)   bookUpdates.title       = plan.bookTitle;
+        if (plan.bookConcept) bookUpdates.description  = plan.bookConcept;
+        await fetch(`${API}/storyteller/books/${book.id}`, {
+          method:  'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body:    JSON.stringify(bookUpdates),
+        });
+      }
+
+      // Save chapter-level fields
       for (const ch of plan.chapters) {
         if (!ch.filled && !ch.title) continue;
         await fetch(`${API}/storyteller/chapters/${ch.id}`, {
@@ -266,14 +303,16 @@ export default function StoryPlannerConversational({
         });
         saved++;
       }
-      toast?.add(`Plan applied — ${saved} chapters updated`, 'success');
+      toast?.add(`Plan saved — ${saved} chapter${saved !== 1 ? 's' : ''} updated`, 'success');
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2200);
       onApply?.();
     } catch {
       toast?.add('Error saving plan', 'error');
     } finally {
       setApplying(false);
     }
-  }, [plan, onApply, toast]);
+  }, [plan, book, onApply, toast]);
 
   // ── Voice toggle ──────────────────────────────────────────────────────
 
@@ -335,15 +374,13 @@ export default function StoryPlannerConversational({
           <span className="spc-header-book">{book?.title || 'Untitled'}</span>
         </div>
         <div className="spc-header-right">
-          {filledCount > 0 && (
-            <button
-              className="spc-apply-btn"
-              onClick={applyPlan}
-              disabled={applying}
-            >
-              {applying ? 'Saving…' : `Apply Plan (${filledCount}/${totalCount})`}
-            </button>
-          )}
+          <button
+            className={`spc-save-btn${saved ? ' spc-save-btn--saved' : ''}`}
+            onClick={applyPlan}
+            disabled={applying}
+          >
+            {applying ? 'Saving…' : saved ? '✓ Saved' : '💾 Save'}
+          </button>
           <button className="spc-close-btn" onClick={onClose}>✕</button>
         </div>
       </header>

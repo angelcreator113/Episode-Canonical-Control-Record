@@ -56,7 +56,7 @@ html, body {
   padding: 0;
   height: 100vh;
   overflow: hidden;
-  background-color: #F6F1EB;
+  background-color: transparent;
 }
 
 .app-main-wrapper.full-screen .app-content > * {
@@ -154,6 +154,13 @@ html, body {
 
 /* StorytellerPage needs scrolling even in full-screen mode */
 .full-screen .app-content:has(> .storyteller-page) {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* WriteMode needs scrolling on mobile in full-screen mode */
+.full-screen .app-content:has(> .wm-root) {
   overflow-y: auto;
   overflow-x: hidden;
   -webkit-overflow-scrolling: touch;

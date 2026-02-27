@@ -349,7 +349,7 @@ function AssetLibrary({ embedded = false }) {
                         alt={asset.name}
                         onError={(e) => {
                           e.target.onerror = null;
-                          e.target.src = `data:image/svg+xml;base64,${btoa(`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="${category.color}"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dy=".3em" fill="white">${category.icon}</text></svg>`)}`;
+                          e.target.src = `data:image/svg+xml,${encodeURIComponent(`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="${category.color}"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dy=".3em" fill="white">${category.icon}</text></svg>`)}`;
                         }}
                       />
                     )}

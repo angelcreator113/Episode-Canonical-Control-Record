@@ -172,7 +172,7 @@ function ShowAssetsTab({ show }) {
     };
     const category = mapAssetTypeToCategory(assetType);
     const color = colors[category] || '#94a3b8';
-    return `data:image/svg+xml;base64,${btoa(`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="${color}"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dy=".3em" fill="white">📁</text></svg>`)}`;
+    return `data:image/svg+xml,${encodeURIComponent(`<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="${color}"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dy=".3em" fill="white">📁</text></svg>`)}`;
   };
   
   // Filter assets
@@ -448,7 +448,7 @@ function ShowAssetsTab({ show }) {
                           poster={
                             asset.thumbnail_url && !asset.thumbnail_url.startsWith('data:image/svg+xml')
                               ? asset.thumbnail_url
-                              : 'data:image/svg+xml;base64,' + btoa('<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="#64748b"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dy=".3em" fill="white">🎬</text></svg>')
+                              : 'data:image/svg+xml,' + encodeURIComponent('<svg width="200" height="200" xmlns="http://www.w3.org/2000/svg"><rect width="200" height="200" fill="#64748b"/><text x="50%" y="50%" font-size="60" text-anchor="middle" dy=".3em" fill="white">🎬</text></svg>')
                           }
                           width="100%"
                           height="100%"

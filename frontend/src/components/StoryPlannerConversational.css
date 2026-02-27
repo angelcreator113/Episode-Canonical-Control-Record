@@ -55,7 +55,7 @@
   gap: 10px;
 }
 
-.spc-apply-btn {
+.spc-save-btn {
   background: var(--st-ink, #2F2A26);
   color: var(--st-surface, #FAF7F2);
   border: none;
@@ -65,15 +65,19 @@
   font-size: 12px;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.2s, color 0.2s;
   white-space: nowrap;
 }
-.spc-apply-btn:hover:not(:disabled) {
+.spc-save-btn:hover:not(:disabled) {
   background: #3E3832;
 }
-.spc-apply-btn:disabled {
+.spc-save-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+.spc-save-btn--saved {
+  background: #2a6d3a;
+  color: #fff;
 }
 
 .spc-close-btn {
@@ -788,8 +792,8 @@
     white-space: nowrap;
   }
 
-  /* Apply button compact */
-  .spc-apply-btn {
+  /* Save button compact */
+  .spc-save-btn {
     font-size: 11px;
     padding: 6px 12px;
   }
@@ -893,7 +897,7 @@
   .spc-header-left { gap: 8px; }
   .spc-header-title { font-size: 13px; }
   .spc-header-book { display: none; } /* hide book subtitle on tiny screens */
-  .spc-apply-btn { font-size: 10px; padding: 5px 10px; }
+  .spc-save-btn { font-size: 10px; padding: 5px 10px; }
 
   .spc-mobile-tab { font-size: 12px; padding: 8px 0; }
 
