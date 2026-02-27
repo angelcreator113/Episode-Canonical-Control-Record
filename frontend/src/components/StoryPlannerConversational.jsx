@@ -72,38 +72,83 @@ function useVoiceInput() {
   const [transcript,  setTranscript]  = useState('');
   const [supported,   setSupported]   = useState(false);
   const recRef = useRef(null);
+  const wantListeningRef = useRef(false);
+  const onResultRef = useRef(null);
+  const committedRef = useRef('');     // finalized text from previous segments
+  const interimRef = useRef('');       // current in-progress segment
 
   useEffect(() => {
     setSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
 
-  const start = useCallback((onResult) => {
+  const startRec = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
+
+    if (recRef.current) {
+      try { recRef.current.onend = null; recRef.current.abort(); } catch {}
+    }
+
     const rec = new SR();
-    rec.continuous      = true;
-    rec.interimResults  = true;
-    rec.lang            = 'en-US';
-    recRef.current      = rec;
+    rec.continuous     = false;   // non-continuous avoids mobile repeat bug
+    rec.interimResults = true;
+    rec.lang           = 'en-US';
+    recRef.current     = rec;
 
     rec.onresult = (e) => {
-      let full = '';
+      let interim = '';
+      let finalPart = '';
       for (let i = 0; i < e.results.length; i++) {
-        full += e.results[i][0].transcript;
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalPart += t;
+        } else {
+          interim += t;
+        }
       }
+      // Commit finalized words so they never repeat
+      if (finalPart) {
+        committedRef.current += (committedRef.current ? ' ' : '') + finalPart.trim();
+      }
+      interimRef.current = interim;
+      const full = (committedRef.current + (interim ? ' ' + interim : '')).trim();
       setTranscript(full);
-      if (onResult) onResult(full);
+      if (onResultRef.current) onResultRef.current(full);
     };
-    rec.onerror = () => { setListening(false); };
-    rec.onend   = () => { setListening(false); };
+
+    rec.onerror = (e) => {
+      if (wantListeningRef.current && (e.error === 'no-speech' || e.error === 'aborted')) {
+        return;
+      }
+      wantListeningRef.current = false;
+      setListening(false);
+    };
+
+    rec.onend = () => {
+      if (wantListeningRef.current) {
+        // Auto-restart for next utterance; committed text is preserved
+        try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
+        return;
+      }
+      setListening(false);
+    };
 
     rec.start();
     setListening(true);
-    setTranscript('');
   }, []);
 
+  const start = useCallback((onResult) => {
+    onResultRef.current = onResult;
+    wantListeningRef.current = true;
+    committedRef.current = '';
+    interimRef.current = '';
+    setTranscript('');
+    startRec();
+  }, [startRec]);
+
   const stop = useCallback(() => {
-    recRef.current?.stop();
+    wantListeningRef.current = false;
+    try { recRef.current?.stop(); } catch {}
     setListening(false);
   }, []);
 
@@ -150,11 +195,25 @@ export default function StoryPlannerConversational({
   const [mobileTab,   setMobileTab]   = useState('chat'); // 'chat' | 'plan'
   const chatRef   = useRef(null);
   const inputRef  = useRef(null);
+  const rootRef   = useRef(null);
   const voice     = useVoiceInput();
 
   // ── Persist messages + plan to sessionStorage on change ──────────
   useEffect(() => { saveSession('msgs', messages); }, [messages, saveSession]);
   useEffect(() => { saveSession('plan', plan); },     [plan, saveSession]);
+
+  // ── Mobile keyboard resize: shrink root to visual viewport ───────
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      if (rootRef.current) {
+        rootRef.current.style.height = `${vv.height}px`;
+      }
+    };
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, []);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -365,7 +424,7 @@ export default function StoryPlannerConversational({
   // ── RENDER ────────────────────────────────────────────────────────────
 
   return (
-    <div className="spc-root">
+    <div className="spc-root" ref={rootRef}>
 
       {/* ── HEADER ── */}
       <header className="spc-header">

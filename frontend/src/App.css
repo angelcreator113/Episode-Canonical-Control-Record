@@ -166,6 +166,11 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* PlanWithVoicePage is position:fixed so app-content just stays out of the way */
+.full-screen .app-content:has(> .pwv-root) {
+  overflow: hidden;
+}
+
 /* SCENE COMPOSER FULL-SCREEN OVERRIDE */
 .app-content > .scene-composer-full {
   position: fixed !important;
