@@ -60,25 +60,7 @@ Write-Host "  Uploaded successfully" -ForegroundColor Green
 # Step 4: Deploy on EC2
 Write-Host "`n[4/4] Deploying on EC2..." -ForegroundColor Yellow
 
-ssh -i $KEY_FILE $EC2_HOST "
-    set -e
-    echo '  Backing up current files...'
-    sudo rm -rf /var/www/html.backup 2>/dev/null || true
-    sudo mv /var/www/html /var/www/html.backup 2>/dev/null || true
-    
-    echo '  Extracting new build...'
-    sudo mkdir -p /var/www/html
-    cd /var/www/html
-    sudo tar -xzf /tmp/frontend-build.tar.gz
-    sudo chown -R www-data:www-data /var/www/html
-    sudo chmod -R 755 /var/www/html
-    
-    echo '  Restarting Nginx...'
-    sudo systemctl restart nginx
-    
-    echo 'Deployment complete!'
-    ls -lh /var/www/html/
-"
+ssh -i $KEY_FILE $EC2_HOST "set -e; echo 'Backing up...'; sudo rm -rf /var/www/html.backup 2>/dev/null || true; sudo mv /var/www/html /var/www/html.backup 2>/dev/null || true; echo 'Extracting...'; sudo mkdir -p /var/www/html; cd /var/www/html; sudo tar -xzf /tmp/frontend-build.tar.gz; sudo chown -R www-data:www-data /var/www/html; sudo chmod -R 755 /var/www/html; echo 'Restarting Nginx...'; sudo systemctl restart nginx; echo 'Deployment complete!'; ls -lh /var/www/html/"
 
 if ($LASTEXITCODE -ne 0) {
     Write-Host "  Deployment failed" -ForegroundColor Red

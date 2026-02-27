@@ -26,7 +26,7 @@
   justify-content: space-between;
   padding: 14px 24px 12px;
   border-bottom: 1px solid rgba(47,42,38,0.08);
-  background: var(--st-surface);
+  background: var(--st-surface, #FFFDF9);
   flex-shrink: 0;
 }
 
@@ -57,10 +57,11 @@
 
 .spc-save-btn {
   background: var(--st-ink, #2F2A26);
-  color: var(--st-surface);
+  color: #FFFDF9;               /* explicit light color — always visible on dark bg */
   border: none;
   border-radius: 4px;
   padding: 7px 16px;
+  min-height: 34px;
   font-family: var(--st-sans, 'DM Sans', sans-serif);
   font-size: 12px;
   font-weight: 600;
@@ -140,8 +141,10 @@
   flex-direction: column;
   width: 50%;
   min-width: 0;
+  min-height: 0;              /* prevent flex overflow — needed for nested scroll */
+  overflow: hidden;            /* contain chat messages scroll */
   border-right: 1px solid rgba(47,42,38,0.07);
-  background: var(--st-surface);
+  background: var(--st-surface, #FFFDF9);
 }
 
 .spc-chat-messages {
@@ -284,7 +287,7 @@
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
-  background: var(--st-surface);
+  background: var(--st-surface, #FFFDF9);
 }
 
 .spc-voice-preview {
@@ -374,9 +377,10 @@
 
 .spc-send-btn {
   height: 42px;
+  min-height: 42px;
   padding: 0 18px;
   background: var(--st-ink, #2F2A26);
-  color: var(--st-surface);
+  color: #FFFDF9;               /* explicit light color — always visible on dark bg */
   border: none;
   border-radius: 6px;
   font-family: var(--st-sans, 'DM Sans', sans-serif);
@@ -723,10 +727,9 @@
 /* ─── Mobile breakpoint (≤ 768px): tab-based layout ─── */
 @media (max-width: 768px) {
 
-  /* Root fills viewport, flex column for proper layout */
+  /* Root fills parent, flex column for proper layout */
   .spc-root {
     height: 100%;
-    height: 100dvh;
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -736,7 +739,7 @@
   .spc-mobile-tabs {
     display: flex;
     border-bottom: 1px solid rgba(47,42,38,0.08);
-    background: var(--st-surface);
+    background: var(--st-surface, #FFFDF9);
     flex-shrink: 0;
   }
 
@@ -837,6 +840,31 @@
     padding: 6px 12px;
   }
 
+  /* Clear & Close — touch-friendly on mobile */
+  .spc-header-right {
+    gap: 6px;
+  }
+  .spc-clear-btn {
+    min-width: 36px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    padding: 4px;
+    border-radius: 6px;
+  }
+  .spc-close-btn {
+    min-width: 36px;
+    min-height: 36px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    padding: 4px;
+    border-radius: 6px;
+  }
+
   /* Chat messages */
   .spc-chat-messages {
     padding: 14px 12px 10px;
@@ -865,7 +893,7 @@
   .spc-input-row {
     padding: 10px 12px max(14px, env(safe-area-inset-bottom, 14px));
     border-top: 1px solid rgba(47,42,38,0.08);
-    background: var(--st-surface);
+    background: var(--st-surface, #FFFDF9);
   }
 
   .spc-input {
@@ -946,10 +974,13 @@
   .spc-header {
     padding: 8px 10px 6px;
   }
-  .spc-header-left { gap: 8px; }
+  .spc-header-left { gap: 6px; }
   .spc-header-title { font-size: 13px; }
   .spc-header-book { display: none; } /* hide book subtitle on tiny screens */
+  .spc-header-right { gap: 4px; }
   .spc-save-btn { font-size: 10px; padding: 5px 10px; }
+  .spc-clear-btn { min-width: 32px; min-height: 32px; font-size: 16px; }
+  .spc-close-btn { min-width: 32px; min-height: 32px; font-size: 18px; }
 
   .spc-mobile-tab { font-size: 12px; padding: 8px 0; }
 

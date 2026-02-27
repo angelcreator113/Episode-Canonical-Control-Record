@@ -13,6 +13,20 @@
   --pwv-border:  rgba(47, 42, 38, 0.10);
   --pwv-serif:   'Lora', Georgia, serif;
   --pwv-sans:    'DM Sans', system-ui, sans-serif;
+
+  /* ── Storyteller tokens (needed by StoryPlannerConversational) ── */
+  --st-ink: #2F2A26;
+  --st-ink-light: #3E3832;
+  --st-bg: #F6F1EB;
+  --st-surface: #FFFDF9;
+  --st-border: rgba(47, 42, 38, 0.10);
+  --st-muted: #635D55;
+  --st-gold: #C6A85E;
+  --st-gold-dim: #A08A5C;
+  --st-gold-soft: rgba(198, 168, 94, 0.06);
+  --st-serif: 'Lora', Georgia, 'Times New Roman', serif;
+  --st-sans: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  --st-mono: 'DM Mono', 'Fira Code', monospace;
 }
 
 /* ── Root ── */
@@ -51,8 +65,9 @@
 }
 
 .pwv-planner-active .spc-root {
-  height: 100vh;
-  height: 100dvh;
+  flex: 1;
+  min-height: 0;
+  height: 100%;  /* fill the fixed parent, NOT 100vh which overflows on mobile */
 }
 
 /* ── Header (book selection screen) ── */
@@ -247,11 +262,13 @@
   .pwv-root.pwv-planner-active {
     display: flex;
     flex-direction: column;
+    overflow: hidden;
   }
   .pwv-root.pwv-planner-active .spc-root {
     flex: 1;
-    height: auto;
+    height: 100%;
     min-height: 0;
+    max-height: 100%;
   }
 }
 

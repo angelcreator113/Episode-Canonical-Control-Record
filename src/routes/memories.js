@@ -4197,7 +4197,10 @@ router.post('/story-planner-chat', optionalAuth, async (req, res) => {
     }
 
     // Build conversation history for Claude (last 12 turns)
-    const conversationHistory = history
+    // Anthropic API requires the first message to have role: 'user'.
+    // The frontend includes the opening assistant greeting in history,
+    // so we must strip leading assistant messages before sending.
+    let conversationHistory = history
       .filter(m => m.role && m.text)
       .slice(-12)
       .map(m => ({
@@ -4205,8 +4208,28 @@ router.post('/story-planner-chat', optionalAuth, async (req, res) => {
         content: m.text,
       }));
 
+    // Strip leading assistant messages — API requires first message to be 'user'
+    while (conversationHistory.length > 0 && conversationHistory[0].role === 'assistant') {
+      conversationHistory.shift();
+    }
+
+    // Ensure alternating roles (merge consecutive same-role messages)
+    conversationHistory = conversationHistory.reduce((acc, msg) => {
+      if (acc.length > 0 && acc[acc.length - 1].role === msg.role) {
+        acc[acc.length - 1].content += '\n\n' + msg.content;
+      } else {
+        acc.push({ ...msg });
+      }
+      return acc;
+    }, []);
+
     // Add the current user message
-    conversationHistory.push({ role: 'user', content: message });
+    if (conversationHistory.length > 0 && conversationHistory[conversationHistory.length - 1].role === 'user') {
+      // Merge with the last user message to avoid consecutive user messages
+      conversationHistory[conversationHistory.length - 1].content += '\n\n' + message;
+    } else {
+      conversationHistory.push({ role: 'user', content: message });
+    }
 
     // Build plan summary for context
     const planSummary = buildStoryPlanSummary(plan);
@@ -4317,10 +4340,20 @@ Match chapter by index (0-based) or by title if the author mentions it by name.`
     });
 
   } catch (err) {
-    console.error('Story planner chat error:', err);
+    console.error('Story planner chat error:', err?.message || err);
+    console.error('Story planner chat error details:', {
+      type: err?.constructor?.name,
+      status: err?.status,
+      error_type: err?.error?.type,
+      message: err?.message,
+    });
     // Never 500 during a writing session — graceful fallback
+    const isRateLimit = err?.status === 429;
+    const reply = isRateLimit
+      ? "I'm thinking too fast — give me a moment and try again."
+      : "Something went wrong on my end — try sending that again.";
     return res.json({
-      reply:       "I didn't catch that — could you say that again?",
+      reply,
       planUpdates: {},
       speakReply:  false,
     });

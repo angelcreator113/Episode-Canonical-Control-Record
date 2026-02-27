@@ -128,7 +128,7 @@ export default function PlanWithVoicePage() {
             // Re-fetch chapters to see updates
             openBook(selectedBook);
           }}
-          onClose={() => navigate(-1)}
+          onClose={() => navigate('/start')}
           toast={toast}
         />
         <ToastLayer />

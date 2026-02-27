@@ -1,52 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
-import authService from './services/authService';
 
 // Contexts
 import { BulkSelectionProvider } from './contexts/BulkSelectionContext';
 import { SearchFiltersProvider } from './contexts/SearchFiltersContext';
 
-// Pages
+// Eager-loaded: critical path pages (login, landing, home)
 import Login from './pages/Login';
 import LandingPage from './pages/LandingPage';
 import Home from './pages/Home';
-import EpisodeDetail from './pages/EpisodeDetail';
-import CreateEpisode from './pages/CreateEpisode';
-import IconCueTimeline from './pages/IconCueTimeline';
-import SearchResults from './pages/SearchResults';
-import ThumbnailGallery from './pages/ThumbnailGallery';
-import CompositionLibrary from './pages/CompositionLibrary';
-import CompositionDetail from './pages/CompositionDetail';
-import SceneLibrary from './pages/SceneLibrary';
-import SceneDetail from './pages/SceneDetail';
-import AdminPanel from './pages/AdminPanel';
-import TemplateManagement from './pages/TemplateManagement';
-import AuditLogViewer from './pages/AuditLogViewer';
-import AuditLog from './pages/AuditLog';
-import ShowManagement from './pages/ShowManagement';
-import ShowDetail from './pages/ShowDetail';
-import ShowForm from './components/ShowForm';
-import CreateShow from './pages/CreateShow';
-import EditShow from './pages/EditShow';
-import Wardrobe from './pages/Wardrobe';
-import WardrobeBrowser from './pages/WardrobeBrowser';
-import WardrobeAnalytics from './pages/WardrobeAnalytics';
-import OutfitSets from './pages/OutfitSets';
-import WardrobeLibraryUpload from './pages/WardrobeLibraryUpload';
-import WardrobeLibraryDetail from './pages/WardrobeLibraryDetail';
-import TemplateStudio from './pages/TemplateStudio';
-import TemplateDesigner from './pages/TemplateDesigner';
-import DiagnosticPage from './pages/DiagnosticPage';
-import DecisionAnalyticsDashboard from './pages/DecisionAnalyticsDashboard';
-import TimelineEditor from './pages/TimelineEditor';
-import EvaluateEpisode from './pages/EvaluateEpisode';
-import WorldAdmin from './pages/WorldAdmin';
-import ShowSettings from './pages/ShowSettings';
-import ExportPage from './pages/ExportPage';
-import AssetLibrary from './pages/AssetLibrary';
-import StorytellerPage from './pages/StorytellerPage';
-import PlanWithVoicePage from './pages/PlanWithVoicePage';
+
+// Lazy-loaded: all other pages (code-split into separate chunks)
+const EpisodeDetail = lazy(() => import('./pages/EpisodeDetail'));
+const CreateEpisode = lazy(() => import('./pages/CreateEpisode'));
+const IconCueTimeline = lazy(() => import('./pages/IconCueTimeline'));
+const SearchResults = lazy(() => import('./pages/SearchResults'));
+const ThumbnailGallery = lazy(() => import('./pages/ThumbnailGallery'));
+const CompositionLibrary = lazy(() => import('./pages/CompositionLibrary'));
+const CompositionDetail = lazy(() => import('./pages/CompositionDetail'));
+const SceneLibrary = lazy(() => import('./pages/SceneLibrary'));
+const SceneDetail = lazy(() => import('./pages/SceneDetail'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel'));
+const TemplateManagement = lazy(() => import('./pages/TemplateManagement'));
+const AuditLogViewer = lazy(() => import('./pages/AuditLogViewer'));
+const AuditLog = lazy(() => import('./pages/AuditLog'));
+const ShowManagement = lazy(() => import('./pages/ShowManagement'));
+const ShowDetail = lazy(() => import('./pages/ShowDetail'));
+const CreateShow = lazy(() => import('./pages/CreateShow'));
+const EditShow = lazy(() => import('./pages/EditShow'));
+const Wardrobe = lazy(() => import('./pages/Wardrobe'));
+const WardrobeBrowser = lazy(() => import('./pages/WardrobeBrowser'));
+const WardrobeAnalytics = lazy(() => import('./pages/WardrobeAnalytics'));
+const OutfitSets = lazy(() => import('./pages/OutfitSets'));
+const WardrobeLibraryUpload = lazy(() => import('./pages/WardrobeLibraryUpload'));
+const WardrobeLibraryDetail = lazy(() => import('./pages/WardrobeLibraryDetail'));
+const TemplateStudio = lazy(() => import('./pages/TemplateStudio'));
+const TemplateDesigner = lazy(() => import('./pages/TemplateDesigner'));
+const DiagnosticPage = lazy(() => import('./pages/DiagnosticPage'));
+const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsDashboard'));
+const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
+const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
+const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
+const ShowSettings = lazy(() => import('./pages/ShowSettings'));
+const ExportPage = lazy(() => import('./pages/ExportPage'));
+const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
+const StorytellerPage = lazy(() => import('./pages/StorytellerPage'));
+const PlanWithVoicePage = lazy(() => import('./pages/PlanWithVoicePage'));
 // Redirect from /book/:id → WriteMode (first chapter)
 const BookToWriteRedirect = () => {
   const { id } = useParams();
@@ -71,28 +71,30 @@ const BookToWriteRedirect = () => {
   if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'Lora,serif',color:'rgba(28,24,20,0.4)'}}>Opening book…</div>;
   return null;
 };
-import CharacterRegistryPage from './pages/CharacterRegistryPage';
-import ContinuityEnginePage from './pages/ContinuityEnginePage';
-import UniversePage from './pages/UniversePage';
-import ReadingMode from './pages/ReadingMode';
-import WriteMode from './pages/WriteMode';
-import BookOverview from './pages/BookOverview';
-import RelationshipMap from './pages/RelationshipMap';
-import SessionStart from './pages/SessionStart';
-import CharacterTherapy from './pages/CharacterTherapy';
-import PressPublisher from './pages/PressPublisher';
-import SettingsPage from './pages/SettingsPage';
-import EpisodeWorkspace from './pages/EpisodeWorkspace';
-import ChapterStructureEditor from './pages/ChapterStructureEditor';
-import QuickEpisodeCreator from './components/QuickEpisodeCreator';
+const CharacterRegistryPage = lazy(() => import('./pages/CharacterRegistryPage'));
+const ContinuityEnginePage = lazy(() => import('./pages/ContinuityEnginePage'));
+const UniversePage = lazy(() => import('./pages/UniversePage'));
+const ReadingMode = lazy(() => import('./pages/ReadingMode'));
+const WriteMode = lazy(() => import('./pages/WriteMode'));
+const BookOverview = lazy(() => import('./pages/BookOverview'));
+const RelationshipMap = lazy(() => import('./pages/RelationshipMap'));
+const SessionStart = lazy(() => import('./pages/SessionStart'));
+const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
+const PressPublisher = lazy(() => import('./pages/PressPublisher'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const EpisodeWorkspace = lazy(() => import('./pages/EpisodeWorkspace'));
+const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
+const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 
-// Components
+// Heavy components — lazy loaded
+const SceneComposerFull = lazy(() => import('./components/SceneComposer/SceneComposerFull'));
+const AnimaticPreview = lazy(() => import('./components/Episodes/SceneComposer/AnimaticPreview'));
+
+// Layout components — eager loaded (always visible)
 import Sidebar from './components/layout/Sidebar';
 import Header from './components/Header';
 import ErrorBoundary from './components/ErrorBoundary';
 import ToastProvider from './components/ToastContainer';
-import SceneComposerFull from './components/SceneComposer/SceneComposerFull';
-import AnimaticPreview from './components/Episodes/SceneComposer/AnimaticPreview';
 import OrientationToast from './components/OrientationToast';
 import LoadingSkeleton from './components/LoadingSkeleton';
 
@@ -221,6 +223,7 @@ function AppContent() {
         )}
         
         <main className="app-content">
+          <Suspense fallback={<LoadingSkeleton variant="page" />}>
           <Routes>
           {/* ===== DASHBOARD ===== */}
           <Route path="/" element={<Home />} />
@@ -360,6 +363,7 @@ function AppContent() {
           {/* Fallback - redirect unknown routes to home */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+          </Suspense>
       </main>
 
       {/* Hide footer on editor routes for immersive experience */}
