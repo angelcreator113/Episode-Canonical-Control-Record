@@ -12,14 +12,6 @@ import './Sidebar.css';
 /* ─── Navigation map ────────────────────────────────────────── */
 const NAV = [
   {
-    zone: 'WRITE',
-    items: [
-      { icon: '▶',  label: 'Start Session',   route: '/start' },
-      { icon: '⌗',  label: 'Plan with Voice', route: '/plan-with-voice' },
-      { icon: '◇',  label: 'Timeline',        route: '/continuity' },
-    ],
-  },
-  {
     zone: 'WORLD',
     items: [
       { icon: '◈',  label: 'Universe',        route: '/universe' },
@@ -27,6 +19,14 @@ const NAV = [
       { icon: '🛋️', label: 'Therapy Room',    route: '/therapy/default' },
       { icon: '📰', label: 'The Press',       route: '/press' },
       { icon: '🔗', label: 'Relationships',   route: '/relationships' },
+    ],
+  },
+  {
+    zone: 'WRITE',
+    items: [
+      { icon: '▶',  label: 'Start Session',   route: '/start' },
+      { icon: '⌗',  label: 'Plan with Voice', route: '/plan-with-voice' },
+      { icon: '◇',  label: 'Timeline',        route: '/continuity' },
     ],
   },
   {
