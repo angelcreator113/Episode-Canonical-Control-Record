@@ -1,246 +1,240 @@
-// frontend/src/components/layout/Sidebar.jsx
+/**
+ * Sidebar.jsx — Prime Studios Navigation
+ * 4 zones: WRITE · WORLD · PRODUCE · MANAGE
+ * Props: isOpen (mobile drawer), onClose (close drawer)
+ */
 import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import showService from '../../services/showService';
-import { episodeService } from '../../services/episodeService';
 import './Sidebar.css';
 
-/**
- * Sidebar — 4-zone navigation
- *
- *   WRITE   — Start Session, Write (Book Editor), Timeline
- *   WORLD   — Universe, Characters, Therapy Room, The Press, Relationships
- *   PRODUCE — Shows (dynamic), Wardrobe, Scene Library, Template Studio
- *   MANAGE  — Asset Library, Analytics, Search, Admin, Settings
- */
-
 /* ─── Navigation map ────────────────────────────────────────── */
-const NAV_SECTIONS = [
+const NAV = [
   {
-    label: 'WRITE',
+    zone: 'WRITE',
     items: [
-      { icon: '▶',  label: 'Start Session',  path: '/start' },
-      { icon: '⌗',  label: 'Plan with Voice', path: '/plan-with-voice' },
-      { icon: '◇',  label: 'Timeline',       path: '/continuity' },
+      { icon: '▶',  label: 'Start Session',   route: '/start' },
+      { icon: '⌗',  label: 'Plan with Voice', route: '/plan-with-voice' },
+      { icon: '◇',  label: 'Timeline',        route: '/continuity' },
     ],
   },
   {
-    label: 'WORLD',
+    zone: 'WORLD',
     items: [
-      { icon: '◈',  label: 'Universe',       path: '/universe' },
-      { icon: '👤', label: 'Characters',     path: '/character-registry' },
-      { icon: '🛋️', label: 'Therapy Room',   path: '/therapy/default' },
-      { icon: '📰', label: 'The Press',      path: '/press' },
-      { icon: '🔗', label: 'Relationships',  path: '/relationships' },
+      { icon: '◈',  label: 'Universe',        route: '/universe' },
+      { icon: '👤', label: 'Characters',      route: '/character-registry' },
+      { icon: '🛋️', label: 'Therapy Room',    route: '/therapy/default' },
+      { icon: '📰', label: 'The Press',       route: '/press' },
+      { icon: '🔗', label: 'Relationships',   route: '/relationships' },
+    ],
+  },
+  {
+    zone: 'PRODUCE',
+    items: [
+      {
+        icon: '🎬', label: 'Shows', route: '/shows',
+        expandable: true,
+      },
+      { icon: '📂', label: 'Episodes',        route: '/episodes' },
+      { icon: '🎞️', label: 'Scene Library',   route: '/scene-library' },
+      { icon: '🖼️', label: 'Template Studio', route: '/template-studio' },
+    ],
+  },
+  {
+    zone: 'MANAGE',
+    items: [
+      { icon: '📊', label: 'Analytics',       route: '/analytics/decisions' },
+      { icon: '🔍', label: 'Search',          route: '/search' },
+      { icon: '🩺', label: 'Diagnostics',     route: '/diagnostics' },
+      { icon: '⚙️', label: 'Settings',        route: '/settings' },
     ],
   },
 ];
 
+/* ─── Shows hook (uses showService with auth) ───────────────── */
+function useShows() {
+  const [shows, setShows] = useState([]);
+  useEffect(() => {
+    showService.getAllShows()
+      .then(data => setShows((data || []).map(s => ({
+        id: s.id,
+        name: s.name || s.title || 'Untitled Show',
+        episodeCount: s.episodeCount || s.episode_count || 0,
+      }))))
+      .catch(() => setShows([]));
+  }, []);
+  return shows;
+}
+
+/* ─── Sidebar ───────────────────────────────────────────────── */
 function Sidebar({ isOpen, onClose }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { user } = useAuth();
-  const [shows, setShows] = useState([]);
-  const [showsExpanded, setShowsExpanded] = useState(true);
-  const [currentShowId, setCurrentShowId] = useState(null);
+  const shows = useShows();
+  const [showsOpen, setShowsOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
 
-  useEffect(() => { loadShows(); }, []);
-
-  // Detect parent show from episode routes
+  // Auto-expand Shows sub-nav when on a /shows/* route
   useEffect(() => {
-    const checkEpisodeRoute = async () => {
-      const match = location.pathname.match(/\/episodes\/([^/]+)/);
-      if (match && match[1] !== 'create') {
-        try {
-          const episode = await episodeService.getEpisode(match[1]);
-          if (episode?.show_id || episode?.showId) {
-            setCurrentShowId(episode.show_id || episode.showId);
-            setShowsExpanded(true);
-          }
-        } catch (err) {
-          console.error('Failed to get episode for sidebar:', err);
-        }
-      } else {
-        const showMatch = location.pathname.match(/\/shows\/([^/]+)/);
-        setCurrentShowId(showMatch ? showMatch[1] : null);
-      }
-    };
-    checkEpisodeRoute();
+    if (location.pathname.startsWith('/shows/')) setShowsOpen(true);
   }, [location.pathname]);
 
-  const loadShows = async () => {
-    try {
-      const data = await showService.getAllShows();
-      setShows(data.map(s => ({
-        id: s.id,
-        name: s.name || s.title || 'Untitled Show',
-        episodeCount: s.episodeCount || s.episode_count || s.episodes?.length || 0,
-      })));
-    } catch (e) {
-      console.error('Error loading shows:', e);
-      setShows([]);
-    }
-  };
-
-  /* helpers */
-  const isActive = (path) => {
-    // If the nav path has a query string, match both pathname and search
-    if (path.includes('?')) {
-      const [navPath, navSearch] = path.split('?');
-      const params = new URLSearchParams(navSearch);
-      const locParams = new URLSearchParams(location.search);
-      return location.pathname === navPath &&
-        [...params].every(([k, v]) => locParams.get(k) === v);
-    }
-    // For plain paths, also exclude when a query-param sibling is the real match
-    if (location.search) {
-      const locParams = new URLSearchParams(location.search);
-      if (locParams.get('view')) return false; // another view is active
-    }
-    return location.pathname === path || location.pathname.startsWith(path + '/');
-  };
+  // Navigate and close mobile drawer
   const go = (path) => { navigate(path); if (onClose) onClose(); };
+
+  // Active-match helper
+  const isActive = (path) =>
+    location.pathname === path || location.pathname.startsWith(path + '/');
 
   return (
     <>
       {/* Mobile backdrop */}
       {isOpen && <div className="sidebar-backdrop" onClick={onClose} />}
 
-      <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
-        {/* ── Logo ── */}
-        <div className="sidebar-logo" onClick={() => go('/')}>
-          <span className="logo-icon">🎬</span>
-          <div className="logo-text">
-            <div className="logo-title">Creative Engine</div>
-            <div className="logo-subtitle">by LaLa</div>
-          </div>
-          {onClose && (
-            <button className="sidebar-close-btn" onClick={(e) => { e.stopPropagation(); onClose(); }} aria-label="Close sidebar">
-              ✕
-            </button>
+      <aside className={`sidebar ${isOpen ? 'open' : ''} ${collapsed ? 'collapsed' : ''}`}>
+        {/* ── Logo / collapse toggle ── */}
+        <div className="sidebar-logo">
+          {!collapsed && (
+            <span className="logo-text" onClick={() => go('/start')}>
+              PRIME<span className="logo-accent">◈</span>
+            </span>
           )}
+          <div className="logo-actions">
+            {/* Desktop collapse toggle */}
+            <button
+              className="collapse-btn"
+              onClick={() => setCollapsed(c => !c)}
+              title={collapsed ? 'Expand' : 'Collapse'}
+            >
+              {collapsed ? '›' : '‹'}
+            </button>
+            {/* Mobile close button */}
+            {onClose && (
+              <button
+                className="sidebar-close-btn"
+                onClick={(e) => { e.stopPropagation(); onClose(); }}
+                aria-label="Close sidebar"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
 
         {/* ── Navigation ── */}
         <nav className="sidebar-nav">
           {/* Home */}
-          <button className={`nav-item ${location.pathname === '/' ? 'active' : ''}`} onClick={() => go('/')}>
+          <NavLink
+            to="/"
+            end
+            className={({ isActive: a }) => `nav-item ${a ? 'active' : ''}`}
+            onClick={() => { if (onClose) onClose(); }}
+            title={collapsed ? 'Home' : undefined}
+          >
             <span className="nav-icon">🏠</span>
-            <span className="nav-label">Home</span>
-          </button>
+            {!collapsed && <span className="nav-label">Home</span>}
+          </NavLink>
 
-          {/* Static sections — WRITE / WORLD */}
-          {NAV_SECTIONS.map(section => (
-            <div className="nav-section" key={section.label}>
-              <div className="nav-section-label">{section.label}</div>
-              {section.items.map(item => (
-                <button
-                  key={item.path}
-                  className={`nav-item ${isActive(item.path) ? 'active' : ''}`}
-                  onClick={() => go(item.path)}
-                >
-                  <span className="nav-icon">{item.icon}</span>
-                  <span className="nav-label">{item.label}</span>
-                </button>
-              ))}
+          {/* Zones */}
+          {NAV.map(({ zone, items }) => (
+            <div className="nav-section" key={zone}>
+              {!collapsed && <div className="nav-section-label">{zone}</div>}
+
+              {items.map(item => {
+                // ── Expandable Shows item ──
+                if (item.expandable) {
+                  const showsActive = isActive('/shows');
+                  return (
+                    <div key={item.route} className="nav-group">
+                      <div
+                        className={`nav-item ${showsActive ? 'active' : ''}`}
+                        onClick={() => {
+                          go(item.route);
+                          setShowsOpen(o => !o);
+                        }}
+                        title={collapsed ? item.label : undefined}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        {!collapsed && (
+                          <>
+                            <span className="nav-label">{item.label}</span>
+                            <span className={`chevron ${showsOpen ? 'open' : ''}`}>›</span>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Shows sub-list */}
+                      {showsOpen && !collapsed && (
+                        <div className="nav-subgroup">
+                          {shows.length === 0 ? (
+                            <div className="sub-empty">No shows yet</div>
+                          ) : (
+                            shows.map(show => (
+                              <NavLink
+                                key={show.id}
+                                to={`/shows/${show.id}`}
+                                className={({ isActive: a }) => `nav-subitem ${a ? 'active' : ''}`}
+                                onClick={() => { if (onClose) onClose(); }}
+                              >
+                                <span className="sub-dot" />
+                                <span className="subitem-label">{show.name}</span>
+                                <span className="subitem-count">{show.episodeCount}</span>
+                              </NavLink>
+                            ))
+                          )}
+                          <NavLink
+                            to="/shows/create"
+                            className="sub-create"
+                            onClick={() => { if (onClose) onClose(); }}
+                          >
+                            + New Show
+                          </NavLink>
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
+                // ── Standard nav item ──
+                return (
+                  <NavLink
+                    key={item.route}
+                    to={item.route}
+                    end={item.route === '/episodes'}
+                    className={({ isActive: a }) => `nav-item ${a ? 'active' : ''}`}
+                    onClick={() => { if (onClose) onClose(); }}
+                    title={collapsed ? item.label : undefined}
+                  >
+                    <span className="nav-icon">{item.icon}</span>
+                    {!collapsed && <span className="nav-label">{item.label}</span>}
+                  </NavLink>
+                );
+              })}
             </div>
           ))}
-
-          {/* ── PRODUCE — Shows (dynamic) ── */}
-          <div className="nav-section">
-            <div className="nav-section-label">PRODUCE</div>
-
-            <div className="nav-group">
-              <button
-                className={`nav-item ${isActive('/shows') ? 'active' : ''}`}
-                onClick={() => {
-                  setShowsExpanded(prev => !prev);
-                  if (!showsExpanded) go('/shows');
-                }}
-              >
-                <span className="nav-icon">🎬</span>
-                <span className="nav-label">Shows</span>
-                <span className={`expand-icon ${showsExpanded ? 'expanded' : ''}`}>▼</span>
-              </button>
-
-              {showsExpanded && (
-                <div className="nav-subgroup">
-                  <button
-                    className={`nav-subitem ${location.pathname === '/shows' ? 'active' : ''}`}
-                    onClick={() => go('/shows')}
-                  >
-                    <span className="subitem-indicator">└─</span>
-                    <span className="subitem-label">All Shows</span>
-                  </button>
-                  {shows.map(show => (
-                    <button
-                      key={show.id}
-                      className={`nav-subitem ${isActive(`/shows/${show.id}`) || currentShowId === show.id ? 'active' : ''}`}
-                      onClick={() => go(`/shows/${show.id}`)}
-                    >
-                      <span className="subitem-indicator">└─</span>
-                      <span className="subitem-label">{show.name}</span>
-                      <span className="subitem-count">{show.episodeCount}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Episode Workspace */}
-            <button className={`nav-item ${isActive('/episodes') && !location.pathname.match(/\/episodes\/[^/]/) ? 'active' : ''}`} onClick={() => go('/episodes')}>
-              <span className="nav-icon">📂</span>
-              <span className="nav-label">Episodes</span>
-            </button>
-
-            {/* Scene Library */}
-            <button className={`nav-item ${isActive('/scene-library') ? 'active' : ''}`} onClick={() => go('/scene-library')}>
-              <span className="nav-icon">{'🎬'}</span>
-              <span className="nav-label">Scene Library</span>
-            </button>
-
-            {/* Template Studio */}
-            <button className={`nav-item ${isActive('/template-studio') ? 'active' : ''}`} onClick={() => go('/template-studio')}>
-              <span className="nav-icon">{'🖼️'}</span>
-              <span className="nav-label">Template Studio</span>
-            </button>
-          </div>
-
-          {/* ── MANAGE ── */}
-          <div className="nav-section">
-            <div className="nav-section-label">MANAGE</div>
-
-            <button className={`nav-item ${isActive('/analytics') ? 'active' : ''}`} onClick={() => go('/analytics/decisions')}>
-              <span className="nav-icon">{'📊'}</span>
-              <span className="nav-label">Analytics</span>
-            </button>
-            <button className={`nav-item ${isActive('/search') ? 'active' : ''}`} onClick={() => go('/search')}>
-              <span className="nav-icon">{'🔍'}</span>
-              <span className="nav-label">Search</span>
-            </button>
-            <button className={`nav-item ${isActive('/diagnostics') ? 'active' : ''}`} onClick={() => go('/diagnostics')}>
-              <span className="nav-icon">{'🩺'}</span>
-              <span className="nav-label">Diagnostics</span>
-            </button>
-            <button
-              className={`nav-item ${isActive('/settings') ? 'active' : ''}`}
-              onClick={() => go('/settings')}
-            >
-              <span className="nav-icon">{'⚙️'}</span>
-              <span className="nav-label">Settings</span>
-            </button>
-          </div>
         </nav>
+
+        {/* ── Bottom: Book Editor shortcut ── */}
+        {!collapsed && (
+          <div className="sidebar-bottom">
+            <button className="book-editor-btn" onClick={() => go('/storyteller')}>
+              📖 Book Editor
+            </button>
+          </div>
+        )}
 
         {/* ── Footer ── */}
         <div className="sidebar-footer">
-          <div className="user-info">
+          <div className="user-info" onClick={() => go('/settings')}>
             <div className="user-avatar">{(user?.name || user?.email || 'U')[0].toUpperCase()}</div>
-            <div className="user-details">
-              <div className="user-name">{user?.name || user?.email?.split('@')[0] || 'Creator'}</div>
-              <div className="user-status">Creator</div>
-            </div>
+            {!collapsed && (
+              <div className="user-details">
+                <div className="user-name">{user?.name || user?.email?.split('@')[0] || 'Creator'}</div>
+                <div className="user-status">Creator</div>
+              </div>
+            )}
           </div>
         </div>
       </aside>
