@@ -54,10 +54,10 @@ const BookToWriteRedirect = () => {
   const nav = useNavigate();
   React.useEffect(() => {
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    fetch(`/api/storyteller/books/${id}/chapters`, { headers: { Authorization: `Bearer ${token}` } })
+    fetch(`/api/v1/storyteller/books/${id}`, { headers: { Authorization: `Bearer ${token}` } })
       .then(r => r.json())
       .then(data => {
-        const chapters = Array.isArray(data) ? data : data.chapters || [];
+        const chapters = Array.isArray(data.chapters) ? data.chapters : [];
         if (chapters.length > 0) {
           const sorted = [...chapters].sort((a, b) => (a.order ?? a.chapter_number ?? 0) - (b.order ?? b.chapter_number ?? 0));
           nav(`/write/${id}/${sorted[0].id}`, { replace: true });
