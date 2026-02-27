@@ -268,6 +268,8 @@ export default function StoryPlannerConversational({
   const send = useCallback(async (text) => {
     if (!text?.trim() || sending) return;
     const trimmed = text.trim();
+    // Stop voice FIRST so its callback can't overwrite the cleared input
+    if (voice.listening) voice.stop();
     const userMsg = { role: 'user', text: trimmed };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
@@ -415,8 +417,11 @@ export default function StoryPlannerConversational({
   const toggleVoice = () => {
     if (voice.listening) {
       voice.stop();
-      // Keep transcript in input field so user can edit before sending
-      if (voice.transcript.trim()) setInput(voice.transcript.trim());
+      // If there's text, send it immediately rather than leaving it in the box
+      const text = voice.transcript.trim() || input.trim();
+      if (text) {
+        send(text);
+      }
     } else {
       // Cancel any TTS so it doesn't fight the mic
       window.speechSynthesis?.cancel();
