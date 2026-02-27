@@ -5,7 +5,7 @@
  * Lets user pick a book, loads its chapters + characters,
  * then renders StoryPlannerConversational.
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryPlannerConversational from '../components/StoryPlannerConversational';
 import { api } from '../utils/storytellerApi';
