@@ -78,6 +78,7 @@ function useVoiceInput() {
   const committedRef = useRef('');     // finalized text from previous segments
   const interimRef = useRef('');       // current in-progress segment
   const restartCountRef = useRef(0);   // track restart attempts for backoff
+  const lastProcessedIdx = useRef(0);  // last processed result index (avoid re-appending)
 
   // Detect mobile for recognition strategy
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -104,18 +105,22 @@ function useVoiceInput() {
 
     rec.onresult = (e) => {
       let interim = '';
-      let finalPart = '';
+      let newFinal = '';
       for (let i = 0; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
-          finalPart += t;
+          // Only commit results we haven't already processed
+          if (i >= lastProcessedIdx.current) {
+            newFinal += t;
+            lastProcessedIdx.current = i + 1;
+          }
         } else {
           interim += t;
         }
       }
-      // Commit finalized words so they never repeat
-      if (finalPart) {
-        committedRef.current += (committedRef.current ? ' ' : '') + finalPart.trim();
+      // Commit only newly finalized words
+      if (newFinal) {
+        committedRef.current += (committedRef.current ? ' ' : '') + newFinal.trim();
       }
       interimRef.current = interim;
       const full = (committedRef.current + (interim ? ' ' + interim : '')).trim();
@@ -182,6 +187,7 @@ function useVoiceInput() {
     wantListeningRef.current = true;
     committedRef.current = '';
     interimRef.current = '';
+    lastProcessedIdx.current = 0;
     setTranscript('');
     startRec();
   }, [startRec]);
