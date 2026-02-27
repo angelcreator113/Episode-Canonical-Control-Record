@@ -8,34 +8,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryPlannerConversational from '../components/StoryPlannerConversational';
+import { api } from '../utils/storytellerApi';
+import { useToasts } from '../hooks/useToasts';
 import './PlanWithVoicePage.css';
-
-const API = '/api/v1/storyteller';
-
-/* ─── tiny api helper (mirrors StorytellerPage) ─── */
-async function api(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...opts,
-  });
-  if (!res.ok) {
-    const err = await res.text().catch(() => 'Request failed');
-    throw new Error(err);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
-/* ─── simple toast hook ─── */
-function useToasts() {
-  const [toasts, setToasts] = useState([]);
-  const add = useCallback((msg, type = 'success') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, msg, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
-  }, []);
-  return { toasts, add };
-}
 
 /* ═══════════════════════════════════════
    PlanWithVoicePage
@@ -89,7 +64,7 @@ export default function PlanWithVoicePage() {
 
       // try to load characters from registry
       try {
-        const charRes = await fetch('/api/v1/character-registry/registries');
+        const charRes = await fetch('/api/v1/character-registry/registries', { headers: authHeader() });
         const charData = await charRes.json();
         const regs = charData?.registries || [];
         const chars = Array.isArray(regs)
