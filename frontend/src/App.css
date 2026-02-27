@@ -115,12 +115,9 @@ html, body {
   position: relative;
 }
 
-/* Content Grid - Max Width Container */
+/* Content Grid - Full Width Container (pages manage their own max-width) */
 .app-content > * {
-  max-width: 1400px;
-  margin: 0 auto;
-  padding: 2rem;
-  background-color: #ffffff;
+  width: 100%;
   min-height: 100%;
   box-sizing: border-box;
 }

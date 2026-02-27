@@ -986,6 +986,7 @@ function ErrorState({ onRetry }) {
 const s = {
   shell: {
     minHeight: '100vh',
+    width: '100%',
     background: '#faf9f7',
     color: 'rgba(26,21,16,0.85)',
     fontFamily: "'DM Sans', sans-serif",
@@ -1035,7 +1036,7 @@ const s = {
   },
   tabContent: {
     padding: '0 48px',
-    maxWidth: 900,
+    width: '100%',
   },
   tabShell: {
     paddingTop: 28,
