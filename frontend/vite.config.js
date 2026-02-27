@@ -37,9 +37,16 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            // Split large vendor chunks to reduce memory
+            // Core React - always needed
             'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-            'ui-vendor': ['react-beautiful-dnd', 'konva', 'react-konva'],
+            // Heavy visualization libs - only when needed
+            'canvas-vendor': ['konva', 'react-konva', 'html2canvas'],
+            // Rich text & charting
+            'editor-vendor': ['react-quill', 'recharts'],
+            // DnD libraries
+            'dnd-vendor': ['react-beautiful-dnd', '@dnd-kit/core', '@dnd-kit/sortable'],
+            // PDF generation
+            'pdf-vendor': ['jspdf'],
           }
         }
       }

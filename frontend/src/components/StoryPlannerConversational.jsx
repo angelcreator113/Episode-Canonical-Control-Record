@@ -77,6 +77,10 @@ function useVoiceInput() {
   const onResultRef = useRef(null);
   const committedRef = useRef('');     // finalized text from previous segments
   const interimRef = useRef('');       // current in-progress segment
+  const restartCountRef = useRef(0);   // track restart attempts for backoff
+
+  // Detect mobile for recognition strategy
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
 
   useEffect(() => {
     setSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
@@ -91,7 +95,9 @@ function useVoiceInput() {
     }
 
     const rec = new SR();
-    rec.continuous     = false;   // non-continuous avoids mobile repeat bug
+    // On mobile, use continuous mode with careful handling;
+    // on desktop, non-continuous with auto-restart works fine
+    rec.continuous     = isMobile;
     rec.interimResults = true;
     rec.lang           = 'en-US';
     recRef.current     = rec;
@@ -115,12 +121,15 @@ function useVoiceInput() {
       const full = (committedRef.current + (interim ? ' ' + interim : '')).trim();
       setTranscript(full);
       if (onResultRef.current) onResultRef.current(full);
+      // Reset restart counter on successful result
+      restartCountRef.current = 0;
     };
 
     rec.onerror = (e) => {
       if (wantListeningRef.current && (e.error === 'no-speech' || e.error === 'aborted')) {
         return;
       }
+      console.warn('SpeechRecognition error:', e.error);
       wantListeningRef.current = false;
       setListening(false);
     };
@@ -128,7 +137,24 @@ function useVoiceInput() {
     rec.onend = () => {
       if (wantListeningRef.current) {
         // Auto-restart for next utterance; committed text is preserved
-        try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
+        // On mobile, add a small delay to prevent rapid restart failures
+        restartCountRef.current++;
+        const delay = isMobile ? Math.min(restartCountRef.current * 150, 800) : 0;
+        if (restartCountRef.current > 8) {
+          // Too many restarts — stop gracefully
+          wantListeningRef.current = false;
+          setListening(false);
+          return;
+        }
+        if (delay > 0) {
+          setTimeout(() => {
+            if (wantListeningRef.current) {
+              try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
+            }
+          }, delay);
+        } else {
+          try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
+        }
         return;
       }
       setListening(false);
@@ -136,7 +162,7 @@ function useVoiceInput() {
 
     rec.start();
     setListening(true);
-  }, []);
+  }, [isMobile]);
 
   // Auto-stop when screen goes off (phone sleep / lock)
   useEffect(() => {

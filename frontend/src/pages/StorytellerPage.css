@@ -1028,7 +1028,9 @@
   inset: 0;
   z-index: 900;
   background: var(--st-bg);
-  overflow: auto;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 /* ── Loading / Empty ── */
@@ -1205,6 +1207,7 @@
   .st-dash-title { font-size: 22px; }
   .st-dash-actions { flex-direction: column; align-items: stretch; }
   .st-dash-cta { text-align: center; }
+  .st-dash-plan-btn { text-align: center; justify-content: center; }
   .st-dash-add-btn { text-align: center; }
   .st-dash-add-form { flex-wrap: wrap; }
   .st-dash-add-input { min-width: 0; flex: 1; }

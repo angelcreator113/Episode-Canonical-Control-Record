@@ -7,11 +7,13 @@
  * Extracted from StorytellerPage.jsx for maintainability.
  */
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { api } from '../utils/storytellerApi';
 import { timeAgo } from '../utils/storytellerHelpers';
 import StoryPlannerConversational from './StoryPlannerConversational';
 
 export default function ChapterSelection({ book, onSelectChapter, onHome, onRefresh, toast }) {
+  const navigate = useNavigate();
   const [chapters, setChapters] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddChapter, setShowAddChapter] = useState(false);
@@ -188,7 +190,7 @@ export default function ChapterSelection({ book, onSelectChapter, onHome, onRefr
             chapters={chapters}
             characters={[]}
             onApply={() => { refreshChapters(); setShowPlanner(false); }}
-            onClose={() => setShowPlanner(false)}
+            onClose={() => { setShowPlanner(false); navigate('/start'); }}
             toast={toast}
           />
         </div>
