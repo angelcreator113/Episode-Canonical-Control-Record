@@ -137,6 +137,19 @@ function useVoiceInput() {
     setListening(true);
   }, []);
 
+  // Auto-stop when screen goes off (phone sleep / lock)
+  useEffect(() => {
+    const onVis = () => {
+      if (document.hidden && wantListeningRef.current) {
+        wantListeningRef.current = false;
+        try { recRef.current?.stop(); } catch {}
+        setListening(false);
+      }
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+
   const start = useCallback((onResult) => {
     onResultRef.current = onResult;
     wantListeningRef.current = true;
@@ -378,7 +391,8 @@ export default function StoryPlannerConversational({
   const toggleVoice = () => {
     if (voice.listening) {
       voice.stop();
-      if (voice.transcript.trim()) send(voice.transcript);
+      // Keep transcript in input field so user can edit before sending
+      if (voice.transcript.trim()) setInput(voice.transcript.trim());
     } else {
       voice.start((t) => setInput(t));
     }
@@ -510,8 +524,11 @@ export default function StoryPlannerConversational({
               <textarea
                 ref={inputRef}
                 className="spc-input"
-                value={voice.listening ? voice.transcript : input}
-                onChange={e => !voice.listening && setInput(e.target.value)}
+                value={input}
+                onChange={e => {
+                  setInput(e.target.value);
+                  if (voice.listening) voice.stop();
+                }}
                 onKeyDown={handleKey}
                 placeholder="Answer here, or use the mic…"
                 rows={2}
