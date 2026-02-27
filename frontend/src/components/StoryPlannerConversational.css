@@ -93,6 +93,22 @@
 }
 .spc-close-btn:hover { color: var(--st-ink, #2F2A26); }
 
+.spc-clear-btn {
+  background: none;
+  border: 1px solid rgba(47,42,38,0.12);
+  color: var(--st-muted, #9A9088);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 0.15s, border-color 0.15s;
+  line-height: 1;
+}
+.spc-clear-btn:hover {
+  color: var(--st-ink, #2F2A26);
+  border-color: rgba(47,42,38,0.25);
+}
+
 /* ── Progress bar ────────────────────────────────────────────── */
 
 .spc-progress-bar {

@@ -12,6 +12,10 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import './StoryPlannerConversational.css';
 
 const API = '/api/v1';
+const authHeader = () => {
+  const t = localStorage.getItem('authToken');
+  return t ? { Authorization: `Bearer ${t}` } : {};
+};
 
 // ── Opening message — adapts to what we already know ─────────────────────
 function makeOpeningMessage(book, chapters) {
@@ -246,7 +250,8 @@ export default function StoryPlannerConversational({
 
   const send = useCallback(async (text) => {
     if (!text?.trim() || sending) return;
-    const userMsg = { role: 'user', text: text.trim() };
+    const trimmed = text.trim();
+    const userMsg = { role: 'user', text: trimmed };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     voice.setTranscript('');
@@ -255,10 +260,10 @@ export default function StoryPlannerConversational({
     try {
       const res  = await fetch(`${API}/memories/story-planner-chat`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
         body:    JSON.stringify({
-          message:    text.trim(),
-          history:    messages,
+          message:    trimmed,
+          history:    messages.slice(-20),
           book:       { id: book?.id, title: book?.title },
           plan:       plan,
           characters: characters.map(c => ({
@@ -291,9 +296,11 @@ export default function StoryPlannerConversational({
       }
 
     } catch (err) {
+      // Put user's text back so they don't lose it
+      setInput(trimmed);
       setMessages(prev => [...prev, {
         role: 'assistant',
-        text: 'Something went wrong. Try again.',
+        text: 'Connection lost — your message is still in the box. Try sending again.',
       }]);
     } finally {
       setSending(false);
@@ -353,7 +360,7 @@ export default function StoryPlannerConversational({
         if (plan.bookConcept) bookUpdates.description  = plan.bookConcept;
         await fetch(`${API}/storyteller/books/${book.id}`, {
           method:  'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
           body:    JSON.stringify(bookUpdates),
         });
       }
@@ -363,7 +370,7 @@ export default function StoryPlannerConversational({
         if (!ch.filled && !ch.title) continue;
         await fetch(`${API}/storyteller/chapters/${ch.id}`, {
           method:  'PUT',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...authHeader() },
           body:    JSON.stringify({
             title:                 ch.title          || undefined,
             scene_goal:            ch.what           || undefined,
@@ -394,8 +401,19 @@ export default function StoryPlannerConversational({
       // Keep transcript in input field so user can edit before sending
       if (voice.transcript.trim()) setInput(voice.transcript.trim());
     } else {
+      // Cancel any TTS so it doesn't fight the mic
+      window.speechSynthesis?.cancel();
       voice.start((t) => setInput(t));
     }
+  };
+
+  // ── Clear / restart conversation ──────────────────────────────────────
+  const clearChat = () => {
+    setMessages([makeOpeningMessage(book, chapters)]);
+    setPlan(planEmpty(chapters, book));
+    setInput('');
+    setActiveChIdx(null);
+    window.speechSynthesis?.cancel();
   };
 
   // ── Handle key ───────────────────────────────────────────────────────
@@ -453,6 +471,13 @@ export default function StoryPlannerConversational({
             disabled={applying}
           >
             {applying ? 'Saving…' : saved ? '✓ Saved' : '💾 Save'}
+          </button>
+          <button
+            className="spc-clear-btn"
+            onClick={clearChat}
+            title="Start a new conversation"
+          >
+            ↻
           </button>
           <button className="spc-close-btn" onClick={onClose}>✕</button>
         </div>
@@ -539,7 +564,7 @@ export default function StoryPlannerConversational({
                   <button
                     className={`spc-mic-btn${voice.listening ? ' listening' : ''}`}
                     onClick={toggleVoice}
-                    title={voice.listening ? 'Stop & send' : 'Speak your answer'}
+                    title={voice.listening ? 'Stop recording' : 'Speak your answer'}
                   >
                     <svg viewBox="0 0 24 24" fill="none" width="18" height="18">
                       <rect x="8" y="2" width="8" height="13" rx="4"
@@ -555,8 +580,8 @@ export default function StoryPlannerConversational({
                 )}
                 <button
                   className="spc-send-btn"
-                  onClick={() => send(voice.listening ? voice.transcript : input)}
-                  disabled={sending || (!input.trim() && !voice.transcript.trim())}
+                  onClick={() => send(input)}
+                  disabled={sending || !input.trim()}
                 >
                   Send
                 </button>
