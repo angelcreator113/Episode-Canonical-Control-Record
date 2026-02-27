@@ -3373,7 +3373,24 @@ button.st-nav-section-clickable:hover {
 
   /* Topbar adjustments */
   .st-topbar { padding: 0 14px; gap: 8px; }
-  .st-topbar-center { display: none; }
+  /* Show truncated title on mobile instead of hiding it */
+  .st-topbar-center {
+    position: static;
+    transform: none;
+    flex: 1;
+    min-width: 0;
+    text-align: center;
+    pointer-events: none;
+  }
+  .st-topbar-title {
+    font-size: 12px;
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    opacity: 0.6;
+  }
+  .st-topbar-title-dim { display: none; }
   .st-topbar-wordcount { display: none; }
   .st-topbar-saved { display: none; }
 
@@ -3405,9 +3422,10 @@ button.st-nav-section-clickable:hover {
   }
   .st-book-card { padding: 20px; }
 
-  /* Chapter header */
-  .st-chapter-header { padding: 40px 0 28px; }
-  .st-chapter-header-title { font-size: 26px; }
+  /* Chapter header — tighter on mobile */
+  .st-chapter-header { padding: 28px 0 20px; }
+  .st-chapter-header-title { font-size: 24px; }
+  .st-chapter-header-label { font-size: 10px; margin-bottom: 6px; }
   .st-chapter-actions {
     position: static;
     margin-top: 12px;
@@ -3521,12 +3539,15 @@ button.st-nav-section-clickable:hover {
 
   .st-topbar-left { gap: 6px; min-width: auto; }
   .st-topbar-right { gap: 6px; min-width: auto; }
-  .st-topbar-back { font-size: 13px; padding: 6px 2px; }
+  /* Abbreviate "← Chapters" to just "←" on small phones */
+  .st-topbar-back { font-size: 16px; padding: 6px 2px; overflow: hidden; max-width: 1.4em; text-overflow: clip; }
+  .st-topbar-title { font-size: 11px; }
   .st-mode-toggle { display: none; }
   .st-mobile-nav-toggle { font-size: 22px; padding: 6px 10px; }
 
   /* Workspace toggle shorter label */
   .st-workspace-toggle { font-size: 12px; padding: 6px 10px; }
+  .st-tools-btn { padding: 6px 8px; font-size: 14px; letter-spacing: 0; }
 
   .st-book-list { padding: 24px 12px 40px; }
   .st-book-list-header h1 { font-size: 24px; }
@@ -3537,9 +3558,9 @@ button.st-nav-section-clickable:hover {
   .st-card-insight { font-size: 13px; }
 
   .st-editor { padding: 0 12px 32px; }
-  .st-chapter-header { padding: 28px 0 20px; }
-  .st-chapter-header-title { font-size: 22px; }
-  .st-chapter-header-label { font-size: 11px; }
+  .st-chapter-header { padding: 20px 0 14px; }
+  .st-chapter-header-title { font-size: 20px; }
+  .st-chapter-header-label { font-size: 10px; margin-bottom: 4px; }
   .st-chapter-header-meta { font-size: 12px; flex-wrap: wrap; }
 
   /* Workflow stepper — vertical on mobile */
@@ -3633,11 +3654,15 @@ button.st-nav-section-clickable:hover {
   .st-card-title { font-size: 16px; }
 
   .st-editor { padding: 0 8px 24px; }
-  .st-chapter-header-title { font-size: 20px; }
+  .st-chapter-header { padding: 16px 0 10px; }
+  .st-chapter-header-title { font-size: 18px; }
+  .st-chapter-header-label { font-size: 9px; }
   .st-line-text { font-size: 14px; line-height: 1.7; }
+  .st-prose-textarea { font-size: 15px; line-height: 1.75; }
 
-  .st-topbar { padding: 0 10px; }
-  .st-topbar-back { font-size: 12px; }
+  .st-topbar { padding: 0 8px; }
+  .st-topbar-back { font-size: 14px; max-width: 1.2em; }
+  .st-topbar-title { font-size: 10px; }
 
   .st-nav { width: 90vw; }
 }
@@ -3714,6 +3739,27 @@ button.st-nav-section-clickable:hover {
 }
 
 /* ═══════════════════════════════════════════════════
+   Safe area insets — notched phones (iPhone X+, etc.)
+   ═══════════════════════════════════════════════════ */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  .st-bottombar {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .st-topbar {
+    padding-top: env(safe-area-inset-top);
+  }
+  .st-editor-layout .st-manuscript-wrapper {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+  .st-nav {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .st-toast-container {
+    bottom: calc(24px + env(safe-area-inset-bottom));
+  }
+}
+
+/* ═══════════════════════════════════════════════════
    Prose Textarea & Status
    ═══════════════════════════════════════════════════ */
 
@@ -3765,6 +3811,34 @@ button.st-nav-section-clickable:hover {
 .st-prose-save-btn:hover {
   background: var(--st-gold);
   color: #fff;
+}
+
+/* ── Prose responsive mobile ── */
+@media (max-width: 768px) {
+  .st-prose-textarea {
+    font-size: 16px;       /* prevent iOS zoom */
+    line-height: 1.85;
+    padding: 16px 0;
+    min-height: 55vh;
+  }
+  .st-prose-status {
+    padding: 6px 0;
+    font-size: 11px;
+    gap: 8px;
+  }
+  .st-prose-save-btn {
+    padding: 4px 12px;
+    font-size: 12px;
+    min-height: 32px;
+  }
+}
+@media (max-width: 480px) {
+  .st-prose-textarea {
+    font-size: 16px;
+    line-height: 1.8;
+    padding: 12px 0;
+    min-height: 50vh;
+  }
 }
 
 /* ═══════════════════════════════════════════════════
@@ -4050,69 +4124,95 @@ button.st-nav-section-clickable:hover {
 
 /* ── Responsive bottom bar ── */
 @media (max-width: 768px) {
+  /* Single scrollable row — icon-only buttons */
   .st-bottombar-actions {
-    padding: 10px 10px;
-    gap: 6px;
-    flex-wrap: wrap;
-    justify-content: center;
+    padding: 8px 12px;
+    gap: 2px;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .st-bottombar-label {
+    font-size: 11px;
+    padding: 6px 10px 6px 4px;
+    margin-right: 4px;
+    border-right: 1px solid var(--st-border);
+    width: auto;
+  }
+  .st-bottombar-icon {
+    font-size: 15px;
   }
   .st-bottombar-btn {
-    padding: 12px 16px;
-    font-size: 15px;
-    border: 1px solid var(--st-border);
+    padding: 10px 14px;
+    font-size: 13px;
+    border: none;
     border-radius: 8px;
+    gap: 4px;
   }
   .st-bottombar-btn-label {
-    display: inline; /* show labels on mobile too */
+    display: none; /* hide labels — icons only */
   }
   .st-bottombar-btn-icon {
     font-size: 20px;
   }
-  .st-bottombar-label {
-    font-size: 14px;
-    padding: 8px 12px 8px 4px;
-    border-right: none;
-    width: 100%;
-    justify-content: center;
-    margin-right: 0;
-  }
-  .st-bottombar-icon {
-    font-size: 18px;
-  }
+  /* Hide meta in bottom bar — word count lives in prose-status already */
   .st-bottombar-meta {
-    width: 100%;
-    justify-content: center;
-    border-left: none;
-    padding: 6px 0 2px;
-    font-size: 13px;
+    display: none;
   }
-  .st-bottombar-wordcount {
-    font-size: 14px;
-  }
-  .st-bottombar-save {
-    font-size: 15px;
-  }
+  /* Result panel mobile */
   .st-bottombar-result {
     padding: 14px;
+    max-height: 35vh;
   }
   .st-bottombar-result-text {
     font-size: 15px;
     line-height: 1.7;
     padding: 12px 14px;
+    max-height: 180px;
   }
   .st-bottombar-result-label {
     font-size: 13px;
   }
+  .st-bottombar-result-actions {
+    gap: 6px;
+  }
   .st-bottombar-insert {
-    padding: 10px 20px;
+    padding: 10px 18px;
     font-size: 14px;
+    flex: 1;
+    text-align: center;
   }
   .st-bottombar-retry,
   .st-bottombar-discard {
-    padding: 10px 16px;
+    padding: 10px 14px;
     font-size: 13px;
   }
+  /* Much less padding needed now — bar is ~52px instead of ~160px */
   .st-editor-layout .st-manuscript-wrapper {
-    padding-bottom: 160px;
+    padding-bottom: 72px;
+  }
+}
+@media (max-width: 480px) {
+  .st-bottombar-actions {
+    padding: 6px 8px;
+    gap: 0;
+  }
+  .st-bottombar-label {
+    display: none; /* hide AI label on small phones */
+  }
+  .st-bottombar-btn {
+    padding: 10px 12px;
+    border-radius: 6px;
+  }
+  .st-bottombar-btn-icon {
+    font-size: 18px;
+  }
+  .st-bottombar-result {
+    padding: 12px 10px;
+  }
+  .st-bottombar-result-text {
+    padding: 10px 12px;
+    font-size: 14px;
   }
 }
