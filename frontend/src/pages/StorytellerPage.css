@@ -3364,14 +3364,24 @@ button.st-nav-section-clickable:hover {
     --st-manuscript-w: 100%;
   }
 
-  /* ── Topbar: ultra-minimal, ABOVE all overlays ── */
+  /* ── Topbar: FIXED on mobile, above all overlays ── */
   .st-topbar {
     padding: 0 12px;
     gap: 0;
     border-bottom-color: transparent;
     background: var(--st-ambient-bg, var(--st-bg));
-    position: sticky;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
     z-index: 70;
+    backdrop-filter: blur(12px);
+    -webkit-transform: translateZ(0);
+    transform: translateZ(0);
+  }
+  /* Push content below the fixed topbar */
+  .st-editor-body {
+    margin-top: var(--st-topbar-h);
   }
   .st-topbar-left { gap: 8px; min-width: 0; flex-shrink: 0; }
   .st-topbar-right { gap: 8px; min-width: 0; flex-shrink: 0; }
