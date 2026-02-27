@@ -72,51 +72,61 @@ function useVoiceInput() {
   const [transcript,  setTranscript]  = useState('');
   const [supported,   setSupported]   = useState(false);
   const recRef = useRef(null);
-  const wantListeningRef = useRef(false);   // true while user wants mic on
-  const onResultRef = useRef(null);         // caller callback
+  const wantListeningRef = useRef(false);
+  const onResultRef = useRef(null);
+  const committedRef = useRef('');     // finalized text from previous segments
+  const interimRef = useRef('');       // current in-progress segment
 
   useEffect(() => {
     setSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
 
-  // Internal: create + start a new recognition instance
   const startRec = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
 
-    // Tear down previous instance
     if (recRef.current) {
       try { recRef.current.onend = null; recRef.current.abort(); } catch {}
     }
 
     const rec = new SR();
-    rec.continuous      = true;
-    rec.interimResults  = true;
-    rec.lang            = 'en-US';
-    recRef.current      = rec;
+    rec.continuous     = false;   // non-continuous avoids mobile repeat bug
+    rec.interimResults = true;
+    rec.lang           = 'en-US';
+    recRef.current     = rec;
 
     rec.onresult = (e) => {
-      let full = '';
+      let interim = '';
+      let finalPart = '';
       for (let i = 0; i < e.results.length; i++) {
-        full += e.results[i][0].transcript;
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) {
+          finalPart += t;
+        } else {
+          interim += t;
+        }
       }
+      // Commit finalized words so they never repeat
+      if (finalPart) {
+        committedRef.current += (committedRef.current ? ' ' : '') + finalPart.trim();
+      }
+      interimRef.current = interim;
+      const full = (committedRef.current + (interim ? ' ' + interim : '')).trim();
       setTranscript(full);
       if (onResultRef.current) onResultRef.current(full);
     };
 
     rec.onerror = (e) => {
-      // 'no-speech' and 'aborted' are benign — auto-restart
       if (wantListeningRef.current && (e.error === 'no-speech' || e.error === 'aborted')) {
-        return; // onend will fire and restart
+        return;
       }
-      // Permission denial or network error — give up
       wantListeningRef.current = false;
       setListening(false);
     };
 
     rec.onend = () => {
-      // Mobile browsers kill recognition unexpectedly — restart if user still wants it
       if (wantListeningRef.current) {
+        // Auto-restart for next utterance; committed text is preserved
         try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
         return;
       }
@@ -130,6 +140,8 @@ function useVoiceInput() {
   const start = useCallback((onResult) => {
     onResultRef.current = onResult;
     wantListeningRef.current = true;
+    committedRef.current = '';
+    interimRef.current = '';
     setTranscript('');
     startRec();
   }, [startRec]);
