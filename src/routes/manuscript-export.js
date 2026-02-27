@@ -57,10 +57,13 @@ async function fetchBook(db, bookId) {
   // Sort chapters and filter lines
   const chapters = (book.chapters || [])
     .slice()
-    .sort((a, b) => (a.order_index || 0) - (b.order_index || 0))
+    .sort((a, b) => (a.order_index || a.sort_order || 0) - (b.order_index || b.sort_order || 0))
     .map(ch => ({
-      id:    ch.id,
-      title: ch.title || 'Untitled Chapter',
+      id:           ch.id,
+      title:        ch.title || 'Untitled Chapter',
+      chapter_type: ch.chapter_type || 'chapter',
+      part_number:  ch.part_number || null,
+      part_title:   ch.part_title || null,
       lines: (ch.lines || ch.storyteller_lines || [])
         .filter(l => ['approved', 'edited'].includes(l.status))
         .sort((a, b) => (a.order_index || a.sort_order || 0) - (b.order_index || b.sort_order || 0))
@@ -79,14 +82,17 @@ async function fetchBook(db, bookId) {
     .reduce((sum, l) => sum + l.content.trim().split(/\s+/).filter(Boolean).length, 0);
 
   return {
-    id:          book.id,
-    title:       book.title || 'Untitled',
-    description: book.description || '',
-    character:   book.character || '',
+    id:           book.id,
+    title:        book.title || 'Untitled',
+    description:  book.description || '',
+    character:    book.character || '',
+    author_name:  book.author_name || '',
+    front_matter: book.front_matter || {},
+    back_matter:  book.back_matter || {},
     chapters,
     wordCount,
     chapterCount: chapters.length,
-    lineCount:   chapters.flatMap(ch => ch.lines).length,
+    lineCount:    chapters.flatMap(ch => ch.lines).length,
   };
 }
 
@@ -232,16 +238,143 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
       children: [new PageBreak()],
     }));
 
-    // ── Chapters ─────────────────────────────────────────────────────────
+    // ── Helper: centered italic page ─────────────────────────────────
+    function addFrontMatterPage(title, body, { italic = true, afterBreak = true } = {}) {
+      if (!body || !body.trim()) return;
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 2160, after: 360 },
+        children: [
+          new TextRun({
+            text: title.toUpperCase(),
+            font: 'Courier New',
+            size: 16,
+            color: 'C9A84C',
+            characterSpacing: 200,
+          }),
+        ],
+      }));
+      body.split(/\n\n+/).forEach(para => {
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 200, after: 200 },
+          children: [
+            new TextRun({
+              text: para.trim(),
+              font: 'Georgia',
+              size: 24,
+              italics: italic,
+              color: '1C1917',
+            }),
+          ],
+        }));
+      });
+      if (afterBreak) {
+        children.push(new Paragraph({ children: [new PageBreak()] }));
+      }
+    }
+
+    // ── Front Matter ─────────────────────────────────────────────────
+    const fm = book.front_matter || {};
+
+    // Copyright page
+    if (fm.copyright || book.author_name) {
+      const copyrightText = fm.copyright
+        || `Copyright © ${new Date().getFullYear()} ${book.author_name || book.character || ''}\nAll rights reserved.`;
+      addFrontMatterPage('Copyright', copyrightText, { italic: false });
+    }
+
+    // Dedication
+    if (fm.dedication) {
+      addFrontMatterPage('Dedication', fm.dedication);
+    }
+
+    // Epigraph
+    if (fm.epigraph) {
+      const epiText = fm.epigraph_attribution
+        ? `${fm.epigraph}\n\n— ${fm.epigraph_attribution}`
+        : fm.epigraph;
+      addFrontMatterPage('Epigraph', epiText);
+    }
+
+    // Foreword
+    if (fm.foreword) {
+      addFrontMatterPage('Foreword', fm.foreword, { italic: false });
+    }
+
+    // Preface
+    if (fm.preface) {
+      addFrontMatterPage('Preface', fm.preface, { italic: false });
+    }
+
+    // ── Helper: Roman numeral ────────────────────────────────────────
+    function toRoman(n) {
+      const vals = [1000,900,500,400,100,90,50,40,10,9,5,4,1];
+      const syms = ['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+      let r = '';
+      for (let i = 0; i < vals.length; i++) {
+        while (n >= vals[i]) { r += syms[i]; n -= vals[i]; }
+      }
+      return r;
+    }
+
+    // ── Chapters (with Part dividers and chapter type labels) ────────
+    let lastPart = null;
+    let chapterNum = 0; // running count of regular chapters only
+
     book.chapters.forEach((chapter, chIdx) => {
 
-      // Chapter number
+      // Part divider page
+      if (chapter.part_number && chapter.part_number !== lastPart) {
+        lastPart = chapter.part_number;
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 3600 },
+          children: [
+            new TextRun({
+              text: `PART ${toRoman(chapter.part_number)}`,
+              font: 'Courier New',
+              size: 28,
+              color: 'C9A84C',
+              characterSpacing: 300,
+            }),
+          ],
+        }));
+        if (chapter.part_title) {
+          children.push(new Paragraph({
+            alignment: AlignmentType.CENTER,
+            spacing: { before: 360, after: 720 },
+            children: [
+              new TextRun({
+                text: chapter.part_title,
+                font: 'Georgia',
+                size: 36,
+                italics: true,
+                color: '1C1917',
+              }),
+            ],
+          }));
+        }
+        children.push(new Paragraph({ children: [new PageBreak()] }));
+      }
+
+      // Chapter type label
+      const cType = chapter.chapter_type || 'chapter';
+      let chapterLabel;
+      if (cType === 'chapter') {
+        chapterNum++;
+        chapterLabel = String(chapterNum).padStart(2, '0');
+      } else {
+        chapterLabel = cType.charAt(0).toUpperCase() + cType.slice(1);
+      }
+
+      // Chapter number / type
       children.push(new Paragraph({
         alignment: AlignmentType.CENTER,
         spacing: { before: 720, after: 180 },
         children: [
           new TextRun({
-            text: String(chIdx + 1).padStart(2, '0'),
+            text: chapterLabel,
             font: 'Courier New',
             size: 18,
             color: 'C9A84C',
@@ -313,6 +446,57 @@ router.get('/book/:bookId/docx', optionalAuth, async (req, res) => {
         }));
       }
     });
+
+    // ── Back Matter ──────────────────────────────────────────────────────
+    const bm = book.back_matter || {};
+
+    function addBackMatterSection(title, body) {
+      if (!body || !body.trim()) return;
+      // Page break before each back matter section
+      children.push(new Paragraph({ children: [new PageBreak()] }));
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 2160, after: 480 },
+        children: [
+          new TextRun({
+            text: title.toUpperCase(),
+            font: 'Courier New',
+            size: 20,
+            color: 'C9A84C',
+            characterSpacing: 200,
+          }),
+        ],
+      }));
+      // Rule
+      children.push(new Paragraph({
+        alignment: AlignmentType.CENTER,
+        spacing: { before: 0, after: 480 },
+        children: [
+          new TextRun({ text: '— — —', font: 'Georgia', size: 20, color: 'C9A84C' }),
+        ],
+      }));
+      body.split(/\n\n+/).forEach(para => {
+        children.push(new Paragraph({
+          alignment: AlignmentType.LEFT,
+          spacing: { before: 120, after: 200, line: 340 },
+          children: [
+            new TextRun({
+              text: para.trim(),
+              font: 'Georgia',
+              size: 24,
+              color: '1C1917',
+            }),
+          ],
+        }));
+      });
+    }
+
+    if (bm.about_author)     addBackMatterSection('About the Author', bm.about_author);
+    if (bm.acknowledgments)  addBackMatterSection('Acknowledgments', bm.acknowledgments);
+    if (bm.glossary)         addBackMatterSection('Glossary', bm.glossary);
+    if (bm.appendix)         addBackMatterSection('Appendix', bm.appendix);
+    if (bm.bibliography)     addBackMatterSection('Bibliography', bm.bibliography);
+    if (bm.notes)            addBackMatterSection('Notes', bm.notes);
 
     // ── Build document ────────────────────────────────────────────────────
     const doc = new Document({
@@ -472,17 +656,97 @@ router.get('/book/:bookId/pdf', optionalAuth, async (req, res) => {
           90, doc.y, { align: 'center', width: W }
         );
 
-      // ── Chapters ──────────────────────────────────────────────────────
+      // ── Helper: PDF front/back matter page ────────────────────────────
+      function pdfMatterPage(title, body, { italic = false } = {}) {
+        if (!body || !body.trim()) return;
+        doc.addPage();
+        doc.y = doc.page.height * 0.25;
+        doc
+          .font(MONO).fontSize(9).fillColor(GOLD)
+          .text(title.toUpperCase(), 90, doc.y, { align: 'center', width: W, characterSpacing: 3 });
+        doc.moveDown(1.5);
+        const mRuleY = doc.y;
+        doc.moveTo(CX - 24, mRuleY).lineTo(CX + 24, mRuleY).strokeColor(GOLD).lineWidth(0.4).stroke();
+        doc.moveDown(1.5);
+        body.split(/\n\n+/).forEach(para => {
+          if (doc.y > doc.page.height - 108) { doc.addPage(); doc.y = 72; }
+          doc
+            .font(italic ? SERIF_ITALIC : SERIF).fontSize(12).fillColor(INK)
+            .text(para.trim(), 90, doc.y, { width: W, align: 'center', lineGap: 4 });
+          doc.moveDown(0.8);
+        });
+      }
+
+      function toRomanPdf(n) {
+        const vals = [1000,900,500,400,100,90,50,40,10,9,5,4,1];
+        const syms = ['M','CM','D','CD','C','XC','L','XL','X','IX','V','IV','I'];
+        let r = '';
+        for (let i = 0; i < vals.length; i++) {
+          while (n >= vals[i]) { r += syms[i]; n -= vals[i]; }
+        }
+        return r;
+      }
+
+      // ── Front Matter ──────────────────────────────────────────────────
+      const fm = book.front_matter || {};
+
+      if (fm.copyright || book.author_name) {
+        const cpText = fm.copyright
+          || `Copyright © ${new Date().getFullYear()} ${book.author_name || book.character || ''}\nAll rights reserved.`;
+        pdfMatterPage('Copyright', cpText);
+      }
+      if (fm.dedication) pdfMatterPage('Dedication', fm.dedication, { italic: true });
+      if (fm.epigraph) {
+        const epiText = fm.epigraph_attribution
+          ? `${fm.epigraph}\n\n— ${fm.epigraph_attribution}`
+          : fm.epigraph;
+        pdfMatterPage('Epigraph', epiText, { italic: true });
+      }
+      if (fm.foreword) pdfMatterPage('Foreword', fm.foreword);
+      if (fm.preface)  pdfMatterPage('Preface', fm.preface);
+
+      // ── Chapters (with Part dividers + chapter types) ─────────────────
+      let lastPartPdf = null;
+      let chapterNumPdf = 0;
+
       book.chapters.forEach((chapter, chIdx) => {
+
+        // Part divider page
+        if (chapter.part_number && chapter.part_number !== lastPartPdf) {
+          lastPartPdf = chapter.part_number;
+          doc.addPage();
+          doc.y = doc.page.height * 0.35;
+          doc
+            .font(MONO).fontSize(16).fillColor(GOLD)
+            .text(`PART ${toRomanPdf(chapter.part_number)}`, 90, doc.y, {
+              align: 'center', width: W, characterSpacing: 4,
+            });
+          if (chapter.part_title) {
+            doc.moveDown(1);
+            doc
+              .font(SERIF_BOLD_I).fontSize(24).fillColor(INK)
+              .text(chapter.part_title, 90, doc.y, { align: 'center', width: W });
+          }
+        }
 
         doc.addPage();
 
-        // Chapter number
+        // Chapter type label
+        const cType = chapter.chapter_type || 'chapter';
+        let chLabel;
+        if (cType === 'chapter') {
+          chapterNumPdf++;
+          chLabel = String(chapterNumPdf).padStart(2, '0');
+        } else {
+          chLabel = cType.charAt(0).toUpperCase() + cType.slice(1);
+        }
+
+        // Chapter number / type
         doc
           .font(MONO)
           .fontSize(9)
           .fillColor(GOLD)
-          .text(String(chIdx + 1).padStart(2, '0'), 90, 72, {
+          .text(chLabel, 90, 72, {
             align: 'center', width: W, characterSpacing: 3,
           });
 
@@ -545,6 +809,36 @@ router.get('/book/:bookId/pdf', optionalAuth, async (req, res) => {
           }
         });
       });
+
+      // ── Back Matter (PDF) ────────────────────────────────────────────
+      const bmPdf = book.back_matter || {};
+
+      function pdfBackSection(title, body) {
+        if (!body || !body.trim()) return;
+        doc.addPage();
+        doc.y = 72;
+        doc
+          .font(MONO).fontSize(11).fillColor(GOLD)
+          .text(title.toUpperCase(), 90, doc.y, { align: 'center', width: W, characterSpacing: 3 });
+        doc.moveDown(0.8);
+        const bsRuleY = doc.y;
+        doc.moveTo(CX - 24, bsRuleY).lineTo(CX + 24, bsRuleY).strokeColor(GOLD).lineWidth(0.4).stroke();
+        doc.moveDown(1.5);
+        body.split(/\n\n+/).forEach(para => {
+          if (doc.y > doc.page.height - 108) { doc.addPage(); doc.y = 72; }
+          doc
+            .font(SERIF).fontSize(12).fillColor(INK)
+            .text(para.trim(), 90, doc.y, { width: W, align: 'left', lineGap: 4 });
+          doc.moveDown(0.6);
+        });
+      }
+
+      if (bmPdf.about_author)    pdfBackSection('About the Author', bmPdf.about_author);
+      if (bmPdf.acknowledgments) pdfBackSection('Acknowledgments', bmPdf.acknowledgments);
+      if (bmPdf.glossary)        pdfBackSection('Glossary', bmPdf.glossary);
+      if (bmPdf.appendix)        pdfBackSection('Appendix', bmPdf.appendix);
+      if (bmPdf.bibliography)    pdfBackSection('Bibliography', bmPdf.bibliography);
+      if (bmPdf.notes)           pdfBackSection('Notes', bmPdf.notes);
 
       // ── Page numbers ─────────────────────────────────────────────────
       const pageCount = doc.bufferedPageRange

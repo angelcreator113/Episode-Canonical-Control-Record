@@ -133,8 +133,8 @@ const UI_TAGS = [
 // ─── NORMALIZER ───
 function normalizeScript(raw) {
   let s = raw;
-  s = s.replace(/[\u201C\u201D\u201E\u201F\u2033\u2036]/g, '"');
-  s = s.replace(/[\u2018\u2019\u201A\u201B\u2032\u2035]/g, "'");
+  s = s.replace(/[“”„‟″‶]/g, '"');
+  s = s.replace(/[‘’‚‛′‵]/g, "'");
   s = s.replace(/\bMe:\s*/g, 'Prime: ');
   const speakers = ['Lala:', 'Prime:', 'Guest:', 'Message:', 'System:'];
   for (const tok of speakers) {

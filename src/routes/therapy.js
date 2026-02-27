@@ -33,6 +33,11 @@ try {
   thresholdDetection = require('../services/thresholdDetection');
 } catch { thresholdDetection = null; }
 
+let registrySync;
+try {
+  registrySync = require('../services/registrySync');
+} catch { registrySync = null; }
+
 // ── WOUND MEMORY PATTERNS ────────────────────────────────────────────────
 
 const WOUND_PATTERNS = {
@@ -526,6 +531,18 @@ router.post('/session-close', optionalAuth, async (req, res) => {
       thresholdDetection.checkAllThresholds(models).catch(e =>
         console.error('Threshold detection (session-close):', e.message)
       );
+    }
+
+    // ── Registry Sync: update character profile from therapy session ──
+    if (registrySync) {
+      registrySync.onTherapySessionClose({
+        character_id,
+        emotional_state_end: decayedState,
+        session_number:      sessions_completed || 1,
+        wound_activated:     (emotional_state?.fear || 0) >= 7 || (emotional_state?.betrayal || 0) >= 6,
+        defense_shift_detected: false,
+        breakthrough_moment:    null,
+      }, models).catch(e => console.error('RegistrySync (session-close):', e.message));
     }
 
     res.json({

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import authService from './services/authService';
 
@@ -46,6 +46,31 @@ import ShowSettings from './pages/ShowSettings';
 import ExportPage from './pages/ExportPage';
 import AssetLibrary from './pages/AssetLibrary';
 import StorytellerPage from './pages/StorytellerPage';
+import PlanWithVoicePage from './pages/PlanWithVoicePage';
+// Redirect from /book/:id → WriteMode (first chapter)
+const BookToWriteRedirect = () => {
+  const { id } = useParams();
+  const [loading, setLoading] = React.useState(true);
+  const nav = useNavigate();
+  React.useEffect(() => {
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    fetch(`/api/storyteller/books/${id}/chapters`, { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.json())
+      .then(data => {
+        const chapters = Array.isArray(data) ? data : data.chapters || [];
+        if (chapters.length > 0) {
+          const sorted = [...chapters].sort((a, b) => (a.order ?? a.chapter_number ?? 0) - (b.order ?? b.chapter_number ?? 0));
+          nav(`/write/${id}/${sorted[0].id}`, { replace: true });
+        } else {
+          nav('/storyteller', { replace: true });
+        }
+      })
+      .catch(() => nav('/storyteller', { replace: true }))
+      .finally(() => setLoading(false));
+  }, [id, nav]);
+  if (loading) return <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh',fontFamily:'Lora,serif',color:'rgba(28,24,20,0.4)'}}>Opening book…</div>;
+  return null;
+};
 import CharacterRegistryPage from './pages/CharacterRegistryPage';
 import ContinuityEnginePage from './pages/ContinuityEnginePage';
 import UniversePage from './pages/UniversePage';
@@ -169,15 +194,16 @@ function AppContent() {
     );
   }
 
-  // Check if current route is Timeline Editor, Scene Composer, Export, or WriteMode (full-screen modes)
+  // Check if current route is Timeline Editor, Scene Composer, Export, Storyteller, or WriteMode (full-screen modes)
   const isTimelineEditor = location.pathname.includes('/timeline');
   const isSceneComposer = location.pathname.includes('/scene-composer');
   const isExportPage = location.pathname.includes('/export');
   const isStorytellerPage = location.pathname.includes('/storyteller');
+  const isPlanWithVoice = location.pathname === '/plan-with-voice';
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode;
-  const hideFooter = isFullScreen || isStorytellerPage;
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isStorytellerPage || isPlanWithVoice;
+  const hideFooter = isFullScreen;
 
   return (
     <div className="app-layout">
@@ -290,7 +316,8 @@ function AppContent() {
           
           {/* StoryTeller Book Editor */}
           <Route path="/storyteller" element={<StorytellerPage />} />
-          <Route path="/book/:id" element={<BookOverview />} />
+          <Route path="/plan-with-voice" element={<PlanWithVoicePage />} />
+          <Route path="/book/:id" element={<BookToWriteRedirect />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />
           <Route path="/write/:bookId/:chapterId" element={<WriteMode />} />
           <Route path="/chapter-structure/:bookId/:chapterId" element={<ChapterStructureEditor />} />

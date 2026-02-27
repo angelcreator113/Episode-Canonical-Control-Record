@@ -78,6 +78,23 @@ module.exports = (sequelize) => {
       allowNull: true,
       defaultValue: null,
     },
+    /* ── Book Structure: Type + Parts ── */
+    chapter_type: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+      defaultValue: 'chapter',
+      comment: 'prologue | chapter | interlude | epilogue | afterword',
+    },
+    part_number: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      comment: 'Groups chapters into Parts/Acts (1 = Part I, 2 = Part II, etc.)',
+    },
+    part_title: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Display title for the Part/Act grouping',
+    },
   }, {
     tableName: 'storyteller_chapters',
     timestamps: true,

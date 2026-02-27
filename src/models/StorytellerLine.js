@@ -44,6 +44,18 @@ module.exports = (sequelize) => {
       type: DataTypes.INTEGER,
       defaultValue: 0,
     },
+    voice_type: {
+      type: DataTypes.STRING(50),
+      defaultValue: 'unattributed',
+    },
+    voice_confidence: {
+      type: DataTypes.FLOAT,
+      allowNull: true,
+    },
+    voice_confirmed: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
   }, {
     tableName: 'storyteller_lines',
     timestamps: true,

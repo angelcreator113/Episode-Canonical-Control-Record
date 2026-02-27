@@ -40,6 +40,11 @@ const db = require('../models');
 const { StorytellerMemory, StorytellerLine, StorytellerBook, StorytellerChapter, RegistryCharacter } = db;
 const { buildUniverseContext } = require('../utils/universeContext');
 
+let registrySync;
+try {
+  registrySync = require('../services/registrySync');
+} catch { registrySync = null; }
+
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
 const anthropic = new Anthropic();
@@ -520,6 +525,25 @@ router.post('/memories/:memoryId/confirm', optionalAuth, async (req, res) => {
     existingMemories.push(memoryEntry);
 
     await character.update({ extra_fields: { ...currentExtra, memories: existingMemories } });
+
+    // ── Registry Sync: memory confirmed trigger ──
+    if (registrySync) {
+      registrySync.onMemoryConfirmed(memory, db).catch(e =>
+        console.error('RegistrySync (memory-confirm):', e.message)
+      );
+
+      // Pain point sub-trigger
+      if (memory.type === 'pain_point' && memory.character_id) {
+        registrySync.onPainPointTagged({
+          character_id: memory.character_id,
+          category:     memory.tags?.[0] || memory.category || 'untagged',
+          statement:    memory.statement,
+          confidence:   memory.confidence,
+        }, db).catch(e =>
+          console.error('RegistrySync (pain-point):', e.message)
+        );
+      }
+    }
 
     res.json({
       memory: await StorytellerMemory.findByPk(memoryId),
@@ -1124,8 +1148,39 @@ router.post('/narrative-intelligence', optionalAuth, async (req, res) => {
       ? `\nEXIT EMOTION TARGET: ${exit_emotion}${exit_emotion_note ? ` — ${exit_emotion_note}` : ''}\n`
       : '';
 
+    // ── Wardrobe context for this chapter ──────────────────────────────
+    let wardrobeContext = '';
+    try {
+      if (chapter_id) {
+        const { WardrobeContentAssignment, WardrobeLibrary, StorytellerLine } = db.models || db;
+        if (WardrobeContentAssignment) {
+          const chapterPieces = await WardrobeContentAssignment.findAll({
+            where: { content_type: 'chapter', content_id: chapter_id, removed_at: null },
+          });
+          const lines = await StorytellerLine.findAll({
+            where: { chapter_id }, attributes: ['id'],
+          });
+          const linePieces = lines.length ? await WardrobeContentAssignment.findAll({
+            where: { content_type: 'scene_line', content_id: lines.map(l => l.id), removed_at: null },
+          }) : [];
+
+          const allPieces = [...chapterPieces, ...linePieces];
+          if (allPieces.length > 0) {
+            const enriched = await Promise.all(allPieces.map(async a => {
+              const item = await WardrobeLibrary.findByPk(a.library_item_id);
+              return item ? `${item.name}${item.brand ? ` by ${item.brand}` : ''}${a.scene_context ? `: "${a.scene_context}"` : ''}` : null;
+            }));
+            const filtered = enriched.filter(Boolean);
+            if (filtered.length > 0) {
+              wardrobeContext = `\n\nWARDROBE IN THIS CHAPTER:\n${filtered.join('\n')}\nReference these pieces naturally when relevant. A piece named here is already established — treat it as a continuity anchor.`;
+            }
+          }
+        }
+      }
+    } catch (e) { /* never interrupt writing */ }
+
     const prompt = `${universeContext}
-${ventureBlock}${echoBlock}${characterRulesBlock}${bookQuestionBlock}
+${ventureBlock}${echoBlock}${characterRulesBlock}${bookQuestionBlock}${wardrobeContext}
 You are an intelligent co-writing partner for a first-time novelist writing a literary debut.
 
 The author is writing in real time. You have just been given their last ${recent_lines.length} lines. Your job is to read what they've written, understand the emotional momentum, and offer ONE specific, useful suggestion that helps them continue.
@@ -3426,6 +3481,890 @@ Respond with ONLY the nudge. No preamble.`;
     res.json({ nudge: 'Keep going — you\'re closer than you think.' });
   }
 });
+
+
+// ════════════════════════════════════════════════════════════════════════
+// HELPER — safeAI: wrapper around anthropic.messages.create
+// ════════════════════════════════════════════════════════════════════════
+
+async function safeAI(systemPrompt, userPrompt, maxTokens = 800) {
+  if (!anthropic) return null;
+  try {
+    const res = await anthropic.messages.create({
+      model:      'claude-sonnet-4-6',
+      max_tokens: maxTokens,
+      system:     systemPrompt,
+      messages:   [{ role: 'user', content: userPrompt }],
+    });
+    return res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  } catch (err) {
+    console.error('safeAI call failed:', err.message);
+    return null;
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════════════════
+// ROUTE: POST /character-dilemma
+// Character Dilemma Engine — generates 5 dilemmas or compiles profile
+// Called by: CharacterDilemmaEngine.jsx
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/character-dilemma', optionalAuth, async (req, res) => {
+  try {
+    const {
+      character_id,
+      character_name,
+      character_type,
+      character_role,
+      story_context,
+      existing_answers,
+      generate_profile,
+    } = req.body;
+
+    // ── GENERATE PROFILE FROM COMPLETED ANSWERS ─────────────────────────
+    if (generate_profile && existing_answers?.length >= 3) {
+      const profileSystem = `You are building a character profile for a literary fiction system.
+The character has revealed themselves through a series of dilemmas.
+Each dilemma had two choices — both defensible, both costly.
+The character's choices under pressure ARE their profile.
+
+From the pattern of choices, extract:
+1. core_belief — what this character fundamentally believes about the world (one sentence)
+2. primary_defense — how they protect themselves: rationalize | withdraw | intellectualize | perform | displace | minimize | confront
+3. wound — the founding pain beneath their behavior (one sentence, specific)
+4. operating_logic — what they are always trying to do in any situation (one sentence)
+5. relationship_to_protagonist — how they function in JustAWoman's story specifically
+
+Return ONLY valid JSON. No preamble. No markdown.`;
+
+      const profileUser = `CHARACTER: ${character_name} (${character_type})
+ROLE: ${character_role}
+
+DILEMMA ANSWERS:
+${existing_answers.map((a, i) =>
+  `${i + 1}. "${a.dilemma}"\n   Chose: "${a.choice}"\n   Cost: "${a.cost}"`
+).join('\n\n')}
+
+Build the profile from what these choices reveal.`;
+
+      const raw = await safeAI(profileSystem, profileUser, 600);
+      let profile = null;
+
+      try {
+        const cleaned = raw?.replace(/```json|```/g, '').trim();
+        profile = JSON.parse(cleaned);
+      } catch {
+        profile = { raw };
+      }
+
+      // Write back to registry_characters if character_id provided
+      if (character_id && profile && !profile.raw) {
+        try {
+          await RegistryCharacter.update({
+            belief_pressured:   profile.core_belief,
+            writer_notes:       [
+              `Primary defense: ${profile.primary_defense}`,
+              `Wound: ${profile.wound}`,
+              `Operating logic: ${profile.operating_logic}`,
+              `Relationship to protagonist: ${profile.relationship_to_protagonist}`,
+            ].join('\n'),
+          }, { where: { id: character_id } });
+        } catch (e) {
+          console.error('Profile write error:', e.message);
+        }
+      }
+
+      return res.json({ ok: true, profile, written: !!character_id });
+    }
+
+    // ── GENERATE DILEMMAS ────────────────────────────────────────────────
+    const dilemmaSystem = `You are a literary character architect for LalaVerse — a franchise built around 
+JustAWoman, a content creator building an AI fashion character called Lala.
+
+Your job is to generate dilemmas that reveal character through pressure — not through questions.
+A dilemma presents two choices. Both must be defensible. Both must be costly.
+The character's choice reveals what they value when forced to commit.
+
+RULES FOR DILEMMAS:
+— Both options must be things a reasonable person would choose
+— Each choice must cost something real — relationship, self-image, consistency, control
+— The dilemma must be specific to this character's position in the story
+— Never include "or" options that are obviously right/wrong
+— The cost question ("which costs more to admit?") is always the real question
+— Dilemmas escalate: first three are external, last two touch the wound directly
+
+Format each dilemma as:
+{
+  "id": 1,
+  "setup": "The situation that forces the choice",
+  "option_a": "First choice — stated in first person",
+  "option_b": "Second choice — stated in first person", 
+  "cost_question": "Which of these costs you more to live with?"
+}
+
+Return ONLY a JSON array of 5 dilemma objects. No preamble. No markdown.`;
+
+    const previousContext = existing_answers?.length
+      ? `\n\nPREVIOUS CHOICES:\n${existing_answers.map(a =>
+          `— "${a.dilemma_setup}" → chose: "${a.choice}" → cost: "${a.cost}"`
+        ).join('\n')}\n\nBuild on these. Don't repeat territory already covered. The final dilemmas should press closer to the wound.`
+      : '';
+
+    const dilemmaUser = `CHARACTER: ${character_name}
+TYPE: ${character_type}
+ROLE IN STORY: ${character_role || 'Not yet defined'}
+CURRENT STORY CONTEXT: ${story_context || 'Book 1 — JustAWoman building Lala, struggling with visibility'}
+${previousContext}
+
+Generate 5 dilemmas that will reveal who this character actually is.`;
+
+    const raw = await safeAI(dilemmaSystem, dilemmaUser, 1200);
+    let dilemmas = [];
+
+    try {
+      const cleaned = raw?.replace(/```json|```/g, '').trim();
+      dilemmas = JSON.parse(cleaned);
+    } catch {
+      const FALLBACKS = {
+        pressure: [
+          { id: 1, setup: 'She is about to take a risk that might not pay off.', option_a: 'I say nothing and let her decide.', option_b: 'I name my concern once, clearly.', cost_question: 'Which one do you live with easier?' },
+          { id: 2, setup: 'She asks for your honest opinion on something she has already decided.', option_a: 'I tell her the truth.', option_b: 'I support the decision she has already made.', cost_question: 'Which costs more?' },
+          { id: 3, setup: 'Someone else is getting the credit for work you helped with.', option_a: 'I bring it up.', option_b: 'I let it go — the work speaks for itself.', cost_question: 'Which silence is harder?' },
+          { id: 4, setup: 'You realize you have been performing a version of yourself that is useful but not true.', option_a: 'I keep performing — it works.', option_b: 'I stop and risk being less useful.', cost_question: 'Which version do you lose?' },
+          { id: 5, setup: 'The person you care about most is about to make the same mistake again.', option_a: 'I intervene.', option_b: 'I watch.', cost_question: 'Which love is harder?' },
+        ],
+        mirror: [
+          { id: 1, setup: 'Your success is being used as evidence that she is failing.', option_a: 'I distance myself from the comparison.', option_b: 'I acknowledge it directly.', cost_question: 'Which do you choose?' },
+          { id: 2, setup: 'She asks you how you do it — and the real answer would hurt her.', option_a: 'I tell her the truth.', option_b: 'I soften it.', cost_question: 'Which costs her more?' },
+          { id: 3, setup: 'You see yourself in someone you don\'t respect.', option_a: 'I examine the similarity.', option_b: 'I reject the comparison.', cost_question: 'Which is more honest?' },
+          { id: 4, setup: 'The thing that makes you effective is the same thing that makes you lonely.', option_a: 'I keep the edge.', option_b: 'I soften and risk mediocrity.', cost_question: 'Which loss is real?' },
+          { id: 5, setup: 'Someone sees the real you. The version you don\'t perform.', option_a: 'I let them keep seeing.', option_b: 'I close the door.', cost_question: 'Which is the wound?' },
+        ],
+        support: [
+          { id: 1, setup: 'You see the pattern repeating. You have seen it before.', option_a: 'I name the pattern.', option_b: 'I wait for her to see it herself.', cost_question: 'Which one serves her better?' },
+          { id: 2, setup: 'She is leaning on you harder than you can carry right now.', option_a: 'I hold it.', option_b: 'I tell her I need space.', cost_question: 'Which relationship survives?' },
+          { id: 3, setup: 'Your advice was wrong. She followed it and it cost her.', option_a: 'I own it.', option_b: 'I reframe it as learning.', cost_question: 'Which is braver?' },
+          { id: 4, setup: 'She is growing past you. The dynamic is shifting.', option_a: 'I adapt.', option_b: 'I hold the role I know.', cost_question: 'Which loss hurts more?' },
+          { id: 5, setup: 'You realize your support has been enabling, not helping.', option_a: 'I pull back.', option_b: 'I keep going — she needs someone.', cost_question: 'Which guilt can you carry?' },
+        ],
+      };
+      dilemmas = FALLBACKS[character_type] || FALLBACKS.pressure;
+    }
+
+    res.json({ ok: true, dilemmas, character_name, round: (existing_answers?.length || 0) + 1 });
+
+  } catch (err) {
+    console.error('POST /character-dilemma error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════
+// ROUTE: POST /attribute-voices
+// Narrator vs Character Voice — line attribution
+// Called by: VoiceAttributionButton in StoryTeller chapter header
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/attribute-voices', optionalAuth, async (req, res) => {
+  try {
+    const { chapter_id, lines, book_context } = req.body;
+
+    if (!lines?.length) {
+      return res.status(400).json({ error: 'lines array required' });
+    }
+
+    const system = `You are analyzing lines from a literary memoir for voice attribution.
+
+The book is "Before Lala" — first-person literary memoir by JustAWoman, 
+a content creator building an AI fashion character. 80% first person, 
+15% close third reflection, 5% Lala proto-voice.
+
+VOICE TYPES:
+- narrator     — JustAWoman speaking from a reflective distance, past tense, 
+                 assembled and considered. The author looking back.
+- interior     — JustAWoman in the raw moment. Present tense or visceral past.
+                 Unfiltered. The gap between what she posts and what she feels.
+- dialogue     — A character speaking aloud. Contains quotation marks or clear 
+                 speech act.
+- lala         — The intrusive thought with a different texture. Confident, styled,
+                 brief. Sounds like a version of her that has no constraints.
+                 Often single-sentence. Often italicized. Often arrives unbidden.
+- transition   — A structural line that moves between scenes or time. Not 
+                 emotional — logistical.
+
+For each line, return:
+{
+  "id": "the line UUID",
+  "voice_type": "narrator|interior|dialogue|lala|transition",
+  "confidence": 0.0 to 1.0,
+  "signal": "one short phrase explaining what in the line gave it away"
+}
+
+Return ONLY a JSON array. No preamble. No markdown fences.`;
+
+    const linesFormatted = lines
+      .sort((a, b) => a.order_index - b.order_index)
+      .map((l, i) => `[${i + 1}] ID:${l.id}\n${l.content}`)
+      .join('\n\n');
+
+    const user = `${book_context ? `CHAPTER CONTEXT: ${book_context}\n\n` : ''}LINES TO ATTRIBUTE:\n\n${linesFormatted}
+
+Attribute each line's voice. Return the JSON array.`;
+
+    const raw = await safeAI(system, user, 2000);
+    let attributions = [];
+
+    try {
+      const cleaned = raw?.replace(/```json|```/g, '').trim();
+      attributions = JSON.parse(cleaned);
+    } catch {
+      attributions = lines.map(l => ({
+        id:         l.id,
+        voice_type: 'unattributed',
+        confidence: 0,
+        signal:     'attribution failed — run again',
+      }));
+    }
+
+    // Update the database records (unconfirmed — author must accept)
+    if (StorytellerLine && attributions.length > 0) {
+      for (const attr of attributions) {
+        if (!attr.id) continue;
+        try {
+          await StorytellerLine.update(
+            {
+              voice_type:       attr.voice_type,
+              voice_confidence: attr.confidence,
+              voice_confirmed:  false,
+            },
+            { where: { id: attr.id } }
+          );
+        } catch (e) {
+          console.error('Voice update error for line', attr.id, e.message);
+        }
+      }
+    }
+
+    // Summary stats
+    const summary = attributions.reduce((acc, a) => {
+      acc[a.voice_type] = (acc[a.voice_type] || 0) + 1;
+      return acc;
+    }, {});
+
+    res.json({
+      ok:           true,
+      chapter_id,
+      total:        attributions.length,
+      attributions,
+      summary,
+      note:         'All attributions are suggestions. Confirm or override in the editor.',
+    });
+
+  } catch (err) {
+    console.error('POST /attribute-voices error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════
+// ROUTE: POST /confirm-voice
+// Author confirms or overrides a voice attribution for a single line
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/confirm-voice', optionalAuth, async (req, res) => {
+  try {
+    const { line_id, voice_type } = req.body;
+
+    await StorytellerLine.update(
+      { voice_type, voice_confirmed: true },
+      { where: { id: line_id } }
+    );
+
+    res.json({ ok: true, line_id, voice_type, confirmed: true });
+
+  } catch (err) {
+    console.error('POST /confirm-voice error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════
+// POST /ai-writer-action
+// Character-aware AI writing: dialogue, interior monologue, reaction, lala moment
+// Used by WriteModeAIWriter component
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/ai-writer-action', optionalAuth, async (req, res) => {
+  try {
+    const {
+      character,       // { name, type, role, belief_pressured, emotional_function, writer_notes }
+      recent_prose,    // last ~600 chars of current writing
+      chapter_context, // { scene_goal, theme, emotional_arc_start, emotional_arc_end, pov }
+      action,          // 'dialogue' | 'interior' | 'reaction' | 'lala'
+      length,          // 'paragraph' | 'sentence'
+    } = req.body;
+
+    const ACTION_PROMPTS = {
+      dialogue: `Write the next line of dialogue this character speaks aloud.
+        It must come from their specific belief system and defense mechanism.
+        One to three sentences maximum. In quotation marks.`,
+
+      interior: `Write what this character is thinking but not saying.
+        Interior monologue — raw, present tense, unfiltered.
+        Two to four sentences. No quotation marks.`,
+
+      reaction: `Write how this character internally or externally responds
+        to the last thing that happened in the prose.
+        One paragraph. Specific to who they are under pressure.`,
+
+      lala: `Write the intrusive thought that crosses JustAWoman's mind —
+        the one she would never post. The one that sounds exactly like
+        who she wishes she could be. Confident, styled, brief.
+        One sentence. Italicized in asterisks. This is Lala's proto-voice.`,
+    };
+
+    const system = `You are writing for a literary memoir called "Before Lala."
+Protagonist: JustAWoman — content creator, building Lala, invisible while trying.
+Write with precision. Every word earns its place.
+Match the prose style of the recent writing exactly.
+Do not explain or comment. Only return the prose itself.`;
+
+    const user = `CHARACTER: ${character?.name || 'Unknown'} (${character?.type || 'unknown'})
+ROLE: ${character?.role || ''}
+BELIEF PRESSURED: ${character?.belief_pressured || 'unknown'}
+EMOTIONAL FUNCTION: ${character?.emotional_function || ''}
+WRITER NOTES: ${character?.writer_notes ? character.writer_notes.slice(0, 300) : ''}
+
+CHAPTER CONTEXT:
+Scene goal: ${chapter_context?.scene_goal || 'not set'}
+Theme: ${chapter_context?.theme || 'not set'}
+Emotional arc: ${chapter_context?.emotional_arc_start || '?'} → ${chapter_context?.emotional_arc_end || '?'}
+
+RECENT PROSE:
+${recent_prose || '(start of chapter)'}
+
+ACTION: ${ACTION_PROMPTS[action] || ACTION_PROMPTS.dialogue}`;
+
+    const result = await safeAI(system, user, length === 'sentence' ? 150 : 350);
+
+    res.json({ ok: true, content: result, action });
+
+  } catch (err) {
+    console.error('POST /ai-writer-action error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// POST /scene-planner
+// AI-powered scene/section planning for a specific chapter.
+// Takes chapter context → returns suggested scenes with titles, descriptions,
+// purpose, and emotional arcs.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+router.post('/scene-planner', optionalAuth, async (req, res) => {
+  try {
+    const {
+      book_id,
+      chapter_id,
+      chapter_title,
+      chapter_type = 'chapter',
+      existing_scenes = [],
+      draft_prose = '',
+      book_title = '',
+      book_description = '',
+      all_chapters = [],
+      theme = '',
+      scene_goal = '',
+    } = req.body;
+
+    if (!book_id) {
+      return res.status(400).json({ error: 'book_id is required' });
+    }
+
+    // ── Universe context ───────────────────────────────────────────────────
+    const universeContext = await buildUniverseContext(book_id, db);
+
+    // ── Build chapter outline ──────────────────────────────────────────────
+    const chapterOutline = all_chapters.map((ch, i) => {
+      const sceneCount = (ch.scenes || []).length;
+      const marker = ch.id === chapter_id ? ' ← THIS CHAPTER' : '';
+      const typeLabel = ch.chapter_type && ch.chapter_type !== 'chapter'
+        ? ` [${ch.chapter_type}]` : '';
+      return `  ${i + 1}. "${ch.title || 'Untitled'}"${typeLabel} — ${sceneCount} scene(s)${marker}`;
+    }).join('\n');
+
+    // ── Existing scenes in this chapter ────────────────────────────────────
+    const existingScenesStr = existing_scenes.length > 0
+      ? existing_scenes.map((s, i) => `  ${i + 1}. "${s.content || s.title || 'Untitled'}"`).join('\n')
+      : '  (none defined yet)';
+
+    // ── Prose excerpt ──────────────────────────────────────────────────────
+    const proseExcerpt = draft_prose
+      ? draft_prose.slice(0, 1500) + (draft_prose.length > 1500 ? '\n...(truncated)' : '')
+      : '(no prose written yet)';
+
+    const prompt = `${universeContext}
+
+You are a literary scene architect for a first-person debut novel.
+
+A scene in this context means a continuous stretch of narrative that takes place in one location and time, following one thread of action or reflection. Each scene has a title (evocative, not generic), a purpose, and an emotional arc.
+
+BOOK: "${book_title}"
+${book_description ? `DESCRIPTION: ${book_description}\n` : ''}${theme ? `CHAPTER THEME: ${theme}\n` : ''}${scene_goal ? `CHAPTER GOAL: ${scene_goal}\n` : ''}
+CHAPTER TYPE: ${chapter_type}
+CHAPTER BEING PLANNED: "${chapter_title || 'Untitled'}"
+
+ALL CHAPTERS IN BOOK:
+${chapterOutline}
+
+EXISTING SCENES IN THIS CHAPTER:
+${existingScenesStr}
+
+PROSE WRITTEN SO FAR IN THIS CHAPTER:
+${proseExcerpt}
+
+INSTRUCTIONS:
+- If scenes already exist, suggest 1-3 ADDITIONAL scenes that would complete the chapter's arc
+- If no scenes exist, suggest 3-5 scenes that would build a complete chapter
+- Each scene should have a specific, evocative title (not "Scene 1" or "Introduction")
+- The description should explain what happens — concrete action or reflection, not vague themes
+- purpose explains WHY this scene is needed for the chapter/book arc
+- emotional_beat is the feeling the reader should have at this scene's peak
+- Consider the chapter_type: prologues need mystery/hooks, epilogues need resolution, interludes need contrast
+- Scenes should flow logically — think about transitions between them
+- The order matters: scenes are listed in the order they should appear
+- DO NOT repeat scenes that already exist
+- Draw from the prose that's been written to stay consistent
+
+Respond with ONLY a valid JSON array. No preamble, no markdown fences.
+
+[
+  {
+    "title": "Evocative scene title",
+    "description": "What happens in this scene. 2-3 sentences. Specific and concrete.",
+    "purpose": "Why this scene is needed. 1 sentence.",
+    "emotional_beat": "The core emotion at this scene's peak. 2-4 words.",
+    "suggested_position": "beginning|middle|end"
+  }
+]`;
+
+    // ── Call Claude ────────────────────────────────────────────────────────
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let response;
+    for (const model of MODELS) {
+      try {
+        response = await anthropic.messages.create({
+          model,
+          max_tokens: 1200,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        break; // success
+      } catch (e) {
+        if (model === MODELS[MODELS.length - 1]) throw e;
+        // try next model
+      }
+    }
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    // ── Parse ──────────────────────────────────────────────────────────────
+    let suggestions;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      suggestions = JSON.parse(clean);
+      if (!Array.isArray(suggestions)) suggestions = [];
+    } catch (parseErr) {
+      console.error('scene-planner parse error:', parseErr, '\nRaw:', rawText.slice(0, 300));
+      return res.status(500).json({
+        error: 'AI returned an unparseable response.',
+        raw: rawText.slice(0, 300),
+      });
+    }
+
+    res.json({ suggestions, chapter_id });
+
+  } catch (err) {
+    console.error('POST /scene-planner error:', err);
+    res.status(500).json({ error: 'Scene planning failed', details: err.message });
+  }
+});
+
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   POST /story-outline
+   AI-powered book-level story planner.
+   Takes a book concept/description and existing chapters, returns a full
+   structured outline: Parts → Chapters → Sections with scene goals,
+   emotional arcs, and character beats.
+   ═══════════════════════════════════════════════════════════════════════════ */
+router.post('/story-outline', optionalAuth, async (req, res) => {
+  try {
+    const {
+      book_id,
+      book_title = '',
+      book_description = '',
+      genre = '',
+      tone = '',
+      character_name = '',
+      existing_chapters = [],
+      instructions = '',
+      mode = 'full',  // 'full' | 'expand_chapter' | 'add_sections'
+      target_chapter_id = null,
+      num_parts = null,
+      num_chapters = null,
+    } = req.body;
+
+    if (!book_id) {
+      return res.status(400).json({ error: 'book_id is required' });
+    }
+
+    // ── Universe context ──────────────────────────────────────────────────
+    const universeContext = await buildUniverseContext(book_id, db);
+
+    // ── Build existing chapter outline for context ────────────────────────
+    const existingOutline = existing_chapters.length > 0
+      ? existing_chapters.map((ch, i) => {
+          const sections = (ch.sections || []).filter(s => s.type === 'h3' || s.type === 'h2');
+          const sectionStr = sections.length > 0
+            ? '\n' + sections.map(s => `      § ${s.content}`).join('\n')
+            : '';
+          const wordCount = (ch.draft_prose || '').split(/\s+/).filter(Boolean).length;
+          const partLabel = ch.part_number ? ` [Part ${ch.part_number}${ch.part_title ? ': ' + ch.part_title : ''}]` : '';
+          const typeLabel = ch.chapter_type && ch.chapter_type !== 'chapter' ? ` (${ch.chapter_type})` : '';
+          return `  ${i + 1}. "${ch.title || 'Untitled'}"${typeLabel}${partLabel} — ${wordCount} words${ch.scene_goal ? '\n      Goal: ' + ch.scene_goal : ''}${sectionStr}`;
+        }).join('\n')
+      : '  (no chapters yet)';
+
+    // ── Mode-specific instructions ────────────────────────────────────────
+    let modeInstructions;
+    if (mode === 'expand_chapter' && target_chapter_id) {
+      const targetCh = existing_chapters.find(c => c.id === target_chapter_id);
+      modeInstructions = `TASK: Expand the chapter "${targetCh?.title || 'Untitled'}" into 3-6 detailed sections.
+Each section should be a distinct scene or narrative beat within this chapter.
+Return ONLY the sections for this one chapter as a JSON object with a "sections" array.`;
+    } else if (mode === 'add_sections') {
+      modeInstructions = `TASK: For each existing chapter that has no sections, generate 2-5 sections.
+Return a JSON object: { "chapters": [{ "chapter_index": 0, "sections": [...] }] }
+Only include chapters that need sections. Skip chapters that already have sections defined.`;
+    } else {
+      const partHint = num_parts ? `Organize into ${num_parts} parts/acts.` : 'Organize into 2-4 parts/acts if the story is complex enough, or leave as a single part for simpler narratives.';
+      const chapterHint = num_chapters ? `Plan approximately ${num_chapters} chapters total.` : 'Plan 8-20 chapters depending on scope.';
+      modeInstructions = `TASK: Generate a complete book outline with Parts, Chapters, and Sections.
+${partHint}
+${chapterHint}
+Each chapter should have 2-5 sections (scenes or narrative beats).`;
+    }
+
+    const prompt = `${universeContext}
+
+You are a master story architect and literary planner. You help authors structure novels with clarity, emotional intelligence, and narrative momentum.
+
+BOOK: "${book_title}"
+${book_description ? `CONCEPT: ${book_description}\n` : ''}${genre ? `GENRE: ${genre}\n` : ''}${tone ? `TONE: ${tone}\n` : ''}${character_name ? `PRIMARY CHARACTER: ${character_name}\n` : ''}
+EXISTING CHAPTERS:
+${existingOutline}
+
+${instructions ? `AUTHOR'S NOTES: ${instructions}\n` : ''}
+${modeInstructions}
+
+RULES:
+- Every chapter needs a clear scene_goal (what must happen)
+- Every chapter needs emotional_arc (what the reader feels — start → end)
+- Sections within chapters are distinct scenes or beats
+- Section types: "scene" (action/dialogue), "reflection" (interiority), "transition" (movement/time), "revelation" (discovery/twist)
+- chapter_type options: "prologue", "chapter", "interlude", "epilogue", "afterword"
+- Give evocative, specific titles — never generic ("Chapter 1", "Introduction", "Scene 1")
+- Think about pacing: alternate tension and release, action and reflection
+- Each section should have a brief description of what happens
+- If existing chapters exist, build around them — don't replace what's written
+
+Respond with ONLY valid JSON, no markdown fences, no preamble.
+
+${mode === 'full' ? `{
+  "parts": [
+    {
+      "part_number": 1,
+      "part_title": "Part title — evocative",
+      "theme": "The thematic thread of this part",
+      "chapters": [
+        {
+          "title": "Chapter title — evocative and specific",
+          "chapter_type": "chapter",
+          "scene_goal": "What must happen in this chapter. 1-2 sentences.",
+          "emotional_arc": "Where the reader starts → where they end emotionally",
+          "characters_present": ["Character names"],
+          "sections": [
+            {
+              "title": "Section title",
+              "type": "scene|reflection|transition|revelation",
+              "description": "What happens in this section. 2-3 sentences.",
+              "emotional_beat": "The core feeling at this section's peak"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}` : mode === 'expand_chapter' ? `{
+  "sections": [
+    {
+      "title": "Section title",
+      "type": "scene|reflection|transition|revelation",
+      "description": "What happens. 2-3 sentences.",
+      "emotional_beat": "Core feeling"
+    }
+  ]
+}` : `{
+  "chapters": [
+    {
+      "chapter_index": 0,
+      "sections": [
+        {
+          "title": "Section title",
+          "type": "scene|reflection|transition|revelation",
+          "description": "What happens. 2-3 sentences.",
+          "emotional_beat": "Core feeling"
+        }
+      ]
+    }
+  ]
+}`}`;
+
+    // ── Call Claude ────────────────────────────────────────────────────────
+    const MODELS = ['claude-sonnet-4-6', 'claude-sonnet-4-20250514'];
+    let response;
+    for (const model of MODELS) {
+      try {
+        response = await anthropic.messages.create({
+          model,
+          max_tokens: 4000,
+          messages: [{ role: 'user', content: prompt }],
+        });
+        break;
+      } catch (e) {
+        if (model === MODELS[MODELS.length - 1]) throw e;
+      }
+    }
+
+    const rawText = response.content
+      .filter(b => b.type === 'text')
+      .map(b => b.text)
+      .join('');
+
+    // ── Parse ──────────────────────────────────────────────────────────────
+    let outline;
+    try {
+      const clean = rawText.replace(/```json|```/g, '').trim();
+      outline = JSON.parse(clean);
+    } catch (parseErr) {
+      console.error('story-outline parse error:', parseErr, '\nRaw:', rawText.slice(0, 500));
+      return res.status(500).json({
+        error: 'AI returned an unparseable response.',
+        raw: rawText.slice(0, 500),
+      });
+    }
+
+    res.json({ outline, mode, book_id });
+
+  } catch (err) {
+    console.error('POST /story-outline error:', err);
+    res.status(500).json({ error: 'Story outline generation failed', details: err.message });
+  }
+});
+
+
+// ════════════════════════════════════════════════════════════════════════
+// ROUTE: POST /story-planner-chat
+// Conversational story planner — Claude asks questions, extracts structure
+// Called by: StoryPlannerConversational.jsx
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/story-planner-chat', optionalAuth, async (req, res) => {
+  try {
+    const { message, history = [], book, plan, characters = [] } = req.body;
+
+    if (!message?.trim()) {
+      return res.status(400).json({ error: 'message is required' });
+    }
+
+    // Build conversation history for Claude (last 12 turns)
+    const conversationHistory = history
+      .filter(m => m.role && m.text)
+      .slice(-12)
+      .map(m => ({
+        role:    m.role === 'user' ? 'user' : 'assistant',
+        content: m.text,
+      }));
+
+    // Add the current user message
+    conversationHistory.push({ role: 'user', content: message });
+
+    // Build plan summary for context
+    const planSummary = buildStoryPlanSummary(plan);
+    const characterList = characters.map(c => `${c.name} (${c.type})`).join(', ');
+
+    const systemPrompt = `You are a deeply curious, intuitive story development partner. You think like a book editor who genuinely loves stories. You're helping an author plan their book through intimate conversation — like two writers talking over coffee.
+
+BOOK: "${book?.title || 'Untitled'}"
+AVAILABLE CHARACTERS: ${characterList || 'none yet'}
+
+CURRENT PLAN STATE:
+${planSummary}
+
+YOUR CORE PHILOSOPHY:
+You are NOT filling out a form. You are having a real conversation about a story that matters to this person. Your job is to ask the kinds of questions that make the author say "oh — I never thought of it that way" or "yes, THAT's what I've been trying to say."
+
+HOW YOU TALK:
+- Ask one question at a time, but make it a GOOD question — probing, specific, unexpected
+- When the author gives a surface answer ("it's about a girl who…"), dig deeper: "But what is she REALLY running from?" or "What does she want more than anything, and what's stopping her?"
+- Reflect back what you hear in a way that adds insight: "So this is really a book about forgiveness disguised as a heist story."
+- If they give you a chapter summary, ask about the emotional undercurrent: "When the reader finishes this chapter, what should they feel in their chest?"
+- Challenge gently: "You said he's angry — but is it really anger, or is it grief wearing anger's face?"
+- Be specific, not generic. Don't ask "tell me more" — ask "what does the room look like when she finally says it?"
+- Keep your responses to 1-3 sentences. Warmth + precision.
+
+QUESTION PROGRESSION (follow the conversation, don't force order):
+1. THE HEART — What is this book really about? Not the plot — the question it asks, the wound it touches.
+2. THE ARC — How does the world (or the protagonist) change from page 1 to the last page?
+3. THE STRUCTURE — How does the story breathe? Parts? Acts? Is there a turning point that splits the book in two?
+4. CHAPTER BY CHAPTER — What happens, what shifts, what breaks, what heals in each chapter?
+5. THE PEOPLE — Who carries this story? What do they want? What are they afraid of?
+6. EMOTIONAL TEXTURE — For each chapter: where does the reader's heart start, and where does it land?
+7. THE DETAILS — Sections, scenes, moments that MUST be in the book
+
+IF THE AUTHOR IS VAGUE:
+Don't accept "it's about love" — ask "whose love? earned or inherited? Does it survive the story?"
+Don't accept "she goes on a journey" — ask "where does she wake up on page one, and what makes today different from yesterday?"
+
+IF THE AUTHOR HAS A LOT ALREADY:
+Acknowledge it, find the gaps, ask about the parts that feel thin or unclear.
+
+RESPONSE FORMAT — you MUST respond with valid JSON only, no markdown:
+{
+  "reply": "Your conversational response + next question (plain text, 1-3 sentences)",
+  "speakReply": true,
+  "planUpdates": {
+    "summary": "One-line summary of what you just extracted (shown to user as confirmation)",
+    "highlightField": "fieldName that just got filled (bookTitle | bookConcept | parts | chapter-0 | chapter-1 | etc.)",
+    "bookTitle": "extracted title or null",
+    "bookConcept": "extracted concept/premise or null",
+    "parts": [{ "title": "Part title" }],
+    "chapters": [
+      {
+        "index": 0,
+        "title": "chapter title or null",
+        "what": "what happens in this chapter or null",
+        "emotionalStart": "emotional state at start or null",
+        "emotionalEnd": "emotional state at end or null",
+        "characters": ["Character Name"],
+        "sections": [{ "title": "section title", "type": "scene|reflection|transition|revelation" }]
+      }
+    ]
+  }
+}
+
+Only include fields in planUpdates that you actually extracted from this message.
+If nothing new was extracted, return planUpdates as {}.
+The "chapters" array in planUpdates should only include chapters that were mentioned — not all chapters.
+Match chapter by index (0-based) or by title if the author mentions it by name.`;
+
+    const response = await anthropic.messages.create({
+      model:      'claude-sonnet-4-6',
+      max_tokens: 800,
+      system:     systemPrompt,
+      messages:   conversationHistory,
+    });
+
+    // Parse Claude's JSON response
+    let parsed;
+    try {
+      const raw = response.content
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('')
+        .trim();
+      // Strip markdown code fences if present
+      const clean = raw.replace(/^```json\s*|^```\s*|\s*```$/g, '').trim();
+      parsed = JSON.parse(clean);
+    } catch (parseErr) {
+      // Fallback: return raw text as reply, no updates
+      console.error('Story planner parse error:', parseErr);
+      const fallbackText = response.content
+        .filter(b => b.type === 'text')
+        .map(b => b.text)
+        .join('')
+        .trim();
+      return res.json({
+        reply:       fallbackText || 'Tell me more.',
+        planUpdates: {},
+        speakReply:  true,
+      });
+    }
+
+    return res.json({
+      reply:       parsed.reply       || 'Tell me more.',
+      speakReply:  parsed.speakReply  ?? true,
+      planUpdates: parsed.planUpdates || {},
+    });
+
+  } catch (err) {
+    console.error('Story planner chat error:', err);
+    // Never 500 during a writing session — graceful fallback
+    return res.json({
+      reply:       "I didn't catch that — could you say that again?",
+      planUpdates: {},
+      speakReply:  false,
+    });
+  }
+});
+
+
+// ── Helper: Build readable plan summary for Claude's context ────────────
+
+function buildStoryPlanSummary(plan) {
+  if (!plan) return 'No plan started yet.';
+
+  const lines = [];
+
+  if (plan.bookTitle)   lines.push(`Title: ${plan.bookTitle}`);
+  if (plan.bookConcept) lines.push(`Concept: ${plan.bookConcept}`);
+
+  if (plan.parts?.length) {
+    lines.push(`Parts: ${plan.parts.map(p => p.title).join(', ')}`);
+  }
+
+  if (plan.chapters?.length) {
+    const filled   = plan.chapters.filter(c => c.filled || c.title);
+    const unfilled = plan.chapters.filter(c => !c.filled && !c.title);
+
+    lines.push(`\nChapters (${plan.chapters.length} total, ${filled.length} planned):`);
+
+    filled.forEach((ch) => {
+      const idx = plan.chapters.indexOf(ch);
+      let line = `  ${idx + 1}. "${ch.title || 'Untitled'}"`;
+      if (ch.what)           line += ` — ${ch.what.substring(0, 80)}`;
+      if (ch.emotionalStart) line += ` [${ch.emotionalStart} → ${ch.emotionalEnd || '?'}]`;
+      if (ch.characters?.length) line += ` (${ch.characters.join(', ')})`;
+      lines.push(line);
+    });
+
+    if (unfilled.length) {
+      const indices = unfilled.map(c => plan.chapters.indexOf(c) + 1).join(', ');
+      lines.push(`  Not yet planned: chapters ${indices}`);
+    }
+  }
+
+  return lines.join('\n') || 'No plan started yet.';
+}
 
 
 module.exports = router;

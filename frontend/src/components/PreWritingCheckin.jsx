@@ -77,13 +77,13 @@ export default function PreWritingCheckin({
       <div style={st.panel}>
         <div style={st.header}>
           <div style={st.headerLeft}>
-            <div style={st.label}>WHO{'\u2019'}S IN THIS SCENE?</div>
+            <div style={st.label}>WHO{'’'}S IN THIS SCENE?</div>
             <div style={st.sub}>
               Talk to a character before writing. 5 exchanges to get inside their head.
             </div>
           </div>
           <button style={st.dismissBtn} onClick={onDismiss}>
-            Skip {'\u2192'}
+            Skip {'→'}
           </button>
         </div>
 
@@ -114,7 +114,7 @@ export default function PreWritingCheckin({
 
                 {done && (
                   <div style={{ ...st.doneTag, color, borderColor: `${color}40` }}>
-                    {'\u2713'} ready
+                    {'✓'} ready
                   </div>
                 )}
                 {locked && !done && (
@@ -122,7 +122,7 @@ export default function PreWritingCheckin({
                 )}
 
                 <div style={st.talkHint}>
-                  {done ? 'Talk again' : 'Talk \u2192'}
+                  {done ? 'Talk again' : 'Talk →'}
                 </div>
               </button>
             );
@@ -133,12 +133,12 @@ export default function PreWritingCheckin({
           <div style={st.readyRow}>
             <div style={st.readyText}>
               {completed.length === 1
-                ? `You\u2019ve talked to ${eligible.find(c => c.id === completed[0])?.selected_name || 'them'}.`
-                : `You\u2019ve talked to ${completed.length} characters.`
-              } You{'\u2019'}re ready.
+                ? `You’ve talked to ${eligible.find(c => c.id === completed[0])?.selected_name || 'them'}.`
+                : `You’ve talked to ${completed.length} characters.`
+              } You{'’'}re ready.
             </div>
             <button style={st.writeBtn} onClick={onDismiss}>
-              Start writing {'\u2192'}
+              Start writing {'→'}
             </button>
           </div>
         )}

@@ -20,19 +20,19 @@ const NAV_SECTIONS = [
   {
     label: 'WRITE',
     items: [
-      { icon: '\u25B6',  label: 'Start Session', path: '/start' },
-      { icon: '\u270E',  label: 'Write',         path: '/storyteller' },
-      { icon: '\u25C7',  label: 'Timeline',      path: '/continuity' },
+      { icon: '▶',  label: 'Start Session',  path: '/start' },
+      { icon: '⌗',  label: 'Plan with Voice', path: '/plan-with-voice' },
+      { icon: '◇',  label: 'Timeline',       path: '/continuity' },
     ],
   },
   {
     label: 'WORLD',
     items: [
-      { icon: '\u25C8',  label: 'Universe',       path: '/universe' },
-      { icon: '\uD83D\uDC64', label: 'Characters',     path: '/character-registry' },
-      { icon: '\uD83D\uDECB\uFE0F', label: 'Therapy Room',   path: '/therapy/default' },
-      { icon: '\uD83D\uDCF0', label: 'The Press',      path: '/press' },
-      { icon: '\uD83D\uDD17', label: 'Relationships',  path: '/relationships' },
+      { icon: '◈',  label: 'Universe',       path: '/universe' },
+      { icon: '👤', label: 'Characters',     path: '/character-registry' },
+      { icon: '🛋️', label: 'Therapy Room',   path: '/therapy/default' },
+      { icon: '📰', label: 'The Press',      path: '/press' },
+      { icon: '🔗', label: 'Relationships',  path: '/relationships' },
     ],
   },
 ];
@@ -84,7 +84,22 @@ function Sidebar({ isOpen, onClose }) {
   };
 
   /* helpers */
-  const isActive = (path) => location.pathname === path || location.pathname.startsWith(path);
+  const isActive = (path) => {
+    // If the nav path has a query string, match both pathname and search
+    if (path.includes('?')) {
+      const [navPath, navSearch] = path.split('?');
+      const params = new URLSearchParams(navSearch);
+      const locParams = new URLSearchParams(location.search);
+      return location.pathname === navPath &&
+        [...params].every(([k, v]) => locParams.get(k) === v);
+    }
+    // For plain paths, also exclude when a query-param sibling is the real match
+    if (location.search) {
+      const locParams = new URLSearchParams(location.search);
+      if (locParams.get('view')) return false; // another view is active
+    }
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
   const go = (path) => { navigate(path); if (onClose) onClose(); };
 
   return (
@@ -179,21 +194,15 @@ function Sidebar({ isOpen, onClose }) {
               <span className="nav-label">Episodes</span>
             </button>
 
-            {/* Wardrobe */}
-            <button className={`nav-item ${isActive('/wardrobe') ? 'active' : ''}`} onClick={() => go('/wardrobe')}>
-              <span className="nav-icon">{'\uD83D\uDC57'}</span>
-              <span className="nav-label">Wardrobe</span>
-            </button>
-
             {/* Scene Library */}
             <button className={`nav-item ${isActive('/scene-library') ? 'active' : ''}`} onClick={() => go('/scene-library')}>
-              <span className="nav-icon">{'\uD83C\uDFAC'}</span>
+              <span className="nav-icon">{'🎬'}</span>
               <span className="nav-label">Scene Library</span>
             </button>
 
             {/* Template Studio */}
             <button className={`nav-item ${isActive('/template-studio') ? 'active' : ''}`} onClick={() => go('/template-studio')}>
-              <span className="nav-icon">{'\uD83D\uDDBC\uFE0F'}</span>
+              <span className="nav-icon">{'🖼️'}</span>
               <span className="nav-label">Template Studio</span>
             </button>
           </div>
@@ -201,27 +210,24 @@ function Sidebar({ isOpen, onClose }) {
           {/* ── MANAGE ── */}
           <div className="nav-section">
             <div className="nav-section-label">MANAGE</div>
-            <button className={`nav-item ${isActive('/assets') ? 'active' : ''}`} onClick={() => go('/assets')}>
-              <span className="nav-icon">{'\uD83D\uDCC1'}</span>
-              <span className="nav-label">Asset Library</span>
-            </button>
+
             <button className={`nav-item ${isActive('/analytics') ? 'active' : ''}`} onClick={() => go('/analytics/decisions')}>
-              <span className="nav-icon">{'\uD83D\uDCCA'}</span>
+              <span className="nav-icon">{'📊'}</span>
               <span className="nav-label">Analytics</span>
             </button>
             <button className={`nav-item ${isActive('/search') ? 'active' : ''}`} onClick={() => go('/search')}>
-              <span className="nav-icon">{'\uD83D\uDD0D'}</span>
+              <span className="nav-icon">{'🔍'}</span>
               <span className="nav-label">Search</span>
             </button>
             <button className={`nav-item ${isActive('/diagnostics') ? 'active' : ''}`} onClick={() => go('/diagnostics')}>
-              <span className="nav-icon">{'\uD83E\uDE7A'}</span>
+              <span className="nav-icon">{'🩺'}</span>
               <span className="nav-label">Diagnostics</span>
             </button>
             <button
               className={`nav-item ${isActive('/settings') ? 'active' : ''}`}
               onClick={() => go('/settings')}
             >
-              <span className="nav-icon">{'\u2699\uFE0F'}</span>
+              <span className="nav-icon">{'⚙️'}</span>
               <span className="nav-label">Settings</span>
             </button>
           </div>

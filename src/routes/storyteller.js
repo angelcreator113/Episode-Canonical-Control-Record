@@ -35,6 +35,11 @@ try {
   emotionalImpact = require('../services/emotionalImpact');
 } catch { emotionalImpact = null; }
 
+let registrySync;
+try {
+  registrySync = require('../services/registrySync');
+} catch { registrySync = null; }
+
 // Optional auth
 let optionalAuth;
 try {
@@ -249,7 +254,7 @@ router.put('/books/:id', optionalAuth, async (req, res) => {
     const book = await models.StorytellerBook.findByPk(req.params.id);
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
-    const allowed = ['character_name', 'season_label', 'week_label', 'title', 'subtitle', 'status', 'description', 'series_id', 'era_name', 'era_description', 'primary_pov', 'timeline_position', 'canon_status'];
+    const allowed = ['character_name', 'season_label', 'week_label', 'title', 'subtitle', 'status', 'description', 'series_id', 'era_name', 'era_description', 'primary_pov', 'timeline_position', 'canon_status', 'front_matter', 'back_matter', 'author_name'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -295,7 +300,7 @@ router.post('/books/:id/chapters', optionalAuth, async (req, res) => {
     const book = await models.StorytellerBook.findByPk(req.params.id);
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
-    const { chapter_number, title, badge, lines = [] } = req.body;
+    const { chapter_number, title, badge, lines = [], chapter_type, part_number, part_title } = req.body;
 
     // Get next sort_order
     const maxOrder = await models.StorytellerChapter.max('sort_order', { where: { book_id: book.id } });
@@ -307,6 +312,9 @@ router.post('/books/:id/chapters', optionalAuth, async (req, res) => {
       title: title || `Chapter ${(maxOrder || 0) + 1}`,
       badge: badge || null,
       sort_order: (maxOrder || 0) + 1,
+      chapter_type: chapter_type || 'chapter',
+      part_number: part_number || null,
+      part_title: part_title || null,
     });
 
     for (let li = 0; li < lines.length; li++) {
@@ -351,7 +359,8 @@ router.put('/chapters/:id', optionalAuth, async (req, res) => {
       'primary_character_id', 'characters_present', 'pov',
       'scene_goal', 'emotional_state_start', 'emotional_state_end',
       'theme', 'chapter_notes', 'interview_answers',
-      'sections', 'chapter_template'];
+      'sections', 'chapter_template',
+      'chapter_type', 'part_number', 'part_title'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -480,6 +489,24 @@ router.put('/lines/:id', optionalAuth, async (req, res) => {
       );
     }
 
+    // ── Registry Sync: extract character moments from approved lines ──
+    if (registrySync && updates.status === 'approved') {
+      (async () => {
+        try {
+          const chapter = await models.StorytellerChapter.findByPk(line.chapter_id, {
+            include: [{ model: models.StorytellerBook, as: 'book' }],
+          });
+          const chapterContext = {
+            show_id:    chapter?.book?.show_id,
+            chapter_id: line.chapter_id,
+          };
+          registrySync.onLineApproved(line, chapterContext, models).catch(console.error);
+        } catch (e) {
+          console.error('RegistrySync (line-approval):', e.message);
+        }
+      })();
+    }
+
     return res.json({ success: true, line });
   } catch (error) {
     console.error('StoryTeller update line error:', error);
@@ -553,6 +580,18 @@ router.post('/books/:id/approve-all', optionalAuth, async (req, res) => {
           approvedCount++;
         }
       }
+    }
+
+    // ── Registry Sync: fire once for bulk approval ──
+    if (registrySync && approvedCount > 0) {
+      const chapterContext = {
+        show_id:    book?.show_id || null,
+        chapter_id: book.chapters?.[0]?.id || null,
+      };
+      const lastLine = { content: 'bulk approval', chapter_id: chapterContext.chapter_id };
+      registrySync.onLineApproved(lastLine, chapterContext, models).catch(e =>
+        console.error('RegistrySync (bulk-approval):', e.message)
+      );
     }
 
     return res.json({

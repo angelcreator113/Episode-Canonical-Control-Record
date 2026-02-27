@@ -190,7 +190,7 @@ export function getVentureContext(pnosAct = 'act_1') {
   );
 
   const ventureLines = relevantVentures.map(v =>
-    `\u2022 ${v.name} (${v.archetype}, ${v.status}): Promised ${v.promised} Cost: ${v.cost} Hidden lesson: ${v.lesson}`
+    `• ${v.name} (${v.archetype}, ${v.status}): Promised ${v.promised} Cost: ${v.cost} Hidden lesson: ${v.lesson}`
   ).join('\n');
 
   return `JUSTAWOMAN'S VENTURE HISTORY (as of ${act?.label || pnosAct}):
@@ -200,7 +200,7 @@ CURRENT PNOS ACT: ${act?.label || pnosAct}
 CURRENT BELIEF: "${act?.belief || ''}"
 VOICE NOTE FOR THIS ACT: ${act?.voice_note || ''}
 
-This is attempt ${relevantVentures.length} for JustAWoman \u2014 not attempt 1.
+This is attempt ${relevantVentures.length} for JustAWoman — not attempt 1.
 The doubt in this chapter carries the weight of all previous attempts.
 The hope is harder-won. The voice should reflect accumulated experience, not fresh naivety.`;
 }

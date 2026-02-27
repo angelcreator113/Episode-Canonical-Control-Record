@@ -114,8 +114,8 @@ export default function CharacterVoiceMode({
   useEffect(() => {
     if (open) {
       const intro = isCheckin
-        ? `You\u2019re about to write a scene with ${charName}.\n\nI\u2019m going to be ${charName} for the next few minutes. Ask me anything \u2014 what I\u2019m thinking, how I\u2019d react, what I\u2019d say. Let\u2019s make sure you\u2019re inside my head before you start writing.`
-        : `I\u2019m going to speak as ${charName} now.\n\nEverything I say is drawn from their confirmed profile \u2014 but I\u2019m still an AI playing a role. When I get something wrong, tell me. That correction is more valuable than anything I could get right.\n\nAsk me anything. I\u2019m ${charName}.`;
+        ? `You’re about to write a scene with ${charName}.\n\nI’m going to be ${charName} for the next few minutes. Ask me anything — what I’m thinking, how I’d react, what I’d say. Let’s make sure you’re inside my head before you start writing.`
+        : `I’m going to speak as ${charName} now.\n\nEverything I say is drawn from their confirmed profile — but I’m still an AI playing a role. When I get something wrong, tell me. That correction is more valuable than anything I could get right.\n\nAsk me anything. I’m ${charName}.`;
 
       setMessages([{ role: 'character', text: intro }]);
       setInput('');
@@ -221,7 +221,7 @@ export default function CharacterVoiceMode({
     } catch (err) {
       setMessages(prev => [...prev, {
         role: 'character',
-        text: `[Voice interrupted \u2014 ${err.message}]`,
+        text: `[Voice interrupted — ${err.message}]`,
       }]);
     }
   }
@@ -249,7 +249,7 @@ export default function CharacterVoiceMode({
       text: correction,
     }, {
       role: 'system_note',
-      text: `\u2713 Voice correction noted. Continuing as ${charName} with that calibration.`,
+      text: `✓ Voice correction noted. Continuing as ${charName} with that calibration.`,
     }]);
 
     setStep('active');
@@ -279,7 +279,7 @@ export default function CharacterVoiceMode({
 
       setMessages(prev => [...prev, {
         role: 'system_note',
-        text: `\u2713 Added to ${charName}\u2019s profile: \u201C${pendingNewDetail}\u201D`,
+        text: `✓ Added to ${charName}’s profile: “${pendingNewDetail}”`,
       }]);
 
       onProfileUpdate?.();
@@ -347,7 +347,7 @@ export default function CharacterVoiceMode({
                 Wrong voice — correct it
               </button>
             )}
-            <button style={st.closeBtn} onClick={handleClose}>{'\u2715'}</button>
+            <button style={st.closeBtn} onClick={handleClose}>{'✕'}</button>
           </div>
         </div>
 
@@ -375,23 +375,23 @@ export default function CharacterVoiceMode({
           {step === 'newdetail' && pendingNewDetail && (
             <div style={{ ...st.detailCard, borderColor: `${accentColor}40` }}>
               <div style={{ ...st.detailLabel, color: accentColor }}>
-                {'\u2726'} NEW DETAIL EMERGED
+                {'✦'} NEW DETAIL EMERGED
               </div>
-              <div style={st.detailText}>{'\u201C'}{pendingNewDetail}{'\u201D'}</div>
+              <div style={st.detailText}>{'“'}{pendingNewDetail}{'”'}</div>
               <div style={st.detailSub}>
-                {charName} revealed something that isn{'\u2019'}t in their profile yet.
-                Confirm to add it. Dismiss if it doesn{'\u2019'}t feel true.
+                {charName} revealed something that isn{'’'}t in their profile yet.
+                Confirm to add it. Dismiss if it doesn{'’'}t feel true.
               </div>
               <div style={st.detailActions}>
                 <button style={st.secondaryBtn} onClick={dismissNewDetail}>
-                  Doesn{'\u2019'}t feel right
+                  Doesn{'’'}t feel right
                 </button>
                 <button
                   style={{ ...st.primaryBtn, background: accentColor, opacity: saving ? 0.6 : 1 }}
                   onClick={confirmNewDetail}
                   disabled={saving}
                 >
-                  {saving ? 'Saving\u2026' : `Add to ${charName}\u2019s profile \u2192`}
+                  {saving ? 'Saving…' : `Add to ${charName}’s profile →`}
                 </button>
               </div>
             </div>
@@ -401,16 +401,16 @@ export default function CharacterVoiceMode({
           {step === 'closing' && (
             <div style={st.closingCard}>
               <div style={{ ...st.closingLabel, color: accentColor }}>
-                YOU{'\u2019'}RE READY
+                YOU{'’'}RE READY
               </div>
               <div style={st.closingText}>
-                You{'\u2019'}ve been inside {charName}{'\u2019'}s head. Go write the scene.
+                You{'’'}ve been inside {charName}{'’'}s head. Go write the scene.
               </div>
               <button
                 style={{ ...st.primaryBtn, background: accentColor, marginTop: 12 }}
                 onClick={handleClose}
               >
-                Start writing {'\u2192'}
+                Start writing {'→'}
               </button>
             </div>
           )}
@@ -437,8 +437,8 @@ export default function CharacterVoiceMode({
               onClick={handleStart}
             >
               {isCheckin
-                ? `Talk to ${charName} before writing \u2192`
-                : `Talk to ${charName} \u2192`}
+                ? `Talk to ${charName} before writing →`
+                : `Talk to ${charName} →`}
             </button>
           </div>
         )}
@@ -457,8 +457,8 @@ export default function CharacterVoiceMode({
                   step === 'correction'
                     ? `How would ${charName} actually respond?`
                     : listening
-                      ? 'Listening\u2026'
-                      : `Talk to ${charName}\u2026`
+                      ? 'Listening…'
+                      : `Talk to ${charName}…`
                 }
                 value={input}
                 onChange={e => setInput(e.target.value)}
@@ -485,13 +485,13 @@ export default function CharacterVoiceMode({
                 onClick={step === 'correction' ? handleCorrectionSubmit : handleSend}
                 disabled={!input.trim() || sending}
               >
-                {'\u2192'}
+                {'→'}
               </button>
             </div>
             <div style={st.cmdHint}>
               {isCheckin
-                ? `${Math.max(0, maxExchanges - exchangeCount)} exchanges left \u00B7 Ctrl + Enter to send`
-                : 'Ctrl + Enter to send \u00B7 \uD83C\uDFA4 to speak'}
+                ? `${Math.max(0, maxExchanges - exchangeCount)} exchanges left · Ctrl + Enter to send`
+                : 'Ctrl + Enter to send · 🎤 to speak'}
             </div>
           </>
         )}

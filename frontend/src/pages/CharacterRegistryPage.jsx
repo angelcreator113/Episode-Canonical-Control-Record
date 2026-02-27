@@ -17,6 +17,7 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterVoiceInterview from './CharacterVoiceInterview';
+import CharacterDilemmaEngine from '../components/CharacterDilemmaEngine';
 
 /* ── Auto-scroll active tab into view on mobile ── */
 function useTabAutoScroll(tabRef, activeTab) {
@@ -62,6 +63,7 @@ const DOSSIER_TABS = [
   { key: 'relationships', label: 'Relationships' },
   { key: 'story',         label: 'Story Presence' },
   { key: 'voice',         label: 'Voice' },
+  { key: 'dilemma',       label: 'Dilemma' },
   { key: 'ai',            label: '✦ AI Writer' },
 ];
 
@@ -615,7 +617,7 @@ export default function CharacterRegistryPage() {
                         e.target.value = '';
                       }}
                     />
-                    <span className="portrait-upload-icon">{'\uD83D\uDCF7'}</span>
+                    <span className="portrait-upload-icon">{'📷'}</span>
                   </label>
                   {c.portrait_url && (
                     <button
@@ -633,7 +635,7 @@ export default function CharacterRegistryPage() {
                         }
                       }}
                     >
-                      {'\u2715'}
+                      {'✕'}
                     </button>
                   )}
                 </div>
@@ -766,19 +768,26 @@ export default function CharacterRegistryPage() {
                     </button>
                   ))}
                 </div>
-                {!editSection && (
-                  <button
-                    className="cr-tab-edit-btn"
-                    onClick={() => startEdit(dossierTab)}
-                  >
-                    ✎ Edit Section
-                  </button>
-                )}
               </div>
 
               {/* Tab Content */}
               <div className="cr-dossier-tab-content">
-                {renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear })}
+                {dossierTab === 'dilemma' ? (
+                  <CharacterDilemmaEngine
+                    character={{
+                      id: c.id,
+                      name: c.display_name || c.name,
+                      character_type: c.character_type || 'pressure',
+                      role: c.role || c.subtitle || '',
+                      story_context: c.story_presence?.current_story_status || '',
+                    }}
+                    onProfileBuilt={() => {
+                      if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+                    }}
+                  />
+                ) : (
+                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear })
+                )}
               </div>
             </div>
           </div>

@@ -56,7 +56,7 @@ html, body {
   padding: 0;
   height: 100vh;
   overflow: hidden;
-  background-color: #0f0f1a; /* Timeline Editor background */
+  background-color: #F6F1EB;
 }
 
 .app-main-wrapper.full-screen .app-content > * {
@@ -125,6 +125,14 @@ html, body {
   box-sizing: border-box;
 }
 
+/* StorytellerPage manages its own layout — bypass the content box */
+.app-content > .storyteller-page {
+  max-width: none;
+  margin: 0;
+  padding: 0;
+  background-color: transparent;
+}
+
 /* Full-screen pages should NOT inherit the white content box */
 .full-screen .app-content > * {
   max-width: none;
@@ -137,6 +145,18 @@ html, body {
 /* WriteMode keeps its own parchment background in full-screen mode */
 .full-screen .app-content > .wm-root {
   background: #FAF7F0;
+}
+
+/* StorytellerPage keeps its own warm parchment background in full-screen mode */
+.full-screen .app-content > .storyteller-page {
+  background: var(--st-bg, #F6F1EB);
+}
+
+/* StorytellerPage needs scrolling even in full-screen mode */
+.full-screen .app-content:has(> .storyteller-page) {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* SCENE COMPOSER FULL-SCREEN OVERRIDE */

@@ -1,0 +1,271 @@
+/* ═══════════════════════════════════════
+   PlanWithVoicePage.css
+   Standalone page for voice planner
+   ═══════════════════════════════════════ */
+
+:root {
+  --pwv-bg:      #F6F1EB;
+  --pwv-surface: #FFFDF9;
+  --pwv-ink:     #2F2A26;
+  --pwv-muted:   #635D55;
+  --pwv-gold:    #C6A85E;
+  --pwv-gold-soft: rgba(198, 168, 94, 0.12);
+  --pwv-border:  rgba(47, 42, 38, 0.10);
+  --pwv-serif:   'Lora', Georgia, serif;
+  --pwv-sans:    'DM Sans', system-ui, sans-serif;
+}
+
+/* ── Root ── */
+.pwv-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  background: var(--pwv-bg);
+  color: var(--pwv-ink);
+  font-family: var(--pwv-sans);
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.pwv-root.pwv-loading {
+  align-items: center;
+  justify-content: center;
+}
+
+.pwv-loading-text {
+  font-family: var(--pwv-serif);
+  font-size: 16px;
+  color: var(--pwv-muted);
+  letter-spacing: 0.5px;
+}
+
+/* ── When planner is active, fill viewport ── */
+.pwv-root.pwv-planner-active {
+  overflow: hidden;
+}
+
+.pwv-planner-active .spc-root {
+  height: 100vh;
+}
+
+/* ── Header (book selection screen) ── */
+.pwv-header {
+  padding: 48px 40px 24px;
+  text-align: center;
+  position: relative;
+}
+
+.pwv-back-btn {
+  position: absolute;
+  left: 32px;
+  top: 48px;
+  background: none;
+  border: none;
+  font-family: var(--pwv-sans);
+  font-size: 14px;
+  color: var(--pwv-muted);
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: 6px;
+  transition: all 0.15s;
+}
+.pwv-back-btn:hover {
+  color: var(--pwv-ink);
+  background: var(--pwv-gold-soft);
+}
+
+.pwv-title {
+  font-family: var(--pwv-serif);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--pwv-ink);
+  margin: 0 0 6px;
+}
+
+.pwv-subtitle {
+  font-size: 14px;
+  color: var(--pwv-muted);
+  margin: 0;
+}
+
+/* ── Book grid ── */
+.pwv-book-grid {
+  max-width: 720px;
+  margin: 12px auto 48px;
+  padding: 0 40px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
+}
+
+.pwv-book-card {
+  background: var(--pwv-surface);
+  border: 1px solid var(--pwv-border);
+  border-radius: 10px;
+  padding: 20px;
+  text-align: left;
+  cursor: pointer;
+  transition: all 0.18s;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--pwv-sans);
+}
+.pwv-book-card:hover {
+  border-color: var(--pwv-gold);
+  box-shadow: 0 2px 12px var(--pwv-gold-soft);
+  transform: translateY(-1px);
+}
+
+.pwv-book-card-title {
+  font-family: var(--pwv-serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--pwv-ink);
+}
+
+.pwv-book-card-desc {
+  font-size: 13px;
+  color: var(--pwv-muted);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.pwv-book-card-meta {
+  font-size: 12px;
+  color: var(--pwv-gold);
+  margin-top: auto;
+  font-weight: 500;
+}
+
+/* ── Empty state ── */
+.pwv-empty {
+  text-align: center;
+  padding: 40px 20px;
+  grid-column: 1 / -1;
+  color: var(--pwv-muted);
+}
+.pwv-empty-hint {
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+/* ── Toasts ── */
+.pwv-toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.pwv-toast {
+  padding: 10px 18px;
+  border-radius: 8px;
+  font-size: 13px;
+  font-family: var(--pwv-sans);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+  animation: pwvToastIn 0.3s;
+}
+.pwv-toast-success { background: #2a7e4f; color: #fff; }
+.pwv-toast-error   { background: #b04040; color: #fff; }
+
+@keyframes pwvToastIn {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Responsive: PlanWithVoicePage ────────────────────────────── */
+
+@media (max-width: 768px) {
+  .pwv-header {
+    padding: 24px 16px 16px;
+  }
+
+  .pwv-back-btn {
+    position: static;
+    margin-bottom: 12px;
+    display: inline-flex;
+    align-items: center;
+    font-size: 13px;
+    padding: 8px 14px;
+    min-height: 44px;               /* touch target */
+  }
+
+  .pwv-title {
+    font-size: 22px;
+  }
+
+  .pwv-subtitle {
+    font-size: 13px;
+  }
+
+  .pwv-book-grid {
+    padding: 0 16px;
+    margin: 8px auto 32px;
+    grid-template-columns: 1fr;     /* single column on mobile */
+    gap: 12px;
+    max-width: 100%;
+  }
+
+  .pwv-book-card {
+    padding: 16px;
+    min-height: 72px;               /* comfortable tap target */
+  }
+
+  .pwv-book-card-title {
+    font-size: 15px;
+  }
+
+  .pwv-book-card-desc {
+    font-size: 12.5px;
+    -webkit-line-clamp: 2;
+  }
+
+  .pwv-toast-container {
+    bottom: 16px;
+    right: 16px;
+    left: 16px;
+  }
+
+  .pwv-toast {
+    font-size: 12.5px;
+  }
+
+  /* Planner fills entire viewport on mobile */
+  .pwv-root.pwv-planner-active .spc-root {
+    height: 100vh;
+    height: 100dvh;
+  }
+}
+
+@media (max-width: 480px) {
+  .pwv-header {
+    padding: 16px 12px 12px;
+  }
+
+  .pwv-title {
+    font-size: 19px;
+  }
+
+  .pwv-book-grid {
+    padding: 0 12px;
+  }
+
+  .pwv-book-card {
+    padding: 14px;
+  }
+}
+
+@keyframes pwvToastIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}

@@ -70,7 +70,7 @@ export default function VoiceModeButton({ character, onProfileUpdate }) {
         onClick={() => setOpen(true)}
         title={`Talk to ${name} in their own voice`}
       >
-        <span style={{ fontSize: 11 }}>{'\u25C8'}</span>
+        <span style={{ fontSize: 11 }}>{'◈'}</span>
         TALK TO {name.toUpperCase()}
       </button>
 
