@@ -707,10 +707,13 @@
 /* ─── Mobile breakpoint (≤ 768px): tab-based layout ─── */
 @media (max-width: 768px) {
 
-  /* Root fills viewport */
+  /* Root fills viewport, flex column for proper layout */
   .spc-root {
-    height: 100vh;
-    height: 100dvh;  /* safe for mobile browsers with nav bars */
+    height: 100%;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
   }
 
   /* Show the tab bar */
@@ -753,6 +756,7 @@
     flex-direction: column;
     flex: 1;
     min-height: 0;
+    overflow: hidden;
   }
 
   /* Both columns become full-size, toggle via classes */
@@ -765,8 +769,25 @@
     max-height: none;
   }
 
+  /* Chat column is a flex column — messages scroll, input stays pinned */
   .spc-chat-col {
+    display: flex;
+    flex-direction: column;
     border-bottom: none;
+    overflow: hidden;
+  }
+
+  /* Messages area scrolls */
+  .spc-chat-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Input row always pinned at bottom */
+  .spc-input-row {
+    flex-shrink: 0;
   }
 
   /* Tab switching — mobile show/hide */
@@ -775,11 +796,13 @@
   }
   .spc-mobile-show {
     display: flex !important;
+    flex-direction: column;
   }
 
   /* Header compact */
   .spc-header {
     padding: 10px 14px 8px;
+    flex-shrink: 0;
   }
   .spc-header-title {
     font-size: 14px;
@@ -825,6 +848,8 @@
   /* Input row — bottom-anchored, thumb-friendly */
   .spc-input-row {
     padding: 10px 12px max(14px, env(safe-area-inset-bottom, 14px));
+    border-top: 1px solid rgba(47,42,38,0.08);
+    background: var(--st-surface, #FAF7F2);
   }
 
   .spc-input {
@@ -846,11 +871,22 @@
     border-radius: 8px;
   }
 
+  /* Voice preview — more visible on mobile */
+  .spc-voice-preview {
+    background: rgba(192,122,92,0.08);
+    border: 1px solid rgba(192,122,92,0.15);
+    border-radius: 8px;
+    padding: 8px 12px;
+    font-size: 14px;
+    min-height: 36px;
+  }
+
   /* Plan column on mobile */
   .spc-plan-col {
     padding: 12px;
     gap: 6px;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
 
   .spc-plan-section {

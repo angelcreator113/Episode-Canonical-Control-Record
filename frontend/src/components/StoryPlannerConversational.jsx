@@ -72,14 +72,23 @@ function useVoiceInput() {
   const [transcript,  setTranscript]  = useState('');
   const [supported,   setSupported]   = useState(false);
   const recRef = useRef(null);
+  const wantListeningRef = useRef(false);   // true while user wants mic on
+  const onResultRef = useRef(null);         // caller callback
 
   useEffect(() => {
     setSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
   }, []);
 
-  const start = useCallback((onResult) => {
+  // Internal: create + start a new recognition instance
+  const startRec = useCallback(() => {
     const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SR) return;
+
+    // Tear down previous instance
+    if (recRef.current) {
+      try { recRef.current.onend = null; recRef.current.abort(); } catch {}
+    }
+
     const rec = new SR();
     rec.continuous      = true;
     rec.interimResults  = true;
@@ -92,18 +101,42 @@ function useVoiceInput() {
         full += e.results[i][0].transcript;
       }
       setTranscript(full);
-      if (onResult) onResult(full);
+      if (onResultRef.current) onResultRef.current(full);
     };
-    rec.onerror = () => { setListening(false); };
-    rec.onend   = () => { setListening(false); };
+
+    rec.onerror = (e) => {
+      // 'no-speech' and 'aborted' are benign — auto-restart
+      if (wantListeningRef.current && (e.error === 'no-speech' || e.error === 'aborted')) {
+        return; // onend will fire and restart
+      }
+      // Permission denial or network error — give up
+      wantListeningRef.current = false;
+      setListening(false);
+    };
+
+    rec.onend = () => {
+      // Mobile browsers kill recognition unexpectedly — restart if user still wants it
+      if (wantListeningRef.current) {
+        try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
+        return;
+      }
+      setListening(false);
+    };
 
     rec.start();
     setListening(true);
-    setTranscript('');
   }, []);
 
+  const start = useCallback((onResult) => {
+    onResultRef.current = onResult;
+    wantListeningRef.current = true;
+    setTranscript('');
+    startRec();
+  }, [startRec]);
+
   const stop = useCallback(() => {
-    recRef.current?.stop();
+    wantListeningRef.current = false;
+    try { recRef.current?.stop(); } catch {}
     setListening(false);
   }, []);
 
@@ -150,11 +183,25 @@ export default function StoryPlannerConversational({
   const [mobileTab,   setMobileTab]   = useState('chat'); // 'chat' | 'plan'
   const chatRef   = useRef(null);
   const inputRef  = useRef(null);
+  const rootRef   = useRef(null);
   const voice     = useVoiceInput();
 
   // ── Persist messages + plan to sessionStorage on change ──────────
   useEffect(() => { saveSession('msgs', messages); }, [messages, saveSession]);
   useEffect(() => { saveSession('plan', plan); },     [plan, saveSession]);
+
+  // ── Mobile keyboard resize: shrink root to visual viewport ───────
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!vv) return;
+    const onResize = () => {
+      if (rootRef.current) {
+        rootRef.current.style.height = `${vv.height}px`;
+      }
+    };
+    vv.addEventListener('resize', onResize);
+    return () => vv.removeEventListener('resize', onResize);
+  }, []);
 
   // Auto-scroll chat
   useEffect(() => {
@@ -365,7 +412,7 @@ export default function StoryPlannerConversational({
   // ── RENDER ────────────────────────────────────────────────────────────
 
   return (
-    <div className="spc-root">
+    <div className="spc-root" ref={rootRef}>
 
       {/* ── HEADER ── */}
       <header className="spc-header">

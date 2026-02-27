@@ -46,10 +46,13 @@
 /* ── When planner is active, fill viewport ── */
 .pwv-root.pwv-planner-active {
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 
 .pwv-planner-active .spc-root {
   height: 100vh;
+  height: 100dvh;
 }
 
 /* ── Header (book selection screen) ── */
@@ -241,9 +244,14 @@
   }
 
   /* Planner fills entire viewport on mobile */
+  .pwv-root.pwv-planner-active {
+    display: flex;
+    flex-direction: column;
+  }
   .pwv-root.pwv-planner-active .spc-root {
-    height: 100vh;
-    height: 100dvh;
+    flex: 1;
+    height: auto;
+    min-height: 0;
   }
 }
 
