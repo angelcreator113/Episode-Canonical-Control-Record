@@ -1606,7 +1606,7 @@
   background: var(--st-ambient-bg, var(--st-bg));
   position: sticky;
   top: 0;
-  z-index: 20;
+  z-index: 35;
   flex-shrink: 0;
   backdrop-filter: blur(12px);
 }
@@ -2078,6 +2078,23 @@
 }
 .st-nav-brand-label {
   display: none;
+}
+.st-nav-close-btn {
+  display: none;
+  background: none;
+  border: none;
+  font-size: 16px;
+  color: var(--st-muted);
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 4px;
+  line-height: 1;
+  transition: color 0.15s, background 0.15s;
+  margin-left: auto;
+}
+.st-nav-close-btn:hover {
+  color: var(--st-ink);
+  background: rgba(47, 42, 38, 0.06);
 }
 .st-nav-brand-title {
   font-family: var(--st-serif);
@@ -3347,12 +3364,14 @@ button.st-nav-section-clickable:hover {
     --st-manuscript-w: 100%;
   }
 
-  /* ── Topbar: ultra-minimal ── */
+  /* ── Topbar: ultra-minimal, ABOVE all overlays ── */
   .st-topbar {
     padding: 0 12px;
     gap: 0;
     border-bottom-color: transparent;
     background: var(--st-ambient-bg, var(--st-bg));
+    position: sticky;
+    z-index: 70;
   }
   .st-topbar-left { gap: 8px; min-width: 0; flex-shrink: 0; }
   .st-topbar-right { gap: 8px; min-width: 0; flex-shrink: 0; }
@@ -3405,14 +3424,14 @@ button.st-nav-section-clickable:hover {
   .st-tools-btn-text { display: none; }
   .st-tools-btn-icon-m { display: inline; }
 
-  /* ── Nav: slide-over ── */
+  /* ── Nav: slide-over, starts below topbar ── */
   .st-nav {
     position: fixed;
-    top: 0;
+    top: var(--st-topbar-h);
     left: 0;
     width: var(--st-nav-w);
-    height: 100vh;
-    height: 100dvh;
+    height: calc(100vh - var(--st-topbar-h));
+    height: calc(100dvh - var(--st-topbar-h));
     z-index: 60;
     background: var(--st-surface);
     box-shadow: 4px 0 32px rgba(47, 42, 38, 0.15);
@@ -3428,10 +3447,31 @@ button.st-nav-section-clickable:hover {
   .st-mobile-nav-backdrop {
     display: block;
     position: fixed;
-    inset: 0;
+    top: var(--st-topbar-h);
+    left: 0;
+    right: 0;
+    bottom: 0;
     background: rgba(47, 42, 38, 0.25);
     z-index: 55;
     animation: st-sheet-bg-in 0.2s ease;
+  }
+
+  /* ── Nav brand: show label + close button on mobile ── */
+  .st-nav-brand-label {
+    display: flex;
+    align-items: center;
+    font-family: var(--st-sans);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--st-muted);
+    margin-bottom: 6px;
+  }
+  .st-nav-close-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
   }
 
   /* ── Tools panel: full width ── */

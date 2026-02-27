@@ -827,7 +827,12 @@ function BookEditor({ book, onClose, toast, onRefresh, initialChapterId }) {
         {/* Left Navigation */}
         <nav className={`st-nav${mobileNavOpen ? ' st-nav-mobile-open' : ''}`}>
           <div className="st-nav-brand">
-              <div className="st-nav-brand-label">Archive</div>
+              <div className="st-nav-brand-label">
+                Archive
+                {mobileNavOpen && (
+                  <button className="st-nav-close-btn" onClick={() => setMobileNavOpen(false)} aria-label="Close navigation">✕</button>
+                )}
+              </div>
               {editingBookTitle ? (
                 <input
                   className="st-inline-edit st-inline-edit-book"
