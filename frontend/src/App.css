@@ -159,6 +159,13 @@ html, body {
   -webkit-overflow-scrolling: touch;
 }
 
+/* WriteMode needs scrolling on mobile in full-screen mode */
+.full-screen .app-content:has(> .wm-root) {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* SCENE COMPOSER FULL-SCREEN OVERRIDE */
 .app-content > .scene-composer-full {
   position: fixed !important;

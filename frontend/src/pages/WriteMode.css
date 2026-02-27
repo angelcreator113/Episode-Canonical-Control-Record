@@ -2147,10 +2147,56 @@
 
 @media (max-width: 767px) {
 
-  /* ── Top Bar: compact layout ── */
+  /* ── Mobile scroll fix: let root flow naturally ── */
+  .wm-root {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .wm-hub-layout {
+    overflow: visible;
+  }
+
+  .wm-main-col {
+    overflow: visible;
+  }
+
+  .wm-content-row {
+    overflow: visible;
+    flex: none;
+  }
+
+  .wm-prose-wrap {
+    overflow: visible;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .wm-manuscript-page {
+    min-height: auto;
+  }
+
+  /* Textarea auto-grows via JS — disable internal scroll */
+  .wm-prose-area {
+    overflow: hidden;
+    flex: none;
+    min-height: 50vh;
+  }
+
+  /* Section prose textareas also auto-grow */
+  .wm-section-prose {
+    overflow: hidden !important;
+    flex: none !important;
+    min-height: 120px !important;
+  }
+
+  /* Topbar stays visible while scrolling */
   .wm-topbar {
-    padding: 10px 14px 8px;
-    gap: 8px;
+    position: sticky;
+    top: 0;
+    z-index: 50;
   }
   .wm-chapter-info {
     flex: 1;
@@ -3280,6 +3326,7 @@
 
   .wm-hub-layout {
     flex-direction: column;
+    overflow: visible;
   }
   .wm-toc-sidebar {
     width: 100% !important;
@@ -3302,10 +3349,19 @@
 
   .wm-main-col {
     min-width: 0;
+    overflow: visible;
+  }
+  .wm-content-row {
+    overflow: visible;
+    flex: none;
+  }
+  .wm-prose-wrap {
+    overflow: visible;
   }
   .wm-manuscript-page {
     padding: 16px 12px;
     margin: 0;
+    min-height: auto;
   }
   .wm-manuscript-header {
     padding: 0 0 8px;
@@ -3393,6 +3449,13 @@
 
 /* ── Medium screens (481px - 768px) ── */
 @media (min-width: 481px) and (max-width: 768px) {
+  .wm-root {
+    height: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+  }
   .wm-center-tabs {
     padding: 0 12px;
   }
@@ -3403,6 +3466,17 @@
 
   .wm-hub-layout {
     flex-direction: column;
+    overflow: visible;
+  }
+  .wm-main-col {
+    overflow: visible;
+  }
+  .wm-content-row {
+    overflow: visible;
+    flex: none;
+  }
+  .wm-prose-wrap {
+    overflow: visible;
   }
   .wm-toc-sidebar {
     width: 100% !important;
@@ -3424,10 +3498,13 @@
   }
   .wm-manuscript-page {
     padding: 20px 16px;
+    min-height: auto;
   }
   .wm-prose-area {
     font-size: 16px;
     min-height: 45vh;
+    overflow: hidden;
+    flex: none;
   }
 
   .wm-review-manuscript {

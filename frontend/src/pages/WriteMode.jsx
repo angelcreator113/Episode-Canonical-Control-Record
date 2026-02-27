@@ -198,6 +198,7 @@ export default function WriteMode() {
   const recognitionRef  = useRef(null);
   const editRecRef      = useRef(null);
   const proseRef        = useRef(null);
+  const proseTextareaRef = useRef(null);
   const autoSaveRef     = useRef(null);
   const transcriptRef   = useRef('');
   const editTransRef    = useRef('');
@@ -921,7 +922,23 @@ export default function WriteMode() {
     setProse(val);
     setWordCount(val.split(/\s+/).filter(Boolean).length);
     setSaved(false);
+    // Auto-grow textarea on mobile
+    autoGrowTextarea(e.target);
   };
+
+  // Auto-grow textarea so it doesn't need internal scroll on mobile
+  const autoGrowTextarea = useCallback((el) => {
+    if (!el || window.innerWidth > 767) return;
+    el.style.height = 'auto';
+    el.style.height = el.scrollHeight + 'px';
+  }, []);
+
+  // Re-grow textarea when prose changes externally (AI generation, undo, etc.)
+  useEffect(() => {
+    if (proseTextareaRef.current && window.innerWidth <= 767) {
+      autoGrowTextarea(proseTextareaRef.current);
+    }
+  }, [prose, streamingText, autoGrowTextarea]);
 
   // ── SECTION-AWARE PROSE ───────────────────────────────────────────────
 
@@ -1716,7 +1733,10 @@ export default function WriteMode() {
                         <textarea
                           className="wm-prose-area wm-section-prose"
                           value={sectionProse[sec.id] || ''}
-                          onChange={(e) => handleSectionProseChange(sec.id, e.target.value)}
+                          onChange={(e) => {
+                            handleSectionProseChange(sec.id, e.target.value);
+                            autoGrowTextarea(e.target);
+                          }}
                           placeholder={`Write under ${sec.content || 'this section'}…`}
                           spellCheck={false}
                           readOnly={generating}
@@ -1729,6 +1749,7 @@ export default function WriteMode() {
             ) : (
               <textarea
                 className="wm-prose-area"
+                ref={proseTextareaRef}
                 value={streamingText ? (prose ? prose.trimEnd() + '\n\n' + streamingText : streamingText) : prose}
                 onChange={handleProseChange}
                 placeholder={editMode ? '' : "Begin writing…"}
