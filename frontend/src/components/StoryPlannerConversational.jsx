@@ -75,10 +75,10 @@ function useVoiceInput() {
   const recRef = useRef(null);
   const wantListeningRef = useRef(false);
   const onResultRef = useRef(null);
-  const committedRef = useRef('');     // finalized text from previous segments
+  const committedRef = useRef('');     // finalized text from ALL previous recognition sessions
+  const sessionFinalRef = useRef('');  // final text snapshot from CURRENT session (rebuilt each event, never accumulated)
   const interimRef = useRef('');       // current in-progress segment
   const restartCountRef = useRef(0);   // track restart attempts for backoff
-  const lastProcessedIdx = useRef(0);  // last processed result index (avoid re-appending)
 
   // Detect mobile for recognition strategy
   const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
@@ -104,26 +104,25 @@ function useVoiceInput() {
     recRef.current     = rec;
 
     rec.onresult = (e) => {
+      // Rebuild session text from scratch each event — NEVER accumulate.
+      // e.results is the full list of results for THIS recognition session.
+      // Final results stay in the list; we just snapshot them each time.
+      let sessionFinal = '';
       let interim = '';
-      let newFinal = '';
       for (let i = 0; i < e.results.length; i++) {
         const t = e.results[i][0].transcript;
         if (e.results[i].isFinal) {
-          // Only commit results we haven't already processed
-          if (i >= lastProcessedIdx.current) {
-            newFinal += t;
-            lastProcessedIdx.current = i + 1;
-          }
+          sessionFinal += (sessionFinal ? ' ' : '') + t.trim();
         } else {
           interim += t;
         }
       }
-      // Commit only newly finalized words
-      if (newFinal) {
-        committedRef.current += (committedRef.current ? ' ' : '') + newFinal.trim();
-      }
+      // Store snapshot (not accumulated — safe to overwrite)
+      sessionFinalRef.current = sessionFinal;
       interimRef.current = interim;
-      const full = (committedRef.current + (interim ? ' ' + interim : '')).trim();
+      // Combine: previous sessions + this session's finals + current interim
+      const full = [committedRef.current, sessionFinal, interim]
+        .filter(Boolean).join(' ').trim();
       setTranscript(full);
       if (onResultRef.current) onResultRef.current(full);
       // Reset restart counter on successful result
@@ -141,7 +140,13 @@ function useVoiceInput() {
 
     rec.onend = () => {
       if (wantListeningRef.current) {
-        // Auto-restart for next utterance; committed text is preserved
+        // Before restart, commit this session's final text to committedRef
+        if (sessionFinalRef.current) {
+          committedRef.current = [committedRef.current, sessionFinalRef.current]
+            .filter(Boolean).join(' ');
+          sessionFinalRef.current = '';
+        }
+        // Auto-restart for next utterance
         // On mobile, add a small delay to prevent rapid restart failures
         restartCountRef.current++;
         const delay = isMobile ? Math.min(restartCountRef.current * 150, 800) : 0;
@@ -186,8 +191,8 @@ function useVoiceInput() {
     onResultRef.current = onResult;
     wantListeningRef.current = true;
     committedRef.current = '';
+    sessionFinalRef.current = '';
     interimRef.current = '';
-    lastProcessedIdx.current = 0;
     setTranscript('');
     startRec();
   }, [startRec]);
@@ -445,6 +450,20 @@ export default function StoryPlannerConversational({
     window.speechSynthesis?.cancel();
   };
 
+  // ── Edit a sent message — reloads it into the input ──────────────────
+
+  const editMessage = useCallback((msgIndex) => {
+    if (sending) return;
+    const msg = messages[msgIndex];
+    if (!msg || msg.role !== 'user') return;
+    // Put the text back in the input
+    setInput(msg.text);
+    // Remove this message and everything after it (including Claude's reply)
+    setMessages(prev => prev.slice(0, msgIndex));
+    // Focus the input so they can edit immediately
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [sending, messages]);
+
   // ── Handle key ───────────────────────────────────────────────────────
 
   const handleKey = (e) => {
@@ -554,6 +573,15 @@ export default function StoryPlannerConversational({
                     </div>
                   )}
                 </div>
+                {msg.role === 'user' && !sending && (
+                  <button
+                    className="spc-msg-edit-btn"
+                    onClick={() => editMessage(i)}
+                    title="Edit this message"
+                  >
+                    ✎
+                  </button>
+                )}
               </div>
             ))}
             {sending && (
