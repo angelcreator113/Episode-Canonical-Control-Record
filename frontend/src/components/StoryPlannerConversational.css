@@ -344,6 +344,8 @@
   color: var(--st-muted, #9A9088);
   padding: 4px 0;
   min-height: 20px;
+  max-height: 28px;
+  overflow: hidden;
   -webkit-user-select: text;
   user-select: text;
 }
@@ -378,6 +380,7 @@
   outline: none;
   line-height: 1.5;
   transition: border-color 0.15s;
+  overflow-y: auto;
 }
 .spc-input:focus {
   border-color: rgba(198,168,94,0.4);
@@ -953,9 +956,11 @@
 
   .spc-input {
     min-height: 44px;   /* touch target */
+    max-height: 80px;   /* capped on mobile so send stays visible */
     font-size: 16px;    /* prevents iOS zoom */
     padding: 10px 12px;
     border-radius: 8px;
+    overflow-y: auto;
   }
 
   .spc-mic-btn {

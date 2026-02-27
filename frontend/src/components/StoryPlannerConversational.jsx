@@ -587,7 +587,7 @@ export default function StoryPlannerConversational({
             {voice.listening && (
               <div className="spc-voice-preview">
                 <span className="spc-voice-dot" />
-                {voice.transcript || 'Listening…'}
+                Listening…
               </div>
             )}
             <div className="spc-input-wrap">
@@ -601,7 +601,7 @@ export default function StoryPlannerConversational({
                 }}
                 onKeyDown={handleKey}
                 placeholder="Answer here, or use the mic…"
-                rows={2}
+                rows={1}
                 disabled={sending}
               />
               <div className="spc-input-actions">
