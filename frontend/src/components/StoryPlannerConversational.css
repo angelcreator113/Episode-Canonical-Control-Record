@@ -1,4 +1,4 @@
-/**
+﻿/**
  * StoryPlannerConversational.css
  * Quiet room aesthetic — parchment, Lora/DM Sans, gold accents
  * Matches StorytellerPage design system exactly
@@ -26,7 +26,7 @@
   justify-content: space-between;
   padding: 14px 24px 12px;
   border-bottom: 1px solid rgba(47,42,38,0.08);
-  background: var(--st-surface, #FAF7F2);
+  background: var(--st-surface);
   flex-shrink: 0;
 }
 
@@ -57,7 +57,7 @@
 
 .spc-save-btn {
   background: var(--st-ink, #2F2A26);
-  color: var(--st-surface, #FAF7F2);
+  color: var(--st-surface);
   border: none;
   border-radius: 4px;
   padding: 7px 16px;
@@ -141,7 +141,7 @@
   width: 50%;
   min-width: 0;
   border-right: 1px solid rgba(47,42,38,0.07);
-  background: var(--st-surface, #FAF7F2);
+  background: var(--st-surface);
 }
 
 .spc-chat-messages {
@@ -284,7 +284,7 @@
   flex-direction: column;
   gap: 8px;
   flex-shrink: 0;
-  background: var(--st-surface, #FAF7F2);
+  background: var(--st-surface);
 }
 
 .spc-voice-preview {
@@ -376,7 +376,7 @@
   height: 42px;
   padding: 0 18px;
   background: var(--st-ink, #2F2A26);
-  color: var(--st-surface, #FAF7F2);
+  color: var(--st-surface);
   border: none;
   border-radius: 6px;
   font-family: var(--st-sans, 'DM Sans', sans-serif);
@@ -736,7 +736,7 @@
   .spc-mobile-tabs {
     display: flex;
     border-bottom: 1px solid rgba(47,42,38,0.08);
-    background: var(--st-surface, #FAF7F2);
+    background: var(--st-surface);
     flex-shrink: 0;
   }
 
@@ -865,7 +865,7 @@
   .spc-input-row {
     padding: 10px 12px max(14px, env(safe-area-inset-bottom, 14px));
     border-top: 1px solid rgba(47,42,38,0.08);
-    background: var(--st-surface, #FAF7F2);
+    background: var(--st-surface);
   }
 
   .spc-input {

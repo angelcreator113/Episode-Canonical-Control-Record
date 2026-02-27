@@ -5,42 +5,12 @@
  * Lets user pick a book, loads its chapters + characters,
  * then renders StoryPlannerConversational.
  */
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryPlannerConversational from '../components/StoryPlannerConversational';
+import { api } from '../utils/storytellerApi';
+import { useToasts } from '../hooks/useToasts';
 import './PlanWithVoicePage.css';
-
-const API = '/api/v1/storyteller';
-
-/* ─── tiny api helper (mirrors StorytellerPage) ─── */
-function authHeader() {
-  const token = localStorage.getItem('authToken');
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}
-
-async function api(path, opts = {}) {
-  const res = await fetch(`${API}${path}`, {
-    ...opts,
-    headers: { 'Content-Type': 'application/json', ...authHeader(), ...(opts.headers || {}) },
-  });
-  if (!res.ok) {
-    const err = await res.text().catch(() => 'Request failed');
-    throw new Error(err);
-  }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
-/* ─── simple toast hook ─── */
-function useToasts() {
-  const [toasts, setToasts] = useState([]);
-  const add = useCallback((msg, type = 'success') => {
-    const id = Date.now();
-    setToasts(prev => [...prev, { id, msg, type }]);
-    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 3000);
-  }, []);
-  return { toasts, add };
-}
 
 /* ═══════════════════════════════════════
    PlanWithVoicePage

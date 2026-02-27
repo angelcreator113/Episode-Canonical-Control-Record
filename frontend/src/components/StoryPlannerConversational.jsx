@@ -9,13 +9,10 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { authHeader } from '../utils/storytellerApi';
 import './StoryPlannerConversational.css';
 
 const API = '/api/v1';
-const authHeader = () => {
-  const t = localStorage.getItem('authToken');
-  return t ? { Authorization: `Bearer ${t}` } : {};
-};
 
 // ── Opening message — adapts to what we already know ─────────────────────
 function makeOpeningMessage(book, chapters) {
