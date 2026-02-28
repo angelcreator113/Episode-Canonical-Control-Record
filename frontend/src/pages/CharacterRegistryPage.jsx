@@ -179,6 +179,11 @@ export default function CharacterRegistryPage() {
   const [generatingId, setGeneratingId]   = useState(null);   // single char generation
   const [generatingAll, setGeneratingAll] = useState(false);   // batch generation
 
+  // Plot thread CRUD state
+  const [showNewThread, setShowNewThread] = useState(false);
+  const [threadForm, setThreadForm]       = useState({ title: '', description: '', status: 'open', source: '' });
+  const [editingThreadId, setEditingThreadId] = useState(null);
+
   // World mode — flat view of ALL characters across registries
   const [worldMode, setWorldMode]           = useState(false);
   const [allCharacters, setAllCharacters]   = useState([]);
@@ -196,6 +201,11 @@ export default function CharacterRegistryPage() {
   const [aiLoading, setAiLoading]       = useState(false);
   const [aiError, setAiError]           = useState(null);
   const [aiContextUsed, setAiContextUsed] = useState(null);
+
+  // Comparison view state
+  const [compareMode, setCompareMode]   = useState(false);
+  const [compareSelection, setCompareSelection] = useState([]);  // array of char ids (max 2)
+  const [showCompare, setShowCompare]   = useState(false);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type, key: Date.now() });
@@ -237,11 +247,31 @@ export default function CharacterRegistryPage() {
 
   useEffect(() => { fetchRegistries(); }, [fetchRegistries]);
 
-  // Load living states from localStorage on mount
+  // Load living states from localStorage on mount, then try DB
   useEffect(() => {
     const saved = JSON.parse(localStorage.getItem('wv_living_states') || '{}');
     setLivingStates(saved);
   }, []);
+
+  // Hydrate living states from DB (evolution_tracking.living_state) when registry loads
+  useEffect(() => {
+    if (!activeRegistry?.characters) return;
+    const dbStates = {};
+    for (const ch of activeRegistry.characters) {
+      const ls = ch.evolution_tracking?.living_state;
+      if (ls?.isGenerated) dbStates[ch.id] = ls;
+    }
+    if (Object.keys(dbStates).length > 0) {
+      setLivingStates(prev => {
+        const merged = { ...prev };
+        for (const [id, state] of Object.entries(dbStates)) {
+          if (!merged[id]?.isGenerated) merged[id] = state;
+        }
+        localStorage.setItem('wv_living_states', JSON.stringify(merged));
+        return merged;
+      });
+    }
+  }, [activeRegistry?.id]);
 
   // Names to exclude from LalaVerse
   const WORLD_EXCLUDE = ['chloe', 'justawoman', 'the almost-mentor', 'the witness', 'the husband', 'the digital products customer'];
@@ -347,24 +377,51 @@ export default function CharacterRegistryPage() {
       const updated = { ...livingStates, [charId]: newState };
       setLivingStates(updated);
       localStorage.setItem('wv_living_states', JSON.stringify(updated));
+      // Persist to DB via evolution_tracking
+      try {
+        await fetch(`${API}/characters/${charId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: newState } }),
+        });
+      } catch { /* non-critical */ }
     } catch {
       const newState = generateFallbackState(character);
       const updated = { ...livingStates, [charId]: newState };
       setLivingStates(updated);
       localStorage.setItem('wv_living_states', JSON.stringify(updated));
+      // Persist fallback to DB too
+      try {
+        await fetch(`${API}/characters/${charId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: newState } }),
+        });
+      } catch { /* non-critical */ }
     } finally {
       setGeneratingId(null);
     }
   }, [allCharacters, activeRegistry, livingStates]);
 
   const confirmState = useCallback((charId) => {
+    const confirmedState = { ...livingStates[charId], isConfirmed: true };
     const updated = {
       ...livingStates,
-      [charId]: { ...livingStates[charId], isConfirmed: true },
+      [charId]: confirmedState,
     };
     setLivingStates(updated);
     localStorage.setItem('wv_living_states', JSON.stringify(updated));
-  }, [livingStates]);
+    // Persist confirmation to DB
+    const character = allCharacters.find(c => c.id === charId) ||
+                      (activeRegistry?.characters || []).find(c => c.id === charId);
+    if (character) {
+      fetch(`${API}/characters/${charId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
+      }).catch(() => { /* non-critical */ });
+    }
+  }, [livingStates, allCharacters, activeRegistry]);
 
   const generateAllStates = useCallback(async () => {
     const charList = worldMode ? allCharacters : (activeRegistry?.characters || []);
@@ -479,6 +536,70 @@ export default function CharacterRegistryPage() {
     }
   }, [activeChar]);
 
+  /* ── Plot Thread CRUD ── */
+  const addPlotThread = async () => {
+    if (!activeChar || !threadForm.title.trim()) return;
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(threadForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPlotThreads(data.threads);
+        setShowNewThread(false);
+        setThreadForm({ title: '', description: '', status: 'open', source: '' });
+        showToast('Plot thread added');
+      }
+    } catch (e) { showToast('Failed to add thread', 'error'); }
+  };
+
+  const updatePlotThread = async (threadId) => {
+    if (!activeChar) return;
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads/${threadId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(threadForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPlotThreads(data.threads);
+        setEditingThreadId(null);
+        setThreadForm({ title: '', description: '', status: 'open', source: '' });
+        showToast('Plot thread updated');
+      }
+    } catch (e) { showToast('Failed to update thread', 'error'); }
+  };
+
+  const deletePlotThread = async (threadId) => {
+    if (!activeChar) return;
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads/${threadId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPlotThreads(data.threads);
+        showToast('Thread removed');
+      }
+    } catch (e) { showToast('Failed to delete thread', 'error'); }
+  };
+
+  const toggleThreadStatus = async (thread) => {
+    const nextStatus = thread.status === 'open' ? 'active' : thread.status === 'active' ? 'resolved' : 'open';
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads/${thread.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      if (data.success) setPlotThreads(data.threads);
+    } catch { /* silent */ }
+  };
+
   /* ── Characters + Filtering ── */
 
   const characters = worldMode ? allCharacters : (activeRegistry?.characters || []);
@@ -516,6 +637,14 @@ export default function CharacterRegistryPage() {
   /* ── Character Actions ── */
 
   const openDossier = (char) => {
+    if (compareMode) {
+      setCompareSelection(prev => {
+        if (prev.includes(char.id)) return prev.filter(id => id !== char.id);
+        if (prev.length >= 2) return [prev[1], char.id];
+        return [...prev, char.id];
+      });
+      return;
+    }
     setActiveChar(char);
     setView('dossier');
     setDossierTab('overview');
@@ -797,6 +926,36 @@ export default function CharacterRegistryPage() {
     setAiDirection('');
   };
 
+  /* ── Save AI Writer Result to Character Profile ── */
+  const saveAiToProfile = useCallback(async (fields) => {
+    if (!activeChar || !fields || Object.keys(fields).length === 0) return;
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('AI result saved to profile');
+        // Refresh character data
+        if (activeRegistry?.id) {
+          const refreshed = await fetch(`${API}/registries/${activeRegistry.id}`);
+          const rData = await refreshed.json();
+          if (rData.success) {
+            setActiveRegistry(rData.registry);
+            const updated = (rData.registry?.characters || []).find(c => c.id === activeChar.id);
+            if (updated) setActiveChar(updated);
+          }
+        }
+      } else {
+        showToast(data.error || 'Failed to save', 'error');
+      }
+    } catch (e) {
+      showToast('Failed to save AI result', 'error');
+    }
+  }, [activeChar, activeRegistry, showToast]);
+
   /* ── Stats ── */
   const statusCounts = {
     total: sorted.length,
@@ -910,6 +1069,9 @@ export default function CharacterRegistryPage() {
               <button className="cr-dossier-back-btn" onClick={closeDossier}>
                 ← Back to Registry
               </button>
+              <button className="cr-export-btn" onClick={() => window.print()} title="Print / Export PDF">
+                🖨 Export
+              </button>
             </div>
           )}
 
@@ -961,21 +1123,24 @@ export default function CharacterRegistryPage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const form = new FormData();
-                        form.append('portrait', file);
+                        const fd = new FormData();
+                        fd.append('portrait', file);
                         try {
                           const resp = await fetch(`${API}/characters/${c.id}/portrait`, {
                             method: 'POST',
-                            body: form,
+                            body: fd,
                           });
                           const data = await resp.json();
                           if (data.success && data.portrait_url) {
-                            setCharacters(prev => prev.map(ch =>
-                              ch.id === c.id ? { ...ch, portrait_url: data.portrait_url } : ch
-                            ));
+                            setActiveChar(prev => ({ ...prev, portrait_url: data.portrait_url }));
+                            if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+                            showToast('Portrait uploaded');
+                          } else {
+                            showToast(data.error || 'Upload failed', 'error');
                           }
                         } catch (err) {
                           console.error('Portrait upload failed:', err);
+                          showToast('Portrait upload failed', 'error');
                         }
                         e.target.value = '';
                       }}
@@ -989,12 +1154,16 @@ export default function CharacterRegistryPage() {
                       onClick={async (e) => {
                         e.stopPropagation();
                         try {
-                          await fetch(`${API}/characters/${c.id}/portrait`, { method: 'DELETE' });
-                          setCharacters(prev => prev.map(ch =>
-                            ch.id === c.id ? { ...ch, portrait_url: null } : ch
-                          ));
+                          const resp = await fetch(`${API}/characters/${c.id}/portrait`, { method: 'DELETE' });
+                          const data = await resp.json();
+                          if (data.success) {
+                            setActiveChar(prev => ({ ...prev, portrait_url: null }));
+                            if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+                            showToast('Portrait removed');
+                          }
                         } catch (err) {
                           console.error('Portrait remove failed:', err);
+                          showToast('Portrait remove failed', 'error');
                         }
                       }}
                     >
@@ -1264,31 +1433,97 @@ export default function CharacterRegistryPage() {
                 /* ── Plot Threads Tab ── */
                 : dossierTab === 'threads' ? (
                   <div className="cr-threads-tab">
+                    <div className="cr-threads-header">
+                      <h4>Plot Threads</h4>
+                      <button className="cr-btn-outline" onClick={() => { setShowNewThread(true); setEditingThreadId(null); setThreadForm({ title: '', description: '', status: 'open', source: '' }); }}>
+                        + New Thread
+                      </button>
+                    </div>
+
+                    {/* New / Edit Thread Form */}
+                    {(showNewThread || editingThreadId) && (
+                      <div className="cr-thread-form">
+                        <div className="cr-edit-field">
+                          <label className="cr-edit-label">Thread Title *</label>
+                          <input className="cr-edit-input" value={threadForm.title}
+                            onChange={e => setThreadForm(p => ({ ...p, title: e.target.value }))}
+                            placeholder="e.g. David's resistance to Lala" autoFocus />
+                        </div>
+                        <div className="cr-edit-field">
+                          <label className="cr-edit-label">Description</label>
+                          <textarea className="cr-edit-input cr-edit-textarea" value={threadForm.description}
+                            onChange={e => setThreadForm(p => ({ ...p, description: e.target.value }))}
+                            placeholder="What this thread is about…" rows={2} />
+                        </div>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <div className="cr-edit-field" style={{ flex: 1 }}>
+                            <label className="cr-edit-label">Status</label>
+                            <select className="cr-edit-input cr-edit-select" value={threadForm.status}
+                              onChange={e => setThreadForm(p => ({ ...p, status: e.target.value }))}>
+                              <option value="open">Open</option>
+                              <option value="active">Active</option>
+                              <option value="resolved">Resolved</option>
+                            </select>
+                          </div>
+                          <div className="cr-edit-field" style={{ flex: 1 }}>
+                            <label className="cr-edit-label">Source</label>
+                            <input className="cr-edit-input" value={threadForm.source}
+                              onChange={e => setThreadForm(p => ({ ...p, source: e.target.value }))}
+                              placeholder="Ch. 3, Ep. 5…" />
+                          </div>
+                        </div>
+                        <div className="cr-modal-actions">
+                          <button className="cr-edit-cancel-btn" onClick={() => { setShowNewThread(false); setEditingThreadId(null); }}>Cancel</button>
+                          <button className="cr-edit-save-btn"
+                            disabled={!threadForm.title.trim()}
+                            onClick={() => editingThreadId ? updatePlotThread(editingThreadId) : addPlotThread()}>
+                            {editingThreadId ? 'Update Thread' : 'Add Thread'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
                     {plotThreads.length > 0 ? (
                       <div className="cr-threads-list">
                         {plotThreads.map((thread, i) => {
                           const dotColor = thread.status === 'active' ? '#3d8e42'
                             : thread.status === 'resolved' ? '#9a8c9e' : '#c9a84c';
                           return (
-                            <div key={i} className="cr-thread-entry">
-                              <div className="cr-thread-dot" style={{ background: dotColor }} />
+                            <div key={thread.id || i} className="cr-thread-entry">
+                              <div className="cr-thread-dot" style={{ background: dotColor }}
+                                onClick={() => toggleThreadStatus(thread)}
+                                title="Click to cycle status" />
                               <div className="cr-thread-body">
                                 <div className="cr-thread-title">{thread.title || thread.description}</div>
+                                {thread.description && thread.title && (
+                                  <div className="cr-thread-desc">{thread.description}</div>
+                                )}
                                 <div className="cr-thread-meta">
                                   <span style={{ color: dotColor }}>{thread.status || 'open'}</span>
                                   {thread.source && <span className="cr-thread-source">· {thread.source}</span>}
                                 </div>
                               </div>
+                              <div className="cr-thread-actions">
+                                <button className="cr-thread-edit-btn" onClick={() => {
+                                  setEditingThreadId(thread.id);
+                                  setShowNewThread(false);
+                                  setThreadForm({ title: thread.title || '', description: thread.description || '', status: thread.status || 'open', source: thread.source || '' });
+                                }}>✎</button>
+                                <button className="cr-thread-delete-btn" onClick={() => deletePlotThread(thread.id)}>✕</button>
+                              </div>
                             </div>
                           );
                         })}
                       </div>
-                    ) : (
+                    ) : !showNewThread ? (
                       <div className="cr-dossier-empty">
                         <div className="cr-dossier-empty-icon">🧵</div>
                         <p className="cr-dossier-empty-text">No plot threads tracked yet.</p>
+                        <button className="cr-dossier-empty-btn" onClick={() => setShowNewThread(true)}>
+                          + Add First Thread
+                        </button>
                       </div>
-                    )}
+                    ) : null}
                   </div>
                 )
 
@@ -1307,7 +1542,7 @@ export default function CharacterRegistryPage() {
                     }}
                   />
                 ) : (
-                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear })
+                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile })
                 )}
               </div>
             </div>
@@ -1673,7 +1908,27 @@ export default function CharacterRegistryPage() {
             <span className="cr-stat-count">{statusCounts.draft}</span>
             <span className="cr-stat-label">Draft</span>
           </div>
+          <div className="cr-stat-actions">
+            <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
+              onClick={() => { setCompareMode(m => !m); setCompareSelection([]); }}>
+              {compareMode ? '✕ Cancel Compare' : '⟷ Compare'}
+            </button>
+          </div>
         </div>
+
+        {/* Compare bar */}
+        {compareMode && (
+          <div className="cr-compare-bar">
+            <span className="cr-compare-bar-text">
+              Select 2 characters to compare ({compareSelection.length}/2)
+            </span>
+            {compareSelection.length === 2 && (
+              <button className="cr-edit-save-btn" onClick={() => setShowCompare(true)}>
+                Compare Now →
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Empty */}
         {sorted.length === 0 ? (
@@ -1696,7 +1951,8 @@ export default function CharacterRegistryPage() {
           /* ── GRID VIEW ── */
           <div className="cr-grid">
             {filtered.map(c => (
-              <CharacterCard key={c.id} c={c} onClick={() => openDossier(c)} />
+              <CharacterCard key={c.id} c={c} onClick={() => openDossier(c)}
+                isCompareSelected={compareMode && compareSelection.includes(c.id)} />
             ))}
           </div>
         ) : (
@@ -1865,6 +2121,69 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
+      {/* Character Comparison Modal */}
+      {showCompare && compareSelection.length === 2 && (() => {
+        const chars = sorted;
+        const a = chars.find(ch => ch.id === compareSelection[0]);
+        const b = chars.find(ch => ch.id === compareSelection[1]);
+        if (!a || !b) return null;
+        const fields = [
+          { label: 'Role', key: 'role_type', fmt: v => ROLE_LABELS[v] || v },
+          { label: 'Archetype', key: 'character_archetype' },
+          { label: 'Canon Tier', key: 'canon_tier' },
+          { label: 'Era', key: 'era_introduced' },
+          { label: 'Status', key: 'status' },
+          { label: 'Core Desire', key: 'core_desire' },
+          { label: 'Core Fear', key: 'core_fear' },
+          { label: 'Core Wound', key: 'core_wound' },
+          { label: 'Mask', key: 'mask_persona' },
+          { label: 'Truth', key: 'truth_persona' },
+          { label: 'Signature Trait', key: 'signature_trait' },
+          { label: 'Emotional Baseline', key: 'emotional_baseline' },
+          { label: 'Core Belief', key: 'core_belief' },
+          { label: 'Pressure Type', key: 'pressure_type' },
+        ];
+        return (
+          <div className="cr-modal-overlay" onClick={() => { setShowCompare(false); setCompareMode(false); setCompareSelection([]); }}>
+            <div className="cr-modal cr-compare-modal" onClick={e => e.stopPropagation()}>
+              <div className="cr-modal-body">
+                <h2 className="cr-modal-title">Character Comparison</h2>
+                <div className="cr-compare-grid">
+                  <div className="cr-compare-header-row">
+                    <div className="cr-compare-label-col"></div>
+                    <div className="cr-compare-char-col">
+                      <span className="cr-compare-char-icon">{a.icon || '◆'}</span>
+                      <span className="cr-compare-char-name">{a.selected_name || a.display_name}</span>
+                    </div>
+                    <div className="cr-compare-char-col">
+                      <span className="cr-compare-char-icon">{b.icon || '◆'}</span>
+                      <span className="cr-compare-char-name">{b.selected_name || b.display_name}</span>
+                    </div>
+                  </div>
+                  {fields.map(f => {
+                    const va = f.fmt ? f.fmt(a[f.key]) : (a[f.key] || '—');
+                    const vb = f.fmt ? f.fmt(b[f.key]) : (b[f.key] || '—');
+                    const diff = va !== vb;
+                    return (
+                      <div key={f.key} className={`cr-compare-row ${diff ? 'cr-compare-diff' : ''}`}>
+                        <div className="cr-compare-label-col">{f.label}</div>
+                        <div className="cr-compare-val-col">{va}</div>
+                        <div className="cr-compare-val-col">{vb}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="cr-modal-actions">
+                  <button className="cr-edit-cancel-btn" onClick={() => { setShowCompare(false); setCompareMode(false); setCompareSelection([]); }}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
       <CharacterVoiceInterview
@@ -1942,12 +2261,12 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
 /* ================================================================
    CHARACTER CARD (Grid)
    ================================================================ */
-function CharacterCard({ c, onClick }) {
+function CharacterCard({ c, onClick, isCompareSelected }) {
   const isCore = c.canon_tier === 'Core Canon';
   const roleColor = `var(--role-${c.role_type || 'special'})`;
 
   return (
-    <div className={`cr-card ${isCore ? 'canon-core' : ''}`} onClick={onClick}>
+    <div className={`cr-card ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''}`} onClick={onClick}>
       {/* Portrait */}
       <div className="cr-card-portrait" style={{ background: `linear-gradient(135deg, var(--surface2) 0%, var(--surface3) 100%)` }}>
         <div className="cr-card-portrait-bg" style={{ background: roleColor }} />
@@ -2070,11 +2389,18 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EField label="Display Name" value={form.display_name} onChange={v => F('display_name', v)} />
               <EField label="Alias / Selected Name" value={form.selected_name} onChange={v => F('selected_name', v)} />
               <EArea label="Description" value={form.description} onChange={v => F('description', v)} rows={4} />
+              <EArea label="Core Belief" value={form.core_belief} onChange={v => F('core_belief', v)} rows={2} placeholder="The central question this character carries" />
               <EField label="First Appearance" value={form.first_appearance} onChange={v => F('first_appearance', v)} placeholder="Book 1 · Episode 3" />
               <EField label="Era Introduced" value={form.era_introduced} onChange={v => F('era_introduced', v)} />
               <ESelect label="Canon Tier" value={form.canon_tier} onChange={v => F('canon_tier', v)}
                 options={CANON_TIERS.map(t => ({ value: t, label: t }))} allowEmpty />
+              <ESelect label="Appearance Mode" value={form.appearance_mode} onChange={v => F('appearance_mode', v)}
+                options={[{value:'on_page',label:'On Page'},{value:'composite',label:'Composite'},{value:'observed',label:'Observed'},{value:'invisible',label:'Invisible'},{value:'brief',label:'Brief'}]} allowEmpty />
+              <EField label="Pressure Type" value={form.pressure_type} onChange={v => F('pressure_type', v)} placeholder="How this character applies pressure" />
+              <EArea label="Pressure Quote" value={form.pressure_quote} onChange={v => F('pressure_quote', v)} rows={2} placeholder="A line that captures their pressure" />
+              <EField label="Job Options" value={form.job_options} onChange={v => F('job_options', v)} placeholder="Considered professions" />
               <EField label="Creator" value={form.creator} onChange={v => F('creator', v)} />
+              <EArea label="Writer Notes" value={form.writer_notes} onChange={v => F('writer_notes', v)} rows={3} placeholder="Private notes for the writer…" />
             </>
           ) : (
             <>
@@ -2083,10 +2409,28 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   {c.description || c.subtitle}
                 </p>
               )}
+              {c.core_belief && (
+                <div className="cr-dossier-belief-banner">
+                  <span className="cr-dossier-belief-icon">◈</span>
+                  <span className="cr-dossier-belief-text">"{c.core_belief}"</span>
+                </div>
+              )}
               <DRow label="First Appearance" value={c.first_appearance} />
               <DRow label="Era Introduced" value={c.era_introduced} />
               <DRow label="Canon Tier" value={c.canon_tier} accent={c.canon_tier === 'Core Canon'} />
+              <DRow label="Appearance Mode" value={c.appearance_mode?.replace('_', ' ')} />
+              <DRow label="Pressure Type" value={c.pressure_type} />
+              {c.pressure_quote && (
+                <DRow label="Pressure Quote" value={`"${c.pressure_quote}"`} accent />
+              )}
+              <DRow label="Job Options" value={c.job_options} />
               <DRow label="Creator" value={c.creator} />
+              {c.writer_notes && (
+                <div className="cr-dossier-writer-notes">
+                  <span className="cr-dossier-writer-notes-label">✎ Writer Notes</span>
+                  <p className="cr-dossier-writer-notes-text">{c.writer_notes}</p>
+                </div>
+              )}
               {jGet(c.story_presence, 'current_story_status') && (
                 <DRow label="Current Arc" value={jGet(c.story_presence, 'current_story_status')} accent />
               )}
@@ -2115,6 +2459,9 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                 options={ARCHETYPES.map(a => ({ value: a, label: a }))} allowEmpty />
               <EArea label="Signature Trait" value={form.signature_trait} onChange={v => F('signature_trait', v)} rows={2} />
               <EField label="Emotional Baseline" value={form.emotional_baseline} onChange={v => F('emotional_baseline', v)} />
+              <EArea label="Belief Under Pressure" value={form.belief_pressured} onChange={v => F('belief_pressured', v)} rows={2} placeholder="What they believe when the mask cracks" />
+              <EArea label="Emotional Function" value={form.emotional_function} onChange={v => F('emotional_function', v)} rows={2} placeholder="The role they serve emotionally in the story" />
+              <EField label="Wound Depth" value={form.wound_depth} onChange={v => F('wound_depth', v)} placeholder="0–10 scale" />
             </>
           ) : (
             <>
@@ -2163,6 +2510,19 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <DRow label="Archetype" value={c.character_archetype} accent />
               <DRow label="Signature Trait" value={c.signature_trait} />
               <DRow label="Emotional Baseline" value={c.emotional_baseline} />
+              <DRow label="Belief Under Pressure" value={c.belief_pressured} />
+              <DRow label="Emotional Function" value={c.emotional_function} />
+              {c.wound_depth > 0 && (
+                <div className="cr-dossier-row">
+                  <span className="cr-dossier-row-label">Wound Depth</span>
+                  <span className="cr-dossier-row-value">
+                    <span className="cr-wound-meter">
+                      <span className="cr-wound-fill" style={{ width: `${(c.wound_depth || 0) * 10}%` }} />
+                    </span>
+                    {c.wound_depth}/10
+                  </span>
+                </div>
+              )}
 
               {c.personality && (
                 <div className="cr-dossier-pills">
@@ -2244,7 +2604,17 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'relationships':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Relationships')}
+          <div className="cr-dossier-section-header">
+            <span className="cr-dossier-section-title">Relationships</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a href="/relationships" className="cr-btn-outline" style={{ textDecoration: 'none', fontSize: 12, padding: '4px 10px' }}>
+                🕸 View Web
+              </a>
+              {!editing && (
+                <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)}>✎ Edit</button>
+              )}
+            </div>
+          </div>
           {editControls}
           {editing ? (
             <>
@@ -2353,7 +2723,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
 
     /* ── AI WRITER ── */
     case 'ai':
-      return <AIWriterTab character={c} ai={ai} />;
+      return <AIWriterTab character={c} ai={ai} onSaveToProfile={ai.onSaveToProfile} />;
 
     default:
       return null;
@@ -2364,7 +2734,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
 /* ================================================================
    AI WRITER TAB
    ================================================================ */
-function AIWriterTab({ character, ai }) {
+function AIWriterTab({ character, ai, onSaveToProfile }) {
   const {
     aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood,
     aiOtherChars, setAiOtherChars, aiLength, setAiLength,
@@ -2507,6 +2877,16 @@ function AIWriterTab({ character, ai }) {
             </div>
           </div>
           <div className="ai-writer-prose">{aiResult.prose}</div>
+          {onSaveToProfile && (
+            <button
+              className="ai-writer-save-btn"
+              onClick={() => onSaveToProfile({
+                writer_notes: `[AI ${aiMode}] ${aiResult.prose?.slice(0, 500)}${aiResult.prose?.length > 500 ? '…' : ''}`,
+              })}
+            >
+              Save to Writer Notes
+            </button>
+          )}
           {aiContextUsed && (
             <div className="ai-writer-context-badge">
               Context: {aiContextUsed.memories || 0} memories · {aiContextUsed.relationships || 0} relationships · {aiContextUsed.recent_lines || 0} lines
@@ -2627,6 +3007,25 @@ function AIWriterTab({ character, ai }) {
             <div className="ai-writer-profile-desc">
               <strong>Bio:</strong> {p.description}
             </div>
+          )}
+          {onSaveToProfile && (
+            <button
+              className="ai-writer-save-btn"
+              onClick={() => {
+                const fields = {};
+                if (p.core_desire) fields.core_desire = p.core_desire;
+                if (p.core_fear) fields.core_fear = p.core_fear;
+                if (p.core_wound) fields.core_wound = p.core_wound;
+                if (p.mask_persona) fields.mask_persona = p.mask_persona;
+                if (p.truth_persona) fields.truth_persona = p.truth_persona;
+                if (p.signature_trait) fields.signature_trait = p.signature_trait;
+                if (p.emotional_baseline) fields.emotional_baseline = p.emotional_baseline;
+                if (p.description) fields.description = p.description;
+                onSaveToProfile(fields);
+              }}
+            >
+              Save Profile to Character Record
+            </button>
           )}
           {p.evidence?.length > 0 && (
             <div className="ai-writer-evidence">
@@ -2776,10 +3175,16 @@ function buildFormForTab(tabKey, c) {
         display_name:     c.display_name || '',
         selected_name:    c.selected_name || '',
         description:      c.description || '',
+        core_belief:      c.core_belief || '',
         first_appearance: c.first_appearance || '',
         era_introduced:   c.era_introduced || '',
         canon_tier:       c.canon_tier || '',
+        appearance_mode:  c.appearance_mode || '',
+        pressure_type:    c.pressure_type || '',
+        pressure_quote:   c.pressure_quote || '',
+        job_options:      c.job_options || '',
         creator:          c.creator || '',
+        writer_notes:     c.writer_notes || '',
       };
     case 'psychology':
       return {
@@ -2791,6 +3196,9 @@ function buildFormForTab(tabKey, c) {
         character_archetype: c.character_archetype || '',
         signature_trait:     c.signature_trait || '',
         emotional_baseline:  c.emotional_baseline || '',
+        belief_pressured:    c.belief_pressured || '',
+        emotional_function:  c.emotional_function || '',
+        wound_depth:         c.wound_depth || '',
       };
     case 'aesthetic':
       return {
@@ -2849,10 +3257,16 @@ function buildPayloadForTab(tabKey, form) {
         display_name:     form.display_name,
         selected_name:    form.selected_name,
         description:      form.description,
+        core_belief:      form.core_belief,
         first_appearance: form.first_appearance,
         era_introduced:   form.era_introduced,
         canon_tier:       form.canon_tier,
+        appearance_mode:  form.appearance_mode,
+        pressure_type:    form.pressure_type,
+        pressure_quote:   form.pressure_quote,
+        job_options:      form.job_options,
         creator:          form.creator,
+        writer_notes:     form.writer_notes,
       };
     case 'psychology':
       return {
@@ -2864,6 +3278,9 @@ function buildPayloadForTab(tabKey, form) {
         character_archetype: form.character_archetype,
         signature_trait:     form.signature_trait,
         emotional_baseline:  form.emotional_baseline,
+        belief_pressured:    form.belief_pressured,
+        emotional_function:  form.emotional_function,
+        wound_depth:         form.wound_depth ? parseFloat(form.wound_depth) : null,
       };
     case 'aesthetic':
       return {
