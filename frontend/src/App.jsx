@@ -89,7 +89,7 @@ const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
 const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPage'));
-const WorldView = lazy(() => import('./pages/WorldView'));
+// WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
 const SceneComposerFull = lazy(() => import('./components/SceneComposer/SceneComposerFull'));
@@ -373,8 +373,8 @@ function AppContent() {
           {/* Recycle Bin */}
           <Route path="/recycle-bin" element={<RecycleBin />} />
 
-          {/* World View */}
-          <Route path="/world" element={<WorldView />} />
+          {/* World View — redirect to merged Characters page */}
+          <Route path="/world" element={<Navigate to="/character-registry?view=world" replace />} />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />

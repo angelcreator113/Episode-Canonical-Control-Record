@@ -4249,3 +4249,548 @@
     left: -11px;
   }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════════
+   WORLD MODE — LalaVerse (merged from WorldView)
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* ── Living State inline actions (dossier tab) ────────────────────────── */
+
+.cr-living-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  flex-wrap: wrap;
+}
+
+.cr-living-confirmed-badge {
+  font-family: var(--sans, 'DM Sans', sans-serif);
+  font-size: 13px;
+  font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* ── World pill variant ───────────────────────────────────────────────── */
+
+.cr-registry-pill.world {
+  background: linear-gradient(135deg, var(--purple-light) 0%, #fce4ef 100%);
+  border-color: var(--purple);
+}
+.cr-registry-pill.world.active {
+  background: linear-gradient(135deg, #f8c8dc 0%, #d4b4e8 100%);
+  color: #fff;
+  border-color: transparent;
+  box-shadow: 0 2px 12px rgba(196,160,224,0.3);
+}
+
+/* ── World header ─────────────────────────────────────────────────────── */
+
+.cr-world-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.cr-world-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 120px;
+  height: 2px;
+  background: linear-gradient(135deg, #f8c8dc 0%, #d4b4e8 50%, #c9a84c 100%);
+}
+
+.cr-world-header-left {
+  flex: 1;
+  min-width: 0;
+}
+
+.cr-world-title {
+  font-family: var(--serif, 'Cormorant Garamond', Georgia, serif);
+  font-size: 38px;
+  font-weight: 300;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+  line-height: 1.1;
+  margin: 0 0 6px;
+}
+
+.cr-world-subtitle {
+  font-family: var(--mono, 'DM Mono', monospace);
+  font-size: 12px;
+  color: var(--ink-faint);
+  margin: 0;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+/* ── Generate all banner ──────────────────────────────────────────────── */
+
+.cr-world-gen-all {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #fce4ef 0%, #ece0f5 100%);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px 22px;
+  margin-bottom: 22px;
+  position: relative;
+  overflow: hidden;
+}
+.cr-world-gen-all::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: linear-gradient(135deg, #f8c8dc 0%, #d4b4e8 50%, #c9a84c 100%);
+}
+
+.cr-world-gen-all-text {
+  flex: 1;
+  font-family: var(--sans, 'DM Sans', sans-serif);
+  font-size: 13px;
+  color: var(--ink-dim);
+}
+
+.cr-world-gen-all-text strong {
+  font-weight: 600;
+  color: var(--gold);
+}
+
+/* ── Type filter bar ──────────────────────────────────────────────────── */
+
+.cr-world-filters {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+
+.cr-world-filter-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono, 'DM Mono', monospace);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 6px 14px;
+  cursor: pointer;
+  color: var(--ink-faint);
+  transition: all 0.15s;
+}
+.cr-world-filter-btn:hover {
+  color: var(--purple-deep);
+  background: var(--surface2);
+  border-color: var(--border2);
+}
+.cr-world-filter-btn.active {
+  font-weight: 600;
+  background: linear-gradient(135deg, #f4b8cb, #c4a0e0);
+  border-color: transparent;
+  color: #fff;
+}
+
+.cr-world-filter-count {
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(0,0,0,0.04);
+  border-radius: 10px;
+  padding: 1px 6px;
+}
+.cr-world-filter-btn.active .cr-world-filter-count {
+  background: rgba(255,255,255,0.2);
+}
+
+/* ── Card grid ────────────────────────────────────────────────────────── */
+
+.cr-world-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
+}
+
+/* ── Character card ───────────────────────────────────────────────────── */
+
+.cr-world-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
+  animation: crWorldFadeIn 0.4s ease both;
+  position: relative;
+}
+.cr-world-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(145deg, rgba(244,184,203,0.06), rgba(212,180,232,0.06));
+  pointer-events: none;
+  border-radius: 10px;
+}
+.cr-world-card:hover {
+  transform: translateY(-3px);
+  box-shadow:
+    0 8px 24px rgba(244,184,203,0.15),
+    0 4px 12px rgba(196,160,224,0.10);
+  border-color: #fbd5e5;
+}
+.cr-world-card--expanded {
+  box-shadow:
+    0 8px 28px rgba(244,184,203,0.18),
+    0 4px 14px rgba(196,160,224,0.12);
+  border-color: var(--border2);
+}
+
+@keyframes crWorldFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* Card header */
+
+.cr-world-card-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 20px;
+  cursor: pointer;
+  user-select: none;
+  position: relative;
+  z-index: 1;
+}
+
+.cr-world-avatar {
+  width: 46px;
+  height: 46px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-family: var(--serif, 'Cormorant Garamond', Georgia, serif);
+  font-size: 20px;
+  font-weight: 500;
+  flex-shrink: 0;
+  border: 2px solid transparent;
+}
+
+.cr-world-card-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.cr-world-card-name {
+  font-family: var(--serif, 'Cormorant Garamond', Georgia, serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cr-world-card-role {
+  font-family: var(--mono, 'DM Mono', monospace);
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin-top: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.cr-world-card-badges {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.cr-world-type-badge {
+  font-family: var(--mono, 'DM Mono', monospace);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 2px 9px;
+  border-radius: 20px;
+  border: 1px solid transparent;
+}
+
+.cr-world-status-badge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--mono, 'DM Mono', monospace);
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+
+.cr-world-status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+/* Card preview (collapsed) */
+
+.cr-world-card-preview {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  padding-right: 4px;
+  position: relative;
+  z-index: 1;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.cr-world-expand-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: transparent;
+  font-size: 16px;
+  color: var(--ink-faint);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1;
+}
+.cr-world-expand-btn:hover {
+  background: var(--surface2);
+  color: var(--purple-deep);
+  border-color: var(--border2);
+}
+
+/* Card body (expanded) */
+
+.cr-world-card-body {
+  padding: 0 20px 20px;
+  border-top: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+}
+
+.cr-world-card-section {
+  margin-top: 18px;
+}
+
+.cr-world-section-label {
+  font-family: var(--mono, 'DM Mono', monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  margin-bottom: 10px;
+}
+
+/* Living state fields */
+
+.cr-world-state-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cr-world-state-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cr-world-state-field {
+  background: var(--surface2);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px solid rgba(232,213,224,0.5);
+  font-family: var(--serif, 'Cormorant Garamond', Georgia, serif);
+  font-size: 15px;
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.cr-world-state-label {
+  font-family: var(--mono, 'DM Mono', monospace);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+  display: block;
+  margin-bottom: 2px;
+}
+
+.cr-world-state-unresolved {
+  border-left: 3px solid #d46070;
+}
+
+/* State meta */
+
+.cr-world-state-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+  font-family: var(--sans, 'DM Sans', sans-serif);
+  font-size: 11px;
+}
+
+.cr-world-last-chapter {
+  color: var(--ink-faint);
+  font-style: italic;
+}
+
+/* State actions */
+
+.cr-world-state-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.cr-world-state-empty {
+  text-align: center;
+  padding: 16px 0;
+}
+.cr-world-state-empty p {
+  font-family: var(--serif, 'Cormorant Garamond', Georgia, serif);
+  font-size: 15px;
+  color: var(--ink-faint);
+  font-style: italic;
+  margin: 0 0 12px;
+}
+
+/* Relationships */
+
+.cr-world-rel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cr-world-rel-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--sans, 'DM Sans', sans-serif);
+  font-size: 12px;
+}
+
+.cr-world-rel-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cr-world-rel-name {
+  font-family: var(--serif, 'Cormorant Garamond', Georgia, serif);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.cr-world-rel-type {
+  color: var(--ink-faint);
+  font-size: 11px;
+}
+
+.cr-world-rel-asym {
+  color: var(--gold);
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.cr-world-rel-more {
+  font-size: 11px;
+  color: var(--ink-faint);
+  margin: 4px 0 0;
+  font-style: italic;
+}
+
+/* Card footer */
+
+.cr-world-card-footer {
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
+}
+
+/* ── World mode responsive ────────────────────────────────────────────── */
+
+@media (max-width: 768px) {
+  .cr-world-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .cr-world-title {
+    font-size: 28px;
+  }
+  .cr-world-gen-all {
+    flex-direction: column;
+    gap: 12px;
+    text-align: center;
+  }
+  .cr-world-filters {
+    gap: 6px;
+  }
+  .cr-world-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .cr-world-title {
+    font-size: 24px;
+  }
+  .cr-world-card-header {
+    padding: 12px 14px;
+    gap: 10px;
+  }
+  .cr-world-avatar {
+    width: 38px;
+    height: 38px;
+    font-size: 16px;
+  }
+  .cr-world-card-name {
+    font-size: 16px;
+  }
+  .cr-world-card-body {
+    padding: 0 14px 14px;
+  }
+}
