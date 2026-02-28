@@ -420,9 +420,10 @@ export default function RelationshipWeb() {
   async function loadCharacterMap() {
     // Build a name→UUID map from all registries so "Open Character Home" works
     try {
-      const res = await fetch(`${API_BASE}/character-registry`);
+      const res = await fetch(`${API_BASE}/character-registry/registries`);
       if (!res.ok) return;
-      const registries = await res.json();
+      const data = await res.json();
+      const registries = data.registries || data;
       const map = {};
       (Array.isArray(registries) ? registries : []).forEach((reg) => {
         (reg.characters || []).forEach((c) => {
