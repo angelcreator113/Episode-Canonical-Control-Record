@@ -23,6 +23,13 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
   const chatRef  = useRef(null);
   const inputRef = useRef(null);
 
+  // Expose trigger footprint via CSS variable so pages can add bottom padding
+  // and avoid placing their own buttons in the same corner.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--apa-trigger-size', '80px');
+    return () => document.documentElement.style.removeProperty('--apa-trigger-size');
+  }, []);
+
   // Auto-scroll
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
@@ -93,6 +100,11 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
 
   return (
     <div className={`apa-root${open ? ' open' : ''}`}>
+
+      {/* Dimming backdrop — mobile only, tap outside to close */}
+      {open && (
+        <div className="apa-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
+      )}
 
       {/* Chat panel */}
       {open && (
