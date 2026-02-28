@@ -77,7 +77,7 @@ const UniversePage = lazy(() => import('./pages/UniversePage'));
 const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
 const BookOverview = lazy(() => import('./pages/BookOverview'));
-const RelationshipMap = lazy(() => import('./pages/RelationshipMap'));
+const RelationshipWeb = lazy(() => import('./pages/RelationshipWeb'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
@@ -347,8 +347,8 @@ function AppContent() {
           {/* PNOS Continuity Engine */}
           <Route path="/continuity" element={<ContinuityEnginePage />} />
           
-          {/* PNOS Character Relationship Map */}
-          <Route path="/relationships" element={<RelationshipMap />} />
+          {/* PNOS Character Relationship Web */}
+          <Route path="/relationships" element={<RelationshipWeb />} />
           
           {/* PNOS LalaVerse Press — Publisher Dashboard */}
           <Route path="/press" element={<PressPublisher />} />

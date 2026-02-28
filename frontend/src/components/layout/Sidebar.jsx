@@ -18,7 +18,7 @@ const NAV = [
       { icon: '🌍', label: 'World View',      route: '/character-registry?view=world' },
       { icon: '️', label: 'Therapy Room',    route: '/therapy/default' },
       { icon: '📰', label: 'The Press',       route: '/press' },
-      { icon: '🔗', label: 'Relationships',   route: '/relationships' },
+      { icon: '�', label: 'Relationship Web', route: '/relationships' },
     ],
   },
   {
