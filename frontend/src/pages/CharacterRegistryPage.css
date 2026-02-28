@@ -2406,14 +2406,14 @@
 }
 
 .ai-writer-mode:hover {
-  border-color: var(--ink, #1a1510);
-  background: #f5f2ee;
+  border-color: #7ec8c8;
+  background: #f0fafa;
 }
 
 .ai-writer-mode.active {
-  border-color: var(--ink, #1a1510);
-  background: var(--ink, #1a1510);
-  color: var(--surface, #faf8f5);
+  border-color: #5bb8b8;
+  background: linear-gradient(135deg, #e6f7f7 0%, #d4f0f0 100%);
+  color: #1a3a3a;
 }
 
 .ai-writer-mode-icon {
@@ -2484,7 +2484,8 @@
 .ai-writer-field textarea:focus,
 .ai-writer-field input:focus {
   outline: none;
-  border-color: var(--ink, #1a1510);
+  border-color: #5bb8b8;
+  box-shadow: 0 0 0 3px rgba(91, 184, 184, 0.12);
 }
 
 .ai-writer-field-row {
@@ -2525,13 +2526,13 @@
 }
 
 .ai-writer-length-btn:hover {
-  border-color: var(--ink, #1a1510);
+  border-color: #7ec8c8;
 }
 
 .ai-writer-length-btn.active {
-  background: var(--ink, #1a1510);
-  color: var(--surface, #faf8f5);
-  border-color: var(--ink, #1a1510);
+  background: linear-gradient(135deg, #5bb8b8, #4aadad);
+  color: #fff;
+  border-color: #5bb8b8;
 }
 
 .ai-writer-auto-note {
@@ -2549,8 +2550,8 @@
 .ai-writer-generate-btn {
   width: 100%;
   padding: 16px 24px;
-  background: var(--ink, #1a1510);
-  color: var(--surface, #faf8f5);
+  background: linear-gradient(135deg, #5bb8b8 0%, #4aadad 50%, #3d9e9e 100%);
+  color: #fff;
   border: none;
   border-radius: 8px;
   font-family: var(--serif, Georgia, serif);
@@ -2560,6 +2561,7 @@
   cursor: pointer;
   transition: all 0.2s;
   margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(91, 184, 184, 0.3);
 }
 
 .ai-writer-generate-btn:hover {
@@ -2678,7 +2680,8 @@
 
 .ai-writer-copy-btn:hover,
 .ai-writer-clear-btn:hover {
-  border-color: var(--ink, #1a1510);
+  border-color: #5bb8b8;
+  color: #3d8e8e;
 }
 
 /* ── Prose Display ── */
@@ -2731,8 +2734,8 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: var(--ink, #1a1510);
-  color: var(--surface, #faf8f5);
+  background: linear-gradient(135deg, #5bb8b8, #4aadad);
+  color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
