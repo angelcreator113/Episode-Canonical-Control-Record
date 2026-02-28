@@ -1,19 +1,50 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    WorldView.css
-   Design system: editorial / warm neutral — matches CharacterHome
-   Fonts: Cormorant Garamond (display) · DM Sans (UI)
+   Design system: pastel luxe — matches CharacterRegistryPage
+   Palette: pink / purple / gold on #fdf5f9
+   Fonts: Cormorant Garamond (display) · DM Sans (UI) · DM Mono (labels)
    ──────────────────────────────────────────────────────────────────────────── */
 
-@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;1,300;1,400&family=DM+Sans:wght@300;400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300;1,400&family=DM+Sans:wght@300;400;500;600&family=DM+Mono:wght@300;400;500&display=swap');
 
 /* ── Root ─────────────────────────────────────────────────────────────── */
 
 .wv-root {
+  --bg: #fdf5f9;
+  --surface: #ffffff;
+  --surface2: #faf0f5;
+  --surface3: #f0e4ef;
+  --border: #e8d5e0;
+  --border2: #d4b4d8;
+  --ink: #2d2232;
+  --ink-dim: #6b5c6e;
+  --ink-faint: #9a8c9e;
+  --gold: #c9a84c;
+  --gold-dim: #a08530;
+  --gold-bg: rgba(201,168,76,0.10);
+  --gold-border: rgba(201,168,76,0.35);
+  --purple: #c4a0e0;
+  --purple-deep: #9b4dca;
+  --purple-light: #ece0f5;
+  --purple-bg: rgba(196,160,224,0.12);
+  --pink: #f4b8cb;
+  --pink-deep: #e88da8;
+  --pink-light: #fbd5e5;
+  --pink-bg: rgba(244,184,203,0.15);
+  --red: #c43a2a;
+  --green: #3d8e42;
+  --gradient-main: linear-gradient(135deg, #f8c8dc 0%, #d4b4e8 50%, #c9a84c 100%);
+  --gradient-soft: linear-gradient(135deg, #fce4ef 0%, #ece0f5 100%);
+  --gradient-card: linear-gradient(145deg, rgba(244,184,203,0.06), rgba(212,180,232,0.06));
+  --serif: 'Cormorant Garamond', Georgia, serif;
+  --sans: 'DM Sans', sans-serif;
+  --mono: 'DM Mono', monospace;
+
   min-height: 100vh;
-  background: #FAF8F4;
+  background: var(--bg);
   padding: 0 0 80px;
-  font-family: 'DM Sans', sans-serif;
-  color: #1a1917;
+  font-family: var(--sans);
+  color: var(--ink);
 }
 
 /* ── Header ───────────────────────────────────────────────────────────── */
@@ -24,23 +55,33 @@
   align-items: flex-end;
   margin: 0 32px 28px;
   padding: 40px 0 16px;
-  border-bottom: 1px solid #e8e5df;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.wv-header::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  left: 0;
+  width: 120px;
+  height: 2px;
+  background: var(--gradient-main);
 }
 
 .wv-title {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 42px;
   font-weight: 300;
-  color: #1a1917;
+  color: var(--ink);
   letter-spacing: -0.01em;
   line-height: 1.1;
   margin: 0 0 6px;
 }
 
 .wv-subtitle {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
-  color: #9c9890;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink-faint);
   margin: 0;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -48,18 +89,19 @@
 
 .wv-refresh-btn {
   background: none;
-  border: 1px solid #e8e5df;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 7px 14px;
   font-size: 14px;
   cursor: pointer;
-  color: #9c9890;
-  font-family: 'DM Sans', sans-serif;
-  transition: background 0.15s, color 0.15s;
+  color: var(--ink-faint);
+  font-family: var(--sans);
+  transition: all 0.15s;
 }
 .wv-refresh-btn:hover {
-  background: #f0ede6;
-  color: #1a1917;
+  background: var(--surface2);
+  color: var(--purple-deep);
+  border-color: var(--border2);
 }
 
 /* ── Generate All Banner ─────────────────────────────────────────────── */
@@ -68,43 +110,57 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: #ffffff;
+  background: var(--gradient-soft);
+  border: 1px solid var(--border);
   border-radius: 12px;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
   padding: 18px 24px;
   margin: 0 32px 24px;
+  position: relative;
+  overflow: hidden;
+}
+.wv-generate-all-banner::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--gradient-main);
 }
 
 .wv-gen-all-text {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 13px;
-  color: #6b6963;
+  color: var(--ink-dim);
 }
 
 .wv-gen-all-count {
   font-weight: 600;
-  color: #C6A85E;
+  color: var(--gold);
 }
 
 .wv-gen-all-btn {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
   padding: 8px 18px;
   border-radius: 8px;
-  border: 1px solid #C6A85E;
-  background: transparent;
-  color: #C6A85E;
+  border: none;
+  background: linear-gradient(135deg, var(--pink) 0%, var(--purple) 100%);
+  color: #fff;
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: opacity 0.15s, box-shadow 0.15s;
+  box-shadow: 0 2px 8px rgba(196,160,224,0.25);
 }
 .wv-gen-all-btn:hover {
-  opacity: 0.75;
+  opacity: 0.85;
+  box-shadow: 0 4px 14px rgba(196,160,224,0.35);
 }
 .wv-gen-all-btn:disabled {
   opacity: 0.4;
   cursor: not-allowed;
+  box-shadow: none;
 }
 
 /* ── Filter Bar ──────────────────────────────────────────────────────── */
@@ -120,26 +176,29 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--mono);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   background: transparent;
-  border: 1px solid #e8e5df;
+  border: 1px solid var(--border);
   border-radius: 20px;
   padding: 6px 14px;
   cursor: pointer;
-  color: #9c9890;
+  color: var(--ink-faint);
   transition: all 0.15s;
 }
 .wv-filter-btn:hover {
-  color: #4a4742;
-  background: #f4f1eb;
+  color: var(--purple-deep);
+  background: var(--surface2);
+  border-color: var(--border2);
 }
 .wv-filter-btn.active {
   font-weight: 600;
-  border-color: var(--card-ring, #C6A85E);
+  background: linear-gradient(135deg, var(--pink), var(--purple));
+  border-color: transparent;
+  color: #fff;
 }
 
 .wv-filter-count {
@@ -148,6 +207,9 @@
   background: rgba(0,0,0,0.04);
   border-radius: 10px;
   padding: 1px 6px;
+}
+.wv-filter-btn.active .wv-filter-count {
+  background: rgba(255,255,255,0.2);
 }
 
 /* ── Card Grid ───────────────────────────────────────────────────────── */
@@ -162,19 +224,34 @@
 /* ── Character Card ─────────────────────────────────────────────────── */
 
 .wv-card {
-  background: #ffffff;
-  border: none;
-  border-radius: 12px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
   overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
-  transition: all 0.2s ease;
+  transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s;
   animation: cardFadeIn 0.4s ease both;
+  position: relative;
+}
+.wv-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-card);
+  pointer-events: none;
+  border-radius: 10px;
 }
 .wv-card:hover {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 8px 24px rgba(0,0,0,0.06);
+  transform: translateY(-3px);
+  box-shadow:
+    0 8px 24px rgba(244,184,203,0.15),
+    0 4px 12px rgba(196,160,224,0.10);
+  border-color: var(--pink-light);
 }
 .wv-card--expanded {
-  box-shadow: 0 2px 8px rgba(0,0,0,0.08), 0 8px 32px rgba(0,0,0,0.07);
+  box-shadow:
+    0 8px 28px rgba(244,184,203,0.18),
+    0 4px 14px rgba(196,160,224,0.12);
+  border-color: var(--border2);
 }
 
 @keyframes cardFadeIn {
@@ -191,6 +268,8 @@
   padding: 16px 20px;
   cursor: pointer;
   user-select: none;
+  position: relative;
+  z-index: 1;
 }
 
 .wv-avatar {
@@ -198,7 +277,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-weight: 500;
   flex-shrink: 0;
 }
@@ -209,24 +288,25 @@
 }
 
 .wv-card-name {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 18px;
-  font-weight: 500;
-  color: #1a1917;
+  font-weight: 600;
+  color: var(--ink);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
 .wv-card-role {
-  font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
-  color: #9c9890;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-faint);
   margin-top: 2px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  font-style: italic;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .wv-card-badges {
@@ -237,7 +317,7 @@
 }
 
 .wv-type-badge {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--mono);
   font-size: 10px;
   font-weight: 500;
   letter-spacing: 0.06em;
@@ -250,9 +330,9 @@
   display: flex;
   align-items: center;
   gap: 4px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--mono);
   font-size: 10px;
-  color: #9c9890;
+  color: var(--ink-faint);
 }
 
 .wv-status-dot {
@@ -269,6 +349,8 @@
   gap: 6px;
   margin-left: auto;
   padding-right: 4px;
+  position: relative;
+  z-index: 1;
 }
 
 .wv-momentum-mini {
@@ -285,10 +367,10 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 1px solid #e8e5df;
+  border: 1px solid var(--border);
   background: transparent;
   font-size: 14px;
-  color: #9c9890;
+  color: var(--ink-faint);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -297,15 +379,18 @@
   flex-shrink: 0;
 }
 .wv-expand-btn:hover {
-  background: #f0ede6;
-  color: #4a4742;
+  background: var(--surface2);
+  color: var(--purple-deep);
+  border-color: var(--border2);
 }
 
 /* Card Body */
 
 .wv-card-body {
   padding: 0 20px 20px;
-  border-top: 1px solid #f0ede6;
+  border-top: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
 }
 
 .wv-card-section {
@@ -313,12 +398,12 @@
 }
 
 .wv-section-label {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--mono);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: #9c9890;
+  color: var(--ink-faint);
   margin-bottom: 10px;
 }
 
@@ -329,15 +414,15 @@
   padding: 20px 0;
 }
 .wv-state-empty p {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
-  color: #9c9890;
+  color: var(--ink-faint);
   font-style: italic;
   margin: 0 0 14px;
 }
 
 .wv-generate-btn {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -383,32 +468,33 @@
 }
 
 .wv-state-field {
-  background: #FAF8F4;
+  background: var(--surface2);
   border-radius: 8px;
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
   gap: 4px;
+  border: 1px solid rgba(232,213,224,0.5);
 }
 
 .wv-state-label {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--mono);
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: #9c9890;
+  color: var(--ink-faint);
 }
 
 .wv-state-value {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
-  color: #2d2b27;
+  color: var(--ink);
   line-height: 1.5;
 }
 
 .wv-state-value.wv-unresolved {
-  color: #e07070;
+  color: var(--red);
   font-style: italic;
 }
 
@@ -420,11 +506,11 @@
   gap: 16px;
   margin-top: 14px;
   padding-top: 12px;
-  border-top: 1px solid #f0ede6;
+  border-top: 1px solid var(--border);
 }
 
 .wv-momentum {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 11px;
   font-weight: 500;
   letter-spacing: 0.04em;
@@ -435,9 +521,9 @@
 }
 
 .wv-last-chapter {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 11px;
-  color: #b5b1a8;
+  color: var(--ink-faint);
   font-style: italic;
 }
 
@@ -450,7 +536,7 @@
 }
 
 .wv-confirm-btn {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
   border: none;
@@ -458,25 +544,29 @@
   padding: 8px 16px;
   cursor: pointer;
   transition: opacity 0.15s;
+  background: linear-gradient(135deg, var(--pink) 0%, var(--purple) 100%);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(196,160,224,0.2);
 }
 .wv-confirm-btn:hover {
   opacity: 0.85;
 }
 
 .wv-regen-btn {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
   background: transparent;
-  border: 1px solid #e8e5df;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 6px 12px;
-  color: #6b6963;
+  color: var(--ink-dim);
   cursor: pointer;
   transition: all 0.15s;
 }
 .wv-regen-btn:hover {
-  background: #f0ede6;
+  background: var(--surface2);
+  border-color: var(--border2);
 }
 .wv-regen-btn:disabled {
   opacity: 0.4;
@@ -488,15 +578,18 @@
 }
 
 .wv-edit-btn {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   background: transparent;
   border: none;
   padding: 6px 8px;
   font-size: 12px;
-  color: #9c9890;
+  color: var(--ink-faint);
   cursor: pointer;
   text-decoration: underline;
   text-underline-offset: 3px;
+}
+.wv-edit-btn:hover {
+  color: var(--purple-deep);
 }
 
 .wv-confirmed-badge {
@@ -504,7 +597,7 @@
   align-items: center;
   gap: 12px;
   margin-top: 12px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
 }
@@ -512,9 +605,9 @@
 /* ── Relationships ───────────────────────────────────────────────────── */
 
 .wv-no-rel {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 14px;
-  color: #9c9890;
+  color: var(--ink-faint);
   font-style: italic;
   margin: 0;
 }
@@ -529,7 +622,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
 }
 
@@ -541,25 +634,25 @@
 }
 
 .wv-rel-name {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 15px;
   font-weight: 500;
-  color: #1a1917;
+  color: var(--ink);
 }
 
 .wv-rel-type {
-  color: #9c9890;
+  color: var(--ink-faint);
   font-size: 11px;
 }
 
 .wv-rel-asymmetric {
-  color: #C6A85E;
+  color: var(--gold);
   font-weight: 600;
 }
 
 .wv-rel-more {
   font-size: 11px;
-  color: #b5b1a8;
+  color: var(--ink-faint);
   margin: 4px 0 0;
   font-style: italic;
 }
@@ -569,24 +662,29 @@
 .wv-card-footer {
   margin-top: 18px;
   padding-top: 14px;
-  border-top: 1px solid #f0ede6;
+  border-top: 1px solid var(--border);
+  position: relative;
+  z-index: 1;
 }
 
 .wv-open-home-btn {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
   background: transparent;
-  border: 1px solid;
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 9px 16px;
+  color: var(--ink-dim);
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: all 0.15s;
   width: 100%;
 }
 .wv-open-home-btn:hover {
-  opacity: 0.75;
+  border-color: var(--purple);
+  color: var(--purple-deep);
+  background: var(--purple-bg);
 }
 
 /* ── Loading ─────────────────────────────────────────────────────────── */
@@ -597,15 +695,15 @@
   align-items: center;
   justify-content: center;
   min-height: 60vh;
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   gap: 16px;
-  color: #9c9890;
+  color: var(--ink-faint);
 }
 
 .wv-loading p {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 16px;
-  color: #9c9890;
+  color: var(--ink-faint);
   font-style: italic;
   margin: 0;
 }
@@ -618,6 +716,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
+  background: var(--purple);
   animation: orbFloat 1.2s ease-in-out infinite;
 }
 
@@ -635,35 +734,37 @@
   justify-content: center;
   min-height: 60vh;
   gap: 12px;
-  font-family: 'DM Sans', sans-serif;
-  color: #9c9890;
+  font-family: var(--sans);
+  color: var(--ink-faint);
 }
 .wv-error p {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 18px;
-  color: #1a1917;
+  color: var(--ink);
   margin: 0;
 }
 .wv-error small {
   font-size: 12px;
-  color: #b5b1a8;
+  color: var(--ink-faint);
   display: block;
 }
 .wv-error button {
-  font-family: 'DM Sans', sans-serif;
+  font-family: var(--sans);
   font-size: 12px;
   font-weight: 500;
   letter-spacing: 0.04em;
   background: transparent;
-  border: 1px solid #C6A85E;
+  border: 1px solid var(--gold);
   border-radius: 8px;
   padding: 8px 20px;
-  color: #C6A85E;
+  color: var(--gold);
   cursor: pointer;
-  transition: opacity 0.15s;
+  transition: all 0.15s;
   margin-top: 4px;
 }
-.wv-error button:hover { opacity: 0.75; }
+.wv-error button:hover {
+  background: var(--gold-bg);
+}
 
 /* ── Empty ───────────────────────────────────────────────────────────── */
 
@@ -672,9 +773,9 @@
   padding: 48px 24px;
 }
 .wv-empty p {
-  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-family: var(--serif);
   font-size: 16px;
-  color: #9c9890;
+  color: var(--ink-faint);
   font-style: italic;
 }
 

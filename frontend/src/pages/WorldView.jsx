@@ -29,28 +29,28 @@ import './WorldView.css';
 // Field: character.role_type (enum in registry_characters)
 
 const TYPE_META = {
-  protagonist: { label: 'Protagonist', color: '#0d9488', bg: 'rgba(13,148,136,0.08)',  ring: 'rgba(13,148,136,0.3)' },
-  special:     { label: 'Special',     color: '#C6A85E', bg: 'rgba(198,168,94,0.08)',   ring: 'rgba(198,168,94,0.3)' },
-  pressure:    { label: 'Pressure',    color: '#e07070', bg: 'rgba(224,112,112,0.08)',  ring: 'rgba(224,112,112,0.3)' },
-  mirror:      { label: 'Mirror',      color: '#a78bfa', bg: 'rgba(167,139,250,0.08)', ring: 'rgba(167,139,250,0.3)' },
-  support:     { label: 'Support',     color: '#34d399', bg: 'rgba(52,211,153,0.08)',   ring: 'rgba(52,211,153,0.3)' },
-  shadow:      { label: 'Shadow',      color: '#94a3b8', bg: 'rgba(148,163,184,0.08)', ring: 'rgba(148,163,184,0.3)' },
+  protagonist: { label: 'Protagonist', color: '#c9a84c', bg: 'rgba(201,168,76,0.10)',   ring: 'rgba(201,168,76,0.35)' },
+  special:     { label: 'Special',     color: '#5ec0b8', bg: 'rgba(94,192,184,0.10)',    ring: 'rgba(94,192,184,0.30)' },
+  pressure:    { label: 'Pressure',    color: '#d46070', bg: 'rgba(212,96,112,0.10)',    ring: 'rgba(212,96,112,0.30)' },
+  mirror:      { label: 'Mirror',      color: '#7b8de0', bg: 'rgba(123,141,224,0.10)',   ring: 'rgba(123,141,224,0.30)' },
+  support:     { label: 'Support',     color: '#5dab62', bg: 'rgba(93,171,98,0.10)',     ring: 'rgba(93,171,98,0.30)' },
+  shadow:      { label: 'Shadow',      color: '#9b4dca', bg: 'rgba(155,77,202,0.10)',    ring: 'rgba(155,77,202,0.30)' },
 };
 
 const STATUS_META = {
-  draft:     { label: 'Draft',     dot: '#94a3b8' },
-  accepted:  { label: 'Accepted',  dot: '#34d399' },
-  declined:  { label: 'Declined',  dot: '#f87171' },
-  finalized: { label: 'Finalized', dot: '#C6A85E' },
+  draft:     { label: 'Draft',     dot: '#9a8c9e' },
+  accepted:  { label: 'Accepted',  dot: '#3d8e42' },
+  declined:  { label: 'Declined',  dot: '#c43a2a' },
+  finalized: { label: 'Finalized', dot: '#c9a84c' },
 };
 
 // ── Momentum arrows ────────────────────────────────────────────────────────
 
 const MOMENTUM = {
-  rising:  { symbol: '↑', color: '#34d399', label: 'Rising' },
-  steady:  { symbol: '→', color: '#94a3b8', label: 'Steady' },
-  falling: { symbol: '↓', color: '#f87171', label: 'Falling' },
-  dormant: { symbol: '·', color: '#64748b', label: 'Dormant' },
+  rising:  { symbol: '↑', color: '#3d8e42', label: 'Rising' },
+  steady:  { symbol: '→', color: '#9a8c9e', label: 'Steady' },
+  falling: { symbol: '↓', color: '#c43a2a', label: 'Falling' },
+  dormant: { symbol: '·', color: '#6b5c6e', label: 'Dormant' },
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
