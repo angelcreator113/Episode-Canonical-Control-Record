@@ -820,7 +820,7 @@ function ProductionTab({ shows, universeId, onChanged, showToast, isMobile, isTa
     if (!selectedShowId) { setEpisodes([]); return; }
     setLoadingEps(true);
     const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-    fetch(`/api/v1/episodes?show_id=${selectedShowId}&limit=200`, {
+    fetch(`/api/v1/episodes?show_id=${selectedShowId}&limit=100`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     })
       .then(r => r.json())
