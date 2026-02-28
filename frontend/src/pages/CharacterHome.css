@@ -732,3 +732,14 @@
   .ch-living-state-grid { grid-template-columns: 1fr; }
   .ch-dossier-fallback  { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 480px) {
+  .ch-topbar  { padding: 10px 12px; }
+  /* Remove side margin — it eats into already-tight 400px width */
+  .ch-hero    { margin: 0; padding: 18px 14px 16px; gap: 10px; }
+  .ch-hero-name { font-size: 24px; }
+  .ch-section-nav { padding: 12px 12px 0; gap: 4px; }
+  .ch-content { padding: 14px 12px 0; }
+  /* Wrap section nav pills if too many */
+  .ch-section-nav { flex-wrap: wrap; }
+}

@@ -914,6 +914,30 @@ textarea.bo-field-input { min-height: 44px; }
   .bo-toc-scene-badge { display: none; }
 }
 
+@media (max-width: 480px) {
+  .bo-header { padding: 14px 12px 10px; }
+  .bo-chapter-list { padding: 0 10px; }
+  .bo-book-title { font-size: 22px; }
+  .bo-title-page { padding: 20px 12px 14px; }
+  .bo-chapter-card { padding: 14px 12px; }
+
+  /* TOC even tighter */
+  .bo-toc-row {
+    grid-template-columns: 44px 1fr auto;
+    padding: 10px 4px;
+  }
+  .bo-toc-num { font-size: 10px; padding-right: 6px; }
+  .bo-toc-title { font-size: 14px; }
+  .bo-toc-scenes { padding-left: 56px; }
+
+  /* Header meta row wraps cleanly */
+  .bo-header-meta { gap: 8px; margin-top: 12px; }
+
+  /* Action buttons full-width stack */
+  .bo-book-edit-actions { flex-direction: column; gap: 8px; }
+  .bo-book-edit-actions button { width: 100%; justify-content: center; }
+}
+
 /* ══════════════════════════════════════════
    View Toggle — Subtle segmented control
    ══════════════════════════════════════════ */

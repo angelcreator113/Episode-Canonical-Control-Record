@@ -617,3 +617,11 @@
   .wv-header { flex-direction: column; align-items: flex-start; gap: 8px; }
   .wv-generate-all-banner { flex-direction: column; gap: 12px; text-align: center; }
 }
+
+@media (max-width: 480px) {
+  .wv-root { padding: 12px 12px 60px; }
+  .wv-header { padding: 6px 0; gap: 6px; }
+  .wv-filters { gap: 6px; flex-wrap: wrap; }
+  .wv-card { border-radius: 10px; }
+  .wv-generate-all-banner { padding: 12px; border-radius: 8px; }
+}

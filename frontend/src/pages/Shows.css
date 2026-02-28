@@ -625,6 +625,34 @@
   }
 }
 
+@media (max-width: 480px) {
+  .shows-container {
+    padding: 0.625rem;
+  }
+
+  .shows-title {
+    font-size: 1.1rem;
+  }
+
+  /* Stats bar wraps and shrinks further */
+  .shows-stats {
+    gap: 0.25rem;
+  }
+
+  .stat-card {
+    padding: 0.375rem 0.5rem;
+  }
+
+  .stat-value {
+    font-size: 0.9rem;
+  }
+
+  /* Show card tighter */
+  .shows-grid {
+    gap: 0.375rem;
+  }
+}
+
 @media (min-width: 769px) and (max-width: 1199px) {
   .shows-grid {
     grid-template-columns: 1fr;
