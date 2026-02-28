@@ -82,6 +82,7 @@ const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 const EpisodeWorkspace = lazy(() => import('./pages/EpisodeWorkspace'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
@@ -97,6 +98,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ToastProvider from './components/ToastContainer';
 import OrientationToast from './components/OrientationToast';
 import LoadingSkeleton from './components/LoadingSkeleton';
+import AppAssistant from './components/AppAssistant';
 
 import './App.css';
 
@@ -356,6 +358,9 @@ function AppContent() {
           
           {/* Settings */}
           <Route path="/settings" element={<SettingsPage />} />
+          
+          {/* Recycle Bin */}
+          <Route path="/recycle-bin" element={<RecycleBin />} />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />
@@ -376,6 +381,13 @@ function AppContent() {
 
       {/* Orientation awareness toast */}
       <OrientationToast />
+
+      {/* AI Assistant — floating chat bubble */}
+      <AppAssistant
+        appContext={{ currentView: location.pathname }}
+        onNavigate={(path) => navigate(path)}
+        onRefresh={() => window.dispatchEvent(new Event('app-refresh'))}
+      />
     </div>
   );
 }

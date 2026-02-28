@@ -99,6 +99,8 @@ module.exports = (sequelize) => {
     tableName: 'storyteller_chapters',
     timestamps: true,
     underscored: true,
+    paranoid: true,
+    deletedAt: 'deleted_at',
   });
 
   StorytellerChapter.associate = (models) => {

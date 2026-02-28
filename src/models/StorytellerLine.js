@@ -60,6 +60,8 @@ module.exports = (sequelize) => {
     tableName: 'storyteller_lines',
     timestamps: true,
     underscored: true,
+    paranoid: true,
+    deletedAt: 'deleted_at',
   });
 
   StorytellerLine.associate = (models) => {
