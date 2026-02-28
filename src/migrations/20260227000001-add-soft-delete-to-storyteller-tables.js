@@ -19,8 +19,14 @@ module.exports = {
     ];
 
     for (const table of tables) {
+      // Check if table exists at all — skip if it doesn't
+      const desc = await queryInterface.describeTable(table).catch(() => null);
+      if (!desc) {
+        console.log(`  ⏭️  ${table} does not exist, skipping`);
+        continue;
+      }
+
       // Check if column already exists before adding
-      const desc = await queryInterface.describeTable(table).catch(() => ({}));
       if (!desc.deleted_at) {
         await queryInterface.addColumn(table, 'deleted_at', {
           type:         Sequelize.DATE,
@@ -47,6 +53,8 @@ module.exports = {
     ];
 
     for (const table of tables) {
+      const exists = await queryInterface.describeTable(table).catch(() => null);
+      if (!exists) continue;
       await queryInterface.removeIndex(table, `${table}_deleted_at_idx`).catch(() => {});
       await queryInterface.removeColumn(table, 'deleted_at').catch(() => {});
     }
