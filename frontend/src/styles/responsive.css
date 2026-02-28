@@ -1060,7 +1060,48 @@
 
 
 /* ============================================================
-   16. LANDSCAPE MOBILE — Prevent awkward layouts
+   16. SAFE-AREA INSETS — Notch / Dynamic Island / Home Bar
+   ============================================================
+   These rules complement the env() values already applied
+   directly in ToastContainer.css and AppAssistant.css.
+   Any new fixed/sticky element added near an edge should
+   reference var(--safe-top/right/bottom/left) from design-tokens.
+   ============================================================ */
+
+/* Sidebar mobile drawer clears status-bar notch */
+@media (max-width: 767px) {
+  .sidebar {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+
+  /* Hamburger / header respects notch */
+  .header {
+    padding-top: env(safe-area-inset-top, 0px);
+  }
+}
+
+/* Sticky bottom bars (if a page adds one) */
+.sticky-bottom,
+.page-actions-bar,
+.bottom-action-bar {
+  padding-bottom: calc(var(--spacing-lg, 1rem) + env(safe-area-inset-bottom, 0px));
+}
+
+/* Any future fixed-bottom FAB that isn't AppAssistant */
+.fab-fixed {
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+}
+
+/* Full-screen overlays that use 100vh → use 100dvh for mobile chrome */
+.scene-composer-full,
+.timeline-editor-fullscreen,
+.pwv-root {
+  height: 100dvh;
+}
+
+
+/* ============================================================
+   17. LANDSCAPE MOBILE — Prevent awkward layouts
    ============================================================ */
 
 @media (max-height: 500px) and (orientation: landscape) {
@@ -1083,7 +1124,7 @@
 }
 
 /* ============================================================
-   17. LANDSCAPE MOBILE — Optimize tab pages on rotation
+   18. LANDSCAPE MOBILE — Optimize tab pages on rotation
    ============================================================ */
 
 @media (max-width: 920px) and (orientation: landscape) {

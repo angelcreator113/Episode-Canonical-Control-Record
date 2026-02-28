@@ -129,17 +129,46 @@
   --transition: 200ms ease;
   --transition-slow: 300ms ease;
   
-  /* === Z-INDEX === */
-  --z-dropdown: 100;
-  --z-sticky: 50;
-  --z-modal: 200;
-  --z-popover: 150;
-  --z-tooltip: 250;
-  
+  /* === Z-INDEX ===
+     One reference for every stacking layer.
+     Always use these vars — hardcoded values cause conflicts.
+     Hierarchy (low → high):
+       raised       cards on hover, drag ghosts
+       dropdown     menus, autocomplete, popovers
+       sticky       sticky table heads / section anchors
+       assistant    Amber floating chat widget
+       sidebar      mobile slide-out drawer + its backdrop
+       modal        dialogs, wardrobe pickers, sheet overlays
+       fullscreen   Scene Composer / Timeline full-screen mode
+       toast        transient notifications — always on top
+  */
+  --z-raised:     2;
+  --z-dropdown:   200;
+  --z-sticky:     300;
+  --z-assistant:  500;
+  --z-sidebar:    1000;
+  --z-modal:      1100;
+  --z-fullscreen: 1200;
+  --z-toast:      1300;
+
   /* === LAYOUT === */
   --page-max-width: 1200px;
-  --sidebar-width: 280px;
-  --header-height: 64px;
+  --sidebar-width: 220px;          /* desktop collapsed-open width     */
+  --sidebar-width-collapsed: 56px; /* desktop icon-only width          */
+  --sidebar-width-mobile: 280px;   /* mobile drawer width              */
+  --header-height: 56px;
+  --header-height-mobile: 60px;
+  --header-height-landscape: 50px;
+  --apa-trigger-size: 80px;        /* Amber assistant corner clearance */
+
+  /* === SAFE-AREA INSETS ===
+     Reference these anywhere a fixed/sticky element sits near an edge.
+     env() falls back to 0px on non-notch devices automatically.
+  */
+  --safe-top:    env(safe-area-inset-top,    0px);
+  --safe-right:  env(safe-area-inset-right,  0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left:   env(safe-area-inset-left,   0px);
 }
 
 /* === BUTTON STYLES === */
