@@ -4811,4 +4811,242 @@ function buildAssistantContextSummary(context) {
 }
 
 
+// ══════════════════════════════════════════════════════════════════════════════
+// ── WORLD VIEW: Generate Living State ────────────────────────────────────────
+// POST /memories/generate-living-state
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.post('/generate-living-state', optionalAuth, async (req, res) => {
+  try {
+    // Accept both snake_case and camelCase params
+    const characterId   = req.body.character_id   || req.body.characterId;
+    const characterName = req.body.character_name  || req.body.characterName;
+    const characterType = req.body.character_type  || req.body.characterType || 'support';
+    const characterRole = req.body.character_role  || req.body.characterRole || '';
+    const beliefPressured = req.body.belief_pressured || req.body.beliefPressured || '';
+
+    if (!characterId || !characterName) {
+      return res.status(400).json({ error: 'character_id and character_name are required' });
+    }
+
+    // Find this character's manuscript lines across all books
+    const books = await StorytellerBook.findAll({ attributes: ['id', 'title'], raw: true });
+    let manuscriptSnippets = [];
+    let lastChapter = null;
+
+    for (const book of books) {
+      const chapters = await StorytellerChapter.findAll({
+        where: { book_id: book.id },
+        attributes: ['id', 'title', 'sort_order'],
+        order: [['sort_order', 'ASC']],
+        raw: true,
+      });
+
+      for (const chapter of chapters) {
+        const lines = await StorytellerLine.findAll({
+          where: {
+            chapter_id: chapter.id,
+            content: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
+          },
+          attributes: ['content', 'sort_order'],
+          order: [['sort_order', 'ASC']],
+          limit: 10,
+          raw: true,
+        });
+
+        if (lines.length > 0) {
+          lastChapter = `${book.title} — ${chapter.title}`;
+          manuscriptSnippets.push(
+            ...lines.map(l => `[${chapter.title}] ${l.content}`)
+          );
+        }
+      }
+    }
+
+    // Trim to reasonable context size
+    const snippetText = manuscriptSnippets.slice(-30).join('\n');
+
+    // Build universe context for extra grounding
+    let universeContext = '';
+    if (books.length > 0) {
+      try {
+        universeContext = await buildUniverseContext(books[0].id, db);
+      } catch { /* fine — optional enrichment */ }
+    }
+
+    const systemPrompt = `You are a narrative state analyst for the LalaVerse universe.
+Given manuscript excerpts mentioning a character, extract their CURRENT living state.
+
+Character: ${characterName}
+Type: ${characterType}
+Role: ${characterRole}
+Belief Under Pressure: ${beliefPressured}
+
+${universeContext ? `Universe Context:\n${universeContext}\n` : ''}
+
+Return JSON with exactly these fields:
+{
+  "knows": "What this character currently knows (1-2 sentences)",
+  "wants": "What this character currently wants (1-2 sentences)",
+  "unresolved": "What tension or question is unresolved for them (1-2 sentences)",
+  "momentum": "rising" | "steady" | "falling" | "dormant",
+  "lastChapter": "Name of the last chapter they appeared in",
+  "relationships": [{ "characterId": "uuid", "name": "Name", "type": "relationship type", "asymmetric": false }]
+}
+
+If no manuscript data is available, generate plausible defaults based on the character's type and role.
+Return ONLY valid JSON. No markdown fences.`;
+
+    const userPrompt = snippetText
+      ? `Here are the manuscript excerpts mentioning ${characterName}:\n\n${snippetText}`
+      : `No manuscript data found for ${characterName}. Generate plausible defaults based on their type (${characterType}) and role (${characterRole}).`;
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: userPrompt }],
+      system: systemPrompt,
+    });
+
+    const raw = message.content?.[0]?.text || '{}';
+    let parsed;
+    try {
+      // Strip markdown fences if present
+      const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      parsed = {
+        knows: `${characterName} understands more than she lets on.`,
+        wants: `To become what she was always becoming.`,
+        unresolved: `The gap between who she is and who she's building.`,
+        momentum: 'steady',
+        lastChapter: lastChapter,
+        relationships: [],
+      };
+    }
+
+    // Ensure lastChapter from our DB search takes priority
+    if (lastChapter) parsed.lastChapter = lastChapter;
+
+    return res.json(parsed);
+
+  } catch (err) {
+    console.error('[generate-living-state] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to generate living state' });
+  }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// ── CHARACTER HOME: Generate Character Arc ───────────────────────────────────
+// POST /memories/generate-character-arc
+// ══════════════════════════════════════════════════════════════════════════════
+
+router.post('/generate-character-arc', optionalAuth, async (req, res) => {
+  try {
+    const characterId   = req.body.character_id   || req.body.characterId;
+    const characterName = req.body.character_name  || req.body.characterName;
+    const characterType = req.body.character_type  || req.body.characterType || 'support';
+
+    if (!characterId || !characterName) {
+      return res.status(400).json({ error: 'character_id and character_name are required' });
+    }
+
+    // Find all manuscript mentions across chapters
+    const books = await StorytellerBook.findAll({ attributes: ['id', 'title'], raw: true });
+    const chapterAppearances = [];
+
+    for (const book of books) {
+      const chapters = await StorytellerChapter.findAll({
+        where: { book_id: book.id },
+        attributes: ['id', 'title', 'sort_order'],
+        order: [['sort_order', 'ASC']],
+        raw: true,
+      });
+
+      for (const chapter of chapters) {
+        const lineCount = await StorytellerLine.count({
+          where: {
+            chapter_id: chapter.id,
+            content: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
+          },
+        });
+
+        if (lineCount > 0) {
+          // Get a representative line
+          const sample = await StorytellerLine.findOne({
+            where: {
+              chapter_id: chapter.id,
+              content: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
+            },
+            attributes: ['content'],
+            order: [['sort_order', 'ASC']],
+            raw: true,
+          });
+
+          chapterAppearances.push({
+            book: book.title,
+            chapter: chapter.title,
+            sortOrder: chapter.sort_order,
+            mentions: lineCount,
+            sample: sample?.content?.substring(0, 200) || '',
+          });
+        }
+      }
+    }
+
+    const systemPrompt = `You are a narrative arc analyst. Given a character's appearances across chapters,
+extract their arc — the emotional/belief journey chapter by chapter.
+
+Character: ${characterName}
+Type: ${characterType}
+
+Return JSON:
+{
+  "summary": "1-2 sentence arc summary",
+  "chapters": [
+    { "chapter": "Ch 1 — Title", "event": "What happens to them", "shift": "How their belief shifts" }
+  ]
+}
+
+Return ONLY valid JSON. No markdown fences.`;
+
+    const userPrompt = chapterAppearances.length > 0
+      ? `${characterName} appears in these chapters:\n\n${chapterAppearances.map(
+          a => `${a.book} — ${a.chapter} (${a.mentions} mentions): "${a.sample}"`
+        ).join('\n')}`
+      : `No manuscript data found for ${characterName}. Generate a plausible 2-3 chapter arc skeleton for a ${characterType} character.`;
+
+    const message = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1024,
+      messages: [{ role: 'user', content: userPrompt }],
+      system: systemPrompt,
+    });
+
+    const raw = message.content?.[0]?.text || '{}';
+    let parsed;
+    try {
+      const cleaned = raw.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      parsed = JSON.parse(cleaned);
+    } catch {
+      parsed = {
+        summary: `${characterName}'s arc is still being written.`,
+        chapters: chapterAppearances.map(a => ({
+          chapter: a.chapter,
+          event: `Appears ${a.mentions} time(s)`,
+          shift: '',
+        })),
+      };
+    }
+
+    return res.json({ arc: parsed });
+
+  } catch (err) {
+    console.error('[generate-character-arc] Error:', err.message);
+    return res.status(500).json({ error: 'Failed to generate character arc' });
+  }
+});
+
+
 module.exports = router;
