@@ -243,7 +243,10 @@ export default function CharacterRegistryPage() {
     setLivingStates(saved);
   }, []);
 
-  // Load ALL characters across ALL registries (for World mode)
+  // Names to exclude from LalaVerse
+  const WORLD_EXCLUDE = ['chloe', 'justawoman', 'the almost-mentor', 'the witness', 'the husband', 'the digital products customer'];
+
+  // Load ALL characters across ALL registries + Press (for World mode)
   const loadAllCharacters = useCallback(async () => {
     try {
       const res = await fetch(`${API}/registries`, { credentials: 'include' });
@@ -259,7 +262,34 @@ export default function CharacterRegistryPage() {
           all.push(...chars);
         }
       }
-      setAllCharacters(all);
+
+      // Also fetch LalaVerse Press characters
+      try {
+        const pr = await fetch('/api/v1/press/characters', { credentials: 'include' });
+        if (pr.ok) {
+          const pd = await pr.json();
+          const pressList = pd.characters || pd.data || [];
+          for (const pc of pressList) {
+            all.push({
+              id: `press_${pc.slug}`,
+              selected_name: pc.name,
+              display_name: pc.name,
+              role_type: 'special',
+              role_label: pc.publication || pc.tagline,
+              status: 'finalized',
+              belief_pressured: pc.tagline,
+              _isPress: true,
+            });
+          }
+        }
+      } catch { /* press fetch optional */ }
+
+      // Filter out excluded names
+      const filtered = all.filter(c => {
+        const name = (c.selected_name || c.display_name || '').toLowerCase().trim();
+        return !WORLD_EXCLUDE.includes(name);
+      });
+      setAllCharacters(filtered);
     } catch { /* silent */ }
   }, []);
 

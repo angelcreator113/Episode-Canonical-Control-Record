@@ -16,8 +16,7 @@ const NAV = [
     items: [
       { icon: '◈',  label: 'Universe',        route: '/universe' },
       { icon: '🌍', label: 'World View',      route: '/character-registry?view=world' },
-      { icon: '👤', label: 'Characters',      route: '/character-registry' },
-      { icon: '🛋️', label: 'Therapy Room',    route: '/therapy/default' },
+      { icon: '️', label: 'Therapy Room',    route: '/therapy/default' },
       { icon: '📰', label: 'The Press',       route: '/press' },
       { icon: '🔗', label: 'Relationships',   route: '/relationships' },
     ],
