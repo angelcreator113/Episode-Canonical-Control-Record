@@ -198,45 +198,62 @@ export default function CharacterHome() {
   if (error || !character) return (
     <div className="ch-error">
       <p>{error || 'Character not found.'}</p>
-      <button onClick={() => navigate('/world')}>← Back to World</button>
+      <button className="ch-btn-generate" style={{ borderColor: meta.color, color: meta.color }} onClick={() => navigate('/world')}>
+        ← Back to World
+      </button>
+    </div>
+  );
+
+  // Section header helper
+  const SectionHeader = ({ label, color }) => (
+    <div className="ch-section-header">
+      <span className="ch-section-label" style={{ color }}>{label}</span>
+      <hr className="ch-section-rule" style={{ background: color }} />
     </div>
   );
 
   // ── Main render ───────────────────────────────────────────────────
 
   return (
-    <div className="ch-root">
-      {/* Hero Header */}
-      <div className="ch-hero" style={{ '--hero-accent': meta.color, '--hero-bg': meta.bg }}>
-        <button className="ch-back-btn" onClick={() => navigate('/world')}>
+    <div className="ch-page">
+      {/* Topbar */}
+      <div className="ch-topbar">
+        <button className="ch-btn-back" onClick={() => navigate('/world')}>
           ← World View
         </button>
+        <span className="ch-breadcrumb">/ {name}</span>
+      </div>
 
-        <div className="ch-hero-main">
-          <div className="ch-hero-avatar" style={{ background: meta.bg, borderColor: meta.color, color: meta.color }}>
-            {(name || '?').split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
+      {/* Hero Header */}
+      <div className="ch-hero" style={{ borderLeftColor: meta.color }}>
+        <div className="ch-hero-left">
+          <h1 className="ch-hero-name">{name}</h1>
+          {character.belief_pressured && (
+            <span className="ch-hero-archetype">"{character.belief_pressured}"</span>
+          )}
+          <div className="ch-hero-badges">
+            <span className="ch-badge" style={{ borderColor: meta.color, color: meta.color, background: meta.bg }}>
+              {meta.label}
+            </span>
+            {character.status === 'finalized' && (
+              <span className="ch-badge" style={{ borderColor: '#9c9890', color: '#9c9890' }}>Finalized</span>
+            )}
           </div>
-          <div className="ch-hero-info">
-            <h1 className="ch-hero-name">{name}</h1>
-            <div className="ch-hero-meta">
-              <span className="ch-type-badge" style={{ background: meta.bg, color: meta.color }}>
-                {meta.label}
-              </span>
-              {character.role_label && (
-                <span className="ch-role">{character.role_label}</span>
-              )}
-              {character.belief_pressured && (
-                <span className="ch-belief">"{character.belief_pressured}"</span>
-              )}
-            </div>
-          </div>
+        </div>
 
+        <div className="ch-hero-right">
           {/* Momentum indicator */}
           {livingState?.isGenerated && (
             <div className="ch-hero-momentum" style={{ color: momentum.color }}>
-              <span className="ch-momentum-symbol">{momentum.symbol}</span>
-              <span className="ch-momentum-label">{momentum.label}</span>
+              <span className="ch-hero-momentum-icon">{momentum.symbol}</span>
+              <span className="ch-hero-momentum-label">{momentum.label}</span>
             </div>
+          )}
+          {character.role_label && (
+            <span className="ch-hero-role">{character.role_label}</span>
+          )}
+          {character.status === 'finalized' && (
+            <span className="ch-finalized-lock">🔒</span>
           )}
         </div>
       </div>
@@ -246,12 +263,11 @@ export default function CharacterHome() {
         {SECTIONS.map(s => (
           <button
             key={s.key}
-            className={`ch-nav-btn ${activeSection === s.key ? 'active' : ''}`}
-            style={activeSection === s.key ? { color: meta.color, borderBottomColor: meta.color } : {}}
+            className={`ch-nav-pill ${activeSection === s.key ? 'active' : ''}`}
+            style={activeSection === s.key ? { color: meta.color, borderColor: meta.color } : {}}
             onClick={() => setActiveSection(s.key)}
           >
-            <span className="ch-nav-icon">{s.icon}</span>
-            {s.label}
+            {s.icon} {s.label}
           </button>
         ))}
       </nav>
@@ -260,72 +276,103 @@ export default function CharacterHome() {
       <div className="ch-content">
         {/* ── 1. Living State ──────────────────────────────────────── */}
         {activeSection === 'living' && (
-          <div className="ch-section ch-living">
-            {livingState?.isGenerated ? (
-              <>
-                <div className="ch-state-grid">
-                  <div className="ch-state-card">
-                    <span className="ch-state-label" style={{ color: meta.color }}>KNOWS</span>
-                    <p>{livingState.currentKnows}</p>
+          <div className="ch-section">
+            <SectionHeader label="Living State" color={meta.color} />
+            <div className="ch-living-state-panel">
+              {livingState?.isGenerated ? (
+                <>
+                  <div className="ch-living-state-header">
+                    <div className="ch-momentum-pill" style={{ color: momentum.color }}>
+                      {momentum.symbol} {momentum.label}
+                    </div>
+                    <div className="ch-living-state-actions">
+                      <button
+                        className="ch-btn-generate"
+                        style={{ borderColor: meta.color, color: meta.color }}
+                        onClick={() => navigate('/world')}
+                      >
+                        ↻ Regenerate
+                      </button>
+                    </div>
                   </div>
-                  <div className="ch-state-card">
-                    <span className="ch-state-label" style={{ color: meta.color }}>WANTS</span>
-                    <p>{livingState.currentWants}</p>
+                  <div className="ch-living-state-grid">
+                    <div className="ch-living-slot">
+                      <div className="ch-living-slot-label">Knows</div>
+                      <div className="ch-living-slot-text">{livingState.currentKnows}</div>
+                    </div>
+                    <div className="ch-living-slot">
+                      <div className="ch-living-slot-label">Wants</div>
+                      <div className="ch-living-slot-text">{livingState.currentWants}</div>
+                    </div>
+                    <div className="ch-living-slot ch-living-slot-full">
+                      <div className="ch-living-slot-label" style={{ color: '#e07070' }}>Unresolved</div>
+                      <div className="ch-living-slot-text">{livingState.unresolved}</div>
+                    </div>
                   </div>
-                  <div className="ch-state-card ch-state-unresolved">
-                    <span className="ch-state-label">UNRESOLVED</span>
-                    <p>{livingState.unresolved}</p>
-                  </div>
+                  {livingState.lastChapter && (
+                    <div className="ch-living-state-footer">Last seen: {livingState.lastChapter}</div>
+                  )}
+                </>
+              ) : (
+                <div className="ch-living-state-empty">
+                  <p>No living state generated yet.</p>
+                  <button
+                    className="ch-btn-generate-primary"
+                    style={{ background: meta.color }}
+                    onClick={() => navigate('/world')}
+                  >
+                    Generate from World View
+                  </button>
                 </div>
-                {livingState.lastChapter && (
-                  <p className="ch-last-seen">Last seen: {livingState.lastChapter}</p>
-                )}
-              </>
-            ) : (
-              <div className="ch-state-empty">
-                <p>No living state generated yet.</p>
-                <button
-                  className="ch-gen-btn"
-                  style={{ borderColor: meta.color, color: meta.color }}
-                  onClick={() => navigate('/world')}
-                >
-                  Generate from World View
-                </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
 
         {/* ── 2. Arc Timeline ──────────────────────────────────────── */}
         {activeSection === 'arc' && (
-          <div className="ch-section ch-arc">
-            {arc ? (
-              <>
-                {arc.summary && <p className="ch-arc-summary">{arc.summary}</p>}
-                <div className="ch-arc-timeline">
-                  {(arc.chapters || []).map((ch, i) => (
-                    <div key={i} className="ch-arc-node" style={{ '--node-color': meta.color }}>
-                      <div className="ch-arc-dot" />
-                      <div className="ch-arc-content">
-                        <span className="ch-arc-chapter">{ch.chapter}</span>
-                        <span className="ch-arc-event">{ch.event}</span>
-                        {ch.shift && <span className="ch-arc-shift">{ch.shift}</span>}
+          <div className="ch-section">
+            <SectionHeader label="Arc Timeline" color={meta.color} />
+            {arc?.summary && <p className="ch-section-description">{arc.summary}</p>}
+            {arc && (arc.chapters || []).length > 0 ? (
+              <div className="ch-arc-strip">
+                {(arc.chapters || []).map((ch, i) => (
+                  <React.Fragment key={i}>
+                    <div className="ch-arc-beat">
+                      <div className="ch-arc-beat-header">
+                        <span className="ch-arc-chapter-label">{ch.chapter}</span>
+                        {ch.title && <span className="ch-arc-chapter-title">{ch.title}</span>}
+                        <span className="ch-arc-momentum">{momentum.symbol}</span>
                       </div>
+                      <div className="ch-arc-what-happened">{ch.event}</div>
+                      {ch.shift && (
+                        <div className="ch-arc-belief-shift">
+                          <span className="ch-arc-belief-label">Belief shift</span>
+                          {ch.shift}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
-              </>
-            ) : (
+                    {i < (arc.chapters || []).length - 1 && (
+                      <div className="ch-arc-connector" style={{ background: meta.color }} />
+                    )}
+                  </React.Fragment>
+                ))}
+              </div>
+            ) : !arc ? (
               <div className="ch-arc-empty">
                 <p>No arc data yet.</p>
                 <button
-                  className="ch-gen-btn"
-                  style={{ borderColor: meta.color, color: meta.color }}
+                  className="ch-btn-generate-primary"
+                  style={{ background: meta.color }}
                   onClick={generateArc}
                   disabled={generatingArc}
                 >
-                  {generatingArc ? '✦ Generating arc…' : '✦ Generate Arc from Manuscript'}
+                  {generatingArc ? '✦ Generating…' : '✦ Generate Arc from Manuscript'}
                 </button>
+              </div>
+            ) : (
+              <div className="ch-arc-empty">
+                <p>Arc generated but no chapter beats found yet.</p>
               </div>
             )}
           </div>
@@ -333,77 +380,118 @@ export default function CharacterHome() {
 
         {/* ── 3. Relationships ─────────────────────────────────────── */}
         {activeSection === 'relations' && (
-          <div className="ch-section ch-relations">
-            {character.relationships_map && Object.keys(character.relationships_map).length > 0 ? (
-              <div className="ch-rel-grid">
-                {Object.entries(character.relationships_map).map(([key, rel]) => (
-                  <div key={key} className="ch-rel-card">
-                    <div className="ch-rel-name">{rel.name || key}</div>
-                    <div className="ch-rel-type">{rel.type || rel.relationship || '—'}</div>
-                    {rel.dynamic && <div className="ch-rel-dynamic">{rel.dynamic}</div>}
-                    {rel.notes && <div className="ch-rel-notes">{rel.notes}</div>}
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="ch-empty-msg">No relationships mapped yet. Add them in the Dossier section.</p>
-            )}
+          <div className="ch-section">
+            <SectionHeader label="Relationships" color={meta.color} />
+            <div className="ch-relationships-panel">
+              {character.relationships_map && Object.keys(character.relationships_map).length > 0 ? (
+                <div className="ch-relationships-list">
+                  {Object.entries(character.relationships_map).map(([key, rel]) => (
+                    <div key={key} className="ch-relationship-entry">
+                      <div className="ch-relationship-name">{rel.name || key}</div>
+                      <div className="ch-relationship-desc">
+                        {rel.type || rel.relationship || '—'}
+                        {rel.dynamic && ` · ${rel.dynamic}`}
+                        {rel.notes && ` — ${rel.notes}`}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="ch-relationships-empty">
+                  No relationships mapped yet. Add them in the Dossier section.
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* ── 4. Plot Threads ──────────────────────────────────────── */}
         {activeSection === 'threads' && (
-          <div className="ch-section ch-threads">
+          <div className="ch-section">
+            <SectionHeader label="Plot Threads" color={meta.color} />
             {plotThreads.length > 0 ? (
-              <div className="ch-thread-list">
-                {plotThreads.map((thread, i) => (
-                  <div key={i} className="ch-thread-card">
-                    <div className="ch-thread-title">{thread.title}</div>
-                    <div className="ch-thread-status">{thread.status}</div>
-                    {thread.description && <p className="ch-thread-desc">{thread.description}</p>}
-                  </div>
-                ))}
+              <div className="ch-threads-list">
+                {plotThreads.map((thread, i) => {
+                  const dotColor = thread.status === 'active' ? '#34d399'
+                    : thread.status === 'resolved' ? '#94a3b8' : '#C6A85E';
+                  return (
+                    <div key={i} className="ch-thread-entry">
+                      <div className="ch-thread-status-dot" style={{ background: dotColor }} />
+                      <div className="ch-thread-body">
+                        <div className="ch-thread-desc">{thread.title || thread.description}</div>
+                        <div className="ch-thread-meta">
+                          <span style={{ color: dotColor }}>{thread.status || 'open'}</span>
+                          {thread.source && <span className="ch-thread-source">{thread.source}</span>}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             ) : (
-              <p className="ch-empty-msg">No plot threads tracked yet. This will be available in Phase 2.</p>
+              <div className="ch-threads-empty">
+                No plot threads tracked yet. This will be available in Phase 2.
+              </div>
             )}
           </div>
         )}
 
         {/* ── 5. Full Dossier ──────────────────────────────────────── */}
         {activeSection === 'dossier' && (
-          <div className="ch-section ch-dossier-wrap">
-            {CharacterDossier ? (
-              <CharacterDossier
-                character={character}
-                onSave={onDossierSave}
-                onStatusChange={onDossierStatusChange}
-                onInterview={onDossierInterview}
-                onRefresh={loadCharacter}
-              />
-            ) : (
-              <p className="ch-empty-msg">
-                Character Dossier component not available. Check your project setup.
-              </p>
-            )}
+          <div className="ch-section">
+            <SectionHeader label="Full Dossier" color={meta.color} />
+            <div className="ch-dossier-wrapper">
+              {CharacterDossier ? (
+                <CharacterDossier
+                  character={character}
+                  onSave={onDossierSave}
+                  onStatusChange={onDossierStatusChange}
+                  onInterview={onDossierInterview}
+                  onRefresh={loadCharacter}
+                />
+              ) : (
+                <div className="ch-dossier-fallback">
+                  <div className="ch-dossier-field ch-dossier-field-full">
+                    <div className="ch-dossier-label">Name</div>
+                    <div className="ch-dossier-value">{name}</div>
+                  </div>
+                  <div className="ch-dossier-field">
+                    <div className="ch-dossier-label">Type</div>
+                    <div className="ch-dossier-value">{meta.label}</div>
+                  </div>
+                  <div className="ch-dossier-field">
+                    <div className="ch-dossier-label">Role</div>
+                    <div className="ch-dossier-value">{character.role_label || '—'}</div>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
         {/* ── 6. Therapy Room ──────────────────────────────────────── */}
         {activeSection === 'therapy' && (
-          <div className="ch-section ch-therapy">
-            <div className="ch-therapy-card" style={{ borderColor: meta.color }}>
-              <div className="ch-therapy-icon">🛋️</div>
-              <h3>Therapy Session</h3>
-              <p>Have a deep conversation with {name} about their beliefs, fears, and growth.</p>
-              <button
-                className="ch-therapy-btn"
-                style={{ background: meta.color, color: '#fff' }}
-                onClick={() => navigate(`/therapy?character=${charId}`)}
-              >
-                Start Therapy Session →
-              </button>
+          <div className="ch-section">
+            <SectionHeader label="Therapy Room" color={meta.color} />
+            <div className="ch-therapy-list">
+              <div className="ch-therapy-session">
+                <div className="ch-therapy-session-date">Session Available</div>
+                <div className="ch-therapy-wound">
+                  <span className="ch-therapy-wound-label">Focus</span>
+                  Beliefs, fears, and growth
+                </div>
+                <div className="ch-therapy-summary">
+                  Have a deep conversation with {name} — explore their internal world, challenge their beliefs, and uncover hidden truths.
+                </div>
+              </div>
             </div>
+            <button
+              className="ch-btn-ghost ch-btn-full"
+              style={{ borderColor: meta.color, color: meta.color }}
+              onClick={() => navigate(`/therapy?character=${charId}`)}
+            >
+              Start Therapy Session →
+            </button>
           </div>
         )}
       </div>
