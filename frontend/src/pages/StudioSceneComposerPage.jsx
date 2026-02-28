@@ -23,9 +23,10 @@ export default function StudioSceneComposerPage() {
       return;
     }
     episodeAPI.getAll({ limit: 50 })
-      .then(data => {
-        const list = data?.episodes || data?.data || (Array.isArray(data) ? data : []);
-        setEpisodes(list);
+      .then(res => {
+        const body = res?.data || res;
+        const list = body?.episodes || body?.data || (Array.isArray(body) ? body : []);
+        setEpisodes(Array.isArray(list) ? list : []);
       })
       .catch(() => setEpisodes([]))
       .finally(() => setLoading(false));
