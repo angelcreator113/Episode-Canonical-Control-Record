@@ -1045,7 +1045,7 @@ export default function WriteMode() {
     if (targetId === chapterId) return;
     // auto-save current
     if (prose) await saveDraft(prose);
-    navigate(`/write/${bookId}/${targetId}`);
+    navigate(`/chapter/${bookId}/${targetId}`);
   }, [chapterId, bookId, prose, saveDraft, navigate]);
 
   // ── PREV / NEXT CHAPTER ───────────────────────────────────────────────

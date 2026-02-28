@@ -60,7 +60,7 @@ const BookToWriteRedirect = () => {
         const chapters = Array.isArray(data.chapters) ? data.chapters : [];
         if (chapters.length > 0) {
           const sorted = [...chapters].sort((a, b) => (a.order ?? a.chapter_number ?? 0) - (b.order ?? b.chapter_number ?? 0));
-          nav(`/write/${id}/${sorted[0].id}`, { replace: true });
+          nav(`/chapter/${id}/${sorted[0].id}`, { replace: true });
         } else {
           nav('/storyteller', { replace: true });
         }
@@ -83,6 +83,7 @@ const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
+const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
 const EpisodeWorkspace = lazy(() => import('./pages/EpisodeWorkspace'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
@@ -206,7 +207,8 @@ function AppContent() {
   const isPlanWithVoice = location.pathname === '/plan-with-voice';
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isStorytellerPage || isPlanWithVoice;
+  const isChapterJourney = location.pathname.startsWith('/chapter/');
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isPlanWithVoice;
   const hideFooter = isFullScreen;
 
   return (
@@ -324,6 +326,7 @@ function AppContent() {
           <Route path="/plan-with-voice" element={<PlanWithVoicePage />} />
           <Route path="/book/:id" element={<BookToWriteRedirect />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />
+          <Route path="/chapter/:bookId/:chapterId" element={<ChapterJourney />} />
           <Route path="/write/:bookId/:chapterId" element={<WriteMode />} />
           <Route path="/chapter-structure/:bookId/:chapterId" element={<ChapterStructureEditor />} />
           
