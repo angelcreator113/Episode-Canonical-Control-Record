@@ -4559,14 +4559,14 @@ async function executeAssistantAction(action, params = {}, context = {}) {
         if (!bookId) return { error: 'No book in context' };
 
         const [maxOrder] = await sequelize.query(
-          `SELECT COALESCE(MAX(order_index), -1) as max_idx
+          `SELECT COALESCE(MAX(sort_order), -1) as max_idx
            FROM storyteller_chapters
            WHERE book_id = :bookId AND deleted_at IS NULL`,
           { replacements: { bookId }, type: sequelize.QueryTypes.SELECT }
         );
 
         await sequelize.query(
-          `INSERT INTO storyteller_chapters (id, book_id, title, order_index, created_at, updated_at)
+          `INSERT INTO storyteller_chapters (id, book_id, title, sort_order, created_at, updated_at)
            VALUES (gen_random_uuid(), :bookId, :title, :orderIndex, NOW(), NOW())`,
           {
             replacements: {
@@ -4704,7 +4704,7 @@ router.get('/recycle-bin', optionalAuth, async (req, res) => {
         { type: sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
-        `SELECT l.id, LEFT(l.content, 120) as preview, l.deleted_at, l.status,
+        `SELECT l.id, LEFT(l.text, 120) as preview, l.deleted_at, l.status,
                 c.title as chapter_title, b.title as book_title, 'line' as type
          FROM storyteller_lines l
          LEFT JOIN storyteller_chapters c ON c.id = l.chapter_id
@@ -4714,7 +4714,7 @@ router.get('/recycle-bin', optionalAuth, async (req, res) => {
         { type: sequelize.QueryTypes.SELECT }
       ),
       sequelize.query(
-        `SELECT id, name, type as char_type, status, deleted_at, 'character' as type
+        `SELECT id, display_name as name, role_type as char_type, status, deleted_at, 'character' as type
          FROM registry_characters WHERE deleted_at IS NOT NULL
          ORDER BY deleted_at DESC LIMIT 100`,
         { type: sequelize.QueryTypes.SELECT }
@@ -4803,7 +4803,7 @@ function buildAssistantContextSummary(context) {
   const lines = [];
   lines.push(`Current view: ${context.currentView || 'unknown'}`);
   if (context.currentBook)    lines.push(`Active book: "${context.currentBook.title}" (id: ${context.currentBook.id})`);
-  if (context.currentChapter) lines.push(`Active chapter: "${context.currentChapter.title}" (id: ${context.currentChapter.id}, index: ${context.currentChapter.order_index})`);
+  if (context.currentChapter) lines.push(`Active chapter: "${context.currentChapter.title}" (id: ${context.currentChapter.id}, sort_order: ${context.currentChapter.sort_order})`);
   if (context.currentShow)    lines.push(`Active show: "${context.currentShow.title}" (id: ${context.currentShow.id})`);
   if (context.pendingLines != null) lines.push(`Pending lines in current chapter: ${context.pendingLines}`);
   if (context.totalBooks != null)   lines.push(`Total books: ${context.totalBooks}`);
