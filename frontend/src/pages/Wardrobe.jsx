@@ -88,7 +88,7 @@ const Wardrobe = ({ embedded = false }) => {
 
       {/* Tab Content */}
       <div className="wardrobe-content">
-        {activeTab === 'items' && <WardrobeBrowser mode="gallery" unified={true} />}
+        {activeTab === 'items' && <WardrobeBrowser mode="gallery" unified={true} embedded={embedded} />}
         {activeTab === 'outfits' && <OutfitSets unified={true} />}
         {activeTab === 'analytics' && <WardrobeAnalytics unified={true} />}
       </div>

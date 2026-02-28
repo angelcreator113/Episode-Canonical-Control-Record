@@ -3,9 +3,9 @@
    ========================================================== */
 
 .wardrobe-unified {
-  min-height: 100vh;
   background: #f9fafb;
-  padding: 1.5rem;
+  padding: 0;
+  width: 100%;
 }
 
 /* Header */
@@ -55,7 +55,7 @@
 
 .btn-primary-action {
   padding: 0.65rem 1.25rem;
-  background: #6b9bd1;
+  background: #6366f1;
   color: white;
   border: none;
   border-radius: 8px;
@@ -68,7 +68,7 @@
 }
 
 .btn-primary-action:hover {
-  background: #5b8fc7;
+  background: #4f46e5;
 }
 
 /* Tab Navigation - Clean & Minimal */
@@ -105,7 +105,7 @@
 }
 
 .wardrobe-tab.active {
-  background: #6b9bd1;
+  background: #6366f1;
   color: white;
 }
 
