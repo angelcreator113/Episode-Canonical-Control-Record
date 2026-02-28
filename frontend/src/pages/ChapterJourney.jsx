@@ -245,7 +245,8 @@ export default function ChapterJourney() {
   }, [transitionTo]);
 
   const handleReviewComplete = useCallback(() => {
-    navigate(`/storyteller?bookId=${bookId}`);
+    try { sessionStorage.removeItem('st_chapter'); } catch {}
+    navigate(`/storyteller?book=${bookId}`);
   }, [navigate, bookId]);
 
   const handleChapterRefresh = useCallback(async () => {
@@ -326,7 +327,10 @@ export default function ChapterJourney() {
         <div className="cj-ribbon-row">
           <button
             className="cj-back"
-            onClick={() => navigate(`/storyteller?bookId=${bookId}`)}
+            onClick={() => {
+              try { sessionStorage.removeItem('st_chapter'); } catch {}
+              navigate(`/storyteller?book=${bookId}`);
+            }}
             title="Back to book"
           >←</button>
 
