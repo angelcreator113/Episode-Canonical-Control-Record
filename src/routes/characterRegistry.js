@@ -251,6 +251,14 @@ router.get('/characters/:id', async (req, res) => {
 });
 
 /**
+ * GET /characters/:id/plot-threads
+ * Stub — returns empty threads array (Phase 2)
+ */
+router.get('/characters/:id/plot-threads', async (req, res) => {
+  return res.json({ success: true, threads: [] });
+});
+
+/**
  * PUT /characters/:id
  * Update any character fields
  */
