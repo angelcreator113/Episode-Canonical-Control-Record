@@ -446,7 +446,7 @@ export default function ChapterStructureEditor() {
           </span>
           <button
             className="cse-add-btn"
-            onClick={() => navigate(`/write/${bookId}/${chapterId}`)}
+            onClick={() => navigate(`/chapter/${bookId}/${chapterId}`)}
           >
             Write Mode
           </button>

@@ -4400,4 +4400,415 @@ function buildStoryPlanSummary(plan) {
 }
 
 
+// ─────────────────────────────────────────────────────────────────────────────
+// AI ASSISTANT — Command Interpreter
+// POST /api/v1/memories/assistant-command
+// ─────────────────────────────────────────────────────────────────────────────
+
+router.post('/assistant-command', optionalAuth, async (req, res) => {
+  const { message, history = [], context = {} } = req.body;
+
+  if (!message?.trim()) {
+    return res.status(400).json({ error: 'message is required' });
+  }
+
+  const contextSummary = buildAssistantContextSummary(context);
+
+  const conversationHistory = history
+    .filter(m => m.role && m.text)
+    .slice(-6)
+    .map(m => ({ role: m.role === 'user' ? 'user' : 'assistant', content: m.text }));
+
+  conversationHistory.push({ role: 'user', content: message });
+
+  const systemPrompt = `You are the Prime Studios AI assistant — a command interpreter built into the LalaVerse writing platform.
+
+CURRENT APP STATE:
+${contextSummary}
+
+YOUR ROLE:
+- Interpret natural language commands and map them to specific actions
+- Execute actions by returning a structured JSON response
+- Confirm what you did in plain, brief language (1-2 sentences max)
+- If a command is ambiguous, clarify before acting — ask ONE focused question
+- Never guess at IDs you don't have — ask the user or say you need to navigate there first
+
+AVAILABLE ACTIONS:
+Navigation:
+  - navigate: go to a page (/storyteller, /character-registry, /continuity, /universe, /write, /write/:bookId/:chapterId)
+
+StoryTeller — Read:
+  - get_pending_count: count pending lines in current chapter
+  - get_chapter_list: list all chapters in current book
+  - get_book_list: list all books
+
+StoryTeller — Write (non-destructive):
+  - approve_all_pending: approve all pending lines in current chapter
+  - create_chapter: create a new chapter { title, order_index }
+  - create_book: create a new book { title, description }
+
+StoryTeller — Destructive (soft-deleted, restorable from Recycle Bin):
+  - delete_line: soft-delete a specific line { line_id }
+  - delete_chapter: soft-delete a chapter { chapter_id }
+  - delete_book: soft-delete a book { book_id }
+  - reject_line: set line status to rejected { line_id }
+
+Character Registry — Write:
+  - finalize_character: finalize a character { character_id }
+
+Character Registry — Destructive:
+  - delete_character: soft-delete a character { character_id }
+
+RESPONSE FORMAT — valid JSON only, no markdown:
+{
+  "reply": "What you did or what you need to clarify (1-2 sentences, plain language)",
+  "action": "action_name or null if just navigating or answering a question",
+  "actionParams": { ...params needed to execute the action },
+  "navigate": "/route or null",
+  "refresh": "chapters | lines | characters | books | null",
+  "needsClarification": true or false
+}
+
+IMPORTANT RULES:
+- Destructive actions on finalized characters are BLOCKED — return a reply explaining this
+- Never approve, edit, or delete content in chapters other than the current one unless the user specifies
+- If you don't have an ID you need (like a specific chapter_id), say so and offer to navigate there
+- Keep replies warm and brief — this is a writing tool, not a terminal
+- "Delete" always means soft-delete — it goes to the Recycle Bin, never permanent`;
+
+  try {
+    const claudeResponse = await anthropic.messages.create({
+      model:      'claude-sonnet-4-6',
+      max_tokens: 500,
+      system:     systemPrompt,
+      messages:   conversationHistory,
+    });
+
+    const raw   = claudeResponse.content[0].text.trim();
+    const clean = raw.replace(/^```json\s*|^```\s*|\s*```$/g, '').trim();
+
+    let parsed;
+    try {
+      parsed = JSON.parse(clean);
+    } catch {
+      return res.json({ reply: raw, action: null, navigate: null, refresh: null });
+    }
+
+    // Execute the action server-side
+    if (parsed.action && !parsed.needsClarification) {
+      const result = await executeAssistantAction(parsed.action, parsed.actionParams, context);
+      if (result.error) {
+        return res.json({
+          reply:   `Something went wrong: ${result.error}`,
+          action:  parsed.action,
+          refresh: null,
+          error:   result.error,
+        });
+      }
+      if (result.replyAppend) {
+        parsed.reply = parsed.reply + ' ' + result.replyAppend;
+      }
+    }
+
+    return res.json({
+      reply:              parsed.reply      || 'Done.',
+      action:             parsed.action     || null,
+      navigate:           parsed.navigate   || null,
+      refresh:            parsed.refresh    || null,
+      needsClarification: parsed.needsClarification || false,
+      error:              null,
+    });
+
+  } catch (err) {
+    console.error('Assistant command error:', err);
+    return res.json({
+      reply:   "I couldn't complete that — try again or rephrase.",
+      action:  null,
+      refresh: null,
+      error:   err.message,
+    });
+  }
+});
+
+
+// ── ACTION EXECUTOR ─────────────────────────────────────────────────────────
+
+async function executeAssistantAction(action, params = {}, context = {}) {
+  const sequelize = db.sequelize;
+
+  try {
+    switch (action) {
+
+      case 'approve_all_pending': {
+        const chapterId = params.chapter_id || context.currentChapter?.id;
+        if (!chapterId) return { error: 'No chapter in context' };
+
+        await sequelize.query(
+          `UPDATE storyteller_lines
+           SET status = 'approved', updated_at = NOW()
+           WHERE chapter_id = :chapterId
+             AND status = 'pending'
+             AND deleted_at IS NULL`,
+          { replacements: { chapterId }, type: sequelize.QueryTypes.UPDATE }
+        );
+        return {};
+      }
+
+      case 'create_chapter': {
+        const bookId = params.book_id || context.currentBook?.id;
+        if (!bookId) return { error: 'No book in context' };
+
+        const [maxOrder] = await sequelize.query(
+          `SELECT COALESCE(MAX(sort_order), -1) as max_idx
+           FROM storyteller_chapters
+           WHERE book_id = :bookId AND deleted_at IS NULL`,
+          { replacements: { bookId }, type: sequelize.QueryTypes.SELECT }
+        );
+
+        await sequelize.query(
+          `INSERT INTO storyteller_chapters (id, book_id, title, sort_order, created_at, updated_at)
+           VALUES (gen_random_uuid(), :bookId, :title, :orderIndex, NOW(), NOW())`,
+          {
+            replacements: {
+              bookId,
+              title:      params.title || 'Untitled Chapter',
+              orderIndex: (maxOrder?.max_idx ?? -1) + 1,
+            },
+            type: sequelize.QueryTypes.INSERT,
+          }
+        );
+        return {};
+      }
+
+      case 'delete_chapter': {
+        const chapterId = params.chapter_id || context.currentChapter?.id;
+        if (!chapterId) return { error: 'No chapter specified' };
+
+        await sequelize.query(
+          `UPDATE storyteller_chapters
+           SET deleted_at = NOW(), updated_at = NOW()
+           WHERE id = :chapterId`,
+          { replacements: { chapterId }, type: sequelize.QueryTypes.UPDATE }
+        );
+        await sequelize.query(
+          `UPDATE storyteller_lines
+           SET deleted_at = NOW(), updated_at = NOW()
+           WHERE chapter_id = :chapterId AND deleted_at IS NULL`,
+          { replacements: { chapterId }, type: sequelize.QueryTypes.UPDATE }
+        );
+        return {};
+      }
+
+      case 'delete_book': {
+        const bookId = params.book_id || context.currentBook?.id;
+        if (!bookId) return { error: 'No book specified' };
+
+        await sequelize.query(
+          `UPDATE storyteller_books SET deleted_at = NOW(), updated_at = NOW() WHERE id = :bookId`,
+          { replacements: { bookId }, type: sequelize.QueryTypes.UPDATE }
+        );
+        await sequelize.query(
+          `UPDATE storyteller_chapters SET deleted_at = NOW(), updated_at = NOW()
+           WHERE book_id = :bookId AND deleted_at IS NULL`,
+          { replacements: { bookId }, type: sequelize.QueryTypes.UPDATE }
+        );
+        return {};
+      }
+
+      case 'delete_character': {
+        const charId = params.character_id;
+        if (!charId) return { error: 'No character_id specified' };
+
+        const [char] = await sequelize.query(
+          `SELECT status FROM registry_characters WHERE id = :charId AND deleted_at IS NULL`,
+          { replacements: { charId }, type: sequelize.QueryTypes.SELECT }
+        );
+        if (char?.status === 'finalized') {
+          return { error: 'Finalized characters cannot be deleted' };
+        }
+
+        await sequelize.query(
+          `UPDATE registry_characters SET deleted_at = NOW(), updated_at = NOW() WHERE id = :charId`,
+          { replacements: { charId }, type: sequelize.QueryTypes.UPDATE }
+        );
+        return {};
+      }
+
+      case 'reject_line': {
+        const lineId = params.line_id;
+        if (!lineId) return { error: 'No line_id specified' };
+
+        await sequelize.query(
+          `UPDATE storyteller_lines
+           SET status = 'rejected', deleted_at = NOW(), updated_at = NOW()
+           WHERE id = :lineId`,
+          { replacements: { lineId }, type: sequelize.QueryTypes.UPDATE }
+        );
+        return {};
+      }
+
+      case 'finalize_character': {
+        const charId = params.character_id;
+        if (!charId) return { error: 'No character_id specified' };
+
+        await sequelize.query(
+          `UPDATE registry_characters
+           SET status = 'finalized', updated_at = NOW()
+           WHERE id = :charId AND deleted_at IS NULL`,
+          { replacements: { charId }, type: sequelize.QueryTypes.UPDATE }
+        );
+        return {};
+      }
+
+      case 'get_pending_count': {
+        const chapterId = params.chapter_id || context.currentChapter?.id;
+        if (!chapterId) return { error: 'No chapter in context' };
+
+        const [row] = await sequelize.query(
+          `SELECT COUNT(*) as count FROM storyteller_lines
+           WHERE chapter_id = :chapterId AND status = 'pending' AND deleted_at IS NULL`,
+          { replacements: { chapterId }, type: sequelize.QueryTypes.SELECT }
+        );
+        return { replyAppend: `(${row?.count ?? 0} pending)` };
+      }
+
+      default:
+        return {};
+    }
+  } catch (err) {
+    console.error(`executeAssistantAction(${action}) error:`, err);
+    return { error: err.message };
+  }
+}
+
+
+// ── RECYCLE BIN — List deleted items ────────────────────────────────────────
+
+router.get('/recycle-bin', optionalAuth, async (req, res) => {
+  const sequelize = db.sequelize;
+
+  try {
+    const [books, chapters, lines, characters, beats] = await Promise.all([
+      sequelize.query(
+        `SELECT id, title, description, deleted_at, 'book' as type
+         FROM storyteller_books WHERE deleted_at IS NOT NULL
+         ORDER BY deleted_at DESC LIMIT 100`,
+        { type: sequelize.QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT c.id, c.title, c.deleted_at, b.title as book_title, 'chapter' as type
+         FROM storyteller_chapters c
+         LEFT JOIN storyteller_books b ON b.id = c.book_id
+         WHERE c.deleted_at IS NOT NULL
+         ORDER BY c.deleted_at DESC LIMIT 100`,
+        { type: sequelize.QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT l.id, LEFT(l.text, 120) as preview, l.deleted_at, l.status,
+                c.title as chapter_title, b.title as book_title, 'line' as type
+         FROM storyteller_lines l
+         LEFT JOIN storyteller_chapters c ON c.id = l.chapter_id
+         LEFT JOIN storyteller_books b ON b.id = c.book_id
+         WHERE l.deleted_at IS NOT NULL
+         ORDER BY l.deleted_at DESC LIMIT 200`,
+        { type: sequelize.QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT id, display_name as name, role_type as char_type, status, deleted_at, 'character' as type
+         FROM registry_characters WHERE deleted_at IS NOT NULL
+         ORDER BY deleted_at DESC LIMIT 100`,
+        { type: sequelize.QueryTypes.SELECT }
+      ),
+      sequelize.query(
+        `SELECT id, name, location, time_tag, deleted_at, 'beat' as type
+         FROM continuity_beats WHERE deleted_at IS NOT NULL
+         ORDER BY deleted_at DESC LIMIT 100`,
+        { type: sequelize.QueryTypes.SELECT }
+      ),
+    ]);
+
+    return res.json({ books, chapters, lines, characters, beats });
+  } catch (err) {
+    console.error('Recycle bin error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ── RECYCLE BIN — Restore item ──────────────────────────────────────────────
+
+router.post('/recycle-bin/restore', optionalAuth, async (req, res) => {
+  const { type, id } = req.body;
+  const sequelize = db.sequelize;
+
+  const tableMap = {
+    book:      'storyteller_books',
+    chapter:   'storyteller_chapters',
+    line:      'storyteller_lines',
+    character: 'registry_characters',
+    beat:      'continuity_beats',
+  };
+
+  const table = tableMap[type];
+  if (!table || !id) {
+    return res.status(400).json({ error: 'type and id required' });
+  }
+
+  try {
+    await sequelize.query(
+      `UPDATE "${table}" SET deleted_at = NULL, updated_at = NOW() WHERE id = :id`,
+      { replacements: { id }, type: sequelize.QueryTypes.UPDATE }
+    );
+    return res.json({ success: true, restored: { type, id } });
+  } catch (err) {
+    console.error('Restore error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ── RECYCLE BIN — Permanent delete (manual only) ────────────────────────────
+
+router.delete('/recycle-bin/:type/:id', optionalAuth, async (req, res) => {
+  const { type, id } = req.params;
+  const sequelize = db.sequelize;
+
+  const tableMap = {
+    book:      'storyteller_books',
+    chapter:   'storyteller_chapters',
+    line:      'storyteller_lines',
+    character: 'registry_characters',
+    beat:      'continuity_beats',
+  };
+
+  const table = tableMap[type];
+  if (!table) return res.status(400).json({ error: 'invalid type' });
+
+  try {
+    await sequelize.query(
+      `DELETE FROM "${table}" WHERE id = :id AND deleted_at IS NOT NULL`,
+      { replacements: { id }, type: sequelize.QueryTypes.DELETE }
+    );
+    return res.json({ success: true });
+  } catch (err) {
+    console.error('Permanent delete error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+
+// ── HELPER: Build context summary for assistant ─────────────────────────────
+
+function buildAssistantContextSummary(context) {
+  const lines = [];
+  lines.push(`Current view: ${context.currentView || 'unknown'}`);
+  if (context.currentBook)    lines.push(`Active book: "${context.currentBook.title}" (id: ${context.currentBook.id})`);
+  if (context.currentChapter) lines.push(`Active chapter: "${context.currentChapter.title}" (id: ${context.currentChapter.id}, sort_order: ${context.currentChapter.sort_order})`);
+  if (context.currentShow)    lines.push(`Active show: "${context.currentShow.title}" (id: ${context.currentShow.id})`);
+  if (context.pendingLines != null) lines.push(`Pending lines in current chapter: ${context.pendingLines}`);
+  if (context.totalBooks != null)   lines.push(`Total books: ${context.totalBooks}`);
+  return lines.join('\n');
+}
+
+
 module.exports = router;

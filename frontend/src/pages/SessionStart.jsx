@@ -126,7 +126,7 @@ function SessionStart() {
                 <button
                   key={d.chapterId}
                   className="ss-card ss-card-draft"
-                  onClick={() => navigate(`/write/${d.bookId}/${d.chapterId}`)}
+                  onClick={() => navigate(`/chapter/${d.bookId}/${d.chapterId}`)}
                 >
                   <div className="ss-card-top">
                     <span className="ss-card-badge">Ch {d.chapterNumber}</span>

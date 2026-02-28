@@ -731,7 +731,7 @@ export default function BookOverview() {
                   <span className="bo-outline-col bo-ol-actions">
                     <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => startEdit(ch)}>Plan</button>
                     <button className="bo-btn bo-btn-ghost bo-btn-sm" onClick={() => navigate(`/chapter-structure/${id}/${ch.id}`)}>Scenes</button>
-                    <button className="bo-btn bo-btn-write bo-btn-sm" onClick={() => navigate(`/write/${id}/${ch.id}`)}>Write</button>
+                    <button className="bo-btn bo-btn-write bo-btn-sm" onClick={() => navigate(`/chapter/${id}/${ch.id}`)}>Write</button>
                   </span>
                 </div>
               );
@@ -847,7 +847,7 @@ export default function BookOverview() {
                       >Scenes</button>
                       <button
                         className="bo-btn bo-btn-write bo-btn-sm"
-                        onClick={() => navigate(`/write/${id}/${ch.id}`)}
+                        onClick={() => navigate(`/chapter/${id}/${ch.id}`)}
                       >Write</button>
                     </div>
                   </div>
@@ -1047,7 +1047,7 @@ export default function BookOverview() {
                   <div className="bo-toc-actions">
                     <button
                       className="bo-toc-write-btn"
-                      onClick={() => navigate(`/write/${id}/${ch.id}`)}
+                      onClick={() => navigate(`/chapter/${id}/${ch.id}`)}
                       title="Open in WriteMode"
                     >
                       Write

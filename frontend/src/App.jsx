@@ -60,7 +60,7 @@ const BookToWriteRedirect = () => {
         const chapters = Array.isArray(data.chapters) ? data.chapters : [];
         if (chapters.length > 0) {
           const sorted = [...chapters].sort((a, b) => (a.order ?? a.chapter_number ?? 0) - (b.order ?? b.chapter_number ?? 0));
-          nav(`/write/${id}/${sorted[0].id}`, { replace: true });
+          nav(`/chapter/${id}/${sorted[0].id}`, { replace: true });
         } else {
           nav('/storyteller', { replace: true });
         }
@@ -82,6 +82,8 @@ const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const RecycleBin = lazy(() => import('./pages/RecycleBin'));
+const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
 const EpisodeWorkspace = lazy(() => import('./pages/EpisodeWorkspace'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
@@ -97,6 +99,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import ToastProvider from './components/ToastContainer';
 import OrientationToast from './components/OrientationToast';
 import LoadingSkeleton from './components/LoadingSkeleton';
+import AppAssistant from './components/AppAssistant';
 
 import './App.css';
 
@@ -204,7 +207,8 @@ function AppContent() {
   const isPlanWithVoice = location.pathname === '/plan-with-voice';
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isStorytellerPage || isPlanWithVoice;
+  const isChapterJourney = location.pathname.startsWith('/chapter/');
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isPlanWithVoice;
   const hideFooter = isFullScreen;
 
   return (
@@ -234,8 +238,8 @@ function AppContent() {
           
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
           
-          {/* Episodes */}
-          <Route path="/episodes" element={<EpisodeWorkspace />} />
+          {/* Episodes — listing redirects to Universe Production tab */}
+          <Route path="/episodes" element={<Navigate to="/universe?tab=production" replace />} />
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
@@ -322,6 +326,7 @@ function AppContent() {
           <Route path="/plan-with-voice" element={<PlanWithVoicePage />} />
           <Route path="/book/:id" element={<BookToWriteRedirect />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />
+          <Route path="/chapter/:bookId/:chapterId" element={<ChapterJourney />} />
           <Route path="/write/:bookId/:chapterId" element={<WriteMode />} />
           <Route path="/chapter-structure/:bookId/:chapterId" element={<ChapterStructureEditor />} />
           
@@ -356,6 +361,9 @@ function AppContent() {
           
           {/* Settings */}
           <Route path="/settings" element={<SettingsPage />} />
+          
+          {/* Recycle Bin */}
+          <Route path="/recycle-bin" element={<RecycleBin />} />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />
@@ -376,6 +384,13 @@ function AppContent() {
 
       {/* Orientation awareness toast */}
       <OrientationToast />
+
+      {/* AI Assistant — floating chat bubble */}
+      <AppAssistant
+        appContext={{ currentView: location.pathname }}
+        onNavigate={(path) => navigate(path)}
+        onRefresh={() => window.dispatchEvent(new Event('app-refresh'))}
+      />
     </div>
   );
 }

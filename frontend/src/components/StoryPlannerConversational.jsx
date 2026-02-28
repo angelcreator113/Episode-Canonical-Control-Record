@@ -75,16 +75,16 @@ function useVoiceInput() {
   const recRef = useRef(null);
   const wantListeningRef = useRef(false);
   const onResultRef = useRef(null);
-  const committedRef = useRef('');     // finalized text from previous segments
-  const interimRef = useRef('');       // current in-progress segment
-  const restartCountRef = useRef(0);   // track restart attempts for backoff
-  const lastProcessedIdx = useRef(0);  // last processed result index (avoid re-appending)
-
-  // Detect mobile for recognition strategy
-  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const segments = useRef([]);         // one entry per completed recognition session
+  const restartCountRef = useRef(0);
 
   useEffect(() => {
     setSupported(!!(window.SpeechRecognition || window.webkitSpeechRecognition));
+  }, []);
+
+  // Build display text: all committed segments + optional interim
+  const buildText = useCallback((interim = '') => {
+    return [...segments.current, interim].filter(Boolean).join(' ').trim();
   }, []);
 
   const startRec = useCallback(() => {
@@ -96,43 +96,40 @@ function useVoiceInput() {
     }
 
     const rec = new SR();
-    // On mobile, use continuous mode with careful handling;
-    // on desktop, non-continuous with auto-restart works fine
-    rec.continuous     = isMobile;
+    // ALWAYS non-continuous: one utterance per session, auto-restart between.
+    // This eliminates all duplicate-result bugs from continuous mode.
+    rec.continuous     = false;
     rec.interimResults = true;
     rec.lang           = 'en-US';
     recRef.current     = rec;
 
+    // Local flag — unique to THIS session closure. Once committed, ignore all
+    // further onresult events from this session. This makes duplication
+    // structurally impossible.
+    let committed = false;
+
     rec.onresult = (e) => {
-      let interim = '';
-      let newFinal = '';
-      for (let i = 0; i < e.results.length; i++) {
-        const t = e.results[i][0].transcript;
-        if (e.results[i].isFinal) {
-          // Only commit results we haven't already processed
-          if (i >= lastProcessedIdx.current) {
-            newFinal += t;
-            lastProcessedIdx.current = i + 1;
-          }
-        } else {
-          interim += t;
-        }
+      if (committed) return;
+
+      const last = e.results[e.results.length - 1];
+      if (last.isFinal) {
+        const text = last[0].transcript.trim();
+        if (text) segments.current.push(text);
+        committed = true;
+        const full = buildText();
+        setTranscript(full);
+        if (onResultRef.current) onResultRef.current(full);
+      } else {
+        const full = buildText(last[0].transcript);
+        setTranscript(full);
+        if (onResultRef.current) onResultRef.current(full);
       }
-      // Commit only newly finalized words
-      if (newFinal) {
-        committedRef.current += (committedRef.current ? ' ' : '') + newFinal.trim();
-      }
-      interimRef.current = interim;
-      const full = (committedRef.current + (interim ? ' ' + interim : '')).trim();
-      setTranscript(full);
-      if (onResultRef.current) onResultRef.current(full);
-      // Reset restart counter on successful result
       restartCountRef.current = 0;
     };
 
     rec.onerror = (e) => {
       if (wantListeningRef.current && (e.error === 'no-speech' || e.error === 'aborted')) {
-        return;
+        return; // will auto-restart via onend
       }
       console.warn('SpeechRecognition error:', e.error);
       wantListeningRef.current = false;
@@ -141,25 +138,18 @@ function useVoiceInput() {
 
     rec.onend = () => {
       if (wantListeningRef.current) {
-        // Auto-restart for next utterance; committed text is preserved
-        // On mobile, add a small delay to prevent rapid restart failures
         restartCountRef.current++;
-        const delay = isMobile ? Math.min(restartCountRef.current * 150, 800) : 0;
-        if (restartCountRef.current > 8) {
-          // Too many restarts — stop gracefully
+        if (restartCountRef.current > 12) {
           wantListeningRef.current = false;
           setListening(false);
           return;
         }
-        if (delay > 0) {
-          setTimeout(() => {
-            if (wantListeningRef.current) {
-              try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
-            }
-          }, delay);
-        } else {
-          try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
-        }
+        // Brief delay for browser cleanup before next session
+        setTimeout(() => {
+          if (wantListeningRef.current) {
+            try { startRec(); } catch { setListening(false); wantListeningRef.current = false; }
+          }
+        }, 120);
         return;
       }
       setListening(false);
@@ -167,7 +157,7 @@ function useVoiceInput() {
 
     rec.start();
     setListening(true);
-  }, [isMobile]);
+  }, [buildText]);
 
   // Auto-stop when screen goes off (phone sleep / lock)
   useEffect(() => {
@@ -185,9 +175,7 @@ function useVoiceInput() {
   const start = useCallback((onResult) => {
     onResultRef.current = onResult;
     wantListeningRef.current = true;
-    committedRef.current = '';
-    interimRef.current = '';
-    lastProcessedIdx.current = 0;
+    segments.current = [];
     setTranscript('');
     startRec();
   }, [startRec]);
@@ -280,6 +268,8 @@ export default function StoryPlannerConversational({
   const send = useCallback(async (text) => {
     if (!text?.trim() || sending) return;
     const trimmed = text.trim();
+    // Stop voice FIRST so its callback can't overwrite the cleared input
+    if (voice.listening) voice.stop();
     const userMsg = { role: 'user', text: trimmed };
     setMessages(prev => [...prev, userMsg]);
     setInput('');
@@ -427,8 +417,11 @@ export default function StoryPlannerConversational({
   const toggleVoice = () => {
     if (voice.listening) {
       voice.stop();
-      // Keep transcript in input field so user can edit before sending
-      if (voice.transcript.trim()) setInput(voice.transcript.trim());
+      // If there's text, send it immediately rather than leaving it in the box
+      const text = voice.transcript.trim() || input.trim();
+      if (text) {
+        send(text);
+      }
     } else {
       // Cancel any TTS so it doesn't fight the mic
       window.speechSynthesis?.cancel();
@@ -444,6 +437,20 @@ export default function StoryPlannerConversational({
     setActiveChIdx(null);
     window.speechSynthesis?.cancel();
   };
+
+  // ── Edit a sent message — reloads it into the input ──────────────────
+
+  const editMessage = useCallback((msgIndex) => {
+    if (sending) return;
+    const msg = messages[msgIndex];
+    if (!msg || msg.role !== 'user') return;
+    // Put the text back in the input
+    setInput(msg.text);
+    // Remove this message and everything after it (including Claude's reply)
+    setMessages(prev => prev.slice(0, msgIndex));
+    // Focus the input so they can edit immediately
+    setTimeout(() => inputRef.current?.focus(), 50);
+  }, [sending, messages]);
 
   // ── Handle key ───────────────────────────────────────────────────────
 
@@ -554,6 +561,15 @@ export default function StoryPlannerConversational({
                     </div>
                   )}
                 </div>
+                {msg.role === 'user' && !sending && (
+                  <button
+                    className="spc-msg-edit-btn"
+                    onClick={() => editMessage(i)}
+                    title="Edit this message"
+                  >
+                    ✎
+                  </button>
+                )}
               </div>
             ))}
             {sending && (
@@ -571,7 +587,7 @@ export default function StoryPlannerConversational({
             {voice.listening && (
               <div className="spc-voice-preview">
                 <span className="spc-voice-dot" />
-                {voice.transcript || 'Listening…'}
+                Listening…
               </div>
             )}
             <div className="spc-input-wrap">
@@ -585,7 +601,7 @@ export default function StoryPlannerConversational({
                 }}
                 onKeyDown={handleKey}
                 placeholder="Answer here, or use the mic…"
-                rows={2}
+                rows={1}
                 disabled={sending}
               />
               <div className="spc-input-actions">

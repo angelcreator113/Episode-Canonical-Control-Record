@@ -6,17 +6,17 @@
  * Sidebar: ◈ Universe → /universe (under Home)
  *
  * Pass 1 features:
- * - Three tabs: Universe | Series | Shows
+ * - Five tabs: Universe | Series | Production | Wardrobe | Assets
  * - Universe tab: edit all fields, preview toggle, Claude "Structure from Raw Draft"
  * - Series tab: create/edit series, books grouped inside, edit era inline
- * - Shows tab: linked shows, edit description + era
+ * - Production tab: shows + episodes merged — select a show to browse episodes
  * - Canon Timeline strip at bottom of Universe tab
  *
  * Light theme — matches app parchment/serif design system
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import ProducerModeFrame from './ProducerModeFrame';
 import Wardrobe from './Wardrobe';
 import AssetLibrary from './AssetLibrary';
@@ -45,7 +45,7 @@ export default function UniversePage() {
   const isMobile = width < 640;
   const isTablet = width >= 640 && width < 1024;
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = ['universe','series','shows','wardrobe','assets'].includes(searchParams.get('tab'))
+  const initialTab = ['universe','series','production','wardrobe','assets'].includes(searchParams.get('tab'))
     ? searchParams.get('tab') : 'universe';
   const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -119,7 +119,7 @@ export default function UniversePage() {
 
       {/* Tab bar */}
       <div style={{ ...s.tabBar, padding: `0 ${px}px` }}>
-        {['universe', 'series', 'shows', 'wardrobe', 'assets'].map(tab => (
+        {['universe', 'series', 'production', 'wardrobe', 'assets'].map(tab => (
           <button
             key={tab}
             style={{
@@ -137,7 +137,7 @@ export default function UniversePage() {
           >
             {tab === 'universe' ? '🌌 Universe' :
              tab === 'series'   ? '📚 Series' :
-             tab === 'shows'    ? '📺 Shows' :
+             tab === 'production' ? '🎬 Production' :
              tab === 'wardrobe' ? '👗 Wardrobe' : '📁 Assets'}
           </button>
         ))}
@@ -167,8 +167,8 @@ export default function UniversePage() {
             isTablet={isTablet}
           />
         )}
-        {activeTab === 'shows' && (
-          <ShowsTab
+        {activeTab === 'production' && (
+          <ProductionTab
             shows={shows}
             universeId={LALAVERSE_ID}
             onChanged={() => { load(); showToast('Show updated'); }}
@@ -769,19 +769,81 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
 }
 
 // ══════════════════════════════════════════════════════════════════════════
-//  TAB 3 — SHOWS
+//  TAB 3 — PRODUCTION  (Shows + Episodes merged)
 // ══════════════════════════════════════════════════════════════════════════
 
-function ShowsTab({ shows, universeId, onChanged, showToast, isMobile, isTablet }) {
+const EP_STATUS_GROUPS = [
+  { key: 'active',    label: 'In Progress', icon: '🔥', statuses: ['in_progress', 'in_build', 'editing'] },
+  { key: 'draft',     label: 'Drafts',      icon: '📝', statuses: ['draft'] },
+  { key: 'review',    label: 'In Review',   icon: '👁️',  statuses: ['review', 'pending_review'] },
+  { key: 'published', label: 'Published',   icon: '✅', statuses: ['published', 'completed', 'aired'] },
+  { key: 'archived',  label: 'Archived',    icon: '📦', statuses: ['archived', 'cancelled'] },
+];
+
+function statusLabel(st) {
+  return (st || 'draft').replace(/_/g, ' ');
+}
+
+function relTime(dateStr) {
+  if (!dateStr) return '';
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
+function ProductionTab({ shows, universeId, onChanged, showToast, isMobile, isTablet }) {
+  const navigate = useNavigate();
   const [editingId, setEditingId]       = useState(null);
   const [editForm, setEditForm]         = useState({});
   const [saving, setSaving]             = useState(false);
   const [selectedShowId, setSelectedShowId] = useState(null);
 
+  // Episode state (for selected show)
+  const [episodes, setEpisodes]         = useState([]);
+  const [loadingEps, setLoadingEps]     = useState(false);
+  const [epFilter, setEpFilter]         = useState('all');
+  const [epSearch, setEpSearch]         = useState('');
+
   const safeShows = Array.isArray(shows) ? shows : [];
   const linkedShows = safeShows.filter(sh =>
-    sh.universe_id === universeId || safeShows.length <= 3 // show all if few
+    sh.universe_id === universeId || safeShows.length <= 3
   );
+
+  // Fetch episodes when a show is selected
+  useEffect(() => {
+    if (!selectedShowId) { setEpisodes([]); return; }
+    setLoadingEps(true);
+    const token = localStorage.getItem('token') || sessionStorage.getItem('token');
+    fetch(`/api/v1/episodes?show_id=${selectedShowId}&limit=200`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(data => {
+        const list = data?.data || data?.episodes || [];
+        setEpisodes(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setEpisodes([]))
+      .finally(() => setLoadingEps(false));
+  }, [selectedShowId]);
+
+  // Filtered episodes
+  const filteredEps = episodes.filter(ep => {
+    if (epFilter !== 'all') {
+      const group = EP_STATUS_GROUPS.find(g => g.key === epFilter);
+      if (group && !group.statuses.includes(ep.status)) return false;
+    }
+    if (epSearch.trim()) {
+      const q = epSearch.toLowerCase();
+      if (!(ep.title || '').toLowerCase().includes(q) && !String(ep.episode_number).includes(q)) return false;
+    }
+    return true;
+  }).sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0));
 
   function startEdit(show) {
     setEditingId(show.id);
@@ -810,6 +872,12 @@ function ShowsTab({ shows, universeId, onChanged, showToast, isMobile, isTablet 
     }
   }
 
+  function selectShow(id) {
+    setSelectedShowId(id);
+    setEpFilter('all');
+    setEpSearch('');
+  }
+
   if (linkedShows.length === 0) {
     return (
       <div style={s.tabShell}>
@@ -826,20 +894,165 @@ function ShowsTab({ shows, universeId, onChanged, showToast, isMobile, isTablet 
   return (
     <div style={s.tabShell}>
 
-      {/* ── Producer Mode Frame (when a show is selected) ── */}
+      {/* ── Selected Show: Producer Mode + Episodes ── */}
       {selectedShow && (
-        <div style={{ marginBottom: 24 }}>
+        <div>
+          {/* Back + header */}
           <button
-            style={{ ...s.secondaryBtn, marginBottom: 12 }}
+            style={{ ...s.secondaryBtn, marginBottom: 16 }}
             onClick={() => setSelectedShowId(null)}
           >
-            ← Back to show list
+            ← All Shows
           </button>
+
+          {/* Producer Mode stats + quick links */}
           <ProducerModeFrame showId={selectedShow.id} show={selectedShow} />
+
+          {/* ── Episode Browser ── */}
+          <div style={{ marginTop: 28 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
+              <div style={s.sectionLabel}>EPISODES</div>
+              <button
+                style={s.primaryBtn}
+                onClick={() => navigate(`/shows/${selectedShow.id}/quick-episode`)}
+              >
+                + New Episode
+              </button>
+            </div>
+
+            {/* Filters */}
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 16, alignItems: 'center' }}>
+              <input
+                style={{ ...s.input, maxWidth: 220, padding: '8px 12px', fontSize: 13 }}
+                placeholder="Search episodes…"
+                value={epSearch}
+                onChange={e => setEpSearch(e.target.value)}
+              />
+              {EP_STATUS_GROUPS.map(g => {
+                const count = episodes.filter(ep => g.statuses.includes(ep.status)).length;
+                if (count === 0) return null;
+                return (
+                  <button
+                    key={g.key}
+                    style={{
+                      ...s.microBtn,
+                      background: epFilter === g.key ? 'rgba(201,168,76,0.15)' : 'none',
+                      borderColor: epFilter === g.key ? 'rgba(201,168,76,0.4)' : 'rgba(26,21,16,0.15)',
+                      color: epFilter === g.key ? '#9A7B2F' : 'rgba(26,21,16,0.55)',
+                    }}
+                    onClick={() => setEpFilter(epFilter === g.key ? 'all' : g.key)}
+                  >
+                    {g.icon} {g.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Episode list */}
+            {loadingEps ? (
+              <div style={{ padding: 40, textAlign: 'center', fontFamily: 'DM Mono, monospace', fontSize: 13, color: 'rgba(26,21,16,0.35)' }}>
+                Loading episodes…
+              </div>
+            ) : filteredEps.length === 0 ? (
+              <div style={s.emptyState}>
+                <div style={s.emptyTitle}>{episodes.length === 0 ? 'No episodes yet' : 'No matching episodes'}</div>
+                <div style={s.emptyHint}>{episodes.length === 0 ? 'Create your first episode to get started.' : 'Try a different filter.'}</div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {filteredEps.map(ep => (
+                  <div
+                    key={ep.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: isMobile ? '12px 14px' : '12px 18px',
+                      background: 'rgba(26,21,16,0.015)',
+                      border: '1px solid rgba(26,21,16,0.06)',
+                      borderRadius: 3,
+                      cursor: 'pointer',
+                      transition: 'border-color 0.15s',
+                      flexWrap: isMobile ? 'wrap' : 'nowrap',
+                    }}
+                    onClick={() => navigate(`/episodes/${ep.id}`)}
+                    onMouseEnter={e => e.currentTarget.style.borderColor = 'rgba(201,168,76,0.35)'}
+                    onMouseLeave={e => e.currentTarget.style.borderColor = 'rgba(26,21,16,0.06)'}
+                  >
+                    {/* Episode number */}
+                    <span style={{
+                      fontFamily: 'DM Mono, monospace',
+                      fontSize: 12,
+                      color: '#C9A84C',
+                      letterSpacing: '0.04em',
+                      minWidth: 48,
+                      flexShrink: 0,
+                    }}>
+                      Ep {ep.episode_number || '?'}
+                    </span>
+
+                    {/* Title + meta */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        fontFamily: "'Playfair Display', serif",
+                        fontSize: 15,
+                        color: 'rgba(26,21,16,0.82)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {ep.title || 'Untitled'}
+                      </div>
+                    </div>
+
+                    {/* Status badge */}
+                    <span style={{
+                      fontFamily: 'DM Mono, monospace',
+                      fontSize: 11,
+                      letterSpacing: '0.06em',
+                      color: ep.status === 'published' || ep.status === 'completed' || ep.status === 'aired'
+                        ? '#4A7C59'
+                        : ep.status === 'draft' ? 'rgba(26,21,16,0.35)' : '#C9A84C',
+                      textTransform: 'capitalize',
+                      flexShrink: 0,
+                    }}>
+                      {statusLabel(ep.status)}
+                    </span>
+
+                    {/* Time */}
+                    <span style={{
+                      fontFamily: 'DM Mono, monospace',
+                      fontSize: 11,
+                      color: 'rgba(26,21,16,0.3)',
+                      flexShrink: 0,
+                      minWidth: 60,
+                      textAlign: 'right',
+                    }}>
+                      {relTime(ep.updated_at)}
+                    </span>
+
+                    {/* Quick actions */}
+                    <div style={{ display: 'flex', gap: 6, flexShrink: 0 }} onClick={e => e.stopPropagation()}>
+                      <button
+                        style={s.microBtn}
+                        onClick={() => navigate(`/episodes/${ep.id}/scene-composer`)}
+                        title="Scene Composer"
+                      >🎬</button>
+                      <button
+                        style={s.microBtn}
+                        onClick={() => navigate(`/episodes/${ep.id}/timeline`)}
+                        title="Timeline"
+                      >⏱️</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* ── Show Cards ── */}
+      {/* ── Show Cards (no show selected) ── */}
       {!selectedShow && linkedShows.map(show => (
         <div key={show.id} style={{ ...s.showCard, padding: isMobile ? '14px 14px' : '18px 20px' }}>
           <div style={{
@@ -871,9 +1084,9 @@ function ShowsTab({ shows, universeId, onChanged, showToast, isMobile, isTablet 
                   flex: isMobile ? 1 : undefined,
                   padding: isMobile ? '12px 14px' : '10px 22px',
                 }}
-                onClick={() => setSelectedShowId(show.id)}
+                onClick={() => selectShow(show.id)}
               >
-                🌍 Producer Mode
+                🎬 Episodes
               </button>
             </div>
           </div>
@@ -986,6 +1199,7 @@ function ErrorState({ onRetry }) {
 const s = {
   shell: {
     minHeight: '100vh',
+    width: '100%',
     background: '#faf9f7',
     color: 'rgba(26,21,16,0.85)',
     fontFamily: "'DM Sans', sans-serif",
@@ -1035,7 +1249,7 @@ const s = {
   },
   tabContent: {
     padding: '0 48px',
-    maxWidth: 900,
+    width: '100%',
   },
   tabShell: {
     paddingTop: 28,

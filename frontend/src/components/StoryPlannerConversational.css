@@ -261,6 +261,45 @@
   50%       { opacity: 1;   transform: scale(1.1); }
 }
 
+/* Edit button on user messages */
+.spc-msg--user {
+  position: relative;
+}
+.spc-msg-edit-btn {
+  position: absolute;
+  top: 4px;
+  left: -28px;
+  width: 24px;
+  height: 24px;
+  border: none;
+  background: transparent;
+  color: var(--st-muted, #9A9088);
+  font-size: 14px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+}
+.spc-msg--user:hover .spc-msg-edit-btn,
+.spc-msg-edit-btn:focus {
+  opacity: 1;
+}
+/* Always show on touch devices */
+@media (hover: none) {
+  .spc-msg-edit-btn {
+    opacity: 0.5;
+    position: static;
+    align-self: flex-start;
+    margin-top: 4px;
+    margin-left: 4px;
+    flex-shrink: 0;
+  }
+}
+
 /* Thinking dots */
 .spc-thinking {
   display: flex;
@@ -305,6 +344,8 @@
   color: var(--st-muted, #9A9088);
   padding: 4px 0;
   min-height: 20px;
+  max-height: 28px;
+  overflow: hidden;
   -webkit-user-select: text;
   user-select: text;
 }
@@ -339,6 +380,7 @@
   outline: none;
   line-height: 1.5;
   transition: border-color 0.15s;
+  overflow-y: auto;
 }
 .spc-input:focus {
   border-color: rgba(198,168,94,0.4);
@@ -914,9 +956,11 @@
 
   .spc-input {
     min-height: 44px;   /* touch target */
+    max-height: 80px;   /* capped on mobile so send stays visible */
     font-size: 16px;    /* prevents iOS zoom */
     padding: 10px 12px;
     border-radius: 8px;
+    overflow-y: auto;
   }
 
   .spc-mic-btn {
