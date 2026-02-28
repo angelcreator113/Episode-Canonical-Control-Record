@@ -139,6 +139,13 @@ export default function CharacterRegistryPage() {
   const [interviewTarget, setInterviewTarget] = useState(null);
   const [bookId, setBookId] = useState(null);
 
+  // Registry management
+  const [showNewRegistry, setShowNewRegistry]     = useState(false);
+  const [editingRegistry, setEditingRegistry]     = useState(null);   // null or registry object
+  const [registryForm, setRegistryForm]           = useState({ title: '', book_tag: '', description: '', core_rule: '' });
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deleteTargetId, setDeleteTargetId]       = useState(null);
+
   // Dossier mobile: collapse left panel
   const [dossierPanelOpen, setDossierPanelOpen] = useState(false);
   const tabsRef = useRef(null);
@@ -302,26 +309,100 @@ export default function CharacterRegistryPage() {
     }
   };
 
-  const createRegistry = async () => {
+  const createRegistry = () => {
+    setRegistryForm({ title: '', book_tag: '', description: '', core_rule: '' });
+    setShowNewRegistry(true);
+  };
+
+  const submitNewRegistry = async () => {
+    if (!registryForm.title.trim()) return;
     try {
       const res = await fetch(`${API}/registries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: 'Book 1 · Before Lala',
-          book_tag: 'book-1',
-          description: 'Character registry for Book 1 of the PNOS narrative.',
-          core_rule: 'Every character either confirms her silence — or threatens to break it.',
+          title: registryForm.title.trim(),
+          book_tag: registryForm.book_tag.trim() || null,
+          description: registryForm.description.trim() || null,
+          core_rule: registryForm.core_rule.trim() || null,
         }),
       });
       const data = await res.json();
       if (data.success) {
         showToast('Registry created');
+        setShowNewRegistry(false);
         setActiveRegistry(data.registry);
         await fetchRegistries();
+      } else {
+        showToast(data.error || 'Failed to create registry', 'error');
       }
     } catch (e) {
       showToast('Failed to create registry', 'error');
+    }
+  };
+
+  const openEditRegistry = (reg) => {
+    setRegistryForm({
+      title: reg.title || '',
+      book_tag: reg.book_tag || '',
+      description: reg.description || '',
+      core_rule: reg.core_rule || '',
+    });
+    setEditingRegistry(reg);
+  };
+
+  const updateRegistry = async () => {
+    if (!editingRegistry || !registryForm.title.trim()) return;
+    try {
+      const res = await fetch(`${API}/registries/${editingRegistry.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: registryForm.title.trim(),
+          book_tag: registryForm.book_tag.trim() || null,
+          description: registryForm.description.trim() || null,
+          core_rule: registryForm.core_rule.trim() || null,
+        }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Registry updated');
+        setEditingRegistry(null);
+        if (activeRegistry?.id === editingRegistry.id) {
+          await fetchRegistry(editingRegistry.id);
+        }
+        await fetchRegistries();
+      } else {
+        showToast(data.error || 'Failed to update registry', 'error');
+      }
+    } catch (e) {
+      showToast('Failed to update registry', 'error');
+    }
+  };
+
+  const confirmDeleteRegistry = (id) => {
+    setDeleteTargetId(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const deleteRegistry = async () => {
+    if (!deleteTargetId) return;
+    try {
+      const res = await fetch(`${API}/registries/${deleteTargetId}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Registry deleted');
+        setShowDeleteConfirm(false);
+        setDeleteTargetId(null);
+        if (activeRegistry?.id === deleteTargetId) {
+          setActiveRegistry(null);
+        }
+        await fetchRegistries();
+      } else {
+        showToast(data.error || 'Failed to delete registry', 'error');
+      }
+    } catch (e) {
+      showToast('Failed to delete registry', 'error');
     }
   };
 
@@ -906,11 +987,35 @@ export default function CharacterRegistryPage() {
               >
                 <span className="cr-pill-title">{r.title || 'Untitled'}</span>
                 {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
+                {activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
               </button>
             ))}
             <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
               +
             </button>
+          </div>
+        )}
+
+        {/* Registry context bar */}
+        {activeRegistry && (
+          <div className="cr-registry-context">
+            <div className="cr-registry-context-info">
+              <h3 className="cr-registry-context-title">{activeRegistry.title}</h3>
+              {activeRegistry.description && (
+                <p className="cr-registry-context-desc">{activeRegistry.description}</p>
+              )}
+              {activeRegistry.core_rule && (
+                <p className="cr-registry-context-rule">"{activeRegistry.core_rule}"</p>
+              )}
+            </div>
+            <div className="cr-registry-context-actions">
+              <button className="cr-ctx-btn" onClick={() => openEditRegistry(activeRegistry)}>
+                ✎ Edit
+              </button>
+              <button className="cr-ctx-btn danger" onClick={() => confirmDeleteRegistry(activeRegistry.id)}>
+                ✕ Delete
+              </button>
+            </div>
           </div>
         )}
 
@@ -981,30 +1086,142 @@ export default function CharacterRegistryPage() {
       {showNewChar && (
         <div className="cr-modal-overlay" onClick={() => setShowNewChar(false)}>
           <div className="cr-modal" onClick={e => e.stopPropagation()}>
-            <h2 className="cr-modal-title">New Character</h2>
-            <div className="cr-edit-field">
-              <label className="cr-edit-label">Name</label>
-              <input className="cr-edit-input" value={newCharForm.display_name}
-                onChange={e => setNewCharForm(p => ({ ...p, display_name: e.target.value }))}
-                placeholder="Character name" autoFocus />
+            <div className="cr-modal-body">
+              <h2 className="cr-modal-title">New Character</h2>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Name</label>
+                <input className="cr-edit-input" value={newCharForm.display_name}
+                  onChange={e => setNewCharForm(p => ({ ...p, display_name: e.target.value }))}
+                  placeholder="Character name" autoFocus />
+              </div>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Role</label>
+                <select className="cr-edit-input cr-edit-select" value={newCharForm.role_type}
+                  onChange={e => setNewCharForm(p => ({ ...p, role_type: e.target.value }))}>
+                  {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Icon (emoji)</label>
+                <input className="cr-edit-input" value={newCharForm.icon}
+                  onChange={e => setNewCharForm(p => ({ ...p, icon: e.target.value }))}
+                  placeholder="◆" style={{ maxWidth: 80 }} />
+              </div>
+              <div className="cr-modal-actions">
+                <button className="cr-edit-cancel-btn" onClick={() => setShowNewChar(false)}>Cancel</button>
+                <button className="cr-edit-save-btn" onClick={createCharacter}
+                  disabled={!newCharForm.display_name.trim()}>Create</button>
+              </div>
             </div>
-            <div className="cr-edit-field">
-              <label className="cr-edit-label">Role</label>
-              <select className="cr-edit-input cr-edit-select" value={newCharForm.role_type}
-                onChange={e => setNewCharForm(p => ({ ...p, role_type: e.target.value }))}>
-                {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
+          </div>
+        </div>
+      )}
+
+      {/* New Registry Modal */}
+      {showNewRegistry && (
+        <div className="cr-modal-overlay" onClick={() => setShowNewRegistry(false)}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <h2 className="cr-modal-title">New Registry</h2>
+              <p className="cr-modal-subtitle">Create a character registry for a book or arc.</p>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Title *</label>
+                <input className="cr-edit-input" value={registryForm.title}
+                  onChange={e => setRegistryForm(p => ({ ...p, title: e.target.value }))}
+                  placeholder="e.g. Book 1 · Before Lala" autoFocus />
+              </div>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Book Tag</label>
+                <input className="cr-edit-input" value={registryForm.book_tag}
+                  onChange={e => setRegistryForm(p => ({ ...p, book_tag: e.target.value }))}
+                  placeholder="e.g. book-1" />
+              </div>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Description</label>
+                <textarea className="cr-edit-input" value={registryForm.description}
+                  onChange={e => setRegistryForm(p => ({ ...p, description: e.target.value }))}
+                  placeholder="What this registry is about…" rows={3} />
+              </div>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Core Rule</label>
+                <textarea className="cr-edit-input" value={registryForm.core_rule}
+                  onChange={e => setRegistryForm(p => ({ ...p, core_rule: e.target.value }))}
+                  placeholder="The narrative rule governing every character…" rows={2} />
+              </div>
+              <div className="cr-modal-actions">
+                <button className="cr-edit-cancel-btn" onClick={() => setShowNewRegistry(false)}>Cancel</button>
+                <button className="cr-edit-save-btn" onClick={submitNewRegistry}
+                  disabled={!registryForm.title.trim()}>Create Registry</button>
+              </div>
             </div>
-            <div className="cr-edit-field">
-              <label className="cr-edit-label">Icon (emoji)</label>
-              <input className="cr-edit-input" value={newCharForm.icon}
-                onChange={e => setNewCharForm(p => ({ ...p, icon: e.target.value }))}
-                placeholder="◆" style={{ maxWidth: 80 }} />
+          </div>
+        </div>
+      )}
+
+      {/* Edit Registry Modal */}
+      {editingRegistry && (
+        <div className="cr-modal-overlay" onClick={() => setEditingRegistry(null)}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <h2 className="cr-modal-title">Edit Registry</h2>
+              <p className="cr-modal-subtitle">Update the registry's details.</p>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Title *</label>
+                <input className="cr-edit-input" value={registryForm.title}
+                  onChange={e => setRegistryForm(p => ({ ...p, title: e.target.value }))}
+                  placeholder="Registry title" autoFocus />
+              </div>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Book Tag</label>
+                <input className="cr-edit-input" value={registryForm.book_tag}
+                  onChange={e => setRegistryForm(p => ({ ...p, book_tag: e.target.value }))}
+                  placeholder="e.g. book-1" />
+              </div>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Description</label>
+                <textarea className="cr-edit-input" value={registryForm.description}
+                  onChange={e => setRegistryForm(p => ({ ...p, description: e.target.value }))}
+                  placeholder="What this registry is about…" rows={3} />
+              </div>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Core Rule</label>
+                <textarea className="cr-edit-input" value={registryForm.core_rule}
+                  onChange={e => setRegistryForm(p => ({ ...p, core_rule: e.target.value }))}
+                  placeholder="The narrative rule governing every character…" rows={2} />
+              </div>
+              <div className="cr-modal-actions">
+                <button className="cr-edit-cancel-btn" onClick={() => setEditingRegistry(null)}>Cancel</button>
+                <button className="cr-edit-save-btn" onClick={updateRegistry}
+                  disabled={!registryForm.title.trim()}>Save Changes</button>
+              </div>
             </div>
-            <div className="cr-modal-actions">
-              <button className="cr-edit-cancel-btn" onClick={() => setShowNewChar(false)}>Cancel</button>
-              <button className="cr-edit-save-btn" onClick={createCharacter}
-                disabled={!newCharForm.display_name.trim()}>Create</button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Registry Confirmation */}
+      {showDeleteConfirm && (
+        <div className="cr-modal-overlay" onClick={() => { setShowDeleteConfirm(false); setDeleteTargetId(null); }}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <div className="cr-delete-confirm">
+                <div className="cr-delete-icon">🗑</div>
+                <h2 className="cr-delete-title">Delete Registry?</h2>
+                <p className="cr-delete-desc">
+                  This will remove the registry and all its characters. This action cannot be undone.
+                </p>
+                <div className="cr-delete-name">
+                  {registries.find(r => r.id === deleteTargetId)?.title || 'Unknown'}
+                </div>
+                <div className="cr-delete-actions">
+                  <button className="cr-delete-cancel" onClick={() => { setShowDeleteConfirm(false); setDeleteTargetId(null); }}>
+                    Cancel
+                  </button>
+                  <button className="cr-delete-btn" onClick={deleteRegistry}>
+                    Delete Registry
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

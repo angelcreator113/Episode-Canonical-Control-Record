@@ -4,39 +4,48 @@
    Location: frontend/src/pages/CharacterRegistryPage.css
    ============================================================ */
 
-/* ---------- Custom Properties ---------- */
+/* ---------- Custom Properties — Pastel Luxe Palette ---------- */
 .cr-page {
-  --bg:          #faf8f5;
+  --bg:          #fdf5f9;
   --surface:     #ffffff;
-  --surface2:    #f5f2ed;
-  --surface3:    #ede8e0;
-  --border:      #e0d8cc;
-  --border2:     #d0c5b5;
-  --gold:        #b8963a;
-  --gold-dim:    #8a7535;
-  --gold-bg:     rgba(184, 150, 58, 0.08);
-  --gold-border: rgba(184, 150, 58, 0.35);
-  --ink:         #1a1510;
-  --ink-dim:     #6b6050;
-  --ink-faint:   #9a9080;
+  --surface2:    #faf0f5;
+  --surface3:    #f0e4ef;
+  --border:      #e8d5e0;
+  --border2:     #d4b4d8;
+  --gold:        #c9a84c;
+  --gold-dim:    #a08530;
+  --gold-bg:     rgba(201, 168, 76, 0.10);
+  --gold-border: rgba(201, 168, 76, 0.35);
+  --ink:         #2d2232;
+  --ink-dim:     #6b5c6e;
+  --ink-faint:   #9a8c9e;
   --red:         #c43a2a;
   --green:       #3d8e42;
-  --blue:        #5570d2;
-  --purple:      #8b45b5;
-  --cyan:        #2fa8a0;
-  --orange:      #c07830;
-  --pink:        #e8a0b0;
-  --pink-light:  #f5d5dd;
-  --pink-bg:     rgba(232, 160, 176, 0.12);
-  --pink-hover:  #d4899a;
-  --wine:        #722f37;
+  --blue:        #7b8de0;
+  --purple:      #c4a0e0;
+  --purple-deep: #9b4dca;
+  --purple-light:#ece0f5;
+  --purple-bg:   rgba(196, 160, 224, 0.12);
+  --cyan:        #5ec0b8;
+  --orange:      #d08840;
+  --pink:        #f4b8cb;
+  --pink-deep:   #e88da8;
+  --pink-light:  #fbd5e5;
+  --pink-bg:     rgba(244, 184, 203, 0.15);
+  --pink-hover:  #eb9cb5;
+  --wine:        #9b4dca;
 
   --role-protagonist: var(--gold);
-  --role-pressure:    var(--red);
+  --role-pressure:    #d46070;
   --role-mirror:      var(--blue);
-  --role-support:     var(--green);
+  --role-support:     #5dab62;
   --role-shadow:      var(--purple);
   --role-special:     var(--cyan);
+
+  --gradient-main:  linear-gradient(135deg, #f8c8dc 0%, #d4b4e8 50%, #c9a84c 100%);
+  --gradient-soft:  linear-gradient(135deg, #fce4ef 0%, #ece0f5 100%);
+  --gradient-gold:  linear-gradient(135deg, #c9a84c 0%, #e0c070 100%);
+  --gradient-card:  linear-gradient(145deg, rgba(244,184,203,0.06), rgba(212,180,232,0.06));
 
   --serif:  'Cormorant Garamond', 'Georgia', serif;
   --sans:   'DM Sans', 'Inter', -apple-system, sans-serif;
@@ -78,11 +87,25 @@
   align-items: center;
   justify-content: space-between;
   padding: 16px 32px;
-  background: var(--surface);
+  background: rgba(255,255,255,0.82);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
   z-index: 100;
+}
+
+/* Gradient accent strip at top of header */
+.cr-header::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-main);
+  z-index: 1;
 }
 
 .cr-header-left {
@@ -95,7 +118,10 @@
   font-family: var(--serif);
   font-size: 17px;
   font-weight: 700;
-  color: var(--gold);
+  background: var(--gradient-main);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
   letter-spacing: 0.04em;
 }
 
@@ -151,13 +177,15 @@
 }
 
 .cr-header-btn.primary {
-  background: var(--pink);
-  border-color: var(--pink);
+  background: linear-gradient(135deg, var(--pink), var(--purple));
+  border-color: transparent;
   color: #fff;
+  box-shadow: 0 2px 8px rgba(244,184,203,0.25);
 }
 
 .cr-header-btn.primary:hover {
-  background: var(--pink-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(244,184,203,0.35);
 }
 
 .cr-header-btn.active {
@@ -276,8 +304,8 @@
 }
 
 .cr-filter-pill.active {
-  background: var(--ink);
-  border-color: var(--ink);
+  background: linear-gradient(135deg, var(--pink), var(--purple));
+  border-color: transparent;
   color: #fff;
 }
 
@@ -344,17 +372,17 @@
 }
 
 .cr-registry-pill:hover {
-  border-color: var(--wine);
-  color: var(--wine);
-  background: rgba(114,47,55,.04);
+  border-color: var(--purple);
+  color: var(--purple-deep);
+  background: var(--purple-bg);
 }
 
 .cr-registry-pill.active {
-  border-color: var(--wine);
-  background: var(--wine);
+  border-color: transparent;
+  background: linear-gradient(135deg, var(--pink) 0%, var(--purple) 60%, var(--gold) 100%);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 2px 8px rgba(114,47,55,.18);
+  box-shadow: 0 3px 12px rgba(196,160,224,.25);
 }
 
 .cr-pill-title {
@@ -393,9 +421,21 @@
   gap: 20px;
   margin-bottom: 24px;
   padding: 14px 20px;
-  background: var(--surface);
+  background: var(--gradient-soft);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.cr-stats-strip::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--gradient-main);
 }
 
 .cr-stat-item {
@@ -440,8 +480,11 @@
 }
 
 .cr-card:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 8px 24px rgba(26, 21, 16, 0.08);
+  transform: translateY(-3px);
+  box-shadow:
+    0 8px 24px rgba(244, 184, 203, 0.15),
+    0 4px 12px rgba(196, 160, 224, 0.10);
+  border-color: var(--pink-light);
 }
 
 /* Core Canon gold border */
@@ -456,7 +499,7 @@
   left: 0;
   right: 0;
   height: 3px;
-  background: linear-gradient(90deg, var(--gold), var(--gold-dim));
+  background: var(--gradient-main);
 }
 
 /* Portrait zone (60% of card) */
@@ -566,7 +609,7 @@
   bottom: 0;
   left: 0;
   right: 0;
-  background: linear-gradient(transparent, rgba(26,21,16,0.92));
+  background: linear-gradient(transparent, rgba(45,34,50,0.88));
   padding: 40px 18px 18px;
   opacity: 0;
   transition: opacity 0.2s;
@@ -706,8 +749,8 @@
 }
 
 .cr-list-open-btn:hover {
-  background: var(--pink);
-  border-color: var(--pink);
+  background: linear-gradient(135deg, var(--pink), var(--purple));
+  border-color: transparent;
   color: #fff;
 }
 
@@ -1132,7 +1175,7 @@
 
 .cr-dossier-tab.active {
   color: var(--ink);
-  border-bottom-color: var(--gold);
+  border-bottom-color: var(--pink);
 }
 
 /* Tab content */
@@ -1449,7 +1492,7 @@
 }
 
 .cr-edit-save-btn {
-  background: var(--pink);
+  background: linear-gradient(135deg, var(--pink), var(--purple));
   border: none;
   border-radius: 6px;
   padding: 8px 22px;
@@ -1457,13 +1500,15 @@
   font-weight: 600;
   color: #fff;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: all 0.15s;
   min-height: 40px;
   touch-action: manipulation;
+  box-shadow: 0 2px 8px rgba(244,184,203,0.2);
 }
 
 .cr-edit-save-btn:hover {
-  background: var(--pink-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px rgba(244,184,203,0.3);
 }
 
 .cr-edit-save-btn:disabled {
@@ -1520,7 +1565,9 @@
 .cr-modal-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(232, 160, 176, 0.25);
+  background: rgba(45, 34, 50, 0.35);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
   z-index: 200;
   display: flex;
   align-items: center;
@@ -1530,12 +1577,30 @@
 .cr-modal {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 32px;
-  width: 460px;
+  border-radius: 16px;
+  padding: 0;
+  width: 500px;
   max-width: 90vw;
   max-height: 80vh;
   overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(45,34,50,0.18), 0 4px 16px rgba(244,184,203,0.12);
+  position: relative;
+}
+
+.cr-modal::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: var(--gradient-main);
+  border-radius: 16px 16px 0 0;
+  z-index: 1;
+}
+
+.cr-modal-body {
+  padding: 28px 32px 32px;
 }
 
 .cr-modal-title {
@@ -1543,7 +1608,14 @@
   font-size: var(--fs-2xl);
   font-weight: 600;
   color: var(--ink);
-  margin: 0 0 20px;
+  margin: 0 0 6px;
+}
+
+.cr-modal-subtitle {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-faint);
+  margin: 0 0 24px;
 }
 
 .cr-modal-actions {
@@ -1565,7 +1637,14 @@
 .cr-empty-icon {
   font-size: 48px;
   margin-bottom: 16px;
-  opacity: 0.3;
+  width: 80px;
+  height: 80px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--gradient-soft);
+  border: 1px solid var(--border);
 }
 
 .cr-empty-title {
@@ -1583,20 +1662,22 @@
 }
 
 .cr-empty-btn {
-  background: var(--pink);
+  background: linear-gradient(135deg, var(--pink), var(--purple));
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 11px 24px;
   font-family: var(--sans);
   font-size: var(--fs-base);
   font-weight: 600;
   color: #fff;
   cursor: pointer;
-  transition: background 0.12s;
+  transition: all 0.2s;
+  box-shadow: 0 4px 14px rgba(244,184,203,0.25);
 }
 
 .cr-empty-btn:hover {
-  background: var(--pink-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(244,184,203,0.35);
 }
 
 
@@ -1618,7 +1699,7 @@
   animation: cr-toast-in 0.2s ease-out;
 }
 
-.cr-toast.success { background: var(--green); }
+.cr-toast.success { background: linear-gradient(135deg, var(--pink), var(--purple)); }
 .cr-toast.error   { background: var(--red); }
 
 @keyframes cr-toast-in {
@@ -3586,5 +3667,266 @@
 
   .cr-card-portrait .cr-card-initial {
     font-size: 56px;
+  }
+}
+
+
+/* ================================================================
+   REGISTRY CONTEXT BAR — Below registry pills
+   ================================================================ */
+.cr-registry-context {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  margin-bottom: 24px;
+  background: var(--gradient-soft);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  position: relative;
+  overflow: hidden;
+}
+
+.cr-registry-context::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 3px;
+  background: var(--gradient-main);
+}
+
+.cr-registry-context-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.cr-registry-context-title {
+  font-family: var(--serif);
+  font-size: var(--fs-lg);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0 0 2px;
+  line-height: 1.3;
+}
+
+.cr-registry-context-desc {
+  font-family: var(--sans);
+  font-size: var(--fs-sm);
+  color: var(--ink-dim);
+  line-height: 1.4;
+  margin: 0;
+}
+
+.cr-registry-context-rule {
+  font-family: var(--serif);
+  font-size: var(--fs-sm);
+  color: var(--ink-faint);
+  font-style: italic;
+  margin: 4px 0 0;
+}
+
+.cr-registry-context-actions {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cr-ctx-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-family: var(--mono);
+  font-size: var(--fs-xs);
+  font-weight: 500;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  letter-spacing: 0.02em;
+}
+
+.cr-ctx-btn:hover {
+  border-color: var(--purple);
+  color: var(--purple-deep);
+  background: var(--purple-bg);
+}
+
+.cr-ctx-btn.danger:hover {
+  border-color: var(--red);
+  color: var(--red);
+  background: rgba(196,58,42,0.05);
+}
+
+
+/* ================================================================
+   REGISTRY PILL — edit icon overlay on hover
+   ================================================================ */
+.cr-registry-pill {
+  position: relative;
+}
+
+.cr-pill-edit-icon {
+  display: none;
+  font-size: 11px;
+  margin-left: 4px;
+  opacity: 0.6;
+}
+
+.cr-registry-pill.active .cr-pill-edit-icon {
+  display: inline;
+}
+
+
+/* ================================================================
+   DELETE CONFIRM OVERLAY
+   ================================================================ */
+.cr-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 8px;
+}
+
+.cr-delete-icon {
+  font-size: 36px;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(196,58,42,0.06);
+  margin-bottom: 4px;
+}
+
+.cr-delete-title {
+  font-family: var(--serif);
+  font-size: var(--fs-xl);
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+.cr-delete-desc {
+  font-size: var(--fs-sm);
+  color: var(--ink-dim);
+  margin: 0 0 8px;
+  line-height: 1.5;
+}
+
+.cr-delete-name {
+  font-family: var(--serif);
+  font-size: var(--fs-md);
+  font-weight: 600;
+  color: var(--ink);
+  padding: 8px 16px;
+  background: var(--surface2);
+  border-radius: 8px;
+  margin-bottom: 4px;
+}
+
+.cr-delete-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.cr-delete-cancel {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: var(--fs-base);
+  font-weight: 500;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cr-delete-cancel:hover {
+  background: var(--surface2);
+}
+
+.cr-delete-btn {
+  background: var(--red);
+  border: none;
+  border-radius: 8px;
+  padding: 10px 24px;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: #fff;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.cr-delete-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+
+/* ================================================================
+   CARD GRADIENT SHIMMER ON HOVER (desktop only)
+   ================================================================ */
+@media (hover: hover) {
+  .cr-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    background: var(--gradient-card);
+    opacity: 0;
+    transition: opacity 0.3s;
+    z-index: 0;
+    pointer-events: none;
+  }
+
+  .cr-card:hover::before {
+    opacity: 1;
+  }
+
+  .cr-card > * {
+    position: relative;
+    z-index: 1;
+  }
+}
+
+
+/* ================================================================
+   REGISTRY CONTEXT RESPONSIVE
+   ================================================================ */
+@media (max-width: 768px) {
+  .cr-registry-context {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 12px 16px;
+  }
+
+  .cr-registry-context-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+
+@media (max-width: 480px) {
+  .cr-registry-context {
+    padding: 10px 12px;
+    margin-bottom: 16px;
+  }
+
+  .cr-registry-context-title {
+    font-size: var(--fs-base);
+  }
+
+  .cr-ctx-btn {
+    font-size: 11px;
+    padding: 6px 10px;
   }
 }
