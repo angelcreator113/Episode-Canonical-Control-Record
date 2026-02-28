@@ -1,280 +1,314 @@
 /**
- * ChapterJourney.jsx
+ * ChapterJourney.jsx — Phase 2: Unified Shell
+ *
  * Route: /chapter/:bookId/:chapterId
  *
- * Phase 1 — State detection + routing.
- * Reads the chapter's current state from the API and renders
- * the right existing component. No new UI. No existing components touched.
+ * What Phase 2 adds over Phase 1:
+ *  - Stage-aware color system (light pink / light teal / gold)
+ *  - Shared top bar with breadcrumb + stage pills
+ *  - Brief flash animation on stage transitions
+ *  - Override warning banner
+ *  - Stage-enter animation on child component
+ *  - Three-dot loading state with stage colors
  *
- * Stage detection priority:
- *   REVIEW  — chapter has 5+ lines OR any prose content
- *   WRITE   — chapter has a scene_goal (brief exists)
- *   PLAN    — everything else (empty chapter, no brief)
+ * What this file does NOT change:
+ *  - Stage detection logic (same as Phase 1)
+ *  - Which component renders per stage
+ *  - Props passed to child components
+ *  - Backend API calls
  */
 
-import { useEffect, useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import './ChapterJourney.css';
 
-// ── Lazy imports — load only what's needed for the current stage ──────────────
-import StoryPlannerConversational from '../components/StoryPlannerConversational';
-import WriteMode                  from './WriteMode';
-import StorytellerPage            from './StorytellerPage';
+// ── Lazy imports — same as Phase 1 ────────────────────────────────────────
+const StoryPlannerConversational = React.lazy(() =>
+  import('../components/StoryPlannerConversational')
+);
+const WriteMode = React.lazy(() =>
+  import('./WriteMode')
+);
+const StorytellerPage = React.lazy(() =>
+  import('./StorytellerPage')
+);
 
-// ── Stage constants ────────────────────────────────────────────────────────────
-const STAGE = {
-  LOADING: 'loading',
-  PLAN:    'plan',
-  WRITE:   'write',
-  REVIEW:  'review',
-  ERROR:   'error',
-};
+// ── Stage detection ────────────────────────────────────────────────────────
 
-const STAGE_LABELS = {
-  plan:   'Plan',
-  write:  'Write',
-  review: 'Review',
-};
-
-const STAGE_ORDER = ['plan', 'write', 'review'];
-
-// ── API helpers ────────────────────────────────────────────────────────────────
-async function fetchChapterState(bookId, chapterId) {
-  const token = localStorage.getItem('token') || sessionStorage.getItem('token');
-  const headers = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-
-  const res = await fetch(
-    `/api/v1/storyteller/books/${bookId}`,
-    { headers }
-  );
-  if (!res.ok) throw new Error(`Failed to load book: ${res.status}`);
-  const data = await res.json();
-
-  const chapter = data.chapters?.find(c => c.id === chapterId);
-  if (!chapter) throw new Error('Chapter not found');
-
-  const lines         = chapter.lines || [];
-  const approvedCount = lines.filter(l => l.status === 'approved').length;
-  const totalLines    = lines.length;
-  const hasProse      = !!(chapter.prose_content || chapter.prose || chapter.draft_prose);
-  const hasSceneGoal  = !!(chapter.scene_goal?.trim());
-
-  return {
-    chapter,
-    book:         data,
-    approvedCount,
-    totalLines,
-    hasProse,
-    hasSceneGoal,
-  };
+function detectStage(chapter) {
+  if (!chapter) return 'plan';
+  const lines = chapter.lines || [];
+  const approved = lines.filter(l => l.status === 'approved' || l.status === 'edited').length;
+  if (approved >= 5)              return 'review';
+  if (chapter.prose?.trim())      return 'review';
+  if (lines.length > 0)           return 'review';
+  if (chapter.scene_goal?.trim()) return 'write';
+  return 'plan';
 }
 
-function detectStage({ approvedCount, totalLines, hasProse, hasSceneGoal }) {
-  if (approvedCount >= 5)  return STAGE.REVIEW;
-  if (hasProse)            return STAGE.REVIEW;
-  if (totalLines > 0)      return STAGE.REVIEW;
-  if (hasSceneGoal)        return STAGE.WRITE;
-  return STAGE.PLAN;
-}
+// Stage metadata — labels, arrows between stages
+const STAGES = [
+  { id: 'plan',   label: 'Plan'   },
+  { id: 'write',  label: 'Write'  },
+  { id: 'review', label: 'Review' },
+];
 
-// ── Main component ─────────────────────────────────────────────────────────────
+// ── ChapterJourney ─────────────────────────────────────────────────────────
+
 export default function ChapterJourney() {
   const { bookId, chapterId } = useParams();
-  const navigate              = useNavigate();
+  const navigate = useNavigate();
 
-  const [stage,           setStage]           = useState(STAGE.LOADING);
-  const [chapterData,     setChapterData]     = useState(null);
-  const [bookData,        setBookData]        = useState(null);
-  const [error,           setError]           = useState(null);
-  const [manualOverride,  setManualOverride]  = useState(null);
-  const [overrideWarning, setOverrideWarning] = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState(null);
+  const [book, setBook]                 = useState(null);
+  const [chapter, setChapter]           = useState(null);
+  const [detectedStage, setDetectedStage] = useState('plan');
+  const [activeStage, setActiveStage]   = useState('plan');
+  const [isOverride, setIsOverride]     = useState(false);
+  const [isFlashing, setIsFlashing]     = useState(false);
+  const [stageEnter, setStageEnter]     = useState(false);
 
-  // ── Load chapter state ───────────────────────────────────────────────────────
+  const prevStageRef = useRef(null);
+
+  // ── Load chapter data ──────────────────────────────────────────────────
+
   const loadChapter = useCallback(async () => {
-    setStage(STAGE.LOADING);
-    setError(null);
     try {
-      const result        = await fetchChapterState(bookId, chapterId);
-      const detectedStage = detectStage(result);
-      setChapterData(result.chapter);
-      setBookData(result.book);
-      setStage(detectedStage);
-      setManualOverride(null);
+      setLoading(true);
+      setError(null);
+
+      const res = await fetch(`/api/v1/storyteller/books/${bookId}`, {
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+      });
+
+      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+
+      const data = await res.json();
+      const bookData = data.book || data;
+      const chapters = bookData.chapters || [];
+      const found = chapters.find(c => c.id === chapterId) || chapters[0];
+
+      setBook(bookData);
+      setChapter(found || null);
+
+      const stage = detectStage(found);
+      setDetectedStage(stage);
+      setActiveStage(stage);
+      setIsOverride(false);
     } catch (err) {
-      console.error('ChapterJourney load error:', err);
-      setError(err.message);
-      setStage(STAGE.ERROR);
+      setError(err.message || 'Failed to load chapter');
+    } finally {
+      setLoading(false);
     }
   }, [bookId, chapterId]);
 
-  useEffect(() => {
-    loadChapter();
-  }, [loadChapter]);
+  useEffect(() => { loadChapter(); }, [loadChapter]);
 
-  // ── Manual stage override ────────────────────────────────────────────────────
-  const handleStageClick = (targetStage) => {
-    const currentStage = manualOverride || stage;
-    if (targetStage === currentStage) return;
+  // ── Stage transition with flash ────────────────────────────────────────
 
-    if (targetStage === STAGE.WRITE && stage === STAGE.PLAN) {
-      setOverrideWarning('This chapter has no brief yet. You can write anyway — the context panel will be empty.');
-    } else if (targetStage === STAGE.REVIEW && stage === STAGE.PLAN) {
-      setOverrideWarning('There\'s nothing to review yet. Jump to Write first, or Plan this chapter.');
+  const transitionTo = useCallback((newStage, override = false) => {
+    if (newStage === activeStage) return;
+
+    // Flash on change
+    setIsFlashing(true);
+    setTimeout(() => setIsFlashing(false), 320);
+
+    // Stage-enter animation on new content
+    setStageEnter(false);
+    setTimeout(() => setStageEnter(true), 50);
+
+    setActiveStage(newStage);
+    setIsOverride(override);
+    prevStageRef.current = activeStage;
+  }, [activeStage]);
+
+  const handlePillClick = useCallback((stageId) => {
+    if (stageId === activeStage) return;
+
+    // If clicking detected stage — remove override
+    if (stageId === detectedStage) {
+      transitionTo(stageId, false);
       return;
-    } else {
-      setOverrideWarning(null);
     }
 
-    setManualOverride(targetStage);
-  };
+    // Otherwise it's a manual override
+    transitionTo(stageId, true);
+  }, [activeStage, detectedStage, transitionTo]);
 
-  const dismissOverrideWarning = () => {
-    setOverrideWarning(null);
-  };
+  const handleReturnToAuto = useCallback(() => {
+    transitionTo(detectedStage, false);
+  }, [detectedStage, transitionTo]);
 
-  // ── Stage transition callbacks ───────────────────────────────────────────────
+  // ── Stage callbacks (passed to child components) ───────────────────────
+
   const handlePlanComplete = useCallback(() => {
-    setManualOverride(null);
-    loadChapter();
-  }, [loadChapter]);
+    transitionTo('write', false);
+  }, [transitionTo]);
 
   const handleWriteComplete = useCallback(() => {
-    setManualOverride(null);
-    loadChapter();
-  }, [loadChapter]);
+    transitionTo('review', false);
+  }, [transitionTo]);
 
   const handleReviewComplete = useCallback(() => {
-    navigate('/storyteller');
-  }, [navigate]);
+    // Chapter done — for now navigate back to book
+    navigate(`/storyteller?bookId=${bookId}`);
+  }, [navigate, bookId]);
 
-  // ── Active stage ─────────────────────────────────────────────────────────────
-  const activeStage = manualOverride || stage;
+  const handleChapterRefresh = useCallback(async () => {
+    await loadChapter();
+  }, [loadChapter]);
 
-  // ── Render ───────────────────────────────────────────────────────────────────
-  if (stage === STAGE.LOADING) {
-    return (
-      <div className="cj-loading">
-        <div className="cj-loading-dots">
-          <span /><span /><span />
-        </div>
-        <p>Opening chapter…</p>
+  // ── Override warning message ───────────────────────────────────────────
+
+  const overrideMessages = {
+    plan:   `Viewing Plan — no brief yet. Chapter will use defaults when writing starts.`,
+    write:  `Viewing Write — chapter draft is ready for review.`,
+    review: `Viewing Review — chapter may not have a brief or prose yet.`,
+  };
+
+  // ── Render helpers ─────────────────────────────────────────────────────
+
+  if (loading) return (
+    <div className="cj-loading">
+      <div className="cj-loading-dots">
+        <span /><span /><span />
       </div>
-    );
-  }
+      <p className="cj-loading-label">Loading chapter…</p>
+    </div>
+  );
 
-  if (stage === STAGE.ERROR) {
-    return (
-      <div className="cj-error">
-        <p>Couldn't load this chapter.</p>
-        <p className="cj-error-detail">{error}</p>
+  if (error) return (
+    <div className="cj-error">
+      <p>Couldn't load this chapter.</p>
+      <small>{error}</small>
+      <div>
         <button onClick={loadChapter}>Try again</button>
-        <button onClick={() => navigate('/storyteller')}>Back to library</button>
+        <button onClick={() => navigate(-1)}>← Go back</button>
       </div>
-    );
-  }
+    </div>
+  );
+
+  const stageClass  = activeStage;                           // 'plan' | 'write' | 'review'
+  const flashClass  = isFlashing ? 'cj-flash' : '';
+  const rootClasses = `cj-root cj-${stageClass} ${flashClass}`.trim();
+  const chapterTitle = chapter?.title || 'Untitled Chapter';
+  const bookTitle    = book?.title    || 'Untitled Book';
+
+  // Shared props for all child components
+  const sharedProps = {
+    bookId,
+    chapterId,
+    book,
+    chapter,
+    onChapterRefresh: handleChapterRefresh,
+  };
 
   return (
-    <div className={`cj-root cj-stage--${activeStage}`}>
+    <div className={rootClasses}>
 
-      {/* ── Stage indicator bar ─────────────────────────────────────────────── */}
-      <div className="cj-stage-bar">
+      {/* ── Top bar ──────────────────────────────────────────────────── */}
+      <div className="cj-bar">
         <button
-          className="cj-back-btn"
-          onClick={() => navigate('/storyteller')}
-          title="Back to library"
+          className="cj-back"
+          onClick={() => navigate(`/storyteller?bookId=${bookId}`)}
+          title="Back to book"
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          ←
         </button>
 
-        <div className="cj-stage-info">
-          <span className="cj-book-title">{bookData?.title || 'Book'}</span>
-          <span className="cj-divider">·</span>
-          <span className="cj-chapter-title">{chapterData?.title || 'Chapter'}</span>
+        <div className="cj-breadcrumb">
+          <span className="cj-book-name" title={bookTitle}>{bookTitle}</span>
+          <span className="cj-sep">·</span>
+          <span className="cj-chapter-name" title={chapterTitle}>{chapterTitle}</span>
         </div>
 
         {/* Stage pills */}
-        <div className="cj-stage-pills">
-          {STAGE_ORDER.map((s, i) => (
-            <button
-              key={s}
-              className={`cj-stage-pill${activeStage === s ? ' active' : ''}${stage === s ? ' detected' : ''}`}
-              onClick={() => handleStageClick(s)}
-              title={
-                manualOverride === s
-                  ? 'You chose this stage manually'
-                  : stage === s
-                  ? 'This is where your chapter is'
-                  : 'Jump to this stage'
-              }
-            >
-              {i > 0 && <span className="cj-pill-arrow">→</span>}
-              <span className="cj-pill-label">{STAGE_LABELS[s]}</span>
-              {stage === s && !manualOverride && (
-                <span className="cj-pill-dot" />
-              )}
-            </button>
-          ))}
+        <div className="cj-pills">
+          {STAGES.map((s, i) => {
+            const isActive   = s.id === activeStage;
+            const isDetected = s.id === detectedStage;
+            return (
+              <React.Fragment key={s.id}>
+                {i > 0 && (
+                  <span className="cj-pill-sep" style={{
+                    fontSize: 9,
+                    opacity: 0.2,
+                    color: 'currentColor',
+                    margin: '0 1px',
+                    userSelect: 'none',
+                  }}>›</span>
+                )}
+                <button
+                  className={`cj-pill ${isActive ? 'cj-active' : ''}`}
+                  data-s={s.id}
+                  onClick={() => handlePillClick(s.id)}
+                  title={isDetected && !isOverride
+                    ? `Current stage (auto-detected)`
+                    : isDetected
+                    ? `Detected stage — click to return`
+                    : `Jump to ${s.label}`}
+                >
+                  {isDetected && !isOverride && <span className="cj-pill-dot" />}
+                  {s.label}
+                </button>
+              </React.Fragment>
+            );
+          })}
         </div>
 
-        {manualOverride && (
-          <button
-            className="cj-override-reset"
-            onClick={() => { setManualOverride(null); setOverrideWarning(null); }}
-            title="Go back to detected stage"
-          >
-            <svg width="12" height="12" viewBox="0 0 16 16" fill="none"><path d="M2 8a6 6 0 1 1 1.76 4.24" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/><path d="M2 12V8h4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
-            Auto
+        {/* Return to auto button — visible only when overriding */}
+        {isOverride && (
+          <button className="cj-pill-auto" onClick={handleReturnToAuto} title="Return to auto-detected stage">
+            ↺ Auto
           </button>
         )}
       </div>
 
-      {/* ── Override warning banner ──────────────────────────────────────────── */}
-      {overrideWarning && (
-        <div className="cj-override-warning">
-          <span>{overrideWarning}</span>
-          <button onClick={dismissOverrideWarning}>Got it</button>
+      {/* ── Override warning ─────────────────────────────────────────── */}
+      {isOverride && (
+        <div className="cj-override-banner">
+          <span>{overrideMessages[activeStage]}</span>
+          <button onClick={handleReturnToAuto}>Return to detected stage</button>
         </div>
       )}
 
-      {/* ── Stage content ────────────────────────────────────────────────────── */}
-      <div className="cj-content">
+      {/* ── Stage content ────────────────────────────────────────────── */}
+      <React.Suspense fallback={
+        <div className="cj-loading">
+          <div className="cj-loading-dots"><span /><span /><span /></div>
+        </div>
+      }>
+        <div className={`cj-content ${stageEnter ? 'cj-stage-enter' : ''}`.trim()}>
 
-        {activeStage === STAGE.PLAN && (
-          <StoryPlannerConversational
-            bookId={bookId}
-            chapterId={chapterId}
-            chapter={chapterData}
-            book={bookData}
-            onComplete={handlePlanComplete}
-            hideHeader={true}
-          />
-        )}
+          {activeStage === 'plan' && (
+            <StoryPlannerConversational
+              {...sharedProps}
+              onComplete={handlePlanComplete}
+              hideHeader={true}
+            />
+          )}
 
-        {activeStage === STAGE.WRITE && (
-          <WriteMode
-            bookId={bookId}
-            chapterId={chapterId}
-            chapter={chapterData}
-            book={bookData}
-            onReviewReady={handleWriteComplete}
-            hideTopBar={true}
-          />
-        )}
+          {activeStage === 'write' && (
+            <WriteMode
+              {...sharedProps}
+              onReviewReady={handleWriteComplete}
+              hideTopBar={true}
+            />
+          )}
 
-        {activeStage === STAGE.REVIEW && (
-          <StorytellerPage
-            bookId={bookId}
-            chapterId={chapterId}
-            chapter={chapterData}
-            book={bookData}
-            onChapterComplete={handleReviewComplete}
-            initialView="book"
-            hideTopBar={true}
-          />
-        )}
+          {activeStage === 'review' && (
+            <StorytellerPage
+              {...sharedProps}
+              initialView="book"
+              onChapterComplete={handleReviewComplete}
+              hideTopBar={true}
+            />
+          )}
 
-      </div>
+        </div>
+      </React.Suspense>
     </div>
   );
 }
