@@ -1,18 +1,17 @@
 /**
- * ChapterJourney.css — Phase 3: Mode Ribbon + Narrative OS
+ * ChapterJourney.css — Mobile-first
  *
  * Stage color system:
- *   PLAN   — soft rose (#fce7f3 / #ec4899)
- *   WRITE  — warm ivory-teal (#f0fdfa / #0d9488)
- *   REVIEW — cool lilac-gold (#f5f3ff / #C6A85E)
+ *   PLAN   — soft rose   (#fdf2f8 / #ec4899)
+ *   WRITE  — warm teal   (#f0fdfa / #0d9488)
+ *   REVIEW — cool gold   (#f5f3ff / #C6A85E)
  *
- * Font stack: 'DM Sans' + 'Lora' — already loaded in app.
+ * Breakpoint: min-width 640px = tablet/desktop enhancements
  */
 
 /* ── CSS variables ─────────────────────────────────────────────────────── */
 
 :root {
-  --cj-bar-h: auto;
   --cj-ease: cubic-bezier(0.4, 0, 0.2, 1);
 
   /* PLAN — soft rose */
@@ -24,7 +23,7 @@
   --cj-plan-muted:      #be7da0;
   --cj-plan-border:     rgba(236, 72, 153, 0.15);
 
-  /* WRITE — warm ivory-teal */
+  /* WRITE — warm teal */
   --cj-write-bg:        #f0fdfa;
   --cj-write-bar:       rgba(240, 253, 250, 0.96);
   --cj-write-accent:    #0d9488;
@@ -33,7 +32,7 @@
   --cj-write-muted:     #5eaba4;
   --cj-write-border:    rgba(13, 148, 136, 0.15);
 
-  /* REVIEW — cool lilac */
+  /* REVIEW — cool gold */
   --cj-review-bg:        #f5f3ff;
   --cj-review-bar:       rgba(245, 243, 255, 0.96);
   --cj-review-accent:    #C6A85E;
@@ -48,7 +47,7 @@
 .cj-root {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  height: 100dvh; /* dvh accounts for mobile browser chrome */
   overflow: hidden;
   font-family: 'DM Sans', -apple-system, sans-serif;
   transition: background 0.35s var(--cj-ease);
@@ -59,7 +58,7 @@
 .cj-root.cj-write  { background: var(--cj-write-bg); }
 .cj-root.cj-review { background: var(--cj-review-bg); }
 
-/* Stage-change flash */
+/* Stage-change flash overlay */
 .cj-root::after {
   content: '';
   position: fixed;
@@ -97,28 +96,31 @@
 .cj-write  .cj-ribbon { background: var(--cj-write-bar);  border-bottom: 1px solid var(--cj-write-border); }
 .cj-review .cj-ribbon { background: var(--cj-review-bar); border-bottom: 1px solid var(--cj-review-border); }
 
-/* Row 1: mode identity + navigation */
-.cj-ribbon-row {
+/* ── Row 1: back + mode label + context + save ─────────────────────────── */
+
+.cj-ribbon-top {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 12px 16px;
+  gap: 8px;
+  padding: 10px 14px 6px;
 }
 
-/* Back button */
+/* Back button — 44px touch target */
 .cj-back {
-  width: 30px;
-  height: 30px;
-  border-radius: 7px;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
   border: none;
   background: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 15px;
+  font-size: 16px;
   flex-shrink: 0;
   transition: background 0.14s, color 0.14s;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 .cj-plan   .cj-back { color: var(--cj-plan-muted); }
 .cj-write  .cj-back { color: var(--cj-write-muted); }
@@ -132,16 +134,18 @@
 .cj-mode-label {
   display: flex;
   align-items: center;
-  gap: 7px;
-  font-size: 11px;
+  gap: 6px;
+  font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  flex-shrink: 0;
 }
 .cj-mode-dot {
-  width: 8px;
-  height: 8px;
+  width: 7px;
+  height: 7px;
   border-radius: 50%;
+  flex-shrink: 0;
   animation: cj-mode-pulse 2.8s ease-in-out infinite;
 }
 @keyframes cj-mode-pulse {
@@ -155,7 +159,7 @@
 .cj-write  .cj-mode-label { color: var(--cj-write-accent); }
 .cj-review .cj-mode-label { color: var(--cj-review-accent); }
 
-/* Chapter context */
+/* Chapter + book context — fills available space */
 .cj-mode-context {
   display: flex;
   flex-direction: column;
@@ -165,7 +169,7 @@
 }
 .cj-mode-chapter {
   font-family: 'Lora', Georgia, serif;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -176,7 +180,7 @@
 .cj-review .cj-mode-chapter { color: var(--cj-review-text); }
 
 .cj-mode-book {
-  font-size: 11px;
+  font-size: 10px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -185,50 +189,53 @@
 .cj-write  .cj-mode-book { color: var(--cj-write-muted); }
 .cj-review .cj-mode-book { color: var(--cj-review-muted); }
 
-/* Ribbon right-side actions */
-.cj-ribbon-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-shrink: 0;
-}
-
-/* Save Plan / Save Draft button */
+/* Save button */
 .cj-save-btn {
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
   border: none;
-  border-radius: 7px;
-  padding: 6px 14px;
+  border-radius: 8px;
+  padding: 7px 11px;
   font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
+  flex-shrink: 0;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-.cj-plan   .cj-save-btn { background: rgba(236,72,153,0.1);  color: var(--cj-plan-accent); }
-.cj-write  .cj-save-btn { background: rgba(13,148,136,0.1);  color: var(--cj-write-accent); }
-.cj-review .cj-save-btn { background: rgba(198,168,94,0.1);  color: var(--cj-review-accent); }
-.cj-plan   .cj-save-btn:hover { background: rgba(236,72,153,0.18); }
-.cj-write  .cj-save-btn:hover { background: rgba(13,148,136,0.18); }
-.cj-review .cj-save-btn:hover { background: rgba(198,168,94,0.18); }
+.cj-plan   .cj-save-btn { background: rgba(236, 72, 153, 0.1);  color: var(--cj-plan-accent); }
+.cj-write  .cj-save-btn { background: rgba(13, 148, 136, 0.1);  color: var(--cj-write-accent); }
+.cj-review .cj-save-btn { background: rgba(198, 168, 94, 0.1);  color: var(--cj-review-accent); }
+.cj-plan   .cj-save-btn:hover { background: rgba(236, 72, 153, 0.18); }
+.cj-write  .cj-save-btn:hover { background: rgba(13, 148, 136, 0.18); }
+.cj-review .cj-save-btn:hover { background: rgba(198, 168, 94, 0.18); }
 
-/* ── Stage pills ───────────────────────────────────────────────────────── */
+/* ── Row 2: stage pills + override return ──────────────────────────────── */
 
+.cj-ribbon-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 2px 14px 8px;
+}
+
+/* Stage pills container */
 .cj-pills {
   display: flex;
   align-items: center;
   border-radius: 20px;
   padding: 3px;
-  flex-shrink: 0;
   gap: 1px;
   transition: background 0.35s, border-color 0.35s;
 }
-.cj-plan   .cj-pills { background: rgba(236,72,153,0.06);   border: 1px solid rgba(236,72,153,0.12); }
-.cj-write  .cj-pills { background: rgba(13,148,136,0.06);   border: 1px solid rgba(13,148,136,0.12); }
-.cj-review .cj-pills { background: rgba(198,168,94,0.06);   border: 1px solid rgba(198,168,94,0.12); }
+.cj-plan   .cj-pills { background: rgba(236, 72, 153, 0.06); border: 1px solid rgba(236, 72, 153, 0.12); }
+.cj-write  .cj-pills { background: rgba(13, 148, 136, 0.06); border: 1px solid rgba(13, 148, 136, 0.12); }
+.cj-review .cj-pills { background: rgba(198, 168, 94, 0.06); border: 1px solid rgba(198, 168, 94, 0.12); }
 
 .cj-pill {
   display: flex;
@@ -236,7 +243,7 @@
   gap: 4px;
   border: none;
   border-radius: 14px;
-  padding: 4px 12px;
+  padding: 5px 10px;
   font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 500;
@@ -245,26 +252,25 @@
   transition: background 0.18s, color 0.18s, transform 0.1s;
   white-space: nowrap;
   background: none;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
 
-/* Inactive pill text — muted per stage */
-.cj-plan   .cj-pill         { color: rgba(236,72,153,0.45); }
-.cj-write  .cj-pill         { color: rgba(13,148,136,0.55); }
-.cj-review .cj-pill         { color: rgba(198,168,94,0.5); }
+.cj-plan   .cj-pill { color: rgba(236, 72, 153, 0.45); }
+.cj-write  .cj-pill { color: rgba(13, 148, 136, 0.55); }
+.cj-review .cj-pill { color: rgba(198, 168, 94, 0.5); }
 
-/* Hover on inactive */
-.cj-plan   .cj-pill:not(.cj-active):hover { background: rgba(236,72,153,0.08);  color: var(--cj-plan-accent); }
-.cj-write  .cj-pill:not(.cj-active):hover { background: rgba(13,148,136,0.08);  color: var(--cj-write-accent); }
-.cj-review .cj-pill:not(.cj-active):hover { background: rgba(198,168,94,0.08);  color: var(--cj-review-accent); }
+.cj-plan   .cj-pill:not(.cj-active):hover { background: rgba(236, 72, 153, 0.08); color: var(--cj-plan-accent); }
+.cj-write  .cj-pill:not(.cj-active):hover { background: rgba(13, 148, 136, 0.08); color: var(--cj-write-accent); }
+.cj-review .cj-pill:not(.cj-active):hover { background: rgba(198, 168, 94, 0.08); color: var(--cj-review-accent); }
 
-/* Active pill — always uses the pill's own stage color */
+/* Active pill — uses its own stage color regardless of root stage */
 .cj-pill.cj-active[data-s="plan"]   { background: #ec4899; color: #fff; }
 .cj-pill.cj-active[data-s="write"]  { background: #0d9488; color: #fff; }
 .cj-pill.cj-active[data-s="review"] { background: #C6A85E; color: #1A1714; }
-
 .cj-pill.cj-active { transform: scale(1.02); }
 
-/* Pulse dot — on auto-detected stage */
+/* Auto-detected indicator dot */
 .cj-pill-dot {
   width: 4px;
   height: 4px;
@@ -274,15 +280,14 @@
   animation: cj-breathe 2.8s ease infinite;
 }
 @keyframes cj-breathe {
-  0%,100% { opacity: 0.35; transform: scale(1); }
-  50%     { opacity: 0.9;  transform: scale(1.4); }
+  0%, 100% { opacity: 0.35; transform: scale(1); }
+  50%      { opacity: 0.9;  transform: scale(1.4); }
 }
 
-/* Separator arrow between pills */
+/* Separator between pills */
 .cj-pill-sep {
   font-size: 9px;
   opacity: 0.22;
-  color: currentColor;
   margin: 0 1px;
   user-select: none;
   pointer-events: none;
@@ -292,11 +297,11 @@
 .cj-write  .cj-pill-sep { color: var(--cj-write-accent); }
 .cj-review .cj-pill-sep { color: var(--cj-review-accent); }
 
-/* Auto return ghost pill */
+/* Override return button — visible on all screen sizes */
 .cj-pill-auto {
   background: none;
   border-radius: 8px;
-  padding: 5px 11px;
+  padding: 6px 10px;
   font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 500;
@@ -304,37 +309,39 @@
   transition: all 0.14s;
   flex-shrink: 0;
   letter-spacing: 0.01em;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
 }
-.cj-plan   .cj-pill-auto { border: 1px solid rgba(236,72,153,0.2);  color: rgba(236,72,153,0.6); }
-.cj-write  .cj-pill-auto { border: 1px solid rgba(13,148,136,0.2);  color: rgba(13,148,136,0.6); }
-.cj-review .cj-pill-auto { border: 1px solid rgba(198,168,94,0.2);  color: rgba(198,168,94,0.6); }
+.cj-plan   .cj-pill-auto { border: 1px solid rgba(236, 72, 153, 0.2); color: rgba(236, 72, 153, 0.6); }
+.cj-write  .cj-pill-auto { border: 1px solid rgba(13, 148, 136, 0.2); color: rgba(13, 148, 136, 0.6); }
+.cj-review .cj-pill-auto { border: 1px solid rgba(198, 168, 94, 0.2); color: rgba(198, 168, 94, 0.6); }
 
-.cj-plan   .cj-pill-auto:hover { border-color: var(--cj-plan-accent);   color: var(--cj-plan-accent);   background: rgba(236,72,153,0.05); }
-.cj-write  .cj-pill-auto:hover { border-color: var(--cj-write-accent);  color: var(--cj-write-accent);  background: rgba(13,148,136,0.05); }
-.cj-review .cj-pill-auto:hover { border-color: var(--cj-review-accent); color: var(--cj-review-accent); background: rgba(198,168,94,0.05); }
+.cj-plan   .cj-pill-auto:hover { border-color: var(--cj-plan-accent);   color: var(--cj-plan-accent);   background: rgba(236, 72, 153, 0.05); }
+.cj-write  .cj-pill-auto:hover { border-color: var(--cj-write-accent);  color: var(--cj-write-accent);  background: rgba(13, 148, 136, 0.05); }
+.cj-review .cj-pill-auto:hover { border-color: var(--cj-review-accent); color: var(--cj-review-accent); background: rgba(198, 168, 94, 0.05); }
 
-/* ── Row 2: Structured info blocks ─────────────────────────────────────── */
+/* ── Row 3: Structured info blocks ─────────────────────────────────────── */
 
 .cj-ribbon-info {
   display: flex;
   align-items: stretch;
-  gap: 1px;
-  padding: 0 16px 10px;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 0 14px 8px;
 }
 
 .cj-info-block {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 14px;
+  padding: 5px 10px;
   border-radius: 6px;
   flex: 1;
-  min-width: 0;
-  transition: background 0.25s;
+  min-width: calc(33% - 4px);
 }
-.cj-plan   .cj-info-block { background: rgba(236,72,153,0.04); }
-.cj-write  .cj-info-block { background: rgba(13,148,136,0.04); }
-.cj-review .cj-info-block { background: rgba(198,168,94,0.04); }
+.cj-plan   .cj-info-block { background: rgba(236, 72, 153, 0.04); }
+.cj-write  .cj-info-block { background: rgba(13, 148, 136, 0.04); }
+.cj-review .cj-info-block { background: rgba(198, 168, 94, 0.04); }
 
 .cj-info-label {
   font-size: 9px;
@@ -342,20 +349,20 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
-.cj-plan   .cj-info-label { color: rgba(236,72,153,0.5); }
-.cj-write  .cj-info-label { color: rgba(13,148,136,0.5); }
-.cj-review .cj-info-label { color: rgba(198,168,94,0.5); }
+.cj-plan   .cj-info-label { color: rgba(236, 72, 153, 0.5); }
+.cj-write  .cj-info-label { color: rgba(13, 148, 136, 0.5); }
+.cj-review .cj-info-label { color: rgba(198, 168, 94, 0.5); }
 
 .cj-info-value {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.3;
 }
 .cj-plan   .cj-info-value { color: var(--cj-plan-text); }
 .cj-write  .cj-info-value { color: var(--cj-write-text); }
 .cj-review .cj-info-value { color: var(--cj-review-text); }
 
-/* Info block action button */
+/* Info block action button (used by consumers of the API) */
 .cj-info-action {
   display: inline-flex;
   align-items: center;
@@ -374,13 +381,13 @@
 .cj-review .cj-info-action { color: var(--cj-review-accent); }
 .cj-info-action:hover { opacity: 0.7; }
 
-/* ── Progress strip ────────────────────────────────────────────────────── */
+/* ── Row 4: Progress strip ─────────────────────────────────────────────── */
 
 .cj-progress-strip {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 16px 10px;
+  padding: 0 14px 10px;
 }
 
 .cj-progress-label {
@@ -390,9 +397,9 @@
   letter-spacing: 0.1em;
   white-space: nowrap;
 }
-.cj-plan   .cj-progress-label { color: rgba(236,72,153,0.45); }
-.cj-write  .cj-progress-label { color: rgba(13,148,136,0.45); }
-.cj-review .cj-progress-label { color: rgba(198,168,94,0.45); }
+.cj-plan   .cj-progress-label { color: rgba(236, 72, 153, 0.45); }
+.cj-write  .cj-progress-label { color: rgba(13, 148, 136, 0.45); }
+.cj-review .cj-progress-label { color: rgba(198, 168, 94, 0.45); }
 
 .cj-progress-track {
   flex: 1;
@@ -400,9 +407,9 @@
   border-radius: 4px;
   overflow: hidden;
 }
-.cj-plan   .cj-progress-track { background: rgba(236,72,153,0.08); }
-.cj-write  .cj-progress-track { background: rgba(13,148,136,0.08); }
-.cj-review .cj-progress-track { background: rgba(198,168,94,0.08); }
+.cj-plan   .cj-progress-track { background: rgba(236, 72, 153, 0.08); }
+.cj-write  .cj-progress-track { background: rgba(13, 148, 136, 0.08); }
+.cj-review .cj-progress-track { background: rgba(198, 168, 94, 0.08); }
 
 .cj-progress-fill {
   height: 100%;
@@ -424,13 +431,14 @@
 .cj-write  .cj-progress-count { color: var(--cj-write-muted); }
 .cj-review .cj-progress-count { color: var(--cj-review-muted); }
 
-/* ── Override banner (structured) ──────────────────────────────────────── */
+/* ── Override banner ───────────────────────────────────────────────────── */
 
 .cj-override-banner {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 8px 16px;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 8px 14px;
   font-size: 12px;
   flex-shrink: 0;
   animation: cj-banner-drop 0.2s ease both;
@@ -441,13 +449,14 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.cj-plan   .cj-override-banner { background: rgba(236,72,153,0.05);  border-bottom: 1px solid rgba(236,72,153,0.1); }
-.cj-write  .cj-override-banner { background: rgba(13,148,136,0.05);  border-bottom: 1px solid rgba(13,148,136,0.1); }
-.cj-review .cj-override-banner { background: rgba(198,168,94,0.05);  border-bottom: 1px solid rgba(198,168,94,0.1); }
+.cj-plan   .cj-override-banner { background: rgba(236, 72, 153, 0.05); border-bottom: 1px solid rgba(236, 72, 153, 0.1); }
+.cj-write  .cj-override-banner { background: rgba(13, 148, 136, 0.05); border-bottom: 1px solid rgba(13, 148, 136, 0.1); }
+.cj-review .cj-override-banner { background: rgba(198, 168, 94, 0.05); border-bottom: 1px solid rgba(198, 168, 94, 0.1); }
 
 .cj-override-blocks {
   display: flex;
-  gap: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
   flex: 1;
   min-width: 0;
 }
@@ -462,21 +471,19 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.cj-plan   .cj-ob-key { color: rgba(236,72,153,0.5); }
-.cj-write  .cj-ob-key { color: rgba(13,148,136,0.5); }
-.cj-review .cj-ob-key { color: rgba(198,168,94,0.5); }
+.cj-plan   .cj-ob-key { color: rgba(236, 72, 153, 0.5); }
+.cj-write  .cj-ob-key { color: rgba(13, 148, 136, 0.5); }
+.cj-review .cj-ob-key { color: rgba(198, 168, 94, 0.5); }
 
 .cj-ob-val {
   font-size: 12px;
   font-weight: 500;
 }
-.cj-plan   .cj-ob-val { color: rgba(180,40,110,0.8); }
-.cj-write  .cj-ob-val { color: rgba(10,110,100,0.8); }
-.cj-review .cj-ob-val { color: rgba(160,133,64,0.85); }
+.cj-plan   .cj-ob-val { color: rgba(180, 40, 110, 0.8); }
+.cj-write  .cj-ob-val { color: rgba(10, 110, 100, 0.8); }
+.cj-review .cj-ob-val { color: rgba(160, 133, 64, 0.85); }
 
-.cj-override-banner .cj-pill-auto {
-  flex-shrink: 0;
-}
+.cj-override-banner .cj-pill-auto { flex-shrink: 0; }
 
 /* ── Content area ──────────────────────────────────────────────────────── */
 
@@ -486,6 +493,7 @@
   display: flex;
   flex-direction: column;
   position: relative;
+  min-height: 0;
 }
 .cj-content > * { flex: 1; min-height: 0; }
 
@@ -504,10 +512,11 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  height: 100dvh;
   gap: 18px;
   background: #fdf9f9;
   font-family: 'DM Sans', sans-serif;
+  padding: 20px;
 }
 .cj-loading-dots {
   display: flex;
@@ -524,8 +533,8 @@
 .cj-loading-dots span:nth-child(2) { background: #0d9488; animation-delay: 0.15s; }
 .cj-loading-dots span:nth-child(3) { background: #C6A85E; animation-delay: 0.30s; }
 @keyframes cj-dot-load {
-  0%,80%,100% { opacity: 0.2; transform: scale(0.7); }
-  40%         { opacity: 1;   transform: scale(1); }
+  0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); }
+  40%           { opacity: 1;   transform: scale(1); }
 }
 .cj-loading-label {
   font-size: 12px;
@@ -540,40 +549,79 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100vh;
+  min-height: 100dvh;
   gap: 12px;
   background: #fdf9f9;
   font-family: 'DM Sans', sans-serif;
   text-align: center;
-  padding: 40px;
+  padding: 24px 20px;
 }
 .cj-error p     { margin: 0; font-size: 14px; color: #374151; }
 .cj-error small { font-size: 11px; color: #9ca3af; font-family: 'DM Mono', monospace; }
 .cj-error button {
   background: #f9fafb;
   border: 1px solid #e5e7eb;
-  border-radius: 6px;
-  padding: 7px 18px;
+  border-radius: 8px;
+  padding: 10px 20px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: #374151;
   cursor: pointer;
   margin: 2px;
   transition: background 0.14s;
+  touch-action: manipulation;
 }
 .cj-error button:hover { background: #f3f4f6; }
 
-/* ── Mobile ────────────────────────────────────────────────────────────── */
+/* ── Tablet / desktop enhancements (640px+) ────────────────────────────── */
 
-@media (max-width: 600px) {
-  .cj-ribbon-row { padding: 10px 12px; gap: 8px; }
-  .cj-mode-book { display: none; }
-  .cj-ribbon-info { padding: 0 12px 8px; gap: 0; flex-wrap: wrap; }
-  .cj-info-block { padding: 4px 10px; }
-  .cj-progress-strip { padding: 0 12px 8px; }
-  .cj-pill { padding: 4px 9px; font-size: 10px; }
-  .cj-pill-auto { display: none; }
-  .cj-save-btn { padding: 5px 10px; font-size: 10px; }
-  .cj-override-blocks { flex-wrap: wrap; gap: 8px; }
+@media (min-width: 640px) {
+  .cj-ribbon-top {
+    padding: 12px 16px 6px;
+    gap: 10px;
+  }
+  .cj-ribbon-nav {
+    padding: 2px 16px 10px;
+  }
+  .cj-ribbon-info {
+    padding: 0 16px 10px;
+    gap: 1px;
+    flex-wrap: nowrap;
+  }
+  .cj-info-block {
+    min-width: 0;
+    padding: 6px 14px;
+  }
+  .cj-info-value {
+    font-size: 12px;
+  }
+  .cj-progress-strip {
+    padding: 0 16px 10px;
+  }
+  .cj-override-banner {
+    padding: 8px 16px;
+    flex-wrap: nowrap;
+  }
+  .cj-back {
+    width: 30px;
+    height: 30px;
+    font-size: 15px;
+    border-radius: 7px;
+  }
+  .cj-mode-label {
+    font-size: 11px;
+  }
+  .cj-mode-chapter {
+    font-size: 14px;
+  }
+  .cj-save-btn {
+    padding: 6px 14px;
+  }
+  .cj-pill {
+    padding: 4px 12px;
+  }
+  .cj-pill-auto {
+    padding: 5px 11px;
+  }
 }
