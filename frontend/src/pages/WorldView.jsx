@@ -551,7 +551,7 @@ export default function WorldView() {
   // ── Navigate to Character Home ─────────────────────────────────────────
 
   const openCharacterHome = useCallback((charId) => {
-    navigate(`/character/${charId}`);
+    navigate(`/character-registry?charId=${charId}`);
   }, [navigate]);
 
   // ── Render ────────────────────────────────────────────────────────────

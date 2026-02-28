@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterVoiceInterview from './CharacterVoiceInterview';
 import CharacterDilemmaEngine from '../components/CharacterDilemmaEngine';
@@ -57,6 +57,9 @@ const CANON_TIERS = ['Core Canon', 'Licensed', 'Minor'];
 
 const DOSSIER_TABS = [
   { key: 'overview',      label: 'Overview' },
+  { key: 'living',        label: '✦ Living State' },
+  { key: 'arc',           label: 'Arc Timeline' },
+  { key: 'threads',       label: 'Plot Threads' },
   { key: 'psychology',    label: 'Psychology' },
   { key: 'aesthetic',     label: 'Aesthetic DNA' },
   { key: 'career',        label: 'Career' },
@@ -66,6 +69,22 @@ const DOSSIER_TABS = [
   { key: 'dilemma',       label: 'Dilemma' },
   { key: 'ai',            label: '✦ AI Writer' },
 ];
+
+const MOMENTUM = {
+  rising:  { symbol: '↑', color: '#3d8e42', label: 'Rising' },
+  steady:  { symbol: '→', color: '#9a8c9e', label: 'Steady' },
+  falling: { symbol: '↓', color: '#c43a2a', label: 'Falling' },
+  dormant: { symbol: '·', color: '#6b5c6e', label: 'Dormant' },
+};
+
+const ROLE_COLORS = {
+  protagonist: '#c9a84c',
+  pressure:    '#d46070',
+  mirror:      '#7b8de0',
+  support:     '#5dab62',
+  shadow:      '#9b4dca',
+  special:     '#5ec0b8',
+};
 
 const ARCHETYPES = [
   'Strategist', 'Dreamer', 'Performer', 'Guardian', 'Rebel',
@@ -101,6 +120,7 @@ function EmptyState({ label, onEdit }) {
 export default function CharacterRegistryPage() {
 
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   /* ── Mobile Detection ── */
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
@@ -150,6 +170,12 @@ export default function CharacterRegistryPage() {
   const [dossierPanelOpen, setDossierPanelOpen] = useState(false);
   const tabsRef = useRef(null);
   useTabAutoScroll(tabsRef, dossierTab);
+
+  // Living State / Arc / Threads (merged from CharacterHome)
+  const [livingState, setLivingState]     = useState(null);
+  const [charArc, setCharArc]             = useState(null);
+  const [plotThreads, setPlotThreads]     = useState([]);
+  const [generatingArc, setGeneratingArc] = useState(false);
 
   // AI Writer state
   const [aiMode, setAiMode]             = useState('scene');    // scene | monologue | profile | gaps | next
@@ -219,6 +245,79 @@ export default function CharacterRegistryPage() {
       } catch (e) { /* no book context */ }
     })();
   }, [activeRegistry?.book_tag]);
+
+  // Deep-link: ?charId=xxx opens that character's dossier automatically
+  useEffect(() => {
+    const linkId = searchParams.get('charId');
+    if (!linkId || !activeRegistry?.characters?.length) return;
+    const found = activeRegistry.characters.find(c => c.id === linkId);
+    if (found) {
+      setActiveChar(found);
+      setView('dossier');
+      setDossierTab(searchParams.get('tab') || 'living');
+      setEditSection(null);
+      // Clear param so refresh doesn't re-trigger
+      setSearchParams({}, { replace: true });
+    }
+  }, [activeRegistry, searchParams]);
+
+  // Load living state, plot threads, arc when dossier opens for a character
+  useEffect(() => {
+    if (view !== 'dossier' || !activeChar) {
+      setLivingState(null);
+      setCharArc(null);
+      setPlotThreads([]);
+      return;
+    }
+    // Living state from localStorage (same as WorldView)
+    const saved = JSON.parse(localStorage.getItem('wv_living_states') || '{}');
+    setLivingState(saved[activeChar.id] || null);
+
+    // Plot threads from API
+    (async () => {
+      try {
+        const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setPlotThreads(data.threads || []);
+        }
+      } catch { /* phase 2 */ }
+    })();
+  }, [view, activeChar?.id]);
+
+  // Generate arc from manuscript
+  const generateArc = useCallback(async () => {
+    if (!activeChar) return;
+    setGeneratingArc(true);
+    try {
+      const res = await fetch('/api/v1/memories/generate-character-arc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          character_id: activeChar.id,
+          character_name: activeChar.selected_name || activeChar.display_name,
+          character_type: activeChar.role_type,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCharArc(data.arc || data);
+      } else {
+        setCharArc({
+          chapters: [
+            { chapter: 'Ch 1', event: 'Introduction', shift: 'Belief intact' },
+            { chapter: 'Ch 5', event: 'First pressure', shift: 'Cracks forming' },
+          ],
+          summary: `${activeChar.selected_name || activeChar.display_name}'s arc is still being written.`,
+        });
+      }
+    } catch {
+      setCharArc({ chapters: [], summary: 'Unable to generate arc. Connect to a manuscript first.' });
+    } finally {
+      setGeneratingArc(false);
+    }
+  }, [activeChar]);
 
   /* ── Characters + Filtering ── */
 
@@ -853,7 +952,134 @@ export default function CharacterRegistryPage() {
 
               {/* Tab Content */}
               <div className="cr-dossier-tab-content">
-                {dossierTab === 'dilemma' ? (
+                {/* ── Living State Tab ── */}
+                {dossierTab === 'living' ? (() => {
+                  const mom = MOMENTUM[livingState?.momentum || 'dormant'];
+                  return (
+                    <div className="cr-living-tab">
+                      {livingState?.isGenerated ? (
+                        <>
+                          <div className="cr-living-header">
+                            <div className="cr-living-momentum" style={{ color: mom.color }}>
+                              <span className="cr-living-momentum-icon">{mom.symbol}</span>
+                              <span className="cr-living-momentum-label">{mom.label}</span>
+                            </div>
+                            <button className="cr-btn-outline" onClick={() => navigate('/world')}>
+                              ↻ Regenerate in World View
+                            </button>
+                          </div>
+                          <div className="cr-living-grid">
+                            <div className="cr-living-slot">
+                              <div className="cr-living-slot-label">Knows</div>
+                              <div className="cr-living-slot-text">{livingState.currentKnows}</div>
+                            </div>
+                            <div className="cr-living-slot">
+                              <div className="cr-living-slot-label">Wants</div>
+                              <div className="cr-living-slot-text">{livingState.currentWants}</div>
+                            </div>
+                            <div className="cr-living-slot cr-living-slot-full">
+                              <div className="cr-living-slot-label cr-living-slot-danger">Unresolved</div>
+                              <div className="cr-living-slot-text">{livingState.unresolved}</div>
+                            </div>
+                          </div>
+                          {livingState.lastChapter && (
+                            <div className="cr-living-footer">Last seen: {livingState.lastChapter}</div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="cr-dossier-empty">
+                          <div className="cr-dossier-empty-icon">✦</div>
+                          <p className="cr-dossier-empty-text">No living state generated yet.</p>
+                          <button className="cr-dossier-empty-btn" onClick={() => navigate('/world')}>
+                            Generate from World View
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+
+                /* ── Arc Timeline Tab ── */
+                : dossierTab === 'arc' ? (() => {
+                  const mom = MOMENTUM[livingState?.momentum || 'dormant'];
+                  const roleColor = ROLE_COLORS[c.role_type] || '#9a8c9e';
+                  return (
+                    <div className="cr-arc-tab">
+                      {charArc?.summary && <p className="cr-arc-summary">{charArc.summary}</p>}
+                      {charArc && (charArc.chapters || []).length > 0 ? (
+                        <div className="cr-arc-strip">
+                          {(charArc.chapters || []).map((ch, i) => (
+                            <React.Fragment key={i}>
+                              <div className="cr-arc-beat">
+                                <div className="cr-arc-beat-header">
+                                  <span className="cr-arc-chapter-label">{ch.chapter}</span>
+                                  {ch.title && <span className="cr-arc-chapter-title">{ch.title}</span>}
+                                  <span className="cr-arc-momentum" style={{ color: mom.color }}>{mom.symbol}</span>
+                                </div>
+                                <div className="cr-arc-event">{ch.event}</div>
+                                {ch.shift && (
+                                  <div className="cr-arc-shift">
+                                    <span className="cr-arc-shift-label">Belief shift</span>
+                                    {ch.shift}
+                                  </div>
+                                )}
+                              </div>
+                              {i < (charArc.chapters || []).length - 1 && (
+                                <div className="cr-arc-connector" style={{ background: roleColor }} />
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      ) : !charArc ? (
+                        <div className="cr-dossier-empty">
+                          <div className="cr-dossier-empty-icon">📈</div>
+                          <p className="cr-dossier-empty-text">No arc data yet.</p>
+                          <button className="cr-dossier-empty-btn" onClick={generateArc} disabled={generatingArc}>
+                            {generatingArc ? '✦ Generating…' : '✦ Generate Arc from Manuscript'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="cr-dossier-empty">
+                          <p className="cr-dossier-empty-text">Arc generated but no chapter beats found yet.</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+
+                /* ── Plot Threads Tab ── */
+                : dossierTab === 'threads' ? (
+                  <div className="cr-threads-tab">
+                    {plotThreads.length > 0 ? (
+                      <div className="cr-threads-list">
+                        {plotThreads.map((thread, i) => {
+                          const dotColor = thread.status === 'active' ? '#3d8e42'
+                            : thread.status === 'resolved' ? '#9a8c9e' : '#c9a84c';
+                          return (
+                            <div key={i} className="cr-thread-entry">
+                              <div className="cr-thread-dot" style={{ background: dotColor }} />
+                              <div className="cr-thread-body">
+                                <div className="cr-thread-title">{thread.title || thread.description}</div>
+                                <div className="cr-thread-meta">
+                                  <span style={{ color: dotColor }}>{thread.status || 'open'}</span>
+                                  {thread.source && <span className="cr-thread-source">· {thread.source}</span>}
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div className="cr-dossier-empty">
+                        <div className="cr-dossier-empty-icon">🧵</div>
+                        <p className="cr-dossier-empty-text">No plot threads tracked yet.</p>
+                      </div>
+                    )}
+                  </div>
+                )
+
+                /* ── Dilemma Tab ── */
+                : dossierTab === 'dilemma' ? (
                   <CharacterDilemmaEngine
                     character={{
                       id: c.id,

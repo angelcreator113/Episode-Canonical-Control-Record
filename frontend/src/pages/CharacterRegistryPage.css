@@ -3933,3 +3933,319 @@
     padding: 6px 10px;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════
+   LIVING STATE TAB
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cr-living-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cr-living-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, var(--blush) 0%, var(--lilac) 100%);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.cr-living-header h4 {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-size: var(--fs-lg);
+  color: var(--ink);
+}
+
+.cr-living-momentum {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 14px;
+  border-radius: 999px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: #fff;
+  letter-spacing: 0.3px;
+}
+
+.cr-living-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.cr-living-slot {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: box-shadow 0.2s;
+}
+
+.cr-living-slot:hover {
+  box-shadow: 0 2px 12px rgba(157, 78, 136, 0.10);
+}
+
+.cr-living-slot-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  color: var(--muted);
+  margin-bottom: 6px;
+}
+
+.cr-living-slot-text {
+  font-size: var(--fs-base);
+  color: var(--ink);
+  line-height: 1.5;
+}
+
+.cr-living-slot-full {
+  border-left: 3px solid var(--accent);
+}
+
+.cr-living-slot-danger {
+  border-left: 3px solid #d46070;
+}
+
+.cr-living-footer {
+  text-align: center;
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  font-style: italic;
+  padding: 8px 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   ARC TIMELINE TAB
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cr-arc-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.cr-arc-summary {
+  background: linear-gradient(135deg, var(--blush) 0%, var(--lilac) 100%);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 16px 20px;
+  font-size: var(--fs-base);
+  color: var(--ink);
+  line-height: 1.6;
+  font-style: italic;
+}
+
+.cr-arc-strip {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  position: relative;
+  padding-left: 28px;
+}
+
+.cr-arc-beat {
+  position: relative;
+  padding: 14px 18px 14px 22px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  margin-bottom: 8px;
+  transition: box-shadow 0.2s;
+}
+
+.cr-arc-beat:hover {
+  box-shadow: 0 2px 12px rgba(157, 78, 136, 0.10);
+}
+
+.cr-arc-beat::before {
+  content: '';
+  position: absolute;
+  left: -22px;
+  top: 22px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid var(--card);
+  box-shadow: 0 0 0 2px var(--border);
+}
+
+.cr-arc-connector {
+  position: absolute;
+  left: -17px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--border);
+  z-index: 0;
+}
+
+.cr-arc-beat-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.cr-arc-chapter-label {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--accent);
+  background: var(--blush);
+  padding: 2px 10px;
+  border-radius: 999px;
+}
+
+.cr-arc-chapter-title {
+  font-family: var(--ff-display);
+  font-size: var(--fs-base);
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.cr-arc-momentum {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: #fff;
+}
+
+.cr-arc-event {
+  font-size: var(--fs-sm);
+  color: var(--ink);
+  line-height: 1.5;
+  margin-bottom: 4px;
+}
+
+.cr-arc-shift {
+  font-size: 12px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cr-arc-shift-label {
+  font-weight: 600;
+  color: var(--accent);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   PLOT THREADS TAB
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.cr-threads-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.cr-threads-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cr-thread-entry {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 14px 16px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: box-shadow 0.2s;
+}
+
+.cr-thread-entry:hover {
+  box-shadow: 0 2px 12px rgba(157, 78, 136, 0.10);
+}
+
+.cr-thread-dot {
+  flex-shrink: 0;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  margin-top: 5px;
+}
+
+.cr-thread-body {
+  flex: 1;
+  min-width: 0;
+}
+
+.cr-thread-title {
+  font-family: var(--ff-display);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+
+.cr-thread-meta {
+  font-size: var(--fs-sm);
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.cr-thread-source {
+  font-style: italic;
+}
+
+/* Outline button (shared) */
+.cr-btn-outline {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 18px;
+  border-radius: var(--radius);
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  background: transparent;
+  border: 1.5px solid var(--accent);
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.cr-btn-outline:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.cr-btn-outline:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Responsive for new tabs ────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .cr-living-grid {
+    grid-template-columns: 1fr;
+  }
+  .cr-arc-strip {
+    padding-left: 20px;
+  }
+  .cr-arc-beat::before {
+    left: -16px;
+  }
+  .cr-arc-connector {
+    left: -11px;
+  }
+}

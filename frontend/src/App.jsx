@@ -90,7 +90,6 @@ const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
 const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPage'));
 const WorldView = lazy(() => import('./pages/WorldView'));
-const CharacterHome = lazy(() => import('./pages/CharacterHome'));
 
 // Heavy components — lazy loaded
 const SceneComposerFull = lazy(() => import('./components/SceneComposer/SceneComposerFull'));
@@ -374,9 +373,8 @@ function AppContent() {
           {/* Recycle Bin */}
           <Route path="/recycle-bin" element={<RecycleBin />} />
 
-          {/* World View + Character Home */}
+          {/* World View */}
           <Route path="/world" element={<WorldView />} />
-          <Route path="/character/:charId" element={<CharacterHome />} />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />
