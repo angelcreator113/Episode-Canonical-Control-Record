@@ -198,6 +198,13 @@ export default function StoryPlannerConversational({
   onApply,
   onClose,
   toast,
+  hideHeader = false,
+  activeChapterId,
+  chapter,
+  bookId,
+  chapterId,
+  onChapterRefresh,
+  onComplete,
 }) {
   const bookKey = book?.id || 'default';
 
@@ -495,29 +502,31 @@ export default function StoryPlannerConversational({
     <div className="spc-root" ref={rootRef}>
 
       {/* ── HEADER ── */}
-      <header className="spc-header">
-        <div className="spc-header-left">
-          <span className="spc-header-title">Story Planner</span>
-          <span className="spc-header-book">{book?.title || 'Untitled'}</span>
-        </div>
-        <div className="spc-header-right">
-          <button
-            className={`spc-save-btn${saved ? ' spc-save-btn--saved' : ''}`}
-            onClick={applyPlan}
-            disabled={applying}
-          >
-            {applying ? 'Saving…' : saved ? '✓ Saved' : '💾 Save'}
-          </button>
-          <button
-            className="spc-clear-btn"
-            onClick={clearChat}
-            title="Start a new conversation"
-          >
-            ↻
-          </button>
-          <button className="spc-close-btn" onClick={onClose}>✕</button>
-        </div>
-      </header>
+      {!hideHeader && (
+        <header className="spc-header">
+          <div className="spc-header-left">
+            <span className="spc-header-title">Story Planner</span>
+            <span className="spc-header-book">{book?.title || 'Untitled'}</span>
+          </div>
+          <div className="spc-header-right">
+            <button
+              className={`spc-save-btn${saved ? ' spc-save-btn--saved' : ''}`}
+              onClick={applyPlan}
+              disabled={applying}
+            >
+              {applying ? 'Saving…' : saved ? '✓ Saved' : '💾 Save'}
+            </button>
+            <button
+              className="spc-clear-btn"
+              onClick={clearChat}
+              title="Start a new conversation"
+            >
+              ↻
+            </button>
+            <button className="spc-close-btn" onClick={onClose}>✕</button>
+          </div>
+        </header>
+      )}
 
       {/* ── MOBILE TAB BAR ── */}
       <div className="spc-mobile-tabs">
@@ -582,6 +591,24 @@ export default function StoryPlannerConversational({
             )}
           </div>
 
+          {/* Context header (when inside ChapterJourney) */}
+          {hideHeader && (
+            <div className="spc-context-header">
+              <span className="spc-context-icon">✦</span>
+              <span className="spc-context-title">Planning Assistant</span>
+              {activeChIdx !== null && plan.chapters[activeChIdx] && (
+                <span className="spc-context-focus">
+                  Focus: Ch {String(activeChIdx + 1).padStart(2, '0')} — {plan.chapters[activeChIdx].title || 'Untitled'}
+                </span>
+              )}
+              <button
+                className="spc-context-clear"
+                onClick={clearChat}
+                title="Start a new conversation"
+              >↻</button>
+            </div>
+          )}
+
           {/* Input row */}
           <div className="spc-input-row">
             {voice.listening && (
@@ -600,7 +627,9 @@ export default function StoryPlannerConversational({
                   if (voice.listening) voice.stop();
                 }}
                 onKeyDown={handleKey}
-                placeholder="Answer here, or use the mic…"
+                placeholder={activeChIdx !== null
+                  ? `Tell me about ${plan.chapters[activeChIdx]?.title || 'this chapter'}…`
+                  : 'Describe your vision, or use the mic…'}
                 rows={1}
                 disabled={sending}
               />
@@ -672,7 +701,7 @@ export default function StoryPlannerConversational({
               {plan.chapters.map((ch, i) => (
                 <div
                   key={ch.id}
-                  className={`spc-plan-chapter${ch.filled ? ' filled' : ''}${activeChIdx === i ? ' active' : ''}${highlight === `chapter-${i}` ? ' flash' : ''}`}
+                  className={`spc-plan-chapter${ch.filled ? ' filled' : ''}${activeChIdx === i ? ' active' : ''}${highlight === `chapter-${i}` ? ' flash' : ''}${activeChapterId && ch.id === activeChapterId ? ' spc-ch-current' : ''}`}
                   onClick={() => setActiveChIdx(activeChIdx === i ? null : i)}
                 >
                   <div className="spc-plan-ch-header">
@@ -681,6 +710,9 @@ export default function StoryPlannerConversational({
                       {ch.title || <span className="spc-plan-empty">Chapter {i + 1}</span>}
                     </span>
                     {ch.filled && <span className="spc-plan-ch-dot" />}
+                    <span className="spc-plan-ch-status">
+                      {ch.filled ? 'Ready' : ch.what?.trim() ? 'Draft' : ''}
+                    </span>
                     <button
                       className="spc-plan-ch-focus-btn"
                       title={`Work on ${ch.title || 'Chapter ' + (i + 1)}`}
