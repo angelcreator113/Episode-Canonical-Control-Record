@@ -235,6 +235,22 @@ router.post('/registries/:id/characters', async (req, res) => {
 });
 
 /**
+ * GET /characters/:id
+ * Get a single character by ID
+ */
+router.get('/characters/:id', async (req, res) => {
+  try {
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    return res.json({ success: true, character });
+  } catch (err) {
+    console.error('[CharacterRegistry] GET /characters/:id error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * PUT /characters/:id
  * Update any character fields
  */
