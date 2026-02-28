@@ -36,7 +36,6 @@ const NAV = [
         icon: '🎬', label: 'Shows', route: '/shows',
         expandable: true,
       },
-      { icon: '📂', label: 'Episodes',        route: '/episodes' },
       { icon: '🎞️', label: 'Scene Library',   route: '/scene-library' },
       { icon: '🖼️', label: 'Template Studio', route: '/template-studio' },
     ],

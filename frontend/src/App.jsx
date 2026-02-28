@@ -238,8 +238,8 @@ function AppContent() {
           
           {/* ===== PRE-PRODUCTION ROUTES ===== */}
           
-          {/* Episodes */}
-          <Route path="/episodes" element={<EpisodeWorkspace />} />
+          {/* Episodes — listing redirects to Universe Production tab */}
+          <Route path="/episodes" element={<Navigate to="/universe?tab=production" replace />} />
           <Route path="/episodes/create" element={<CreateEpisode />} />
           <Route path="/episodes/:episodeId/edit" element={<QuickEpisodeCreator />} />
           <Route path="/episodes/:id/evaluate" element={<EvaluateEpisode />} />
