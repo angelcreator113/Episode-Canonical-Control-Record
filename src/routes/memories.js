@@ -5048,5 +5048,316 @@ Return ONLY valid JSON. No markdown fences.`;
   }
 });
 
+// ─── Canonical Book 1 Relationship Data ──────────────────────────────────────
+const BOOK1_NODES = [
+  {
+    id: 'justawoman',
+    label: 'JustAWoman',
+    role_type: 'special',
+    world_exists: true,
+    group: 'real_world',
+    bio: 'Content creator. Mother of Marcus (7), Miles (5), Noah (3). Married to David. Posts fashion, beauty, makeup consistently. Wound: invisibility while trying.',
+  },
+  {
+    id: 'david',
+    label: 'David',
+    role_type: 'pressure',
+    world_exists: true,
+    group: 'real_world',
+    bio: 'The Husband. Works Monday–Friday, 6am–5pm, sometimes later. Supportive but concerned about the investment before the returns arrive. His concern lands as doubt.',
+  },
+  {
+    id: 'marcus',
+    label: 'Marcus',
+    role_type: 'support',
+    world_exists: true,
+    group: 'real_world',
+    bio: 'Oldest son. Age 7. Part of the real life JustAWoman is building around.',
+  },
+  {
+    id: 'miles',
+    label: 'Miles',
+    role_type: 'support',
+    world_exists: true,
+    group: 'real_world',
+    bio: 'Middle son. Age 5.',
+  },
+  {
+    id: 'noah',
+    label: 'Noah',
+    role_type: 'support',
+    world_exists: true,
+    group: 'real_world',
+    bio: 'Youngest son. Age 3.',
+  },
+  {
+    id: 'dana',
+    label: 'Dana',
+    role_type: 'support',
+    world_exists: false,
+    group: 'real_world',
+    bio: 'The Witness. Real friend. Has her own up-and-down social media journey. JustAWoman processes her content ideas and creative journey with Dana. A peer, not a mentor.',
+  },
+  {
+    id: 'chloe',
+    label: 'Chloe',
+    role_type: 'mirror',
+    world_exists: false,
+    group: 'online',
+    bio: 'The Comparison Creator. Lifestyle content creator (JustAWoman thinks she does makeup — that misread matters). Married, no children. Extremely consistent, high quality videos, goes live with her audience. Great influencer. Does not know JustAWoman exists.',
+  },
+  {
+    id: 'jade',
+    label: 'Jade',
+    role_type: 'shadow',
+    world_exists: false,
+    group: 'online',
+    bio: 'The Almost-Mentor. Former high-level position at the bank JustAWoman has used since adulthood — that institutional credibility is the trust bridge. Creates content teaching women to run an online business. JustAWoman has purchased her coaching course and coaching for clients. Purely transactional — Jade does not know JustAWoman personally.',
+  },
+  {
+    id: 'lala',
+    label: 'Lala',
+    role_type: 'special',
+    world_exists: true,
+    group: 'created',
+    bio: 'Being built by JustAWoman. AI fashion game character for her YouTube channel. In Book 1: one intrusive thought, proto-voice, tonal rupture. Not a character arriving — a character being built. Does not know JustAWoman exists. Does not know she was built.',
+  },
+];
+
+const BOOK1_EDGES = [
+  {
+    from: 'justawoman',
+    to: 'david',
+    direction: 'two_way',
+    type: 'romantic',
+    from_knows: 'Her husband. Loves her. His concern about the investment comes from love, not from wanting to stop her. But it lands like doubt.',
+    to_knows: 'His wife. Is watching her pour time, money, and identity into building Lala. Was skeptical. Said stop spending. Means protect.',
+    from_feels: 'Loves him. Cannot blame him for her invisibility. That makes the tension real — the obstacle is internal, not him.',
+    to_feels: 'Supportive but concerned. Watching the investment grow before the returns arrive.',
+    strength: 5,
+    note: 'Core real-world tension. His arc runs through the entire franchise.',
+  },
+  {
+    from: 'justawoman',
+    to: 'marcus',
+    direction: 'two_way',
+    type: 'familial',
+    from_knows: 'Her oldest. 7 years old. Part of the real life she is building around.',
+    to_knows: 'His mom. Present in his daily life.',
+    from_feels: 'Love. Also: the constraint. Three boys under 8 while building a career.',
+    to_feels: 'She is mom.',
+    strength: 3,
+    note: 'The boys collectively represent the real-life weight JustAWoman carries while creating.',
+  },
+  {
+    from: 'justawoman',
+    to: 'miles',
+    direction: 'two_way',
+    type: 'familial',
+    from_knows: 'Middle son. 5 years old.',
+    to_knows: 'His mom.',
+    from_feels: 'Love and constraint.',
+    to_feels: 'She is mom.',
+    strength: 3,
+    note: null,
+  },
+  {
+    from: 'justawoman',
+    to: 'noah',
+    direction: 'two_way',
+    type: 'familial',
+    from_knows: 'Youngest. 3 years old. Most demanding of her presence.',
+    to_knows: 'His mom.',
+    from_feels: 'Love and constraint — the youngest creates the most immediate pull.',
+    to_feels: 'She is mom.',
+    strength: 3,
+    note: null,
+  },
+  {
+    from: 'justawoman',
+    to: 'dana',
+    direction: 'two_way',
+    type: 'support',
+    from_knows: 'Her friend. Has her own social media journey — up and down. Someone JustAWoman can process out loud with. Peer, not mentor.',
+    to_knows: 'JustAWoman is building something. Watches the journey. Has her own version of the same struggle.',
+    from_feels: 'Trust. Comfort. The relief of someone who gets it without explanation.',
+    to_feels: 'Supportive. Invested in JustAWoman\'s success. Also navigating her own.',
+    strength: 4,
+    note: 'The Witness. Peers on the same journey — that\'s what makes Dana valuable and limited at the same time.',
+  },
+  {
+    from: 'justawoman',
+    to: 'chloe',
+    direction: 'one_way',
+    type: 'mirror',
+    from_knows: 'Follows her online. Loves her content. Perceives her as a makeup creator — but Chloe actually does lifestyle content. That misread is the story.',
+    to_knows: null,
+    from_feels: 'Admiration shading into comparison spiral. Measuring herself against a version of Chloe that isn\'t quite real.',
+    to_feels: null,
+    strength: 4,
+    note: 'misread — JustAWoman is comparing herself in the wrong lane. Chloe never asked for the comparison.',
+  },
+  {
+    from: 'justawoman',
+    to: 'jade',
+    direction: 'one_way',
+    type: 'transactional',
+    from_knows: 'Online business coach. Former high-level position at her bank — that institutional credibility is why JustAWoman trusted her enough to buy. Teaches women to run online businesses.',
+    to_knows: null,
+    from_feels: 'Trust (bank-backed). Influenced by her direction. Has purchased her course and coaching for clients.',
+    to_feels: null,
+    strength: 3,
+    note: 'The trust bridge is the bank connection — not personal relationship. Jade does not know JustAWoman exists.',
+  },
+  {
+    from: 'justawoman',
+    to: 'lala',
+    direction: 'one_way',
+    type: 'creation',
+    from_knows: 'Building her. Records herself as Lala, performing AI, playing a character inside a fashion game. Knows everything about Lala because she created her.',
+    to_knows: null,
+    from_feels: 'Creative ownership. Also: Lala is who JustAWoman would be with no constraints — no kids, no husband-approval friction, no "what will people think." Lala is her times ten.',
+    to_feels: null,
+    strength: 5,
+    note: 'franchise_hinge — this is the most important relationship in the entire franchise. One-way now. The arrow reverses after the consciousness transfer.',
+  },
+  {
+    from: 'david',
+    to: 'marcus',
+    direction: 'two_way',
+    type: 'familial',
+    from_knows: 'His oldest son.',
+    to_knows: 'His dad.',
+    from_feels: 'Father. Provider.',
+    to_feels: 'Dad.',
+    strength: 2,
+    note: null,
+  },
+  {
+    from: 'david',
+    to: 'miles',
+    direction: 'two_way',
+    type: 'familial',
+    from_knows: 'His middle son.',
+    to_knows: 'His dad.',
+    from_feels: 'Father.',
+    to_feels: 'Dad.',
+    strength: 2,
+    note: null,
+  },
+  {
+    from: 'david',
+    to: 'noah',
+    direction: 'two_way',
+    type: 'familial',
+    from_knows: 'His youngest.',
+    to_knows: 'His dad.',
+    from_feels: 'Father.',
+    to_feels: 'Dad.',
+    strength: 2,
+    note: null,
+  },
+];
+
+// ─── GET /relationship-map — returns canonical seed data ─────────────────────
+router.get('/relationship-map', optionalAuth, async (req, res) => {
+  return res.json({
+    nodes: BOOK1_NODES,
+    edges: BOOK1_EDGES,
+    meta: {
+      book: 'Book 1 — Before Lala',
+      total_nodes: BOOK1_NODES.length,
+      total_edges: BOOK1_EDGES.length,
+      franchise_hinge: 'justawoman → lala',
+    },
+  });
+});
+
+// ─── POST /generate-relationship-web — Claude enriches from manuscript ────────
+router.post('/generate-relationship-web', optionalAuth, async (req, res) => {
+  const { registryId } = req.body;
+  const db = req.app.locals.db || require('../models');
+
+  try {
+    const { Op } = require('sequelize');
+
+    const lines = await db.StorytellerLine.findAll({
+      where: { status: { [Op.in]: ['approved', 'edited'] } },
+      include: [{
+        model: db.StorytellerChapter,
+        as: 'chapter',
+        attributes: ['title', 'order_index'],
+        required: true,
+      }],
+      order: [[{ model: db.StorytellerChapter, as: 'chapter' }, 'order_index', 'ASC']],
+      limit: 100,
+    });
+
+    if (!lines || lines.length === 0) {
+      return res.json({
+        nodes: BOOK1_NODES,
+        edges: BOOK1_EDGES,
+        source: 'seed',
+      });
+    }
+
+    const manuscriptExcerpt = lines.map((l) => l.content).join('\n');
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 1500,
+      system: `You are analyzing a manuscript to identify how character relationships are expressed in the actual text.
+You have a baseline relationship graph. Your job is to identify any edges where the manuscript reveals something specific about the relationship that should update from_knows, to_knows, from_feels, or to_feels.
+
+Characters: JustAWoman, David, Marcus, Miles, Noah, Dana, Chloe, Jade, Lala.
+
+Return ONLY a JSON array of edge updates. Each update: { from, to, from_knows_update, from_feels_update }
+Only include edges where the manuscript reveals something specific. Omit edges with no new information.
+No preamble, no markdown.`,
+      messages: [{
+        role: 'user',
+        content: `Manuscript (approved lines):\n\n${manuscriptExcerpt}\n\nWhat do these lines reveal about the relationships between characters?`,
+      }],
+    });
+
+    let updates = [];
+    try {
+      const clean = response.content?.[0]?.text?.replace(/```json|```/g, '').trim();
+      updates = JSON.parse(clean);
+    } catch {
+      return res.json({ nodes: BOOK1_NODES, edges: BOOK1_EDGES, source: 'seed_parse_failed' });
+    }
+
+    const enrichedEdges = BOOK1_EDGES.map((edge) => {
+      const update = Array.isArray(updates)
+        ? updates.find((u) => u.from === edge.from && u.to === edge.to)
+        : null;
+      if (!update) return edge;
+      return {
+        ...edge,
+        from_knows: update.from_knows_update || edge.from_knows,
+        from_feels: update.from_feels_update || edge.from_feels,
+      };
+    });
+
+    return res.json({
+      nodes: BOOK1_NODES,
+      edges: enrichedEdges,
+      source: 'enriched',
+    });
+
+  } catch (err) {
+    console.error('[generate-relationship-web] error:', err?.message);
+    return res.json({
+      nodes: BOOK1_NODES,
+      edges: BOOK1_EDGES,
+      source: 'fallback',
+    });
+  }
+});
+
 
 module.exports = router;

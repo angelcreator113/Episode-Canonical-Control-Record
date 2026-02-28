@@ -77,7 +77,7 @@ const UniversePage = lazy(() => import('./pages/UniversePage'));
 const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
 const BookOverview = lazy(() => import('./pages/BookOverview'));
-const RelationshipMap = lazy(() => import('./pages/RelationshipMap'));
+const RelationshipWeb = lazy(() => import('./pages/RelationshipWeb'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
@@ -89,8 +89,7 @@ const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
 const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPage'));
-const WorldView = lazy(() => import('./pages/WorldView'));
-const CharacterHome = lazy(() => import('./pages/CharacterHome'));
+// WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
 const SceneComposerFull = lazy(() => import('./components/SceneComposer/SceneComposerFull'));
@@ -348,8 +347,8 @@ function AppContent() {
           {/* PNOS Continuity Engine */}
           <Route path="/continuity" element={<ContinuityEnginePage />} />
           
-          {/* PNOS Character Relationship Map */}
-          <Route path="/relationships" element={<RelationshipMap />} />
+          {/* PNOS Character Relationship Web */}
+          <Route path="/relationships" element={<RelationshipWeb />} />
           
           {/* PNOS LalaVerse Press — Publisher Dashboard */}
           <Route path="/press" element={<PressPublisher />} />
@@ -374,9 +373,8 @@ function AppContent() {
           {/* Recycle Bin */}
           <Route path="/recycle-bin" element={<RecycleBin />} />
 
-          {/* World View + Character Home */}
-          <Route path="/world" element={<WorldView />} />
-          <Route path="/character/:charId" element={<CharacterHome />} />
+          {/* World View — redirect to merged Characters page */}
+          <Route path="/world" element={<Navigate to="/character-registry?view=world" replace />} />
 
           {/* If authenticated user tries to access login, redirect to home */}
           <Route path="/login" element={<Navigate to="/" replace />} />
