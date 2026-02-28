@@ -363,11 +363,35 @@
   cursor: default;
 }
 
+/* ── Backdrop (mobile only, tap to close) ───────────────────────── */
+
+.apa-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  z-index: -1;         /* behind panel + trigger within apa-root stacking context */
+  pointer-events: all; /* catch taps even though apa-root is pointer-events:none  */
+  cursor: default;
+  display: none;       /* hidden on desktop */
+  animation: apa-backdrop-in 0.18s ease both;
+}
+
+@keyframes apa-backdrop-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 /* ── Mobile ────────────────────────────────────────────────────────── */
 
 @media (max-width: 480px) {
+  .apa-backdrop {
+    display: block;
+  }
+
   .apa-root {
-    bottom: 16px;
+    /* Honour device safe-area (iPhone home bar, Android nav) so the
+       trigger never hides behind system UI or overlaps page buttons. */
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
     right: 16px;
   }
 
