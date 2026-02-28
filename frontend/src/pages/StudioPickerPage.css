@@ -1,0 +1,216 @@
+/* ─── StudioPickerPage.css ─────────────────────────────────────
+   Shared styles for Studio > Timeline / Scene Composer pickers
+   ────────────────────────────────────────────────────────────── */
+
+.sp-page {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 3rem 1.5rem 4rem;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+/* ── Header ── */
+.sp-header {
+  text-align: center;
+  margin-bottom: 2.5rem;
+}
+.sp-icon {
+  font-size: 3rem;
+  margin-bottom: 0.5rem;
+}
+.sp-title {
+  font-family: 'Playfair Display', 'Lora', serif;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 0.5rem;
+}
+.sp-subtitle {
+  font-size: 0.95rem;
+  color: #64748b;
+  margin: 0;
+}
+
+/* ── Loading ── */
+.sp-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 0;
+  gap: 1rem;
+  color: #64748b;
+  font-size: 0.9rem;
+}
+.sp-loading-dots {
+  display: flex;
+  gap: 6px;
+}
+.sp-loading-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #94a3b8;
+  animation: sp-bounce 1.2s ease-in-out infinite;
+}
+.sp-loading-dots span:nth-child(2) { animation-delay: 0.15s; }
+.sp-loading-dots span:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes sp-bounce {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* ── Empty state ── */
+.sp-empty {
+  text-align: center;
+  padding: 3rem 0;
+  color: #64748b;
+}
+.sp-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+}
+.sp-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 1rem;
+  padding: 10px 20px;
+  background: linear-gradient(135deg, #6366f1, #8b5cf6);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s, box-shadow 0.15s;
+}
+.sp-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+/* ── Episode grid ── */
+.sp-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.sp-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 14px 18px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  text-align: left;
+  font-family: inherit;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+}
+.sp-card:hover {
+  border-color: #818cf8;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.12);
+  transform: translateY(-1px);
+}
+
+.sp-card-number {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #f1f5f9, #e2e8f0);
+  font-family: 'DM Mono', 'Roboto Mono', monospace;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.sp-card-info {
+  flex: 1;
+  min-width: 0;
+}
+.sp-card-title {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.sp-card-meta {
+  margin-top: 3px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.sp-status {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: capitalize;
+}
+.sp-status-draft     { background: #f1f5f9; color: #64748b; }
+.sp-status-writing   { background: #dbeafe; color: #3b82f6; }
+.sp-status-review    { background: #fef3c7; color: #d97706; }
+.sp-status-published { background: #d1fae5; color: #059669; }
+.sp-status-completed { background: #d1fae5; color: #059669; }
+
+.sp-card-arrow {
+  flex-shrink: 0;
+  font-size: 1.1rem;
+  color: #94a3b8;
+  transition: color 0.15s, transform 0.15s;
+}
+.sp-card:hover .sp-card-arrow {
+  color: #6366f1;
+  transform: translateX(3px);
+}
+
+/* ── Working episode banner ── */
+.sp-working-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 18px;
+  margin-bottom: 1.5rem;
+  background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+  border: 1px solid #c7d2fe;
+  border-radius: 10px;
+}
+.sp-working-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #6366f1;
+  animation: sp-pulse 2s ease-in-out infinite;
+}
+@keyframes sp-pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(0.85); }
+}
+.sp-working-text {
+  flex: 1;
+  font-size: 0.85rem;
+  color: #4338ca;
+  font-weight: 500;
+}
+.sp-working-text strong {
+  font-weight: 700;
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .sp-page { padding: 2rem 1rem; }
+  .sp-title { font-size: 1.4rem; }
+  .sp-card { padding: 12px 14px; }
+}

@@ -1,0 +1,575 @@
+/* ═══════════════════════════════════════════════════════════════════
+   ProductionTab.css — Franchise OS / Game Dashboard Theme
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ── Root ─────────────────────────────────────────────────────────── */
+.prod-tab {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding-bottom: 60px;
+  min-height: 60vh;
+  position: relative;
+}
+
+/* subtle living gradient background */
+.prod-tab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    168deg,
+    rgba(99,102,241,0.025) 0%,
+    rgba(139,92,246,0.02) 30%,
+    transparent 60%
+  );
+  pointer-events: none;
+  border-radius: 12px;
+  z-index: 0;
+}
+.prod-tab > * { position: relative; z-index: 1; }
+
+/* ── HERO — World State Header ──────────────────────────────────── */
+.prod-hero {
+  padding: 32px 28px 28px;
+  border-bottom: 1px solid rgba(99,102,241,0.08);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.prod-hero-left { flex: 1; min-width: 260px; }
+
+.prod-hero-universe {
+  font-family: 'Playfair Display', 'Georgia', serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #1a1510;
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.prod-hero-universe .world-icon {
+  font-size: 22px;
+  filter: saturate(0.8);
+}
+.prod-hero-season-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  color: #6366f1;
+  background: rgba(99,102,241,0.08);
+  padding: 4px 12px;
+  border-radius: 20px;
+  margin-left: 12px;
+}
+
+.prod-hero-state-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin-top: 4px;
+}
+.prod-hero-state-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  color: rgba(26,21,16,0.5);
+  letter-spacing: 0.02em;
+}
+.prod-hero-state-item .state-label {
+  color: rgba(26,21,16,0.38);
+}
+.prod-hero-state-item .state-value {
+  color: rgba(26,21,16,0.72);
+  font-weight: 600;
+}
+.prod-hero-state-item .state-icon {
+  font-size: 13px;
+  filter: saturate(0.7);
+}
+
+/* Right-side action buttons */
+.prod-hero-right {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.prod-hero-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: 1px solid rgba(99,102,241,0.18);
+  background: rgba(99,102,241,0.06);
+  color: #4f46e5;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  text-align: left;
+}
+.prod-hero-btn:hover {
+  background: rgba(99,102,241,0.12);
+  border-color: rgba(99,102,241,0.3);
+  box-shadow: 0 2px 8px rgba(99,102,241,0.1);
+}
+.prod-hero-btn.primary-action {
+  background: #6366f1;
+  color: #fff;
+  border-color: #6366f1;
+}
+.prod-hero-btn.primary-action:hover {
+  background: #4f46e5;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.25);
+}
+
+/* ── CHARACTER STATE PANEL ──────────────────────────────────────── */
+.prod-character-panel {
+  padding: 24px 28px;
+  border-bottom: 1px solid rgba(26,21,16,0.05);
+}
+.prod-character-title {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  color: rgba(26,21,16,0.35);
+  text-transform: uppercase;
+  margin-bottom: 16px;
+}
+.prod-character-meters {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+.prod-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px 16px;
+  background: rgba(255,255,255,0.6);
+  border: 1px solid rgba(26,21,16,0.04);
+  border-radius: 10px;
+  transition: border-color 0.15s;
+}
+.prod-meter:hover {
+  border-color: rgba(26,21,16,0.1);
+}
+.prod-meter-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.prod-meter-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: rgba(26,21,16,0.45);
+  text-transform: uppercase;
+}
+.prod-meter-value {
+  font-family: 'DM Mono', monospace;
+  font-size: 15px;
+  font-weight: 700;
+}
+.prod-meter-track {
+  height: 5px;
+  border-radius: 99px;
+  background: rgba(26,21,16,0.05);
+  overflow: hidden;
+}
+.prod-meter-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+/* Color variants for meters */
+.prod-meter[data-stat="reputation"] .prod-meter-value { color: #8b5cf6; }
+.prod-meter[data-stat="reputation"] .prod-meter-fill  { background: #8b5cf6; }
+.prod-meter[data-stat="wealth"] .prod-meter-value     { color: #f59e0b; }
+.prod-meter[data-stat="wealth"] .prod-meter-fill      { background: #f59e0b; }
+.prod-meter[data-stat="career"] .prod-meter-value     { color: #3b82f6; }
+.prod-meter[data-stat="career"] .prod-meter-fill      { background: #3b82f6; }
+.prod-meter[data-stat="heat"] .prod-meter-value       { color: #ef4444; }
+.prod-meter[data-stat="heat"] .prod-meter-fill        { background: #ef4444; }
+.prod-meter[data-stat="emotion"] .prod-meter-value    { color: #10b981; }
+.prod-meter[data-stat="emotion"] .prod-meter-fill     { background: #10b981; }
+.prod-meter[data-stat="influence"] .prod-meter-value  { color: #06b6d4; }
+.prod-meter[data-stat="influence"] .prod-meter-fill   { background: #06b6d4; }
+.prod-meter[data-stat="stress"] .prod-meter-value     { color: #ef4444; }
+.prod-meter[data-stat="stress"] .prod-meter-fill      { background: #ef4444; }
+
+/* coins special — no bar, just value */
+.prod-meter-coins .prod-meter-value {
+  font-size: 20px;
+  color: #d97706;
+}
+
+/* ── STORY ENGINE ───────────────────────────────────────────────── */
+.prod-story-engine {
+  padding: 28px 28px 20px;
+  flex: 1;
+}
+.prod-story-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.prod-story-title {
+  font-family: 'Playfair Display', 'Georgia', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: #1a1510;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.prod-new-ep-btn {
+  padding: 10px 20px;
+  border-radius: 8px;
+  border: none;
+  background: #6366f1;
+  color: #fff;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.prod-new-ep-btn:hover {
+  background: #4f46e5;
+  box-shadow: 0 4px 14px rgba(99,102,241,0.2);
+}
+
+/* Segmented controls (tab bar) */
+.prod-segment-bar {
+  display: flex;
+  gap: 0;
+  background: rgba(26,21,16,0.03);
+  border-radius: 8px;
+  padding: 3px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+}
+.prod-segment {
+  padding: 9px 16px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  color: rgba(26,21,16,0.4);
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.prod-segment:hover {
+  color: rgba(26,21,16,0.65);
+}
+.prod-segment.active {
+  background: #fff;
+  color: #4f46e5;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  font-weight: 600;
+}
+.prod-segment .seg-count {
+  font-size: 10px;
+  background: rgba(26,21,16,0.06);
+  padding: 2px 6px;
+  border-radius: 10px;
+  color: rgba(26,21,16,0.4);
+}
+.prod-segment.active .seg-count {
+  background: rgba(99,102,241,0.1);
+  color: #6366f1;
+}
+
+/* Search */
+.prod-ep-search {
+  width: 100%;
+  max-width: 320px;
+  padding: 9px 14px 9px 36px;
+  border: 1px solid rgba(26,21,16,0.08);
+  border-radius: 8px;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: #1a1510;
+  background: rgba(255,255,255,0.6);
+  outline: none;
+  transition: border-color 0.15s;
+  margin-bottom: 16px;
+}
+.prod-ep-search:focus {
+  border-color: rgba(99,102,241,0.3);
+}
+.prod-ep-search::placeholder {
+  color: rgba(26,21,16,0.25);
+}
+.prod-search-wrap {
+  position: relative;
+}
+.prod-search-wrap .search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  color: rgba(26,21,16,0.2);
+  pointer-events: none;
+}
+
+/* Episode Story Cards */
+.prod-ep-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.prod-ep-card {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  background: rgba(255,255,255,0.7);
+  border: 1px solid rgba(26,21,16,0.05);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  overflow: hidden;
+}
+.prod-ep-card:hover {
+  border-color: rgba(99,102,241,0.2);
+  box-shadow: 0 3px 12px rgba(99,102,241,0.06);
+  transform: translateY(-1px);
+}
+
+/* Left accent stripe */
+.prod-ep-accent {
+  width: 4px;
+  flex-shrink: 0;
+  border-radius: 10px 0 0 10px;
+}
+.prod-ep-accent.status-draft      { background: rgba(26,21,16,0.12); }
+.prod-ep-accent.status-active     { background: #f59e0b; }
+.prod-ep-accent.status-review     { background: #8b5cf6; }
+.prod-ep-accent.status-published  { background: #10b981; }
+.prod-ep-accent.status-archived   { background: rgba(26,21,16,0.08); }
+
+.prod-ep-body {
+  flex: 1;
+  padding: 16px 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+}
+
+.prod-ep-number {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  font-weight: 700;
+  color: #6366f1;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+  min-width: 52px;
+}
+
+.prod-ep-info {
+  flex: 1;
+  min-width: 0;
+}
+.prod-ep-name {
+  font-family: 'Playfair Display', 'Georgia', serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: rgba(26,21,16,0.82);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 3px;
+}
+.prod-ep-meta {
+  font-family: 'DM Mono', monospace;
+  font-size: 11px;
+  color: rgba(26,21,16,0.3);
+  letter-spacing: 0.02em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.prod-ep-meta .meta-status {
+  text-transform: capitalize;
+  font-weight: 600;
+}
+.prod-ep-meta .meta-status.draft  { color: rgba(26,21,16,0.35); }
+.prod-ep-meta .meta-status.active { color: #d97706; }
+.prod-ep-meta .meta-status.review { color: #7c3aed; }
+.prod-ep-meta .meta-status.published { color: #059669; }
+
+.prod-ep-meta .meta-dot {
+  width: 2px;
+  height: 2px;
+  border-radius: 50%;
+  background: rgba(26,21,16,0.15);
+}
+
+/* Impact forecast badge */
+.prod-ep-impact {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: rgba(26,21,16,0.3);
+  background: rgba(26,21,16,0.025);
+  padding: 3px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+
+.prod-ep-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-right: 4px;
+  align-items: center;
+}
+.prod-ep-action-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  transition: all 0.12s;
+  color: rgba(26,21,16,0.3);
+}
+.prod-ep-action-btn:hover {
+  background: rgba(99,102,241,0.06);
+  border-color: rgba(99,102,241,0.12);
+  color: #6366f1;
+}
+
+/* ── STUDIO CONTROLS STRIP ──────────────────────────────────────── */
+.prod-studio-strip {
+  padding: 20px 28px;
+  border-top: 1px solid rgba(26,21,16,0.05);
+  margin-top: 12px;
+}
+.prod-studio-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  color: rgba(26,21,16,0.25);
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.prod-studio-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.prod-studio-btn {
+  padding: 9px 16px;
+  border-radius: 7px;
+  border: 1px solid rgba(26,21,16,0.06);
+  background: rgba(255,255,255,0.5);
+  font-family: 'DM Mono', monospace;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(26,21,16,0.5);
+  cursor: pointer;
+  transition: all 0.15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.prod-studio-btn:hover {
+  border-color: rgba(99,102,241,0.2);
+  color: #4f46e5;
+  background: rgba(99,102,241,0.04);
+}
+.prod-studio-btn .studio-icon {
+  font-size: 14px;
+  filter: saturate(0.6);
+}
+
+/* ── EMPTY STATES ───────────────────────────────────────────────── */
+.prod-empty {
+  padding: 48px 28px;
+  text-align: center;
+}
+.prod-empty-title {
+  font-family: 'Playfair Display', 'Georgia', serif;
+  font-size: 18px;
+  color: rgba(26,21,16,0.4);
+  margin-bottom: 8px;
+}
+.prod-empty-hint {
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: rgba(26,21,16,0.25);
+}
+
+/* Loading */
+.prod-loading {
+  padding: 48px 28px;
+  text-align: center;
+  font-family: 'DM Mono', monospace;
+  font-size: 13px;
+  color: rgba(26,21,16,0.3);
+  letter-spacing: 0.06em;
+}
+
+/* ── RESPONSIVE ─────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .prod-hero { padding: 20px 16px 18px; flex-direction: column; }
+  .prod-hero-universe { font-size: 22px; }
+  .prod-hero-season-badge { margin-left: 0; margin-top: 2px; }
+  .prod-hero-right { flex-direction: row; width: 100%; }
+  .prod-hero-btn { flex: 1; text-align: center; padding: 10px 12px; font-size: 11px; }
+
+  .prod-character-panel { padding: 16px; }
+  .prod-character-meters { grid-template-columns: repeat(2, 1fr); }
+
+  .prod-story-engine { padding: 16px; }
+  .prod-segment-bar { overflow-x: auto; }
+  .prod-segment { padding: 8px 12px; font-size: 11px; }
+
+  .prod-ep-body { padding: 12px 14px; flex-wrap: wrap; }
+  .prod-ep-actions { width: 100%; justify-content: flex-end; padding-top: 4px; }
+
+  .prod-studio-strip { padding: 16px; }
+  .prod-studio-grid { gap: 6px; }
+  .prod-studio-btn { padding: 8px 12px; font-size: 11px; }
+}
+
+@media (max-width: 480px) {
+  .prod-character-meters { grid-template-columns: 1fr; }
+  .prod-ep-number { min-width: 42px; font-size: 12px; }
+}
