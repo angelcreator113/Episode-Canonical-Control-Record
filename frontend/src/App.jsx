@@ -87,6 +87,8 @@ const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
 const EpisodeWorkspace = lazy(() => import('./pages/EpisodeWorkspace'));
 const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor'));
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
+const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
+const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPage'));
 
 // Heavy components — lazy loaded
 const SceneComposerFull = lazy(() => import('./components/SceneComposer/SceneComposerFull'));
@@ -200,8 +202,9 @@ function AppContent() {
   }
 
   // Check if current route is Timeline Editor, Scene Composer, Export, Storyteller, or WriteMode (full-screen modes)
-  const isTimelineEditor = location.pathname.includes('/timeline');
-  const isSceneComposer = location.pathname.includes('/scene-composer');
+  // Only match episode-scoped URLs for full-screen (not /studio/* picker pages)
+  const isTimelineEditor = /\/episodes\/[^/]+\/timeline/.test(location.pathname);
+  const isSceneComposer = /\/episodes\/[^/]+\/scene-composer/.test(location.pathname);
   const isExportPage = location.pathname.includes('/export');
   const isStorytellerPage = location.pathname.includes('/storyteller');
   const isPlanWithVoice = location.pathname === '/plan-with-voice';
@@ -258,6 +261,10 @@ function AppContent() {
           <Route path="/shows/:id/settings" element={<ShowSettings />} />
           {/* Scene Composer */}
           <Route path="/episodes/:episodeId/scene-composer" element={<SceneComposerFull />} />
+          
+          {/* Studio — universe-level entry points */}
+          <Route path="/studio/timeline" element={<StudioTimelinePage />} />
+          <Route path="/studio/scene-composer" element={<StudioSceneComposerPage />} />
           
           {/* Scene Library */}
           <Route path="/scene-library" element={<SceneLibrary />} />

@@ -124,6 +124,14 @@ const EpisodeDetail = () => {
     }
   }, [episodeId, fetchEpisode]);
 
+  // Set this as the "working episode" for Studio tools (Timeline, Scene Composer)
+  useEffect(() => {
+    if (episodeId && episode) {
+      localStorage.setItem('working-episode-id', episodeId);
+      localStorage.setItem('working-episode-title', episode.title || episode.episodeTitle || 'Untitled');
+    }
+  }, [episodeId, episode]);
+
   // Handle episode updates from Overview tab
   const handleUpdateEpisode = async (updates) => {
     try {
@@ -513,6 +521,9 @@ const EpisodeDetail = () => {
               <span className={`ed-status-badge ed-status-${episode.status?.toLowerCase() || 'draft'}`}>
                 {episode.status || 'Draft'}
               </span>
+              <span className="ed-working-badge" title="Studio tools (Timeline, Scene Composer) will open this episode">
+                ◆ Working Episode
+              </span>
             </div>
           </div>
         </div>
@@ -593,24 +604,7 @@ const EpisodeDetail = () => {
             <span className="ed-tab-icon">📝</span>
             <span className="ed-tab-label">Script</span>
           </button>
-          <button
-            className="ed-tab ed-tab-launch"
-            onClick={() => navigate(`/episodes/${episodeId}/scene-composer`)}
-            title="Open Scene Composer"
-          >
-            <span className="ed-tab-icon">🎬</span>
-            <span className="ed-tab-label">Compose</span>
-            <span className="ed-tab-launch-arrow">↗</span>
-          </button>
-          <button
-            className="ed-tab ed-tab-launch"
-            onClick={() => navigate(`/episodes/${episodeId}/timeline`)}
-            title="Open Timeline Editor"
-          >
-            <span className="ed-tab-icon">⏱️</span>
-            <span className="ed-tab-label">Timeline</span>
-            <span className="ed-tab-launch-arrow">↗</span>
-          </button>
+
           <button
             className={`ed-tab ${activeTab === 'assets' ? 'ed-tab-active' : ''}`}
             onClick={() => setActiveTab('assets')}

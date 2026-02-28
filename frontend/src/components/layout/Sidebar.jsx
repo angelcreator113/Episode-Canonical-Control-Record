@@ -26,7 +26,14 @@ const NAV = [
     items: [
       { icon: '▶',  label: 'Start Session',   route: '/start' },
       { icon: '⌗',  label: 'Plan with Voice', route: '/plan-with-voice' },
-      { icon: '◇',  label: 'Timeline',        route: '/continuity' },
+      { icon: '◇',  label: 'Continuity',      route: '/continuity' },
+    ],
+  },
+  {
+    zone: 'STUDIO',
+    items: [
+      { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
+      { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
     ],
   },
   {
