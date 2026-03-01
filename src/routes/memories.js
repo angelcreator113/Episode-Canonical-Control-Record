@@ -5979,7 +5979,7 @@ Format:
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 8000,
+      max_tokens: 16000,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
     });
@@ -5987,9 +5987,20 @@ Format:
     const raw = response.content?.[0]?.text || '';
     let parsed;
     try {
-      parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
-    } catch {
-      return res.status(500).json({ error: 'Failed to parse task arc from Claude.' });
+      // Strip markdown fences and any preamble before the JSON
+      let cleaned = raw.replace(/```json|```/g, '').trim();
+      // Find the first { and last } to extract JSON object
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+      }
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error('[generate-story-tasks] JSON parse error:', parseErr.message);
+      console.error('[generate-story-tasks] raw length:', raw.length, 'stop_reason:', response.stop_reason);
+      console.error('[generate-story-tasks] raw tail:', raw.slice(-200));
+      return res.status(500).json({ error: 'Failed to parse task arc from Claude.', stop_reason: response.stop_reason, raw_length: raw.length });
     }
 
     return res.json({

@@ -233,7 +233,7 @@ async function startServer() {
     // Handle connection events
     server.on('connection', (socket) => {
       // Set socket timeout to prevent hanging connections
-      socket.setTimeout(120000); // 2 minutes
+      socket.setTimeout(300000); // 5 minutes (needed for long Claude API calls)
 
       socket.on('timeout', () => {
         console.warn('⏰ Socket timeout - closing connection');
