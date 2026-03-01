@@ -6424,11 +6424,11 @@ Return ONLY valid JSON:
       return res.json({ memories_extracted: 0, fallback: true });
     }
 
-    // Save to storyteller_memories table
-    const memories = parsed.pain_points || [];
+    // Save pain_points to storyteller_memories table
+    const painPoints = parsed.pain_points || [];
     let saved = 0;
 
-    for (const memory of memories) {
+    for (const memory of painPoints) {
       try {
         await StorytellerMemory.create({
           character_id: characterId,
@@ -6443,7 +6443,46 @@ Return ONLY valid JSON:
         });
         saved++;
       } catch (e) {
-        console.error('[extract-story-memories] save error:', e?.message);
+        console.error('[extract-story-memories] save pain_point error:', e?.message);
+      }
+    }
+
+    // Save belief_shifts to storyteller_memories table
+    const beliefShifts = parsed.belief_shifts || [];
+    for (const shift of beliefShifts) {
+      try {
+        await StorytellerMemory.create({
+          character_id: characterId,
+          type: 'belief_shift',
+          statement: `${shift.before} → ${shift.after} (triggered by: ${shift.trigger})`,
+          confidence: 0.80,
+          confirmed: false,
+          source_ref: `story_${storyNumber}`,
+          tags: JSON.stringify(['belief_shift']),
+          category: 'belief_shift',
+        });
+        saved++;
+      } catch (e) {
+        console.error('[extract-story-memories] save belief_shift error:', e?.message);
+      }
+    }
+
+    // Save therapy_opening as a memory
+    if (parsed.therapy_opening) {
+      try {
+        await StorytellerMemory.create({
+          character_id: characterId,
+          type: 'therapy_opening',
+          statement: parsed.therapy_opening,
+          confidence: 0.90,
+          confirmed: false,
+          source_ref: `story_${storyNumber}`,
+          tags: JSON.stringify(['therapy_opening']),
+          category: 'therapy_opening',
+        });
+        saved++;
+      } catch (e) {
+        console.error('[extract-story-memories] save therapy_opening error:', e?.message);
       }
     }
 
@@ -6458,6 +6497,51 @@ Return ONLY valid JSON:
   } catch (err) {
     console.error('[extract-story-memories] error:', err?.message);
     return res.json({ memories_extracted: 0, fallback: true });
+  }
+});
+
+// ─── GET /story-memories/:characterId ────────────────────────────────────────
+// Fetch all story-extracted memories for a character (used by Therapy Room).
+router.get('/story-memories/:characterId', optionalAuth, async (req, res) => {
+  try {
+    const { characterId } = req.params;
+    const memories = await StorytellerMemory.findAll({
+      where: { character_id: characterId },
+      order: [['created_at', 'DESC']],
+      limit: 200,
+    });
+    const painPoints = memories.filter(m => m.type === 'pain_point');
+    const beliefShifts = memories.filter(m => m.type === 'belief_shift');
+    const therapyOpenings = memories.filter(m => m.type === 'therapy_opening');
+    return res.json({
+      success: true,
+      total: memories.length,
+      pain_points: painPoints.map(m => ({
+        id: m.id,
+        statement: m.statement,
+        category: m.category,
+        coaching_angle: m.coaching_angle,
+        source_ref: m.source_ref,
+        confirmed: m.confirmed,
+        created_at: m.created_at,
+      })),
+      belief_shifts: beliefShifts.map(m => ({
+        id: m.id,
+        statement: m.statement,
+        source_ref: m.source_ref,
+        confirmed: m.confirmed,
+        created_at: m.created_at,
+      })),
+      therapy_openings: therapyOpenings.map(m => ({
+        id: m.id,
+        statement: m.statement,
+        source_ref: m.source_ref,
+        created_at: m.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('[story-memories] error:', err?.message);
+    return res.json({ success: false, total: 0, pain_points: [], belief_shifts: [], therapy_openings: [] });
   }
 });
 

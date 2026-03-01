@@ -40,6 +40,60 @@ try {
 
 // ── WOUND MEMORY PATTERNS ────────────────────────────────────────────────
 
+// ── STORY MEMORIES LOADER ────────────────────────────────────────────────
+// Loads pain_points, belief_shifts, and therapy_openings extracted from
+// approved Story Engine stories, so the Therapy Room knows what the
+// character has been through.
+
+async function loadStoryMemories(characterId, models) {
+  if (!characterId || !models?.StorytellerMemory) return '';
+
+  try {
+    const memories = await models.StorytellerMemory.findAll({
+      where: { character_id: characterId },
+      order: [['created_at', 'DESC']],
+      limit: 50,
+    });
+
+    if (!memories.length) return '';
+
+    const painPoints = memories.filter(m => m.type === 'pain_point');
+    const beliefShifts = memories.filter(m => m.type === 'belief_shift');
+    const therapyOpenings = memories.filter(m => m.type === 'therapy_opening');
+
+    const sections = [];
+
+    if (painPoints.length) {
+      sections.push(`PAIN POINTS FROM STORY ENGINE (${painPoints.length} extracted):\n` +
+        painPoints.slice(0, 12).map(m =>
+          `  • [${m.category || 'general'}] ${m.statement}${m.coaching_angle ? ` → coaching: ${m.coaching_angle}` : ''}`
+        ).join('\n'));
+    }
+
+    if (beliefShifts.length) {
+      sections.push(`BELIEF SHIFTS FROM STORIES:\n` +
+        beliefShifts.slice(0, 8).map(m =>
+          `  • ${m.statement}`
+        ).join('\n'));
+    }
+
+    if (therapyOpenings.length) {
+      sections.push(`SUGGESTED THERAPY OPENINGS (from story analysis):\n` +
+        therapyOpenings.slice(0, 5).map(m =>
+          `  • "${m.statement}" (from ${m.source_ref || 'story'})`
+        ).join('\n'));
+    }
+
+    if (!sections.length) return '';
+
+    return `\n\nSTORY-DERIVED EMOTIONAL MATERIAL:\nThese are emotional events, wounds, and shifts extracted from the character's approved stories.\nUse this material to inform the character's emotional state — they CARRY these experiences.\nDo not reference "stories" directly — these are lived experiences in the character's world.\n\n${sections.join('\n\n')}`;
+  } catch (e) {
+    console.error('[therapy] loadStoryMemories error:', e?.message);
+    return '';
+  }
+}
+
+
 const WOUND_PATTERNS = {
   the_husband: {
     wound:    'The people he loves most always leave for something bigger than him.',
@@ -205,6 +259,10 @@ router.post('/session-open', optionalAuth, async (req, res) => {
     const archetypeKey = rest.archetype?.toLowerCase().replace(/\s+/g,'_').replace(/the_/,'');
     const context = buildTherapyContext(rest);
 
+    // Load story-derived memories from DB
+    const models = req.app.get('models');
+    const storyMemoryContext = await loadStoryMemories(rest.character_id, models);
+
     const dejaVu = detectDejaVu(archetypeKey, event);
 
     const emotionalShifts = {
@@ -226,6 +284,7 @@ router.post('/session-open', optionalAuth, async (req, res) => {
       : '';
 
     const prompt = `${context}
+${storyMemoryContext}
 
 WHAT JUST HAPPENED IN THE STORY:
 "${event}"
@@ -282,6 +341,10 @@ router.post('/session-respond', optionalAuth, async (req, res) => {
     const archetypeKey = rest.archetype?.toLowerCase().replace(/\s+/g,'_').replace(/the_/,'');
     const context = buildTherapyContext(rest);
 
+    // Load story-derived memories from DB
+    const models = req.app.get('models');
+    const storyMemoryContext = await loadStoryMemories(rest.character_id, models);
+
     const historyText = (conversation || [])
       .slice(-6)
       .map(m => `${m.role === 'character' ? rest.character_name : 'AUTHOR'}: ${m.content}`)
@@ -314,6 +377,7 @@ router.post('/session-respond', optionalAuth, async (req, res) => {
       : '';
 
     const prompt = `${context}
+${storyMemoryContext}
 
 CONVERSATION SO FAR:
 ${historyText}
@@ -388,6 +452,11 @@ router.post('/reveal', optionalAuth, async (req, res) => {
     } = req.body;
 
     const context = buildTherapyContext(rest);
+
+    // Load story-derived memories from DB
+    const models = req.app.get('models');
+    const storyMemoryContext = await loadStoryMemories(rest.character_id, models);
+
     const historyText = (conversation || [])
       .slice(-4)
       .map(m => `${m.role === 'character' ? rest.character_name : 'AUTHOR'}: ${m.content}`)
@@ -421,6 +490,7 @@ without them realizing. 2\u20133 sentences.`,
     const revealInstruction = REVEAL_PROMPTS[reveal_type] || REVEAL_PROMPTS.partial;
 
     const prompt = `${context}
+${storyMemoryContext}
 
 CONVERSATION SO FAR:
 ${historyText}

@@ -15,7 +15,7 @@ module.exports = (sequelize) => {
 
       line_id: {
         type: DataTypes.UUID,
-        allowNull: false,
+        allowNull: true,
       },
 
       // Nullable — may be unassigned when first extracted
@@ -40,6 +40,8 @@ module.exports = (sequelize) => {
               'transformation',
               'pain_point',
               'character_dynamic',
+              'belief_shift',
+              'therapy_opening',
             ]],
             msg: 'type must be one of: goal, preference, relationship, belief, event, constraint, transformation, pain_point, character_dynamic',
           },
