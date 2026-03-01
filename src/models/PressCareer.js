@@ -14,5 +14,6 @@ module.exports = (sequelize) => {
     tableName: 'press_careers',
     timestamps: true,
     underscored: true,
+    paranoid: false,
   });
 };

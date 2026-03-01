@@ -456,7 +456,7 @@ router.post('/seed-characters', optionalAuth, async (req, res) => {
 router.get('/characters', optionalAuth, async (req, res) => {
   try {
     const models  = getModels();
-    const careers = await models.PressCareer?.findAll() || [];
+    const careers = await models.PressCareer?.findAll({ paranoid: false }) || [];
 
     const result = PRESS_CHARACTERS.map(pc => {
       const career = careers.find(c => c.character_slug === pc.slug);
@@ -507,6 +507,7 @@ router.get('/characters/:slug', optionalAuth, async (req, res) => {
     const models = getModels();
     const career = await models.PressCareer?.findOne({
       where: { character_slug: pc.slug },
+      paranoid: false,
     });
 
     res.json({
@@ -539,6 +540,7 @@ router.post('/advance-career', optionalAuth, async (req, res) => {
 
     let career = await models.PressCareer?.findOne({
       where: { character_slug },
+      paranoid: false,
     });
 
     const currentStage = career?.current_stage || 1;
@@ -568,7 +570,7 @@ router.post('/advance-career', optionalAuth, async (req, res) => {
           current_stage: nextStage,
           stage_history: [...(career.stage_history || []), historyEntry],
         },
-        { where: { character_slug } }
+        { where: { character_slug }, paranoid: false }
       );
     } else if (models.PressCareer) {
       await models.PressCareer.create({
@@ -668,6 +670,7 @@ Write only the post. No preamble. No explanation. Start immediately with the con
       if (models.PressCareer) {
         await models.PressCareer.increment('content_generated', {
           where: { character_slug },
+          paranoid: false,
         });
       }
     } catch {}
