@@ -60,6 +60,31 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+    tone: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Chapter mood/atmosphere (e.g. "tense and claustrophobic", "dreamlike")',
+    },
+    setting: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Where this chapter takes place (e.g. "the throne room during the siege")',
+    },
+    conflict: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Central tension of this chapter',
+    },
+    stakes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'What is at risk in this chapter',
+    },
+    hooks: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Foreshadowing, cliffhangers, mysteries to plant',
+    },
     draft_prose: {
       type: DataTypes.TEXT,
       allowNull: true,

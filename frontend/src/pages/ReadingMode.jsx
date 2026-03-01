@@ -86,17 +86,18 @@ export default function ReadingMode() {
   if (error)   return <ErrorState message={error} onBack={() => navigate(-1)} />;
   if (!book)   return <ErrorState message='Book not found' onBack={() => navigate(-1)} />;
 
-  // Build reading data
+  // Build reading data — show ALL lines so the full book is visible cover-to-cover
   const chapters = (book.chapters || [])
     .slice()
     .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
     .map(ch => ({
       ...ch,
       readableLines: (ch.lines || ch.storyteller_lines || [])
-        .filter(l => ['approved', 'edited'].includes(l.status))
         .sort((a, b) => (a.order_index ?? a.sort_order ?? 0) - (b.order_index ?? b.sort_order ?? 0)),
-    }))
-    .filter(ch => ch.readableLines.length > 0);
+    }));
+
+  // Chapters with content (for manuscript rendering)
+  const contentChapters = chapters.filter(ch => ch.readableLines.length > 0);
 
   const allLines = chapters.flatMap(ch => ch.readableLines);
   const wordCount = allLines.reduce((sum, l) => {
@@ -118,7 +119,7 @@ export default function ReadingMode() {
           onClick={() => navigate(-1)}
           type='button'
         >
-          ← Editor
+          ← Back
         </button>
 
         <div style={s.topMeta}>
@@ -175,7 +176,7 @@ export default function ReadingMode() {
         {/* Chapters */}
         {chapters.length === 0 ? (
           <div style={s.emptyState}>
-            No approved lines yet. Approve lines in the editor to see them here.
+            No lines in this book yet. Start writing to see your story here.
           </div>
         ) : (
           chapters.map((chapter, chIdx) => (
@@ -184,12 +185,13 @@ export default function ReadingMode() {
               chapter={chapter}
               chapterIndex={chIdx}
               isLast={chIdx === chapters.length - 1}
+              isEmpty={chapter.readableLines.length === 0}
             />
           ))
         )}
 
         {/* End mark */}
-        {chapters.length > 0 && (
+        {contentChapters.length > 0 && (
           <div style={s.endMark}>
             <div style={s.endRule} />
             <div style={s.endText}>∎</div>
@@ -206,7 +208,7 @@ export default function ReadingMode() {
 
 // ── Chapter Section ────────────────────────────────────────────────────────
 
-function ChapterSection({ chapter, chapterIndex, isLast }) {
+function ChapterSection({ chapter, chapterIndex, isLast, isEmpty }) {
   return (
     <section id={`chapter-${chapter.id}`} style={s.chapter}>
 
@@ -222,13 +224,17 @@ function ChapterSection({ chapter, chapterIndex, isLast }) {
 
       {/* Lines */}
       <div style={s.lines}>
-        {chapter.readableLines.map((line, lineIdx) => (
-          <Line
-            key={line.id}
-            line={line}
-            isFirst={lineIdx === 0}
-          />
-        ))}
+        {isEmpty ? (
+          <p style={s.emptyChapter}>— No lines yet —</p>
+        ) : (
+          chapter.readableLines.map((line, lineIdx) => (
+            <Line
+              key={line.id}
+              line={line}
+              isFirst={lineIdx === 0}
+            />
+          ))
+        )}
       </div>
 
       {/* Chapter divider */}
@@ -591,6 +597,15 @@ const s = {
     textAlign: 'center',
     padding: '80px 0',
     lineHeight: 1.8,
+  },
+  emptyChapter: {
+    fontFamily: "'Playfair Display', Georgia, serif",
+    fontSize: 14,
+    fontStyle: 'italic',
+    color: 'rgba(28,25,23,0.2)',
+    textAlign: 'center',
+    padding: '32px 0',
+    margin: 0,
   },
 
   // Loading

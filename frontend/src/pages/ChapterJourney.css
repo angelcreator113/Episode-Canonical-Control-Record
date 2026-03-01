@@ -16,31 +16,29 @@
   --cj-bar-h: auto;
   --cj-ease: cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* PLAN — warm gold (muted) */
-  --cj-plan-bg:         #faf9f6;
-  --cj-plan-bar:        rgba(250, 249, 246, 0.97);
-  --cj-plan-accent:     #b0922e;
-  --cj-plan-accent-lt:  rgba(176, 146, 46, 0.08);
-  --cj-plan-text:       #1a1a2e;
-  --cj-plan-muted:      rgba(26, 26, 46, 0.38);
+  /* All three stages share identical palette for seamless transitions */
+  --cj-plan-bg:         #FAF7F0;
+  --cj-plan-bar:        rgba(250, 247, 240, 0.97);
+  --cj-plan-accent:     #C9A84C;
+  --cj-plan-accent-lt:  rgba(201, 168, 76, 0.08);
+  --cj-plan-text:       #1C1814;
+  --cj-plan-muted:      rgba(28, 24, 20, 0.38);
   --cj-plan-border:     #e8e5de;
 
-  /* WRITE — warm gold (primary) */
   --cj-write-bg:        #FAF7F0;
   --cj-write-bar:       rgba(250, 247, 240, 0.97);
   --cj-write-accent:    #C9A84C;
   --cj-write-accent-lt: rgba(201, 168, 76, 0.08);
-  --cj-write-text:      #1a1a2e;
-  --cj-write-muted:     rgba(26, 26, 46, 0.38);
+  --cj-write-text:      #1C1814;
+  --cj-write-muted:     rgba(28, 24, 20, 0.38);
   --cj-write-border:    #e8e5de;
 
-  /* REVIEW — warm gold (deeper) */
-  --cj-review-bg:        #f8f7f4;
-  --cj-review-bar:       rgba(248, 247, 244, 0.97);
+  --cj-review-bg:        #FAF7F0;
+  --cj-review-bar:       rgba(250, 247, 240, 0.97);
   --cj-review-accent:    #C9A84C;
   --cj-review-accent-lt: rgba(201, 168, 76, 0.08);
-  --cj-review-text:      #1a1a2e;
-  --cj-review-muted:     rgba(26, 26, 46, 0.38);
+  --cj-review-text:      #1C1814;
+  --cj-review-muted:     rgba(28, 24, 20, 0.38);
   --cj-review-border:    #e8e5de;
 }
 
@@ -101,20 +99,47 @@
 .cj-write  .cj-ribbon { background: #ffffff; border-bottom: 1px solid #e8e5de; }
 .cj-review .cj-ribbon { background: #ffffff; border-bottom: 1px solid #e8e5de; }
 
-/* ── Write-mode ribbon collapse ───────────────────────────────────────── */
-/* In Write mode, info blocks & progress are redundant with the right sidebar.
-   Collapse the ribbon to a single compact row: ← [Plan · Write · Review] [Save] */
-.cj-write .cj-ribbon-info   { display: none; }
-.cj-write .cj-progress-strip { display: none; }
-.cj-write .cj-ribbon-row {
-  padding: 8px 16px;
+/* ── Unified ribbon collapse — all stages use the same compact bar ───── */
+/* Single compact row for ALL stages:
+     ← back    [Plan · Write · Review]    💾 Save    ⚙ Tools              */
+.cj-root .cj-ribbon-info    { display: none; }
+.cj-root .cj-progress-strip { display: none; }
+.cj-root .cj-mode-label     { display: none; }
+.cj-root .cj-mode-context   { display: none; }
+
+/* Flatten to one horizontal bar */
+.cj-root .cj-ribbon {
+  flex-direction: row;
+  align-items: center;
+  padding: 6px 12px;
+  gap: 8px;
 }
-.cj-write .cj-mode-label {
-  font-size: 11px;
+.cj-root .cj-ribbon-top {
+  display: contents;
+}
+.cj-root .cj-ribbon-nav {
+  display: contents;
+}
+
+/* Push pills + tools to the right (← stays left) */
+.cj-root .cj-pills {
+  margin-left: auto;
+  order: 1;
+}
+.cj-root .cj-tools-wrap {
+  order: 2;
+}
+.cj-root .cj-save-btn {
+  order: 2;
+}
+.cj-root .cj-pill-auto {
+  order: 1;
 }
 
 /* Row 1: mode identity + navigation */
-.cj-ribbon-row {
+.cj-ribbon-row,
+.cj-ribbon-top,
+.cj-ribbon-nav {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -230,6 +255,92 @@
 .cj-plan   .cj-save-btn:hover { box-shadow: 0 2px 8px rgba(201,168,76,0.25); }
 .cj-write  .cj-save-btn:hover { box-shadow: 0 2px 8px rgba(201,168,76,0.25); }
 .cj-review .cj-save-btn:hover { box-shadow: 0 2px 8px rgba(201,168,76,0.25); }
+
+/* ── Tools dropdown ────────────────────────────────────────────────────── */
+.cj-tools-wrap {
+  position: relative;
+  margin-left: 4px;
+}
+
+.cj-tools-btn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  border: 1px solid rgba(201,168,76,0.35);
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  background: transparent;
+  color: #1C1814;
+}
+.cj-tools-btn:hover,
+.cj-tools-btn.open {
+  background: rgba(201,168,76,0.12);
+  border-color: #C9A84C;
+}
+
+.cj-tools-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  background: #FDFBF7;
+  border: 1px solid rgba(201,168,76,0.30);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+  padding: 4px 0;
+  z-index: 200;
+  animation: cj-dropdown-in 0.12s ease-out;
+}
+
+@keyframes cj-dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cj-tools-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 8px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1C1814;
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+}
+.cj-tools-item:hover {
+  background: rgba(201,168,76,0.10);
+}
+.cj-tools-icon {
+  display: inline-flex;
+  width: 18px;
+  justify-content: center;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+/* Save item in the dropdown gets a gold accent + bottom separator */
+.cj-tools-save {
+  font-weight: 700;
+  color: #b0922e;
+  border-bottom: 1px solid rgba(201,168,76,0.15);
+  margin-bottom: 2px;
+  padding-bottom: 10px;
+}
+.cj-tools-save:hover {
+  background: rgba(201,168,76,0.14);
+}
 
 /* ── Stage pills ───────────────────────────────────────────────────────── */
 
@@ -506,10 +617,88 @@
 .cj-content > * { flex: 1; min-height: 0; }
 
 /* When WriteMode (.wm-root) lives inside CJ, override its fixed 100dvh
-   so it fills the remaining space below the ribbon instead of overflowing. */
+   so it fills the remaining space below the ribbon instead of overflowing.
+   Use !important to survive WriteMode.css media queries that reset
+   height: auto / min-height: 100dvh at ≤767px and 481-768px. */
 .cj-root .wm-root {
-  height: 100%;
-  min-height: 0;
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Preserve flex containment inside CJ — mobile queries set overflow: visible
+   which breaks the shrink/scroll model and lets content push off-screen.
+   wm-hub-layout clips the 3-col row. wm-main-col must NOT clip so that
+   the AI toolbar + bottom bar (flex-shrink:0 siblings of content-row)
+   stay visible. wm-content-row clips horizontal overflow only. */
+.cj-root .wm-hub-layout {
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
+.cj-root .wm-main-col {
+  overflow: visible !important;
+  min-height: 0 !important;
+}
+.cj-root .wm-content-row {
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
+
+/* Compact the AI toolbar and bottom bar when embedded in CJ —
+   standalone WriteMode has generous spacing for full-page mode,
+   but inside CJ the ribbon already eats 50-80px of viewport. */
+.cj-root .wm-ai-toolbar {
+  padding: 4px 10px !important;
+  gap: 4px !important;
+}
+.cj-root .wm-ai-btn {
+  padding: 5px 10px !important;
+  font-size: 0.75rem !important;
+}
+.cj-root .wm-bottom-bar {
+  padding: 6px 12px 8px !important;
+  gap: 8px !important;
+}
+.cj-root .wm-mic-btn {
+  width: 38px !important;
+  height: 38px !important;
+}
+.cj-root .wm-bottom-hint {
+  font-size: 9px !important;
+}
+
+/* Ensure the prose area scrolls within the constrained CJ space */
+.cj-root .wm-prose-wrap {
+  overflow-y: auto !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+.cj-root .wm-content-row {
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+
+/* WriteMode's own center tabs (Write/Review/Lines) are redundant with
+   CJ's ribbon pills — hide them at all breakpoints, not just mobile. */
+.cj-root .wm-center-tabs {
+  display: none !important;
+}
+
+/* Ensure context panel fills the full height inside CJ.
+   .wm-hub-layout is a flex-row, so align-self: stretch fills vertically.
+   Keep flex-shrink: 0 + fixed width so it doesn't grow horizontally.
+   overflow-y: auto lets the panel scroll its own content.
+   Only on desktop — mobile hides it via the 768px media query. */
+@media (min-width: 769px) {
+  .cj-root .wm-context-panel {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    align-self: stretch !important;
+    flex-shrink: 0 !important;
+    padding-bottom: 0 !important;
+  }
 }
 
 .cj-stage-enter {
@@ -518,6 +707,361 @@
 @keyframes cj-enter {
   from { opacity: 0; transform: translateY(5px); }
   to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   UNIFIED PAGE STYLING — Normalize Plan / Write / Review inside CJ
+   ═══════════════════════════════════════════════════════════════════════════
+   Each child page (SPC, WriteMode, StorytellerPage) was designed standalone
+   with its own palette, fonts and gold accents. When flipping between stages
+   inside the CJ ribbon these differences are jarring.
+   Below we force a single visual language: parchment bg, Lora prose,
+   DM Sans UI, unified gold #C9A84C, ink #1C1814.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Shared CSS-variable override (consumed by SPC + ST via var()) ── */
+.cj-root {
+  --st-bg:           #FAF7F0;
+  --st-ink:          #1C1814;
+  --st-ink-light:    #2E2A25;
+  --st-surface:      #FFFCF6;
+  --st-border:       rgba(28, 24, 20, 0.10);
+  --st-border-light: rgba(28, 24, 20, 0.06);
+  --st-muted:        #8A847C;
+  --st-gold:         #C9A84C;
+  --st-gold-dim:     #b0922e;
+  --st-gold-soft:    rgba(201, 168, 76, 0.06);
+  --st-gold-border:  rgba(201, 168, 76, 0.18);
+  --st-body:         'Lora', Georgia, serif;
+  --st-serif:        'Lora', Georgia, serif;
+  --st-sans:         'DM Sans', -apple-system, sans-serif;
+  --st-mono:         'DM Mono', monospace;
+  --st-radius:       5px;
+  --st-parchment:    #FAF7F0;
+}
+
+/* ── 2. Background normalization ──────────────────────────────────────── */
+/* SPC */
+.cj-root .spc-root       { background: #FAF7F0 !important; color: #1C1814; }
+.cj-root .spc-chat-col   { background: #FFFCF6 !important; }
+.cj-root .spc-plan-col   { background: #FAF7F0 !important; }
+/* ST */
+.cj-root .storyteller-page { background: #FAF7F0 !important; color: #1C1814; }
+.cj-root .st-editor-layout { background: #FAF7F0 !important; color: #1C1814; }
+.cj-root .st-editor-layout::before { display: none; } /* kill ambient vignette */
+/* WM — already #FAF7F0 but kill the noise texture to match the others */
+.cj-root .wm-root::before { display: none; }
+
+/* ── 3. Font normalization — Lora for prose, DM Sans for UI ───────────── */
+/* ST: Spectral → Lora for body text (biggest visual jarring on switch) */
+.cj-root .storyteller-page { font-family: 'DM Sans', -apple-system, sans-serif !important; }
+.cj-root .st-line-text     { font-family: 'Lora', Georgia, serif !important; }
+.cj-root .st-chapter-header-title { font-family: 'Lora', Georgia, serif !important; }
+.cj-root .st-nav-tool-label { font-family: 'DM Sans', sans-serif !important; }
+/* SPC: already DM Sans UI + Lora prose — just firm it up */
+.cj-root .spc-root { font-family: 'DM Sans', -apple-system, sans-serif !important; }
+.cj-root .spc-header-title { font-family: 'Lora', Georgia, serif !important; }
+.cj-root .spc-msg-text { font-family: 'Lora', Georgia, serif; }
+/* WM: root is Lora — fine for prose; firm up UI labels to DM Sans */
+.cj-root .wm-ai-btn,
+.cj-root .wm-bottom-hint { font-family: 'DM Sans', sans-serif !important; }
+
+/* ── 4. Ink normalization — #1C1814 everywhere ────────────────────────── */
+.cj-root .spc-header-title { color: #1C1814 !important; }
+.cj-root .spc-msg-text     { color: #1C1814; }
+.cj-root .st-line-text     { color: #1C1814 !important; }
+
+/* ── 5. Gold normalization — #C9A84C primary, #b0922e dim ─────────────── */
+/* SPC: progress + send button → unified gold */
+.cj-root .spc-progress-fill {
+  background: linear-gradient(90deg, #C9A84C, #b0922e) !important;
+}
+.cj-root .spc-send-btn {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .spc-send-btn:hover:not(:disabled) {
+  background: #b0922e !important;
+}
+.cj-root .spc-save-btn {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .spc-save-btn:hover:not(:disabled) {
+  background: #b0922e !important;
+}
+.cj-root .spc-save-btn--saved {
+  background: #2a6d3a !important;
+}
+/* SPC plan sections — unified card look */
+.cj-root .spc-plan-section {
+  background: rgba(255,252,246,0.7) !important;
+  border-color: rgba(201,168,76,0.12) !important;
+  border-radius: 5px !important;
+}
+/* SPC section labels */
+.cj-root .spc-section-label {
+  color: rgba(201,168,76,0.55) !important;
+}
+/* SPC chat scrollbar */
+.cj-root .spc-chat-messages::-webkit-scrollbar-thumb,
+.cj-root .spc-plan-col::-webkit-scrollbar-thumb {
+  background: rgba(201,168,76,0.18) !important;
+}
+
+/* ST: buttons → unified gold */
+.cj-root .st-btn-gold {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .st-btn-gold:hover {
+  background: #b0922e !important;
+}
+.cj-root .st-btn-primary {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .st-btn-primary:hover {
+  background: #b0922e !important;
+}
+.cj-root .st-btn-ghost {
+  border-color: rgba(201,168,76,0.25) !important;
+  color: #1C1814 !important;
+}
+.cj-root .st-btn-ghost:hover {
+  border-color: #C9A84C !important;
+  color: #C9A84C !important;
+}
+
+/* ST nav tools — gold active highlight */
+.cj-root .st-nav-tool.active {
+  color: #C9A84C !important;
+  background: rgba(201,168,76,0.08) !important;
+}
+
+/* ST status colors keep their semantic meaning but gold base normalised */
+.cj-root .st-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(201,168,76,0.18) !important;
+}
+
+/* WM: burnished gold → standard gold (key interactive elements) */
+.cj-root .wm-ai-btn.active,
+.cj-root .wm-word-badge {
+  border-color: rgba(201,168,76,0.2) !important;
+}
+
+/* ── 6. Hide redundant chrome already handled by CJ ribbon ────────────── */
+/* ST topbar — CJ ribbon already provides ← back, chapter title, pills */
+.cj-root .st-topbar { display: none !important; }
+
+/* ST bottom bar — fixed positioning breaks inside CJ's flex layout;
+   convert to sticky within the content flow */
+.cj-root .st-bottombar {
+  position: sticky !important;
+  bottom: 0 !important;
+  left: auto !important;
+  right: auto !important;
+  z-index: 20 !important;
+  border-radius: 8px 8px 0 0;
+  background: #FFFCF6 !important;
+}
+/* ST bottom bar buttons → gold theme */
+.cj-root .st-bottombar-btn {
+  font-family: 'DM Sans', sans-serif !important;
+}
+
+/* ST editor layout — fit inside CJ flex (no min-height: 100vh) */
+.cj-root .st-editor-layout {
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* ST editor body (nav + content area) — scrollable within CJ height */
+.cj-root .st-editor-body {
+  overflow-y: auto !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+
+/* ST nav — fit inside CJ height */
+.cj-root .st-nav {
+  max-height: 100% !important;
+  overflow-y: auto !important;
+}
+
+/* ── 7. Unified border-radius across pages ────────────────────────────── */
+.cj-root .spc-save-btn,
+.cj-root .spc-send-btn,
+.cj-root .spc-close-btn,
+.cj-root .spc-clear-btn  { border-radius: 5px !important; }
+.cj-root .st-btn          { border-radius: 5px !important; }
+
+/* ── 8. Unified scrollbar treatment — thin gold tint ──────────────────── */
+.cj-root ::-webkit-scrollbar { width: 4px; }
+.cj-root ::-webkit-scrollbar-track { background: transparent; }
+.cj-root ::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.18);
+  border-radius: 4px;
+}
+.cj-root ::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 168, 76, 0.32);
+}
+
+/* ── 9. Unified section/card borders ──────────────────────────────────── */
+.cj-root .spc-chat-col {
+  border-right-color: rgba(201, 168, 76, 0.10) !important;
+}
+.cj-root .spc-header {
+  border-bottom-color: rgba(201, 168, 76, 0.10) !important;
+  background: #FFFCF6 !important;
+}
+.cj-root .st-nav {
+  border-right: 1px solid rgba(201, 168, 76, 0.10) !important;
+}
+
+/* ── 10. ST manuscript width → closer to WM's narrower width ──────────── */
+.cj-root .st-manuscript {
+  max-width: 740px !important;
+}
+
+/* ── 11. Prose line-height harmony ────────────────────────────────────── */
+.cj-root .st-line-text {
+  line-height: 2.0 !important;
+  font-size: 17.5px !important;
+  letter-spacing: 0.01em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   12. WRITEMODE DEEP NORMALIZATION
+   Eliminate every visual difference between SPC (Plan) and WM (Write/Review)
+   so switching tabs feels like one continuous surface.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* 12a. Kill WM page-entrance animation (0.55s fade-in on every tab switch) */
+.cj-root .wm-root {
+  animation: none !important;
+  background: #FAF7F0 !important;        /* strip SVG noise texture */
+  font-family: 'DM Sans', -apple-system, sans-serif !important;
+}
+
+/* 12b. Unified text selection color */
+.cj-root ::selection {
+  background: rgba(201,168,76,0.16);
+  color: #1C1814;
+}
+
+/* 12c. Prose-wrap desk gradient → flat parchment */
+.cj-root .wm-prose-wrap {
+  background: #FAF7F0 !important;
+}
+
+/* 12d. Manuscript page — strip entrance animation; keep a fill-viewport
+   min-height so the writing canvas does not collapse when empty.
+   120px ≈ ribbon (~44px) + AI toolbar (~40px) + bottom bar (~36px). */
+.cj-root .wm-manuscript-page {
+  animation: none !important;
+  min-height: calc(100vh - 140px) !important;
+}
+/* Align CJ margin line with text padding */
+.cj-root .wm-manuscript-page::after {
+  left: 80px;
+}
+
+/* 12e. WM topbar — match SPC header: solid bg, no blur, simple border */
+.cj-root .wm-topbar {
+  background: #FFFCF6 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid rgba(201,168,76,0.10) !important;
+}
+
+/* 12f. WM bottom-bar — match SPC's solid treatment */
+.cj-root .wm-bottom-bar {
+  background: #FFFCF6 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-top: 1px solid rgba(201,168,76,0.10) !important;
+}
+
+/* 12g. WM AI toolbar — solid, no blur */
+.cj-root .wm-ai-toolbar {
+  background: #FFFCF6 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-top: 1px solid rgba(201,168,76,0.10) !important;
+}
+
+/* 12h. WM sidebars — solid background, no gradient, no slide-in animation */
+.cj-root .wm-toc-sidebar {
+  background: #FAF7F0 !important;
+  animation: none !important;
+  border-right-color: rgba(201,168,76,0.10) !important;
+}
+.cj-root .wm-context-panel {
+  background: #FAF7F0 !important;
+  animation: none !important;
+  border-left-color: rgba(201,168,76,0.10) !important;
+}
+
+/* 12i. Gold normalization — #B8962E → #C9A84C throughout WM */
+.cj-root .wm-save-status          { color: #C9A84C !important; }
+.cj-root .wm-sidebar-toggle.active { color: #C9A84C !important; }
+.cj-root .wm-toc-item.current      { border-left-color: #C9A84C !important; }
+.cj-root .wm-ctx-tab--active       { border-bottom-color: #C9A84C !important; }
+.cj-root .wm-prose-area            { caret-color: #C9A84C !important; }
+.cj-root .wm-goal-fill             { background: linear-gradient(90deg, #C9A84C 0%, #b0922e 100%) !important; }
+.cj-root .wm-center-tab--active    { border-bottom-color: #C9A84C !important; }
+.cj-root .wm-history-btn.active    { background: #C9A84C !important; border-color: #C9A84C !important; }
+.cj-root .wm-ai-btn.active         { border-color: rgba(201,168,76,0.25) !important; }
+.cj-root .wm-word-count            { color: rgba(201,168,76,0.72) !important; }
+
+/* 12j. WM AI button shimmer → remove for consistency with SPC buttons */
+.cj-root .wm-ai-btn::before { display: none !important; }
+
+/* 12k. WM label fonts — DM Sans to match SPC (prose stays Lora) */
+.cj-root .wm-toc-header-title,
+.cj-root .wm-book-title,
+.cj-root .wm-ctx-label,
+.cj-root .wm-ctx-header-title,
+.cj-root .wm-edit-label,
+.cj-root .wm-toc-num,
+.cj-root .wm-toc-words,
+.cj-root .wm-word-count,
+.cj-root .wm-save-status { font-family: 'DM Sans', sans-serif !important; }
+
+/* 12l. WM border tints — gold-tinted to match SPC borders */
+.cj-root .wm-center-tabs { border-bottom-color: rgba(201,168,76,0.10) !important; }
+
+/* 12m. WM focus ring — restore subtle golden ambient glow instead of flat ring */
+.cj-root .wm-prose-area:focus {
+  outline: none !important;
+  border: none !important;
+}
+.cj-root .wm-manuscript-page:has(.wm-prose-area:focus) {
+  box-shadow:
+    0 1px 2px rgba(28,24,20,0.05),
+    0 2px 8px rgba(28,24,20,0.04),
+    0 8px 32px rgba(28,24,20,0.045),
+    0 0 0 1px rgba(201,168,76,0.06),
+    0 0 40px rgba(201,168,76,0.025),
+    0 0 80px rgba(201,168,76,0.012) !important;
+}
+
+/* 12n. WM review section — match the same parchment surface */
+.cj-root .wm-review-header {
+  background: #FFFCF6 !important;
+  border-bottom: 1px solid rgba(201,168,76,0.10) !important;
+}
+.cj-root .wm-review-stat-val { color: #C9A84C !important; }
+.cj-root .wm-approve-all-btn {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .wm-approve-all-btn:hover:not(:disabled) {
+  background: #b0922e !important;
 }
 
 /* ── Loading ───────────────────────────────────────────────────────────── */
@@ -595,10 +1139,26 @@
   .cj-progress-strip   { display: none !important; }
   .cj-override-banner  { display: none !important; }
 
-  .cj-ribbon-row {
-    padding: 8px 12px;
-    gap: 8px;
-    flex-wrap: nowrap;
+  /* Collapse ribbon to single compact row: merge top + nav */
+  .cj-ribbon {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 6px 10px;
+    gap: 6px;
+  }
+  .cj-ribbon-top {
+    display: contents;
+  }
+  .cj-ribbon-nav {
+    display: contents;
+  }
+
+  .cj-ribbon-row,
+  .cj-ribbon-top,
+  .cj-ribbon-nav {
+    padding: 0;
+    gap: 6px;
   }
 
   .cj-mode-book { display: none; }
@@ -622,6 +1182,12 @@
     font-size: 10px;
     border-radius: 12px;
   }
+  /* Abbreviate pill labels: Story Planner → Plan, etc. */
+  .cj-pill-label { display: none; }
+  .cj-pill[data-s="plan"]::after   { content: 'Plan'; }
+  .cj-pill[data-s="write"]::after  { content: 'Write'; }
+  .cj-pill[data-s="review"]::after { content: 'Review'; }
+
   .cj-pill-sep { display: none; }
   .cj-pill-auto { display: none; }
 
@@ -630,14 +1196,88 @@
     font-size: 10px;
     border-radius: 6px;
   }
+
+  .cj-tools-btn {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+
+  /* ── Context panel: hidden on mobile inside CJ (was forced visible) ── */
+  .cj-root .wm-context-panel {
+    display: none !important;
+  }
+
+  /* ── WriteMode embedded in CJ: tighter everything ── */
+  .cj-root .wm-ai-toolbar {
+    padding: 4px 8px !important;
+    gap: 3px !important;
+  }
+  .cj-root .wm-ai-btn {
+    padding: 5px 8px !important;
+    font-size: 0.7rem !important;
+  }
+  .cj-root .wm-bottom-bar {
+    padding: 4px 10px 6px !important;
+    gap: 6px !important;
+  }
+  .cj-root .wm-mic-btn {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  .cj-root .wm-bottom-hint {
+    font-size: 8px !important;
+    line-height: 1.3 !important;
+  }
+  .cj-root .wm-ai-hint {
+    font-size: 8px !important;
+    padding: 0 4px !important;
+  }
+
+  /* Chapter heading compact inside CJ */
+  .cj-root .wm-chapter-opening {
+    padding: 8px 12px 2px !important;
+  }
+  .cj-root .wm-chapter-heading {
+    font-size: 15px !important;
+    margin-bottom: 2px !important;
+  }
+  .cj-root .wm-section-heading {
+    font-size: 12px !important;
+  }
+
+  /* StoryTeller review inside CJ — compact */
+  .cj-root .wm-review-header {
+    padding: 8px 12px !important;
+  }
+  .cj-root .wm-review-stat-label {
+    font-size: 9px !important;
+  }
+  .cj-root .wm-review-stat-val {
+    font-size: 18px !important;
+  }
+  .cj-root .wm-review-empty {
+    padding: 24px 16px !important;
+    font-size: 13px !important;
+  }
+
+  /* Story Planner inside CJ — tighter */
+  .cj-root .spc-chat-col {
+    border-right: none !important;
+  }
+  .cj-root .spc-header {
+    padding: 8px 12px !important;
+  }
+  .cj-root .spc-header-title {
+    font-size: 14px !important;
+  }
 }
 
 /* ── Ultra-compact (≤420px) ────────────────────────────────────────────── */
 
 @media (max-width: 420px) {
-  .cj-ribbon-row {
-    padding: 6px 10px;
-    gap: 6px;
+  .cj-ribbon {
+    padding: 4px 8px;
+    gap: 4px;
   }
 
   /* Hide mode label text, keep just the dot */
@@ -655,5 +1295,19 @@
     padding: 4px 8px;
     font-size: 9px;
     gap: 3px;
+  }
+
+  .cj-tools-btn {
+    padding: 4px 6px;
+    font-size: 9px;
+  }
+
+  /* Tighter content */
+  .cj-root .wm-manuscript-page {
+    margin-top: 0 !important;
+  }
+  .cj-root .wm-prose-area {
+    padding: 8px 12px 60px !important;
+    font-size: 15px !important;
   }
 }

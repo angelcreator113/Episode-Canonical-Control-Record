@@ -60,9 +60,19 @@ const CENTER_TABS = [
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────
 
-export default function WriteMode({ hideTopBar = false }) {
+export default function WriteMode({ hideTopBar = false, initialCenterTab = 'write' }) {
   const { bookId, chapterId } = useParams();
   const navigate = useNavigate();
+
+  // ── Mobile detection: hide sidebars at JSX level on phones ──
+  const MOBILE_BP = 767;
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth <= MOBILE_BP);
+  useEffect(() => {
+    const mq = window.matchMedia(`(max-width: ${MOBILE_BP}px)`);
+    const handler = (e) => setIsMobile(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
 
   // Chapter / book state
   const [chapter,    setChapter]    = useState(null);
@@ -70,7 +80,7 @@ export default function WriteMode({ hideTopBar = false }) {
   const [allChapters, setAllChapters] = useState([]);
   const [loading,    setLoading]    = useState(true);
 
-  // Sidebar state
+  // Sidebar state — force off on mobile
   const [showToc,    setShowToc]    = useState(() => {
     const saved = localStorage.getItem('wm-show-toc');
     return saved !== null ? saved === 'true' : true;
@@ -79,6 +89,12 @@ export default function WriteMode({ hideTopBar = false }) {
     const saved = localStorage.getItem('wm-show-context');
     return saved !== null ? saved === 'true' : true;
   });
+
+  // Effective visibility: never show panels on mobile
+  const effectiveToc     = !isMobile && showToc;
+  // When embedded in CJ (hideTopBar), still hide context panel on mobile
+  // — the CJ ribbon's Tools dropdown provides access to AI Writer instead.
+  const effectiveContext = !isMobile && showContext;
   const [tocDragIdx,     setTocDragIdx]     = useState(null);
   const [tocDragOverIdx, setTocDragOverIdx] = useState(null);
   const [editingTocId,   setEditingTocId]   = useState(null);
@@ -165,7 +181,32 @@ export default function WriteMode({ hideTopBar = false }) {
   const [showCharQuick,  setShowCharQuick]  = useState(false);
 
   // ── NEW: Center tab state ──
-  const [centerTab,    setCenterTab]    = useState('write');
+  const [centerTab,    setCenterTab]    = useState(initialCenterTab || 'write');
+
+  // ── Listen for CJ ribbon tab switches ──
+  useEffect(() => {
+    const handler = (e) => {
+      if (e.detail && CENTER_TABS.some(t => t.id === e.detail)) {
+        setCenterTab(e.detail);
+      }
+    };
+    window.addEventListener('cj-set-tab', handler);
+    return () => window.removeEventListener('cj-set-tab', handler);
+  }, []);
+
+  // ── Listen for CJ context-panel toggle (AI Writer sidebar) ──
+  useEffect(() => {
+    const handler = (e) => {
+      const tab = e.detail?.tab; // optional: switch to a specific context tab
+      setShowContext(prev => {
+        const next = !prev;
+        if (next && tab) setContextTab(tab);
+        return next;
+      });
+    };
+    window.addEventListener('cj-toggle-context', handler);
+    return () => window.removeEventListener('cj-toggle-context', handler);
+  }, []);
 
   // ── NEW: Review tab state (from StorytellerPage) ──
   const [reviewLines,      setReviewLines]      = useState([]);
@@ -654,7 +695,7 @@ export default function WriteMode({ hideTopBar = false }) {
   // ── AI TOOLBAR ACTIONS ─────────────────────────────────────────────────
 
   const handleContinue = useCallback(async () => {
-    if (!prose.trim() || generating) return;
+    if (generating) return;
     takeSnapshot('Before continue');
     setAiAction('continue');
     setGenerating(true);
@@ -666,16 +707,44 @@ export default function WriteMode({ hideTopBar = false }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          current_prose:  prose,
-          chapter_title:  chapter?.title,
-          chapter_brief:  chapter?.scene_goal || chapter?.chapter_notes,
+          current_prose:  prose.trim() || `[Opening scene — ${chapter?.scene_goal || chapter?.chapter_notes || chapter?.title || 'begin the chapter'}]`,
+          chapter_title:  chapter?.title || 'Untitled Chapter',
+          chapter_brief:  chapter?.scene_goal || chapter?.chapter_notes || chapter?.title || '',
           pnos_act:       chapter?.pnos_act || 'act_1',
           book_character: book?.character || 'JustAWoman',
           character_id:   selectedCharacter?.id || null,
           gen_length:     genLength,
           stream:         true,
+          // Full plan context for Claude
+          emotional_state_start: chapter?.emotional_state_start || '',
+          emotional_state_end:   chapter?.emotional_state_end || '',
+          theme:                 chapter?.theme || book?.theme || '',
+          pov:                   chapter?.pov || '',
+          characters_present:    chapter?.characters_present || '',
+          sections:              chapter?.sections || [],
+          chapter_notes:         chapter?.chapter_notes || '',
+          tone:                  chapter?.tone || book?.tone || '',
+          setting:               chapter?.setting || book?.setting || '',
+          conflict:              chapter?.conflict || book?.conflict || '',
+          stakes:                chapter?.stakes || book?.stakes || '',
+          hooks:                 chapter?.hooks || '',
         }),
       });
+
+      if (!res.ok) {
+        // Server returned an error — try to extract message from JSON body
+        try {
+          const errData = await res.json();
+          setHint(errData.error || `Server error (${res.status}) — please try again.`);
+        } catch {
+          setHint(`Server error (${res.status}) — please try again.`);
+        }
+        setTimeout(() => setHint(null), 5000);
+        setStreamingText('');
+        setGenerating(false);
+        setAiAction(null);
+        return;
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
@@ -705,13 +774,20 @@ export default function WriteMode({ hideTopBar = false }) {
       }
 
       if (fullText) {
-        const newProse = prose.trimEnd() + '\n\n' + fullText;
+        const newProse = prose.trim()
+          ? prose.trimEnd() + '\n\n' + fullText
+          : fullText;
         setProse(newProse);
         setWordCount(newProse.split(/\s+/).filter(Boolean).length);
         setSaved(false);
+      } else {
+        setHint('No text generated — try again or write a few words first.');
+        setTimeout(() => setHint(null), 5000);
       }
     } catch (err) {
       console.error('story-continue error:', err);
+      setHint('Connection error — check your server and try again.');
+      setTimeout(() => setHint(null), 5000);
     }
     setStreamingText('');
     setGenerating(false);
@@ -719,7 +795,13 @@ export default function WriteMode({ hideTopBar = false }) {
   }, [prose, chapter, book, generating, genLength, selectedCharacter, takeSnapshot]);
 
   const handleDeepen = useCallback(async () => {
-    if (!prose.trim() || generating) return;
+    if (!prose.trim() || generating) {
+      if (!prose.trim() && !generating) {
+        setHint('Write some prose first — then Deepen will enrich it.');
+        setTimeout(() => setHint(null), 4000);
+      }
+      return;
+    }
     takeSnapshot('Before deepen');
     setAiAction('deepen');
     setGenerating(true);
@@ -734,8 +816,26 @@ export default function WriteMode({ hideTopBar = false }) {
           pnos_act:       chapter?.pnos_act || 'act_1',
           chapter_title:  chapter?.title,
           character_id:   selectedCharacter?.id || null,
+          // Full plan context for Claude
+          chapter_brief:         chapter?.scene_goal || chapter?.chapter_notes || '',
+          emotional_state_start: chapter?.emotional_state_start || '',
+          emotional_state_end:   chapter?.emotional_state_end || '',
+          theme:                 chapter?.theme || book?.theme || '',
+          pov:                   chapter?.pov || '',
+          characters_present:    chapter?.characters_present || '',
+          tone:                  chapter?.tone || book?.tone || '',
+          setting:               chapter?.setting || book?.setting || '',
+          conflict:              chapter?.conflict || book?.conflict || '',
+          stakes:                chapter?.stakes || book?.stakes || '',
         }),
       });
+      if (!res.ok) {
+        setHint(`Deepen failed (${res.status}) — please try again.`);
+        setTimeout(() => setHint(null), 5000);
+        setGenerating(false);
+        setAiAction(null);
+        return;
+      }
       const data = await res.json();
       if (data.prose) {
         setProse(data.prose);
@@ -747,10 +847,12 @@ export default function WriteMode({ hideTopBar = false }) {
       }
     } catch (err) {
       console.error('story-deepen error:', err);
+      setHint('Connection error — check your server and try again.');
+      setTimeout(() => setHint(null), 5000);
     }
     setGenerating(false);
     setAiAction(null);
-  }, [prose, chapter, generating, takeSnapshot]);
+  }, [prose, chapter, generating, selectedCharacter, takeSnapshot]);
 
   const handleNudge = useCallback(async () => {
     if (generating) return;
@@ -767,18 +869,37 @@ export default function WriteMode({ hideTopBar = false }) {
           chapter_brief:  chapter?.scene_goal || chapter?.chapter_notes,
           pnos_act:       chapter?.pnos_act || 'act_1',
           character_id:   selectedCharacter?.id || null,
+          // Full plan context for Claude
+          emotional_state_start: chapter?.emotional_state_start || '',
+          emotional_state_end:   chapter?.emotional_state_end || '',
+          theme:                 chapter?.theme || book?.theme || '',
+          pov:                   chapter?.pov || '',
+          characters_present:    chapter?.characters_present || '',
+          tone:                  chapter?.tone || book?.tone || '',
+          setting:               chapter?.setting || book?.setting || '',
+          conflict:              chapter?.conflict || book?.conflict || '',
+          stakes:                chapter?.stakes || book?.stakes || '',
         }),
       });
+      if (!res.ok) {
+        setHint(`Nudge failed (${res.status}) — please try again.`);
+        setTimeout(() => setHint(null), 5000);
+        setGenerating(false);
+        setAiAction(null);
+        return;
+      }
       const data = await res.json();
       if (data.nudge) {
         setNudgeText(data.nudge);
       }
     } catch (err) {
       console.error('story-nudge error:', err);
+      setHint('Connection error — check your server and try again.');
+      setTimeout(() => setHint(null), 5000);
     }
     setGenerating(false);
     setAiAction(null);
-  }, [prose, chapter, generating]);
+  }, [prose, chapter, generating, selectedCharacter]);
 
   const undoAi = useCallback(() => {
     if (proseBeforeAi !== null) {
@@ -816,9 +937,12 @@ export default function WriteMode({ hideTopBar = false }) {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ status: 'approved' }),
       });
-      updateLineLocal(lineId, { status: 'approved' });
+      const updatedLines = reviewLines.map(ln => ln.id === lineId ? { ...ln, status: 'approved' } : ln);
+      setReviewLines(updatedLines);
       const line = reviewLines.find(l => l.id === lineId);
       if (line) setLastApprovedLine({ ...line, status: 'approved' });
+      // Sync approved lines back to draft prose
+      syncLinesToDraft(updatedLines);
     } catch {}
   };
 
@@ -838,9 +962,12 @@ export default function WriteMode({ hideTopBar = false }) {
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({ text: editText, content: editText, status: 'edited' }),
       });
-      updateLineLocal(editingLine, { text: editText, content: editText, status: 'edited' });
+      const updatedLines = reviewLines.map(ln => ln.id === editingLine ? { ...ln, text: editText, content: editText, status: 'edited' } : ln);
+      setReviewLines(updatedLines);
       setEditingLine(null);
       setEditText('');
+      // Sync edited lines back to draft prose
+      syncLinesToDraft(updatedLines);
     } catch {}
   };
 
@@ -848,6 +975,28 @@ export default function WriteMode({ hideTopBar = false }) {
     const pending = reviewLines.filter(l => l.status === 'pending');
     for (const ln of pending) await approveLine(ln.id);
   };
+
+  // ── SYNC APPROVED LINES BACK TO DRAFT PROSE ─────────────────────────
+  // After approving/editing lines, rebuild draft_prose from the current review lines
+  // so Write tab always reflects the latest approved content
+  const syncLinesToDraft = useCallback(async (updatedLines) => {
+    const lines = updatedLines || reviewLines;
+    const approvedOrEdited = lines
+      .filter(l => l.status === 'approved' || l.status === 'edited')
+      .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    if (approvedOrEdited.length === 0) return;
+    const rebuiltProse = approvedOrEdited.map(l => l.text || l.content || '').join('\n\n');
+    setProse(rebuiltProse);
+    setWordCount(rebuiltProse.split(/\s+/).filter(Boolean).length);
+    // Persist to server
+    try {
+      await fetch(`${API}/storyteller/chapters/${chapterId}/save-draft`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ draft_prose: rebuiltProse }),
+      });
+    } catch {}
+  }, [reviewLines, chapterId]);
 
   // ── SEND TO REVIEW ────────────────────────────────────────────────────
 
@@ -859,13 +1008,36 @@ export default function WriteMode({ hideTopBar = false }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ draft_prose: prose }),
       });
+
+      // Check for existing approved/edited lines that should be preserved
+      const existingRes = await fetch(`${API}/storyteller/books/${bookId}`);
+      const existingData = await existingRes.json();
+      const existingBook = existingData?.book || existingData;
+      const existingCh = (existingBook.chapters || []).find(c => c.id === chapterId);
+      const existingLines = existingCh?.lines || [];
+      const approvedLines = existingLines.filter(l => l.status === 'approved' || l.status === 'edited');
+
+      // If there are approved lines, delete only pending/rejected lines then append new prose
+      // If no approved lines exist, use replace mode for a fresh start
+      const importMode = approvedLines.length > 0 ? 'append' : 'replace';
+
+      if (approvedLines.length > 0) {
+        // Delete only pending/rejected lines to preserve approved ones
+        const toDelete = existingLines.filter(l => l.status === 'pending' || l.status === 'rejected');
+        for (const ln of toDelete) {
+          try {
+            await fetch(`${API}/storyteller/lines/${ln.id}`, { method: 'DELETE' });
+          } catch {}
+        }
+      }
+
       // Convert paragraphs to LINE-marked format for import
       const paragraphs = prose.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
       const lineMarked = paragraphs.map((p, i) => `LINE ${i + 1}\n${p}`).join('\n\n');
       await fetch(`${API}/storyteller/chapters/${chapterId}/import`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ raw_text: lineMarked, mode: 'replace' }),
+        body: JSON.stringify({ raw_text: lineMarked, mode: importMode }),
       });
 
       // ── Emotional Impact — the character carries the scene ──
@@ -1305,7 +1477,7 @@ export default function WriteMode({ hideTopBar = false }) {
                   onClick={() => { setSelectedCharacter(null); setShowCharQuick(false); }}
                 >
                   <span className="wm-quick-char-option-icon">{'—'}</span>
-                  <span>No character voice</span>
+                  <span>Narrator</span>
                 </div>
                 {characters.map(c => (
                   <div
@@ -1401,8 +1573,8 @@ export default function WriteMode({ hideTopBar = false }) {
       {/* ── MAIN HUB LAYOUT ── */}
       <div className="wm-hub-layout">
 
-        {/* ── LEFT: TOC SIDEBAR ── */}
-        {showToc && (
+        {/* ── LEFT: TOC SIDEBAR (hidden on mobile) ── */}
+        {effectiveToc && (
           <aside className="wm-toc-sidebar">
             <div className="wm-toc-header">
               <span className="wm-toc-header-title">Contents</span>
@@ -1584,6 +1756,71 @@ export default function WriteMode({ hideTopBar = false }) {
           </button>
         ))}
       </div>
+
+      {/* ══ MOBILE UTILITY BAR — character picker + chapter nav (phones only) ══ */}
+      {isMobile && (
+        <div className="wm-mobile-bar">
+          {/* Character picker */}
+          <div className="wm-mob-char-wrap">
+            <button
+              className="wm-mob-char-btn"
+              onClick={() => setShowCharQuick(q => !q)}
+            >
+              <span className="wm-mob-char-icon">{selectedCharacter?.icon || '👤'}</span>
+              <span className="wm-mob-char-name">{selectedCharacter?.display_name || selectedCharacter?.selected_name || 'Narrator'}</span>
+              <span className="wm-mob-char-caret">{showCharQuick ? '▲' : '▼'}</span>
+            </button>
+            {showCharQuick && (
+              <div className="wm-mob-char-dropdown">
+                <button
+                  className={`wm-mob-char-option${!selectedCharacter ? ' selected' : ''}`}
+                  onClick={() => { setSelectedCharacter(null); setShowCharQuick(false); }}
+                >
+                  <span className="wm-mob-char-opt-icon">{'—'}</span>
+                  Narrator
+                </button>
+                {characters.map(c => (
+                  <button
+                    key={c.id}
+                    className={`wm-mob-char-option${selectedCharacter?.id === c.id ? ' selected' : ''}`}
+                    onClick={() => { setSelectedCharacter(c); setShowCharQuick(false); }}
+                  >
+                    <span className="wm-mob-char-opt-icon">{c.icon || '👤'}</span>
+                    {c.display_name || c.selected_name}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Chapter nav */}
+          {allChapters.length > 1 && (
+            <div className="wm-mob-chapter-nav">
+              <button
+                className="wm-mob-nav-btn"
+                disabled={allChapters.findIndex(c => c.id === chapterId) <= 0}
+                onClick={() => goAdjacentChapter(-1)}
+              >{'‹'}</button>
+              <span className="wm-mob-nav-label">
+                {(() => {
+                  const idx = allChapters.findIndex(c => c.id === chapterId);
+                  return `${idx + 1}/${allChapters.length}`;
+                })()}
+              </span>
+              <button
+                className="wm-mob-nav-btn"
+                disabled={allChapters.findIndex(c => c.id === chapterId) >= allChapters.length - 1}
+                onClick={() => goAdjacentChapter(1)}
+              >{'›'}</button>
+            </div>
+          )}
+
+          {/* Word count */}
+          {wordCount > 0 && (
+            <span className="wm-mob-wc">{wordCount}w</span>
+          )}
+        </div>
+      )}
 
       {/* ══ WRITE TAB ══ */}
       {centerTab === 'write' && (
@@ -1784,7 +2021,8 @@ export default function WriteMode({ hideTopBar = false }) {
           <button
             className={`wm-ai-btn${aiAction === 'continue' ? ' active' : ''}`}
             onClick={handleContinue}
-            disabled={generating || !prose.trim()}
+            disabled={generating}
+            title={!prose.trim() ? 'Generate an opening for this chapter' : 'Continue writing'}
           >
             <span className="wm-ai-icon">{"✨"}</span> Continue
           </button>
@@ -1792,6 +2030,7 @@ export default function WriteMode({ hideTopBar = false }) {
             className={`wm-ai-btn${aiAction === 'deepen' ? ' active' : ''}`}
             onClick={handleDeepen}
             disabled={generating || !prose.trim()}
+            title={!prose.trim() ? 'Write something first — then Deepen will enrich your text' : 'Deepen the prose'}
           >
             <span className="wm-ai-icon">{"🔍"}</span> Deepen
           </button>
@@ -1799,6 +2038,7 @@ export default function WriteMode({ hideTopBar = false }) {
             className={`wm-ai-btn${aiAction === 'nudge' ? ' active' : ''}`}
             onClick={handleNudge}
             disabled={generating}
+            title="Get a creative writing prompt"
           >
             <span className="wm-ai-icon">{"💡"}</span> Nudge
           </button>
@@ -1809,7 +2049,14 @@ export default function WriteMode({ hideTopBar = false }) {
           )}
           <button
             className={`wm-len-toggle${genLength === 'sentence' ? ' sentence' : ''}`}
-            onClick={() => setGenLength(g => g === 'paragraph' ? 'sentence' : 'paragraph')}
+            onClick={() => {
+              setGenLength(g => {
+                const next = g === 'paragraph' ? 'sentence' : 'paragraph';
+                setHint(next === 'sentence' ? 'Continue will generate 1-2 sentences' : 'Continue will generate full paragraphs');
+                setTimeout(() => setHint(null), 3000);
+                return next;
+              });
+            }}
             title={genLength === 'sentence' ? 'Generating one sentence at a time' : 'Generating full paragraphs'}
           >
             {genLength === 'sentence' ? '1 line' : '¶ full'}
@@ -1829,6 +2076,9 @@ export default function WriteMode({ hideTopBar = false }) {
             >
               <span className="wm-ai-icon">{'¶'}</span> Paragraphs
             </button>
+          )}
+          {!prose.trim() && (
+            <span className="wm-ai-hint">Tap <strong>Continue</strong> to start writing — or <strong>Nudge</strong> for a creative prompt</span>
           )}
         </div>
       )}
@@ -1923,7 +2173,7 @@ export default function WriteMode({ hideTopBar = false }) {
             onClick={toggleListening}
             disabled={generating}
           >
-            <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+            <svg width="20" height="20" viewBox="0 0 28 28" fill="none">
               <rect x="9" y="3" width="10" height="16" rx="5"
                 fill={listening ? '#F5F0E8' : '#1a1a1a'} />
               <path d="M5 14c0 5 3.5 9 9 9s9-4 9-9"
@@ -1963,6 +2213,9 @@ export default function WriteMode({ hideTopBar = false }) {
       {centerTab === 'review' && (
         <div className="wm-review-tab">
           <div className="wm-review-header">
+            <button className="wm-review-back-btn" onClick={() => setCenterTab('write')}>
+              {'←'} Back to Write
+            </button>
             <div className="wm-review-stats">
               <span className="wm-review-stat approved">{approvedLines.length} approved</span>
               {pendingLines.length > 0 && (
@@ -2070,8 +2323,8 @@ export default function WriteMode({ hideTopBar = false }) {
 
         </div>{/* end wm-main-col */}
 
-        {/* ── RIGHT: CONTEXT PANEL ── */}
-        {showContext && (
+        {/* ── RIGHT: CONTEXT PANEL (hidden on mobile) ── */}
+        {effectiveContext && (
           <aside className="wm-context-panel">
             <div className="wm-ctx-header">
               <div className="wm-ctx-tabs">
@@ -2095,7 +2348,9 @@ export default function WriteMode({ hideTopBar = false }) {
               <WriteModeAIWriter
                 chapterId={chapterId}
                 bookId={bookId}
-                selectedCharacter={null}
+                selectedCharacter={selectedCharacter}
+                characters={characters}
+                onSelectCharacter={setSelectedCharacter}
                 currentProse={prose}
                 chapterContext={{
                   scene_goal:          chapter?.scene_goal,

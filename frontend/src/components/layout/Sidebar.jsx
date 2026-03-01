@@ -25,7 +25,6 @@ const NAV = [
     zone: 'WRITE',
     items: [
       { icon: '▶',  label: 'Start Session',   route: '/start' },
-      { icon: '⌗',  label: 'Plan with Voice', route: '/plan-with-voice' },
       { icon: '◇',  label: 'Continuity',      route: '/continuity' },
     ],
   },
@@ -223,14 +222,7 @@ function Sidebar({ isOpen, onClose }) {
           ))}
         </nav>
 
-        {/* ── Bottom: Book Editor shortcut ── */}
-        {!collapsed && (
-          <div className="sidebar-bottom">
-            <button className="book-editor-btn" onClick={() => go('/storyteller')}>
-              📖 Book Editor
-            </button>
-          </div>
-        )}
+
 
         {/* ── Footer ── */}
         <div className="sidebar-footer">

@@ -1,0 +1,186 @@
+/* TOCPanel.css */
+/* Scoped, theme-friendly. Inherits font/colors from the parent panel. */
+
+.tocp-shell{
+  padding: 18px 14px;
+  display:flex;
+  flex-direction:column;
+  gap: 10px;
+}
+
+.tocp-book{ margin-bottom: 6px; }
+
+.tocp-bookTitle{
+  font-family: "Playfair Display", serif;
+  font-size: 17px;
+  font-style: italic;
+  line-height: 1.25;
+  margin-bottom: 4px;
+  color: var(--panel-title, rgba(26,21,16,0.92));
+}
+
+.tocp-bookSub{
+  font-family: "DM Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 11px;
+  letter-spacing: .10em;
+  margin-bottom: 10px;
+  color: var(--panel-sub, rgba(26,21,16,0.55));
+}
+
+.tocp-overallRow{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.tocp-overallBar{
+  flex:1;
+  height: 4px;
+  border-radius: 99px;
+  overflow:hidden;
+  background: var(--panel-track, rgba(0,0,0,0.08));
+}
+
+.tocp-overallFill{
+  height:100%;
+  width: 0%;
+  background: var(--panel-accent, #C9A84C);
+  border-radius: 99px;
+  transition: width .35s ease;
+}
+
+.tocp-overallPct{
+  min-width: 40px;
+  text-align:right;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 12px;
+  color: var(--panel-accent, #C9A84C);
+}
+
+.tocp-overallLabel{
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .08em;
+  color: var(--panel-sub, rgba(26,21,16,0.5));
+}
+
+.tocp-divider{
+  height: 1px;
+  background: var(--panel-divider, rgba(0,0,0,0.08));
+}
+
+.tocp-empty{
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 12px;
+  letter-spacing: .06em;
+  color: var(--panel-sub, rgba(26,21,16,0.5));
+}
+
+.tocp-list{
+  display:flex;
+  flex-direction:column;
+}
+
+.tocp-row{
+  display:flex;
+  gap: 10px;
+  padding: 10px 8px;
+  border-radius: 12px;
+  border: 1px solid transparent;
+  background: transparent;
+  cursor:pointer;
+  text-align:left;
+  width: 100%;
+  transition: background .12s ease, border-color .12s ease, transform .12s ease;
+}
+
+.tocp-row:hover{
+  background: rgba(0,0,0,0.035);
+  border-color: rgba(0,0,0,0.06);
+}
+
+.tocp-row:active{
+  transform: translateY(1px);
+}
+
+.tocp-row + .tocp-row{
+  border-top: 1px solid rgba(0,0,0,0.04);
+  border-radius: 0;
+  padding-top: 12px;
+}
+
+.tocp-num{
+  width: 26px;
+  flex-shrink:0;
+  padding-top: 2px;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .10em;
+  color: rgba(201,168,76,0.85);
+}
+
+.tocp-info{ flex:1; min-width:0; }
+
+.tocp-title{
+  font-family: "Playfair Display", serif;
+  font-size: 14px;
+  font-style: italic;
+  line-height: 1.25;
+  margin-bottom: 4px;
+  color: var(--panel-title, rgba(26,21,16,0.90));
+}
+
+.tocp-arc{
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+  margin-bottom: 6px;
+  color: var(--panel-sub, rgba(26,21,16,0.45));
+}
+
+.tocp-barTrack{
+  height: 3px;
+  border-radius: 99px;
+  overflow:hidden;
+  margin-bottom: 6px;
+  background: var(--panel-track, rgba(0,0,0,0.08));
+}
+
+.tocp-barFill{
+  height:100%;
+  width: 0%;
+  border-radius: 99px;
+  transition: width .3s ease;
+  background: #C9A84C;
+}
+
+.tocp-barFill[data-complete="true"]{ background: #4A7C59; }
+.tocp-barFill[data-complete="false"]{ background: #C9A84C; }
+
+.tocp-counts{
+  display:flex;
+  align-items:center;
+  gap: 10px;
+  font-family: "DM Mono", ui-monospace, monospace;
+  font-size: 11px;
+  letter-spacing: .06em;
+}
+
+.tocp-ok{ color: #4A7C59; }
+.tocp-warn{ color: #C9A84C; }
+.tocp-total{
+  margin-left:auto;
+  color: rgba(26,21,16,0.45);
+}
+
+.tocp-row--placeholder{
+  opacity: .35;
+  cursor: default;
+  pointer-events:none;
+}
+
+.tocp-title--placeholder{
+  font-style: italic;
+  color: rgba(26,21,16,0.35);
+}

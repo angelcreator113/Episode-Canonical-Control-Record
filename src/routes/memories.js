@@ -3129,6 +3129,19 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
       character_id   = null,
       gen_length     = 'paragraph',
       stream         = false,
+      // Full plan context
+      emotional_state_start = '',
+      emotional_state_end   = '',
+      theme                 = '',
+      pov                   = '',
+      characters_present    = '',
+      sections              = [],
+      chapter_notes         = '',
+      tone                  = '',
+      setting               = '',
+      conflict              = '',
+      stakes                = '',
+      hooks                 = '',
     } = req.body;
 
     if (!current_prose?.trim()) {
@@ -3148,14 +3161,38 @@ router.post('/story-continue', optionalAuth, async (req, res) => {
       ? 'Write exactly 1–2 sentences. One beat. One moment. That\'s all.'
       : 'Write 2–4 paragraphs. Rich but controlled.';
 
+    // Build plan context block for Claude
+    const planContext = [];
+    if (emotional_state_start || emotional_state_end) {
+      planContext.push(`EMOTIONAL ARC: ${emotional_state_start || '?'} → ${emotional_state_end || '?'}`);
+    }
+    if (theme) planContext.push(`THEME: ${theme}`);
+    if (pov) planContext.push(`POV: ${pov}`);
+    if (tone) planContext.push(`TONE/MOOD: ${tone}`);
+    if (setting) planContext.push(`SETTING: ${setting}`);
+    if (conflict) planContext.push(`CONFLICT: ${conflict}`);
+    if (stakes) planContext.push(`STAKES: ${stakes}`);
+    if (hooks) planContext.push(`HOOKS TO PLANT: ${hooks}`);
+    if (characters_present) {
+      const chars = Array.isArray(characters_present) ? characters_present : characters_present;
+      planContext.push(`CHARACTERS IN SCENE: ${typeof chars === 'string' ? chars : JSON.stringify(chars)}`);
+    }
+    if (chapter_notes && chapter_notes !== chapter_brief) {
+      planContext.push(`AUTHOR'S NOTES: ${chapter_notes}`);
+    }
+    if (sections && sections.length > 0) {
+      const sectionSummary = sections.filter(s => s.title || s.description).map(s => `  - ${s.title || 'Section'}: ${s.description || s.prose?.slice(0, 80) || ''}`).join('\n');
+      if (sectionSummary) planContext.push(`SCENE STRUCTURE:\n${sectionSummary}`);
+    }
+    const planBlock = planContext.length > 0 ? planContext.join('\n') + '\n\n' : '';
+
     const prompt = `You are continuing a memoir in the voice of ${charName}.
 
 The author has written prose below. They paused. Now pick up EXACTLY where they left off — same voice, same truth, same movement. The reader should not be able to tell where the author stopped and you began.
 
 CHAPTER: ${chapter_title || 'Untitled'}
 ${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
-
-CURRENT ACT: ${act.voice}
+${planBlock}CURRENT ACT: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 PROSE TENSE/MODE: ${act.tense}
 
@@ -3287,6 +3324,17 @@ router.post('/story-deepen', optionalAuth, async (req, res) => {
       pnos_act       = 'act_1',
       chapter_title  = '',
       character_id   = null,
+      // Full plan context
+      chapter_brief         = '',
+      emotional_state_start = '',
+      emotional_state_end   = '',
+      theme                 = '',
+      pov                   = '',
+      characters_present    = '',
+      tone                  = '',
+      setting               = '',
+      conflict              = '',
+      stakes                = '',
     } = req.body;
 
     if (!current_prose?.trim()) {
@@ -3302,6 +3350,23 @@ router.post('/story-deepen', optionalAuth, async (req, res) => {
     const lastParagraph = paragraphs[paragraphs.length - 1];
     const contextBefore = paragraphs.slice(-4, -1).join('\n\n');
 
+    // Build plan context for deeper scene awareness
+    const deepenPlanContext = [];
+    if (chapter_brief) deepenPlanContext.push(`SCENE: ${chapter_brief}`);
+    if (emotional_state_start || emotional_state_end) {
+      deepenPlanContext.push(`EMOTIONAL ARC: ${emotional_state_start || '?'} → ${emotional_state_end || '?'}`);
+    }
+    if (theme) deepenPlanContext.push(`THEME: ${theme}`);
+    if (pov) deepenPlanContext.push(`POV: ${pov}`);
+    if (tone) deepenPlanContext.push(`TONE/MOOD: ${tone}`);
+    if (setting) deepenPlanContext.push(`SETTING: ${setting}`);
+    if (conflict) deepenPlanContext.push(`CONFLICT: ${conflict}`);
+    if (stakes) deepenPlanContext.push(`STAKES: ${stakes}`);
+    if (characters_present) {
+      deepenPlanContext.push(`CHARACTERS: ${typeof characters_present === 'string' ? characters_present : JSON.stringify(characters_present)}`);
+    }
+    const deepenPlanBlock = deepenPlanContext.length > 0 ? deepenPlanContext.join('\n') + '\n' : '';
+
     const prompt = `You are deepening a moment in a memoir written in ${charName}'s voice.
 
 ${contextBefore ? `CONTEXT (what came before):\n${contextBefore}\n\n` : ''}
@@ -3309,7 +3374,7 @@ PARAGRAPH TO DEEPEN:
 ${lastParagraph}
 
 CHAPTER: ${chapter_title || 'Untitled'}
-CURRENT VOICE: ${act.voice}
+${deepenPlanBlock}CURRENT VOICE: ${act.voice}
 CURRENT BELIEF: "${act.belief}"
 
 ${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}${charRules}
@@ -3392,6 +3457,16 @@ router.post('/story-nudge', optionalAuth, async (req, res) => {
       chapter_brief  = '',
       pnos_act       = 'act_1',
       character_id   = null,
+      // Full plan context
+      emotional_state_start = '',
+      emotional_state_end   = '',
+      theme                 = '',
+      pov                   = '',
+      characters_present    = '',
+      tone                  = '',
+      setting               = '',
+      conflict              = '',
+      stakes                = '',
     } = req.body;
 
     if (!current_prose?.trim()) {
@@ -3404,6 +3479,21 @@ router.post('/story-nudge', optionalAuth, async (req, res) => {
     const charVoiceBlock = charVoice?.voiceBlock || '';
     const recentProse = current_prose.split('\n\n').slice(-3).join('\n\n');
 
+    // Build plan context for nudge awareness
+    const nudgePlanContext = [];
+    if (emotional_state_start || emotional_state_end) {
+      nudgePlanContext.push(`EMOTIONAL ARC: ${emotional_state_start || '?'} → ${emotional_state_end || '?'}`);
+    }
+    if (theme) nudgePlanContext.push(`THEME: ${theme}`);
+    if (tone) nudgePlanContext.push(`TONE/MOOD: ${tone}`);
+    if (setting) nudgePlanContext.push(`SETTING: ${setting}`);
+    if (conflict) nudgePlanContext.push(`CONFLICT: ${conflict}`);
+    if (stakes) nudgePlanContext.push(`STAKES: ${stakes}`);
+    if (characters_present) {
+      nudgePlanContext.push(`CHARACTERS: ${typeof characters_present === 'string' ? characters_present : JSON.stringify(characters_present)}`);
+    }
+    const nudgePlanBlock = nudgePlanContext.length > 0 ? nudgePlanContext.join('\n') + '\n' : '';
+
     const prompt = `You are a writing partner for a memoir in ${charName}'s voice.
 
 The author has written this so far:
@@ -3411,7 +3501,7 @@ ${recentProse}
 
 CHAPTER: ${chapter_title || 'Untitled'}
 ${chapter_brief ? `SCENE: ${chapter_brief}` : ''}
-ACT ENERGY: ${act.voice}
+${nudgePlanBlock}ACT ENERGY: ${act.voice}
 BELIEF: "${act.belief}"
 
 ${charVoiceBlock ? charVoiceBlock + '\n\n' : ''}Give the writer a SHORT creative nudge — one sentence, maybe two. Not prose. A suggestion.
@@ -3499,6 +3589,24 @@ async function safeAI(systemPrompt, userPrompt, maxTokens = 800) {
     return res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
   } catch (err) {
     console.error('safeAI call failed:', err.message);
+    return null;
+  }
+}
+
+// safeAI variant with explicit temperature control (for creative writing)
+async function safeAIWithTemp(systemPrompt, userPrompt, maxTokens = 800, temperature = 0.85) {
+  if (!anthropic) return null;
+  try {
+    const res = await anthropic.messages.create({
+      model:       'claude-sonnet-4-6',
+      max_tokens:  maxTokens,
+      temperature,
+      system:      systemPrompt,
+      messages:    [{ role: 'user', content: userPrompt }],
+    });
+    return res.content.filter(b => b.type === 'text').map(b => b.text).join('').trim();
+  } catch (err) {
+    console.error('safeAIWithTemp call failed:', err.message);
     return null;
   }
 }
@@ -3804,11 +3912,18 @@ router.post('/ai-writer-action', optionalAuth, async (req, res) => {
       character,       // { name, type, role, belief_pressured, emotional_function, writer_notes }
       recent_prose,    // last ~600 chars of current writing
       chapter_context, // { scene_goal, theme, emotional_arc_start, emotional_arc_end, pov }
-      action,          // 'dialogue' | 'interior' | 'reaction' | 'lala'
+      action,          // 'continue' | 'dialogue' | 'interior' | 'reaction' | 'lala'
       length,          // 'paragraph' | 'sentence'
+      retry_hint,      // random seed string to force variation on retries
     } = req.body;
 
     const ACTION_PROMPTS = {
+      continue: `Write what happens next in this character's voice.
+        Continue the prose seamlessly — same rhythm, same emotional temperature.
+        Two to four sentences. Predict the next beat: the next breath,
+        the next small action, the next thought that would cross their mind.
+        Do not restart or summarize. Just continue.`,
+
       dialogue: `Write the next line of dialogue this character speaks aloud.
         It must come from their specific belief system and defense mechanism.
         One to three sentences maximum. In quotation marks.`,
@@ -3847,9 +3962,11 @@ Emotional arc: ${chapter_context?.emotional_arc_start || '?'} → ${chapter_cont
 RECENT PROSE:
 ${recent_prose || '(start of chapter)'}
 
-ACTION: ${ACTION_PROMPTS[action] || ACTION_PROMPTS.dialogue}`;
+ACTION: ${ACTION_PROMPTS[action] || ACTION_PROMPTS.dialogue}${retry_hint ? `\n\nIMPORTANT: Write a COMPLETELY DIFFERENT version than before. Vary the tone, word choice, and angle. Variation seed: ${retry_hint}` : ''}`;
 
-    const result = await safeAI(system, user, length === 'sentence' ? 150 : 350);
+    // Use higher temperature for creative writing; bump further on retries
+    const temp = retry_hint ? 1.0 : 0.85;
+    const result = await safeAIWithTemp(system, user, length === 'sentence' ? 150 : 350, temp);
 
     res.json({ ok: true, content: result, action });
 
@@ -4235,7 +4352,9 @@ router.post('/story-planner-chat', optionalAuth, async (req, res) => {
     const planSummary = buildStoryPlanSummary(plan);
     const characterList = characters.map(c => `${c.name} (${c.type})`).join(', ');
 
-    const systemPrompt = `You are a deeply curious, intuitive story development partner. You think like a book editor who genuinely loves stories. You're helping an author plan their book through intimate conversation — like two writers talking over coffee.
+    const systemPrompt = `You are the author's ride-or-die creative bestie. Think of yourself as that one friend who is OBSESSED with their stories, stays up way too late theorizing about their characters, and will absolutely call them out (with love) when something isn't hitting. You're sassy, warm, a little dramatic, and unapologetically enthusiastic. You talk like a real person — a Gen Z girly girl who also happens to be a brilliant story editor.
+
+You use casual language naturally: "okay wait", "bestie", "literally", "no because", "the way I gasped", "I'm screaming", "obsessed", "slay", "that's giving", "not gonna lie", "period", "this is everything". But you're NOT a caricature — you're genuinely smart about storytelling. You know story structure, emotional arcs, and character psychology. The sass serves the story. You hype what deserves hype and you lovingly drag what needs work.
 
 BOOK: "${book?.title || 'Untitled'}"
 AVAILABLE CHARACTERS: ${characterList || 'none yet'}
@@ -4244,32 +4363,45 @@ CURRENT PLAN STATE:
 ${planSummary}
 
 YOUR CORE PHILOSOPHY:
-You are NOT filling out a form. You are having a real conversation about a story that matters to this person. Your job is to ask the kinds of questions that make the author say "oh — I never thought of it that way" or "yes, THAT's what I've been trying to say."
+You're not filling out a boring form. You're having a REAL conversation about a story you're genuinely excited about. Your job is to ask the kinds of questions that make the author go "oh wait — that's actually so good" or "YES that's exactly what I meant!" You get invested. You pick favorites. You have opinions. You're basically co-plotting this story because you care about it.
 
 HOW YOU TALK:
-- Ask one question at a time, but make it a GOOD question — probing, specific, unexpected
-- When the author gives a surface answer ("it's about a girl who…"), dig deeper: "But what is she REALLY running from?" or "What does she want more than anything, and what's stopping her?"
-- Reflect back what you hear in a way that adds insight: "So this is really a book about forgiveness disguised as a heist story."
-- If they give you a chapter summary, ask about the emotional undercurrent: "When the reader finishes this chapter, what should they feel in their chest?"
-- Challenge gently: "You said he's angry — but is it really anger, or is it grief wearing anger's face?"
-- Be specific, not generic. Don't ask "tell me more" — ask "what does the room look like when she finally says it?"
-- Keep your responses to 1-3 sentences. Warmth + precision.
+- Ask one question at a time, but make it a BANGER — specific, unexpected, the kind of question that unlocks something
+- When they give a surface answer ("it's about a girl who…"), dig deeper but keep it bestie: "Okay but what is she REALLY running from though? Like what keeps her up at 3am?"
+- Hype the good stuff: "No because the way this chapter concept just gave me chills?? The betrayal reveal here is going to DESTROY readers."
+- Get nosy about the emotional undercurrent: "Okay so when the reader finishes this chapter, what should they be feeling? Like are we crying, are we furious, are we throwing the book?"
+- Challenge with love: "Babe, you said he's angry — but be honest with me. Is it really anger or is it grief wearing a mask? Because that changes EVERYTHING."
+- Be specific, not generic. Never say "tell me more" — say "okay but like what does the room look like when she finally says it? I need to SEE it."
+- Keep responses to 1-3 sentences. Vibes + precision.
+- When characters come up, get INVESTED: "Wait I already love her. Okay what's her deal though — what does she want so bad it scares her?"
+- PROACTIVELY suggest plot ideas when characters or situations are discussed. Pitch dramatic twists, emotional reveals, and "what if" scenarios. Example: "Okay hear me out — what if the reason he can't forgive her isn't the lie itself, but that she was RIGHT to lie? Like that would be such a gut punch."
+- When you have enough context about characters, ACTIVELY brainstorm plot directions: "So with Maya being this stubborn and Kai keeping secrets, I'm already seeing like three different ways this could blow up and they're all devastating. Want me to pitch them?"
 
 QUESTION PROGRESSION (follow the conversation, don't force order):
-1. THE HEART — What is this book really about? Not the plot — the question it asks, the wound it touches.
-2. THE ARC — How does the world (or the protagonist) change from page 1 to the last page?
-3. THE STRUCTURE — How does the story breathe? Parts? Acts? Is there a turning point that splits the book in two?
-4. CHAPTER BY CHAPTER — What happens, what shifts, what breaks, what heals in each chapter?
-5. THE PEOPLE — Who carries this story? What do they want? What are they afraid of?
-6. EMOTIONAL TEXTURE — For each chapter: where does the reader's heart start, and where does it land?
-7. THE DETAILS — Sections, scenes, moments that MUST be in the book
+1. THE HEART — What is this book really about? Not the plot — the FEELING. The wound it's poking at.
+2. THE ARC — How does the main character (or the whole world) change from page one to the end?
+3. THE THEME — What's the tension this book lives inside? (like "freedom vs. belonging" or "the price of knowing the truth"). Extract this even if they don't say the word "theme" — you'll hear it.
+4. THE VOICE — Whose eyes are we seeing through? First person? Third? Does POV hop between characters? Get this early — it shapes literally everything.
+5. THE WORLD — Where and when does this live? What does the world look, smell, taste like? For fantasy: what are the rules? What's the magic system? What's forbidden and WHY? For thrillers: what's the geography of danger? Extract the SETTING and TONE.
+6. THE CONFLICT — What does the protagonist want, and what's standing in the way? Is it external (villain, war, ticking clock) or internal (guilt, identity crisis, a secret eating them alive)? Who or what is the antagonist? Extract the STAKES — what happens if they fail? Not the world — THEM personally.
+7. THE STRUCTURE — How does the story breathe? Parts? Acts? Is there a moment that cracks the book in half?
+8. CHAPTER BY CHAPTER — What happens, what shifts, what breaks, what heals in each chapter?
+9. THE PEOPLE — Who carries this story? What do they want? What are they terrified of? What's their dynamic? Brainstorm plot directions: "Okay so she's ambitious and he's secretive — that's already a RECIPE. What if she accidentally uncovers his thing while chasing hers?"
+10. EMOTIONAL TEXTURE — For each chapter: where does the reader's heart start, and where does it land?
+11. THE HOOKS — What mysteries, foreshadowing, or cliffhangers should we plant? What questions should the reader be screaming about at each chapter's end?
+12. THE DETAILS — Sections, scenes, moments that absolutely MUST be in the book. The iconic scenes.
 
 IF THE AUTHOR IS VAGUE:
-Don't accept "it's about love" — ask "whose love? earned or inherited? Does it survive the story?"
-Don't accept "she goes on a journey" — ask "where does she wake up on page one, and what makes today different from yesterday?"
+Don't accept "it's about love" — hit them with "whose love though? Earned or inherited? Does it survive the story or does it burn?"
+Don't accept "she goes on a journey" — "babe WHERE does she wake up on page one, and what makes today the day everything changes?"
+Don't accept "it's a fantasy world" — "okay but what's BROKEN about this world? What smells wrong? What are people whispering about when the lights go out?"
+Don't accept "the stakes are high" — "high how? Like what does SHE personally lose if she stops fighting? Not the kingdom — HER. What breaks?"
 
 IF THE AUTHOR HAS A LOT ALREADY:
-Acknowledge it, find the gaps, ask about the parts that feel thin or unclear.
+Hype it! Then find the gaps — the spots that feel thin or handwavy. For fantasy: pressure-test the world-building. For thrillers: check the ticking clock logic. For drama: make sure the emotional chain of events actually tracks.
+
+WHEN SUGGESTING NAMES OR TITLES:
+If the author asks for help naming their book, chapters, or sections — or if you notice a title could be stronger — go all in. Pitch 3-5 options with different vibes and explain WHY each one works. Be opinionated about which one YOU love most.
 
 RESPONSE FORMAT — you MUST respond with valid JSON only, no markdown:
 {
@@ -4277,9 +4409,15 @@ RESPONSE FORMAT — you MUST respond with valid JSON only, no markdown:
   "speakReply": true,
   "planUpdates": {
     "summary": "One-line summary of what you just extracted (shown to user as confirmation)",
-    "highlightField": "fieldName that just got filled (bookTitle | bookConcept | parts | chapter-0 | chapter-1 | etc.)",
+    "highlightField": "fieldName that just got filled (bookTitle | bookConcept | theme | pov | tone | setting | conflict | stakes | parts | chapter-0 | chapter-1 | etc.)",
     "bookTitle": "extracted title or null",
     "bookConcept": "extracted concept/premise or null",
+    "theme": "the central theme or thematic question of the book (e.g. 'forgiveness vs. justice', 'the cost of ambition') or null",
+    "pov": "the narrative point of view (e.g. 'first person', 'third person limited', 'alternating POV between Maya and James') or null",
+    "tone": "the overall mood/atmosphere (e.g. 'dark and foreboding', 'tense and paranoid', 'whimsical but with teeth', 'epic and sweeping') or null",
+    "setting": "the world/setting description (e.g. 'a dying empire where magic bleeds from the earth', 'rain-soaked London, 1888') or null",
+    "conflict": "central conflict (e.g. 'a war between mortal ambition and ancient pacts', 'she must choose between the family she was born into and the one she built') or null",
+    "stakes": "what is ultimately at risk (e.g. 'the extinction of wild magic and the last people who remember it', 'her sanity, her freedom, and the only person she trusts') or null",
     "parts": [{ "title": "Part title" }],
     "chapters": [
       {
@@ -4289,7 +4427,14 @@ RESPONSE FORMAT — you MUST respond with valid JSON only, no markdown:
         "emotionalStart": "emotional state at start or null",
         "emotionalEnd": "emotional state at end or null",
         "characters": ["Character Name"],
-        "sections": [{ "title": "section title", "type": "scene|reflection|transition|revelation" }]
+        "sections": [{ "title": "section title", "type": "scene|reflection|transition|revelation" }],
+        "theme": "chapter-specific theme if different from book theme, or null",
+        "pov": "chapter-specific POV if it differs from the book default, or null",
+        "tone": "chapter-specific mood if it shifts from the book tone (e.g. 'intimate and quiet' in a mostly epic book), or null",
+        "setting": "where this chapter takes place specifically, or null",
+        "conflict": "this chapter's central tension, or null",
+        "stakes": "what's at risk in this chapter, or null",
+        "hooks": "foreshadowing, cliffhangers, or mysteries to plant in this chapter, or null"
       }
     ]
   }
@@ -4370,6 +4515,12 @@ function buildStoryPlanSummary(plan) {
 
   if (plan.bookTitle)   lines.push(`Title: ${plan.bookTitle}`);
   if (plan.bookConcept) lines.push(`Concept: ${plan.bookConcept}`);
+  if (plan.theme)        lines.push(`Theme: ${plan.theme}`);
+  if (plan.pov)          lines.push(`POV: ${plan.pov}`);
+  if (plan.tone)         lines.push(`Tone/Mood: ${plan.tone}`);
+  if (plan.setting)      lines.push(`Setting/World: ${plan.setting}`);
+  if (plan.conflict)     lines.push(`Central Conflict: ${plan.conflict}`);
+  if (plan.stakes)       lines.push(`Stakes: ${plan.stakes}`);
 
   if (plan.parts?.length) {
     lines.push(`Parts: ${plan.parts.map(p => p.title).join(', ')}`);
@@ -4387,6 +4538,13 @@ function buildStoryPlanSummary(plan) {
       if (ch.what)           line += ` — ${ch.what.substring(0, 80)}`;
       if (ch.emotionalStart) line += ` [${ch.emotionalStart} → ${ch.emotionalEnd || '?'}]`;
       if (ch.characters?.length) line += ` (${ch.characters.join(', ')})`;
+      if (ch.theme)          line += ` {theme: ${ch.theme}}`;
+      if (ch.pov)            line += ` {pov: ${ch.pov}}`;
+      if (ch.tone)           line += ` {tone: ${ch.tone}}`;
+      if (ch.setting)        line += ` {setting: ${ch.setting}}`;
+      if (ch.conflict)       line += ` {conflict: ${ch.conflict}}`;
+      if (ch.stakes)         line += ` {stakes: ${ch.stakes}}`;
+      if (ch.hooks)          line += ` {hooks: ${ch.hooks}}`;
       lines.push(line);
     });
 
