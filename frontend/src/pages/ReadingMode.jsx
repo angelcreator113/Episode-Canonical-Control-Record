@@ -89,21 +89,30 @@ export default function ReadingMode() {
   // Build reading data — show ALL lines so the full book is visible cover-to-cover
   const chapters = (book.chapters || [])
     .slice()
-    .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
-    .map(ch => ({
-      ...ch,
-      readableLines: (ch.lines || ch.storyteller_lines || [])
-        .sort((a, b) => (a.order_index ?? a.sort_order ?? 0) - (b.order_index ?? b.sort_order ?? 0)),
-    }));
+    .sort((a, b) => (a.sort_order ?? a.chapter_number ?? 0) - (b.sort_order ?? b.chapter_number ?? 0))
+    .map(ch => {
+      const lines = (ch.lines || ch.storyteller_lines || [])
+        .sort((a, b) => (a.sort_order ?? a.order_index ?? 0) - (b.sort_order ?? b.order_index ?? 0));
+      // Fallback: if no lines yet but has draft_prose, split into paragraphs
+      const draftParas = (!lines.length && ch.draft_prose)
+        ? ch.draft_prose.split(/\n\n+/).filter(p => p.trim())
+        : [];
+      return {
+        ...ch,
+        readableLines: lines,
+        draftParas,
+      };
+    });
 
   // Chapters with content (for manuscript rendering)
-  const contentChapters = chapters.filter(ch => ch.readableLines.length > 0);
+  const contentChapters = chapters.filter(ch => ch.readableLines.length > 0 || ch.draftParas.length > 0);
 
   const allLines = chapters.flatMap(ch => ch.readableLines);
+  const allDraftParas = chapters.flatMap(ch => ch.draftParas);
   const wordCount = allLines.reduce((sum, l) => {
     const text = l.content || l.text || '';
     return sum + text.trim().split(/\s+/).filter(Boolean).length;
-  }, 0);
+  }, 0) + allDraftParas.reduce((sum, p) => sum + p.trim().split(/\s+/).filter(Boolean).length, 0);
   const readingMinutes = Math.max(1, Math.round(wordCount / WORDS_PER_MINUTE));
 
   return (
@@ -152,7 +161,13 @@ export default function ReadingMode() {
             >
               <span style={s.tocNum}>{i + 1}</span>
               <span style={s.tocChapterTitle}>{ch.title || `Chapter ${i + 1}`}</span>
-              <span style={s.tocLineCount}>{ch.readableLines.length} lines</span>
+              <span style={s.tocLineCount}>
+                {ch.readableLines.length > 0
+                  ? `${ch.readableLines.length} lines`
+                  : ch.draftParas.length > 0
+                    ? 'draft'
+                    : 'empty'}
+              </span>
             </a>
           ))}
         </div>
@@ -172,6 +187,36 @@ export default function ReadingMode() {
           )}
           <div style={s.bookRule} />
         </div>
+
+        {/* Front matter */}
+        {book.front_matter && (
+          <div style={s.frontMatter}>
+            {book.front_matter.dedication && (
+              <div style={s.fmBlock}>
+                <div style={s.fmLabel}>Dedication</div>
+                <div style={s.fmDedication}>{book.front_matter.dedication}</div>
+              </div>
+            )}
+            {book.front_matter.epigraph && (
+              <div style={s.fmBlock}>
+                <div style={s.fmEpigraph}>{book.front_matter.epigraph}</div>
+              </div>
+            )}
+            {book.front_matter.foreword && (
+              <div style={s.fmBlock}>
+                <div style={s.fmLabel}>Foreword</div>
+                <div style={s.fmText}>{book.front_matter.foreword}</div>
+              </div>
+            )}
+            {book.front_matter.preface && (
+              <div style={s.fmBlock}>
+                <div style={s.fmLabel}>Preface</div>
+                <div style={s.fmText}>{book.front_matter.preface}</div>
+              </div>
+            )}
+            <div style={s.bookRule} />
+          </div>
+        )}
 
         {/* Chapters */}
         {chapters.length === 0 ? (
@@ -195,6 +240,43 @@ export default function ReadingMode() {
           <div style={s.endMark}>
             <div style={s.endRule} />
             <div style={s.endText}>∎</div>
+          </div>
+        )}
+
+        {/* Back matter */}
+        {book.back_matter && (
+          <div style={s.backMatter}>
+            <div style={s.bookRule} />
+            {book.back_matter.acknowledgments && (
+              <div style={s.fmBlock}>
+                <div style={s.fmLabel}>Acknowledgments</div>
+                <div style={s.fmText}>{book.back_matter.acknowledgments}</div>
+              </div>
+            )}
+            {book.back_matter.about_author && (
+              <div style={s.fmBlock}>
+                <div style={s.fmLabel}>About the Author</div>
+                <div style={s.fmText}>{book.back_matter.about_author}</div>
+              </div>
+            )}
+            {book.back_matter.glossary && (
+              <div style={s.fmBlock}>
+                <div style={s.fmLabel}>Glossary</div>
+                <div style={s.fmText}>{book.back_matter.glossary}</div>
+              </div>
+            )}
+            {book.back_matter.bibliography && (
+              <div style={s.fmBlock}>
+                <div style={s.fmLabel}>Bibliography</div>
+                <div style={s.fmText}>{book.back_matter.bibliography}</div>
+              </div>
+            )}
+            {book.back_matter.notes && (
+              <div style={s.fmBlock}>
+                <div style={s.fmLabel}>Notes</div>
+                <div style={s.fmText}>{book.back_matter.notes}</div>
+              </div>
+            )}
           </div>
         )}
 
@@ -224,8 +306,20 @@ function ChapterSection({ chapter, chapterIndex, isLast, isEmpty }) {
 
       {/* Lines */}
       <div style={s.lines}>
-        {isEmpty ? (
-          <p style={s.emptyChapter}>— No lines yet —</p>
+        {isEmpty && chapter.draftParas.length === 0 ? (
+          <p style={s.emptyChapter}>— No content yet —</p>
+        ) : isEmpty && chapter.draftParas.length > 0 ? (
+          // Fallback: render draft prose paragraphs when no lines imported yet
+          <>
+            <div style={s.draftBadge}>Draft</div>
+            {chapter.draftParas.map((para, pi) => (
+              <p key={pi} style={s.line}>
+                {pi === 0 ? (
+                  <><span style={s.dropCap}>{para[0]}</span>{para.slice(1)}</>
+                ) : para}
+              </p>
+            ))}
+          </>
         ) : (
           chapter.readableLines.map((line, lineIdx) => (
             <Line
@@ -650,5 +744,71 @@ const s = {
     color: GOLD,
     cursor: 'pointer',
     padding: '4px 0',
+  },
+
+  // Front / back matter
+  frontMatter: {
+    marginBottom: 60,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 32,
+  },
+  backMatter: {
+    marginTop: 40,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: 32,
+    paddingBottom: 40,
+  },
+  fmBlock: {
+    maxWidth: 500,
+    width: '100%',
+    textAlign: 'center',
+  },
+  fmLabel: {
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 8,
+    letterSpacing: '0.22em',
+    color: GOLD,
+    textTransform: 'uppercase',
+    marginBottom: 8,
+  },
+  fmDedication: {
+    fontFamily: "'Playfair Display', Georgia, serif",
+    fontSize: 16,
+    fontStyle: 'italic',
+    color: INK_LIGHT,
+    lineHeight: 1.7,
+  },
+  fmEpigraph: {
+    fontFamily: "'Playfair Display', Georgia, serif",
+    fontSize: 15,
+    fontStyle: 'italic',
+    color: INK_LIGHT,
+    lineHeight: 1.7,
+    paddingLeft: 24,
+    borderLeft: `2px solid rgba(201,168,76,0.3)`,
+    textAlign: 'left',
+  },
+  fmText: {
+    fontFamily: "'Playfair Display', Georgia, serif",
+    fontSize: 15,
+    color: INK,
+    lineHeight: 1.75,
+    textAlign: 'left',
+    whiteSpace: 'pre-wrap',
+  },
+
+  // Draft badge (shown when rendering draft_prose fallback)
+  draftBadge: {
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 8,
+    letterSpacing: '0.18em',
+    color: 'rgba(201,168,76,0.5)',
+    textTransform: 'uppercase',
+    marginBottom: 8,
+    textAlign: 'center',
   },
 };

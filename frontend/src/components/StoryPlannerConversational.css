@@ -772,6 +772,201 @@
   margin: 0;
 }
 
+/* ── Quick-action buttons row (wrapping) ─────────────────────── */
+
+.spc-plan-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.spc-action-btn--outline {
+  background: transparent;
+  border: 1px solid #3A342E;
+  color: #C2BAB2;
+}
+.spc-action-btn--outline:hover,
+.spc-action-btn--outline.active {
+  background: #2F2A26;
+  border-color: var(--st-gold, #C6A85E);
+  color: var(--st-gold, #C6A85E);
+}
+
+/* ── Book Structure Blueprint ────────────────────────────────── */
+
+.spc-structure-blueprint {
+  background: #1E1B18;
+  border: 1px dashed #3A342E;
+  border-radius: 8px;
+}
+.spc-structure-group {
+  margin-bottom: 10px;
+}
+.spc-structure-group:last-child { margin-bottom: 0; }
+.spc-structure-label {
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--st-gold, #C6A85E);
+  margin-bottom: 5px;
+}
+.spc-structure-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.spc-structure-item {
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 11px;
+  color: #D9D0C7;
+  background: #2A2521;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid #3A342E;
+}
+.spc-structure-item--anatomy {
+  border-color: rgba(198, 168, 94, 0.25);
+  color: #E8D9B8;
+}
+.spc-structure-body-desc {
+  font-family: var(--st-serif, 'Lora', Georgia, serif);
+  font-size: 12px;
+  color: #C2BAB2;
+  margin: 0;
+  font-style: italic;
+}
+
+/* ── Approval Cards ──────────────────────────────────────────── */
+
+.spc-approvals-section {
+  border: 1px solid rgba(198, 168, 94, 0.35);
+  background: linear-gradient(135deg, #2A2420 0%, #1E1B18 100%);
+  border-radius: 10px;
+}
+.spc-approval-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: var(--st-gold, #C6A85E);
+  color: #1C1814;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+  padding: 0 5px;
+}
+.spc-approval-card {
+  background: #2A2521;
+  border: 1px solid #3A342E;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: border-color 0.2s;
+}
+.spc-approval-card:hover {
+  border-color: var(--st-gold, #C6A85E);
+}
+.spc-approval-type {
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--st-gold, #C6A85E);
+  margin-bottom: 4px;
+}
+.spc-approval-title {
+  font-family: var(--st-serif, 'Lora', Georgia, serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: #FAF7F0;
+  margin-bottom: 4px;
+}
+.spc-approval-summary {
+  font-family: var(--st-serif, 'Lora', Georgia, serif);
+  font-size: 12px;
+  color: #C2BAB2;
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+.spc-approval-details {
+  background: #1E1B18;
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  max-height: 160px;
+  overflow-y: auto;
+}
+.spc-approval-details p {
+  font-family: var(--st-serif, 'Lora', Georgia, serif);
+  font-size: 12px;
+  color: #D9D0C7;
+  margin: 0;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+.spc-approval-pre {
+  font-family: var(--st-mono, 'DM Mono', monospace);
+  font-size: 10px;
+  color: #D9D0C7;
+  margin: 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.spc-approval-actions {
+  display: flex;
+  gap: 6px;
+}
+.spc-approval-btn {
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.spc-approval-btn--approve {
+  background: var(--st-gold, #C6A85E);
+  color: #1C1814;
+  border-color: var(--st-gold, #C6A85E);
+}
+.spc-approval-btn--approve:hover {
+  background: #D4B86A;
+}
+.spc-approval-btn--edit {
+  background: transparent;
+  color: var(--st-gold, #C6A85E);
+  border-color: var(--st-gold, #C6A85E);
+}
+.spc-approval-btn--edit:hover {
+  background: rgba(198, 168, 94, 0.12);
+}
+.spc-approval-btn--dismiss {
+  background: transparent;
+  color: #8A7E72;
+  border-color: #3A342E;
+}
+.spc-approval-btn--dismiss:hover {
+  background: #2A2521;
+  color: #C2BAB2;
+}
+
+.spc-approved-badge {
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 11px;
+  color: #6EBF7B;
+  text-align: center;
+  padding: 6px 0;
+  opacity: 0.7;
+}
+
 /* ── Mobile tab bar (hidden on desktop) ──────────────────────── */
 
 .spc-mobile-tabs {

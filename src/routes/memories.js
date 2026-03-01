@@ -4307,7 +4307,7 @@ ${mode === 'full' ? `{
 
 router.post('/story-planner-chat', optionalAuth, async (req, res) => {
   try {
-    const { message, history = [], book, plan, characters = [] } = req.body;
+    const { message, history = [], book, plan, characters = [], approvalStatus } = req.body;
 
     if (!message?.trim()) {
       return res.status(400).json({ error: 'message is required' });
@@ -4358,6 +4358,7 @@ You use casual language naturally: "okay wait", "bestie", "literally", "no becau
 
 BOOK: "${book?.title || 'Untitled'}"
 AVAILABLE CHARACTERS: ${characterList || 'none yet'}
+${approvalStatus?.items?.length ? `\nAPPROVAL STATUS: ${approvalStatus.pending} pending, ${approvalStatus.approved} approved\n${approvalStatus.items.map(a => `  - [${a.status.toUpperCase()}] ${a.type}: ${a.title}`).join('\n')}` : ''}
 
 CURRENT PLAN STATE:
 ${planSummary}
@@ -4443,11 +4444,68 @@ RESPONSE FORMAT — you MUST respond with valid JSON only, no markdown:
 Only include fields in planUpdates that you actually extracted from this message.
 If nothing new was extracted, return planUpdates as {}.
 The "chapters" array in planUpdates should only include chapters that were mentioned — not all chapters.
-Match chapter by index (0-based) or by title if the author mentions it by name.`;
+Match chapter by index (0-based) or by title if the author mentions it by name.
+
+RESTRUCTURING CHAPTERS & SECTIONS:
+You CAN update existing chapters to better fit the evolving story — rename them, change their sections, adjust tone/stakes/conflict, reorder scenes within a chapter. Just reference them by index.
+You CAN suggest NEW chapters beyond what currently exists — use an index beyond the current count and they will be created automatically.
+You CAN restructure sections within a chapter — add new ones, rename existing ones, change their types (scene/reflection/transition/revelation), reorder them. Always return the FULL updated sections array for that chapter when restructuring.
+If the author says something like "actually chapter 3 should be split into two" or "move the reveal to chapter 5" or "this chapter needs a reflection beat" — update the plan accordingly.
+
+STANDARD BOOK STRUCTURE — follow this blueprint so the book is easy to organize:
+A complete book has three parts:
+1. FRONT MATTER — Title Page, Dedication, Epigraph, Table of Contents
+2. BODY — Chapters grouped into Parts (optional). Each chapter has: title, scene goal, emotional arc, POV, tone, setting, conflict, stakes, sections (scene/reflection/transition/revelation), hooks/foreshadowing, and characters present.
+3. BACK MATTER — Acknowledgments, Glossary, About the Author, Bibliography
+
+When the author asks you to write, plan, or restructure — follow this blueprint. Suggest front/back matter items when appropriate. Keep the structure clean and consistent so the author always knows where they are in the book.
+
+TABLE OF CONTENTS & BOOK INDEX:
+When the author asks for a TOC, index, or book layout — generate it from the current plan state.
+Send it as an APPROVAL (see below) so the author can review and approve it before it gets applied.
+A TOC approval should list every chapter with its sections. A book layout approval should include front matter, all chapters, and back matter.
+
+BOOK DESCRIPTION / SYNOPSIS:
+When the author asks for a description or synopsis — write 2-3 compelling options (short blurb, medium back-cover, and long synopsis).
+Send each as an approval item so the author picks their favorite. The approved one sets bookConcept.
+
+APPROVAL WORKFLOW:
+For BIG decisions that shape the book, send them as approval items instead of auto-applying.
+Use approvals for: book layout proposals, table of contents, book descriptions, new character ideas, major restructuring proposals, front/back matter suggestions.
+Do NOT use approvals for small extractions (theme, tone, a chapter title mentioned in passing) — those auto-apply as normal planUpdates.
+
+To send approvals, add an "approvals" array inside planUpdates:
+"approvals": [
+  {
+    "id": "unique-id-string",
+    "type": "book_layout | table_of_contents | book_description | character_profile | restructure | front_matter | back_matter",
+    "title": "Short title of what you're proposing",
+    "summary": "1-2 sentence description of the proposal",
+    "details": "The full proposal text — formatted nicely for the author to read",
+    "content": {
+      "bookConcept": "if this approval sets the description, put it here",
+      "chapters": [{ "index": 0, "title": "..." }]
+    }
+  }
+]
+The "content" field contains the planUpdates that will be merged into the plan IF the author approves.
+The "details" field is the human-readable version the author sees in the approval card.
+You can send multiple approval items at once.
+
+WHAT NEEDS APPROVAL vs WHAT AUTO-APPLIES:
+- Auto-apply (normal planUpdates): theme, POV, tone, setting, conflict, stakes, individual chapter field updates, section tweaks
+- Needs approval: Full book layout, TOC generation, book description options, proposals to add 3+ chapters at once, major restructuring (reordering many chapters), new character profiles, front/back matter suggestions
+
+WHEN THE AUTHOR IS WRITING WITH YOU:
+If you're helping write the book step by step, tell them what you need to proceed:
+- "I need you to approve the book layout before I can outline chapters"
+- "Before I draft this section, approve the character profile for Maya"
+- "I've got 3 description options — pick one so we can finalize"
+Be clear about what's blocking progress so the author knows exactly what to approve or edit.`;
 
     const response = await anthropic.messages.create({
       model:      'claude-sonnet-4-6',
-      max_tokens: 800,
+      max_tokens: 1200,
       system:     systemPrompt,
       messages:   conversationHistory,
     });
