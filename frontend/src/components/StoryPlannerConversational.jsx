@@ -81,6 +81,84 @@ function planEmpty(chapters, book) {
   };
 }
 
+// ── Book health scanner — detects issues in the plan/book ────────────────
+function scanBookHealth(plan, characters, book) {
+  const issues = [];
+  const add = (severity, category, message) => issues.push({ severity, category, message });
+
+  // Book-level checks
+  if (!plan.bookTitle)   add('warning', 'book', 'Your book doesn\'t have a title yet');
+  if (!plan.bookConcept) add('warning', 'book', 'No book description or concept — readers won\'t know what it\'s about');
+  if (!plan.theme)       add('info',    'book', 'Theme not defined — every great book has a central question');
+  if (!plan.pov)         add('info',    'book', 'POV not set — who\'s telling this story?');
+  if (!plan.tone)        add('info',    'book', 'Tone/mood not established yet');
+  if (!plan.setting)     add('info',    'book', 'Setting not defined — where does this world live?');
+  if (!plan.conflict)    add('warning', 'book', 'No central conflict — what\'s driving the story forward?');
+  if (!plan.stakes)      add('warning', 'book', 'Stakes not defined — what happens if the protagonist fails?');
+
+  // Chapter checks
+  if (plan.chapters.length === 0) {
+    add('error', 'structure', 'No chapters yet — your book needs at least one chapter');
+  } else {
+    const emptyChapters = plan.chapters.filter(ch => !ch.what && !ch.title);
+    const noGoalChapters = plan.chapters.filter(ch => ch.title && !ch.what);
+    const noEmotionChapters = plan.chapters.filter(ch => ch.what && !ch.emotionalStart && !ch.emotionalEnd);
+    const noSectionsChapters = plan.chapters.filter(ch => ch.what && (!ch.sections || ch.sections.length === 0));
+    const noCharChapters = plan.chapters.filter(ch => ch.what && (!ch.characters || ch.characters.length === 0));
+
+    if (emptyChapters.length > 0)
+      add('warning', 'chapters', `${emptyChapters.length} chapter${emptyChapters.length > 1 ? 's are' : ' is'} completely empty`);
+    if (noGoalChapters.length > 0)
+      add('warning', 'chapters', `${noGoalChapters.length} chapter${noGoalChapters.length > 1 ? 's' : ''} missing scene goals — what happens in them?`);
+    if (noEmotionChapters.length > 0)
+      add('info', 'chapters', `${noEmotionChapters.length} chapter${noEmotionChapters.length > 1 ? 's' : ''} missing emotional arcs`);
+    if (noSectionsChapters.length > 0)
+      add('info', 'chapters', `${noSectionsChapters.length} chapter${noSectionsChapters.length > 1 ? 's' : ''} have no sections defined`);
+    if (noCharChapters.length > 0)
+      add('info', 'chapters', `${noCharChapters.length} chapter${noCharChapters.length > 1 ? 's' : ''} don\'t list which characters appear`);
+  }
+
+  // Character checks
+  if (characters.length === 0) {
+    add('info', 'characters', 'No characters created yet — every story needs people');
+  } else {
+    const charsInChapters = new Set(plan.chapters.flatMap(ch => ch.characters || []));
+    const unusedChars = characters.filter(c => !charsInChapters.has(c.selected_name || c.name));
+    if (unusedChars.length > 0)
+      add('info', 'characters', `${unusedChars.length} character${unusedChars.length > 1 ? 's' : ''} not assigned to any chapter yet`);
+  }
+
+  return issues;
+}
+
+// ── Severity counts helper ──────────────────────────────────────────────
+function countHealthSeverity(issues) {
+  return {
+    errors:   issues.filter(i => i.severity === 'error').length,
+    warnings: issues.filter(i => i.severity === 'warning').length,
+    infos:    issues.filter(i => i.severity === 'info').length,
+    total:    issues.length,
+  };
+}
+
+// ── Book structure blueprint (what a complete book looks like) ────────────
+const BOOK_STRUCTURE = {
+  frontMatter: ['Title Page', 'Dedication', 'Epigraph', 'Table of Contents'],
+  body:        'Chapters organized into Parts (optional) with sections per chapter',
+  backMatter:  ['Acknowledgments', 'Glossary', 'About the Author', 'Bibliography'],
+  chapterAnatomy: [
+    'Title & Number',
+    'Scene Goal (what happens)',
+    'Emotional Arc (start → end)',
+    'POV & Tone',
+    'Setting & World Details',
+    'Conflict & Stakes',
+    'Sections (scene / reflection / transition / revelation)',
+    'Hooks & Foreshadowing',
+    'Characters Present',
+  ],
+};
+
 function useVoiceInput() {
   const [listening,   setListening]   = useState(false);
   const [transcript,  setTranscript]  = useState('');
@@ -247,6 +325,10 @@ export default function StoryPlannerConversational({
   const [activeChIdx, setActiveChIdx] = useState(null);
   const [highlight,   setHighlight]   = useState(null);
   const [mobileTab,   setMobileTab]   = useState('chat'); // 'chat' | 'plan'
+  const [approvals,   setApprovals]   = useState(() => loadSession('approvals', []));
+  const [showStructure, setShowStructure] = useState(false); // toggle book structure view
+  const [showHealth,    setShowHealth]    = useState(false); // toggle health report
+  const [healthIssues, setHealthIssues]  = useState(() => scanBookHealth(planEmpty(chapters, book), characters, book));
   const chatRef   = useRef(null);
   const inputRef  = useRef(null);
   const rootRef   = useRef(null);
@@ -255,6 +337,12 @@ export default function StoryPlannerConversational({
   // ── Persist messages + plan to sessionStorage on change ──────────
   useEffect(() => { saveSession('msgs', messages); }, [messages, saveSession]);
   useEffect(() => { saveSession('plan', plan); },     [plan, saveSession]);
+  useEffect(() => { saveSession('approvals', approvals); }, [approvals, saveSession]);
+
+  // ── Recalculate health whenever plan or characters change ────────
+  useEffect(() => {
+    setHealthIssues(scanBookHealth(plan, characters, book));
+  }, [plan, characters, book]);
 
   // ── Mobile keyboard resize: shrink root to visual viewport ───────
   useEffect(() => {
@@ -310,6 +398,17 @@ export default function StoryPlannerConversational({
             name: c.selected_name || c.name,
             type: c.type,
           })),
+          approvalStatus: {
+            pending:  pendingApprovals.length,
+            approved: approvedCount,
+            items:    approvals.filter(a => a.status !== 'dismissed').map(a => ({
+              title: a.title, type: a.type, status: a.status,
+            })),
+          },
+          healthReport: {
+            issues: healthIssues,
+            counts: countHealthSeverity(healthIssues),
+          },
         }),
       });
 
@@ -321,6 +420,19 @@ export default function StoryPlannerConversational({
         if (data.planUpdates.highlightField) {
           setHighlight(data.planUpdates.highlightField);
         }
+      }
+
+      // Handle approval requests from Claude
+      if (data.planUpdates?.approvals?.length) {
+        setApprovals(prev => [
+          ...prev,
+          ...data.planUpdates.approvals.map((a, i) => ({
+            ...a,
+            id:        a.id || `approval-${Date.now()}-${i}`,
+            status:    'pending',
+            createdAt: Date.now(),
+          })),
+        ]);
       }
 
       setMessages(prev => [...prev, {
@@ -363,6 +475,7 @@ export default function StoryPlannerConversational({
     if (updates.parts)       next.parts       = updates.parts;
 
     if (updates.chapters) {
+      // Update existing chapters
       next.chapters = prev.chapters.map((ch, idx) => {
         const upd = updates.chapters.find(u => u.id === ch.id || u.index === idx);
         if (!upd) return ch;
@@ -384,6 +497,34 @@ export default function StoryPlannerConversational({
           filled:         true,
         };
       });
+
+      // Append NEW chapters Claude suggested beyond existing count
+      const existingCount = prev.chapters.length;
+      const newOnes = updates.chapters.filter(u => {
+        // Already matched an existing chapter by id or index?
+        const matched = prev.chapters.some((ch, idx) => u.id === ch.id || u.index === idx);
+        return !matched && (u.index >= existingCount || (!u.id && u.index === undefined));
+      });
+      for (const nu of newOnes) {
+        next.chapters.push({
+          id:             null,  // will be created on Apply
+          title:          nu.title || `Chapter ${next.chapters.length + 1}`,
+          what:           nu.what || '',
+          emotionalStart: nu.emotionalStart || '',
+          emotionalEnd:   nu.emotionalEnd || '',
+          characters:     nu.characters || [],
+          sections:       nu.sections || [],
+          theme:          nu.theme || '',
+          pov:            nu.pov || '',
+          tone:           nu.tone || '',
+          setting:        nu.setting || '',
+          conflict:       nu.conflict || '',
+          stakes:         nu.stakes || '',
+          hooks:          nu.hooks || '',
+          filled:         true,
+          _isNew:         true,
+        });
+      }
     }
 
     return next;
@@ -426,37 +567,64 @@ export default function StoryPlannerConversational({
       // Save chapter-level fields
       for (const ch of plan.chapters) {
         if (!ch.filled && !ch.title) continue;
-        await fetch(`${API}/storyteller/chapters/${ch.id}`, {
-          method:  'PUT',
-          headers: { 'Content-Type': 'application/json', ...authHeader() },
-          body:    JSON.stringify({
-            title:                 ch.title          || undefined,
-            scene_goal:            ch.what           || undefined,
-            emotional_state_start: ch.emotionalStart || undefined,
-            emotional_state_end:   ch.emotionalEnd   || undefined,
-            characters_present:    ch.characters?.join(', ') || undefined,
-            theme:                 ch.theme || plan.theme || undefined,
-            pov:                   ch.pov   || plan.pov   || undefined,
-            tone:                  ch.tone  || plan.tone  || undefined,
-            setting:               ch.setting  || undefined,
-            conflict:              ch.conflict || undefined,
-            stakes:                ch.stakes   || undefined,
-            hooks:                 ch.hooks    || undefined,
-            // Build chapter_notes as a richer summary combining plan details
-            chapter_notes:         [
-              ch.what,
-              ch.emotionalStart && ch.emotionalEnd ? `Emotional arc: ${ch.emotionalStart} → ${ch.emotionalEnd}` : null,
-              ch.characters?.length ? `Characters: ${ch.characters.join(', ')}` : null,
-              ch.theme || plan.theme ? `Theme: ${ch.theme || plan.theme}` : null,
-              ch.pov || plan.pov ? `POV: ${ch.pov || plan.pov}` : null,
-              ch.tone || plan.tone ? `Tone: ${ch.tone || plan.tone}` : null,
-              ch.setting ? `Setting: ${ch.setting}` : null,
-              ch.conflict ? `Conflict: ${ch.conflict}` : null,
-              ch.stakes ? `Stakes: ${ch.stakes}` : null,
-              ch.hooks ? `Hooks: ${ch.hooks}` : null,
-            ].filter(Boolean).join(' | ') || undefined,
-          }),
-        });
+
+        const chapterBody = {
+          title:                 ch.title          || undefined,
+          scene_goal:            ch.what           || undefined,
+          emotional_state_start: ch.emotionalStart || undefined,
+          emotional_state_end:   ch.emotionalEnd   || undefined,
+          characters_present:    ch.characters?.join(', ') || undefined,
+          theme:                 ch.theme || plan.theme || undefined,
+          pov:                   ch.pov   || plan.pov   || undefined,
+          tone:                  ch.tone  || plan.tone  || undefined,
+          setting:               ch.setting  || undefined,
+          conflict:              ch.conflict || undefined,
+          stakes:                ch.stakes   || undefined,
+          hooks:                 ch.hooks    || undefined,
+          sections:              ch.sections?.length ? ch.sections : undefined,
+          // Build chapter_notes as a richer summary combining plan details
+          chapter_notes:         [
+            ch.what,
+            ch.emotionalStart && ch.emotionalEnd ? `Emotional arc: ${ch.emotionalStart} → ${ch.emotionalEnd}` : null,
+            ch.characters?.length ? `Characters: ${ch.characters.join(', ')}` : null,
+            ch.theme || plan.theme ? `Theme: ${ch.theme || plan.theme}` : null,
+            ch.pov || plan.pov ? `POV: ${ch.pov || plan.pov}` : null,
+            ch.tone || plan.tone ? `Tone: ${ch.tone || plan.tone}` : null,
+            ch.setting ? `Setting: ${ch.setting}` : null,
+            ch.conflict ? `Conflict: ${ch.conflict}` : null,
+            ch.stakes ? `Stakes: ${ch.stakes}` : null,
+            ch.hooks ? `Hooks: ${ch.hooks}` : null,
+          ].filter(Boolean).join(' | ') || undefined,
+        };
+
+        if (ch._isNew || !ch.id) {
+          // CREATE new chapter via POST
+          const createRes = await fetch(`${API}/storyteller/books/${book.id}/chapters`, {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json', ...authHeader() },
+            body:    JSON.stringify({
+              title:          chapterBody.title || `Chapter ${saved + 1}`,
+              chapter_number: plan.chapters.indexOf(ch) + 1,
+            }),
+          });
+          const createData = await createRes.json();
+          if (createData.chapter?.id) {
+            // Now update with all fields
+            ch.id = createData.chapter.id;
+            await fetch(`${API}/storyteller/chapters/${ch.id}`, {
+              method:  'PUT',
+              headers: { 'Content-Type': 'application/json', ...authHeader() },
+              body:    JSON.stringify(chapterBody),
+            });
+          }
+        } else {
+          // UPDATE existing chapter via PUT
+          await fetch(`${API}/storyteller/chapters/${ch.id}`, {
+            method:  'PUT',
+            headers: { 'Content-Type': 'application/json', ...authHeader() },
+            body:    JSON.stringify(chapterBody),
+          });
+        }
         saved++;
       }
       toast?.add(`Plan saved — ${saved} chapter${saved !== 1 ? 's' : ''} updated`, 'success');
@@ -495,8 +663,57 @@ export default function StoryPlannerConversational({
     setPlan(planEmpty(chapters, book));
     setInput('');
     setActiveChIdx(null);
+    setApprovals([]);
     window.speechSynthesis?.cancel();
   };
+
+  // ── Approval workflow ─────────────────────────────────────────────────
+
+  const approveItem = useCallback((approvalId) => {
+    setApprovals(prev => {
+      const item = prev.find(a => a.id === approvalId);
+      if (!item) return prev;
+      // Merge the approved content into the plan
+      if (item.content) {
+        setPlan(p => mergeUpdates(p, item.content));
+      }
+      return prev.map(a => a.id === approvalId ? { ...a, status: 'approved' } : a);
+    });
+    toast?.add('Approved! Changes applied to your plan.', 'success');
+  }, [toast]);
+
+  const dismissItem = useCallback((approvalId) => {
+    setApprovals(prev => prev.map(a => a.id === approvalId ? { ...a, status: 'dismissed' } : a));
+  }, []);
+
+  const pendingApprovals = approvals.filter(a => a.status === 'pending');
+  const approvedCount    = approvals.filter(a => a.status === 'approved').length;
+
+  // ── Quick-action buttons ──────────────────────────────────────────────
+
+  const generateTOC = useCallback(() => {
+    if (sending) return;
+    const chapterList = plan.chapters.map((ch, i) =>
+      `${i + 1}. "${ch.title || 'Untitled'}"${ch.sections?.length ? ` (${ch.sections.length} sections)` : ''}`
+    ).join(', ');
+    send(`Based on our current plan, can you create a Table of Contents and book index for me? Here are the chapters so far: ${chapterList}. Propose it as something I can approve!`);
+  }, [sending, send, plan.chapters]);
+
+  const generateDescription = useCallback(() => {
+    if (sending) return;
+    const context = [
+      plan.bookTitle && `Title: "${plan.bookTitle}"`,
+      plan.bookConcept && `Current concept: ${plan.bookConcept}`,
+      plan.theme && `Theme: ${plan.theme}`,
+      plan.conflict && `Conflict: ${plan.conflict}`,
+    ].filter(Boolean).join('. ');
+    send(`Can you write me a compelling book description/synopsis that I can put on the back cover? ${context ? `Here's what we have: ${context}.` : ''} Give me a few options I can approve or edit!`);
+  }, [sending, send, plan]);
+
+  const generateBookLayout = useCallback(() => {
+    if (sending) return;
+    send(`Based on everything we've discussed, can you propose a complete book layout for me to approve? Include front matter, chapter structure, and back matter. Show me exactly how the book should be organized from cover to cover!`);
+  }, [sending, send]);
 
   // ── Suggest name / rename helpers ─────────────────────────────────────
 
@@ -526,6 +743,16 @@ export default function StoryPlannerConversational({
     const charList = charNames.length > 0 ? ` My characters so far: ${charNames.join(', ')}.` : '';
     send(`Okay bestie I need your brain — can you brainstorm some plot ideas and dramatic storylines for my story?${charList} Give me the messy, dramatic, page-turner kind of ideas!`);
   }, [sending, send, characters]);
+
+  // ── Check my book — send health report to Claude for diagnosis ────
+  const checkMyBook = useCallback(() => {
+    if (sending) return;
+    const counts = countHealthSeverity(healthIssues);
+    const issueList = healthIssues.map(i =>
+      `[${i.severity.toUpperCase()}] ${i.category}: ${i.message}`
+    ).join('\n');
+    send(`Hey bestie, can you check my book for anything that's broken, missing, or needs attention? Here's what the health scanner found:\n\n${counts.total > 0 ? issueList : 'Everything looks clean!'}\n\nGive me your honest take — what should I fix first?`);
+  }, [sending, send, healthIssues]);
 
   // ── Edit a sent message — reloads it into the input ──────────────────
 
@@ -813,8 +1040,166 @@ export default function StoryPlannerConversational({
                 disabled={sending}
                 title="Ask Claude to brainstorm plot ideas for your characters"
               >✦ Brainstorm plots</button>
+              <button
+                className="spc-action-btn"
+                onClick={generateTOC}
+                disabled={sending}
+                title="Generate a Table of Contents from your current plan"
+              >📑 Generate TOC</button>
+              <button
+                className="spc-action-btn"
+                onClick={generateDescription}
+                disabled={sending}
+                title="Have Claude write a book description/synopsis"
+              >✏️ Description</button>
+              <button
+                className="spc-action-btn"
+                onClick={generateBookLayout}
+                disabled={sending}
+                title="Get a full book layout proposal to approve"
+              >📐 Book layout</button>
+              <button
+                className={`spc-action-btn spc-action-btn--outline${showStructure ? ' active' : ''}`}
+                onClick={() => setShowStructure(s => !s)}
+                title="Show/hide the standard book structure template"
+              >🏗️ Structure</button>
+              <button
+                className={`spc-action-btn spc-action-btn--health${healthIssues.length > 0 ? ' has-issues' : ''}`}
+                onClick={checkMyBook}
+                disabled={sending}
+                title="Ask your assistant to check your book for issues"
+              >🩺 Check my book{healthIssues.length > 0 ? ` (${healthIssues.length})` : ''}</button>
+              <button
+                className={`spc-action-btn spc-action-btn--outline${showHealth ? ' active' : ''}`}
+                onClick={() => setShowHealth(s => !s)}
+                title="Show/hide the book health report"
+              >📋 Health report</button>
             </div>
           </div>
+
+          {/* Health Report (toggle) */}
+          {showHealth && (
+            <div className="spc-plan-section spc-health-report">
+              <div className="spc-plan-section-label">
+                Book Health Report
+                {healthIssues.length > 0 && (
+                  <span className="spc-health-count">{healthIssues.length}</span>
+                )}
+              </div>
+              {healthIssues.length === 0 ? (
+                <div className="spc-health-clean">
+                  <span className="spc-health-clean-icon">✓</span>
+                  <span>Everything looks great! No issues found.</span>
+                </div>
+              ) : (
+                <div className="spc-health-issues">
+                  {healthIssues.map((issue, i) => (
+                    <div key={i} className={`spc-health-issue spc-health-issue--${issue.severity}`}>
+                      <span className="spc-health-issue-icon">
+                        {issue.severity === 'error' ? '🔴' : issue.severity === 'warning' ? '🟡' : '🔵'}
+                      </span>
+                      <span className="spc-health-issue-category">{issue.category}</span>
+                      <span className="spc-health-issue-msg">{issue.message}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <div className="spc-health-permissions">
+                <div className="spc-health-permissions-title">What your assistant can do:</div>
+                <div className="spc-health-perm spc-health-perm--auto">✅ Auto-apply: theme, POV, tone, setting, chapter fields, section tweaks</div>
+                <div className="spc-health-perm spc-health-perm--approval">🔔 Needs your OK: book layout, TOC, descriptions, major restructuring, new characters</div>
+                <div className="spc-health-perm spc-health-perm--diagnose">🔍 Can diagnose: missing content, structure gaps, character issues, emotional arcs</div>
+                <div className="spc-health-perm spc-health-perm--suggest">💡 Can suggest: fixes for broken areas, plot ideas, name ideas, next steps</div>
+                <div className="spc-health-perm spc-health-perm--no">🚫 Cannot: delete chapters, delete characters, change published status</div>
+              </div>
+            </div>
+          )}
+
+          {/* Book Structure Blueprint (toggle) */}
+          {showStructure && (
+            <div className="spc-plan-section spc-structure-blueprint">
+              <div className="spc-plan-section-label">Book Structure Blueprint</div>
+              <div className="spc-structure-group">
+                <span className="spc-structure-label">Front Matter</span>
+                <div className="spc-structure-items">
+                  {BOOK_STRUCTURE.frontMatter.map((item, i) => (
+                    <span key={i} className="spc-structure-item">{item}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="spc-structure-group">
+                <span className="spc-structure-label">Body</span>
+                <p className="spc-structure-body-desc">{BOOK_STRUCTURE.body}</p>
+              </div>
+              <div className="spc-structure-group">
+                <span className="spc-structure-label">Chapter Anatomy</span>
+                <div className="spc-structure-items">
+                  {BOOK_STRUCTURE.chapterAnatomy.map((item, i) => (
+                    <span key={i} className="spc-structure-item spc-structure-item--anatomy">{item}</span>
+                  ))}
+                </div>
+              </div>
+              <div className="spc-structure-group">
+                <span className="spc-structure-label">Back Matter</span>
+                <div className="spc-structure-items">
+                  {BOOK_STRUCTURE.backMatter.map((item, i) => (
+                    <span key={i} className="spc-structure-item">{item}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Pending Approvals */}
+          {pendingApprovals.length > 0 && (
+            <div className="spc-plan-section spc-approvals-section">
+              <div className="spc-plan-section-label">
+                Needs Your Approval
+                <span className="spc-approval-count">{pendingApprovals.length}</span>
+              </div>
+              {pendingApprovals.map(item => (
+                <div key={item.id} className="spc-approval-card">
+                  <div className="spc-approval-type">{item.type?.replace(/_/g, ' ')}</div>
+                  <div className="spc-approval-title">{item.title}</div>
+                  {item.summary && (
+                    <p className="spc-approval-summary">{item.summary}</p>
+                  )}
+                  {item.details && (
+                    <div className="spc-approval-details">
+                      {typeof item.details === 'string'
+                        ? <p>{item.details}</p>
+                        : <pre className="spc-approval-pre">{JSON.stringify(item.details, null, 2)}</pre>
+                      }
+                    </div>
+                  )}
+                  <div className="spc-approval-actions">
+                    <button
+                      className="spc-approval-btn spc-approval-btn--approve"
+                      onClick={() => approveItem(item.id)}
+                    >✓ Approve</button>
+                    <button
+                      className="spc-approval-btn spc-approval-btn--edit"
+                      onClick={() => {
+                        setMobileTab('chat');
+                        send(`I want to edit this proposal: "${item.title}". Here's what I'd like to change:`);
+                      }}
+                    >✎ Edit</button>
+                    <button
+                      className="spc-approval-btn spc-approval-btn--dismiss"
+                      onClick={() => dismissItem(item.id)}
+                    >✕ Skip</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Approved items badge */}
+          {approvedCount > 0 && (
+            <div className="spc-approved-badge">
+              ✓ {approvedCount} item{approvedCount !== 1 ? 's' : ''} approved
+            </div>
+          )}
 
           {/* Parts (if any) */}
           {plan.parts?.length > 0 && (

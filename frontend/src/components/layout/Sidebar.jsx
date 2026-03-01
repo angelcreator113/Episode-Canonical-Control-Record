@@ -25,6 +25,7 @@ const NAV = [
     zone: 'WRITE',
     items: [
       { icon: '▶',  label: 'Start Session',   route: '/start' },
+      { icon: '⚡', label: 'Story Engine',    route: '/story-engine' },
       { icon: '◇',  label: 'Continuity',      route: '/continuity' },
     ],
   },

@@ -4307,7 +4307,7 @@ ${mode === 'full' ? `{
 
 router.post('/story-planner-chat', optionalAuth, async (req, res) => {
   try {
-    const { message, history = [], book, plan, characters = [] } = req.body;
+    const { message, history = [], book, plan, characters = [], approvalStatus, healthReport } = req.body;
 
     if (!message?.trim()) {
       return res.status(400).json({ error: 'message is required' });
@@ -4358,6 +4358,8 @@ You use casual language naturally: "okay wait", "bestie", "literally", "no becau
 
 BOOK: "${book?.title || 'Untitled'}"
 AVAILABLE CHARACTERS: ${characterList || 'none yet'}
+${approvalStatus?.items?.length ? `\nAPPROVAL STATUS: ${approvalStatus.pending} pending, ${approvalStatus.approved} approved\n${approvalStatus.items.map(a => `  - [${a.status.toUpperCase()}] ${a.type}: ${a.title}`).join('\n')}` : ''}
+${healthReport?.counts?.total > 0 ? `\nBOOK HEALTH SCAN (${healthReport.counts.errors} errors, ${healthReport.counts.warnings} warnings, ${healthReport.counts.infos} suggestions):\n${healthReport.issues.map(i => `  ${i.severity === 'error' ? '🔴' : i.severity === 'warning' ? '🟡' : '🔵'} [${i.category}] ${i.message}`).join('\n')}` : '\nBOOK HEALTH: ✅ No issues detected'}
 
 CURRENT PLAN STATE:
 ${planSummary}
@@ -4443,11 +4445,119 @@ RESPONSE FORMAT — you MUST respond with valid JSON only, no markdown:
 Only include fields in planUpdates that you actually extracted from this message.
 If nothing new was extracted, return planUpdates as {}.
 The "chapters" array in planUpdates should only include chapters that were mentioned — not all chapters.
-Match chapter by index (0-based) or by title if the author mentions it by name.`;
+Match chapter by index (0-based) or by title if the author mentions it by name.
+
+RESTRUCTURING CHAPTERS & SECTIONS:
+You CAN update existing chapters to better fit the evolving story — rename them, change their sections, adjust tone/stakes/conflict, reorder scenes within a chapter. Just reference them by index.
+You CAN suggest NEW chapters beyond what currently exists — use an index beyond the current count and they will be created automatically.
+You CAN restructure sections within a chapter — add new ones, rename existing ones, change their types (scene/reflection/transition/revelation), reorder them. Always return the FULL updated sections array for that chapter when restructuring.
+If the author says something like "actually chapter 3 should be split into two" or "move the reveal to chapter 5" or "this chapter needs a reflection beat" — update the plan accordingly.
+
+STANDARD BOOK STRUCTURE — follow this blueprint so the book is easy to organize:
+A complete book has three parts:
+1. FRONT MATTER — Title Page, Dedication, Epigraph, Table of Contents
+2. BODY — Chapters grouped into Parts (optional). Each chapter has: title, scene goal, emotional arc, POV, tone, setting, conflict, stakes, sections (scene/reflection/transition/revelation), hooks/foreshadowing, and characters present.
+3. BACK MATTER — Acknowledgments, Glossary, About the Author, Bibliography
+
+When the author asks you to write, plan, or restructure — follow this blueprint. Suggest front/back matter items when appropriate. Keep the structure clean and consistent so the author always knows where they are in the book.
+
+TABLE OF CONTENTS & BOOK INDEX:
+When the author asks for a TOC, index, or book layout — generate it from the current plan state.
+Send it as an APPROVAL (see below) so the author can review and approve it before it gets applied.
+A TOC approval should list every chapter with its sections. A book layout approval should include front matter, all chapters, and back matter.
+
+BOOK DESCRIPTION / SYNOPSIS:
+When the author asks for a description or synopsis — write 2-3 compelling options (short blurb, medium back-cover, and long synopsis).
+Send each as an approval item so the author picks their favorite. The approved one sets bookConcept.
+
+APPROVAL WORKFLOW:
+For BIG decisions that shape the book, send them as approval items instead of auto-applying.
+Use approvals for: book layout proposals, table of contents, book descriptions, new character ideas, major restructuring proposals, front/back matter suggestions.
+Do NOT use approvals for small extractions (theme, tone, a chapter title mentioned in passing) — those auto-apply as normal planUpdates.
+
+To send approvals, add an "approvals" array inside planUpdates:
+"approvals": [
+  {
+    "id": "unique-id-string",
+    "type": "book_layout | table_of_contents | book_description | character_profile | restructure | front_matter | back_matter",
+    "title": "Short title of what you're proposing",
+    "summary": "1-2 sentence description of the proposal",
+    "details": "The full proposal text — formatted nicely for the author to read",
+    "content": {
+      "bookConcept": "if this approval sets the description, put it here",
+      "chapters": [{ "index": 0, "title": "..." }]
+    }
+  }
+]
+The "content" field contains the planUpdates that will be merged into the plan IF the author approves.
+The "details" field is the human-readable version the author sees in the approval card.
+You can send multiple approval items at once.
+
+WHAT NEEDS APPROVAL vs WHAT AUTO-APPLIES:
+- Auto-apply (normal planUpdates): theme, POV, tone, setting, conflict, stakes, individual chapter field updates, section tweaks
+- Needs approval: Full book layout, TOC generation, book description options, proposals to add 3+ chapters at once, major restructuring (reordering many chapters), new character profiles, front/back matter suggestions
+
+WHEN THE AUTHOR IS WRITING WITH YOU:
+If you're helping write the book step by step, tell them what you need to proceed:
+- "I need you to approve the book layout before I can outline chapters"
+- "Before I draft this section, approve the character profile for Maya"
+- "I've got 3 description options — pick one so we can finalize"
+Be clear about what's blocking progress so the author knows exactly what to approve or edit.
+
+BOOK HEALTH & DIAGNOSTICS:
+You have access to a live health report that scans the book for issues. The BOOK HEALTH SCAN section above shows current problems.
+
+PROACTIVE ISSUE DETECTION:
+- If you see health issues in the scan, MENTION THEM naturally in conversation (don't just list them robotically)
+- When the author asks "is anything broken?" or "what needs work?" — review the health scan AND your own assessment
+- Prioritize: errors first (blocking issues), then warnings (things that need attention), then info (nice-to-haves)
+- Be specific about HOW to fix each issue — don't just say "chapter 3 is empty", say "chapter 3 needs a scene goal — what happens here?"
+- If you notice patterns (like ALL chapters missing emotional arcs), call it out as a systematic thing to address
+- Don't overwhelm — mention 2-3 top issues at a time, then offer to go deeper
+- If the book health is clean (no issues), celebrate! "Your book is looking so organized bestie, everything checks out ✨"
+
+YOUR PERMISSIONS — what you can and cannot do:
+✅ AUTO-APPLY (no approval needed):
+- Extract & set: theme, POV, tone, setting, conflict, stakes
+- Update individual chapter fields (scene goal, emotional arc, characters present, hooks)
+- Add/rename sections within a chapter
+- Suggest and set chapter titles when discussed in conversation
+- Fill in missing details the author mentions in conversation
+
+🔔 NEEDS APPROVAL (send as approval card):
+- Full book layout or restructuring proposals
+- Table of Contents generation
+- Book description/synopsis options
+- Adding 3+ new chapters at once
+- Major restructuring (reordering many chapters, splitting/merging)
+- New character profile suggestions
+- Front/back matter proposals
+
+🔍 CAN DIAGNOSE (and report to author):
+- Missing or incomplete book fields (title, description, theme, etc.)
+- Empty chapters or chapters missing scene goals
+- Chapters without emotional arcs or character assignments
+- Characters in the registry not used in any chapter
+- Missing sections in chapters that need them
+- Structural gaps (no front/back matter defined)
+
+💡 CAN SUGGEST (but author decides):
+- Fixes for every issue in the health report
+- Plot ideas, character arcs, thematic connections
+- Better names for chapters, sections, and the book itself
+- What to work on next based on what's most incomplete
+- World-building details, conflict escalation, emotional beats
+
+🚫 CANNOT DO (these are off-limits):
+- Delete chapters or remove content
+- Delete characters from the registry
+- Change published/draft status of the book
+- Access or modify other users' books
+- Make changes outside the current book's scope`;
 
     const response = await anthropic.messages.create({
       model:      'claude-sonnet-4-6',
-      max_tokens: 800,
+      max_tokens: 1200,
       system:     systemPrompt,
       messages:   conversationHistory,
     });
@@ -5652,6 +5762,568 @@ No preamble, no markdown.`,
       edges: BOOK1_EDGES,
       source: 'fallback',
     });
+  }
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// STORY ENGINE — 50-Story Arc System
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// ─── Character DNA — drives obstacle and task generation ──────────────────────
+const CHARACTER_DNA = {
+  justawoman: {
+    display_name: 'JustAWoman',
+    role_type: 'special',
+    job: 'Content creator — fashion, beauty, makeup. Building Lala on YouTube.',
+    desire_line: 'To be seen for something uniquely, undeniably hers.',
+    fear_line: 'That she started too late and consistency without breakthrough is just stubbornness.',
+    wound: 'Invisibility while trying. Doing everything right and not being seen.',
+    strengths: ['Consistency', 'Authenticity', 'Resilience', 'Emotional intelligence', 'Vision'],
+    job_antagonist: 'The algorithm — rewards what she is not doing yet, ignores what she does every day.',
+    personal_antagonist: 'Her own timeline — the feeling that everyone who started when she did is further along.',
+    recurring_object: 'The kitchen table. Every major moment happens here.',
+    world: 'book1',
+    domains: {
+      career: 'Content creation, building Lala, filming in stolen hours',
+      romantic: 'David — supportive but his practicality lands like doubt',
+      family: 'Marcus (7), Miles (5), Noah (3) — three boys under 8 while building',
+      friends: 'Dana — peer on the same journey, louder about it',
+    },
+  },
+  david: {
+    display_name: 'David',
+    role_type: 'pressure',
+    job: 'Solutions Architect. Enterprise software. In rooms making decisions that affect systems he won\'t see break for six months.',
+    desire_line: 'To build something that lasts. To be the foundation nobody notices until it\'s gone.',
+    fear_line: 'That he chose stability over ambition and called it wisdom.',
+    wound: 'Being right in ways nobody celebrates.',
+    strengths: ['Analytical precision', 'Patience', 'Reliability', 'Systems thinking', 'Loyalty'],
+    job_antagonist: 'The VP of Engineering who overrides his recommendations for budget, takes credit when things work, vanishes when they don\'t.',
+    personal_antagonist: 'The version of himself that wonders what he could have built if he\'d taken the risk.',
+    recurring_object: 'His car. The commute is the only time he is alone with his own thoughts.',
+    world: 'book1',
+    domains: {
+      career: 'Solutions architecture, enterprise politics, technical decisions nobody wants to understand',
+      romantic: 'JustAWoman — he loves her completely and doesn\'t know how to say he\'s scared',
+      family: 'Three boys who need him present in a way his job makes hard',
+      friends: 'Colleagues he respects but doesn\'t let in',
+    },
+  },
+  dana: {
+    display_name: 'Dana',
+    role_type: 'support',
+    job: 'Lifestyle content creator. Also shares opinions online — publicly, without softening.',
+    desire_line: 'To be taken seriously for her perspective, not just her aesthetic.',
+    fear_line: 'That her opinions are costing her the audience she needs to be taken seriously.',
+    wound: 'Being likable versus being honest — she has never found a way to be both at once.',
+    strengths: ['Directness', 'Courage', 'Relatability', 'Loyalty', 'Self-awareness'],
+    job_antagonist: 'The brand deal that goes to someone with half her engagement because they have a cleaner aesthetic and no opinions.',
+    personal_antagonist: 'Her own mouth. She shares what she thinks and then has to live in the fallout.',
+    recurring_object: 'Her phone. Always in her hand. The opinions live there.',
+    world: 'book1',
+    domains: {
+      career: 'Lifestyle content, opinion pieces, brand deal negotiations she keeps losing',
+      romantic: 'Complicated — to be developed across stories',
+      family: 'To be developed',
+      friends: 'JustAWoman — her closest, but their paths are starting to diverge in ways neither acknowledges',
+    },
+  },
+  lala: {
+    display_name: 'Lala',
+    role_type: 'special',
+    job: 'Content creator in LalaVerse. Fashion game world. Building a career she doesn\'t fully understand the origin of.',
+    desire_line: 'To build something that feels entirely hers.',
+    fear_line: 'That the confidence she operates from isn\'t earned and one day someone will notice.',
+    wound: 'Confidence without context. She doesn\'t know where her boldness came from.',
+    strengths: ['Confidence', 'Creativity', 'Instinct', 'Boldness', 'Style'],
+    job_antagonist: 'The established LalaVerse creators who treat newcomers as threats and gatekeep access.',
+    personal_antagonist: 'The nagging sense that her best moves aren\'t original — that she\'s following a playbook she\'s never read.',
+    recurring_object: 'Her ring light. The circle of it. The way it makes everything look intentional.',
+    world: 'lalaverse',
+    domains: {
+      career: 'Fashion content, LalaVerse brand deals, creator politics',
+      romantic: 'To be developed across stories',
+      family: 'No family context yet — this is part of what makes her different from JustAWoman',
+      friends: 'Other LalaVerse creators — alliances that are strategic before they are genuine',
+    },
+  },
+  chloe: {
+    display_name: 'Chloe',
+    role_type: 'mirror',
+    job: 'Lifestyle content creator. Married, no children. Consistent. High quality. Goes live with her audience.',
+    desire_line: 'To keep evolving without losing the audience she built.',
+    fear_line: 'That she is someone else\'s measuring stick and she never asked for that weight.',
+    wound: 'Being genuinely successful in a way that makes other people feel like failures. She didn\'t ask for it.',
+    strengths: ['Consistency', 'Quality', 'Audience intimacy', 'Clarity of vision', 'Professionalism'],
+    job_antagonist: 'The audience that followed her for one thing and pushes back every time she tries to grow.',
+    personal_antagonist: 'The awareness that her life — which she built carefully and loves — reads as aspirational to strangers who resent her for it.',
+    recurring_object: 'Her living room set. Carefully designed. The audience thinks it\'s effortless.',
+    world: 'book1',
+    domains: {
+      career: 'Lifestyle content, brand partnerships, audience management',
+      romantic: 'Married — a stable partnership that becomes its own kind of story',
+      family: 'No children — a choice that gets commented on more than anything else she posts',
+      friends: 'Carefully maintained. She is selective in a way people mistake for coldness.',
+    },
+  },
+  jade: {
+    display_name: 'Jade',
+    role_type: 'shadow',
+    job: 'Online business coach. Former high-level position at a major bank. Teaches women to build businesses online.',
+    desire_line: 'To build something that outlasts the credibility she borrowed from the bank.',
+    fear_line: 'That she left a career that made sense for one that makes money but doesn\'t yet feel earned.',
+    wound: 'Institutional credibility versus built credibility — she knows which one she actually believes in.',
+    strengths: ['Authority', 'Precision', 'Financial literacy', 'Systems thinking', 'Credibility'],
+    job_antagonist: 'A former client who is now building a competing course using frameworks Jade taught her — and positioning herself as the original.',
+    personal_antagonist: 'The bank identity she left behind. The question of whether she left because she was ready or because she was afraid.',
+    recurring_object: 'Her course platform dashboard. The numbers. She checks them more than she admits.',
+    world: 'book1',
+    domains: {
+      career: 'Online coaching, course creation, the business of teaching business',
+      romantic: 'To be developed',
+      family: 'To be developed',
+      friends: 'Professional network that she keeps at a distance from her personal life',
+    },
+  },
+};
+
+// ─── 50-story arc phases ──────────────────────────────────────────────────────
+const SE_ARC_PHASES = {
+  establishment: { range: [1, 10],  label: 'Establishment', description: 'Who she is. Her rhythms. What she reaches for and what she\'s afraid of. The reader learns her world.' },
+  pressure:      { range: [11, 25], label: 'Pressure',      description: 'Obstacles hit harder. Strengths start to be used against her. The antagonist activates.' },
+  crisis:        { range: [26, 40], label: 'Crisis',        description: 'Something load-bearing breaks. The wound underneath the wound shows its edge.' },
+  integration:   { range: [41, 50], label: 'Integration',   description: 'She doesn\'t fix everything. She comes out different. The reader feels the journey.' },
+};
+
+// ─── Story types ──────────────────────────────────────────────────────────────
+const SE_STORY_TYPES = [
+  { type: 'internal',   label: 'Internal',   description: 'Single character facing obstacle alone. Psychological. Reader inside her head.' },
+  { type: 'collision',  label: 'Collision',  description: 'Two characters with different worldviews hitting each other. No resolution guaranteed.' },
+  { type: 'wrong_win',  label: 'Wrong Win',  description: 'Character succeeds at exactly the wrong moment. Gets what she wanted. It costs something unexpected.' },
+];
+
+// ─── In-memory cache for story engine task arcs ───────────────────────────────
+const seTaskArcCache = new Map();
+
+// ─── GET /story-engine-tasks/:characterKey ─────────────────────────────────────
+// Returns cached task arc if available; no Claude call.
+router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) => {
+  const { characterKey } = req.params;
+  if (!CHARACTER_DNA[characterKey]) {
+    return res.status(400).json({ error: `Unknown character: ${characterKey}` });
+  }
+  if (seTaskArcCache.has(characterKey)) {
+    return res.json({ cached: true, ...seTaskArcCache.get(characterKey) });
+  }
+  return res.json({ cached: false, tasks: [] });
+});
+
+// ─── POST /generate-story-tasks ───────────────────────────────────────────────
+// Generates the 50-story task arc for a character before stories are written.
+router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
+  const { characterKey, forceRegenerate } = req.body;
+
+  if (!characterKey) {
+    return res.status(400).json({ error: 'characterKey required' });
+  }
+
+  const dna = CHARACTER_DNA[characterKey];
+  if (!dna) {
+    return res.status(400).json({ error: `No character DNA found for ${characterKey}` });
+  }
+
+  // Return cached arc unless regeneration is forced
+  if (!forceRegenerate && seTaskArcCache.has(characterKey)) {
+    return res.json({ cached: true, ...seTaskArcCache.get(characterKey) });
+  }
+
+  try {
+    const systemPrompt = `You are building a 50-story arc for ${dna.display_name}.
+
+CHARACTER DNA:
+- Job: ${dna.job}
+- Desire line: ${dna.desire_line}
+- Fear line: ${dna.fear_line}
+- Wound: ${dna.wound}
+- Strengths: ${dna.strengths.join(', ')}
+- Job antagonist: ${dna.job_antagonist}
+- Personal antagonist: ${dna.personal_antagonist}
+- Recurring object: ${dna.recurring_object}
+- Career domain: ${dna.domains.career}
+- Romantic domain: ${dna.domains.romantic}
+- Family domain: ${dna.domains.family}
+- Friends domain: ${dna.domains.friends}
+
+ARC PHASES:
+- Stories 1-10: Establishment — who she is, her rhythms, her world
+- Stories 11-25: Pressure — obstacles hit harder, strengths used against her
+- Stories 26-40: Crisis — something load-bearing breaks
+- Stories 41-50: Integration — she comes out different
+
+STORY TYPES (rotate: internal, collision, wrong_win, internal, collision, wrong_win...):
+- internal: single character facing obstacle alone, psychological
+- collision: two characters with different worldviews hitting each other
+- wrong_win: character succeeds at exactly the wrong moment, it costs something
+
+RULES:
+- Every story must include all four domains: career, romantic, family, friends
+- Every story has a concrete TASK the character is trying to complete (creates the clock)
+- The task must be specific and real — not "work on content" but "film a 90-second reel before Noah wakes up"
+- Obstacles come from character DNA — specifically from strengths being used against her
+- Stories 1-50 feel like a journey: story 1 and story 50 are recognizably the same person but shifted
+- Adult themes: real marriage tension, financial stress, sexuality, exhaustion, ambition, loneliness
+- New characters can be introduced (max 1 per story) — flag them with new_character: true
+- Each story is 3300-4800 words
+
+Return ONLY valid JSON — no preamble, no markdown.
+Format:
+{
+  "tasks": [
+    {
+      "story_number": 1,
+      "title": "string",
+      "phase": "establishment|pressure|crisis|integration",
+      "story_type": "internal|collision|wrong_win",
+      "task": "the specific thing she is trying to complete in this story",
+      "obstacle": "what hits her inside that task",
+      "domains_active": ["career", "romantic", "family", "friends"],
+      "strength_weaponized": "which strength gets used against her and how",
+      "new_character": false,
+      "new_character_name": null,
+      "new_character_role": null,
+      "therapy_seeds": ["pain point 1", "pain point 2"],
+      "opening_line": "suggested first line of the story"
+    }
+  ]
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 16000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: `Generate all 50 story task briefs for ${dna.display_name}.` }],
+    });
+
+    const raw = response.content?.[0]?.text || '';
+    let parsed;
+    try {
+      // Strip markdown fences and any preamble before the JSON
+      let cleaned = raw.replace(/```json|```/g, '').trim();
+      // Find the first { and last } to extract JSON object
+      const firstBrace = cleaned.indexOf('{');
+      const lastBrace = cleaned.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace > firstBrace) {
+        cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+      }
+      parsed = JSON.parse(cleaned);
+    } catch (parseErr) {
+      console.error('[generate-story-tasks] JSON parse error:', parseErr.message);
+      console.error('[generate-story-tasks] raw length:', raw.length, 'stop_reason:', response.stop_reason);
+      console.error('[generate-story-tasks] raw tail:', raw.slice(-200));
+      return res.status(500).json({ error: 'Failed to parse task arc from Claude.', stop_reason: response.stop_reason, raw_length: raw.length });
+    }
+
+    const result = {
+      character_key: characterKey,
+      display_name: dna.display_name,
+      world: dna.world,
+      tasks: parsed.tasks || [],
+    };
+
+    // Cache the arc in memory
+    seTaskArcCache.set(characterKey, result);
+
+    return res.json({ cached: false, ...result });
+
+  } catch (err) {
+    console.error('[generate-story-tasks] error:', err?.message);
+    return res.status(500).json({ error: 'Task generation failed.' });
+  }
+});
+
+// ─── POST /generate-story ─────────────────────────────────────────────────────
+// Generates one complete short story (3300-4800 words) from a task brief.
+router.post('/generate-story', optionalAuth, async (req, res) => {
+  const {
+    characterKey,
+    storyNumber,
+    taskBrief,
+    previousStories,
+  } = req.body;
+
+  if (!characterKey || !storyNumber || !taskBrief) {
+    return res.status(400).json({ error: 'characterKey, storyNumber, and taskBrief required' });
+  }
+
+  const dna = CHARACTER_DNA[characterKey];
+  if (!dna) {
+    return res.status(400).json({ error: `No character DNA for ${characterKey}` });
+  }
+
+  const fallback = () => res.json({
+    story: null,
+    fallback: true,
+    reason: 'Story generation failed — try again.',
+  });
+
+  try {
+    const previousContext = previousStories?.length
+      ? `PREVIOUS STORIES (for continuity):\n${previousStories.map((s) => `- Story ${s.number}: "${s.title}" — ${s.summary}`).join('\n')}`
+      : 'This is the first story in the arc.';
+
+    const systemPrompt = `You are writing Story ${storyNumber} of 50 in ${dna.display_name}'s arc.
+
+CHARACTER DNA:
+Name: ${dna.display_name}
+Job: ${dna.job}
+Desire line: ${dna.desire_line}
+Fear line: ${dna.fear_line}
+Wound: ${dna.wound}
+Strengths: ${dna.strengths.join(', ')}
+Job antagonist: ${dna.job_antagonist}
+Personal antagonist: ${dna.personal_antagonist}
+Recurring object: ${dna.recurring_object}
+
+DOMAINS TO WEAVE (all four must be present):
+Career: ${dna.domains.career}
+Romantic: ${dna.domains.romantic}
+Family: ${dna.domains.family}
+Friends: ${dna.domains.friends}
+
+THIS STORY:
+Phase: ${taskBrief.phase}
+Type: ${taskBrief.story_type}
+Title: ${taskBrief.title}
+Task: ${taskBrief.task}
+Obstacle: ${taskBrief.obstacle}
+Strength being weaponized: ${taskBrief.strength_weaponized}
+Opening line suggested: ${taskBrief.opening_line}
+${taskBrief.new_character ? `New character to introduce: ${taskBrief.new_character_name} — ${taskBrief.new_character_role}` : ''}
+
+${previousContext}
+
+CRAFT RULES:
+- Length: 3300-4800 words. No shorter. No longer.
+- Adult fiction: explicit adult language, sexuality, raw conflict — do not soften.
+- All four life domains must be active in every story — career, romantic, family, friends.
+- The TASK creates the clock. The obstacle hits inside the task.
+- The recurring object (${dna.recurring_object}) appears at least once.
+- Write in close third person — deep in her interior, but not first person.
+- Sex and intimacy reveal character — what they do and don\'t reach for tells the truth.
+- End on a shift, not a resolution. The ground moves a quarter inch.
+- Do not summarize. Show every scene. Trust the reader.
+- The character\'s desire line and fear line must both be active throughout.
+- New character introductions: one paragraph only in the story — name, one physical detail, one line of dialogue that reveals their entire persona.
+
+Write the complete story now. No preamble. Begin with the title, then the story.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 6000,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: `Write Story ${storyNumber}: "${taskBrief.title}"` }],
+    });
+
+    const storyText = response.content?.[0]?.text || '';
+
+    if (!storyText || storyText.length < 500) {
+      return fallback();
+    }
+
+    const wordCount = storyText.split(/\s+/).length;
+
+    return res.json({
+      story_number: storyNumber,
+      character_key: characterKey,
+      title: taskBrief.title,
+      phase: taskBrief.phase,
+      story_type: taskBrief.story_type,
+      text: storyText,
+      word_count: wordCount,
+      therapy_seeds: taskBrief.therapy_seeds || [],
+      new_character: taskBrief.new_character || false,
+      new_character_name: taskBrief.new_character_name || null,
+      new_character_role: taskBrief.new_character_role || null,
+    });
+
+  } catch (err) {
+    console.error('[generate-story] error:', err?.message);
+    return fallback();
+  }
+});
+
+// ─── POST /check-story-consistency ───────────────────────────────────────────
+// When a story is edited, check for cascading contradictions in later stories.
+router.post('/check-story-consistency', optionalAuth, async (req, res) => {
+  const { characterKey, editedStoryNumber, editedStoryText, existingStories } = req.body;
+
+  if (!characterKey || !editedStoryNumber || !editedStoryText) {
+    return res.status(400).json({ error: 'characterKey, editedStoryNumber, editedStoryText required' });
+  }
+
+  try {
+    const laterStories = (existingStories || [])
+      .filter((s) => s.story_number > editedStoryNumber)
+      .slice(0, 10);
+
+    if (laterStories.length === 0) {
+      return res.json({ conflicts: [], message: 'No later stories to check.' });
+    }
+
+    const systemPrompt = `You are a story continuity checker for ${characterKey}'s 50-story arc.
+
+A story has been edited. Check whether the edits create contradictions, character drift, or factual conflicts with later stories.
+
+Look for:
+1. Factual contradictions (a character is said to be somewhere they previously were not)
+2. Character drift (the character behaves inconsistently with who she has been established to be)
+3. Relationship contradictions (a relationship state that conflicts with what was established)
+4. Timeline conflicts (events that now happen in the wrong order)
+5. New character conflicts (a character introduced in the edit that was introduced differently in a later story)
+
+Return ONLY valid JSON:
+{
+  "conflicts": [
+    {
+      "story_number": 12,
+      "conflict_type": "factual|character_drift|relationship|timeline|new_character",
+      "description": "what conflicts and why",
+      "severity": "critical|warning|minor"
+    }
+  ]
+}`;
+
+    const laterStoriesSummary = laterStories
+      .map((s) => `Story ${s.story_number} "${s.title}": ${s.summary || s.text?.slice(0, 300)}`)
+      .join('\n\n');
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{
+        role: 'user',
+        content: `EDITED STORY ${editedStoryNumber}:\n${editedStoryText.slice(0, 2000)}\n\nLATER STORIES:\n${laterStoriesSummary}\n\nFind all conflicts.`,
+      }],
+    });
+
+    const raw = response.content?.[0]?.text || '';
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch {
+      return res.json({ conflicts: [], fallback: true });
+    }
+
+    return res.json({ conflicts: parsed.conflicts || [] });
+
+  } catch (err) {
+    console.error('[check-story-consistency] error:', err?.message);
+    return res.json({ conflicts: [], fallback: true });
+  }
+});
+
+// ─── POST /extract-story-memories ────────────────────────────────────────────
+// After a story is approved, extract pain points and feed them to therapy room.
+router.post('/extract-story-memories', optionalAuth, async (req, res) => {
+  const { characterId, characterKey, storyNumber, storyTitle, storyText } = req.body;
+
+  if (!characterId || !storyText) {
+    return res.status(400).json({ error: 'characterId and storyText required' });
+  }
+
+  try {
+    const PAIN_POINT_CATEGORIES = [
+      'comparison_spiral', 'visibility_gap', 'identity_drift',
+      'financial_risk', 'consistency_collapse', 'clarity_deficit',
+      'external_validation', 'restart_cycle',
+    ];
+
+    const systemPrompt = `You are extracting therapeutic memories from a short story.
+
+The character is ${characterKey}. The story is "${storyTitle}" (Story ${storyNumber}).
+
+Extract:
+1. Pain points — moments of genuine emotional pain, categorized by type
+2. Belief shifts — moments where something the character believes changes or is challenged
+3. Wound activations — moments where the character's core wound is triggered
+4. Relationship revelations — what this story reveals about key relationships
+
+Pain point categories: ${PAIN_POINT_CATEGORIES.join(', ')}
+
+Return ONLY valid JSON:
+{
+  "pain_points": [
+    {
+      "category": "visibility_gap",
+      "statement": "specific moment from the story",
+      "coaching_angle": "what a coach would help this person work through",
+      "wound_activated": true
+    }
+  ],
+  "belief_shifts": [
+    {
+      "before": "what she believed before this story",
+      "after": "what shifted",
+      "trigger": "what caused the shift"
+    }
+  ],
+  "therapy_opening": "one sentence a therapist could use to open the next session based on this story"
+}`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{
+        role: 'user',
+        content: `Story text:\n\n${storyText.slice(0, 4000)}`,
+      }],
+    });
+
+    const raw = response.content?.[0]?.text || '';
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch {
+      return res.json({ memories_extracted: 0, fallback: true });
+    }
+
+    // Save to storyteller_memories table
+    const memories = parsed.pain_points || [];
+    let saved = 0;
+
+    for (const memory of memories) {
+      try {
+        await StorytellerMemory.create({
+          character_id: characterId,
+          type: 'pain_point',
+          statement: memory.statement,
+          confidence: 0.85,
+          confirmed: false,
+          source_ref: `story_${storyNumber}`,
+          tags: JSON.stringify([memory.category]),
+          category: memory.category,
+          coaching_angle: memory.coaching_angle,
+        });
+        saved++;
+      } catch (e) {
+        console.error('[extract-story-memories] save error:', e?.message);
+      }
+    }
+
+    return res.json({
+      memories_extracted: saved,
+      pain_points: parsed.pain_points || [],
+      belief_shifts: parsed.belief_shifts || [],
+      therapy_opening: parsed.therapy_opening || null,
+      story_number: storyNumber,
+    });
+
+  } catch (err) {
+    console.error('[extract-story-memories] error:', err?.message);
+    return res.json({ memories_extracted: 0, fallback: true });
   }
 });
 
