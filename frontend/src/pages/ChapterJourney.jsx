@@ -150,6 +150,7 @@ export default function ChapterJourney() {
   const [error, setError]                 = useState(null);
   const [book, setBook]                   = useState(null);
   const [chapter, setChapter]             = useState(null);
+  const [characters, setCharacters]       = useState([]);
   const [detectedStage, setDetectedStage] = useState('plan');
   const [activeStage, setActiveStage]     = useState('plan');
   const [isOverride, setIsOverride]       = useState(false);
@@ -209,20 +210,36 @@ export default function ChapterJourney() {
       setLoading(true);
       setError(null);
 
-      const res = await fetch(`/api/v1/storyteller/books/${bookId}`, {
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-      });
+      // Load book + chapters AND characters in parallel
+      const [bookRes, charRes] = await Promise.all([
+        fetch(`/api/v1/storyteller/books/${bookId}`, {
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        }),
+        fetch('/api/v1/character-registry/registries/default', {
+          headers: { 'Content-Type': 'application/json' },
+          credentials: 'include',
+        }).catch(() => null), // characters are optional — don't block on failure
+      ]);
 
-      if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+      if (!bookRes.ok) throw new Error(`${bookRes.status} ${bookRes.statusText}`);
 
-      const data = await res.json();
+      const data = await bookRes.json();
       const bookData = data.book || data;
       const chapters = bookData.chapters || [];
       const found = chapters.find(c => c.id === chapterId) || chapters[0];
 
       setBook(bookData);
       setChapter(found || null);
+
+      // Load characters from default registry
+      if (charRes?.ok) {
+        try {
+          const charData = await charRes.json();
+          const reg = charData.registry || charData;
+          setCharacters(reg.characters || reg.RegistryCharacters || []);
+        } catch { setCharacters([]); }
+      }
 
       const stage = detectStage(found);
       setDetectedStage(stage);
@@ -328,6 +345,7 @@ export default function ChapterJourney() {
     chapterId,
     book,
     chapter,
+    characters,
     onChapterRefresh: handleChapterRefresh,
   };
 

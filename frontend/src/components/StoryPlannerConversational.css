@@ -793,6 +793,138 @@
   color: var(--st-gold, #C6A85E);
 }
 
+/* ── Health Report ────────────────────────────────────────────── */
+
+.spc-health-report {
+  background: #1E1B18;
+  border: 1px solid #3A342E;
+  border-radius: 10px;
+}
+.spc-health-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  border-radius: 9px;
+  background: #C6735A;
+  color: #FAF7F0;
+  font-size: 10px;
+  font-weight: 700;
+  margin-left: 6px;
+  padding: 0 5px;
+}
+.spc-health-clean {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 0;
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 13px;
+  color: #7AB87A;
+}
+.spc-health-clean-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(122, 184, 122, 0.15);
+  color: #7AB87A;
+  font-weight: 700;
+  font-size: 14px;
+}
+.spc-health-issues {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.spc-health-issue {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.spc-health-issue--error {
+  background: rgba(198, 67, 67, 0.1);
+  border: 1px solid rgba(198, 67, 67, 0.25);
+  color: #E8A0A0;
+}
+.spc-health-issue--warning {
+  background: rgba(198, 168, 94, 0.08);
+  border: 1px solid rgba(198, 168, 94, 0.2);
+  color: #E8D9B8;
+}
+.spc-health-issue--info {
+  background: rgba(94, 148, 198, 0.08);
+  border: 1px solid rgba(94, 148, 198, 0.2);
+  color: #A0C8E8;
+}
+.spc-health-issue-icon {
+  flex-shrink: 0;
+  font-size: 10px;
+  margin-top: 1px;
+}
+.spc-health-issue-category {
+  font-weight: 600;
+  text-transform: capitalize;
+  flex-shrink: 0;
+  min-width: 65px;
+}
+.spc-health-issue-msg {
+  color: #D9D0C7;
+}
+
+/* ── Permissions ─────────────────────────────────────────────── */
+
+.spc-health-permissions {
+  border-top: 1px solid #3A342E;
+  padding-top: 12px;
+  margin-top: 4px;
+}
+.spc-health-permissions-title {
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--st-gold, #C6A85E);
+  margin-bottom: 8px;
+}
+.spc-health-perm {
+  font-family: var(--st-sans, 'DM Sans', sans-serif);
+  font-size: 11px;
+  color: #C2BAB2;
+  padding: 4px 0;
+  line-height: 1.4;
+}
+.spc-health-perm--no {
+  color: #B08080;
+}
+
+/* ── Health button variant ───────────────────────────────────── */
+
+.spc-action-btn--health {
+  background: #2A2521;
+  border: 1px solid #3A342E;
+  color: #D9D0C7;
+}
+.spc-action-btn--health.has-issues {
+  border-color: #C6735A;
+  color: #E8C0A0;
+  animation: health-pulse 2s ease-in-out infinite;
+}
+@keyframes health-pulse {
+  0%, 100% { border-color: #C6735A; }
+  50% { border-color: rgba(198, 115, 90, 0.4); }
+}
+
 /* ── Book Structure Blueprint ────────────────────────────────── */
 
 .spc-structure-blueprint {
