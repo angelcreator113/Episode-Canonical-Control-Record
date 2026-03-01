@@ -1,0 +1,212 @@
+/**
+ * ReadingMode.css — Mobile responsive overrides
+ *
+ * ReadingMode uses inline JS styles for base layout.
+ * This CSS file provides mobile-specific overrides via media queries
+ * that CSS specificity can't easily do inline.
+ *
+ * Palette: Parchment #faf8f4, Ink #1c1917, Gold #C9A84C
+ */
+
+/* ── Fix 100vh on mobile browsers ──────────────────────────────────── */
+.rm-shell {
+  min-height: 100vh !important;
+  min-height: 100dvh !important;
+}
+
+/* ── Tablet (≤ 768px) ──────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .rm-manuscript {
+    padding: 40px 24px 0 !important;
+    max-width: 100% !important;
+  }
+
+  .rm-book-title {
+    font-size: 28px !important;
+    line-height: 1.2 !important;
+  }
+
+  .rm-book-description {
+    font-size: 14px !important;
+    max-width: 100% !important;
+  }
+
+  .rm-book-header {
+    margin-bottom: 48px !important;
+  }
+
+  .rm-chapter-title {
+    font-size: 20px !important;
+  }
+
+  .rm-chapter-header {
+    gap: 10px !important;
+    margin-bottom: 24px !important;
+  }
+
+  .rm-line {
+    font-size: 16px !important;
+    line-height: 1.75 !important;
+  }
+
+  .rm-lala-line {
+    font-size: 15px !important;
+    margin: 20px 0 20px 16px !important;
+    padding-left: 12px !important;
+  }
+
+  .rm-drop-cap {
+    font-size: 52px !important;
+    margin-top: 6px !important;
+  }
+
+  .rm-top-bar {
+    padding: 10px 16px !important;
+  }
+
+  .rm-top-meta {
+    gap: 6px !important;
+  }
+
+  .rm-top-title {
+    font-size: 12px !important;
+    max-width: 120px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .rm-top-stat {
+    font-size: 8px !important;
+  }
+
+  .rm-toc {
+    padding: 12px 16px 16px !important;
+  }
+
+  /* Back button touch target */
+  .rm-back-btn {
+    min-height: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+  }
+
+  /* TOC button touch target */
+  .rm-toc-btn {
+    min-height: 44px !important;
+    min-width: 44px !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .rm-fm-block {
+    max-width: 100% !important;
+  }
+
+  .rm-chapter {
+    margin-bottom: 48px !important;
+  }
+
+  .rm-front-matter,
+  .rm-back-matter {
+    gap: 24px !important;
+  }
+}
+
+/* ── Mobile phones (≤ 480px) ───────────────────────────────────────── */
+@media (max-width: 480px) {
+  .rm-manuscript {
+    padding: 24px 16px 0 !important;
+  }
+
+  .rm-book-title {
+    font-size: 24px !important;
+  }
+
+  .rm-book-description {
+    font-size: 13px !important;
+  }
+
+  .rm-book-header {
+    margin-bottom: 36px !important;
+    gap: 8px !important;
+  }
+
+  .rm-chapter-title {
+    font-size: 18px !important;
+  }
+
+  .rm-chapter-header {
+    gap: 8px !important;
+    margin-bottom: 20px !important;
+    padding-bottom: 10px !important;
+  }
+
+  .rm-line {
+    font-size: 15px !important;
+    line-height: 1.7 !important;
+    margin-bottom: 16px !important;
+  }
+
+  .rm-lala-line {
+    font-size: 14px !important;
+    margin: 16px 0 16px 8px !important;
+    padding-left: 10px !important;
+  }
+
+  .rm-drop-cap {
+    font-size: 42px !important;
+    margin-top: 4px !important;
+    margin-right: 4px !important;
+  }
+
+  .rm-top-bar {
+    padding: 8px 12px !important;
+  }
+
+  /* Hide stats on smallest screens — just show title */
+  .rm-top-divider,
+  .rm-top-stat {
+    display: none !important;
+  }
+
+  .rm-top-title {
+    font-size: 11px !important;
+    max-width: 160px;
+  }
+
+  .rm-toc-chapter-title {
+    font-size: 13px !important;
+  }
+
+  .rm-fm-epigraph {
+    padding-left: 16px !important;
+  }
+
+  /* Ensure input font >= 16px to prevent iOS zoom */
+  .rm-shell input,
+  .rm-shell textarea {
+    font-size: 16px !important;
+  }
+}
+
+/* ── Ultra-small (≤ 360px) ─────────────────────────────────────────── */
+@media (max-width: 360px) {
+  .rm-manuscript {
+    padding: 16px 12px 0 !important;
+  }
+
+  .rm-book-title {
+    font-size: 22px !important;
+  }
+
+  .rm-line {
+    font-size: 14px !important;
+    line-height: 1.65 !important;
+  }
+
+  .rm-drop-cap {
+    font-size: 36px !important;
+  }
+}

@@ -33,6 +33,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
+import './ReadingMode.css';
 
 const STORYTELLER_API = '/api/v1/storyteller';
 
@@ -116,14 +117,15 @@ export default function ReadingMode() {
   const readingMinutes = Math.max(1, Math.round(wordCount / WORDS_PER_MINUTE));
 
   return (
-    <div style={s.shell} ref={scrollRef}>
+    <div className="rm-shell" style={s.shell} ref={scrollRef}>
 
       {/* Progress bar */}
       <div style={{ ...s.progressBar, width: `${progress}%` }} />
 
       {/* Top bar */}
-      <div style={s.topBar}>
+      <div className="rm-top-bar" style={s.topBar}>
         <button
+          className="rm-back-btn"
           style={s.backBtn}
           onClick={() => navigate(-1)}
           type='button'
@@ -131,15 +133,16 @@ export default function ReadingMode() {
           ← Back
         </button>
 
-        <div style={s.topMeta}>
-          <span style={s.topTitle}>{book.title}</span>
-          <span style={s.topDivider}>·</span>
-          <span style={s.topStat}>{wordCount.toLocaleString()} words</span>
-          <span style={s.topDivider}>·</span>
-          <span style={s.topStat}>{readingMinutes} min read</span>
+        <div className="rm-top-meta" style={s.topMeta}>
+          <span className="rm-top-title" style={s.topTitle}>{book.title}</span>
+          <span className="rm-top-divider" style={s.topDivider}>·</span>
+          <span className="rm-top-stat" style={s.topStat}>{wordCount.toLocaleString()} words</span>
+          <span className="rm-top-divider" style={s.topDivider}>·</span>
+          <span className="rm-top-stat" style={s.topStat}>{readingMinutes} min read</span>
         </div>
 
         <button
+          className="rm-toc-btn"
           style={s.tocBtn}
           onClick={() => setShowToc(v => !v)}
           type='button'
@@ -150,7 +153,7 @@ export default function ReadingMode() {
 
       {/* Table of contents drawer */}
       {showToc && (
-        <div style={s.toc}>
+        <div className="rm-toc" style={s.toc}>
           <div style={s.tocTitle}>Contents</div>
           {chapters.map((ch, i) => (
             <a
@@ -160,7 +163,7 @@ export default function ReadingMode() {
               onClick={() => setShowToc(false)}
             >
               <span style={s.tocNum}>{i + 1}</span>
-              <span style={s.tocChapterTitle}>{ch.title || `Chapter ${i + 1}`}</span>
+              <span className="rm-toc-chapter-title" style={s.tocChapterTitle}>{ch.title || `Chapter ${i + 1}`}</span>
               <span style={s.tocLineCount}>
                 {ch.readableLines.length > 0
                   ? `${ch.readableLines.length} lines`
@@ -174,23 +177,23 @@ export default function ReadingMode() {
       )}
 
       {/* Manuscript */}
-      <div style={s.manuscript}>
+      <div className="rm-manuscript" style={s.manuscript}>
 
         {/* Book header */}
-        <div style={s.bookHeader}>
+        <div className="rm-book-header" style={s.bookHeader}>
           {book.character && (
             <div style={s.bookCharacter}>{book.character}</div>
           )}
-          <h1 style={s.bookTitle}>{book.title}</h1>
+          <h1 className="rm-book-title" style={s.bookTitle}>{book.title}</h1>
           {book.description && (
-            <div style={s.bookDescription}>{book.description}</div>
+            <div className="rm-book-description" style={s.bookDescription}>{book.description}</div>
           )}
           <div style={s.bookRule} />
         </div>
 
         {/* Front matter */}
         {book.front_matter && (
-          <div style={s.frontMatter}>
+          <div className="rm-front-matter" style={s.frontMatter}>
             {book.front_matter.dedication && (
               <div style={s.fmBlock}>
                 <div style={s.fmLabel}>Dedication</div>
@@ -198,8 +201,8 @@ export default function ReadingMode() {
               </div>
             )}
             {book.front_matter.epigraph && (
-              <div style={s.fmBlock}>
-                <div style={s.fmEpigraph}>{book.front_matter.epigraph}</div>
+              <div className="rm-fm-block" style={s.fmBlock}>
+                <div className="rm-fm-epigraph" style={s.fmEpigraph}>{book.front_matter.epigraph}</div>
               </div>
             )}
             {book.front_matter.foreword && (
@@ -245,7 +248,7 @@ export default function ReadingMode() {
 
         {/* Back matter */}
         {book.back_matter && (
-          <div style={s.backMatter}>
+          <div className="rm-back-matter" style={s.backMatter}>
             <div style={s.bookRule} />
             {book.back_matter.acknowledgments && (
               <div style={s.fmBlock}>
@@ -281,7 +284,7 @@ export default function ReadingMode() {
         )}
 
         {/* Bottom padding */}
-        <div style={{ height: 120 }} />
+        <div className="rm-bottom-pad" style={{ height: 120 }} />
 
       </div>
     </div>
@@ -292,14 +295,14 @@ export default function ReadingMode() {
 
 function ChapterSection({ chapter, chapterIndex, isLast, isEmpty }) {
   return (
-    <section id={`chapter-${chapter.id}`} style={s.chapter}>
+    <section id={`chapter-${chapter.id}`} className="rm-chapter" style={s.chapter}>
 
       {/* Chapter header */}
-      <div style={s.chapterHeader}>
+      <div className="rm-chapter-header" style={s.chapterHeader}>
         <div style={s.chapterNum}>
           {String(chapterIndex + 1).padStart(2, '0')}
         </div>
-        <h2 style={s.chapterTitle}>
+        <h2 className="rm-chapter-title" style={s.chapterTitle}>
           {chapter.title || `Chapter ${chapterIndex + 1}`}
         </h2>
       </div>
@@ -313,9 +316,9 @@ function ChapterSection({ chapter, chapterIndex, isLast, isEmpty }) {
           <>
             <div style={s.draftBadge}>Draft</div>
             {chapter.draftParas.map((para, pi) => (
-              <p key={pi} style={s.line}>
+              <p key={pi} className="rm-line" style={s.line}>
                 {pi === 0 ? (
-                  <><span style={s.dropCap}>{para[0]}</span>{para.slice(1)}</>
+                  <><span className="rm-drop-cap" style={s.dropCap}>{para[0]}</span>{para.slice(1)}</>
                 ) : para}
               </p>
             ))}
@@ -357,7 +360,7 @@ function Line({ line, isFirst }) {
 
   if (isLala) {
     return (
-      <p style={s.lalaLine}>
+      <p className="rm-lala-line" style={s.lalaLine}>
         {text}
       </p>
     );
@@ -368,14 +371,14 @@ function Line({ line, isFirst }) {
     const firstChar = text[0];
     const rest      = text.slice(1);
     return (
-      <p style={s.line}>
-        <span style={s.dropCap}>{firstChar}</span>
+      <p className="rm-line" style={s.line}>
+        <span className="rm-drop-cap" style={s.dropCap}>{firstChar}</span>
         {rest}
       </p>
     );
   }
 
-  return <p style={s.line}>{text}</p>;
+  return <p className="rm-line" style={s.line}>{text}</p>;
 }
 
 // ── Loading / Error ────────────────────────────────────────────────────────

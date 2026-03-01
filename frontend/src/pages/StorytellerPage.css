@@ -1596,7 +1596,7 @@
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  background: var(--st-ambient-bg, var(--st-bg));
+  min-height: 100dvh;
   color: var(--st-ambient-ink, var(--st-ink));
   position: relative;
 }
@@ -1981,6 +1981,7 @@
   position: sticky;
   top: var(--st-topbar-h);
   height: calc(100vh - var(--st-topbar-h));
+  height: calc(100dvh - var(--st-topbar-h));
   overflow: hidden;          /* no global scroll — scroll lives in st-nav-scroll */
   z-index: 1;
   transition: opacity 0.4s, width 0.4s;
@@ -3022,6 +3023,7 @@ button.st-nav-section-clickable:hover {
   top: calc(var(--st-topbar-h) + 20px);
   height: fit-content;
   max-height: calc(100vh - var(--st-topbar-h) - 40px);
+  max-height: calc(100dvh - var(--st-topbar-h) - 40px);
   overflow-y: auto;
 }
 .st-canon-header {
@@ -3687,7 +3689,7 @@ button.st-nav-section-clickable:hover {
   .st-topbar-back-arrow { font-size: 16px; }
   .st-topbar-title { font-size: 12px; }
   .st-mobile-nav-toggle { font-size: 18px; padding: 6px; }
-  .st-tools-btn { padding: 6px 8px; font-size: 16px; min-height: 32px; min-width: 32px; }
+  .st-tools-btn { padding: 6px 8px; font-size: 16px; min-height: 44px; min-width: 44px; }
 
   /* Workspace toggle */
   .st-workspace-toggle { font-size: 12px; padding: 6px 8px; }
@@ -3713,7 +3715,7 @@ button.st-nav-section-clickable:hover {
 
   /* Chapter actions */
   .st-chapter-actions { gap: 6px; }
-  .st-chapter-icon-btn { padding: 7px 10px; font-size: 15px; min-height: 36px; min-width: 36px; }
+  .st-chapter-icon-btn { padding: 7px 10px; font-size: 15px; min-height: 44px; min-width: 44px; }
 
   /* Lines */
   .st-book-page { padding: 0 16px; }
@@ -3841,7 +3843,17 @@ button.st-nav-section-clickable:hover {
   .st-btn { min-height: 44px; padding: 10px 18px; }
   .st-btn-sm { min-height: 40px; padding: 8px 14px; }
   .st-nav-chapter { min-height: 48px; }
-  .st-chapter-icon-btn { min-height: 40px; min-width: 40px; }
+  .st-chapter-icon-btn { min-height: 44px; min-width: 44px; }
+
+  /* Section action buttons — always visible and tappable on touch */
+  .st-section-actions { opacity: 1; }
+  .st-section-actions button {
+    min-width: 40px;
+    min-height: 40px;
+    width: auto;
+    height: auto;
+    font-size: 15px;
+  }
 
   /* Add line trigger more prominent on touch */
   .st-add-line-trigger { opacity: 0.4; padding: 16px 0; }

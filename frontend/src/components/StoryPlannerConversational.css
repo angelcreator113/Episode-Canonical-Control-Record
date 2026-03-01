@@ -1373,8 +1373,8 @@
   .spc-header-book { display: none; } /* hide book subtitle on tiny screens */
   .spc-header-right { gap: 4px; }
   .spc-save-btn { font-size: 10px; padding: 5px 10px; }
-  .spc-clear-btn { min-width: 32px; min-height: 32px; font-size: 16px; }
-  .spc-close-btn { min-width: 32px; min-height: 32px; font-size: 18px; }
+  .spc-clear-btn { min-width: 44px; min-height: 44px; font-size: 16px; }
+  .spc-close-btn { min-width: 44px; min-height: 44px; font-size: 18px; }
 
   .spc-mobile-tab { font-size: 12px; padding: 8px 0; }
 
