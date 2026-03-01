@@ -81,6 +81,7 @@ const RelationshipWeb = lazy(() => import('./pages/RelationshipWeb'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
+const StoryEngine = lazy(() => import('./pages/StoryEngine'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
@@ -212,7 +213,8 @@ function AppContent() {
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
   const isChapterJourney = location.pathname.startsWith('/chapter/');
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isPlanWithVoice;
+  const isStoryEngine = location.pathname === '/story-engine';
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isPlanWithVoice || isStoryEngine;
   const hideFooter = isFullScreen;
 
   return (
@@ -349,6 +351,9 @@ function AppContent() {
           
           {/* PNOS Character Relationship Web */}
           <Route path="/relationships" element={<RelationshipWeb />} />
+          
+          {/* PNOS Story Engine — 50-Story Arc System */}
+          <Route path="/story-engine" element={<StoryEngine />} />
           
           {/* PNOS LalaVerse Press — Publisher Dashboard */}
           <Route path="/press" element={<PressPublisher />} />
