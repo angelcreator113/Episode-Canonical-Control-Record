@@ -248,14 +248,9 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
       <div style={s.shell}>
         <div style={s.introBlock}>
           <div style={s.introIcon}>✦</div>
-          <div style={s.introTitle}>Let's set the scene.</div>
+          <div style={s.introTitle}>Set the scene</div>
           <div style={s.introSub}>
-            Before you write a single line, I need to understand where we are.
-            Seven quick questions. Answer like you're telling a friend.
-            I'll build the scene brief from your answers.
-          </div>
-          <div style={s.introChapter}>
-            Chapter: <em>{chapter.title}</em>
+            Seven quick questions to build your scene brief.
           </div>
           {savedAnswers && (
             <div style={{ marginTop: 10, marginBottom: 4 }}>
@@ -535,59 +530,61 @@ export default function SceneInterview({ chapter, book, characters, onComplete, 
 
 const s = {
   shell: {
-    background: '#faf9f7',
-    border: '1px solid rgba(201,168,76,0.2)',
-    borderRadius: 4,
-    marginBottom: 20,
+    background: '#FAF7F0',
+    border: '1px solid rgba(201,168,76,0.15)',
+    borderRadius: 6,
+    marginBottom: 12,
     overflow: 'hidden',
   },
   // Intro
   introBlock: {
-    padding: '36px 32px',
+    padding: '16px 16px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
     textAlign: 'center',
-    gap: 12,
+    gap: 6,
   },
   introIcon: {
-    fontSize: 24,
-    color: '#C6A85E',
-    marginBottom: 4,
+    fontSize: 18,
+    color: '#C9A84C',
+    marginBottom: 0,
   },
   introTitle: {
     fontFamily: "'Lora', Georgia, serif",
-    fontSize: 22,
+    fontSize: 15,
     fontStyle: 'italic',
-    color: 'rgba(30,25,20,0.85)',
+    color: '#1a1a2e',
   },
   introSub: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    color: 'rgba(30,25,20,0.45)',
+    fontSize: 11,
+    color: 'rgba(26,26,46,0.4)',
     letterSpacing: '0.04em',
-    lineHeight: 1.7,
-    maxWidth: 480,
+    lineHeight: 1.4,
+    maxWidth: 400,
   },
   introChapter: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
-    color: '#C6A85E',
+    fontSize: 11,
+    color: '#C9A84C',
     letterSpacing: '0.12em',
     textTransform: 'uppercase',
-    marginTop: 4,
+    marginTop: 2,
   },
   introBtns: {
     display: 'flex',
-    gap: 10,
-    marginTop: 8,
+    gap: 8,
+    marginTop: 4,
+    flexWrap: 'wrap',
+    justifyContent: 'center',
   },
   // Question
   questionBlock: {
-    padding: '28px 32px',
+    padding: '16px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 12,
+    gap: 8,
   },
   progressRow: {
     display: 'flex',
@@ -604,7 +601,7 @@ const s = {
   },
   progressFill: {
     height: '100%',
-    background: '#C6A85E',
+    background: '#C9A84C',
     borderRadius: 1,
     transition: 'width 0.3s ease',
   },
@@ -617,9 +614,9 @@ const s = {
   },
   questionText: {
     fontFamily: "'Lora', Georgia, serif",
-    fontSize: 20,
+    fontSize: 15,
     fontStyle: 'italic',
-    color: 'rgba(30,25,20,0.88)',
+    color: '#1a1a2e',
     lineHeight: 1.4,
   },
   questionHint: {
@@ -661,11 +658,11 @@ const s = {
   },
   // Generating
   generatingBlock: {
-    padding: '48px 32px',
+    padding: '28px 16px',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
   },
   generatingDots: {
     display: 'flex',
@@ -675,14 +672,14 @@ const s = {
     width: 8,
     height: 8,
     borderRadius: '50%',
-    background: '#C6A85E',
+    background: '#C9A84C',
     animation: 'pulse 1.2s ease-in-out infinite',
   },
   generatingTitle: {
     fontFamily: "'Lora', Georgia, serif",
-    fontSize: 18,
+    fontSize: 16,
     fontStyle: 'italic',
-    color: 'rgba(30,25,20,0.75)',
+    color: '#1a1a2e',
   },
   generatingSub: {
     fontFamily: 'DM Mono, monospace',
@@ -694,10 +691,12 @@ const s = {
   },
   // Review
   reviewBlock: {
-    padding: '24px 32px',
+    padding: '16px 16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: 14,
+    gap: 10,
+    maxHeight: '50vh',
+    overflowY: 'auto',
   },
   reviewHeader: {
     borderBottom: '1px solid rgba(201,168,76,0.15)',
@@ -706,16 +705,16 @@ const s = {
   },
   reviewLabel: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
+    fontSize: 10,
     letterSpacing: '0.2em',
-    color: '#C6A85E',
+    color: '#C9A84C',
     marginBottom: 4,
   },
   reviewTitle: {
     fontFamily: "'Lora', Georgia, serif",
-    fontSize: 20,
+    fontSize: 17,
     fontStyle: 'italic',
-    color: 'rgba(30,25,20,0.85)',
+    color: '#1a1a2e',
   },
   briefSection: {
     display: 'flex',
@@ -743,8 +742,8 @@ const s = {
   },
   arcStart: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    color: '#B85C38',
+    fontSize: 12,
+    color: '#b0922e',
     letterSpacing: '0.04em',
   },
   arcArrow: {
@@ -752,8 +751,8 @@ const s = {
   },
   arcEnd: {
     fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    color: '#4A7C59',
+    fontSize: 12,
+    color: '#C9A84C',
     letterSpacing: '0.04em',
   },
   charRow: {
@@ -795,7 +794,7 @@ const s = {
     transition: 'all 0.12s',
   },
   openingUseBtn: {
-    background: '#7A9B7E',
+    background: '#C9A84C',
     border: 'none',
     borderRadius: 2,
     fontFamily: 'DM Mono, monospace',
@@ -816,28 +815,28 @@ const s = {
   },
   // Buttons
   startBtn: {
-    background: '#C6A85E',
+    background: '#C9A84C',
     border: 'none',
-    borderRadius: 2,
+    borderRadius: 4,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    letterSpacing: '0.12em',
-    color: '#14100c',
+    fontSize: 12,
+    letterSpacing: '0.1em',
+    color: '#fff',
     fontWeight: 600,
-    padding: '10px 22px',
+    padding: '9px 18px',
     cursor: 'pointer',
     transition: 'opacity 0.15s',
   },
   nextBtn: {
-    background: '#C6A85E',
+    background: '#C9A84C',
     border: 'none',
-    borderRadius: 2,
+    borderRadius: 4,
     fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    letterSpacing: '0.12em',
-    color: '#14100c',
+    fontSize: 12,
+    letterSpacing: '0.1em',
+    color: '#fff',
     fontWeight: 600,
-    padding: '9px 20px',
+    padding: '8px 16px',
     cursor: 'pointer',
     transition: 'opacity 0.15s',
   },
@@ -869,7 +868,7 @@ const s = {
     fontFamily: 'DM Mono, monospace',
     fontSize: 12,
     letterSpacing: '0.08em',
-    color: '#C6A85E',
+    color: '#C9A84C',
     padding: '6px 12px',
     borderRadius: 3,
     cursor: 'pointer',

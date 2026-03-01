@@ -2455,12 +2455,6 @@
   font-weight: 600;
 }
 
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-}
-
 .detail-item {
   display: flex;
   flex-direction: column;

@@ -23,27 +23,27 @@ function makeOpeningMessage(book, chapters) {
   if (title && filled > 0) {
     return {
       role: 'assistant',
-      text: `I can see "${title}" already has ${chapters.length} chapter${chapters.length > 1 ? 's' : ''}, with ${filled} planned so far. Let's go deeper — pick a chapter you want to develop, or tell me what's still unclear in your head about this story. What's the part that excites you most right now?`,
+      text: `Okay bestie, "${title}" is already looking like a SERVE — ${chapters.length} chapter${chapters.length > 1 ? 's' : ''} with ${filled} planned so far! Pick a chapter you want to go deeper on, or tell me what's still living rent-free in your head about this story. What part has you the most excited right now? ✨`,
       extracting: null,
     };
   }
   if (title && hasChs) {
     return {
       role: 'assistant',
-      text: `"${title}" — I love it. You've got ${chapters.length} chapter${chapters.length > 1 ? 's' : ''} created but they're waiting to be filled. Before we plan them out, tell me: what is this book really about? Not the plot — the feeling. What do you want someone to carry with them after they finish reading?`,
+      text: `"${title}" — okay I'm already obsessed with the title. You've got ${chapters.length} chapter${chapters.length > 1 ? 's' : ''} ready to go but they need the good stuff! Before we dive in, tell me: what is this book REALLY about? Not the plot — the FEELING. Like what do you want someone to carry with them after they put it down?`,
       extracting: null,
     };
   }
   if (title) {
     return {
       role: 'assistant',
-      text: `"${title}" — that's a strong start. Now tell me what pulled you to write this. What's the core idea, the itch that won't leave you alone? Give me as much or as little as you want.`,
+      text: `"${title}" — no because I already love this?? Okay tell me everything. What pulled you to write this? What's the idea that just won't leave you alone? Give me as much or as little as you want, I'm all ears. 💅`,
       extracting: null,
     };
   }
   return {
     role: 'assistant',
-    text: "Let's build your book together. Tell me — what's this book about? Not the summary, the heart of it. What made you sit down and say 'I need to write this'?",
+    text: "Hiiii okay I'm so ready to build this book with you! Tell me — what's your story about? Not the summary, the HEART of it. Like what made you sit down and go 'I HAVE to write this'? Spill everything. ✨",
     extracting: null,
   };
 }
@@ -54,6 +54,12 @@ function planEmpty(chapters, book) {
   return {
     bookTitle:   book?.title || '',
     bookConcept: book?.description || '',
+    theme:       book?.theme || '',
+    pov:         book?.pov || '',
+    tone:        book?.tone || '',
+    setting:     book?.setting || '',
+    conflict:    book?.conflict || '',
+    stakes:      book?.stakes || '',
     parts:       [],
     chapters:    (chapters || []).map(ch => ({
       id:               ch.id,
@@ -63,6 +69,13 @@ function planEmpty(chapters, book) {
       emotionalEnd:     ch.emotional_state_end || '',
       characters:       Array.isArray(ch.characters_present) ? ch.characters_present : (typeof ch.characters_present === 'string' ? ch.characters_present.split(',').map(s => s.trim()).filter(Boolean) : []),
       sections:         Array.isArray(ch.sections) ? ch.sections : [],
+      theme:            ch.theme || '',
+      pov:              ch.pov || '',
+      tone:             ch.tone || '',
+      setting:          ch.setting || '',
+      conflict:         ch.conflict || '',
+      stakes:           ch.stakes || '',
+      hooks:            ch.hooks || '',
       filled:           false,
     })),
   };
@@ -341,6 +354,12 @@ export default function StoryPlannerConversational({
 
     if (updates.bookTitle)   next.bookTitle   = updates.bookTitle;
     if (updates.bookConcept) next.bookConcept = updates.bookConcept;
+    if (updates.theme)       next.theme       = updates.theme;
+    if (updates.pov)         next.pov         = updates.pov;
+    if (updates.tone)        next.tone        = updates.tone;
+    if (updates.setting)     next.setting     = updates.setting;
+    if (updates.conflict)    next.conflict    = updates.conflict;
+    if (updates.stakes)      next.stakes      = updates.stakes;
     if (updates.parts)       next.parts       = updates.parts;
 
     if (updates.chapters) {
@@ -355,6 +374,13 @@ export default function StoryPlannerConversational({
           emotionalEnd:   upd.emotionalEnd   ?? ch.emotionalEnd,
           characters:     upd.characters     ?? ch.characters,
           sections:       upd.sections       ?? ch.sections,
+          theme:          upd.theme          ?? ch.theme,
+          pov:            upd.pov            ?? ch.pov,
+          tone:           upd.tone           ?? ch.tone,
+          setting:        upd.setting        ?? ch.setting,
+          conflict:       upd.conflict       ?? ch.conflict,
+          stakes:         upd.stakes         ?? ch.stakes,
+          hooks:          upd.hooks          ?? ch.hooks,
           filled:         true,
         };
       });
@@ -379,11 +405,17 @@ export default function StoryPlannerConversational({
     setApplying(true);
     let saved = 0;
     try {
-      // Save book-level fields (title, description) if changed
-      if (book?.id && (plan.bookTitle || plan.bookConcept)) {
+      // Save book-level fields (title, description, theme, pov, tone, setting, conflict, stakes) if changed
+      if (book?.id && (plan.bookTitle || plan.bookConcept || plan.theme || plan.pov || plan.tone || plan.setting || plan.conflict || plan.stakes)) {
         const bookUpdates = {};
         if (plan.bookTitle)   bookUpdates.title       = plan.bookTitle;
         if (plan.bookConcept) bookUpdates.description  = plan.bookConcept;
+        if (plan.theme)       bookUpdates.theme        = plan.theme;
+        if (plan.pov)         bookUpdates.pov          = plan.pov;
+        if (plan.tone)        bookUpdates.tone         = plan.tone;
+        if (plan.setting)     bookUpdates.setting      = plan.setting;
+        if (plan.conflict)    bookUpdates.conflict     = plan.conflict;
+        if (plan.stakes)      bookUpdates.stakes       = plan.stakes;
         await fetch(`${API}/storyteller/books/${book.id}`, {
           method:  'PUT',
           headers: { 'Content-Type': 'application/json', ...authHeader() },
@@ -403,7 +435,26 @@ export default function StoryPlannerConversational({
             emotional_state_start: ch.emotionalStart || undefined,
             emotional_state_end:   ch.emotionalEnd   || undefined,
             characters_present:    ch.characters?.join(', ') || undefined,
-            chapter_notes:         ch.what           || undefined,
+            theme:                 ch.theme || plan.theme || undefined,
+            pov:                   ch.pov   || plan.pov   || undefined,
+            tone:                  ch.tone  || plan.tone  || undefined,
+            setting:               ch.setting  || undefined,
+            conflict:              ch.conflict || undefined,
+            stakes:                ch.stakes   || undefined,
+            hooks:                 ch.hooks    || undefined,
+            // Build chapter_notes as a richer summary combining plan details
+            chapter_notes:         [
+              ch.what,
+              ch.emotionalStart && ch.emotionalEnd ? `Emotional arc: ${ch.emotionalStart} → ${ch.emotionalEnd}` : null,
+              ch.characters?.length ? `Characters: ${ch.characters.join(', ')}` : null,
+              ch.theme || plan.theme ? `Theme: ${ch.theme || plan.theme}` : null,
+              ch.pov || plan.pov ? `POV: ${ch.pov || plan.pov}` : null,
+              ch.tone || plan.tone ? `Tone: ${ch.tone || plan.tone}` : null,
+              ch.setting ? `Setting: ${ch.setting}` : null,
+              ch.conflict ? `Conflict: ${ch.conflict}` : null,
+              ch.stakes ? `Stakes: ${ch.stakes}` : null,
+              ch.hooks ? `Hooks: ${ch.hooks}` : null,
+            ].filter(Boolean).join(' | ') || undefined,
           }),
         });
         saved++;
@@ -412,12 +463,14 @@ export default function StoryPlannerConversational({
       setSaved(true);
       setTimeout(() => setSaved(false), 2200);
       onApply?.();
+      // Auto-transition to WriteMode after plan is saved
+      onComplete?.();
     } catch {
       toast?.add('Error saving plan', 'error');
     } finally {
       setApplying(false);
     }
-  }, [plan, book, onApply, toast]);
+  }, [plan, book, onApply, onComplete, toast]);
 
   // ── Voice toggle ──────────────────────────────────────────────────────
 
@@ -444,6 +497,35 @@ export default function StoryPlannerConversational({
     setActiveChIdx(null);
     window.speechSynthesis?.cancel();
   };
+
+  // ── Suggest name / rename helpers ─────────────────────────────────────
+
+  const suggestBookTitle = useCallback(() => {
+    if (sending) return;
+    const context = plan.bookConcept ? ` (it's about: ${plan.bookConcept})` : '';
+    send(`Can you suggest some book title ideas based on what we've discussed so far?${context} Give me a few options with different vibes!`);
+  }, [sending, send, plan.bookConcept]);
+
+  const suggestChapterTitle = useCallback((ch, idx) => {
+    if (sending) return;
+    const label = ch.title || `Chapter ${idx + 1}`;
+    const context = ch.what ? ` Here's what happens: ${ch.what}` : '';
+    send(`Help me come up with a better title for ${label}!${context} Pitch me some ideas!`);
+  }, [sending, send]);
+
+  const suggestSectionTitle = useCallback((section, ch, chIdx) => {
+    if (sending) return;
+    const chLabel = ch.title || `Chapter ${chIdx + 1}`;
+    const secLabel = section.title || section.content || 'this section';
+    send(`In "${chLabel}", can you suggest a better name for the section called "${secLabel}"? Make it hit!`);
+  }, [sending, send]);
+
+  const brainstormPlots = useCallback(() => {
+    if (sending) return;
+    const charNames = characters.map(c => c.selected_name || c.name).filter(Boolean);
+    const charList = charNames.length > 0 ? ` My characters so far: ${charNames.join(', ')}.` : '';
+    send(`Okay bestie I need your brain — can you brainstorm some plot ideas and dramatic storylines for my story?${charList} Give me the messy, dramatic, page-turner kind of ideas!`);
+  }, [sending, send, characters]);
 
   // ── Edit a sent message — reloads it into the input ──────────────────
 
@@ -476,8 +558,8 @@ export default function StoryPlannerConversational({
     const label = ch.title || `Chapter ${idx + 1}`;
     const hasContent = ch.what || ch.emotionalStart || ch.characters?.length;
     const msg = hasContent
-      ? `Let's dive deeper into "${label}". What else should I know about this chapter?`
-      : `Let's work on "${label}". Tell me what happens in this chapter.`;
+      ? `Okay let's go deeper on "${label}" — what else should I know about this chapter? Give me the tea! ☕`
+      : `Alright let's figure out "${label}"! What happens in this chapter? Set the scene for me. ✨`;
     send(msg);
   }, [sending, send]);
 
@@ -488,7 +570,7 @@ export default function StoryPlannerConversational({
     setMobileTab('chat'); // switch to chat on mobile
     const chLabel = ch.title || `Chapter ${chIdx + 1}`;
     const secLabel = section.title || section.content || 'this section';
-    send(`In "${chLabel}", let's talk about the section "${secLabel}". What should happen here?`);
+    send(`Okay in "${chLabel}", let's talk about "${secLabel}" — what's the vibe here? What goes down? 🎬`);
   }, [sending, send]);
   // ── Filled chapters count ─────────────────────────────────────────────
 
@@ -668,14 +750,70 @@ export default function StoryPlannerConversational({
         <div className={`spc-plan-col${mobileTab === 'plan' ? ' spc-mobile-show' : ' spc-mobile-hide'}`}>
 
           {/* Book concept */}
-          <div className={`spc-plan-section${highlight === 'bookTitle' || highlight === 'bookConcept' ? ' spc-plan-section--flash' : ''}`}>
+          <div className={`spc-plan-section${highlight === 'bookTitle' || highlight === 'bookConcept' || highlight === 'theme' || highlight === 'pov' || highlight === 'tone' || highlight === 'setting' || highlight === 'conflict' || highlight === 'stakes' ? ' spc-plan-section--flash' : ''}`}>
             <div className="spc-plan-section-label">Book</div>
-            <div className="spc-plan-book-title">
-              {plan.bookTitle || <span className="spc-plan-empty">Title not yet named…</span>}
+            <div className="spc-plan-book-title-row">
+              <div className="spc-plan-book-title">
+                {plan.bookTitle || <span className="spc-plan-empty">Title not yet named…</span>}
+              </div>
+              <button
+                className="spc-suggest-btn"
+                onClick={suggestBookTitle}
+                disabled={sending}
+                title="Ask Claude to suggest a book title"
+              >✦ Suggest title</button>
             </div>
             {plan.bookConcept && (
               <p className="spc-plan-concept">{plan.bookConcept}</p>
             )}
+            {(plan.theme || plan.pov || plan.tone || plan.setting || plan.conflict || plan.stakes) && (
+              <div className="spc-plan-book-meta">
+                {plan.theme && (
+                  <div className="spc-plan-ch-field">
+                    <span className="spc-plan-ch-field-label">Theme</span>
+                    <span className="spc-plan-ch-field-val">{plan.theme}</span>
+                  </div>
+                )}
+                {plan.pov && (
+                  <div className="spc-plan-ch-field">
+                    <span className="spc-plan-ch-field-label">POV</span>
+                    <span className="spc-plan-ch-field-val">{plan.pov}</span>
+                  </div>
+                )}
+                {plan.tone && (
+                  <div className="spc-plan-ch-field">
+                    <span className="spc-plan-ch-field-label">Tone</span>
+                    <span className="spc-plan-ch-field-val">{plan.tone}</span>
+                  </div>
+                )}
+                {plan.setting && (
+                  <div className="spc-plan-ch-field">
+                    <span className="spc-plan-ch-field-label">World</span>
+                    <span className="spc-plan-ch-field-val">{plan.setting}</span>
+                  </div>
+                )}
+                {plan.conflict && (
+                  <div className="spc-plan-ch-field">
+                    <span className="spc-plan-ch-field-label">Conflict</span>
+                    <span className="spc-plan-ch-field-val">{plan.conflict}</span>
+                  </div>
+                )}
+                {plan.stakes && (
+                  <div className="spc-plan-ch-field">
+                    <span className="spc-plan-ch-field-label">Stakes</span>
+                    <span className="spc-plan-ch-field-val">{plan.stakes}</span>
+                  </div>
+                )}
+              </div>
+            )}
+            <div className="spc-plan-actions-row">
+              <button
+                className="spc-action-btn"
+                onClick={brainstormPlots}
+                disabled={sending}
+                title="Ask Claude to brainstorm plot ideas for your characters"
+              >✦ Brainstorm plots</button>
+            </div>
           </div>
 
           {/* Parts (if any) */}
@@ -714,6 +852,12 @@ export default function StoryPlannerConversational({
                       {ch.filled ? 'Ready' : ch.what?.trim() ? 'Draft' : ''}
                     </span>
                     <button
+                      className="spc-suggest-btn spc-suggest-btn--sm"
+                      title="Suggest a chapter title"
+                      onClick={(e) => { e.stopPropagation(); suggestChapterTitle(ch, i); }}
+                      disabled={sending}
+                    >✦</button>
+                    <button
                       className="spc-plan-ch-focus-btn"
                       title={`Work on ${ch.title || 'Chapter ' + (i + 1)}`}
                       onClick={(e) => { e.stopPropagation(); focusChapter(ch, i); }}
@@ -751,6 +895,48 @@ export default function StoryPlannerConversational({
                           </div>
                         </div>
                       )}
+                      {(ch.theme || plan.theme) && (
+                        <div className="spc-plan-ch-field">
+                          <span className="spc-plan-ch-field-label">Theme</span>
+                          <span className="spc-plan-ch-field-val">{ch.theme || plan.theme}</span>
+                        </div>
+                      )}
+                      {(ch.pov || plan.pov) && (
+                        <div className="spc-plan-ch-field">
+                          <span className="spc-plan-ch-field-label">POV</span>
+                          <span className="spc-plan-ch-field-val">{ch.pov || plan.pov}</span>
+                        </div>
+                      )}
+                      {(ch.tone || plan.tone) && (
+                        <div className="spc-plan-ch-field">
+                          <span className="spc-plan-ch-field-label">Tone</span>
+                          <span className="spc-plan-ch-field-val">{ch.tone || plan.tone}</span>
+                        </div>
+                      )}
+                      {ch.setting && (
+                        <div className="spc-plan-ch-field">
+                          <span className="spc-plan-ch-field-label">Setting</span>
+                          <span className="spc-plan-ch-field-val">{ch.setting}</span>
+                        </div>
+                      )}
+                      {ch.conflict && (
+                        <div className="spc-plan-ch-field">
+                          <span className="spc-plan-ch-field-label">Conflict</span>
+                          <span className="spc-plan-ch-field-val">{ch.conflict}</span>
+                        </div>
+                      )}
+                      {ch.stakes && (
+                        <div className="spc-plan-ch-field">
+                          <span className="spc-plan-ch-field-label">Stakes</span>
+                          <span className="spc-plan-ch-field-val">{ch.stakes}</span>
+                        </div>
+                      )}
+                      {ch.hooks && (
+                        <div className="spc-plan-ch-field">
+                          <span className="spc-plan-ch-field-label">Hooks</span>
+                          <span className="spc-plan-ch-field-val">{ch.hooks}</span>
+                        </div>
+                      )}
                       {ch.sections?.length > 0 && (
                         <div className="spc-plan-ch-field">
                           <span className="spc-plan-ch-field-label">Sections</span>
@@ -763,6 +949,12 @@ export default function StoryPlannerConversational({
                             >
                               <span className="spc-plan-ch-section-num">{si + 1}</span>
                               <span>{s.title || s.content}</span>
+                              <button
+                                className="spc-suggest-btn spc-suggest-btn--xs"
+                                title="Suggest section name"
+                                onClick={(e) => { e.stopPropagation(); suggestSectionTitle(s, ch, i); }}
+                                disabled={sending}
+                              >✦</button>
                               <span className="spc-plan-ch-section-go">▶</span>
                             </div>
                           ))}

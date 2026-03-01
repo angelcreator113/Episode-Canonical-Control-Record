@@ -22,9 +22,6 @@ const StoryPlannerConversational = React.lazy(() =>
 const WriteMode = React.lazy(() =>
   import('./WriteMode')
 );
-const StorytellerPage = React.lazy(() =>
-  import('./StorytellerPage')
-);
 
 // ── Stage detection ────────────────────────────────────────────────────────
 
@@ -40,21 +37,21 @@ function detectStage(chapter) {
 }
 
 const STAGES = [
-  { id: 'plan',   label: 'Plan'   },
-  { id: 'write',  label: 'Write'  },
-  { id: 'review', label: 'Review' },
+  { id: 'plan',   label: 'Story Planner' },
+  { id: 'write',  label: 'WriteMode'     },
+  { id: 'review', label: 'StoryTeller'   },
 ];
 
 const MODE_LABELS = {
-  plan:   'Plan Mode',
-  write:  'Write Mode',
-  review: 'Review Mode',
+  plan:   'Story Planner',
+  write:  'WriteMode',
+  review: 'StoryTeller',
 };
 
 const SAVE_LABELS = {
   plan:   '💾 Save Plan',
   write:  '💾 Save Draft',
-  review: '💾 Save Review',
+  review: '💾 Save Final',
 };
 
 // Stage-specific info blocks content
@@ -71,7 +68,7 @@ function getInfoBlocks(activeStage, chapter, book) {
   if (activeStage === 'plan') {
     return [
       { key: 'Status',    val: chapter?.what?.trim() ? 'Brief drafted' : 'Needs a brief' },
-      { key: 'Next Step', val: chapter?.what?.trim() ? 'Refine characters & arc' : 'Define what happens' },
+      { key: 'Next Step', val: chapter?.what?.trim() ? 'Move to WriteMode' : 'Define what happens' },
       { key: 'Emotional Arc', val: emotional || 'Not set yet' },
     ];
   }
@@ -80,15 +77,15 @@ function getInfoBlocks(activeStage, chapter, book) {
     return [
       { key: 'Status',    val: lineCount > 0 ? `${lineCount} lines drafted` : 'No lines yet' },
       { key: 'Scene Goal', val: chapter?.scene_goal?.trim() || 'Open-ended' },
-      { key: 'Chapter', val: `${chNum} of ${total}` },
+      { key: 'Chapter',    val: `${chNum} of ${total}` },
     ];
   }
   // review
   const approved = (chapter?.lines || []).filter(l => l.status === 'approved' || l.status === 'edited').length;
   const totalLines = chapter?.lines?.length || 0;
   return [
-    { key: 'Status',   val: totalLines > 0 ? `${approved}/${totalLines} approved` : 'No lines to review' },
-    { key: 'Quality',  val: approved === totalLines && totalLines > 0 ? 'Ready to publish' : 'In review' },
+    { key: 'Status',   val: totalLines > 0 ? `${approved}/${totalLines} approved` : 'No lines yet' },
+    { key: 'Quality',  val: approved === totalLines && totalLines > 0 ? 'Ready to publish' : 'In progress' },
     { key: 'Chapter',  val: `${(idx >= 0 ? idx + 1 : 1)} of ${total}` },
   ];
 }
@@ -124,20 +121,20 @@ function getOverrideBlocks(activeStage, detectedStage) {
   const detected = STAGES.find(s => s.id === detectedStage)?.label || detectedStage;
   if (activeStage === 'plan') {
     return [
-      { key: 'Mode',   val: 'Plan (manual)' },
+      { key: 'Mode',   val: 'Story Planner (manual)' },
       { key: 'Detected', val: detected },
       { key: 'Impact', val: 'No brief yet — defaults will be used' },
     ];
   }
   if (activeStage === 'write') {
     return [
-      { key: 'Mode',   val: 'Write (manual)' },
+      { key: 'Mode',   val: 'WriteMode (manual)' },
       { key: 'Detected', val: detected },
-      { key: 'Impact', val: 'Draft ready for review' },
+      { key: 'Impact', val: 'Draft ready for StoryTeller' },
     ];
   }
   return [
-    { key: 'Mode',   val: 'Review (manual)' },
+    { key: 'Mode',   val: 'StoryTeller (manual)' },
     { key: 'Detected', val: detected },
     { key: 'Impact', val: 'May lack brief or prose' },
   ];
@@ -158,9 +155,52 @@ export default function ChapterJourney() {
   const [isOverride, setIsOverride]       = useState(false);
   const [isFlashing, setIsFlashing]       = useState(false);
   const [stageEnter, setStageEnter]       = useState(false);
+  const [toolsOpen, setToolsOpen]         = useState(false);
+
+  // Tools dropdown: Save + AI Writer + WriteMode center-tab tools
+  const TOOL_ITEMS = [
+    { id: 'save',      icon: '💾', label: SAVE_LABELS[activeStage] || 'Save', action: 'save' },
+    { id: 'ai-writer', icon: '✦',  label: 'AI Writer', action: 'toggle-context' },
+    { id: 'structure', icon: '§',  label: 'Structure' },
+    { id: 'scenes',    icon: '▦',  label: 'Scenes'    },
+    { id: 'memory',    icon: '◉',  label: 'Memory'    },
+    { id: 'lala',      icon: '✧',  label: 'Lala'      },
+    { id: 'export',    icon: '↓',  label: 'Export'    },
+  ];
+
+  // Close tools dropdown on outside click
+  const toolsRef = useRef(null);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const close = (e) => {
+      if (toolsRef.current && !toolsRef.current.contains(e.target)) setToolsOpen(false);
+    };
+    document.addEventListener('mousedown', close);
+    return () => document.removeEventListener('mousedown', close);
+  }, [toolsOpen]);
 
   // Optional ref hook: children that support imperative save can attach here
   const saveRef = useRef(null);
+
+  // Save: try child imperative ref first, fall back to custom event
+  const handleRibbonSave = useCallback(() => {
+    if (saveRef.current?.save) {
+      saveRef.current.save();
+    } else {
+      window.dispatchEvent(new CustomEvent('cj-ribbon-save', { detail: { stage: activeStage } }));
+    }
+  }, [activeStage]);
+
+  const handleToolSelect = useCallback((toolId, action) => {
+    if (action === 'save') {
+      handleRibbonSave();
+    } else if (action === 'toggle-context') {
+      window.dispatchEvent(new CustomEvent('cj-toggle-context', { detail: { tab: 'ai-writer' } }));
+    } else {
+      window.dispatchEvent(new CustomEvent('cj-set-tab', { detail: toolId }));
+    }
+    setToolsOpen(false);
+  }, [handleRibbonSave]);
 
   // ── Load chapter data ──────────────────────────────────────────────────
 
@@ -230,21 +270,12 @@ export default function ChapterJourney() {
 
   const handleReviewComplete = useCallback(() => {
     try { sessionStorage.removeItem('st_chapter'); } catch {}
-    navigate(`/storyteller?book=${bookId}`);
-  }, [navigate, bookId]);
+    navigate('/start');
+  }, [navigate]);
 
   const handleChapterRefresh = useCallback(async () => {
     await loadChapter();
   }, [loadChapter]);
-
-  // Save: try child imperative ref first, fall back to custom event
-  const handleRibbonSave = useCallback(() => {
-    if (saveRef.current?.save) {
-      saveRef.current.save();
-    } else {
-      window.dispatchEvent(new CustomEvent('cj-ribbon-save', { detail: { stage: activeStage } }));
-    }
-  }, [activeStage]);
 
   // ── Memoized info ──────────────────────────────────────────────────────
 
@@ -312,9 +343,9 @@ export default function ChapterJourney() {
             className="cj-back"
             onClick={() => {
               try { sessionStorage.removeItem('st_chapter'); } catch {}
-              navigate(`/storyteller?book=${bookId}`);
+              navigate('/start');
             }}
-            title="Back to book"
+            title="Back to session"
           >←</button>
 
           <div className="cj-mode-label">
@@ -327,9 +358,38 @@ export default function ChapterJourney() {
             <span className="cj-mode-book" title={bookTitle}>{bookTitle}</span>
           </div>
 
-          <button className="cj-save-btn" onClick={handleRibbonSave} title={SAVE_LABELS[activeStage]}>
-            {SAVE_LABELS[activeStage]}
-          </button>
+          {/* Tools dropdown — replaces separate Save button.
+              In plan stage only Save is shown (inline button).
+              In write/review stages the full dropdown appears. */}
+          {(activeStage === 'write' || activeStage === 'review') ? (
+            <div className="cj-tools-wrap" ref={toolsRef}>
+              <button
+                className={`cj-tools-btn${toolsOpen ? ' open' : ''}`}
+                onClick={() => setToolsOpen(o => !o)}
+                title="Tools & Save"
+              >
+                ⚙ Tools
+              </button>
+              {toolsOpen && (
+                <div className="cj-tools-dropdown">
+                  {TOOL_ITEMS.map(t => (
+                    <button
+                      key={t.id}
+                      className={`cj-tools-item${t.id === 'save' ? ' cj-tools-save' : ''}`}
+                      onClick={() => handleToolSelect(t.id, t.action)}
+                    >
+                      <span className="cj-tools-icon">{t.icon}</span>
+                      {t.label}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+          ) : (
+            <button className="cj-save-btn" onClick={handleRibbonSave} title={SAVE_LABELS[activeStage]}>
+              {SAVE_LABELS[activeStage]}
+            </button>
+          )}
         </div>
 
         {/* Row 2: stage pills + optional override return */}
@@ -352,18 +412,12 @@ export default function ChapterJourney() {
                       : `Jump to ${s.label}`}
                   >
                     {isDetected && !isOverride && <span className="cj-pill-dot" />}
-                    {s.label}
+                    <span className="cj-pill-label">{s.label}</span>
                   </button>
                 </React.Fragment>
               );
             })}
           </div>
-
-          {isOverride && (
-            <button className="cj-pill-auto" onClick={handleReturnToAuto} title="Return to auto-detected stage">
-              ↺ Return to {STAGES.find(s => s.id === detectedStage)?.label}
-            </button>
-          )}
         </div>
 
         {/* Row 3: structured info blocks */}
@@ -432,11 +486,11 @@ export default function ChapterJourney() {
           )}
 
           {activeStage === 'review' && (
-            <StorytellerPage
+            <WriteMode
               {...sharedProps}
-              initialView="book"
-              onChapterComplete={handleReviewComplete}
+              onReviewReady={handleReviewComplete}
               hideTopBar={true}
+              initialCenterTab="review"
             />
           )}
 

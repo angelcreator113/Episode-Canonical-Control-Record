@@ -254,7 +254,7 @@ router.put('/books/:id', optionalAuth, async (req, res) => {
     const book = await models.StorytellerBook.findByPk(req.params.id);
     if (!book) return res.status(404).json({ error: 'Book not found' });
 
-    const allowed = ['character_name', 'season_label', 'week_label', 'title', 'subtitle', 'status', 'description', 'series_id', 'era_name', 'era_description', 'primary_pov', 'timeline_position', 'canon_status', 'front_matter', 'back_matter', 'author_name'];
+    const allowed = ['character_name', 'season_label', 'week_label', 'title', 'subtitle', 'status', 'description', 'series_id', 'era_name', 'era_description', 'primary_pov', 'timeline_position', 'canon_status', 'front_matter', 'back_matter', 'author_name', 'theme', 'pov', 'tone', 'setting', 'conflict', 'stakes'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
@@ -360,7 +360,8 @@ router.put('/chapters/:id', optionalAuth, async (req, res) => {
       'scene_goal', 'emotional_state_start', 'emotional_state_end',
       'theme', 'chapter_notes', 'interview_answers',
       'sections', 'chapter_template',
-      'chapter_type', 'part_number', 'part_title'];
+      'chapter_type', 'part_number', 'part_title',
+      'tone', 'setting', 'conflict', 'stakes', 'hooks'];
     const updates = {};
     for (const key of allowed) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];

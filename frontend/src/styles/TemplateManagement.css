@@ -62,17 +62,6 @@
   gap: 1.5rem;
 }
 
-.form-group {
-  display: flex;
-  flex-direction: column;
-}
-
-.form-group label {
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #333;
-}
-
 .form-group input,
 .form-group textarea,
 .form-group select {
@@ -82,15 +71,7 @@
   font-size: 0.95rem;
   font-family: inherit;
   transition: border-color 0.2s ease;
-}
-
-.form-group input:focus,
-.form-group textarea:focus,
-.form-group select:focus {
-  outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
-}
+}
 
 .category-input-group {
   display: flex;
@@ -150,44 +131,6 @@
   opacity: 0.7;
 }
 
-.form-actions {
-  display: flex;
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
-.btn-primary {
-  padding: 0.75rem 1.5rem;
-  background: #667eea;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: all 0.2s ease;
-}
-
-.btn-primary:hover {
-  background: #5568d3;
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-}
-
-.btn-secondary {
-  padding: 0.75rem 1.5rem;
-  background: #e5e7eb;
-  color: #333;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-weight: 600;
-  transition: background 0.2s ease;
-}
-
-.btn-secondary:hover {
-  background: #d1d5db;
-}
-
 /* Templates List */
 .templates-list {
   background: white;
@@ -200,17 +143,6 @@
   margin: 0 0 1.5rem 0;
   color: #333;
   font-size: 1.3rem;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 3rem 1rem;
-  color: #999;
-}
-
-.empty-state p {
-  margin: 0;
-  font-size: 1.5rem;
 }
 
 .empty-text {
@@ -281,15 +213,6 @@
 
 .template-meta {
   margin-bottom: 1rem;
-}
-
-.status-badge {
-  display: inline-block;
-  background: #e6f0ff;
-  color: #667eea;
-  padding: 0.25rem 0.75rem;
-  border-radius: 12px;
-  font-size: 0.85rem;
 }
 
 .status-badge strong {

@@ -76,7 +76,7 @@ export default function ChapterSelection({ book, onSelectChapter, onHome, onRefr
       {/* ── Top bar with branding ── */}
       <div className="st-dash-topbar">
         <button className="st-dash-back" onClick={onHome}>← Home</button>
-        <span className="st-dash-brand">Storyteller</span>
+        <span className="st-dash-brand">StoryTeller</span>
       </div>
 
       {/* ── Project Header ── */}
@@ -103,11 +103,11 @@ export default function ChapterSelection({ book, onSelectChapter, onHome, onRefr
         {/* Primary CTA */}
         <div className="st-dash-actions">
           {lastEditedChapter && chaptersWithContent > 0 ? (
-            <button className="st-dash-cta" onClick={() => onSelectChapter(lastEditedChapter.id)}>
+            <button className="st-dash-cta" onClick={() => navigate(`/chapter/${book.id}/${lastEditedChapter.id}`)}>
               Continue Writing →
             </button>
           ) : chapters.length > 0 ? (
-            <button className="st-dash-cta" onClick={() => onSelectChapter(chapters[0].id)}>
+            <button className="st-dash-cta" onClick={() => navigate(`/chapter/${book.id}/${chapters[0].id}`)}>
               Start Writing →
             </button>
           ) : null}
@@ -141,6 +141,7 @@ export default function ChapterSelection({ book, onSelectChapter, onHome, onRefr
           <div className="st-spinner" /> Loading…
         </div>
       ) : chapters.length > 0 ? (
+        <>
         <div className="st-dash-chapters">
           {chapters.map((ch, i) => {
             const words = (ch.draft_prose || '').split(/\s+/).filter(Boolean).length;
@@ -152,7 +153,7 @@ export default function ChapterSelection({ book, onSelectChapter, onHome, onRefr
               <button
                 key={ch.id}
                 className="st-dash-chapter-row"
-                onClick={() => onSelectChapter(ch.id)}
+                onClick={() => navigate(`/chapter/${book.id}/${ch.id}`)}
                 style={{ '--card-index': i }}
               >
                 <span className="st-dash-ch-num">{i + 1}</span>
@@ -175,6 +176,11 @@ export default function ChapterSelection({ book, onSelectChapter, onHome, onRefr
             );
           })}
         </div>
+
+        <p className="st-dash-flow-hint">
+          Chapters open in: <strong>Story Planner</strong> › <strong>WriteMode</strong> › <strong>StoryTeller</strong>
+        </p>
+        </>
       ) : (
         <div className="st-dash-empty">
           <p className="st-dash-empty-title">No chapters yet</p>

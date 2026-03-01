@@ -1,45 +1,45 @@
 /**
- * ChapterJourney.css — Mobile-first
+ * ChapterJourney.css — Phase 3: Mode Ribbon + Narrative OS
  *
- * Stage color system:
- *   PLAN   — soft rose   (#fdf2f8 / #ec4899)
- *   WRITE  — warm teal   (#f0fdfa / #0d9488)
- *   REVIEW — cool gold   (#f5f3ff / #C6A85E)
+ * Unified white + gold palette (matches UniversePage design system):
+ *   Parchment: #FAF7F0 / #f8f7f4
+ *   Gold:      #C9A84C / #b0922e
+ *   Ink:       #1a1a2e
+ *   Border:    #e8e5de
  *
- * Breakpoint: min-width 640px = tablet/desktop enhancements
+ * Font stack: 'DM Sans' + 'Lora' — already loaded in app.
  */
 
 /* ── CSS variables ─────────────────────────────────────────────────────── */
 
 :root {
+  --cj-bar-h: auto;
   --cj-ease: cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* PLAN — soft rose */
-  --cj-plan-bg:         #fdf2f8;
-  --cj-plan-bar:        rgba(255, 245, 251, 0.96);
-  --cj-plan-accent:     #ec4899;
-  --cj-plan-accent-lt:  rgba(236, 72, 153, 0.09);
-  --cj-plan-text:       #500724;
-  --cj-plan-muted:      #be7da0;
-  --cj-plan-border:     rgba(236, 72, 153, 0.15);
+  /* All three stages share identical palette for seamless transitions */
+  --cj-plan-bg:         #FAF7F0;
+  --cj-plan-bar:        rgba(250, 247, 240, 0.97);
+  --cj-plan-accent:     #C9A84C;
+  --cj-plan-accent-lt:  rgba(201, 168, 76, 0.08);
+  --cj-plan-text:       #1C1814;
+  --cj-plan-muted:      rgba(28, 24, 20, 0.38);
+  --cj-plan-border:     #e8e5de;
 
-  /* WRITE — warm teal */
-  --cj-write-bg:        #f0fdfa;
-  --cj-write-bar:       rgba(240, 253, 250, 0.96);
-  --cj-write-accent:    #0d9488;
-  --cj-write-accent-lt: rgba(13, 148, 136, 0.09);
-  --cj-write-text:      #042f2e;
-  --cj-write-muted:     #5eaba4;
-  --cj-write-border:    rgba(13, 148, 136, 0.15);
+  --cj-write-bg:        #FAF7F0;
+  --cj-write-bar:       rgba(250, 247, 240, 0.97);
+  --cj-write-accent:    #C9A84C;
+  --cj-write-accent-lt: rgba(201, 168, 76, 0.08);
+  --cj-write-text:      #1C1814;
+  --cj-write-muted:     rgba(28, 24, 20, 0.38);
+  --cj-write-border:    #e8e5de;
 
-  /* REVIEW — cool gold */
-  --cj-review-bg:        #f5f3ff;
-  --cj-review-bar:       rgba(245, 243, 255, 0.96);
-  --cj-review-accent:    #C6A85E;
-  --cj-review-accent-lt: rgba(198, 168, 94, 0.09);
-  --cj-review-text:      #2F2A26;
-  --cj-review-muted:     #9A9088;
-  --cj-review-border:    rgba(198, 168, 94, 0.18);
+  --cj-review-bg:        #FAF7F0;
+  --cj-review-bar:       rgba(250, 247, 240, 0.97);
+  --cj-review-accent:    #C9A84C;
+  --cj-review-accent-lt: rgba(201, 168, 76, 0.08);
+  --cj-review-text:      #1C1814;
+  --cj-review-muted:     rgba(28, 24, 20, 0.38);
+  --cj-review-border:    #e8e5de;
 }
 
 /* ── Root ──────────────────────────────────────────────────────────────── */
@@ -47,7 +47,7 @@
 .cj-root {
   display: flex;
   flex-direction: column;
-  height: 100dvh; /* dvh accounts for mobile browser chrome */
+  height: 100vh;
   overflow: hidden;
   font-family: 'DM Sans', -apple-system, sans-serif;
   transition: background 0.35s var(--cj-ease);
@@ -58,7 +58,10 @@
 .cj-root.cj-write  { background: var(--cj-write-bg); }
 .cj-root.cj-review { background: var(--cj-review-bg); }
 
-/* Stage-change flash overlay */
+/* Ensure all stages use white background for content */
+.cj-root { background: #FAF7F0; }
+
+/* Stage-change flash */
 .cj-root::after {
   content: '';
   position: fixed;
@@ -70,9 +73,9 @@
 .cj-root.cj-flash::after {
   animation: cj-flash-anim 0.28s ease forwards;
 }
-.cj-root.cj-plan.cj-flash::after   { background: rgba(236, 72, 153, 0.06); }
-.cj-root.cj-write.cj-flash::after  { background: rgba(13, 148, 136, 0.06); }
-.cj-root.cj-review.cj-flash::after { background: rgba(198, 168, 94, 0.06); }
+.cj-root.cj-plan.cj-flash::after   { background: rgba(201, 168, 76, 0.06); }
+.cj-root.cj-write.cj-flash::after  { background: rgba(201, 168, 76, 0.06); }
+.cj-root.cj-review.cj-flash::after { background: rgba(201, 168, 76, 0.06); }
 
 @keyframes cj-flash-anim {
   0%   { opacity: 1; }
@@ -92,35 +95,71 @@
   transition: background 0.35s var(--cj-ease), border-color 0.35s var(--cj-ease);
 }
 
-.cj-plan   .cj-ribbon { background: var(--cj-plan-bar);   border-bottom: 1px solid var(--cj-plan-border); }
-.cj-write  .cj-ribbon { background: var(--cj-write-bar);  border-bottom: 1px solid var(--cj-write-border); }
-.cj-review .cj-ribbon { background: var(--cj-review-bar); border-bottom: 1px solid var(--cj-review-border); }
+.cj-plan   .cj-ribbon { background: #ffffff; border-bottom: 1px solid #e8e5de; }
+.cj-write  .cj-ribbon { background: #ffffff; border-bottom: 1px solid #e8e5de; }
+.cj-review .cj-ribbon { background: #ffffff; border-bottom: 1px solid #e8e5de; }
 
-/* ── Row 1: back + mode label + context + save ─────────────────────────── */
+/* ── Unified ribbon collapse — all stages use the same compact bar ───── */
+/* Single compact row for ALL stages:
+     ← back    [Plan · Write · Review]    💾 Save    ⚙ Tools              */
+.cj-root .cj-ribbon-info    { display: none; }
+.cj-root .cj-progress-strip { display: none; }
+.cj-root .cj-mode-label     { display: none; }
+.cj-root .cj-mode-context   { display: none; }
 
-.cj-ribbon-top {
-  display: flex;
+/* Flatten to one horizontal bar */
+.cj-root .cj-ribbon {
+  flex-direction: row;
   align-items: center;
+  padding: 6px 12px;
   gap: 8px;
-  padding: 10px 14px 6px;
+}
+.cj-root .cj-ribbon-top {
+  display: contents;
+}
+.cj-root .cj-ribbon-nav {
+  display: contents;
 }
 
-/* Back button — 44px touch target */
+/* Push pills + tools to the right (← stays left) */
+.cj-root .cj-pills {
+  margin-left: auto;
+  order: 1;
+}
+.cj-root .cj-tools-wrap {
+  order: 2;
+}
+.cj-root .cj-save-btn {
+  order: 2;
+}
+.cj-root .cj-pill-auto {
+  order: 1;
+}
+
+/* Row 1: mode identity + navigation */
+.cj-ribbon-row,
+.cj-ribbon-top,
+.cj-ribbon-nav {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+}
+
+/* Back button */
 .cj-back {
-  width: 36px;
-  height: 36px;
-  border-radius: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
   border: none;
   background: none;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 15px;
   flex-shrink: 0;
   transition: background 0.14s, color 0.14s;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
 .cj-plan   .cj-back { color: var(--cj-plan-muted); }
 .cj-write  .cj-back { color: var(--cj-write-muted); }
@@ -134,18 +173,16 @@
 .cj-mode-label {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 10px;
+  gap: 7px;
+  font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  flex-shrink: 0;
 }
 .cj-mode-dot {
-  width: 7px;
-  height: 7px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
-  flex-shrink: 0;
   animation: cj-mode-pulse 2.8s ease-in-out infinite;
 }
 @keyframes cj-mode-pulse {
@@ -159,7 +196,7 @@
 .cj-write  .cj-mode-label { color: var(--cj-write-accent); }
 .cj-review .cj-mode-label { color: var(--cj-review-accent); }
 
-/* Chapter + book context — fills available space */
+/* Chapter context */
 .cj-mode-context {
   display: flex;
   flex-direction: column;
@@ -169,7 +206,7 @@
 }
 .cj-mode-chapter {
   font-family: 'Lora', Georgia, serif;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -180,7 +217,7 @@
 .cj-review .cj-mode-chapter { color: var(--cj-review-text); }
 
 .cj-mode-book {
-  font-size: 10px;
+  font-size: 11px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -189,53 +226,136 @@
 .cj-write  .cj-mode-book { color: var(--cj-write-muted); }
 .cj-review .cj-mode-book { color: var(--cj-review-muted); }
 
-/* Save button */
+/* Ribbon right-side actions */
+.cj-ribbon-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* Save Plan / Save Draft button */
 .cj-save-btn {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 5px;
   border: none;
-  border-radius: 8px;
-  padding: 7px 11px;
+  border-radius: 7px;
+  padding: 6px 14px;
   font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 600;
   cursor: pointer;
   transition: all 0.15s;
   white-space: nowrap;
-  flex-shrink: 0;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
-.cj-plan   .cj-save-btn { background: rgba(236, 72, 153, 0.1);  color: var(--cj-plan-accent); }
-.cj-write  .cj-save-btn { background: rgba(13, 148, 136, 0.1);  color: var(--cj-write-accent); }
-.cj-review .cj-save-btn { background: rgba(198, 168, 94, 0.1);  color: var(--cj-review-accent); }
-.cj-plan   .cj-save-btn:hover { background: rgba(236, 72, 153, 0.18); }
-.cj-write  .cj-save-btn:hover { background: rgba(13, 148, 136, 0.18); }
-.cj-review .cj-save-btn:hover { background: rgba(198, 168, 94, 0.18); }
+.cj-plan   .cj-save-btn { background: linear-gradient(135deg, #C9A84C 0%, #b8953e 100%); color: #fff; }
+.cj-write  .cj-save-btn { background: linear-gradient(135deg, #C9A84C 0%, #b8953e 100%); color: #fff; }
+.cj-review .cj-save-btn { background: linear-gradient(135deg, #C9A84C 0%, #b8953e 100%); color: #fff; }
+.cj-plan   .cj-save-btn:hover { box-shadow: 0 2px 8px rgba(201,168,76,0.25); }
+.cj-write  .cj-save-btn:hover { box-shadow: 0 2px 8px rgba(201,168,76,0.25); }
+.cj-review .cj-save-btn:hover { box-shadow: 0 2px 8px rgba(201,168,76,0.25); }
 
-/* ── Row 2: stage pills + override return ──────────────────────────────── */
+/* ── Tools dropdown ────────────────────────────────────────────────────── */
+.cj-tools-wrap {
+  position: relative;
+  margin-left: 4px;
+}
 
-.cj-ribbon-nav {
+.cj-tools-btn {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 2px 14px 8px;
+  gap: 5px;
+  border: 1px solid rgba(201,168,76,0.35);
+  border-radius: 7px;
+  padding: 6px 12px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  white-space: nowrap;
+  background: transparent;
+  color: #1C1814;
+}
+.cj-tools-btn:hover,
+.cj-tools-btn.open {
+  background: rgba(201,168,76,0.12);
+  border-color: #C9A84C;
 }
 
-/* Stage pills container */
+.cj-tools-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  background: #FDFBF7;
+  border: 1px solid rgba(201,168,76,0.30);
+  border-radius: 8px;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.10);
+  padding: 4px 0;
+  z-index: 200;
+  animation: cj-dropdown-in 0.12s ease-out;
+}
+
+@keyframes cj-dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.cj-tools-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  padding: 8px 14px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  color: #1C1814;
+  cursor: pointer;
+  transition: background 0.1s;
+  text-align: left;
+}
+.cj-tools-item:hover {
+  background: rgba(201,168,76,0.10);
+}
+.cj-tools-icon {
+  display: inline-flex;
+  width: 18px;
+  justify-content: center;
+  font-size: 13px;
+  opacity: 0.7;
+}
+
+/* Save item in the dropdown gets a gold accent + bottom separator */
+.cj-tools-save {
+  font-weight: 700;
+  color: #b0922e;
+  border-bottom: 1px solid rgba(201,168,76,0.15);
+  margin-bottom: 2px;
+  padding-bottom: 10px;
+}
+.cj-tools-save:hover {
+  background: rgba(201,168,76,0.14);
+}
+
+/* ── Stage pills ───────────────────────────────────────────────────────── */
+
 .cj-pills {
   display: flex;
   align-items: center;
   border-radius: 20px;
   padding: 3px;
+  flex-shrink: 0;
   gap: 1px;
   transition: background 0.35s, border-color 0.35s;
 }
-.cj-plan   .cj-pills { background: rgba(236, 72, 153, 0.06); border: 1px solid rgba(236, 72, 153, 0.12); }
-.cj-write  .cj-pills { background: rgba(13, 148, 136, 0.06); border: 1px solid rgba(13, 148, 136, 0.12); }
-.cj-review .cj-pills { background: rgba(198, 168, 94, 0.06); border: 1px solid rgba(198, 168, 94, 0.12); }
+.cj-plan   .cj-pills { background: rgba(201,168,76,0.06);  border: 1px solid rgba(201,168,76,0.15); }
+.cj-write  .cj-pills { background: rgba(201,168,76,0.06);  border: 1px solid rgba(201,168,76,0.15); }
+.cj-review .cj-pills { background: rgba(201,168,76,0.06);  border: 1px solid rgba(201,168,76,0.15); }
 
 .cj-pill {
   display: flex;
@@ -243,7 +363,7 @@
   gap: 4px;
   border: none;
   border-radius: 14px;
-  padding: 5px 10px;
+  padding: 4px 12px;
   font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 500;
@@ -252,25 +372,26 @@
   transition: background 0.18s, color 0.18s, transform 0.1s;
   white-space: nowrap;
   background: none;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
 
-.cj-plan   .cj-pill { color: rgba(236, 72, 153, 0.45); }
-.cj-write  .cj-pill { color: rgba(13, 148, 136, 0.55); }
-.cj-review .cj-pill { color: rgba(198, 168, 94, 0.5); }
+/* Inactive pill text — muted gold */
+.cj-plan   .cj-pill         { color: rgba(176,146,46,0.45); }
+.cj-write  .cj-pill         { color: rgba(176,146,46,0.45); }
+.cj-review .cj-pill         { color: rgba(176,146,46,0.45); }
 
-.cj-plan   .cj-pill:not(.cj-active):hover { background: rgba(236, 72, 153, 0.08); color: var(--cj-plan-accent); }
-.cj-write  .cj-pill:not(.cj-active):hover { background: rgba(13, 148, 136, 0.08); color: var(--cj-write-accent); }
-.cj-review .cj-pill:not(.cj-active):hover { background: rgba(198, 168, 94, 0.08); color: var(--cj-review-accent); }
+/* Hover on inactive */
+.cj-plan   .cj-pill:not(.cj-active):hover { background: rgba(201,168,76,0.08);  color: #b0922e; }
+.cj-write  .cj-pill:not(.cj-active):hover { background: rgba(201,168,76,0.08);  color: #b0922e; }
+.cj-review .cj-pill:not(.cj-active):hover { background: rgba(201,168,76,0.08);  color: #b0922e; }
 
-/* Active pill — uses its own stage color regardless of root stage */
-.cj-pill.cj-active[data-s="plan"]   { background: #ec4899; color: #fff; }
-.cj-pill.cj-active[data-s="write"]  { background: #0d9488; color: #fff; }
-.cj-pill.cj-active[data-s="review"] { background: #C6A85E; color: #1A1714; }
+/* Active pill — unified gold for all stages */
+.cj-pill.cj-active[data-s="plan"]   { background: #C9A84C; color: #fff; }
+.cj-pill.cj-active[data-s="write"]  { background: #C9A84C; color: #fff; }
+.cj-pill.cj-active[data-s="review"] { background: #C9A84C; color: #fff; }
+
 .cj-pill.cj-active { transform: scale(1.02); }
 
-/* Auto-detected indicator dot */
+/* Pulse dot — on auto-detected stage */
 .cj-pill-dot {
   width: 4px;
   height: 4px;
@@ -280,28 +401,29 @@
   animation: cj-breathe 2.8s ease infinite;
 }
 @keyframes cj-breathe {
-  0%, 100% { opacity: 0.35; transform: scale(1); }
-  50%      { opacity: 0.9;  transform: scale(1.4); }
+  0%,100% { opacity: 0.35; transform: scale(1); }
+  50%     { opacity: 0.9;  transform: scale(1.4); }
 }
 
-/* Separator between pills */
+/* Separator arrow between pills */
 .cj-pill-sep {
   font-size: 9px;
   opacity: 0.22;
+  color: currentColor;
   margin: 0 1px;
   user-select: none;
   pointer-events: none;
   transition: color 0.35s;
 }
-.cj-plan   .cj-pill-sep { color: var(--cj-plan-accent); }
-.cj-write  .cj-pill-sep { color: var(--cj-write-accent); }
-.cj-review .cj-pill-sep { color: var(--cj-review-accent); }
+.cj-plan   .cj-pill-sep { color: #C9A84C; }
+.cj-write  .cj-pill-sep { color: #C9A84C; }
+.cj-review .cj-pill-sep { color: #C9A84C; }
 
-/* Override return button — visible on all screen sizes */
+/* Auto return ghost pill */
 .cj-pill-auto {
   background: none;
   border-radius: 8px;
-  padding: 6px 10px;
+  padding: 5px 11px;
   font-family: 'DM Sans', sans-serif;
   font-size: 11px;
   font-weight: 500;
@@ -309,39 +431,37 @@
   transition: all 0.14s;
   flex-shrink: 0;
   letter-spacing: 0.01em;
-  touch-action: manipulation;
-  -webkit-tap-highlight-color: transparent;
 }
-.cj-plan   .cj-pill-auto { border: 1px solid rgba(236, 72, 153, 0.2); color: rgba(236, 72, 153, 0.6); }
-.cj-write  .cj-pill-auto { border: 1px solid rgba(13, 148, 136, 0.2); color: rgba(13, 148, 136, 0.6); }
-.cj-review .cj-pill-auto { border: 1px solid rgba(198, 168, 94, 0.2); color: rgba(198, 168, 94, 0.6); }
+.cj-plan   .cj-pill-auto { border: 1px solid rgba(201,168,76,0.2);  color: rgba(176,146,46,0.6); }
+.cj-write  .cj-pill-auto { border: 1px solid rgba(201,168,76,0.2);  color: rgba(176,146,46,0.6); }
+.cj-review .cj-pill-auto { border: 1px solid rgba(201,168,76,0.2);  color: rgba(176,146,46,0.6); }
 
-.cj-plan   .cj-pill-auto:hover { border-color: var(--cj-plan-accent);   color: var(--cj-plan-accent);   background: rgba(236, 72, 153, 0.05); }
-.cj-write  .cj-pill-auto:hover { border-color: var(--cj-write-accent);  color: var(--cj-write-accent);  background: rgba(13, 148, 136, 0.05); }
-.cj-review .cj-pill-auto:hover { border-color: var(--cj-review-accent); color: var(--cj-review-accent); background: rgba(198, 168, 94, 0.05); }
+.cj-plan   .cj-pill-auto:hover { border-color: #C9A84C; color: #b0922e; background: rgba(201,168,76,0.06); }
+.cj-write  .cj-pill-auto:hover { border-color: #C9A84C; color: #b0922e; background: rgba(201,168,76,0.06); }
+.cj-review .cj-pill-auto:hover { border-color: #C9A84C; color: #b0922e; background: rgba(201,168,76,0.06); }
 
-/* ── Row 3: Structured info blocks ─────────────────────────────────────── */
+/* ── Row 2: Structured info blocks ─────────────────────────────────────── */
 
 .cj-ribbon-info {
   display: flex;
   align-items: stretch;
-  flex-wrap: wrap;
-  gap: 4px;
-  padding: 0 14px 8px;
+  gap: 1px;
+  padding: 0 16px 10px;
 }
 
 .cj-info-block {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 5px 10px;
+  padding: 6px 14px;
   border-radius: 6px;
   flex: 1;
-  min-width: calc(33% - 4px);
+  min-width: 0;
+  transition: background 0.25s;
 }
-.cj-plan   .cj-info-block { background: rgba(236, 72, 153, 0.04); }
-.cj-write  .cj-info-block { background: rgba(13, 148, 136, 0.04); }
-.cj-review .cj-info-block { background: rgba(198, 168, 94, 0.04); }
+.cj-plan   .cj-info-block { background: rgba(201,168,76,0.04); }
+.cj-write  .cj-info-block { background: rgba(201,168,76,0.04); }
+.cj-review .cj-info-block { background: rgba(201,168,76,0.04); }
 
 .cj-info-label {
   font-size: 9px;
@@ -349,20 +469,20 @@
   text-transform: uppercase;
   letter-spacing: 0.1em;
 }
-.cj-plan   .cj-info-label { color: rgba(236, 72, 153, 0.5); }
-.cj-write  .cj-info-label { color: rgba(13, 148, 136, 0.5); }
-.cj-review .cj-info-label { color: rgba(198, 168, 94, 0.5); }
+.cj-plan   .cj-info-label { color: rgba(176,146,46,0.5); }
+.cj-write  .cj-info-label { color: rgba(176,146,46,0.5); }
+.cj-review .cj-info-label { color: rgba(176,146,46,0.5); }
 
 .cj-info-value {
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 500;
-  line-height: 1.3;
+  line-height: 1.4;
 }
 .cj-plan   .cj-info-value { color: var(--cj-plan-text); }
 .cj-write  .cj-info-value { color: var(--cj-write-text); }
 .cj-review .cj-info-value { color: var(--cj-review-text); }
 
-/* Info block action button (used by consumers of the API) */
+/* Info block action button */
 .cj-info-action {
   display: inline-flex;
   align-items: center;
@@ -381,13 +501,13 @@
 .cj-review .cj-info-action { color: var(--cj-review-accent); }
 .cj-info-action:hover { opacity: 0.7; }
 
-/* ── Row 4: Progress strip ─────────────────────────────────────────────── */
+/* ── Progress strip ────────────────────────────────────────────────────── */
 
 .cj-progress-strip {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 0 14px 10px;
+  padding: 0 16px 10px;
 }
 
 .cj-progress-label {
@@ -397,9 +517,9 @@
   letter-spacing: 0.1em;
   white-space: nowrap;
 }
-.cj-plan   .cj-progress-label { color: rgba(236, 72, 153, 0.45); }
-.cj-write  .cj-progress-label { color: rgba(13, 148, 136, 0.45); }
-.cj-review .cj-progress-label { color: rgba(198, 168, 94, 0.45); }
+.cj-plan   .cj-progress-label { color: rgba(176,146,46,0.45); }
+.cj-write  .cj-progress-label { color: rgba(176,146,46,0.45); }
+.cj-review .cj-progress-label { color: rgba(176,146,46,0.45); }
 
 .cj-progress-track {
   flex: 1;
@@ -407,9 +527,9 @@
   border-radius: 4px;
   overflow: hidden;
 }
-.cj-plan   .cj-progress-track { background: rgba(236, 72, 153, 0.08); }
-.cj-write  .cj-progress-track { background: rgba(13, 148, 136, 0.08); }
-.cj-review .cj-progress-track { background: rgba(198, 168, 94, 0.08); }
+.cj-plan   .cj-progress-track { background: rgba(201,168,76,0.08); }
+.cj-write  .cj-progress-track { background: rgba(201,168,76,0.08); }
+.cj-review .cj-progress-track { background: rgba(201,168,76,0.08); }
 
 .cj-progress-fill {
   height: 100%;
@@ -417,9 +537,9 @@
   transition: width 0.6s var(--cj-ease);
   min-width: 0;
 }
-.cj-plan   .cj-progress-fill { background: linear-gradient(90deg, #ec4899, #f472b6); }
-.cj-write  .cj-progress-fill { background: linear-gradient(90deg, #0d9488, #2dd4bf); }
-.cj-review .cj-progress-fill { background: linear-gradient(90deg, #C6A85E, #d4b96a); }
+.cj-plan   .cj-progress-fill { background: linear-gradient(90deg, #b0922e, #C9A84C); }
+.cj-write  .cj-progress-fill { background: linear-gradient(90deg, #C9A84C, #d4b96a); }
+.cj-review .cj-progress-fill { background: linear-gradient(90deg, #C9A84C, #d4b96a); }
 
 .cj-progress-count {
   font-family: 'DM Mono', 'Roboto Mono', monospace;
@@ -431,14 +551,13 @@
 .cj-write  .cj-progress-count { color: var(--cj-write-muted); }
 .cj-review .cj-progress-count { color: var(--cj-review-muted); }
 
-/* ── Override banner ───────────────────────────────────────────────────── */
+/* ── Override banner (structured) ──────────────────────────────────────── */
 
 .cj-override-banner {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 10px;
-  padding: 8px 14px;
+  gap: 14px;
+  padding: 8px 16px;
   font-size: 12px;
   flex-shrink: 0;
   animation: cj-banner-drop 0.2s ease both;
@@ -449,14 +568,13 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
-.cj-plan   .cj-override-banner { background: rgba(236, 72, 153, 0.05); border-bottom: 1px solid rgba(236, 72, 153, 0.1); }
-.cj-write  .cj-override-banner { background: rgba(13, 148, 136, 0.05); border-bottom: 1px solid rgba(13, 148, 136, 0.1); }
-.cj-review .cj-override-banner { background: rgba(198, 168, 94, 0.05); border-bottom: 1px solid rgba(198, 168, 94, 0.1); }
+.cj-plan   .cj-override-banner { background: rgba(201,168,76,0.05);  border-bottom: 1px solid rgba(201,168,76,0.1); }
+.cj-write  .cj-override-banner { background: rgba(201,168,76,0.05);  border-bottom: 1px solid rgba(201,168,76,0.1); }
+.cj-review .cj-override-banner { background: rgba(201,168,76,0.05);  border-bottom: 1px solid rgba(201,168,76,0.1); }
 
 .cj-override-blocks {
   display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
+  gap: 20px;
   flex: 1;
   min-width: 0;
 }
@@ -471,19 +589,21 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.cj-plan   .cj-ob-key { color: rgba(236, 72, 153, 0.5); }
-.cj-write  .cj-ob-key { color: rgba(13, 148, 136, 0.5); }
-.cj-review .cj-ob-key { color: rgba(198, 168, 94, 0.5); }
+.cj-plan   .cj-ob-key { color: rgba(176,146,46,0.5); }
+.cj-write  .cj-ob-key { color: rgba(176,146,46,0.5); }
+.cj-review .cj-ob-key { color: rgba(176,146,46,0.5); }
 
 .cj-ob-val {
   font-size: 12px;
   font-weight: 500;
 }
-.cj-plan   .cj-ob-val { color: rgba(180, 40, 110, 0.8); }
-.cj-write  .cj-ob-val { color: rgba(10, 110, 100, 0.8); }
-.cj-review .cj-ob-val { color: rgba(160, 133, 64, 0.85); }
+.cj-plan   .cj-ob-val { color: rgba(26,26,46,0.8); }
+.cj-write  .cj-ob-val { color: rgba(26,26,46,0.8); }
+.cj-review .cj-ob-val { color: rgba(26,26,46,0.8); }
 
-.cj-override-banner .cj-pill-auto { flex-shrink: 0; }
+.cj-override-banner .cj-pill-auto {
+  flex-shrink: 0;
+}
 
 /* ── Content area ──────────────────────────────────────────────────────── */
 
@@ -493,9 +613,93 @@
   display: flex;
   flex-direction: column;
   position: relative;
-  min-height: 0;
 }
 .cj-content > * { flex: 1; min-height: 0; }
+
+/* When WriteMode (.wm-root) lives inside CJ, override its fixed 100dvh
+   so it fills the remaining space below the ribbon instead of overflowing.
+   Use !important to survive WriteMode.css media queries that reset
+   height: auto / min-height: 100dvh at ≤767px and 481-768px. */
+.cj-root .wm-root {
+  height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+/* Preserve flex containment inside CJ — mobile queries set overflow: visible
+   which breaks the shrink/scroll model and lets content push off-screen.
+   wm-hub-layout clips the 3-col row. wm-main-col must NOT clip so that
+   the AI toolbar + bottom bar (flex-shrink:0 siblings of content-row)
+   stay visible. wm-content-row clips horizontal overflow only. */
+.cj-root .wm-hub-layout {
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
+.cj-root .wm-main-col {
+  overflow: visible !important;
+  min-height: 0 !important;
+}
+.cj-root .wm-content-row {
+  overflow: hidden !important;
+  min-height: 0 !important;
+}
+
+/* Compact the AI toolbar and bottom bar when embedded in CJ —
+   standalone WriteMode has generous spacing for full-page mode,
+   but inside CJ the ribbon already eats 50-80px of viewport. */
+.cj-root .wm-ai-toolbar {
+  padding: 4px 10px !important;
+  gap: 4px !important;
+}
+.cj-root .wm-ai-btn {
+  padding: 5px 10px !important;
+  font-size: 0.75rem !important;
+}
+.cj-root .wm-bottom-bar {
+  padding: 6px 12px 8px !important;
+  gap: 8px !important;
+}
+.cj-root .wm-mic-btn {
+  width: 38px !important;
+  height: 38px !important;
+}
+.cj-root .wm-bottom-hint {
+  font-size: 9px !important;
+}
+
+/* Ensure the prose area scrolls within the constrained CJ space */
+.cj-root .wm-prose-wrap {
+  overflow-y: auto !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+.cj-root .wm-content-row {
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+
+/* WriteMode's own center tabs (Write/Review/Lines) are redundant with
+   CJ's ribbon pills — hide them at all breakpoints, not just mobile. */
+.cj-root .wm-center-tabs {
+  display: none !important;
+}
+
+/* Ensure context panel fills the full height inside CJ.
+   .wm-hub-layout is a flex-row, so align-self: stretch fills vertically.
+   Keep flex-shrink: 0 + fixed width so it doesn't grow horizontally.
+   overflow-y: auto lets the panel scroll its own content.
+   Only on desktop — mobile hides it via the 768px media query. */
+@media (min-width: 769px) {
+  .cj-root .wm-context-panel {
+    display: flex !important;
+    flex-direction: column !important;
+    overflow-y: auto !important;
+    overflow-x: hidden !important;
+    align-self: stretch !important;
+    flex-shrink: 0 !important;
+    padding-bottom: 0 !important;
+  }
+}
 
 .cj-stage-enter {
   animation: cj-enter 0.22s ease both;
@@ -505,6 +709,361 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ═══════════════════════════════════════════════════════════════════════════
+   UNIFIED PAGE STYLING — Normalize Plan / Write / Review inside CJ
+   ═══════════════════════════════════════════════════════════════════════════
+   Each child page (SPC, WriteMode, StorytellerPage) was designed standalone
+   with its own palette, fonts and gold accents. When flipping between stages
+   inside the CJ ribbon these differences are jarring.
+   Below we force a single visual language: parchment bg, Lora prose,
+   DM Sans UI, unified gold #C9A84C, ink #1C1814.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Shared CSS-variable override (consumed by SPC + ST via var()) ── */
+.cj-root {
+  --st-bg:           #FAF7F0;
+  --st-ink:          #1C1814;
+  --st-ink-light:    #2E2A25;
+  --st-surface:      #FFFCF6;
+  --st-border:       rgba(28, 24, 20, 0.10);
+  --st-border-light: rgba(28, 24, 20, 0.06);
+  --st-muted:        #8A847C;
+  --st-gold:         #C9A84C;
+  --st-gold-dim:     #b0922e;
+  --st-gold-soft:    rgba(201, 168, 76, 0.06);
+  --st-gold-border:  rgba(201, 168, 76, 0.18);
+  --st-body:         'Lora', Georgia, serif;
+  --st-serif:        'Lora', Georgia, serif;
+  --st-sans:         'DM Sans', -apple-system, sans-serif;
+  --st-mono:         'DM Mono', monospace;
+  --st-radius:       5px;
+  --st-parchment:    #FAF7F0;
+}
+
+/* ── 2. Background normalization ──────────────────────────────────────── */
+/* SPC */
+.cj-root .spc-root       { background: #FAF7F0 !important; color: #1C1814; }
+.cj-root .spc-chat-col   { background: #FFFCF6 !important; }
+.cj-root .spc-plan-col   { background: #FAF7F0 !important; }
+/* ST */
+.cj-root .storyteller-page { background: #FAF7F0 !important; color: #1C1814; }
+.cj-root .st-editor-layout { background: #FAF7F0 !important; color: #1C1814; }
+.cj-root .st-editor-layout::before { display: none; } /* kill ambient vignette */
+/* WM — already #FAF7F0 but kill the noise texture to match the others */
+.cj-root .wm-root::before { display: none; }
+
+/* ── 3. Font normalization — Lora for prose, DM Sans for UI ───────────── */
+/* ST: Spectral → Lora for body text (biggest visual jarring on switch) */
+.cj-root .storyteller-page { font-family: 'DM Sans', -apple-system, sans-serif !important; }
+.cj-root .st-line-text     { font-family: 'Lora', Georgia, serif !important; }
+.cj-root .st-chapter-header-title { font-family: 'Lora', Georgia, serif !important; }
+.cj-root .st-nav-tool-label { font-family: 'DM Sans', sans-serif !important; }
+/* SPC: already DM Sans UI + Lora prose — just firm it up */
+.cj-root .spc-root { font-family: 'DM Sans', -apple-system, sans-serif !important; }
+.cj-root .spc-header-title { font-family: 'Lora', Georgia, serif !important; }
+.cj-root .spc-msg-text { font-family: 'Lora', Georgia, serif; }
+/* WM: root is Lora — fine for prose; firm up UI labels to DM Sans */
+.cj-root .wm-ai-btn,
+.cj-root .wm-bottom-hint { font-family: 'DM Sans', sans-serif !important; }
+
+/* ── 4. Ink normalization — #1C1814 everywhere ────────────────────────── */
+.cj-root .spc-header-title { color: #1C1814 !important; }
+.cj-root .spc-msg-text     { color: #1C1814; }
+.cj-root .st-line-text     { color: #1C1814 !important; }
+
+/* ── 5. Gold normalization — #C9A84C primary, #b0922e dim ─────────────── */
+/* SPC: progress + send button → unified gold */
+.cj-root .spc-progress-fill {
+  background: linear-gradient(90deg, #C9A84C, #b0922e) !important;
+}
+.cj-root .spc-send-btn {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .spc-send-btn:hover:not(:disabled) {
+  background: #b0922e !important;
+}
+.cj-root .spc-save-btn {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .spc-save-btn:hover:not(:disabled) {
+  background: #b0922e !important;
+}
+.cj-root .spc-save-btn--saved {
+  background: #2a6d3a !important;
+}
+/* SPC plan sections — unified card look */
+.cj-root .spc-plan-section {
+  background: rgba(255,252,246,0.7) !important;
+  border-color: rgba(201,168,76,0.12) !important;
+  border-radius: 5px !important;
+}
+/* SPC section labels */
+.cj-root .spc-section-label {
+  color: rgba(201,168,76,0.55) !important;
+}
+/* SPC chat scrollbar */
+.cj-root .spc-chat-messages::-webkit-scrollbar-thumb,
+.cj-root .spc-plan-col::-webkit-scrollbar-thumb {
+  background: rgba(201,168,76,0.18) !important;
+}
+
+/* ST: buttons → unified gold */
+.cj-root .st-btn-gold {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .st-btn-gold:hover {
+  background: #b0922e !important;
+}
+.cj-root .st-btn-primary {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .st-btn-primary:hover {
+  background: #b0922e !important;
+}
+.cj-root .st-btn-ghost {
+  border-color: rgba(201,168,76,0.25) !important;
+  color: #1C1814 !important;
+}
+.cj-root .st-btn-ghost:hover {
+  border-color: #C9A84C !important;
+  color: #C9A84C !important;
+}
+
+/* ST nav tools — gold active highlight */
+.cj-root .st-nav-tool.active {
+  color: #C9A84C !important;
+  background: rgba(201,168,76,0.08) !important;
+}
+
+/* ST status colors keep their semantic meaning but gold base normalised */
+.cj-root .st-nav-scroll::-webkit-scrollbar-thumb {
+  background: rgba(201,168,76,0.18) !important;
+}
+
+/* WM: burnished gold → standard gold (key interactive elements) */
+.cj-root .wm-ai-btn.active,
+.cj-root .wm-word-badge {
+  border-color: rgba(201,168,76,0.2) !important;
+}
+
+/* ── 6. Hide redundant chrome already handled by CJ ribbon ────────────── */
+/* ST topbar — CJ ribbon already provides ← back, chapter title, pills */
+.cj-root .st-topbar { display: none !important; }
+
+/* ST bottom bar — fixed positioning breaks inside CJ's flex layout;
+   convert to sticky within the content flow */
+.cj-root .st-bottombar {
+  position: sticky !important;
+  bottom: 0 !important;
+  left: auto !important;
+  right: auto !important;
+  z-index: 20 !important;
+  border-radius: 8px 8px 0 0;
+  background: #FFFCF6 !important;
+}
+/* ST bottom bar buttons → gold theme */
+.cj-root .st-bottombar-btn {
+  font-family: 'DM Sans', sans-serif !important;
+}
+
+/* ST editor layout — fit inside CJ flex (no min-height: 100vh) */
+.cj-root .st-editor-layout {
+  min-height: 0 !important;
+  height: 100% !important;
+  overflow: hidden !important;
+}
+
+/* ST editor body (nav + content area) — scrollable within CJ height */
+.cj-root .st-editor-body {
+  overflow-y: auto !important;
+  flex: 1 !important;
+  min-height: 0 !important;
+}
+
+/* ST nav — fit inside CJ height */
+.cj-root .st-nav {
+  max-height: 100% !important;
+  overflow-y: auto !important;
+}
+
+/* ── 7. Unified border-radius across pages ────────────────────────────── */
+.cj-root .spc-save-btn,
+.cj-root .spc-send-btn,
+.cj-root .spc-close-btn,
+.cj-root .spc-clear-btn  { border-radius: 5px !important; }
+.cj-root .st-btn          { border-radius: 5px !important; }
+
+/* ── 8. Unified scrollbar treatment — thin gold tint ──────────────────── */
+.cj-root ::-webkit-scrollbar { width: 4px; }
+.cj-root ::-webkit-scrollbar-track { background: transparent; }
+.cj-root ::-webkit-scrollbar-thumb {
+  background: rgba(201, 168, 76, 0.18);
+  border-radius: 4px;
+}
+.cj-root ::-webkit-scrollbar-thumb:hover {
+  background: rgba(201, 168, 76, 0.32);
+}
+
+/* ── 9. Unified section/card borders ──────────────────────────────────── */
+.cj-root .spc-chat-col {
+  border-right-color: rgba(201, 168, 76, 0.10) !important;
+}
+.cj-root .spc-header {
+  border-bottom-color: rgba(201, 168, 76, 0.10) !important;
+  background: #FFFCF6 !important;
+}
+.cj-root .st-nav {
+  border-right: 1px solid rgba(201, 168, 76, 0.10) !important;
+}
+
+/* ── 10. ST manuscript width → closer to WM's narrower width ──────────── */
+.cj-root .st-manuscript {
+  max-width: 740px !important;
+}
+
+/* ── 11. Prose line-height harmony ────────────────────────────────────── */
+.cj-root .st-line-text {
+  line-height: 2.0 !important;
+  font-size: 17.5px !important;
+  letter-spacing: 0.01em;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   12. WRITEMODE DEEP NORMALIZATION
+   Eliminate every visual difference between SPC (Plan) and WM (Write/Review)
+   so switching tabs feels like one continuous surface.
+   ═════════════════════════════════════════════════════════════════════════ */
+
+/* 12a. Kill WM page-entrance animation (0.55s fade-in on every tab switch) */
+.cj-root .wm-root {
+  animation: none !important;
+  background: #FAF7F0 !important;        /* strip SVG noise texture */
+  font-family: 'DM Sans', -apple-system, sans-serif !important;
+}
+
+/* 12b. Unified text selection color */
+.cj-root ::selection {
+  background: rgba(201,168,76,0.16);
+  color: #1C1814;
+}
+
+/* 12c. Prose-wrap desk gradient → flat parchment */
+.cj-root .wm-prose-wrap {
+  background: #FAF7F0 !important;
+}
+
+/* 12d. Manuscript page — strip entrance animation; keep a fill-viewport
+   min-height so the writing canvas does not collapse when empty.
+   120px ≈ ribbon (~44px) + AI toolbar (~40px) + bottom bar (~36px). */
+.cj-root .wm-manuscript-page {
+  animation: none !important;
+  min-height: calc(100vh - 140px) !important;
+}
+/* Align CJ margin line with text padding */
+.cj-root .wm-manuscript-page::after {
+  left: 80px;
+}
+
+/* 12e. WM topbar — match SPC header: solid bg, no blur, simple border */
+.cj-root .wm-topbar {
+  background: #FFFCF6 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-bottom: 1px solid rgba(201,168,76,0.10) !important;
+}
+
+/* 12f. WM bottom-bar — match SPC's solid treatment */
+.cj-root .wm-bottom-bar {
+  background: #FFFCF6 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  border-top: 1px solid rgba(201,168,76,0.10) !important;
+}
+
+/* 12g. WM AI toolbar — solid, no blur */
+.cj-root .wm-ai-toolbar {
+  background: #FFFCF6 !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: none !important;
+  border-top: 1px solid rgba(201,168,76,0.10) !important;
+}
+
+/* 12h. WM sidebars — solid background, no gradient, no slide-in animation */
+.cj-root .wm-toc-sidebar {
+  background: #FAF7F0 !important;
+  animation: none !important;
+  border-right-color: rgba(201,168,76,0.10) !important;
+}
+.cj-root .wm-context-panel {
+  background: #FAF7F0 !important;
+  animation: none !important;
+  border-left-color: rgba(201,168,76,0.10) !important;
+}
+
+/* 12i. Gold normalization — #B8962E → #C9A84C throughout WM */
+.cj-root .wm-save-status          { color: #C9A84C !important; }
+.cj-root .wm-sidebar-toggle.active { color: #C9A84C !important; }
+.cj-root .wm-toc-item.current      { border-left-color: #C9A84C !important; }
+.cj-root .wm-ctx-tab--active       { border-bottom-color: #C9A84C !important; }
+.cj-root .wm-prose-area            { caret-color: #C9A84C !important; }
+.cj-root .wm-goal-fill             { background: linear-gradient(90deg, #C9A84C 0%, #b0922e 100%) !important; }
+.cj-root .wm-center-tab--active    { border-bottom-color: #C9A84C !important; }
+.cj-root .wm-history-btn.active    { background: #C9A84C !important; border-color: #C9A84C !important; }
+.cj-root .wm-ai-btn.active         { border-color: rgba(201,168,76,0.25) !important; }
+.cj-root .wm-word-count            { color: rgba(201,168,76,0.72) !important; }
+
+/* 12j. WM AI button shimmer → remove for consistency with SPC buttons */
+.cj-root .wm-ai-btn::before { display: none !important; }
+
+/* 12k. WM label fonts — DM Sans to match SPC (prose stays Lora) */
+.cj-root .wm-toc-header-title,
+.cj-root .wm-book-title,
+.cj-root .wm-ctx-label,
+.cj-root .wm-ctx-header-title,
+.cj-root .wm-edit-label,
+.cj-root .wm-toc-num,
+.cj-root .wm-toc-words,
+.cj-root .wm-word-count,
+.cj-root .wm-save-status { font-family: 'DM Sans', sans-serif !important; }
+
+/* 12l. WM border tints — gold-tinted to match SPC borders */
+.cj-root .wm-center-tabs { border-bottom-color: rgba(201,168,76,0.10) !important; }
+
+/* 12m. WM focus ring — restore subtle golden ambient glow instead of flat ring */
+.cj-root .wm-prose-area:focus {
+  outline: none !important;
+  border: none !important;
+}
+.cj-root .wm-manuscript-page:has(.wm-prose-area:focus) {
+  box-shadow:
+    0 1px 2px rgba(28,24,20,0.05),
+    0 2px 8px rgba(28,24,20,0.04),
+    0 8px 32px rgba(28,24,20,0.045),
+    0 0 0 1px rgba(201,168,76,0.06),
+    0 0 40px rgba(201,168,76,0.025),
+    0 0 80px rgba(201,168,76,0.012) !important;
+}
+
+/* 12n. WM review section — match the same parchment surface */
+.cj-root .wm-review-header {
+  background: #FFFCF6 !important;
+  border-bottom: 1px solid rgba(201,168,76,0.10) !important;
+}
+.cj-root .wm-review-stat-val { color: #C9A84C !important; }
+.cj-root .wm-approve-all-btn {
+  background: #C9A84C !important;
+  color: #fff !important;
+}
+.cj-root .wm-approve-all-btn:hover:not(:disabled) {
+  background: #b0922e !important;
+}
+
 /* ── Loading ───────────────────────────────────────────────────────────── */
 
 .cj-loading {
@@ -512,11 +1071,10 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  height: 100dvh;
+  height: 100vh;
   gap: 18px;
-  background: #fdf9f9;
+  background: #FAF7F0;
   font-family: 'DM Sans', sans-serif;
-  padding: 20px;
 }
 .cj-loading-dots {
   display: flex;
@@ -529,12 +1087,12 @@
   border-radius: 50%;
   animation: cj-dot-load 1.4s ease infinite;
 }
-.cj-loading-dots span:nth-child(1) { background: #ec4899; animation-delay: 0s; }
-.cj-loading-dots span:nth-child(2) { background: #0d9488; animation-delay: 0.15s; }
-.cj-loading-dots span:nth-child(3) { background: #C6A85E; animation-delay: 0.30s; }
+.cj-loading-dots span:nth-child(1) { background: #d4b96a; animation-delay: 0s; }
+.cj-loading-dots span:nth-child(2) { background: #C9A84C; animation-delay: 0.15s; }
+.cj-loading-dots span:nth-child(3) { background: #b0922e; animation-delay: 0.30s; }
 @keyframes cj-dot-load {
-  0%, 80%, 100% { opacity: 0.2; transform: scale(0.7); }
-  40%           { opacity: 1;   transform: scale(1); }
+  0%,80%,100% { opacity: 0.2; transform: scale(0.7); }
+  40%         { opacity: 1;   transform: scale(1); }
 }
 .cj-loading-label {
   font-size: 12px;
@@ -549,79 +1107,207 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  min-height: 100dvh;
+  height: 100vh;
   gap: 12px;
-  background: #fdf9f9;
+  background: #FAF7F0;
   font-family: 'DM Sans', sans-serif;
   text-align: center;
-  padding: 24px 20px;
+  padding: 40px;
 }
-.cj-error p     { margin: 0; font-size: 14px; color: #374151; }
-.cj-error small { font-size: 11px; color: #9ca3af; font-family: 'DM Mono', monospace; }
+.cj-error p     { margin: 0; font-size: 14px; color: #1a1a2e; }
+.cj-error small { font-size: 11px; color: rgba(28,24,20,0.45); font-family: 'DM Mono', monospace; }
 .cj-error button {
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 8px;
-  padding: 10px 20px;
+  background: #FAF7F0;
+  border: 1px solid #e8e5de;
+  border-radius: 6px;
+  padding: 7px 18px;
   font-family: 'DM Sans', sans-serif;
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: #374151;
+  color: #1a1a2e;
   cursor: pointer;
   margin: 2px;
   transition: background 0.14s;
-  touch-action: manipulation;
 }
-.cj-error button:hover { background: #f3f4f6; }
+.cj-error button:hover { background: #f0ede6; }
 
-/* ── Tablet / desktop enhancements (640px+) ────────────────────────────── */
+/* ── Mobile: strip ribbon to single compact row ────────────────────────── */
 
-@media (min-width: 640px) {
+@media (max-width: 768px) {
+  /* Hide all non-essential ribbon rows — user is here to WRITE */
+  .cj-ribbon-info      { display: none !important; }
+  .cj-progress-strip   { display: none !important; }
+  .cj-override-banner  { display: none !important; }
+
+  /* Collapse ribbon to single compact row: merge top + nav */
+  .cj-ribbon {
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 6px 10px;
+    gap: 6px;
+  }
   .cj-ribbon-top {
-    padding: 12px 16px 6px;
-    gap: 10px;
+    display: contents;
   }
   .cj-ribbon-nav {
-    padding: 2px 16px 10px;
+    display: contents;
   }
-  .cj-ribbon-info {
-    padding: 0 16px 10px;
-    gap: 1px;
-    flex-wrap: nowrap;
+
+  .cj-ribbon-row,
+  .cj-ribbon-top,
+  .cj-ribbon-nav {
+    padding: 0;
+    gap: 6px;
   }
-  .cj-info-block {
+
+  .cj-mode-book { display: none; }
+  .cj-mode-label { font-size: 10px; gap: 5px; }
+  .cj-mode-dot { width: 6px; height: 6px; }
+
+  .cj-mode-context {
+    flex: 1;
     min-width: 0;
-    padding: 6px 14px;
   }
-  .cj-info-value {
-    font-size: 12px;
-  }
-  .cj-progress-strip {
-    padding: 0 16px 10px;
-  }
-  .cj-override-banner {
-    padding: 8px 16px;
-    flex-wrap: nowrap;
-  }
-  .cj-back {
-    width: 30px;
-    height: 30px;
-    font-size: 15px;
-    border-radius: 7px;
-  }
-  .cj-mode-label {
-    font-size: 11px;
-  }
-  .cj-mode-chapter {
-    font-size: 14px;
-  }
-  .cj-save-btn {
-    padding: 6px 14px;
+  .cj-mode-chapter { font-size: 12px; }
+
+  .cj-pills {
+    background: transparent !important;
+    border: none !important;
+    padding: 0;
+    gap: 2px;
   }
   .cj-pill {
-    padding: 4px 12px;
+    padding: 4px 10px;
+    font-size: 10px;
+    border-radius: 12px;
   }
-  .cj-pill-auto {
-    padding: 5px 11px;
+  /* Abbreviate pill labels: Story Planner → Plan, etc. */
+  .cj-pill-label { display: none; }
+  .cj-pill[data-s="plan"]::after   { content: 'Plan'; }
+  .cj-pill[data-s="write"]::after  { content: 'Write'; }
+  .cj-pill[data-s="review"]::after { content: 'Review'; }
+
+  .cj-pill-sep { display: none; }
+  .cj-pill-auto { display: none; }
+
+  .cj-save-btn {
+    padding: 5px 10px;
+    font-size: 10px;
+    border-radius: 6px;
+  }
+
+  .cj-tools-btn {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+
+  /* ── Context panel: hidden on mobile inside CJ (was forced visible) ── */
+  .cj-root .wm-context-panel {
+    display: none !important;
+  }
+
+  /* ── WriteMode embedded in CJ: tighter everything ── */
+  .cj-root .wm-ai-toolbar {
+    padding: 4px 8px !important;
+    gap: 3px !important;
+  }
+  .cj-root .wm-ai-btn {
+    padding: 5px 8px !important;
+    font-size: 0.7rem !important;
+  }
+  .cj-root .wm-bottom-bar {
+    padding: 4px 10px 6px !important;
+    gap: 6px !important;
+  }
+  .cj-root .wm-mic-btn {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  .cj-root .wm-bottom-hint {
+    font-size: 8px !important;
+    line-height: 1.3 !important;
+  }
+  .cj-root .wm-ai-hint {
+    font-size: 8px !important;
+    padding: 0 4px !important;
+  }
+
+  /* Chapter heading compact inside CJ */
+  .cj-root .wm-chapter-opening {
+    padding: 8px 12px 2px !important;
+  }
+  .cj-root .wm-chapter-heading {
+    font-size: 15px !important;
+    margin-bottom: 2px !important;
+  }
+  .cj-root .wm-section-heading {
+    font-size: 12px !important;
+  }
+
+  /* StoryTeller review inside CJ — compact */
+  .cj-root .wm-review-header {
+    padding: 8px 12px !important;
+  }
+  .cj-root .wm-review-stat-label {
+    font-size: 9px !important;
+  }
+  .cj-root .wm-review-stat-val {
+    font-size: 18px !important;
+  }
+  .cj-root .wm-review-empty {
+    padding: 24px 16px !important;
+    font-size: 13px !important;
+  }
+
+  /* Story Planner inside CJ — tighter */
+  .cj-root .spc-chat-col {
+    border-right: none !important;
+  }
+  .cj-root .spc-header {
+    padding: 8px 12px !important;
+  }
+  .cj-root .spc-header-title {
+    font-size: 14px !important;
+  }
+}
+
+/* ── Ultra-compact (≤420px) ────────────────────────────────────────────── */
+
+@media (max-width: 420px) {
+  .cj-ribbon {
+    padding: 4px 8px;
+    gap: 4px;
+  }
+
+  /* Hide mode label text, keep just the dot */
+  .cj-mode-label span:not(.cj-mode-dot) { display: none; }
+  .cj-mode-label { gap: 0; min-width: auto; }
+  .cj-mode-dot { width: 8px; height: 8px; }
+
+  .cj-mode-context { display: none; }
+
+  /* Pills + save fill the remaining space */
+  .cj-pills { flex: 1; justify-content: center; }
+  .cj-pill { padding: 4px 12px; font-size: 10px; }
+
+  .cj-save-btn {
+    padding: 4px 8px;
+    font-size: 9px;
+    gap: 3px;
+  }
+
+  .cj-tools-btn {
+    padding: 4px 6px;
+    font-size: 9px;
+  }
+
+  /* Tighter content */
+  .cj-root .wm-manuscript-page {
+    margin-top: 0 !important;
+  }
+  .cj-root .wm-prose-area {
+    padding: 8px 12px 60px !important;
+    font-size: 15px !important;
   }
 }

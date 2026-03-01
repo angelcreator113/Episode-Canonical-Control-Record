@@ -16,7 +16,7 @@ const NAV = [
     items: [
       { icon: '◈',  label: 'Universe',        route: '/universe' },
       { icon: '🌍', label: 'World View',      route: '/character-registry?view=world' },
-      { icon: '🧠', label: 'Therapy Room',    route: '/therapy/default' },
+      { icon: '🛋️', label: 'Therapy Room',    route: '/therapy/default' },
       { icon: '📰', label: 'The Press',       route: '/press' },
       { icon: '�', label: 'Relationship Web', route: '/relationships' },
     ],
@@ -25,7 +25,6 @@ const NAV = [
     zone: 'WRITE',
     items: [
       { icon: '▶',  label: 'Start Session',   route: '/start' },
-      { icon: '⌗',  label: 'Plan with Voice', route: '/plan-with-voice' },
       { icon: '◇',  label: 'Continuity',      route: '/continuity' },
     ],
   },
@@ -223,14 +222,7 @@ function Sidebar({ isOpen, onClose }) {
           ))}
         </nav>
 
-        {/* ── Bottom: Book Editor shortcut ── */}
-        {!collapsed && (
-          <div className="sidebar-bottom">
-            <button className="book-editor-btn" onClick={() => go('/storyteller')}>
-              📖 Book Editor
-            </button>
-          </div>
-        )}
+
 
         {/* ── Footer ── */}
         <div className="sidebar-footer">

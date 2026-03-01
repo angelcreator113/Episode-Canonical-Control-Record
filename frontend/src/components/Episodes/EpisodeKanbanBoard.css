@@ -196,11 +196,6 @@
   background: rgba(102, 126, 234, 0.05);
 }
 
-.empty-icon {
-  font-size: 1.125rem;
-  opacity: 0.5;
-}
-
 .empty-title {
   margin: 0.375rem 0 0;
   font-size: 0.875rem;
@@ -282,11 +277,7 @@
   border-radius: 0.375rem;
   font-weight: 500;
   color: #475569;
-}
-
-.meta-sep {
-  opacity: 0.5;
-}
+}
 
 .meta-date {
   color: #94a3b8;

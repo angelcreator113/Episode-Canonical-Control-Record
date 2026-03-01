@@ -1061,6 +1061,22 @@
   margin: 0;
 }
 
+/* ── Flow Hint ── */
+.st-dash-flow-hint {
+  text-align: center;
+  font-family: var(--st-sans);
+  font-size: 12px;
+  color: var(--st-muted);
+  margin: 20px 0 0;
+  padding: 10px 0;
+  border-top: 1px solid rgba(201,168,76,0.15);
+  letter-spacing: 0.02em;
+}
+.st-dash-flow-hint strong {
+  color: var(--st-gold, #C9A84C);
+  font-weight: 600;
+}
+
 /* ── Chapter List ── */
 .st-dash-chapters {
   display: flex;

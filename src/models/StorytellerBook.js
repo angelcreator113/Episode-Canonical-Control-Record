@@ -87,6 +87,37 @@ module.exports = (sequelize) => {
       allowNull: true,
       comment: 'Author display name for title page and About the Author',
     },
+    /* ── Story DNA: extracted by conversational planner ── */
+    theme: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Central theme or thematic question (e.g. "freedom vs. belonging")',
+    },
+    pov: {
+      type: DataTypes.STRING(255),
+      allowNull: true,
+      comment: 'Narrative POV (e.g. "first person", "alternating POV")',
+    },
+    tone: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Overall tone/mood (e.g. "dark and foreboding", "epic and sweeping")',
+    },
+    setting: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'World/setting description (e.g. "a crumbling empire where magic is dying")',
+    },
+    conflict: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'Central conflict driving the story',
+    },
+    stakes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'What is ultimately at risk (e.g. "the extinction of sorcery")',
+    },
   }, {
     tableName: 'storyteller_books',
     timestamps: true,

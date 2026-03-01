@@ -20,24 +20,11 @@
   text-align: center;
 }
 
-.error-icon {
-  font-size: 60px;
-  margin-bottom: 20px;
-  display: block;
-}
-
 .error-boundary h1 {
   color: #1f2937;
   margin: 0 0 16px 0;
   font-size: 28px;
   font-weight: 600;
-}
-
-.error-message {
-  color: #6b7280;
-  margin: 0 0 24px 0;
-  font-size: 16px;
-  line-height: 1.5;
 }
 
 .error-details {
@@ -128,10 +115,6 @@
 
   .error-boundary h1 {
     font-size: 22px;
-  }
-
-  .error-message {
-    font-size: 14px;
   }
 
   .error-actions {

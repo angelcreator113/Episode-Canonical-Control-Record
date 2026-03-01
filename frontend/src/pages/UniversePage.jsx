@@ -12,7 +12,7 @@
  * - Production tab: shows + episodes merged — select a show to browse episodes
  * - Canon Timeline strip at bottom of Universe tab
  *
- * Light theme — matches app parchment/serif design system
+ * Light theme — modern white design with gold accents
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -20,6 +20,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import ProductionTab from './ProductionTab';
 import Wardrobe from './Wardrobe';
 import AssetLibrary from './AssetLibrary';
+import './UniversePage.css';
 
 function useWindowWidth() {
   const [w, setW] = useState(window.innerWidth);
@@ -104,47 +105,57 @@ export default function UniversePage() {
   if (!universe) return <ErrorState onRetry={load} />;
 
   const px = isMobile ? 16 : isTablet ? 28 : 48;
+  const tabIcons = { universe: '🌌', series: '📚', production: '🎬', wardrobe: '👗', assets: '📁' };
 
   return (
-    <div style={s.shell}>
+    <div className="up-shell">
 
-      {/* Page header */}
-      <div style={{ ...s.pageHeader, padding: `${isMobile ? 20 : 36}px ${px}px 0`, paddingBottom: isMobile ? 16 : 24 }}>
-        <div>
-          <div style={{ ...s.pageLabel, fontSize: isMobile ? 11 : 12 }}>FRANCHISE BRAIN</div>
-          <h1 style={{ ...s.pageTitle, fontSize: isMobile ? 24 : isTablet ? 30 : 36 }}>{universe.name}</h1>
-          <div style={s.pageSlug}>/{universe.slug}</div>
+      {/* Hero Header */}
+      <div className="up-hero" style={isMobile ? { padding: '20px 16px' } : isTablet ? { padding: '28px 28px 24px' } : undefined}>
+        <div className="up-hero-top">
+          <div>
+            <div className="up-hero-label">FRANCHISE BRAIN</div>
+            <h1 className="up-hero-title" style={isMobile ? { fontSize: 24 } : isTablet ? { fontSize: 30 } : undefined}>{universe.name}</h1>
+            <div className="up-hero-slug">/{universe.slug}</div>
+          </div>
+        </div>
+
+        <div className="up-hero-stats">
+          <div className="up-hero-stat">
+            <div className="up-stat-value">{series.length}</div>
+            <div className="up-stat-label">Series</div>
+          </div>
+          <div className="up-hero-stat">
+            <div className="up-stat-value">{shows.length}</div>
+            <div className="up-stat-label">Shows</div>
+          </div>
+          <div className="up-hero-stat">
+            <div className="up-stat-value">{shows.reduce((sum, sh) => sum + (parseInt(sh.episodeCount || sh.dataValues?.episodeCount) || 0), 0)}</div>
+            <div className="up-stat-label">Episodes</div>
+          </div>
+          <div className="up-hero-stat">
+            <div className="up-stat-value">{(universe.core_themes || []).length}</div>
+            <div className="up-stat-label">Themes</div>
+          </div>
         </div>
       </div>
 
       {/* Tab bar */}
-      <div style={{ ...s.tabBar, padding: `0 ${px}px` }}>
+      <div className="up-tab-bar" style={isMobile ? { padding: '8px 16px', overflowX: 'auto' } : isTablet ? { padding: '10px 28px' } : undefined}>
         {['universe', 'series', 'production', 'wardrobe', 'assets'].map(tab => (
           <button
             key={tab}
-            style={{
-              ...s.tabBtn,
-              padding: isMobile ? '12px 0' : '16px 24px',
-              flex: isMobile ? 1 : undefined,
-              textAlign: 'center',
-              fontSize: isMobile ? 13 : 14,
-              color: activeTab === tab ? '#C9A84C' : 'rgba(26,21,16,0.35)',
-              borderBottom: activeTab === tab
-                ? '2px solid #C9A84C'
-                : '2px solid transparent',
-            }}
+            className={`up-tab-btn${activeTab === tab ? ' active' : ''}`}
+            style={isMobile ? { flexShrink: 0, textAlign: 'center', fontSize: 12, whiteSpace: 'nowrap' } : undefined}
             onClick={() => switchTab(tab)}
           >
-            {tab === 'universe' ? '🌌 Universe' :
-             tab === 'series'   ? '📚 Series' :
-             tab === 'production' ? '🎬 Production' :
-             tab === 'wardrobe' ? '👗 Wardrobe' : '📁 Assets'}
+            {tabIcons[tab]} {tab.charAt(0).toUpperCase() + tab.slice(1)}
           </button>
         ))}
       </div>
 
       {/* Tab content */}
-      <div style={{ ...s.tabContent, padding: `0 ${px}px` }}>
+      <div className="up-tab-content" style={isMobile ? { padding: '0 16px' } : isTablet ? { padding: '0 28px' } : undefined}>
         {activeTab === 'universe' && (
           <UniverseTab
             universe={universe}
@@ -187,10 +198,7 @@ export default function UniversePage() {
 
       {/* Toast */}
       {toast && (
-        <div style={{
-          ...s.toast,
-          background: toast.type === 'error' ? '#B85C38' : '#4A7C59',
-        }}>
+        <div className={`up-toast ${toast.type === 'error' ? 'up-toast--error' : 'up-toast--success'}`}>
           {toast.msg}
         </div>
       )}
@@ -295,22 +303,23 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
   });
 
   return (
-    <div style={s.tabShell}>
+    <div className="up-tab-shell">
 
       {/* Actions bar */}
-      <div style={s.actionsBar}>
-        <button style={s.secondaryBtn} onClick={() => setPreview(!preview)}>
+      <div className="up-actions-bar">
+        <button className="up-btn-secondary" onClick={() => setPreview(!preview)}>
           {preview ? '✎ Edit' : '◉ Preview'}
         </button>
         <button
-          style={s.secondaryBtn}
+          className="up-btn-secondary"
           onClick={() => setShowRawModal(true)}
         >
           ✦ Structure from Raw Draft
         </button>
         {dirty && (
           <button
-            style={{ ...s.primaryBtn, opacity: saving ? 0.6 : 1 }}
+            className="up-btn-primary"
+            style={{ opacity: saving ? 0.6 : 1 }}
             onClick={save}
             disabled={saving}
           >
@@ -321,42 +330,42 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 
       {preview ? (
         // ── Preview mode ───────────────────────────────────────────────
-        <div style={s.previewShell}>
-          <h2 style={s.previewTitle}>{form.name}</h2>
-          <div style={s.previewSection}>
-            <div style={s.previewLabel}>Description</div>
-            <div style={s.previewBody}>{form.description}</div>
+        <div className="up-preview-shell">
+          <h2 className="up-preview-title">{form.name}</h2>
+          <div className="up-preview-section">
+            <div className="up-preview-label">Description</div>
+            <div className="up-preview-body">{form.description}</div>
           </div>
           {form.core_themes && (
-            <div style={s.previewSection}>
-              <div style={s.previewLabel}>Core Themes</div>
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+            <div className="up-preview-section">
+              <div className="up-preview-label">Core Themes</div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 6 }}>
                 {form.core_themes.split(',').map(t => t.trim()).filter(Boolean).map(t => (
-                  <span key={t} style={s.themeChip}>{t}</span>
+                  <span key={t} className="up-theme-chip">{t}</span>
                 ))}
               </div>
             </div>
           )}
-          <div style={s.previewSection}>
-            <div style={s.previewLabel}>PNOS Beliefs</div>
-            <div style={s.previewBody}>{form.pnos_beliefs}</div>
+          <div className="up-preview-section">
+            <div className="up-preview-label">PNOS Beliefs</div>
+            <div className="up-preview-body">{form.pnos_beliefs}</div>
           </div>
-          <div style={s.previewSection}>
-            <div style={s.previewLabel}>World Rules</div>
-            <div style={s.previewBody}>{form.world_rules}</div>
+          <div className="up-preview-section">
+            <div className="up-preview-label">World Rules</div>
+            <div className="up-preview-body">{form.world_rules}</div>
           </div>
-          <div style={s.previewSection}>
-            <div style={s.previewLabel}>Narrative Economy</div>
-            <div style={s.previewBody}>{form.narrative_economy}</div>
+          <div className="up-preview-section">
+            <div className="up-preview-label">Narrative Economy</div>
+            <div className="up-preview-body">{form.narrative_economy}</div>
           </div>
         </div>
       ) : (
         // ── Edit mode ──────────────────────────────────────────────────
-        <div style={s.formShell}>
+        <div className="up-form-shell">
 
           <Field label='UNIVERSE NAME'>
             <input
-              style={s.input}
+              className="up-input"
               value={form.name}
               onChange={e => set('name', e.target.value)}
             />
@@ -364,7 +373,7 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 
           <Field label='CORE THEMES' hint='Comma-separated'>
             <input
-              style={s.input}
+              className="up-input"
               value={form.core_themes}
               onChange={e => set('core_themes', e.target.value)}
               placeholder='ambition, identity, beauty, consequence, becoming'
@@ -373,7 +382,8 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 
           <Field label='UNIVERSE DESCRIPTION'>
             <textarea
-              style={{ ...s.textarea, minHeight: 120 }}
+              className="up-textarea"
+              style={{ minHeight: 120 }}
               value={form.description}
               onChange={e => set('description', e.target.value)}
             />
@@ -381,7 +391,8 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 
           <Field label='PNOS BELIEFS' hint='The laws that govern how story works'>
             <textarea
-              style={{ ...s.textarea, minHeight: 180 }}
+              className="up-textarea"
+              style={{ minHeight: 180 }}
               value={form.pnos_beliefs}
               onChange={e => set('pnos_beliefs', e.target.value)}
             />
@@ -389,7 +400,8 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 
           <Field label='WORLD RULES' hint='Mechanical + narrative rules'>
             <textarea
-              style={{ ...s.textarea, minHeight: 180 }}
+              className="up-textarea"
+              style={{ minHeight: 180 }}
               value={form.world_rules}
               onChange={e => set('world_rules', e.target.value)}
             />
@@ -397,7 +409,8 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 
           <Field label='NARRATIVE ECONOMY' hint='Currency, reputation, access systems'>
             <textarea
-              style={{ ...s.textarea, minHeight: 100 }}
+              className="up-textarea"
+              style={{ minHeight: 100 }}
               value={form.narrative_economy}
               onChange={e => set('narrative_economy', e.target.value)}
             />
@@ -408,23 +421,20 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 
       {/* Canon Timeline */}
       {timelineItems.length > 0 && (
-        <div style={s.timelineBlock}>
-          <div style={s.sectionLabel}>CANON TIMELINE</div>
-          <div style={s.timelineStrip}>
+        <div className="up-timeline-block">
+          <div className="up-section-label">CANON TIMELINE</div>
+          <div className="up-timeline-strip">
             {timelineItems.map((item, i) => (
-              <div key={i} style={s.timelineItem}>
-                <div style={{
-                  ...s.timelineDot,
-                  background: item.type === 'book' ? '#C9A84C' : '#4A7C59',
-                }} />
-                <div style={s.timelineItemLabel}>{item.label}</div>
-                {item.era && <div style={s.timelineItemEra}>{item.era}</div>}
-                {item.position && <div style={s.timelineItemPos}>{item.position}</div>}
+              <div key={i} className="up-timeline-item">
+                <div className={`up-timeline-dot ${item.type === 'book' ? 'up-timeline-dot--book' : 'up-timeline-dot--show'}`} />
+                <div className="up-timeline-label">{item.label}</div>
+                {item.era && <div className="up-timeline-era">{item.era}</div>}
+                {item.position && <div className="up-timeline-pos">{item.position}</div>}
               </div>
             ))}
-            <div style={{ ...s.timelineItem, opacity: 0.35 }}>
-              <div style={{ ...s.timelineDot, background: 'rgba(26,21,16,0.1)', border: '1px dashed rgba(26,21,16,0.25)' }} />
-              <div style={s.timelineItemLabel}>[ Next ]</div>
+            <div className="up-timeline-item" style={{ opacity: 0.35 }}>
+              <div className="up-timeline-dot up-timeline-dot--placeholder" />
+              <div className="up-timeline-label">[ Next ]</div>
             </div>
           </div>
         </div>
@@ -432,34 +442,33 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 
       {/* Raw Draft Modal */}
       {showRawModal && (
-        <div style={s.modalOverlay} onClick={e => e.target === e.currentTarget && setShowRawModal(false)}>
-          <div style={{
-            ...s.modal,
-            ...(isMobile ? { width: '100%', maxHeight: '100vh', borderRadius: 0, height: '100vh' } : {}),
-          }}>
-            <div style={s.modalHeader}>
+        <div className="up-modal-overlay" onClick={e => e.target === e.currentTarget && setShowRawModal(false)}>
+          <div className="up-modal" style={isMobile ? { width: '100%', maxHeight: '100vh', borderRadius: 0, height: '100vh' } : undefined}>
+            <div className="up-modal-header">
               <div>
-                <div style={s.modalLabel}>CLAUDE</div>
-                <div style={s.modalTitle}>Structure Universe From Raw Draft</div>
+                <div className="up-modal-label">CLAUDE</div>
+                <div className="up-modal-title">Structure Universe From Raw Draft</div>
               </div>
-              <button style={s.closeBtn} onClick={() => setShowRawModal(false)}>✕</button>
+              <button className="up-close-btn" onClick={() => setShowRawModal(false)}>✕</button>
             </div>
-            <div style={s.modalBody}>
-              <p style={s.modalHint}>
+            <div className="up-modal-body">
+              <p className="up-modal-hint">
                 Paste your messy world notes, lore, philosophy, or themes. Claude will structure them into description, PNOS beliefs, world rules, core themes, and narrative economy. You review before saving.
               </p>
               <textarea
-                style={{ ...s.textarea, minHeight: 260 }}
+                className="up-textarea"
+                style={{ minHeight: 260 }}
                 placeholder='Paste your raw universe notes here…'
                 value={rawDraft}
                 onChange={e => setRawDraft(e.target.value)}
                 autoFocus
               />
             </div>
-            <div style={s.modalFooter}>
-              <button style={s.secondaryBtn} onClick={() => setShowRawModal(false)}>Cancel</button>
+            <div className="up-modal-footer">
+              <button className="up-btn-secondary" onClick={() => setShowRawModal(false)}>Cancel</button>
               <button
-                style={{ ...s.primaryBtn, opacity: structuring ? 0.6 : 1 }}
+                className="up-btn-primary"
+                style={{ opacity: structuring ? 0.6 : 1 }}
                 onClick={structureFromRaw}
                 disabled={structuring || !rawDraft.trim()}
               >
@@ -565,36 +574,39 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
   const unassigned = books.filter(b => !b.series_id);
 
   return (
-    <div style={s.tabShell}>
+    <div className="up-tab-shell">
 
       {/* Create series button */}
-      <div style={s.actionsBar}>
-        <button style={s.primaryBtn} onClick={() => setCreating(true)}>
+      <div className="up-actions-bar">
+        <button className="up-btn-primary" onClick={() => setCreating(true)}>
           + New Series
         </button>
       </div>
 
       {/* New series form */}
       {creating && (
-        <div style={s.createCard}>
-          <div style={s.sectionLabel}>NEW SERIES</div>
+        <div className="up-create-card">
+          <div className="up-section-label">NEW SERIES</div>
           <input
-            style={{ ...s.input, marginBottom: 10 }}
+            className="up-input"
+            style={{ marginBottom: 10 }}
             placeholder='Series name — e.g. Becoming Prime'
             value={newName}
             onChange={e => setNewName(e.target.value)}
             autoFocus
           />
           <textarea
-            style={{ ...s.textarea, minHeight: 80, marginBottom: 10 }}
+            className="up-textarea"
+            style={{ minHeight: 80, marginBottom: 10 }}
             placeholder='Series description — what story arc does this cover?'
             value={newDesc}
             onChange={e => setNewDesc(e.target.value)}
           />
           <div style={{ display: 'flex', gap: 8 }}>
-            <button style={s.secondaryBtn} onClick={() => setCreating(false)}>Cancel</button>
+            <button className="up-btn-secondary" onClick={() => setCreating(false)}>Cancel</button>
             <button
-              style={{ ...s.primaryBtn, opacity: saving ? 0.6 : 1 }}
+              className="up-btn-primary"
+              style={{ opacity: saving ? 0.6 : 1 }}
               onClick={createSeries}
               disabled={saving}
             >
@@ -608,56 +620,39 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
       {series.map(ser => {
         const seriesBooks = books.filter(b => b.series_id === ser.id);
         return (
-          <div key={ser.id} style={{ ...s.seriesCard, padding: isMobile ? '14px 14px' : '18px 20px' }}>
-            <div style={{ ...s.seriesHeader, flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 8 : 0 }}>
+          <div key={ser.id} className="up-series-card" style={isMobile ? { padding: '14px' } : undefined}>
+            <div className="up-series-header" style={isMobile ? { flexDirection: 'column', gap: 8 } : undefined}>
               <div style={{ flex: 1 }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                  <div style={{ ...s.seriesName, fontSize: isMobile ? 19 : 22 }}>{ser.name}</div>
+                  <div className="up-series-name" style={isMobile ? { fontSize: 19 } : undefined}>{ser.name}</div>
                   {isMobile && (
-                    <button
-                      style={{ ...s.deleteBtn, padding: '8px 12px', flexShrink: 0 }}
-                      onClick={() => deleteSeries(ser.id)}
-                      title='Delete series'
-                    >
-                      ✕
-                    </button>
+                    <button className="up-btn-delete" style={{ padding: '8px 12px', flexShrink: 0 }} onClick={() => deleteSeries(ser.id)} title='Delete series'>✕</button>
                   )}
                 </div>
                 {ser.description && (
-                  <div style={{ ...s.seriesDesc, maxWidth: isMobile ? '100%' : 560 }}>{ser.description}</div>
+                  <div className="up-series-desc" style={isMobile ? { maxWidth: '100%' } : undefined}>{ser.description}</div>
                 )}
               </div>
               {!isMobile && (
-                <button
-                  style={s.deleteBtn}
-                  onClick={() => deleteSeries(ser.id)}
-                  title='Delete series'
-                >
-                  ✕
-                </button>
+                <button className="up-btn-delete" onClick={() => deleteSeries(ser.id)} title='Delete series'>✕</button>
               )}
             </div>
 
             {/* Books in series */}
             {seriesBooks.length === 0 ? (
-              <div style={s.emptyBooks}>No books in this series yet.</div>
+              <div className="up-empty-books">No books in this series yet.</div>
             ) : (
-              <div style={s.bookList}>
+              <div className="up-book-list">
                 {seriesBooks.map(book => (
-                  <div key={book.id} style={{
-                    ...s.bookRow,
-                    flexDirection: isMobile ? 'column' : 'row',
-                    alignItems: isMobile ? 'flex-start' : 'center',
-                  }}>
-                    <div style={s.bookRowLeft}>
-                      <div style={{ ...s.bookRowTitle, fontSize: isMobile ? 15 : 16 }}>{book.title}</div>
-                      <div style={s.bookRowMeta}>
-                        {book.primary_pov && <span style={s.metaChip}>{book.primary_pov.replace('_', ' ')}</span>}
+                  <div key={book.id} className="up-book-row" style={isMobile ? { flexDirection: 'column', alignItems: 'flex-start' } : undefined}>
+                    <div className="up-book-row-left">
+                      <div className="up-book-title" style={isMobile ? { fontSize: 15 } : undefined}>{book.title}</div>
+                      <div className="up-book-meta">
+                        {book.primary_pov && <span className="up-meta-chip">{book.primary_pov.replace('_', ' ')}</span>}
                         {book.canon_status && (
-                          <span style={{
-                            ...s.metaChip,
-                            color: book.canon_status === 'locked' ? '#7B5EA7'
-                              : book.canon_status === 'active' ? '#4A7C59' : '#C9A84C',
+                          <span className="up-meta-chip" style={{
+                            color: book.canon_status === 'locked' ? '#a78bfa'
+                              : book.canon_status === 'active' ? '#4ade80' : '#C9A84C',
                           }}>
                             {book.canon_status}
                           </span>
@@ -665,27 +660,23 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
                       </div>
                     </div>
 
-                    <div style={{
-                      ...s.bookRowRight,
-                      justifyContent: isMobile ? 'flex-start' : 'flex-end',
-                      width: isMobile ? '100%' : undefined,
-                      flexDirection: isMobile ? 'row' : 'row',
-                      flexWrap: 'wrap',
-                    }}>
+                    <div className="up-book-row-right" style={isMobile ? { justifyContent: 'flex-start', width: '100%', flexWrap: 'wrap' } : undefined}>
                       {editingEra === book.id ? (
                         <div style={{ display: 'flex', gap: 6, alignItems: 'center', width: isMobile ? '100%' : 'auto' }}>
                           <input
-                            style={{ ...s.input, padding: '8px 10px', fontSize: 13, flex: 1, width: 'auto' }}
+                            className="up-input"
+                            style={{ padding: '8px 10px', fontSize: 13, flex: 1, width: 'auto' }}
                             value={eraValues[book.id] ?? book.era_name ?? ''}
                             onChange={e => setEraValues(prev => ({ ...prev, [book.id]: e.target.value }))}
                             autoFocus
                           />
-                          <button style={{ ...s.microBtn, padding: isMobile ? '8px 12px' : '5px 9px' }} onClick={() => saveEra(book.id)}>✓</button>
-                          <button style={{ ...s.microBtn, padding: isMobile ? '8px 12px' : '5px 9px' }} onClick={() => setEditingEra(null)}>✕</button>
+                          <button className="up-btn-micro" style={isMobile ? { padding: '8px 12px' } : undefined} onClick={() => saveEra(book.id)}>✓</button>
+                          <button className="up-btn-micro" style={isMobile ? { padding: '8px 12px' } : undefined} onClick={() => setEditingEra(null)}>✕</button>
                         </div>
                       ) : (
                         <button
-                          style={{ ...s.eraBtn, padding: isMobile ? '8px 12px' : '5px 10px', fontSize: isMobile ? 12 : 11 }}
+                          className="up-era-btn"
+                          style={isMobile ? { padding: '8px 12px', fontSize: 12 } : undefined}
                           onClick={() => {
                             setEditingEra(book.id);
                             setEraValues(prev => ({ ...prev, [book.id]: book.era_name || '' }));
@@ -697,13 +688,8 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
 
                       {/* Move to different series */}
                       <select
-                        style={{
-                          ...s.assignSelect,
-                          maxWidth: isMobile ? 'none' : 160,
-                          flex: isMobile ? '1 1 auto' : '1 1 auto',
-                          fontSize: isMobile ? 12 : 11,
-                          padding: isMobile ? '8px 10px' : '5px 8px',
-                        }}
+                        className="up-assign-select"
+                        style={isMobile ? { maxWidth: 'none', flex: '1 1 auto', fontSize: 12, padding: '8px 10px' } : undefined}
                         value={ser.id}
                         onChange={e => {
                           const val = e.target.value;
@@ -726,25 +712,21 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
 
       {/* Unassigned books */}
       {unassigned.length > 0 && (
-        <div style={{ ...s.seriesCard, borderColor: 'rgba(26,21,16,0.08)', padding: isMobile ? '14px 14px' : '18px 20px' }}>
-          <div style={s.seriesName}>Unassigned Books</div>
-          <div style={s.bookList}>
+        <div className="up-series-card" style={{ borderColor: '#eeebe4', ...(isMobile ? { padding: 14 } : {}) }}>
+          <div className="up-series-name">Unassigned Books</div>
+          <div className="up-book-list">
             {unassigned.map(book => (
-              <div key={book.id} style={{
-                ...s.bookRow,
-                flexDirection: isMobile ? 'column' : 'row',
-                alignItems: isMobile ? 'flex-start' : 'center',
-              }}>
-                <div style={s.bookRowLeft}>
-                  <div style={{ ...s.bookRowTitle, fontSize: isMobile ? 15 : 16 }}>{book.title}</div>
-                  <div style={s.bookRowMeta}>
-                    <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.3)' }}>no series</span>
+              <div key={book.id} className="up-book-row" style={isMobile ? { flexDirection: 'column', alignItems: 'flex-start' } : undefined}>
+                <div className="up-book-row-left">
+                  <div className="up-book-title" style={isMobile ? { fontSize: 15 } : undefined}>{book.title}</div>
+                  <div className="up-book-meta">
+                    <span className="up-meta-chip" style={{ color: 'rgba(26,26,46,0.3)' }}>no series</span>
                   </div>
                 </div>
-                <div style={s.bookRowRight}>
+                <div className="up-book-row-right">
                   {series.length > 0 ? (
                     <select
-                      style={s.assignSelect}
+                      className="up-assign-select"
                       value=''
                       onChange={e => {
                         if (e.target.value) assignToSeries(book.id, e.target.value);
@@ -756,7 +738,7 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
                       ))}
                     </select>
                   ) : (
-                    <span style={{ ...s.metaChip, color: 'rgba(26,21,16,0.25)' }}>Create a series first</span>
+                    <span className="up-meta-chip" style={{ color: 'rgba(26,26,46,0.3)' }}>Create a series first</span>
                   )}
                 </div>
               </div>
@@ -778,10 +760,10 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
 
 function Field({ label, hint, children }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 18 }}>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'baseline' }}>
-        <label style={s.fieldLabel}>{label}</label>
-        {hint && <span style={s.fieldHint}>{hint}</span>}
+    <div className="up-field">
+      <div className="up-field-header">
+        <label className="up-field-label">{label}</label>
+        {hint && <span className="up-field-hint">{hint}</span>}
       </div>
       {children}
     </div>
@@ -794,7 +776,7 @@ function LoadingDots() {
       {[0,1,2].map(i => (
         <span key={i} style={{
           width: 4, height: 4, borderRadius: '50%',
-          background: '#14100c', display: 'inline-block',
+          background: '#b0922e', display: 'inline-block',
           animation: 'pulse 1.2s ease-in-out infinite',
           animationDelay: `${i * 0.2}s`,
         }} />
@@ -805,8 +787,7 @@ function LoadingDots() {
 
 function LoadingState() {
   return (
-    <div style={{ padding: 60, textAlign: 'center', fontFamily: 'DM Mono, monospace',
-      fontSize: 14, color: 'rgba(26,21,16,0.4)', letterSpacing: '0.08em' }}>
+    <div className="up-loading">
       Loading universe…
     </div>
   );
@@ -814,533 +795,17 @@ function LoadingState() {
 
 function ErrorState({ onRetry }) {
   return (
-    <div style={{ padding: 60, textAlign: 'center' }}>
-      <div style={{ fontFamily: 'DM Mono, monospace', fontSize: 14,
-        color: '#B85C38', marginBottom: 12 }}>
+    <div className="up-error">
+      <div className="up-error-msg">
         Could not load universe data.
       </div>
-      <button style={s.secondaryBtn} onClick={onRetry}>Retry</button>
+      <button className="up-btn-secondary" onClick={onRetry}>Retry</button>
     </div>
   );
 }
 
-// ══════════════════════════════════════════════════════════════════════════
-//  STYLES — Light Theme (parchment design system)
-// ══════════════════════════════════════════════════════════════════════════
-
+// Styles migrated to UniversePage.css — this stub kept for any edge-case references
 const s = {
-  shell: {
-    minHeight: '100vh',
-    width: '100%',
-    background: '#faf9f7',
-    color: 'rgba(26,21,16,0.85)',
-    fontFamily: "'DM Sans', sans-serif",
-  },
-  pageHeader: {
-    padding: '36px 48px 0',
-    borderBottom: '1px solid rgba(201,168,76,0.18)',
-    paddingBottom: 24,
-  },
-  pageLabel: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
-    letterSpacing: '0.22em',
-    color: '#C9A84C',
-    marginBottom: 6,
-  },
-  pageTitle: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 36,
-    fontStyle: 'italic',
-    color: 'rgba(26,21,16,0.92)',
-    fontWeight: 400,
-    margin: 0,
-    marginBottom: 4,
-  },
-  pageSlug: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    color: 'rgba(26,21,16,0.35)',
-    letterSpacing: '0.1em',
-  },
-  tabBar: {
-    display: 'flex',
-    gap: 0,
-    padding: '0 48px',
-    borderBottom: '1px solid rgba(201,168,76,0.15)',
-  },
-  tabBtn: {
-    background: 'none',
-    border: 'none',
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 14,
-    letterSpacing: '0.1em',
-    padding: '16px 24px',
-    cursor: 'pointer',
-    transition: 'color 0.15s',
-  },
-  tabContent: {
-    padding: '0 48px',
-    width: '100%',
-  },
-  tabShell: {
-    paddingTop: 28,
-    paddingBottom: 60,
-  },
-  actionsBar: {
-    display: 'flex',
-    gap: 10,
-    marginBottom: 28,
-    alignItems: 'center',
-    flexWrap: 'wrap',
-  },
-  formShell: {
-    maxWidth: 720,
-  },
-  previewShell: {
-    maxWidth: 720,
-  },
-  previewTitle: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 28,
-    fontStyle: 'italic',
-    color: '#C9A84C',
-    fontWeight: 400,
-    marginBottom: 24,
-  },
-  previewSection: {
-    marginBottom: 28,
-  },
-  previewLabel: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
-    letterSpacing: '0.18em',
-    color: 'rgba(26,21,16,0.45)',
-    marginBottom: 8,
-    textTransform: 'uppercase',
-  },
-  previewBody: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 16,
-    lineHeight: 1.75,
-    color: 'rgba(26,21,16,0.75)',
-    whiteSpace: 'pre-wrap',
-  },
-  themeChip: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
-    color: 'rgba(161,128,46,0.85)',
-    background: 'rgba(201,168,76,0.12)',
-    borderRadius: 3,
-    padding: '4px 10px',
-    letterSpacing: '0.06em',
-  },
-  fieldLabel: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
-    letterSpacing: '0.14em',
-    color: 'rgba(26,21,16,0.5)',
-    textTransform: 'uppercase',
-  },
-  fieldHint: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
-    color: 'rgba(26,21,16,0.35)',
-    letterSpacing: '0.06em',
-  },
-  input: {
-    background: '#f5f0e8',
-    border: '1px solid rgba(26,21,16,0.1)',
-    borderRadius: 3,
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 15,
-    color: 'rgba(26,21,16,0.85)',
-    padding: '12px 14px',
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box',
-  },
-  textarea: {
-    background: '#f5f0e8',
-    border: '1px solid rgba(26,21,16,0.1)',
-    borderRadius: 3,
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 15,
-    color: 'rgba(26,21,16,0.8)',
-    padding: '12px 14px',
-    outline: 'none',
-    width: '100%',
-    boxSizing: 'border-box',
-    resize: 'vertical',
-    lineHeight: 1.65,
-  },
-  primaryBtn: {
-    background: '#C9A84C',
-    border: 'none',
-    borderRadius: 3,
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    letterSpacing: '0.1em',
-    color: '#14100c',
-    fontWeight: 600,
-    padding: '10px 22px',
-    cursor: 'pointer',
-    transition: 'opacity 0.15s',
-  },
-  secondaryBtn: {
-    background: 'none',
-    border: '1px solid rgba(26,21,16,0.18)',
-    borderRadius: 3,
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    letterSpacing: '0.08em',
-    color: 'rgba(26,21,16,0.55)',
-    padding: '10px 18px',
-    cursor: 'pointer',
-    transition: 'all 0.12s',
-  },
-  deleteBtn: {
-    background: 'none',
-    border: '1px solid rgba(184,92,56,0.25)',
-    borderRadius: 3,
-    color: 'rgba(184,92,56,0.65)',
-    padding: '6px 10px',
-    cursor: 'pointer',
-    fontSize: 13,
-    fontFamily: 'DM Mono, monospace',
-  },
-  microBtn: {
-    background: 'none',
-    border: '1px solid rgba(26,21,16,0.15)',
-    borderRadius: 3,
-    color: 'rgba(26,21,16,0.55)',
-    padding: '5px 9px',
-    cursor: 'pointer',
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-  },
-  sectionLabel: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
-    letterSpacing: '0.18em',
-    color: 'rgba(26,21,16,0.4)',
-    textTransform: 'uppercase',
-    marginBottom: 12,
-  },
-  // Series tab
-  createCard: {
-    background: 'rgba(201,168,76,0.06)',
-    border: '1px solid rgba(201,168,76,0.2)',
-    borderRadius: 3,
-    padding: '18px 20px',
-    marginBottom: 24,
-  },
-  seriesCard: {
-    background: 'rgba(26,21,16,0.02)',
-    border: '1px solid rgba(201,168,76,0.18)',
-    borderRadius: 3,
-    padding: '18px 20px',
-    marginBottom: 16,
-  },
-  seriesHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 14,
-  },
-  seriesName: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 22,
-    fontStyle: 'italic',
-    color: 'rgba(26,21,16,0.88)',
-    marginBottom: 4,
-  },
-  seriesDesc: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    color: 'rgba(26,21,16,0.45)',
-    letterSpacing: '0.02em',
-    lineHeight: 1.6,
-    maxWidth: 560,
-  },
-  bookList: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: 8,
-    paddingTop: 8,
-    borderTop: '1px solid rgba(26,21,16,0.06)',
-  },
-  bookRow: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    padding: '8px 0',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  bookRowLeft: {
-    flex: 1,
-  },
-  bookRowRight: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: 8,
-    alignItems: 'center',
-    flex: '1 1 180px',
-    justifyContent: 'flex-end',
-    minWidth: 0,
-  },
-  bookRowTitle: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 16,
-    color: 'rgba(26,21,16,0.78)',
-    marginBottom: 3,
-  },
-  bookRowMeta: {
-    display: 'flex',
-    gap: 6,
-  },
-  metaChip: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
-    letterSpacing: '0.04em',
-    color: '#C9A84C',
-    background: 'rgba(201,168,76,0.1)',
-    borderRadius: 3,
-    padding: '3px 8px',
-  },
-  eraBtn: {
-    background: 'none',
-    border: '1px solid rgba(26,21,16,0.12)',
-    borderRadius: 3,
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
-    color: 'rgba(26,21,16,0.45)',
-    padding: '5px 10px',
-    cursor: 'pointer',
-    letterSpacing: '0.04em',
-    whiteSpace: 'nowrap',
-    flex: '0 1 auto',
-  },
-  emptyBooks: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    color: 'rgba(26,21,16,0.35)',
-    paddingTop: 10,
-    letterSpacing: '0.04em',
-  },
-  assignSelect: {
-    background: '#f5f0e8',
-    border: '1px solid rgba(201,168,76,0.3)',
-    borderRadius: 3,
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
-    color: 'rgba(26,21,16,0.65)',
-    padding: '5px 8px',
-    cursor: 'pointer',
-    letterSpacing: '0.04em',
-    outline: 'none',
-    maxWidth: 160,
-    minWidth: 0,
-    flex: '1 1 auto',
-  },
-  moveBtn: {
-    background: 'none',
-    border: '1px solid rgba(26,21,16,0.1)',
-    borderRadius: 3,
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 14,
-    color: 'rgba(26,21,16,0.35)',
-    padding: '4px 8px',
-    cursor: 'pointer',
-    transition: 'all 0.12s',
-  },
-  // Shows tab
-  showCard: {
-    background: 'rgba(26,21,16,0.02)',
-    border: '1px solid rgba(74,124,89,0.2)',
-    borderRadius: 3,
-    padding: '18px 20px',
-    marginBottom: 16,
-  },
-  showHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-  },
-  showName: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 22,
-    fontStyle: 'italic',
-    color: 'rgba(26,21,16,0.88)',
-    marginBottom: 4,
-  },
-  showEra: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
-    color: '#4A7C59',
-    letterSpacing: '0.06em',
-  },
-  showDesc: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 14,
-    color: 'rgba(26,21,16,0.5)',
-    lineHeight: 1.7,
-    marginTop: 10,
-    letterSpacing: '0.02em',
-  },
-  emptyState: {
-    paddingTop: 40,
-    textAlign: 'center',
-  },
-  emptyTitle: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 20,
-    fontStyle: 'italic',
-    color: 'rgba(26,21,16,0.5)',
-    marginBottom: 10,
-  },
-  emptyHint: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    color: 'rgba(26,21,16,0.35)',
-    letterSpacing: '0.04em',
-  },
-  // Timeline
-  timelineBlock: {
-    marginTop: 40,
-    paddingTop: 28,
-    borderTop: '1px solid rgba(201,168,76,0.15)',
-  },
-  timelineStrip: {
-    display: 'flex',
-    gap: 0,
-    overflowX: 'auto',
-    paddingBottom: 8,
-  },
-  timelineItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 120,
-    padding: '0 12px',
-    borderRight: '1px solid rgba(26,21,16,0.06)',
-    position: 'relative',
-  },
-  timelineDot: {
-    width: 10,
-    height: 10,
-    borderRadius: '50%',
-    flexShrink: 0,
-  },
-  timelineItemLabel: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 14,
-    fontStyle: 'italic',
-    color: 'rgba(26,21,16,0.7)',
-    textAlign: 'center',
-    lineHeight: 1.3,
-  },
-  timelineItemEra: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
-    color: '#C9A84C',
-    letterSpacing: '0.04em',
-    textAlign: 'center',
-  },
-  timelineItemPos: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 11,
-    color: 'rgba(26,21,16,0.3)',
-    letterSpacing: '0.04em',
-    textAlign: 'center',
-  },
-  // Modal
-  modalOverlay: {
-    position: 'fixed',
-    inset: 0,
-    background: 'rgba(0,0,0,0.25)',
-    backdropFilter: 'blur(4px)',
-    zIndex: 400,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-  modal: {
-    background: '#faf9f7',
-    border: '1px solid rgba(201,168,76,0.25)',
-    borderRadius: 4,
-    width: 580,
-    maxWidth: '100%',
-    maxHeight: '85vh',
-    display: 'flex',
-    flexDirection: 'column',
-    boxShadow: '0 12px 40px rgba(0,0,0,0.12)',
-  },
-  modalHeader: {
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    padding: '20px 24px 16px',
-    borderBottom: '1px solid rgba(201,168,76,0.15)',
-    flexShrink: 0,
-  },
-  modalLabel: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 12,
-    letterSpacing: '0.18em',
-    color: '#C9A84C',
-    marginBottom: 4,
-  },
-  modalTitle: {
-    fontFamily: "'Playfair Display', serif",
-    fontSize: 22,
-    fontStyle: 'italic',
-    color: 'rgba(26,21,16,0.88)',
-  },
-  modalBody: {
-    padding: '18px 24px',
-    overflowY: 'auto',
-    flex: 1,
-  },
-  modalHint: {
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 13,
-    color: 'rgba(26,21,16,0.45)',
-    letterSpacing: '0.02em',
-    lineHeight: 1.7,
-    marginBottom: 14,
-  },
-  modalFooter: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    gap: 10,
-    padding: '14px 24px',
-    borderTop: '1px solid rgba(201,168,76,0.12)',
-    flexShrink: 0,
-  },
-  closeBtn: {
-    background: 'none',
-    border: 'none',
-    color: 'rgba(26,21,16,0.35)',
-    fontSize: 15,
-    cursor: 'pointer',
-    padding: 4,
-  },
-  toast: {
-    position: 'fixed',
-    bottom: 24,
-    left: '50%',
-    transform: 'translateX(-50%)',
-    color: 'white',
-    fontFamily: 'DM Mono, monospace',
-    fontSize: 14,
-    padding: '12px 24px',
-    borderRadius: 3,
-    letterSpacing: '0.06em',
-    zIndex: 500,
-    whiteSpace: 'nowrap',
-  },
+  _migrated: true,
 };
+

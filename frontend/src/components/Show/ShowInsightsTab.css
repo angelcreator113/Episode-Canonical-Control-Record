@@ -33,13 +33,6 @@
   font-size: 0.95rem;
 }
 
-.header-actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-  flex-shrink: 0;
-}
-
 .time-range-select {
   padding: 0.625rem 1rem;
   border: 2px solid #e2e8f0;
@@ -93,16 +86,6 @@
   justify-content: center;
   padding: 4rem;
   color: #64748b;
-}
-
-.loading-spinner {
-  width: 48px;
-  height: 48px;
-  border: 4px solid #e2e8f0;
-  border-top-color: #667eea;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin-bottom: 1rem;
 }
 
 @keyframes spin {
@@ -194,13 +177,6 @@
   padding: 1.5rem;
   margin-bottom: 1.5rem;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-}
-
-.section-title {
-  margin: 0 0 0.75rem 0;
-  font-size: 1rem;
-  font-weight: 700;
-  color: #1e293b;
 }
 
 /* ==================== PLATFORM BREAKDOWN ==================== */
@@ -567,12 +543,6 @@
     flex-direction: column;
     align-items: stretch;
     gap: 1rem;
-  }
-  
-  .header-actions {
-    width: 100%;
-    flex-direction: row;
-    flex-wrap: wrap;
   }
   
   .time-range-select,

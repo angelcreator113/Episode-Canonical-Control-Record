@@ -1,6 +1,7 @@
 /**
- * SessionStart — Creative session briefing screen
- * Shown before every writing session to orient the creator
+ * SessionStart — Creative session launcher
+ * Clear single-path flow: everything funnels into StoryTeller
+ * Draft shortcuts clearly labeled as quick-resume
  */
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -114,12 +115,42 @@ function SessionStart() {
           </div>
         )}
 
-        {/* ── Drafts in Progress ── */}
+        {/* ── Primary CTA — single clear path ── */}
+        <section className="ss-primary-action">
+          <button className="ss-btn ss-btn-hero" onClick={() => navigate('/storyteller')}>
+            📖 Open StoryTeller
+          </button>
+          <p className="ss-primary-hint">Your books, chapters & the writing journey</p>
+        </section>
+
+        {/* ── Flow Explainer ── */}
+        <div className="ss-flow-explainer">
+          <span className="ss-flow-step">
+            <span className="ss-flow-num">1</span>
+            <span className="ss-flow-name">Story Planner</span>
+            <span className="ss-flow-desc">Plan your chapter</span>
+          </span>
+          <span className="ss-flow-arrow">›</span>
+          <span className="ss-flow-step">
+            <span className="ss-flow-num">2</span>
+            <span className="ss-flow-name">WriteMode</span>
+            <span className="ss-flow-desc">Write your prose</span>
+          </span>
+          <span className="ss-flow-arrow">›</span>
+          <span className="ss-flow-step">
+            <span className="ss-flow-num">3</span>
+            <span className="ss-flow-name">StoryTeller</span>
+            <span className="ss-flow-desc">Review & finalize</span>
+          </span>
+        </div>
+
+        {/* ── Quick Resume — clearly labeled as shortcuts ── */}
         {draftsInProgress && draftsInProgress.length > 0 && (
           <section className="ss-section">
             <h2 className="ss-section-title">
               <span className="ss-section-icon">✍</span>
-              Continue Writing
+              Quick Resume
+              <span className="ss-section-badge">Jumps directly into chapter</span>
             </h2>
             <div className="ss-cards">
               {draftsInProgress.map((d) => (
@@ -142,19 +173,20 @@ function SessionStart() {
           </section>
         )}
 
-        {/* ── Recent Books ── */}
+        {/* ── Recent Books — read-only cover-to-cover view ── */}
         {recentBooks && recentBooks.length > 0 && (
           <section className="ss-section">
             <h2 className="ss-section-title">
               <span className="ss-section-icon">📖</span>
               Recent Books
+              <span className="ss-section-badge">Read-only view</span>
             </h2>
             <div className="ss-cards">
               {recentBooks.map((book) => (
                 <button
                   key={book.id}
                   className="ss-card ss-card-book"
-                  onClick={() => navigate('/storyteller')}
+                  onClick={() => navigate(`/books/${book.id}/read`)}
                 >
                   <div className="ss-card-top">
                     <span className="ss-card-badge ss-badge-status" data-status={book.status}>
@@ -171,11 +203,8 @@ function SessionStart() {
           </section>
         )}
 
-        {/* ── Quick Actions ── */}
+        {/* ── Secondary Actions ── */}
         <section className="ss-actions">
-          <button className="ss-btn ss-btn-primary" onClick={() => navigate('/storyteller')}>
-            📖 Open Book Editor
-          </button>
           <button className="ss-btn ss-btn-secondary" onClick={() => navigate('/universe')}>
             ◈ Universe Overview
           </button>

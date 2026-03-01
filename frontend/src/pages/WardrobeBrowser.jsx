@@ -1181,16 +1181,35 @@ const WardrobeBrowser = ({ mode = 'gallery', embedded = false }) => {
               </div>
             )
           ) : items.length === 0 ? (
-            <div className="empty-state">
+            <div className="empty-state wardrobe-welcome">
               <div className="empty-icon-wrap">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
-                  <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
-                </svg>
+                <span style={{ fontSize: '2.5rem' }}>👗</span>
               </div>
-              <h3>No items found</h3>
-              {searchQuery && <p>Try adjusting your search or filters</p>}
-              {!searchQuery && <p>Upload your first wardrobe item to get started</p>}
-              <button className="empty-cta" onClick={() => setShowUploadForm(true)}>Upload Item</button>
+              <h3>Wardrobe Gallery</h3>
+              {searchQuery ? (
+                <p>No items match your search. Try adjusting your filters.</p>
+              ) : (
+                <>
+                  <p>Track costumes, accessories, and wardrobe pieces across your episodes.</p>
+                  <div className="welcome-features">
+                    <div className="welcome-feature">
+                      <span className="feature-icon">📸</span>
+                      <span>Upload photos of wardrobe items</span>
+                    </div>
+                    <div className="welcome-feature">
+                      <span className="feature-icon">🏷️</span>
+                      <span>Tag by character, color &amp; category</span>
+                    </div>
+                    <div className="welcome-feature">
+                      <span className="feature-icon">👔</span>
+                      <span>Build outfit sets for scenes</span>
+                    </div>
+                  </div>
+                </>
+              )}
+              <button className="empty-cta" onClick={() => setShowUploadForm(true)}>
+                + Upload First Item
+              </button>
             </div>
           ) : (
             <div className={`items-grid ${viewMode}`}>

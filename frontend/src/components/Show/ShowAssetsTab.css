@@ -429,15 +429,7 @@
 
 .menu-item:hover {
   background: #f8fafc;
-}
-
-.menu-item-danger {
-  color: #ef4444;
-}
-
-.menu-item-danger:hover {
-  background: #fef2f2;
-}
+}
 
 .asset-thumbnail {
   position: relative;
@@ -502,10 +494,6 @@
   white-space: nowrap;
   text-overflow: ellipsis;
   min-width: 0;
-}
-
-.meta-separator {
-  opacity: 0.5;
 }
 
 .usage-count {

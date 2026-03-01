@@ -89,17 +89,3 @@
   justify-content: flex-end;
   margin-top: 1rem;
 }
-
-.btn-secondary {
-  padding: 0.5rem 1rem;
-  background: #6c757d;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.95rem;
-}
-
-.btn-secondary:hover {
-  background: #5a6268;
-}

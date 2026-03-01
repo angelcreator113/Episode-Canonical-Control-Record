@@ -16,7 +16,7 @@
  *   onInsert: function(text) — inserts generated text into the editor
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 
 const ACTIONS = [
   {
@@ -24,7 +24,8 @@ const ACTIONS = [
     icon:     '→',
     label:    'Continue',
     sub:      'Write what happens next in their voice',
-    endpoint: '/api/v1/memories/story-continue',
+    endpoint: '/api/v1/memories/ai-writer-action',
+    action:   'continue',
   },
   {
     id:       'dialogue',
@@ -76,26 +77,44 @@ export default function WriteModeAIWriter({
   currentProse,
   chapterContext,
   onInsert,
+  characters = [],
+  onSelectCharacter,
 }) {
   const [activeAction, setActiveAction] = useState(null);
   const [result,       setResult]       = useState(null);
+  const [editedResult, setEditedResult] = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
+  const [copied,       setCopied]       = useState(false);
+  const retryRef = useRef(false);
 
   const accent   = TYPE_COLORS[selectedCharacter?.type] || '#B8962E';
   const charName = selectedCharacter?.selected_name || selectedCharacter?.name;
+
+  // Clear result when character changes so old output doesn't bleed across characters
+  useEffect(() => {
+    setResult(null);
+    setEditedResult(null);
+    setActiveAction(null);
+    setError(null);
+    setCopied(false);
+  }, [selectedCharacter?.id]);
 
   // Filter actions — Lala moment only for special type
   const availableActions = ACTIONS.filter(a =>
     !a.onlyFor || a.onlyFor.includes(selectedCharacter?.type)
   );
 
-  async function runAction(action) {
+  async function runAction(action, isRetry = false) {
     if (!selectedCharacter) return;
     setActiveAction(action.id);
-    setResult(null);
+    // On retry, keep the old result visible while loading
+    if (!isRetry) setResult(null);
+    retryRef.current = isRetry;
+    setEditedResult(null);
     setError(null);
     setLoading(true);
+    setCopied(false);
 
     // Build context payload
     const recentProse = currentProse
@@ -118,6 +137,8 @@ export default function WriteModeAIWriter({
       chapter_context: chapterContext,
       action:        action.action || action.id,
       length:        'paragraph',
+      // On retry, send a random hint so the API produces a different result
+      ...(isRetry && { retry_hint: `v${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }),
     };
 
     try {
@@ -129,29 +150,50 @@ export default function WriteModeAIWriter({
 
       const data = await res.json();
 
-      // Handle standard response
-      const text = data.content || data.continuation || data.text ||
-                   data.result  || data.suggestion   || '';
+      // Handle standard response — check all possible field names from different endpoints
+      const text = data.content || data.prose || data.nudge || data.continuation ||
+                   data.text   || data.result || data.suggestion || '';
 
-      setResult(text);
+      if (text) {
+        setResult(text);
+        setEditedResult(text);
+      } else {
+        // If we got an empty response on retry, keep the old result
+        if (!retryRef.current) setResult(null);
+        setError('No content returned — try a different action or add more prose first.');
+      }
 
     } catch (e) {
-      setError('Generation failed. Try again.');
+      // On retry failure, keep the old result visible
+      if (!retryRef.current) setResult(null);
+      setError('Generation failed. Check your connection and try again.');
     }
 
     setLoading(false);
   }
 
   function handleInsert() {
-    if (!result) return;
-    onInsert?.(result);
+    const text = editedResult || result;
+    if (!text) return;
+    onInsert?.(text);
     setResult(null);
+    setEditedResult(null);
     setActiveAction(null);
   }
 
   function handleDiscard() {
     setResult(null);
+    setEditedResult(null);
     setActiveAction(null);
+  }
+
+  function handleCopy() {
+    const text = editedResult || result;
+    if (!text) return;
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
   }
 
   // ── NO CHARACTER SELECTED ──────────────────────────────────────────
@@ -160,8 +202,27 @@ export default function WriteModeAIWriter({
       <div style={s.empty}>
         <div style={s.emptyIcon}>{'◈'}</div>
         <div style={s.emptyText}>
-          Select a character from the picker above to write in their voice.
+          Pick a character to write in their voice.
         </div>
+
+        {/* Inline character picker */}
+        {characters.length > 0 ? (
+          <div style={s.charList}>
+            {characters.map(c => (
+              <button
+                key={c.id}
+                style={s.charOption}
+                onClick={() => onSelectCharacter?.(c)}
+              >
+                <span style={s.charOptionIcon}>{c.icon || '👤'}</span>
+                <span style={s.charOptionName}>{c.display_name || c.selected_name || c.name}</span>
+                {c.type && <span style={{ ...s.charOptionType, color: TYPE_COLORS[c.type] || '#B8962E' }}>{c.type}</span>}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div style={s.emptyHint}>No characters loaded yet.</div>
+        )}
       </div>
     );
   }
@@ -171,10 +232,21 @@ export default function WriteModeAIWriter({
 
       {/* Character header */}
       <div style={s.charHeader}>
-        <div style={{ ...s.charType, color: accent }}>
-          {selectedCharacter.type}
+        <div style={s.charHeaderTop}>
+          <div>
+            <div style={{ ...s.charType, color: accent }}>
+              {selectedCharacter.type}
+            </div>
+            <div style={s.charName}>{charName}</div>
+          </div>
+          <button
+            style={s.changeCharBtn}
+            onClick={() => onSelectCharacter?.(null)}
+            title="Switch to a different character"
+          >
+            {'↻ Change'}
+          </button>
         </div>
-        <div style={s.charName}>{charName}</div>
         {selectedCharacter.belief_pressured && (
           <div style={s.charBelief}>
             &ldquo;{selectedCharacter.belief_pressured}&rdquo;
@@ -226,21 +298,36 @@ export default function WriteModeAIWriter({
             <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
           </div>
 
-          <div style={s.resultText}>{result}</div>
+          <textarea
+            style={s.resultText}
+            value={editedResult ?? result ?? ''}
+            onChange={e => setEditedResult(e.target.value)}
+            rows={6}
+            placeholder="Edit before inserting…"
+          />
+          {loading && (
+            <div style={s.retryLoading}>Generating new version…</div>
+          )}
 
           <div style={s.resultActions}>
             <button
-              style={{ ...s.insertBtn, background: accent }}
+              style={{ ...s.insertBtn, background: accent, opacity: loading ? 0.5 : 1 }}
               onClick={handleInsert}
+              disabled={loading}
             >
               Insert into manuscript
             </button>
-            <button style={s.tryAgainBtn} onClick={() => {
-              const action = availableActions.find(a => a.id === activeAction);
-              if (action) runAction(action);
-            }}>
-              Try again
-            </button>
+            <div style={s.resultRow}>
+              <button style={{ ...s.tryAgainBtn, opacity: loading ? 0.5 : 1 }} disabled={loading} onClick={() => {
+                const action = availableActions.find(a => a.id === activeAction);
+                if (action) runAction(action, true);
+              }}>
+                {loading ? '◌ Generating…' : '↻ Try again'}
+              </button>
+              <button style={s.copyBtn} onClick={handleCopy}>
+                {copied ? '✓ Copied' : '📋 Copy'}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -265,7 +352,8 @@ const s = {
   root: {
     display:       'flex',
     flexDirection: 'column',
-    height:        '100%',
+    flex:          1,
+    minHeight:     0,
     overflow:      'hidden',
   },
 
@@ -274,11 +362,12 @@ const s = {
     display:        'flex',
     flexDirection:  'column',
     alignItems:     'center',
-    justifyContent: 'center',
-    padding:        '32px 16px',
-    gap:            12,
+    justifyContent: 'flex-start',
+    padding:        '18px 12px',
+    gap:            10,
     textAlign:      'center',
     flex:           1,
+    overflowY:      'auto',
   },
   emptyIcon: {
     fontSize: 22,
@@ -292,23 +381,92 @@ const s = {
     lineHeight: 1.6,
     maxWidth:   200,
   },
+  emptyHint: {
+    fontFamily: "'DM Mono', monospace",
+    fontSize:   9,
+    color:      INK_LIGHT,
+    letterSpacing: '0.06em',
+  },
+
+  // Inline character picker
+  charList: {
+    display:       'flex',
+    flexDirection: 'column',
+    gap:           4,
+    width:         '100%',
+    overflowY:     'auto',
+    marginTop:     4,
+    flex:          1,
+    minHeight:     0,
+  },
+  charOption: {
+    display:      'flex',
+    alignItems:   'center',
+    gap:          8,
+    padding:      '8px 12px',
+    background:   'transparent',
+    border:       '1px solid rgba(28,24,20,0.1)',
+    borderRadius: 6,
+    cursor:       'pointer',
+    textAlign:    'left',
+    transition:   'background 0.15s, border-color 0.15s',
+  },
+  charOptionIcon: {
+    fontSize:   16,
+    flexShrink: 0,
+  },
+  charOptionName: {
+    flex:          1,
+    fontFamily:    "'DM Mono', monospace",
+    fontSize:      11,
+    color:         INK,
+    letterSpacing: '0.02em',
+  },
+  charOptionType: {
+    fontSize:      7,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+    fontFamily:    "'DM Mono', monospace",
+  },
 
   // Character header
   charHeader: {
-    padding:      '12px 14px',
+    padding:      '10px 14px',
     borderBottom: '1px solid rgba(28,24,20,0.08)',
   },
-  charType: {
-    fontSize:      7.5,
-    letterSpacing: '0.15em',
-    marginBottom:  4,
+  charHeaderTop: {
+    display:        'flex',
+    justifyContent: 'space-between',
+    alignItems:     'flex-start',
+    gap:            8,
+  },
+  changeCharBtn: {
+    background:    'none',
+    border:        '1px solid rgba(28,24,20,0.12)',
+    borderRadius:  4,
+    padding:       '3px 8px',
+    fontSize:      9,
+    color:         INK_MID,
+    cursor:        'pointer',
     fontFamily:    "'DM Mono', monospace",
+    letterSpacing: '0.04em',
+    whiteSpace:    'nowrap',
+    flexShrink:    0,
+    marginTop:     2,
+    transition:    'color 0.15s, border-color 0.15s',
+  },
+  charType: {
+    fontSize:      8,
+    letterSpacing: '0.12em',
+    marginBottom:  3,
+    fontFamily:    "'DM Mono', monospace",
+    textTransform: 'uppercase',
   },
   charName: {
     fontFamily:   "'Cormorant Garamond', Georgia, serif",
-    fontSize:     16,
+    fontSize:     15,
     color:        INK,
-    marginBottom: 4,
+    marginBottom: 3,
   },
   charBelief: {
     fontFamily: "'Lora', Georgia, serif",
@@ -395,16 +553,29 @@ const s = {
     padding:    '2px 4px',
   },
   resultText: {
-    fontFamily:  "'Lora', Georgia, serif",
-    fontStyle:   'italic',
-    fontSize:    13,
-    color:       INK,
-    lineHeight:  1.8,
-    flex:        1,
-    padding:     '10px 12px',
-    background:  'rgba(28,24,20,0.03)',
+    fontFamily:   "'Lora', Georgia, serif",
+    fontStyle:    'italic',
+    fontSize:     13,
+    color:        INK,
+    lineHeight:   1.8,
+    flex:         1,
+    padding:      '10px 12px',
+    background:   'rgba(28,24,20,0.03)',
     borderRadius: 3,
-    border:      '1px solid rgba(28,24,20,0.08)',
+    border:       '1px solid rgba(28,24,20,0.08)',
+    resize:       'vertical',
+    minHeight:    80,
+    outline:      'none',
+    width:        '100%',
+    boxSizing:    'border-box',
+  },
+  retryLoading: {
+    fontFamily:    "'DM Mono', monospace",
+    fontSize:      9,
+    color:         INK_MID,
+    letterSpacing: '0.06em',
+    fontStyle:     'italic',
+    padding:       '2px 0',
   },
   resultActions: {
     display:       'flex',
@@ -431,6 +602,23 @@ const s = {
     letterSpacing: '0.08em',
     cursor:        'pointer',
     fontFamily:    "'DM Mono', monospace",
+    flex:          1,
+  },
+  resultRow: {
+    display: 'flex',
+    gap:     6,
+  },
+  copyBtn: {
+    background:    'none',
+    border:        '1px solid rgba(28,24,20,0.1)',
+    borderRadius:  3,
+    padding:       '8px 10px',
+    color:         INK_MID,
+    fontSize:      9,
+    letterSpacing: '0.08em',
+    cursor:        'pointer',
+    fontFamily:    "'DM Mono', monospace",
+    whiteSpace:    'nowrap',
   },
 
   // Error
