@@ -12,7 +12,7 @@ const API = '/api/v1/memories/assistant-command';
 
 const GREETING = {
   role: 'assistant',
-  text: "I'm here. Tell me what you need — navigate, create, approve, or ask anything about your book.",
+  text: "Hey, I'm Amber. Ask me anything — about your characters, your book, navigation, or whatever you need.",
 };
 
 export default function AppAssistant({ appContext = {}, onNavigate, onRefresh }) {
@@ -114,7 +114,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               <svg className="apa-panel-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
-              Assistant
+              Amber
             </div>
             <div className="apa-panel-context">
               {appContext.currentBook && (
@@ -163,10 +163,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           {messages.length === 1 && (
             <div className="apa-quick-cmds">
               {[
+                'Who is justawoman?',
+                'List all characters',
                 'Approve all pending lines',
                 'Go to character registry',
-                'How many pending lines?',
-                'Open story planner',
               ].map(cmd => (
                 <button key={cmd} className="apa-quick-cmd" onClick={() => send(cmd)}>
                   {cmd}
@@ -205,8 +205,8 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       <button
         className="apa-trigger"
         onClick={() => setOpen(o => !o)}
-        title="AI Assistant"
-        aria-label="Open AI Assistant"
+        title="Ask Amber"
+        aria-label="Ask Amber"
       >
         {open ? (
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

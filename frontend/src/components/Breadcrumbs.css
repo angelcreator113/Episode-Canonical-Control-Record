@@ -1,8 +1,8 @@
 /* Breadcrumbs.css */
 
 .breadcrumbs {
-  padding: 0.5rem 0 0;
-  margin-bottom: 0.5rem;
+  padding: 0.35rem 1.5rem 0.5rem;
+  margin: 0;
 }
 
 .breadcrumb-list {

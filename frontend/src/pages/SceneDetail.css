@@ -31,11 +31,6 @@
   border-color: #9ca3af;
 }
 
-.header-actions {
-  display: flex;
-  gap: 0.75rem;
-}
-
 /* Buttons */
 .btn-primary,
 .btn-secondary,
@@ -47,32 +42,6 @@
   cursor: pointer;
   transition: all 0.2s;
   border: none;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
-}
-
-.btn-primary:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-secondary {
-  background: white;
-  color: #374151;
-  border: 1px solid #d1d5db;
-}
-
-.btn-secondary:hover {
-  background: #f9fafb;
-  border-color: #9ca3af;
 }
 
 .btn-danger {
@@ -91,25 +60,10 @@
   padding: 4rem 2rem;
 }
 
-.spinner {
-  width: 40px;
-  height: 40px;
-  border: 4px solid #e5e7eb;
-  border-top-color: #3b82f6;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-  margin: 0 auto 1rem;
-}
-
 @keyframes spin {
   to {
     transform: rotate(360deg);
   }
-}
-
-.error-icon {
-  font-size: 4rem;
-  margin-bottom: 1rem;
 }
 
 .error-state h3 {
@@ -180,12 +134,7 @@
   line-height: 1.6;
 }
 
-/* Detail Grid */
-.detail-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 1rem;
-}
+/* Detail Grid */
 
 .detail-item {
   display: flex;
@@ -239,17 +188,6 @@
 }
 
 /* Form Groups */
-.form-group {
-  margin-bottom: 1rem;
-}
-
-.form-group label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: #374151;
-  font-size: 0.875rem;
-}
 
 .form-group input,
 .form-group textarea {
@@ -314,16 +252,6 @@
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
-}
-
-.tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.375rem;
-  padding: 0.375rem 0.75rem;
-  border-radius: 6px;
-  font-size: 0.8125rem;
-  font-weight: 500;
 }
 
 .tag-character {

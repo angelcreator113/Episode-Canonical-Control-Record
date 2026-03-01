@@ -1,23 +1,4 @@
 /* Error Message Styles */
-.error-message {
-  background-color: #fee;
-  border: 1px solid var(--danger);
-  border-radius: 0.375rem;
-  padding: 1rem;
-  margin-bottom: 1.5rem;
-  animation: slideDown 0.3s ease;
-}
-
-.error-content {
-  display: flex;
-  align-items: flex-start;
-  gap: 1rem;
-}
-
-.error-icon {
-  font-size: 1.25rem;
-  flex-shrink: 0;
-}
 
 .error-message p {
   margin: 0;

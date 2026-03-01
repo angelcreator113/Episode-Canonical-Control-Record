@@ -20,18 +20,26 @@ function Home() {
   const [books, setBooks] = useState([]);
   const [shows, setShows] = useState([]);
   const [episodes, setEpisodes] = useState([]);
+  const [characters, setCharacters] = useState([]);
 
   useEffect(() => { loadAll(); }, []);
 
   const loadAll = async () => {
     setLoading(true);
     // Fire all in parallel, swallow individual errors
-    const [uniRes, seriesRes, booksRes, showsRes, epRes] = await Promise.allSettled([
+    const [uniRes, seriesRes, booksRes, showsRes, epRes, charRes] = await Promise.allSettled([
       universeService.getUniverses(),
       universeService.getSeries(),
       storytellerService.getBooks(),
       showService.getAllShows(),
       episodeService.getEpisodes(1, 50).then(r => r?.data || []),
+      fetch('/api/v1/character-registry/registries').then(r => r.json()).then(d => {
+        const allChars = [];
+        (d.registries || []).forEach(reg => {
+          (reg.characters || []).forEach(c => allChars.push(c));
+        });
+        return allChars;
+      }),
     ]);
 
     if (uniRes.status === 'fulfilled') setUniverses(Array.isArray(uniRes.value) ? uniRes.value : []);
@@ -39,6 +47,7 @@ function Home() {
     if (booksRes.status === 'fulfilled') setBooks(Array.isArray(booksRes.value) ? booksRes.value : []);
     if (showsRes.status === 'fulfilled') setShows(Array.isArray(showsRes.value) ? showsRes.value : []);
     if (epRes.status === 'fulfilled') setEpisodes(Array.isArray(epRes.value) ? epRes.value : []);
+    if (charRes.status === 'fulfilled') setCharacters(Array.isArray(charRes.value) ? charRes.value : []);
     setLoading(false);
   };
 
@@ -243,10 +252,61 @@ function Home() {
             <div className="hp-action-icon hp-action-icon--purple">📺</div>
             <span className="hp-action-label">New Episode</span>
           </div>
-          <div className="hp-action-card hp-action-card--blue" onClick={() => navigate('/continuity')}>
-            <div className="hp-action-icon hp-action-icon--blue">🧠</div>
+          <div className="hp-action-card hp-action-card--blue" onClick={() => navigate('/studio/scene-composer')}>
+            <div className="hp-action-icon hp-action-icon--blue">🎬</div>
+            <span className="hp-action-label">Scene Composer</span>
+          </div>
+          <div className="hp-action-card hp-action-card--gold" onClick={() => navigate('/character-registry')}>
+            <div className="hp-action-icon hp-action-icon--gold">👤</div>
+            <span className="hp-action-label">Characters</span>
+          </div>
+          <div className="hp-action-card hp-action-card--teal" onClick={() => navigate('/continuity')}>
+            <div className="hp-action-icon hp-action-icon--teal">🧠</div>
             <span className="hp-action-label">Memory Bank</span>
           </div>
+        </section>
+
+        {/* ─── Character Roster ─── */}
+        <section className="hp-section">
+          <div className="hp-section__head">
+            <h2 className="hp-section__title"><span className="s-icon">👤</span> Character Roster</h2>
+            <button className="hp-section__link" onClick={() => navigate('/character-registry')}>View All →</button>
+          </div>
+          {characters.length > 0 ? (
+            <div className="hp-char-grid">
+              {characters.slice(0, 8).map((char) => {
+                const roleColors = {
+                  lead: '#e8b4c8', support: '#c5b8e8', mirror: '#b8d4e8',
+                  pressure: '#e8d4b8', catalyst: '#c8e8b8', special: '#e8e8b8',
+                };
+                const bg = roleColors[char.role_type] || '#e0dbd5';
+                const initial = (char.display_name || '?')[0].toUpperCase();
+                return (
+                  <div key={char.id} className="hp-char-card" onClick={() => navigate('/character-registry')}>
+                    <div className="hp-char-avatar" style={{ background: bg }}>
+                      {initial}
+                    </div>
+                    <div className="hp-char-info">
+                      <div className="hp-char-name">{char.display_name}</div>
+                      <div className="hp-char-role">{char.role_type || 'unknown'}</div>
+                      {char.core_belief && (
+                        <div className="hp-char-belief">"{char.core_belief.length > 60 ? char.core_belief.slice(0, 60) + '…' : char.core_belief}"</div>
+                      )}
+                    </div>
+                    <span className={`hp-char-status hp-char-status--${char.status || 'draft'}`}>
+                      {char.status || 'draft'}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="hp-empty">
+              <div className="hp-empty__icon">👤</div>
+              <p className="hp-empty__text">No characters created yet</p>
+              <button className="hp-empty__btn" onClick={() => navigate('/character-registry')}>Create Characters →</button>
+            </div>
+          )}
         </section>
 
         {/* ─── In-Progress Episodes ─── */}
@@ -305,6 +365,10 @@ function Home() {
               {books.reduce((a, b) => a + (b.chapter_count || 0), 0)}
             </div>
             <div className="hp-stat-label">Chapters</div>
+          </div>
+          <div className="hp-stat-card">
+            <div className="hp-stat-val">{characters.length}</div>
+            <div className="hp-stat-label">Characters</div>
           </div>
           <div className="hp-stat-card">
             <div className="hp-stat-val">

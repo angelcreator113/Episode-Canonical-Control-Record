@@ -29,12 +29,6 @@
   font-size: 0.95rem;
 }
 
-.header-actions {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
 .unsaved-indicator {
   color: #f59e0b;
   font-weight: 600;
@@ -338,22 +332,6 @@
   font-size: 1.05rem;
 }
 
-.btn-primary {
-  padding: 0.75rem 1.5rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-
 /* PREVIEW - hidden by default, shows at bottom */
 .script-preview {
   display: none; /* Hiding preview until layout issues resolved */
@@ -488,11 +466,6 @@
 
   .header-subtitle {
     font-size: 0.8rem;
-  }
-
-  .header-actions {
-    width: 100%;
-    justify-content: space-between;
   }
 
   .help-banner {

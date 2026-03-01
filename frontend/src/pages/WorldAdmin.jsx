@@ -54,7 +54,6 @@ function WorldAdmin() {
   const { id: showId } = useParams();
   const [searchParams] = useSearchParams();
   const initialTab = searchParams.get('tab') || 'overview';
-  const fromUniverse = searchParams.get('from') === 'universe';
 
   const [show, setShow] = useState(null);
   const [charState, setCharState] = useState(null);
@@ -278,13 +277,13 @@ function WorldAdmin() {
           0% { opacity: 1; transform: scale(1); }
           100% { opacity: 0; transform: scale(0.9); }
         }
+        @media (max-width: 640px) {
+          .wa-tab-bar::-webkit-scrollbar { display: none; }
+        }
       `}</style>
       {/* ─── HEADER ─── */}
       <div style={S.header}>
         <div>
-          <Link to={fromUniverse ? '/universe' : `/shows/${showId}`} style={S.backLink}>
-            {fromUniverse ? '← Universe' : '← Back to Show'}
-          </Link>
           <h1 style={S.title}>🌍 Producer Mode</h1>
           <p style={S.subtitle}>{show?.title || 'Show'} — World Rules &amp; Canon</p>
         </div>
@@ -304,7 +303,7 @@ function WorldAdmin() {
       )}
 
       {/* ─── TABS ─── */}
-      <div style={S.tabBar}>
+      <div className="wa-tab-bar" style={S.tabBar}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)} style={activeTab === t.key ? S.tabActive : S.tab}>
             {t.icon} {t.label}
@@ -1515,7 +1514,7 @@ const S = {
   page: { maxWidth: 1200, margin: '0 auto', padding: '20px 24px', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' },
   center: { textAlign: 'center', padding: 60, color: '#94a3b8' },
   header: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  backLink: { color: '#6366f1', fontSize: 13, textDecoration: 'none', fontWeight: 500 },
+  backLink: { color: '#b0922e', fontSize: 13, textDecoration: 'none', fontWeight: 500 },
   title: { margin: '4px 0 4px', fontSize: 26, fontWeight: 800, color: '#1a1a2e' },
   subtitle: { margin: 0, color: '#64748b', fontSize: 14 },
   refreshBtn: { padding: '8px 16px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, color: '#475569', fontSize: 13, cursor: 'pointer' },
@@ -1523,13 +1522,13 @@ const S = {
   successBanner: { padding: '10px 16px', background: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 8, color: '#16a34a', fontSize: 13, marginBottom: 12, fontWeight: 600 },
   xBtn: { background: 'none', border: 'none', color: '#dc2626', cursor: 'pointer', fontSize: 14 },
   tabBar: { display: 'flex', gap: 2, marginBottom: 20, borderBottom: '1px solid #e2e8f0', overflowX: 'auto' },
-  tab: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap' },
-  tabActive: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid #6366f1', color: '#6366f1', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
+  tab: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid transparent', color: '#64748b', fontSize: 13, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
+  tabActive: { padding: '10px 16px', background: 'transparent', border: 'none', borderBottom: '2px solid #C9A84C', color: '#b0922e', fontSize: 13, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap', flexShrink: 0 },
   content: { display: 'flex', flexDirection: 'column', gap: 16 },
   card: { background: '#fff', border: '1px solid #e2e8f0', borderRadius: 12, padding: 20 },
   cardTitle: { fontSize: 16, fontWeight: 700, color: '#1a1a2e', margin: '0 0 16px' },
   muted: { color: '#94a3b8', fontSize: 13 },
-  primaryBtn: { padding: '8px 18px', background: 'linear-gradient(135deg, #6366f1, #8b5cf6)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
+  primaryBtn: { padding: '8px 18px', background: 'linear-gradient(135deg, #C9A84C, #b0922e)', border: 'none', borderRadius: 8, color: '#fff', fontSize: 13, fontWeight: 600, cursor: 'pointer' },
   secBtn: { padding: '8px 18px', background: '#f1f5f9', border: '1px solid #e2e8f0', borderRadius: 8, color: '#475569', fontSize: 13, cursor: 'pointer' },
   smBtn: { padding: '4px 10px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#475569' },
   smBtnDanger: { padding: '4px 10px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 6, fontSize: 11, cursor: 'pointer', color: '#dc2626' },

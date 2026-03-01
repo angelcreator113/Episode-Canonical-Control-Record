@@ -529,11 +529,7 @@
   left: -6px;
   width: 14px;
   cursor: grab;
-}
-
-.timeline-marker:hover {
-  opacity: 1;
-}
+}
 
 .timeline-marker:active {
   cursor: grabbing;

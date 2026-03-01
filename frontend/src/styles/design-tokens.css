@@ -172,6 +172,8 @@
 }
 
 /* === BUTTON STYLES === */
+/* Core buttons (.btn, .btn-primary, .btn-secondary) are in shared-components.css */
+
 .btn-standard {
   border: none;
   cursor: pointer;
@@ -186,27 +188,6 @@
   transition: all var(--transition);
   white-space: nowrap;
   font-family: var(--font-sans);
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-  color: var(--text-inverse);
-  box-shadow: var(--shadow-primary);
-}
-
-.btn-primary:hover:not(:disabled) {
-  transform: translateY(-1px);
-  box-shadow: 0 8px 20px rgba(59, 130, 246, 0.35);
-}
-
-.btn-secondary {
-  background: var(--gray-100);
-  color: var(--text-primary);
-  border: 1px solid var(--border);
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background: var(--gray-200);
 }
 
 .btn-ghost {
@@ -239,11 +220,6 @@
 .btn-success:hover:not(:disabled) {
   transform: translateY(-1px);
   box-shadow: 0 8px 20px rgba(16, 185, 129, 0.35);
-}
-
-.btn:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 
 /* === CARD STYLES === */

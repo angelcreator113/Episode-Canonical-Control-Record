@@ -14,7 +14,9 @@ import './Wardrobe.css';
 const Wardrobe = ({ embedded = false }) => {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const defaultTab = searchParams.get('tab') || 'items';
+  // When embedded (e.g. inside UniversePage), the URL ?tab= belongs to the parent,
+  // so always default to 'items'. Only read from URL in standalone mode.
+  const defaultTab = embedded ? 'items' : (searchParams.get('tab') || 'items');
   const [activeTab, setActiveTab] = useState(defaultTab);
 
   const handleTabChange = (tab) => {

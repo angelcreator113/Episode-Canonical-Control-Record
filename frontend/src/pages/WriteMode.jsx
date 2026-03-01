@@ -19,17 +19,10 @@ import BookStructurePanel from '../components/BookStructurePanel';
 import MemoryBankView from './MemoryBankView';
 import LalaSceneDetection from '../components/LalaSceneDetection';
 import ExportPanel from '../components/ExportPanel';
-import SceneInterview from './SceneInterview';
 import NarrativeIntelligence from './NarrativeIntelligence';
 import { ContinuityGuard } from './ContinuityGuard';
 import { MemoryCard, MEMORY_STYLES } from './MemoryConfirmation';
-import { PlantEchoButton, IncomingEchoes, EchoHealthPanel } from '../components/DecisionEchoPanel';
-import BeliefTracker from '../components/BeliefTracker';
-import BookQuestionLayer, { getBookQuestionContext } from '../components/BookQuestionLayer';
-import CharacterAppearanceRules from '../components/CharacterAppearanceRules';
-import ChapterExitEmotion from '../components/ChapterExitEmotion';
-import { getLalaSessionPrompt } from '../data/lalaVoiceData';
-import { getCharacterRulesPrompt } from '../data/characterAppearanceRules';
+
 
 import './WriteMode.css';
 
@@ -67,7 +60,7 @@ const CENTER_TABS = [
 
 // ── MAIN COMPONENT ────────────────────────────────────────────────────────
 
-export default function WriteMode() {
+export default function WriteMode({ hideTopBar = false }) {
   const { bookId, chapterId } = useParams();
   const navigate = useNavigate();
 
@@ -128,7 +121,6 @@ export default function WriteMode() {
   const [editMode,   setEditMode]   = useState(false);
   const [editNote,   setEditNote]   = useState('');
   const [editListening, setEditListening] = useState(false);
-  const [editTranscript, setEditTranscript] = useState('');
 
   // AI toolbar state
   const [aiAction,     setAiAction]     = useState(null); // 'continue'|'deepen'|'nudge'
@@ -182,14 +174,8 @@ export default function WriteMode() {
   const [lastApprovedLine, setLastApprovedLine] = useState(null);
   const [reviewLoading,    setReviewLoading]    = useState(false);
 
-  // ── NEW: Alive systems state (from StorytellerPage) ──
+  // ── Registry characters (for NI / Lala / Memory tabs) ──
   const [registryCharacters, setRegistryCharacters] = useState([]);
-  const [chapterCharacters,  setChapterCharacters]  = useState([]);
-  const [exitEmotionData,    setExitEmotionData]    = useState({ exit_emotion: '', exit_emotion_note: '' });
-  const [pnosAct,            setPnosAct]            = useState('act_1');
-  const [activeThreads,      setActiveThreads]      = useState([]);
-  const [incomingEchoes,     setIncomingEchoes]     = useState([]);
-  const [interviewDone,      setInterviewDone]      = useState(false);
 
   // ── NEW: NI — count prose lines, show panel after 5+ ──
   const proseLineCount = prose.split(/\n\n+/).filter(s => s.trim().length > 20).length;
@@ -352,16 +338,6 @@ export default function WriteMode() {
     if (centerTab !== 'review' || !chapterId) return;
     loadReviewLines();
   }, [centerTab, chapterId]);
-
-  // ── NEW: Load incoming echoes ─────────────────────────────────────────
-
-  useEffect(() => {
-    if (!chapterId || !bookId) return;
-    fetch(`${API}/storyteller/echoes?book_id=${bookId}&target_chapter_id=${chapterId}`)
-      .then(r => r.json())
-      .then(data => setIncomingEchoes(Array.isArray(data) ? data : []))
-      .catch(() => {});
-  }, [chapterId, bookId]);
 
   // ── NEW: MEMORY_STYLES injection ──────────────────────────────────────
 
@@ -632,7 +608,6 @@ export default function WriteMode() {
         else interim = e.results[i][0].transcript;
       }
       editTransRef.current = final;
-      setEditTranscript(final + interim);
       setEditNote(final + interim);
     };
     rec.onend = () => setEditListening(false);
@@ -668,7 +643,6 @@ export default function WriteMode() {
         setWordCount(data.prose.split(/\s+/).filter(Boolean).length);
         setSaved(false);
         setEditNote('');
-        setEditTranscript('');
         editTransRef.current = '';
       }
     } catch (err) {
@@ -1036,8 +1010,8 @@ export default function WriteMode() {
 
   // ── TOC / CONTEXT — PERSIST TOGGLES ─────────────────────────────────
 
-  useEffect(() => { localStorage.setItem('wm_showToc', JSON.stringify(showToc)); }, [showToc]);
-  useEffect(() => { localStorage.setItem('wm_showContext', JSON.stringify(showContext)); }, [showContext]);
+  useEffect(() => { localStorage.setItem('wm-show-toc', JSON.stringify(showToc)); }, [showToc]);
+  useEffect(() => { localStorage.setItem('wm-show-context', JSON.stringify(showContext)); }, [showContext]);
 
   // ── SWITCH CHAPTER ────────────────────────────────────────────────────
 
@@ -1180,12 +1154,6 @@ export default function WriteMode() {
     });
   }, []);
 
-  // ── TOC SECTIONS: CHANGE TYPE ─────────────────────────────────────────
-
-  const changeSectionType = useCallback((secId, newType) => {
-    setTocSections(prev => prev.map(s => s.id === secId ? { ...s, type: newType } : s));
-  }, []);
-
   // ── TOC: ADD NEW CHAPTER ──────────────────────────────────────────────
 
   const commitAddChapter = useCallback(async () => {
@@ -1292,6 +1260,7 @@ export default function WriteMode() {
       )}
 
       {/* ── TOP BAR ── */}
+      {!hideTopBar && (
       <header className="wm-topbar">
         <button className="wm-back-btn" onClick={() => setShowExit(true)}>
           {'←'}
@@ -1391,6 +1360,7 @@ export default function WriteMode() {
           </button>
         </div>
       </header>
+      )}
 
       {/* ── WORD GOAL BAR ── */}
       {wordGoal > 0 && (
@@ -1420,7 +1390,7 @@ export default function WriteMode() {
             onChange={e => {
               const v = parseInt(e.target.value) || 0;
               setWordGoal(v);
-              localStorage.setItem('wm_word_goal', v);
+              localStorage.setItem('wm-word-goal', v);
             }}
             placeholder="e.g. 500"
           />
@@ -1624,79 +1594,12 @@ export default function WriteMode() {
         {/* ── PROSE SECTION ── */}
         <div className="wm-prose-wrap" ref={proseRef}>
 
-          {/* Scene Interview — empty chapter */}
-          {!prose.trim() && !interviewDone && (
-            <div className="wm-scene-interview-wrap">
-              <SceneInterview
-                book={book}
-                chapter={chapter}
-                characters={registryCharacters}
-                onComplete={() => setInterviewDone(true)}
-                onSkip={() => setInterviewDone(true)}
-                onLineAdded={() => { setCenterTab('review'); loadReviewLines(); }}
-              />
-            </div>
-          )}
-
-          {/* Alive system context layers */}
-          {prose.trim() && (
-            <div className="wm-alive-systems">
-              <BeliefTracker
-                chapter={chapter}
-                onActChange={act => setPnosAct(act)}
-                onThreadChange={threads => setActiveThreads(threads)}
-              />
-              <BookQuestionLayer
-                book={book}
-                chapter={chapter}
-                onDirectionChange={() => {}}
-              />
-              <CharacterAppearanceRules
-                chapterCharacters={chapterCharacters}
-                onCharacterToggle={(ids) => setChapterCharacters(ids)}
-              />
-              <ChapterExitEmotion
-                chapter={chapter}
-                onExitChange={(data) => setExitEmotionData(data)}
-              />
-              <IncomingEchoes
-                echoes={incomingEchoes}
-                onMarkLanded={async (echoId) => {
-                  try {
-                    await fetch(`${API}/storyteller/echoes/${echoId}`, {
-                      method: 'PUT',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ status: 'landed' }),
-                    });
-                    setIncomingEchoes(prev =>
-                      prev.map(e => e.id === echoId ? { ...e, status: 'landed' } : e)
-                    );
-                  } catch {}
-                }}
-              />
-            </div>
-          )}
-
           {/* ── Manuscript page container ── */}
           <div className="wm-manuscript-page">
 
-            {/* ── Running header ── */}
-            <div className="wm-manuscript-header">
-              <span className="wm-mh-book">{book?.title || ''}</span>
-              <span className="wm-mh-chapter">
-                {chapter?.chapter_number ? `Chapter ${chapter.chapter_number}` : ''}
-              </span>
-            </div>
-
             {/* ── Chapter opening ── */}
             <div className="wm-chapter-opening">
-              <div className="wm-chapter-num">
-                {chapter?.chapter_number
-                  ? String(chapter.chapter_number).padStart(2, '0')
-                  : '—'}
-              </div>
               <h2 className="wm-chapter-heading">{chapter?.title || 'Untitled'}</h2>
-              <div className="wm-chapter-ornament">{'❖'}</div>
             </div>
 
             {/* ── Section-aware writing area ── */}
@@ -1704,13 +1607,16 @@ export default function WriteMode() {
               <div className="wm-canvas-sections">
                 {chapter.sections.map((sec, idx) => {
                   const isHeader = ['h2','h3','h4'].includes(sec.type);
+                  /* Skip h2 that duplicates the chapter title already shown above */
+                  const isDuplicateTitle = sec.type === 'h2' &&
+                    sec.content?.trim().toLowerCase() === (chapter?.title || '').trim().toLowerCase();
                   return (
                     <div key={sec.id || idx} className="wm-cs-block">
                       {/* Section marker */}
                       {sec.type === 'divider' && (
                         <div className="wm-cs-divider"><span className="wm-cs-divider-line" /></div>
                       )}
-                      {sec.type === 'h2' && (
+                      {sec.type === 'h2' && !isDuplicateTitle && (
                         <h2 className="wm-cs-h2">{sec.content || 'Untitled Section'}</h2>
                       )}
                       {sec.type === 'h3' && (
@@ -1758,14 +1664,6 @@ export default function WriteMode() {
               />
             )}
 
-            {/* ── Running footer ── */}
-            <div className="wm-manuscript-footer">
-              <span className="wm-mf-words">{wordCount > 0 ? `${wordCount.toLocaleString()} words` : ''}</span>
-              <span className="wm-mf-ornament">{'—'}</span>
-              <span className="wm-mf-page">
-                {chapter?.chapter_number ? `Ch. ${chapter.chapter_number}` : ''}
-              </span>
-            </div>
           </div>
 
           {/* ── Narrative Intelligence panel — appears after 5+ prose lines ── */}

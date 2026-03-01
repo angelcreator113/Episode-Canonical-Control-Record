@@ -325,7 +325,7 @@
 
 .wm-toc-type-badge {
   font-size: 10px;
-  color: #C6A85E;
+  color: #C9A84C;
   margin-right: 2px;
   flex-shrink: 0;
 }
@@ -349,7 +349,7 @@
   font-size: 8px;
   letter-spacing: 1px;
   text-transform: uppercase;
-  color: #C6A85E;
+  color: #C9A84C;
   white-space: nowrap;
 }
 
@@ -1007,63 +1007,21 @@
   pointer-events: none;
 }
 
-/* ── Running header ── */
-.wm-manuscript-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  padding: 20px 48px 0;
-  opacity: 0.3;
-  transition: opacity 0.3s ease;
-}
-.wm-manuscript-header:hover {
-  opacity: 0.55;
-}
-.wm-mh-book {
-  font-family: 'DM Mono', monospace;
-  font-size: 8.5px;
-  letter-spacing: 0.18em;
-  text-transform: uppercase;
-  color: rgba(28,24,20,0.6);
-}
-.wm-mh-chapter {
-  font-family: 'Lora', serif;
-  font-size: 9px;
-  font-style: italic;
-  color: rgba(28,24,20,0.5);
-  letter-spacing: 0.04em;
-}
-
 /* ── Chapter opening ── */
 .wm-chapter-opening {
   text-align: center;
-  padding: 48px 48px 8px;
+  padding: 24px 48px 8px;
   flex-shrink: 0;
-}
-.wm-chapter-num {
-  font-family: 'DM Mono', monospace;
-  font-size: 11px;
-  letter-spacing: 0.35em;
-  color: rgba(184,150,46,0.45);
-  text-transform: uppercase;
-  margin-bottom: 10px;
 }
 .wm-chapter-heading {
   font-family: 'Lora', Georgia, serif;
-  font-size: 26px;
+  font-size: 22px;
   font-weight: 600;
   color: #1C1814;
   letter-spacing: 0.01em;
   line-height: 1.3;
-  margin: 0 0 14px;
+  margin: 0 0 8px;
 }
-.wm-chapter-ornament {
-  font-size: 12px;
-  color: rgba(184,150,46,0.3);
-  letter-spacing: 0.4em;
-  line-height: 1;
-}
-
 /* ── Canvas section structure markers ── */
 .wm-canvas-sections {
   padding: 4px 0 0;
@@ -1239,31 +1197,6 @@
 
 .wm-prose-area:read-only {
   opacity: 0.75;
-}
-
-/* ── Running footer ── */
-.wm-manuscript-footer {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 48px 24px;
-  opacity: 0.22;
-  transition: opacity 0.3s ease;
-}
-.wm-manuscript-footer:hover {
-  opacity: 0.45;
-}
-.wm-mf-words,
-.wm-mf-page {
-  font-family: 'DM Mono', monospace;
-  font-size: 8.5px;
-  letter-spacing: 0.12em;
-  color: rgba(28,24,20,0.5);
-}
-.wm-mf-ornament {
-  font-size: 8px;
-  color: rgba(28,24,20,0.2);
 }
 
 /* ── Contextual paragraph hint: floats on left margin of manuscript ── */
@@ -2172,6 +2105,7 @@
   .wm-prose-wrap {
     overflow: visible;
     -webkit-overflow-scrolling: touch;
+    background: transparent;
   }
 
   .wm-manuscript-page {
@@ -2192,21 +2126,28 @@
     min-height: 120px !important;
   }
 
-  /* Topbar stays visible while scrolling */
+  /* ┌─────────────────────────────────────────────────────────────────┐
+     │  TOPBAR: Compact — only essentials visible                      │
+     └─────────────────────────────────────────────────────────────────┘ */
   .wm-topbar {
     position: sticky;
     top: 0;
     z-index: 50;
+    padding: 8px 12px;
+    gap: 8px;
   }
   .wm-chapter-info {
     flex: 1;
     min-width: 0;
   }
   .wm-chapter-title {
-    font-size: 12px;
+    font-size: 13px;
   }
   .wm-book-title {
-    font-size: 8px;
+    display: none;
+  }
+  .wm-session-timer {
+    display: none;
   }
   .wm-top-right {
     gap: 6px;
@@ -2219,14 +2160,72 @@
     font-size: 9px;
     min-width: 40px;
   }
+  .wm-history-btn,
+  .wm-focus-btn {
+    display: none;
+  }
+  .wm-sidebar-toggle {
+    width: 28px;
+    height: 28px;
+    font-size: 13px;
+  }
   .wm-mode-btn {
     font-size: 9px;
     padding: 5px 10px;
     letter-spacing: 0.08em;
   }
+
+  /* ┌─────────────────────────────────────────────────────────────────┐
+     │  CENTER TABS: Only Write/Review visible, rest hidden            │
+     └─────────────────────────────────────────────────────────────────┘ */
+  .wm-center-tabs {
+    padding: 0 12px;
+    gap: 0;
+    justify-content: center;
+    overflow-x: hidden;
+  }
+  /* Hide non-essential tabs on mobile */
+  .wm-center-tab:nth-child(n+3) {
+    display: none;
+  }
+  .wm-center-tab {
+    padding: 8px 16px 7px;
+    font-size: 10px;
+    flex: 1;
+    text-align: center;
+    justify-content: center;
+  }
+
+  /* ┌─────────────────────────────────────────────────────────────────┐
+     │  HIDE CLUTTER: manuscript chrome, NI panel                      │
+     └─────────────────────────────────────────────────────────────────┘ */
+
+  /* Narrative intelligence panel — analysis tool, not writing aid */
+  .wm-ni-panel {
+    display: none !important;
+  }
+
+  /* Word goal bar — hide on mobile, not essential during writing */
+  .wm-goal-bar-wrap {
+    display: none;
+  }
+
+  /* ┌─────────────────────────────────────────────────────────────────┐
+     │  CHAPTER OPENING: Minimal — just title, no big number           │
+     └─────────────────────────────────────────────────────────────────┘ */
+  .wm-chapter-opening {
+    padding: 16px 16px 4px;
+    text-align: left;
+  }
+  .wm-chapter-heading {
+    font-size: 18px;
+    margin: 0 0 4px;
+    text-align: left;
+  }
+
   /* ── Manuscript page: full-bleed on phones ── */
   .wm-manuscript-page {
-    margin: 8px auto 60px;
+    margin: 0 auto 40px;
     max-width: 100%;
     border-radius: 0;
     box-shadow: none;
@@ -2234,17 +2233,8 @@
   .wm-manuscript-page::after {
     display: none;
   }
-  .wm-chapter-opening {
-    padding: 32px 20px 6px;
-  }
-  .wm-chapter-heading {
-    font-size: 20px;
-  }
-  .wm-chapter-num {
-    font-size: 9px;
-  }
   .wm-prose-area {
-    padding: 16px 20px 120px;
+    padding: 12px 16px 100px;
     font-size: 16px;
     line-height: 1.9;
     text-indent: 1.5em;
@@ -2252,39 +2242,41 @@
   .wm-canvas-sections {
     padding: 4px 0 0;
   }
-  .wm-cs-h2 { font-size: 17px; padding: 18px 20px 6px; border-top-color: rgba(28,24,20,0.04); }
-  .wm-cs-h3 { font-size: 14px; padding: 14px 20px 4px; margin-left: 16px; }
-  .wm-cs-h4 { font-size: 12.5px; padding: 12px 20px 3px 26px; }
-  .wm-section-prose { padding: 6px 20px 30px !important; min-height: 80px !important; }
-  .wm-cs-body { padding: 4px 20px; }
-  .wm-cs-quote { padding: 8px 20px 8px 36px; margin-left: 20px; }
-  .wm-cs-reflection { margin: 4px 20px; }
-  .wm-manuscript-header,
-  .wm-manuscript-footer {
-    padding-left: 20px;
-    padding-right: 20px;
-  }
+  .wm-cs-h2 { font-size: 17px; padding: 18px 16px 6px; border-top-color: rgba(28,24,20,0.04); }
+  .wm-cs-h3 { font-size: 14px; padding: 14px 16px 4px; margin-left: 16px; }
+  .wm-cs-h4 { font-size: 12.5px; padding: 12px 16px 3px 26px; }
+  .wm-section-prose { padding: 6px 16px 30px !important; min-height: 80px !important; }
+  .wm-cs-body { padding: 4px 16px; }
+  .wm-cs-quote { padding: 8px 16px 8px 36px; margin-left: 16px; }
+  .wm-cs-reflection { margin: 4px 16px; }
 
-  /* ── AI Toolbar: compact buttons, prominent sentence toggle ── */
+  /* ┌─────────────────────────────────────────────────────────────────┐
+     │  AI TOOLBAR: Compact, single row essentials                     │
+     └─────────────────────────────────────────────────────────────────┘ */
   .wm-ai-toolbar {
-    padding: 8px 10px;
+    padding: 6px 12px;
     gap: 6px;
+    justify-content: center;
   }
   .wm-ai-btn {
-    padding: 7px 12px;
+    padding: 6px 10px;
     font-size: 0.72rem;
     gap: 4px;
-    border-radius: 18px;
+    border-radius: 16px;
   }
   .wm-ai-icon {
     font-size: 0.85rem;
   }
+  /* Hide paragraph mode on mobile — too complex for phone UX */
+  .wm-para-mode-btn {
+    display: none;
+  }
 
-  /* Sentence/paragraph toggle: larger and more visible on mobile */
+  /* Sentence/paragraph toggle */
   .wm-len-toggle {
-    padding: 7px 14px;
+    padding: 6px 12px;
     font-size: 0.72rem;
-    border-radius: 18px;
+    border-radius: 16px;
     background: rgba(184,150,46,0.08);
     border-color: rgba(184,150,46,0.2);
     color: #5A4A1E;
@@ -2298,28 +2290,31 @@
     border-color: rgba(184,150,46,0.4);
     box-shadow: 0 0 0 2px rgba(184,150,46,0.08);
   }
+  .wm-para-float-hint { display: none; }
 
-  /* ── Bottom Bar: reduce mic size, tighter spacing ── */
+  /* ┌─────────────────────────────────────────────────────────────────┐
+     │  BOTTOM BAR: Compact, breathable                                │
+     └─────────────────────────────────────────────────────────────────┘ */
   .wm-bottom-bar {
-    padding: 10px 14px 14px;
-    gap: 12px;
-    padding-bottom: max(14px, env(safe-area-inset-bottom));
+    padding: 8px 14px 10px;
+    gap: 10px;
+    padding-bottom: max(10px, env(safe-area-inset-bottom));
   }
   .wm-mic-btn {
-    width: 52px;
-    height: 52px;
+    width: 44px;
+    height: 44px;
   }
   .wm-mic-btn svg {
-    width: 22px;
-    height: 22px;
+    width: 20px;
+    height: 20px;
   }
   .wm-bottom-hint {
     font-size: 9px;
     letter-spacing: 0.06em;
-    line-height: 1.5;
+    line-height: 1.4;
   }
   .wm-send-btn {
-    padding: 8px 14px;
+    padding: 7px 14px;
     font-size: 9px;
     letter-spacing: 0.06em;
   }
@@ -2334,15 +2329,15 @@
 
   /* ── Edit mode panel: compact ── */
   .wm-edit-panel {
-    padding: 12px 14px 14px;
+    padding: 10px 12px 12px;
   }
   .wm-edit-input {
     font-size: 13px;
     padding: 8px 12px;
   }
   .wm-edit-mic-btn {
-    width: 40px;
-    height: 40px;
+    width: 38px;
+    height: 38px;
     font-size: 16px;
   }
   .wm-apply-btn {
@@ -2363,32 +2358,48 @@
   .wm-transcript-text {
     font-size: 13px;
   }
+
+  /* ── Scene interview wrap — tighter ── */
+  .wm-scene-interview-wrap {
+    margin: 12px auto;
+    padding: 0 8px;
+  }
 }
 
 /* ── Extra small phones (≤380px) ── */
 @media (max-width: 380px) {
   .wm-topbar {
-    padding: 8px 10px 6px;
-    gap: 6px;
+    padding: 6px 8px;
+    gap: 4px;
   }
   .wm-chapter-title {
-    font-size: 11px;
+    font-size: 12px;
   }
   .wm-ai-btn {
-    padding: 6px 10px;
+    padding: 5px 8px;
     font-size: 0.68rem;
   }
   .wm-mic-btn {
-    width: 48px;
-    height: 48px;
+    width: 40px;
+    height: 40px;
   }
   .wm-mic-btn svg {
-    width: 20px;
-    height: 20px;
+    width: 18px;
+    height: 18px;
   }
   .wm-bottom-bar {
-    padding: 8px 10px 12px;
-    gap: 10px;
+    padding: 6px 10px 8px;
+    gap: 8px;
+  }
+  .wm-prose-area {
+    font-size: 15px;
+    padding: 10px 12px 80px;
+  }
+  .wm-chapter-opening {
+    padding: 12px 12px 2px;
+  }
+  .wm-chapter-heading {
+    font-size: 16px;
   }
 }
 
@@ -2431,9 +2442,6 @@
     0 2px 8px rgba(28,24,20,0.05),
     0 8px 40px rgba(28,24,20,0.04),
     0 24px 80px rgba(28,24,20,0.03);
-}
-.wm-focus-mode .wm-manuscript-header {
-  opacity: 0.15;
 }
 /* ── Focus-mode vignette ── */
 .wm-focus-mode::after {
@@ -2952,7 +2960,7 @@
   background:       none;
   border:           none;
   border-bottom:    2px solid transparent;
-  padding:          10px 12px 9px;
+  padding:          8px 10px 7px;
   font-family:      'DM Mono', monospace;
   font-size:        10px;
   letter-spacing:   0.1em;
@@ -2976,7 +2984,7 @@
   display:          inline-flex;
   align-items:      center;
   justify-content:  center;
-  background:       #B85C38;
+  background:       #C9A84C;
   color:            #FAF7F0;
   font-size:        8px;
   font-family:      'DM Mono', monospace;
@@ -3001,16 +3009,6 @@
   max-width:        680px;
   margin:           24px auto;
   padding:          0 16px;
-}
-
-/* Alive systems — collapsible row above manuscript */
-.wm-alive-systems {
-  max-width:        680px;
-  margin:           0 auto 16px;
-  padding:          0 16px;
-  display:          flex;
-  flex-direction:   column;
-  gap:              8px;
 }
 
 /* Narrative Intelligence panel */
@@ -3191,7 +3189,7 @@
 }
 
 .wm-review-line-text {
-  font-family:      'Spectral', Georgia, serif;
+  font-family:      'Lora', Georgia, serif;
   font-size:        15px;
   line-height:      1.8;
   margin:           0;
@@ -3204,11 +3202,11 @@
   border:           1px solid rgba(28, 24, 20, 0.12);
   border-radius:    3px;
   padding:          10px 12px;
-  font-family:      'Spectral', Georgia, serif;
+  font-family:      'Lora', Georgia, serif;
   font-size:        15px;
   line-height:      1.8;
   color:            #1C1814;
-  background:       #F5F0E5;
+  background:       #FAF7F0;
   resize:           vertical;
   outline:          none;
 }
@@ -3302,7 +3300,11 @@
     gap: 4px;
   }
   .wm-chapter-info {
-    display: none;
+    flex: 1;
+    min-width: 0;
+  }
+  .wm-chapter-title {
+    font-size: 12px;
   }
   .wm-session-timer {
     display: none;
@@ -3312,6 +3314,14 @@
   }
   .wm-history-btn,
   .wm-focus-btn {
+    display: none;
+  }
+  /* Hide context toggle on narrow phones — panel takes over entire screen */
+  .wm-ctx-toggle {
+    display: none;
+  }
+  /* Hide character quick switch on narrow phones */
+  .wm-quick-char-wrap {
     display: none;
   }
 
@@ -3359,37 +3369,32 @@
     overflow: visible;
   }
   .wm-manuscript-page {
-    padding: 16px 12px;
+    padding: 0;
     margin: 0;
     min-height: auto;
   }
-  .wm-manuscript-header {
-    padding: 0 0 8px;
-  }
   .wm-chapter-opening {
-    padding: 16px 0;
-  }
-  .wm-chapter-num {
-    font-size: 32px;
+    padding: 12px 12px 2px;
   }
   .wm-chapter-heading {
-    font-size: 18px;
+    font-size: 16px;
   }
   .wm-prose-area {
     font-size: 15px;
-    line-height: 1.7;
-    padding: 0;
+    line-height: 1.75;
+    padding: 8px 12px 80px;
     min-height: 40vh;
   }
 
   .wm-ai-toolbar {
-    padding: 8px;
+    padding: 6px 8px;
     gap: 4px;
     flex-wrap: wrap;
+    justify-content: center;
   }
   .wm-ai-btn {
     font-size: 10px;
-    padding: 6px 10px;
+    padding: 5px 8px;
   }
   .wm-len-toggle {
     font-size: 9px;
@@ -3397,7 +3402,7 @@
   }
 
   .wm-bottom-bar {
-    padding: 8px 12px;
+    padding: 6px 10px;
     gap: 8px;
   }
   .wm-bottom-hint {
@@ -3419,14 +3424,16 @@
     padding: 10px 12px;
   }
 
-  .wm-scene-interview-wrap,
-  .wm-alive-systems,
+  .wm-scene-interview-wrap {
+    padding: 0 4px;
+    margin: 8px auto;
+  }
   .wm-ni-panel {
-    padding: 0 12px;
+    display: none !important;
   }
 
   .wm-goal-bar-wrap {
-    padding: 4px 12px;
+    display: none;
   }
 
   /* Context panel fields */
@@ -3529,9 +3536,6 @@
   .wm-scene-interview-wrap {
     padding: 0 24px;
     margin: 32px auto;
-  }
-  .wm-alive-systems {
-    padding: 0 24px;
   }
   .wm-ni-panel {
     padding: 0 24px;

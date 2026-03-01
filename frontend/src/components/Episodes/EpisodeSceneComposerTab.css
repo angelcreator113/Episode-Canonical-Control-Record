@@ -321,36 +321,6 @@
 
 /* ==================== BUTTONS ==================== */
 
-.btn-primary,
-.btn-secondary {
-  padding: 0.5rem 1rem;
-  border-radius: 6px;
-  font-weight: 600;
-  font-size: 0.8rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  border: none;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.btn-primary:hover {
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.35);
-}
-
-.btn-secondary {
-  background: white;
-  color: #64748b;
-  border: 1px solid #e2e8f0;
-}
-
-.btn-secondary:hover {
-  border-color: #cbd5e1;
-}
-
 .btn-large {
   padding: 0.625rem 1.5rem;
   font-size: 0.875rem;

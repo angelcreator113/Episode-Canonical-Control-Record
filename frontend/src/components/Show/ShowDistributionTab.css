@@ -26,12 +26,6 @@
   font-size: 0.825rem;
 }
 
-.header-actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-
 .unsaved-indicator {
   color: #f59e0b;
   font-weight: 600;
@@ -286,73 +280,7 @@
   display: flex;
   flex-direction: column;
   gap: 1.25rem;
-}
-
-.form-section {
-  display: flex;
-  flex-direction: column;
-  gap: 0.875rem;
-}
-
-.section-title {
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin: 0;
-  font-size: 0.95rem;
-  font-weight: 700;
-  color: #1e293b;
-}
-
-.section-icon {
-  font-size: 1rem;
-}
-
-.form-row {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: 1rem;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.375rem;
-}
-
-.form-group label {
-  font-weight: 600;
-  font-size: 0.8rem;
-  color: #334155;
-}
-
-.form-input,
-.form-textarea {
-  width: 100%;
-  padding: 0.625rem;
-  border: 1.5px solid #e2e8f0;
-  border-radius: 6px;
-  font-size: 0.85rem;
-  font-family: inherit;
-  transition: border-color 0.2s ease;
-}
-
-.form-input:focus,
-.form-textarea:focus {
-  outline: none;
-  border-color: #667eea;
-}
-
-.form-textarea {
-  resize: vertical;
-  font-family: monospace;
-  line-height: 1.6;
-}
-
-.form-hint {
-  font-size: 0.75rem;
-  color: #64748b;
-}
+}
 
 .form-hint code {
   padding: 0.125rem 0.375rem;
@@ -422,11 +350,7 @@
   border-radius: 8px;
   cursor: pointer;
   background: white;
-}
-
-.color-text {
-  flex: 1;
-}
+}
 
 /* ==================== CHECKBOX LABEL ==================== */
 
@@ -525,27 +449,6 @@
 
 /* ==================== PRIMARY BUTTON ==================== */
 
-.btn-primary {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.375rem;
-  padding: 0.625rem 1.25rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  font-weight: 600;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-primary:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
-}
-
 /* ==================== RESPONSIVE ==================== */
 
 @media (max-width: 768px) {
@@ -556,11 +459,6 @@
   .distribution-header {
     flex-direction: column;
     gap: 1rem;
-  }
-  
-  .header-actions {
-    width: 100%;
-    flex-direction: column;
   }
   
   .btn-save {
@@ -576,10 +474,6 @@
     flex-direction: column;
     gap: 1rem;
     align-items: flex-start;
-  }
-  
-  .form-row {
-    grid-template-columns: 1fr;
   }
   
   .actions-grid {

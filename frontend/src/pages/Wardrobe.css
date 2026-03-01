@@ -1,36 +1,42 @@
 /* ==========================================================
-   Unified Wardrobe System - Calm, Cohesive Design
+   Unified Wardrobe System — White + Gold Theme
+   Matches UniversePage / ProductionTab design language
    ========================================================== */
 
 .wardrobe-unified {
-  background: #f9fafb;
+  background: transparent;
   padding: 0;
   width: 100%;
 }
 
-/* Header */
+/* ── Header (standalone mode only) ── */
 .wardrobe-header {
   display: flex;
   align-items: center;
   gap: 1.5rem;
   margin-bottom: 1.5rem;
+  padding: 1.25rem 1.5rem;
+  background: #ffffff;
+  border: 1px solid #e8e5de;
+  border-radius: 14px;
 }
 
 .btn-back {
-  padding: 0.5rem 0.75rem;
-  background: white;
-  border: 2px solid #e5e7eb;
-  border-radius: 8px;
+  padding: 0.5rem 0.85rem;
+  background: #ffffff;
+  border: 2px solid #e8e5de;
+  border-radius: 10px;
   font-size: 0.9rem;
   font-weight: 600;
-  color: #374151;
+  color: #1a1a2e;
   cursor: pointer;
-  transition: border-color 0.2s;
+  transition: all 0.2s;
   white-space: nowrap;
 }
 
 .btn-back:hover {
-  border-color: #9ca3af;
+  border-color: #C9A84C;
+  color: #C9A84C;
 }
 
 .wardrobe-title-group {
@@ -41,7 +47,7 @@
   margin: 0;
   font-size: 1.75rem;
   font-weight: 700;
-  color: #1f2937;
+  color: #1a1a2e;
   display: flex;
   align-items: center;
   gap: 0.5rem;
@@ -50,36 +56,39 @@
 .wardrobe-subtitle {
   margin: 0.25rem 0 0 0;
   font-size: 0.9rem;
-  color: #6b7280;
+  color: #7a7a8a;
 }
 
 .btn-primary-action {
-  padding: 0.65rem 1.25rem;
-  background: #6366f1;
-  color: white;
+  padding: 0.65rem 1.35rem;
+  background: linear-gradient(135deg, #C9A84C, #b0922e);
+  color: #ffffff;
   border: none;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 0.95rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: all 0.25s;
   white-space: nowrap;
   margin-left: auto;
+  box-shadow: 0 2px 8px rgba(201, 168, 76, 0.25);
 }
 
 .btn-primary-action:hover {
-  background: #4f46e5;
+  background: linear-gradient(135deg, #b0922e, #9a7f28);
+  box-shadow: 0 4px 14px rgba(201, 168, 76, 0.35);
+  transform: translateY(-1px);
 }
 
-/* Tab Navigation - Clean & Minimal */
+/* ── Tab Navigation — Segment Bar ── */
 .wardrobe-tabs {
   display: flex;
-  gap: 0.5rem;
-  margin-bottom: 1.5rem;
-  background: white;
-  border-radius: 10px;
-  padding: 0.5rem;
-  border: 1px solid #e5e7eb;
+  gap: 0;
+  margin-bottom: 1.25rem;
+  background: #f0eee8;
+  border-radius: 12px;
+  padding: 4px;
+  border: 1px solid #e8e5de;
 }
 
 .wardrobe-tab {
@@ -88,29 +97,30 @@
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  padding: 0.75rem 1rem;
+  padding: 0.7rem 1rem;
   background: transparent;
   border: none;
-  border-radius: 8px;
-  font-size: 0.95rem;
+  border-radius: 10px;
+  font-size: 0.9rem;
   font-weight: 600;
-  color: #6b7280;
+  color: #7a7a8a;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s;
 }
 
 .wardrobe-tab:hover {
-  background: #f3f4f6;
-  color: #374151;
+  background: rgba(255, 255, 255, 0.6);
+  color: #1a1a2e;
 }
 
 .wardrobe-tab.active {
-  background: #6366f1;
-  color: white;
+  background: #ffffff;
+  color: #1a1a2e;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
 }
 
 .wardrobe-unified .tab-icon {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
   line-height: 1;
 }
 
@@ -118,20 +128,21 @@
   line-height: 1;
 }
 
-/* Tab Content */
+/* ── Content ── */
 .wardrobe-content {
-  /* Content has no extra container - tabs mount their components directly */
+  /* Components mount directly — no extra wrapper needed */
 }
 
-/* Mobile Responsive */
+/* ── Responsive ── */
 @media (max-width: 768px) {
   .wardrobe-unified {
-    padding: 1rem;
+    padding: 0.75rem;
   }
 
   .wardrobe-header {
     flex-direction: column;
     align-items: flex-start;
+    padding: 1rem;
   }
 
   .wardrobe-header-left {
@@ -145,8 +156,12 @@
   }
 
   .wardrobe-tabs {
-    flex-direction: column;
-    padding: 0.375rem;
+    padding: 3px;
+  }
+
+  .wardrobe-tab {
+    padding: 0.6rem 0.5rem;
+    font-size: 0.8rem;
   }
 
   .wardrobe-unified .tab-label {
@@ -158,13 +173,13 @@
   }
 
   .wardrobe-unified .tab-icon {
-    font-size: 1.5rem;
+    font-size: 1.35rem;
   }
 }
 
 @media (max-width: 480px) {
   .wardrobe-unified {
-    padding: 0.75rem;
+    padding: 0.5rem;
   }
 
   .wardrobe-header h1 {
@@ -172,6 +187,6 @@
   }
 
   .wardrobe-tabs {
-    gap: 0.25rem;
+    border-radius: 10px;
   }
 }

@@ -41,6 +41,11 @@ function SceneComposerFull() {
   const [currentTime, setCurrentTime] = useState(0);
   const [loading, setLoading] = useState(true);
 
+  // Episode Selector (page switcher)
+  const [allEpisodes, setAllEpisodes] = useState([]);
+  const [showEpisodeSelector, setShowEpisodeSelector] = useState(false);
+  const episodeSelectorRef = useRef(null);
+
   // Selection & Edit Mode State
   const [selected, setSelected] = useState(null); // { type: 'character' | 'ui' | 'background', id }
   const [editLayoutEnabled, setEditLayoutEnabled] = useState(false);
@@ -223,6 +228,37 @@ function SceneComposerFull() {
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
   }, [handleUndo, handleRedo, handleDeleteElement, selected, scenes, currentSceneIndex, copyElement, pasteElement, hasClipboard, pushHistory, markDirty]);
+
+  // Load all episodes for the page selector
+  useEffect(() => {
+    episodeAPI.getAll({ limit: 50 })
+      .then(res => {
+        const body = res?.data || res;
+        const list = body?.episodes || body?.data || (Array.isArray(body) ? body : []);
+        setAllEpisodes(Array.isArray(list) ? list : []);
+      })
+      .catch(() => setAllEpisodes([]));
+  }, []);
+
+  // Close episode selector on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (episodeSelectorRef.current && !episodeSelectorRef.current.contains(e.target)) {
+        setShowEpisodeSelector(false);
+      }
+    };
+    if (showEpisodeSelector) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showEpisodeSelector]);
+
+  const switchEpisode = (ep) => {
+    localStorage.setItem('working-episode-id', ep.id);
+    localStorage.setItem('working-episode-title', ep.title || 'Untitled');
+    setShowEpisodeSelector(false);
+    navigate(`/episodes/${ep.id}/scene-composer`);
+  };
 
   useEffect(() => {
     loadEpisodeData();
@@ -1136,9 +1172,47 @@ function SceneComposerFull() {
           </button>
           <div className="episode-info">
             <h1>Scene Composer</h1>
-            <span className="episode-meta">
-              Episode {episode?.episode_number} · Scene {currentSceneIndex + 1}/{scenes.length}
-            </span>
+            <div className="episode-selector-wrapper" ref={episodeSelectorRef}>
+              <button
+                className="episode-selector-btn"
+                onClick={() => setShowEpisodeSelector(!showEpisodeSelector)}
+                title="Switch episode"
+              >
+                <span className="episode-selector-label">
+                  Ep {episode?.episode_number || '?'}: {episode?.title || 'Untitled'}
+                </span>
+                <span className="episode-selector-scene">
+                  Scene {currentSceneIndex + 1}/{scenes.length}
+                </span>
+                <span className="episode-selector-arrow">{showEpisodeSelector ? '▲' : '▼'}</span>
+              </button>
+
+              {showEpisodeSelector && (
+                <div className="episode-selector-dropdown">
+                  <div className="episode-selector-header">Switch Episode</div>
+                  <div className="episode-selector-list">
+                    {allEpisodes.length === 0 ? (
+                      <div className="episode-selector-empty">No episodes found</div>
+                    ) : allEpisodes.map(ep => (
+                      <button
+                        key={ep.id}
+                        className={`episode-selector-item ${ep.id === episodeId ? 'active' : ''}`}
+                        onClick={() => ep.id !== episodeId && switchEpisode(ep)}
+                      >
+                        <span className="epi-number">
+                          {ep.episode_number || ep.episodeNumber || '—'}
+                        </span>
+                        <span className="epi-title">{ep.title || ep.episodeTitle || 'Untitled'}</span>
+                        <span className={`epi-status epi-status--${(ep.status || 'draft').toLowerCase()}`}>
+                          {ep.status || 'Draft'}
+                        </span>
+                        {ep.id === episodeId && <span className="epi-current">●</span>}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 

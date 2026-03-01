@@ -4412,7 +4412,33 @@ router.post('/assistant-command', optionalAuth, async (req, res) => {
     return res.status(400).json({ error: 'message is required' });
   }
 
-  const contextSummary = buildAssistantContextSummary(context);
+  // Enrich context with character roster from the DB
+  let characterRoster = '';
+  try {
+    const chars = await db.sequelize.query(
+      `SELECT id, display_name, role_type, status, core_belief,
+              SUBSTRING(description, 1, 80) as short_desc
+       FROM registry_characters
+       WHERE deleted_at IS NULL
+       ORDER BY display_name
+       LIMIT 50`,
+      { type: db.sequelize.QueryTypes.SELECT }
+    );
+    if (chars.length > 0) {
+      characterRoster = '\nCHARACTER ROSTER (' + chars.length + ' characters):\n' +
+        chars.map(c =>
+          `  - "${c.display_name}" (${c.role_type || 'unknown'}, ${c.status || 'draft'}) id: ${c.id}` +
+          (c.core_belief ? ` — belief: "${c.core_belief}"` : '') +
+          (c.short_desc ? ` — ${c.short_desc}` : '')
+        ).join('\n');
+    } else {
+      characterRoster = '\nCHARACTER ROSTER: (empty — no characters created yet)';
+    }
+  } catch (e) {
+    console.error('Failed to load character roster for assistant:', e.message);
+  }
+
+  const contextSummary = buildAssistantContextSummary(context) + characterRoster;
 
   const conversationHistory = history
     .filter(m => m.role && m.text)
@@ -4421,7 +4447,8 @@ router.post('/assistant-command', optionalAuth, async (req, res) => {
 
   conversationHistory.push({ role: 'user', content: message });
 
-  const systemPrompt = `You are the Prime Studios AI assistant — a command interpreter built into the LalaVerse writing platform.
+  const systemPrompt = `You are Amber, the Prime Studios AI assistant built into the LalaVerse writing platform.
+Your name is Amber. You are warm, capable, and direct.
 
 CURRENT APP STATE:
 ${contextSummary}
@@ -4431,6 +4458,8 @@ YOUR ROLE:
 - Execute actions by returning a structured JSON response
 - Confirm what you did in plain, brief language (1-2 sentences max)
 - If a command is ambiguous, clarify before acting — ask ONE focused question
+- You have access to the CHARACTER ROSTER above — use it to answer questions about characters by name
+- When asked about a character, look them up in the roster and use get_character_details for the full profile
 - Never guess at IDs you don't have — ask the user or say you need to navigate there first
 
 AVAILABLE ACTIONS:
@@ -4453,6 +4482,11 @@ StoryTeller — Destructive (soft-deleted, restorable from Recycle Bin):
   - delete_book: soft-delete a book { book_id }
   - reject_line: set line status to rejected { line_id }
 
+Character Registry — Read:
+  - list_characters: list all characters in the registry (already in ROSTER above, but use this to get fresh data)
+  - get_character_details: get full profile for a character { character_id } — returns beliefs, wounds, personality, relationships, etc.
+  - search_characters: find characters by name or trait { query }
+
 Character Registry — Write:
   - finalize_character: finalize a character { character_id }
 
@@ -4470,26 +4504,43 @@ RESPONSE FORMAT — valid JSON only, no markdown:
 }
 
 IMPORTANT RULES:
+- When a user asks about a character by name, FIRST check the CHARACTER ROSTER for a match, then use get_character_details to fetch the full profile and answer with real data
+- If the character name is close but not exact, find the closest match in the roster
 - Destructive actions on finalized characters are BLOCKED — return a reply explaining this
 - Never approve, edit, or delete content in chapters other than the current one unless the user specifies
 - If you don't have an ID you need (like a specific chapter_id), say so and offer to navigate there
-- Keep replies warm and brief — this is a writing tool, not a terminal
-- "Delete" always means soft-delete — it goes to the Recycle Bin, never permanent`;
+- Keep replies warm and brief — you are Amber, a creative partner, not a terminal
+- "Delete" always means soft-delete — it goes to the Recycle Bin, never permanent
+- Sign off with personality — you're helpful, smart, and have a touch of charm`;
 
   try {
     const claudeResponse = await anthropic.messages.create({
       model:      'claude-sonnet-4-6',
-      max_tokens: 500,
+      max_tokens: 800,
       system:     systemPrompt,
       messages:   conversationHistory,
     });
 
     const raw   = claudeResponse.content[0].text.trim();
-    const clean = raw.replace(/^```json\s*|^```\s*|\s*```$/g, '').trim();
+    
+    // Extract JSON from the response — Claude may wrap it in markdown or prefix with text
+    let jsonStr = raw;
+    // Try to find a JSON block in ```json ... ``` fences
+    const fencedMatch = raw.match(/```(?:json)?\s*(\{[\s\S]*?\})\s*```/);
+    if (fencedMatch) {
+      jsonStr = fencedMatch[1];
+    } else {
+      // Try to find the first { ... } block (the JSON object)
+      const braceStart = raw.indexOf('{');
+      const braceEnd = raw.lastIndexOf('}');
+      if (braceStart !== -1 && braceEnd > braceStart) {
+        jsonStr = raw.substring(braceStart, braceEnd + 1);
+      }
+    }
 
     let parsed;
     try {
-      parsed = JSON.parse(clean);
+      parsed = JSON.parse(jsonStr);
     } catch {
       return res.json({ reply: raw, action: null, navigate: null, refresh: null });
     }
@@ -4522,7 +4573,7 @@ IMPORTANT RULES:
   } catch (err) {
     console.error('Assistant command error:', err);
     return res.json({
-      reply:   "I couldn't complete that — try again or rephrase.",
+      reply:   "Hmm, that didn't work — try again or rephrase it for me.",
       action:  null,
       refresh: null,
       error:   err.message,
@@ -4670,6 +4721,93 @@ async function executeAssistantAction(action, params = {}, context = {}) {
           { replacements: { chapterId }, type: sequelize.QueryTypes.SELECT }
         );
         return { replyAppend: `(${row?.count ?? 0} pending)` };
+      }
+
+      // ── Character Registry — Read ──────────────────────────────────
+
+      case 'list_characters': {
+        const chars = await sequelize.query(
+          `SELECT id, display_name, role_type, status, core_belief,
+                  SUBSTRING(description, 1, 120) as short_desc
+           FROM registry_characters
+           WHERE deleted_at IS NULL
+           ORDER BY display_name
+           LIMIT 50`,
+          { type: sequelize.QueryTypes.SELECT }
+        );
+        const summary = chars.length === 0
+          ? 'No characters in the registry yet.'
+          : chars.map(c => `"${c.display_name}" (${c.role_type || 'unknown'}, ${c.status}) — ${c.short_desc || 'no description'}`).join('\n');
+        return { replyAppend: `\n${summary}` };
+      }
+
+      case 'get_character_details': {
+        const charId = params.character_id;
+        if (!charId) return { error: 'No character_id specified' };
+
+        const [char] = await sequelize.query(
+          `SELECT id, display_name, role_type, status, description, personality,
+                  core_belief, core_desire, core_fear, core_wound,
+                  mask_persona, truth_persona, character_archetype,
+                  signature_trait, emotional_baseline,
+                  wound_depth, belief_pressured, emotional_function,
+                  writer_notes, aesthetic_dna, career_status,
+                  relationships_map, story_presence, voice_signature,
+                  evolution_tracking
+           FROM registry_characters
+           WHERE id = :charId AND deleted_at IS NULL`,
+          { replacements: { charId }, type: sequelize.QueryTypes.SELECT }
+        );
+        if (!char) return { error: 'Character not found' };
+
+        // Build a rich text summary for the AI to relay
+        const detailLines = [
+          `Name: ${char.display_name}`,
+          `Role: ${char.role_type || 'unknown'} | Status: ${char.status}`,
+        ];
+        if (char.description)        detailLines.push(`Bio: ${char.description}`);
+        if (char.personality)        detailLines.push(`Personality: ${char.personality}`);
+        if (char.core_belief)        detailLines.push(`Core Belief: ${char.core_belief}`);
+        if (char.core_desire)        detailLines.push(`Core Desire: ${char.core_desire}`);
+        if (char.core_fear)          detailLines.push(`Core Fear: ${char.core_fear}`);
+        if (char.core_wound)         detailLines.push(`Core Wound: ${char.core_wound}`);
+        if (char.mask_persona)       detailLines.push(`Mask (public self): ${char.mask_persona}`);
+        if (char.truth_persona)      detailLines.push(`Truth (private self): ${char.truth_persona}`);
+        if (char.character_archetype) detailLines.push(`Archetype: ${char.character_archetype}`);
+        if (char.signature_trait)     detailLines.push(`Signature Trait: ${char.signature_trait}`);
+        if (char.emotional_baseline)  detailLines.push(`Emotional Baseline: ${char.emotional_baseline}`);
+        if (char.wound_depth)         detailLines.push(`Wound Depth: ${char.wound_depth}`);
+        if (char.belief_pressured)    detailLines.push(`Belief Under Pressure: ${char.belief_pressured}`);
+        if (char.emotional_function)  detailLines.push(`Emotional Function: ${char.emotional_function}`);
+        if (char.writer_notes)        detailLines.push(`Writer Notes: ${char.writer_notes}`);
+        if (char.relationships_map && Object.keys(char.relationships_map).length > 0) {
+          detailLines.push(`Relationships: ${JSON.stringify(char.relationships_map)}`);
+        }
+        if (char.voice_signature && Object.keys(char.voice_signature).length > 0) {
+          detailLines.push(`Voice: ${JSON.stringify(char.voice_signature)}`);
+        }
+        return { replyAppend: `\n${detailLines.join('\n')}` };
+      }
+
+      case 'search_characters': {
+        const query = params.query;
+        if (!query) return { error: 'No search query specified' };
+
+        const chars = await sequelize.query(
+          `SELECT id, display_name, role_type, status, core_belief,
+                  SUBSTRING(description, 1, 120) as short_desc
+           FROM registry_characters
+           WHERE deleted_at IS NULL
+             AND (display_name ILIKE :q OR description ILIKE :q
+                  OR core_belief ILIKE :q OR personality ILIKE :q
+                  OR role_type ILIKE :q OR character_archetype ILIKE :q)
+           ORDER BY display_name
+           LIMIT 20`,
+          { replacements: { q: `%${query}%` }, type: sequelize.QueryTypes.SELECT }
+        );
+        if (chars.length === 0) return { replyAppend: 'No characters matched that search.' };
+        const summary = chars.map(c => `"${c.display_name}" (${c.role_type || 'unknown'}, ${c.status}) id: ${c.id} — ${c.short_desc || c.core_belief || 'no description'}`).join('\n');
+        return { replyAppend: `\n${summary}` };
       }
 
       default:

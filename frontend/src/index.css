@@ -4,6 +4,9 @@
 /* Import Design Tokens */
 @import './styles/design-tokens.css';
 
+/* Import Shared Component Styles (buttons, forms, modals, etc.) */
+@import './styles/shared-components.css';
+
 /* Import Responsive Overrides */
 @import './styles/responsive.css';
 

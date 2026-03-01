@@ -31,19 +31,6 @@
 }
 
 /* Individual tag styling */
-.tag {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.4rem 0.75rem;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border-radius: 16px;
-  font-size: 0.9rem;
-  font-weight: 500;
-  white-space: nowrap;
-  user-select: none;
-}
 
 .tag-remove {
   background: none;
@@ -132,11 +119,6 @@ kbd {
   .tag-input-wrapper {
     padding: 0.5rem;
     gap: 0.4rem;
-  }
-
-  .tag {
-    padding: 0.3rem 0.6rem;
-    font-size: 0.85rem;
   }
 
   .tag-input {
