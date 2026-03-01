@@ -370,8 +370,9 @@ export default function StoryEngine() {
 
   useEffect(() => () => stopTimer(), [stopTimer]);
 
-  // ── localStorage helpers for task arc caching ────────────────────────────
-  const cacheKey = (charKey) => `se_tasks_${charKey}`;
+  // ── localStorage helpers for caching ─────────────────────────────────────
+  const cacheKey     = (charKey) => `se_tasks_${charKey}`;
+  const storyCacheKey = (charKey) => `se_stories_${charKey}`;
 
   function getCachedTasks(charKey) {
     try {
@@ -387,20 +388,49 @@ export default function StoryEngine() {
   function setCachedTasks(charKey, taskList) {
     try {
       localStorage.setItem(cacheKey(charKey), JSON.stringify({ ts: Date.now(), tasks: taskList }));
-    } catch { /* quota exceeded — ok */ }
+    } catch { /* quota exceeded */ }
   }
 
-  // ── Load tasks: try localStorage → server cache → show Generate button ──
+  function getCachedStories(charKey) {
+    try {
+      const raw = localStorage.getItem(storyCacheKey(charKey));
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      // Expire after 7 days
+      if (Date.now() - data.ts > 604800000) { localStorage.removeItem(storyCacheKey(charKey)); return null; }
+      return { stories: data.stories || {}, approved: data.approved || [] };
+    } catch { return null; }
+  }
+
+  function setCachedStories(charKey, storiesObj, approvedArr) {
+    try {
+      localStorage.setItem(storyCacheKey(charKey), JSON.stringify({
+        ts: Date.now(),
+        stories: storiesObj,
+        approved: approvedArr,
+      }));
+    } catch { /* quota exceeded */ }
+  }
+
+  // ── Load tasks + stories: try localStorage → server cache → empty state ──
   useEffect(() => {
     if (!selectedChar) return;
-    setStories({});
-    setApprovedStories([]);
     setActiveTask(null);
     setActiveStory(null);
     setConsistencyConflicts([]);
     setTherapyMemories([]);
 
-    // 1. Check localStorage
+    // Restore any previously-written stories for this character
+    const cachedStoryData = getCachedStories(selectedChar);
+    if (cachedStoryData) {
+      setStories(cachedStoryData.stories);
+      setApprovedStories(cachedStoryData.approved);
+    } else {
+      setStories({});
+      setApprovedStories([]);
+    }
+
+    // 1. Check localStorage for task arc
     const cached = getCachedTasks(selectedChar);
     if (cached?.length) {
       setTasks(cached);
@@ -490,8 +520,10 @@ export default function StoryEngine() {
         return;
       }
 
-      setStories((prev) => ({ ...prev, [task.story_number]: data }));
+      const nextStories = { ...stories, [task.story_number]: data };
+      setStories(nextStories);
       setActiveStory(data);
+      setCachedStories(selectedChar, nextStories, approvedStories);
     } catch (e) {
       console.error('handleGenerate error:', e);
       alert('Story generation failed — please try again.');
@@ -504,7 +536,9 @@ export default function StoryEngine() {
 
   // ── Approve a story ───────────────────────────────────────────────────────
   async function handleApprove(story) {
-    setApprovedStories((prev) => [...new Set([...prev, story.story_number])]);
+    const nextApproved = [...new Set([...approvedStories, story.story_number])];
+    setApprovedStories(nextApproved);
+    setCachedStories(selectedChar, stories, nextApproved);
 
     // Extract memories for therapy room
     setTherapyLoading(true);
@@ -533,20 +567,21 @@ export default function StoryEngine() {
 
   // ── Reject a story ────────────────────────────────────────────────────────
   function handleReject(story) {
-    setStories((prev) => {
-      const next = { ...prev };
-      delete next[story.story_number];
-      return next;
-    });
+    const nextStories = { ...stories };
+    delete nextStories[story.story_number];
+    setStories(nextStories);
     setActiveStory(null);
     setActiveTask(tasks.find((t) => t.story_number === story.story_number) || null);
+    setCachedStories(selectedChar, nextStories, approvedStories);
   }
 
   // ── Edit a story — triggers cascade check ────────────────────────────────
   async function handleEdit(story, newText) {
     const updated = { ...story, text: newText, word_count: newText.split(/\s+/).length };
-    setStories((prev) => ({ ...prev, [story.story_number]: updated }));
+    const nextStories = { ...stories, [story.story_number]: updated };
+    setStories(nextStories);
     setActiveStory(updated);
+    setCachedStories(selectedChar, nextStories, approvedStories);
 
     // Cascade consistency check
     await handleCheckConsistency(updated);

@@ -5888,6 +5888,128 @@ const CHARACTER_DNA = {
   },
 };
 
+// ─── Map Story Engine keys → DB character_keys ────────────────────────────────
+const SE_DB_KEY_MAP = {
+  justawoman: ['just-a-woman'],
+  david:      ['the-husband'],
+  dana:       ['the-witness'],
+  chloe:      ['comparison-creator'],
+  jade:       ['the-almost-mentor', 'the-digital-products-customer'],
+  lala:       ['lala'],
+};
+
+// ─── Load rich character profile from DB ──────────────────────────────────────
+async function loadCharacterProfile(characterKey) {
+  const dbKeys = SE_DB_KEY_MAP[characterKey];
+  if (!dbKeys?.length) return null;
+
+  try {
+    const rows = await RegistryCharacter.findAll({
+      where: { character_key: dbKeys },
+      order: [['updated_at', 'DESC']],
+    });
+    if (!rows.length) return null;
+
+    // Merge all matching rows (some chars have multiple DB entries — take latest non-null)
+    const merged = {};
+    const fields = [
+      'core_desire', 'core_fear', 'core_wound', 'core_belief',
+      'personality', 'personality_matrix', 'career_status',
+      'relationships_map', 'voice_signature', 'story_presence',
+      'evolution_tracking', 'mask_persona', 'truth_persona',
+      'signature_trait', 'emotional_baseline', 'emotional_function',
+      'pressure_type', 'pressure_quote', 'description',
+      'aesthetic_dna', 'belief_pressured', 'writer_notes',
+      'wound_depth', 'extra_fields',
+    ];
+    for (const row of rows) {
+      const plain = row.get({ plain: true });
+      for (const f of fields) {
+        if (!merged[f] && plain[f] != null) merged[f] = plain[f];
+      }
+    }
+
+    // Build profile string
+    const sections = [];
+
+    if (merged.core_desire)   sections.push(`CORE DESIRE: ${merged.core_desire}`);
+    if (merged.core_fear)     sections.push(`CORE FEAR: ${merged.core_fear}`);
+    if (merged.core_wound)    sections.push(`CORE WOUND: ${merged.core_wound}`);
+    if (merged.core_belief)   sections.push(`CORE BELIEF: ${merged.core_belief}`);
+    if (merged.mask_persona)  sections.push(`MASK (public persona): ${merged.mask_persona}`);
+    if (merged.truth_persona) sections.push(`TRUTH (private self): ${merged.truth_persona}`);
+    if (merged.signature_trait)    sections.push(`SIGNATURE TRAIT: ${merged.signature_trait}`);
+    if (merged.emotional_baseline) sections.push(`EMOTIONAL BASELINE: ${merged.emotional_baseline}`);
+    if (merged.pressure_type)      sections.push(`PRESSURE TYPE: ${merged.pressure_type}`);
+    if (merged.pressure_quote)     sections.push(`PRESSURE QUOTE: "${merged.pressure_quote}"`);
+    if (merged.belief_pressured)   sections.push(`BELIEF UNDER PRESSURE: ${merged.belief_pressured}`);
+    if (merged.emotional_function) sections.push(`EMOTIONAL FUNCTION: ${merged.emotional_function}`);
+
+    if (merged.personality) {
+      sections.push(`PERSONALITY NOTES: ${typeof merged.personality === 'string' ? merged.personality : JSON.stringify(merged.personality)}`);
+    }
+
+    if (merged.career_status && typeof merged.career_status === 'object') {
+      const cs = merged.career_status;
+      const parts = [];
+      if (cs.current) parts.push(`Current: ${cs.current}`);
+      if (cs.stage)   parts.push(`Stage: ${cs.stage}`);
+      if (cs.platform) parts.push(`Platform: ${cs.platform}`);
+      if (cs.schedule) parts.push(`Schedule: ${cs.schedule}`);
+      if (parts.length) sections.push(`CAREER STATUS:\n  ${parts.join('\n  ')}`);
+    }
+
+    if (merged.relationships_map) {
+      const rels = Array.isArray(merged.relationships_map) ? merged.relationships_map : [];
+      if (rels.length) {
+        const relLines = rels.map(r => {
+          const parts = [];
+          if (r.target) parts.push(r.target);
+          if (r.type) parts.push(`[${r.type}]`);
+          if (r.feels) parts.push(`— ${r.feels}`);
+          if (r.note) parts.push(`(${r.note})`);
+          return parts.join(' ');
+        });
+        sections.push(`RELATIONSHIPS:\n  ${relLines.join('\n  ')}`);
+      }
+    }
+
+    if (merged.story_presence && typeof merged.story_presence === 'object') {
+      const sp = merged.story_presence;
+      const parts = [];
+      if (sp.arc) parts.push(`Arc: ${sp.arc}`);
+      if (sp.narrative_function) parts.push(`Function: ${sp.narrative_function}`);
+      if (sp.chapters_active) parts.push(`Active chapters: ${sp.chapters_active}`);
+      if (parts.length) sections.push(`STORY PRESENCE:\n  ${parts.join('\n  ')}`);
+    }
+
+    if (merged.voice_signature && typeof merged.voice_signature === 'object') {
+      const vs = merged.voice_signature;
+      const parts = Object.entries(vs).map(([k, v]) => `${k}: ${v}`);
+      if (parts.length) sections.push(`VOICE SIGNATURE:\n  ${parts.join('\n  ')}`);
+    }
+
+    if (merged.description) {
+      sections.push(`WRITER'S DESCRIPTION: ${merged.description}`);
+    }
+
+    if (merged.writer_notes) {
+      sections.push(`WRITER NOTES: ${merged.writer_notes}`);
+    }
+
+    // Extract memories from extra_fields if available
+    if (merged.extra_fields?.memories?.length) {
+      const mems = merged.extra_fields.memories.slice(0, 10);
+      sections.push(`CONFIRMED MEMORIES:\n  ${mems.join('\n  ')}`);
+    }
+
+    return sections.length ? sections.join('\n\n') : null;
+  } catch (err) {
+    console.error('[loadCharacterProfile] error:', err?.message);
+    return null;
+  }
+}
+
 // ─── 50-story arc phases ──────────────────────────────────────────────────────
 const SE_ARC_PHASES = {
   establishment: { range: [1, 10],  label: 'Establishment', description: 'Who she is. Her rhythms. What she reaches for and what she\'s afraid of. The reader learns her world.' },
@@ -5939,6 +6061,12 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
   }
 
   try {
+    // Load rich profile from DB
+    const dbProfile = await loadCharacterProfile(characterKey);
+    const profileSection = dbProfile
+      ? `\n\nCHARACTER PROFILE FROM REGISTRY (use this to enrich every story brief — this is who she really is):\n${dbProfile}`
+      : '';
+
     const systemPrompt = `You are building a 50-story arc for ${dna.display_name}.
 
 CHARACTER DNA:
@@ -5953,7 +6081,7 @@ CHARACTER DNA:
 - Career domain: ${dna.domains.career}
 - Romantic domain: ${dna.domains.romantic}
 - Family domain: ${dna.domains.family}
-- Friends domain: ${dna.domains.friends}
+- Friends domain: ${dna.domains.friends}${profileSection}
 
 ARC PHASES:
 - Stories 1-10: Establishment — who she is, her rhythms, her world
@@ -6072,6 +6200,12 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
       ? `PREVIOUS STORIES (for continuity):\n${previousStories.map((s) => `- Story ${s.number}: "${s.title}" — ${s.summary}`).join('\n')}`
       : 'This is the first story in the arc.';
 
+    // Load rich profile from DB
+    const dbProfile = await loadCharacterProfile(characterKey);
+    const profileSection = dbProfile
+      ? `\n\nCHARACTER PROFILE FROM REGISTRY (ground the story in these details — this is who she really is):\n${dbProfile}`
+      : '';
+
     const systemPrompt = `You are writing Story ${storyNumber} of 50 in ${dna.display_name}'s arc.
 
 CHARACTER DNA:
@@ -6083,7 +6217,7 @@ Wound: ${dna.wound}
 Strengths: ${dna.strengths.join(', ')}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}
+Recurring object: ${dna.recurring_object}${profileSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -6290,11 +6424,11 @@ Return ONLY valid JSON:
       return res.json({ memories_extracted: 0, fallback: true });
     }
 
-    // Save to storyteller_memories table
-    const memories = parsed.pain_points || [];
+    // Save pain_points to storyteller_memories table
+    const painPoints = parsed.pain_points || [];
     let saved = 0;
 
-    for (const memory of memories) {
+    for (const memory of painPoints) {
       try {
         await StorytellerMemory.create({
           character_id: characterId,
@@ -6309,7 +6443,46 @@ Return ONLY valid JSON:
         });
         saved++;
       } catch (e) {
-        console.error('[extract-story-memories] save error:', e?.message);
+        console.error('[extract-story-memories] save pain_point error:', e?.message);
+      }
+    }
+
+    // Save belief_shifts to storyteller_memories table
+    const beliefShifts = parsed.belief_shifts || [];
+    for (const shift of beliefShifts) {
+      try {
+        await StorytellerMemory.create({
+          character_id: characterId,
+          type: 'belief_shift',
+          statement: `${shift.before} → ${shift.after} (triggered by: ${shift.trigger})`,
+          confidence: 0.80,
+          confirmed: false,
+          source_ref: `story_${storyNumber}`,
+          tags: JSON.stringify(['belief_shift']),
+          category: 'belief_shift',
+        });
+        saved++;
+      } catch (e) {
+        console.error('[extract-story-memories] save belief_shift error:', e?.message);
+      }
+    }
+
+    // Save therapy_opening as a memory
+    if (parsed.therapy_opening) {
+      try {
+        await StorytellerMemory.create({
+          character_id: characterId,
+          type: 'therapy_opening',
+          statement: parsed.therapy_opening,
+          confidence: 0.90,
+          confirmed: false,
+          source_ref: `story_${storyNumber}`,
+          tags: JSON.stringify(['therapy_opening']),
+          category: 'therapy_opening',
+        });
+        saved++;
+      } catch (e) {
+        console.error('[extract-story-memories] save therapy_opening error:', e?.message);
       }
     }
 
@@ -6324,6 +6497,51 @@ Return ONLY valid JSON:
   } catch (err) {
     console.error('[extract-story-memories] error:', err?.message);
     return res.json({ memories_extracted: 0, fallback: true });
+  }
+});
+
+// ─── GET /story-memories/:characterId ────────────────────────────────────────
+// Fetch all story-extracted memories for a character (used by Therapy Room).
+router.get('/story-memories/:characterId', optionalAuth, async (req, res) => {
+  try {
+    const { characterId } = req.params;
+    const memories = await StorytellerMemory.findAll({
+      where: { character_id: characterId },
+      order: [['created_at', 'DESC']],
+      limit: 200,
+    });
+    const painPoints = memories.filter(m => m.type === 'pain_point');
+    const beliefShifts = memories.filter(m => m.type === 'belief_shift');
+    const therapyOpenings = memories.filter(m => m.type === 'therapy_opening');
+    return res.json({
+      success: true,
+      total: memories.length,
+      pain_points: painPoints.map(m => ({
+        id: m.id,
+        statement: m.statement,
+        category: m.category,
+        coaching_angle: m.coaching_angle,
+        source_ref: m.source_ref,
+        confirmed: m.confirmed,
+        created_at: m.created_at,
+      })),
+      belief_shifts: beliefShifts.map(m => ({
+        id: m.id,
+        statement: m.statement,
+        source_ref: m.source_ref,
+        confirmed: m.confirmed,
+        created_at: m.created_at,
+      })),
+      therapy_openings: therapyOpenings.map(m => ({
+        id: m.id,
+        statement: m.statement,
+        source_ref: m.source_ref,
+        created_at: m.created_at,
+      })),
+    });
+  } catch (err) {
+    console.error('[story-memories] error:', err?.message);
+    return res.json({ success: false, total: 0, pain_points: [], belief_shifts: [], therapy_openings: [] });
   }
 });
 
