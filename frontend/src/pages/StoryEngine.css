@@ -1,6 +1,6 @@
 /* ─────────────────────────────────────────────────────────────────────────────
    StoryEngine.css
-   Aesthetic: Editorial dark fiction — ink black, warm cream, character accent
+   Aesthetic: Editorial parchment — warm cream, ink, gold accent
    Display: Playfair Display · UI: DM Sans
    ──────────────────────────────────────────────────────────────────────────── */
 
@@ -8,16 +8,16 @@
 
 /* ── Variables ───────────────────────────────────────────────────────────────── */
 :root {
-  --se-bg:          #0f0e0c;
-  --se-surface:     #1a1917;
-  --se-surface2:    #221f1c;
-  --se-border:      #2e2b27;
-  --se-text:        #e8e4dc;
-  --se-text-muted:  #7a7570;
-  --se-text-dim:    #4a4540;
+  --se-bg:          #FAF7F0;
+  --se-surface:     #FFFFFF;
+  --se-surface2:    #F0EDE6;
+  --se-border:      #E0DCD4;
+  --se-text:        #1C1814;
+  --se-text-muted:  #6B6560;
+  --se-text-dim:    #A09A92;
   --se-cream:       #FAF8F4;
-  --se-gold:        #C6A85E;
-  --char-color:     #C6A85E;
+  --se-gold:        #b0922e;
+  --char-color:     #b0922e;
 }
 
 /* ── Page shell ──────────────────────────────────────────────────────────────── */
@@ -115,14 +115,14 @@
   justify-content: center;
 }
 .se-world-toggle-btn.open {
-  border-color: #34d399;
-  color: #34d399;
-  background: rgba(52, 211, 153, 0.08);
+  border-color: #059669;
+  color: #059669;
+  background: rgba(5, 150, 105, 0.08);
 }
 .se-world-toggle-btn.closed {
-  border-color: #ef4444;
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.08);
+  border-color: #dc2626;
+  color: #dc2626;
+  background: rgba(220, 38, 38, 0.06);
 }
 
 /* ── Character bar ───────────────────────────────────────────────────────────── */
@@ -275,7 +275,7 @@
 .se-task-card:hover { background: var(--se-surface); }
 .se-task-card.active { background: color-mix(in srgb, var(--char-color) 8%, var(--se-surface)); }
 .se-task-card.approved { opacity: 0.6; }
-.se-task-card.approved .se-task-title { text-decoration: line-through; text-decoration-color: #34d399; }
+.se-task-card.approved .se-task-title { text-decoration: line-through; text-decoration-color: #059669; }
 
 .se-task-number {
   width: 24px;
@@ -285,7 +285,7 @@
   padding-top: 2px;
   text-align: center;
 }
-.se-task-check { color: #34d399; font-size: 13px; }
+.se-task-check { color: #059669; font-size: 13px; }
 
 .se-task-body { flex: 1; min-width: 0; }
 
@@ -558,8 +558,8 @@
 
 .se-btn-edit { border-color: var(--se-border); color: var(--se-text-muted); background: transparent; }
 .se-btn-consistency { border-color: var(--se-border); color: var(--se-text-muted); background: transparent; }
-.se-btn-reject { border-color: #ef4444; color: #ef4444; background: transparent; }
-.se-btn-approve { border-color: transparent; color: var(--se-bg); font-weight: 700; }
+.se-btn-reject { border-color: #dc2626; color: #dc2626; background: transparent; }
+.se-btn-approve { border-color: transparent; color: #FFFFFF; font-weight: 700; }
 .se-btn-cancel { border-color: var(--se-border); color: var(--se-text-muted); background: transparent; }
 
 /* New character alert */
@@ -582,8 +582,8 @@
   font-weight: 600;
   padding: 4px 12px;
   border-radius: 4px;
-  border: 1px solid #34d399;
-  color: #34d399;
+  border: 1px solid #059669;
+  color: #059669;
   background: transparent;
   cursor: pointer;
   min-height: 44px;
@@ -606,14 +606,14 @@
   padding: 12px 28px;
   border-bottom: 1px solid var(--se-border);
   flex-shrink: 0;
-  background: color-mix(in srgb, #ef4444 5%, transparent);
+  background: color-mix(in srgb, #dc2626 5%, transparent);
 }
 .se-conflicts-title {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #ef4444;
+  color: #dc2626;
   margin-bottom: 8px;
 }
 .se-conflict {
@@ -626,10 +626,10 @@
 }
 .se-conflict:last-child { border-bottom: none; }
 .se-conflict-story { color: var(--se-gold); font-weight: 600; white-space: nowrap; }
-.se-conflict-type { color: #ef4444; white-space: nowrap; font-weight: 500; }
+.se-conflict-type { color: #dc2626; white-space: nowrap; font-weight: 500; }
 .se-conflict-desc { color: var(--se-text-muted); }
-.se-conflict-critical .se-conflict-type { color: #ef4444; }
-.se-conflict-warning .se-conflict-type { color: #f59e0b; }
+.se-conflict-critical .se-conflict-type { color: #dc2626; }
+.se-conflict-warning .se-conflict-type { color: #d97706; }
 .se-conflict-minor .se-conflict-type { color: var(--se-text-dim); }
 
 /* Story body */
@@ -660,7 +660,7 @@
 .se-story-editor {
   width: 100%;
   height: 100%;
-  background: var(--se-surface);
+  background: var(--se-cream);
   border: none;
   outline: none;
   resize: none;

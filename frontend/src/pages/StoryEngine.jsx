@@ -6,19 +6,19 @@ const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
 // ─── Character meta (mirrors backend CHARACTER_DNA) ───────────────────────────
 const CHARACTERS = {
-  justawoman: { display_name: 'JustAWoman', icon: '♛', role_type: 'special',  world: 'book1',    color: '#C6A85E' },
-  david:      { display_name: 'David',      icon: '◈',  role_type: 'pressure', world: 'book1',    color: '#e07070' },
-  dana:       { display_name: 'Dana',       icon: '◉',  role_type: 'support',  world: 'book1',    color: '#34d399' },
-  chloe:      { display_name: 'Chloe',      icon: '◎',  role_type: 'mirror',   world: 'book1',    color: '#a78bfa' },
-  jade:       { display_name: 'Jade',       icon: '◆',  role_type: 'shadow',   world: 'book1',    color: '#94a3b8' },
-  lala:       { display_name: 'Lala',       icon: '✦',  role_type: 'special',  world: 'lalaverse', color: '#f472b6' },
+  justawoman: { display_name: 'JustAWoman', icon: '♛', role_type: 'special',  world: 'book1',    color: '#9a7d1e' },
+  david:      { display_name: 'David',      icon: '◈',  role_type: 'pressure', world: 'book1',    color: '#c0392b' },
+  dana:       { display_name: 'Dana',       icon: '◉',  role_type: 'support',  world: 'book1',    color: '#0d9668' },
+  chloe:      { display_name: 'Chloe',      icon: '◎',  role_type: 'mirror',   world: 'book1',    color: '#7c3aed' },
+  jade:       { display_name: 'Jade',       icon: '◆',  role_type: 'shadow',   world: 'book1',    color: '#546678' },
+  lala:       { display_name: 'Lala',       icon: '✦',  role_type: 'special',  world: 'lalaverse', color: '#d63384' },
 };
 
 const PHASE_COLORS = {
-  establishment: '#C6A85E',
-  pressure:      '#e07070',
-  crisis:        '#ef4444',
-  integration:   '#34d399',
+  establishment: '#9a7d1e',
+  pressure:      '#c0392b',
+  crisis:        '#b91c1c',
+  integration:   '#0d9668',
 };
 
 const PHASE_LABELS = {
