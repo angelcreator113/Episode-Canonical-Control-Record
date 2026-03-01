@@ -14,7 +14,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterVoiceInterview from './CharacterVoiceInterview';
 import CharacterDilemmaEngine from '../components/CharacterDilemmaEngine';
@@ -57,6 +57,9 @@ const CANON_TIERS = ['Core Canon', 'Licensed', 'Minor'];
 
 const DOSSIER_TABS = [
   { key: 'overview',      label: 'Overview' },
+  { key: 'living',        label: '✦ Living State' },
+  { key: 'arc',           label: 'Arc Timeline' },
+  { key: 'threads',       label: 'Plot Threads' },
   { key: 'psychology',    label: 'Psychology' },
   { key: 'aesthetic',     label: 'Aesthetic DNA' },
   { key: 'career',        label: 'Career' },
@@ -66,6 +69,22 @@ const DOSSIER_TABS = [
   { key: 'dilemma',       label: 'Dilemma' },
   { key: 'ai',            label: '✦ AI Writer' },
 ];
+
+const MOMENTUM = {
+  rising:  { symbol: '↑', color: '#3d8e42', label: 'Rising' },
+  steady:  { symbol: '→', color: '#9a8c9e', label: 'Steady' },
+  falling: { symbol: '↓', color: '#c43a2a', label: 'Falling' },
+  dormant: { symbol: '·', color: '#6b5c6e', label: 'Dormant' },
+};
+
+const ROLE_COLORS = {
+  protagonist: '#c9a84c',
+  pressure:    '#d46070',
+  mirror:      '#7b8de0',
+  support:     '#5dab62',
+  shadow:      '#9b4dca',
+  special:     '#5ec0b8',
+};
 
 const ARCHETYPES = [
   'Strategist', 'Dreamer', 'Performer', 'Guardian', 'Rebel',
@@ -101,6 +120,7 @@ function EmptyState({ label, onEdit }) {
 export default function CharacterRegistryPage() {
 
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   /* ── Mobile Detection ── */
   const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
@@ -151,6 +171,25 @@ export default function CharacterRegistryPage() {
   const tabsRef = useRef(null);
   useTabAutoScroll(tabsRef, dossierTab);
 
+  // Living State / Arc / Threads (merged from CharacterHome)
+  const [livingStates, setLivingStates]   = useState({});     // { charId: stateObj }
+  const [charArc, setCharArc]             = useState(null);
+  const [plotThreads, setPlotThreads]     = useState([]);
+  const [generatingArc, setGeneratingArc] = useState(false);
+  const [generatingId, setGeneratingId]   = useState(null);   // single char generation
+  const [generatingAll, setGeneratingAll] = useState(false);   // batch generation
+
+  // Plot thread CRUD state
+  const [showNewThread, setShowNewThread] = useState(false);
+  const [threadForm, setThreadForm]       = useState({ title: '', description: '', status: 'open', source: '' });
+  const [editingThreadId, setEditingThreadId] = useState(null);
+
+  // World mode — flat view of ALL characters across registries
+  const [worldMode, setWorldMode]           = useState(false);
+  const [allCharacters, setAllCharacters]   = useState([]);
+  const [worldType, setWorldType]           = useState('all');  // role type filter
+  const [worldExpanded, setWorldExpanded]   = useState({});     // { charId: true }
+
   // AI Writer state
   const [aiMode, setAiMode]             = useState('scene');    // scene | monologue | profile | gaps | next
   const [aiPrompt, setAiPrompt]         = useState('');
@@ -162,6 +201,11 @@ export default function CharacterRegistryPage() {
   const [aiLoading, setAiLoading]       = useState(false);
   const [aiError, setAiError]           = useState(null);
   const [aiContextUsed, setAiContextUsed] = useState(null);
+
+  // Comparison view state
+  const [compareMode, setCompareMode]   = useState(false);
+  const [compareSelection, setCompareSelection] = useState([]);  // array of char ids (max 2)
+  const [showCompare, setShowCompare]   = useState(false);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type, key: Date.now() });
@@ -203,6 +247,193 @@ export default function CharacterRegistryPage() {
 
   useEffect(() => { fetchRegistries(); }, [fetchRegistries]);
 
+  // Load living states from localStorage on mount, then try DB
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem('wv_living_states') || '{}');
+    setLivingStates(saved);
+  }, []);
+
+  // Hydrate living states from DB (evolution_tracking.living_state) when registry loads
+  useEffect(() => {
+    if (!activeRegistry?.characters) return;
+    const dbStates = {};
+    for (const ch of activeRegistry.characters) {
+      const ls = ch.evolution_tracking?.living_state;
+      if (ls?.isGenerated) dbStates[ch.id] = ls;
+    }
+    if (Object.keys(dbStates).length > 0) {
+      setLivingStates(prev => {
+        const merged = { ...prev };
+        for (const [id, state] of Object.entries(dbStates)) {
+          if (!merged[id]?.isGenerated) merged[id] = state;
+        }
+        localStorage.setItem('wv_living_states', JSON.stringify(merged));
+        return merged;
+      });
+    }
+  }, [activeRegistry?.id]);
+
+  // Names to exclude from LalaVerse
+  const WORLD_EXCLUDE = ['chloe', 'justawoman', 'the almost-mentor', 'the witness', 'the husband', 'the digital products customer'];
+
+  // Load ALL characters across ALL registries + Press (for World mode)
+  const loadAllCharacters = useCallback(async () => {
+    try {
+      const res = await fetch(`${API}/registries`, { credentials: 'include' });
+      if (!res.ok) return;
+      const data = await res.json();
+      const regs = data.registries || data || [];
+      const all = [];
+      for (const reg of regs) {
+        const r = await fetch(`${API}/registries/${reg.id}`, { credentials: 'include' });
+        if (r.ok) {
+          const d = await r.json();
+          const chars = d.registry?.characters || d.characters || [];
+          all.push(...chars);
+        }
+      }
+
+      // Also fetch LalaVerse Press characters
+      try {
+        const pr = await fetch('/api/v1/press/characters', { credentials: 'include' });
+        if (pr.ok) {
+          const pd = await pr.json();
+          const pressList = pd.characters || pd.data || [];
+          for (const pc of pressList) {
+            all.push({
+              id: `press_${pc.slug}`,
+              selected_name: pc.name,
+              display_name: pc.name,
+              role_type: 'special',
+              role_label: pc.publication || pc.tagline,
+              status: 'finalized',
+              belief_pressured: pc.tagline,
+              _isPress: true,
+            });
+          }
+        }
+      } catch { /* press fetch optional */ }
+
+      // Filter out excluded names
+      const filtered = all.filter(c => {
+        const name = (c.selected_name || c.display_name || '').toLowerCase().trim();
+        return !WORLD_EXCLUDE.includes(name);
+      });
+      setAllCharacters(filtered);
+    } catch { /* silent */ }
+  }, []);
+
+  // ── Generate living state via Claude ─────────────────────────────────
+  function generateFallbackState(character) {
+    const name = character?.selected_name || character?.display_name || 'Character';
+    const typeDefaults = {
+      protagonist: { currentKnows: `${name} understands more than she lets on.`, currentWants: `To become what she was always becoming.`, unresolved: `The gap between who she is and who she's building.`, momentum: 'rising' },
+      special:     { currentKnows: `${name} understands more than she lets on.`, currentWants: `To become what she was always becoming.`, unresolved: `The gap between who she is and who she's building.`, momentum: 'rising' },
+      pressure:    { currentKnows: `${name} sees the risk before the possibility.`, currentWants: `To protect what's already been built.`, unresolved: `Whether his caution is wisdom or fear.`, momentum: 'steady' },
+      mirror:      { currentKnows: `${name} has done what others are trying to do.`, currentWants: `Nothing — she's already there.`, unresolved: `Whether she'd have gotten there differently.`, momentum: 'steady' },
+      support:     { currentKnows: `${name} holds the thread of consistency.`, currentWants: `To see the pattern resolved.`, unresolved: `Whether she's been seen for her steadiness.`, momentum: 'steady' },
+      shadow:      { currentKnows: `${name} appeared at exactly the right moment.`, currentWants: `To be the answer someone needed.`, unresolved: `Whether the rescue was real.`, momentum: 'falling' },
+    };
+    const defaults = typeDefaults[character?.role_type] || typeDefaults.support;
+    return { ...defaults, relationships: [], isGenerated: true, isConfirmed: false };
+  }
+
+  const generateState = useCallback(async (charId) => {
+    // Find in allCharacters or activeRegistry
+    const character = allCharacters.find(c => c.id === charId) ||
+                      (activeRegistry?.characters || []).find(c => c.id === charId);
+    if (!character) return;
+    setGeneratingId(charId);
+    try {
+      const charName = character.selected_name || character.display_name || 'Character';
+      const res = await fetch('/api/v1/memories/generate-living-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          character_id: charId,
+          character_name: charName,
+          character_type: character.role_type,
+          character_role: character.role_label,
+          belief_pressured: character.belief_pressured,
+        }),
+      });
+      let newState;
+      if (res.ok) {
+        const data = await res.json();
+        newState = {
+          currentKnows:  data.knows  || `${charName} knows the world she's been given.`,
+          currentWants:  data.wants  || `${charName} wants something she can't name yet.`,
+          unresolved:    data.unresolved || "Something between her and what she's after.",
+          lastChapter:   data.lastChapter || null,
+          momentum:      data.momentum || 'steady',
+          relationships: data.relationships || [],
+          isGenerated:   true,
+          isConfirmed:   false,
+        };
+      } else {
+        newState = generateFallbackState(character);
+      }
+      const updated = { ...livingStates, [charId]: newState };
+      setLivingStates(updated);
+      localStorage.setItem('wv_living_states', JSON.stringify(updated));
+      // Persist to DB via evolution_tracking
+      try {
+        await fetch(`${API}/characters/${charId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: newState } }),
+        });
+      } catch { /* non-critical */ }
+    } catch {
+      const newState = generateFallbackState(character);
+      const updated = { ...livingStates, [charId]: newState };
+      setLivingStates(updated);
+      localStorage.setItem('wv_living_states', JSON.stringify(updated));
+      // Persist fallback to DB too
+      try {
+        await fetch(`${API}/characters/${charId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: newState } }),
+        });
+      } catch { /* non-critical */ }
+    } finally {
+      setGeneratingId(null);
+    }
+  }, [allCharacters, activeRegistry, livingStates]);
+
+  const confirmState = useCallback((charId) => {
+    const confirmedState = { ...livingStates[charId], isConfirmed: true };
+    const updated = {
+      ...livingStates,
+      [charId]: confirmedState,
+    };
+    setLivingStates(updated);
+    localStorage.setItem('wv_living_states', JSON.stringify(updated));
+    // Persist confirmation to DB
+    const character = allCharacters.find(c => c.id === charId) ||
+                      (activeRegistry?.characters || []).find(c => c.id === charId);
+    if (character) {
+      fetch(`${API}/characters/${charId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
+      }).catch(() => { /* non-critical */ });
+    }
+  }, [livingStates, allCharacters, activeRegistry]);
+
+  const generateAllStates = useCallback(async () => {
+    const charList = worldMode ? allCharacters : (activeRegistry?.characters || []);
+    const ungenerated = charList.filter(c => !livingStates[c.id]?.isGenerated);
+    if (ungenerated.length === 0) return;
+    setGeneratingAll(true);
+    for (const char of ungenerated) {
+      await generateState(char.id);
+    }
+    setGeneratingAll(false);
+  }, [worldMode, allCharacters, activeRegistry, livingStates, generateState]);
+
   // Fetch book ID for interview context
   useEffect(() => {
     if (!activeRegistry?.book_tag) return;
@@ -220,14 +451,166 @@ export default function CharacterRegistryPage() {
     })();
   }, [activeRegistry?.book_tag]);
 
+  // Deep-link: ?charId=xxx opens that character's dossier, ?view=world opens world mode
+  useEffect(() => {
+    const viewParam = searchParams.get('view');
+    if (viewParam === 'world') {
+      setWorldMode(true);
+      loadAllCharacters();
+      setSearchParams({}, { replace: true });
+      return;
+    }
+    const linkId = searchParams.get('charId');
+    if (!linkId) return;
+    // Try to find in active registry first, then load all
+    const chars = activeRegistry?.characters || [];
+    const found = chars.find(c => c.id === linkId);
+    if (found) {
+      setActiveChar(found);
+      setView('dossier');
+      setDossierTab(searchParams.get('tab') || 'living');
+      setEditSection(null);
+      setSearchParams({}, { replace: true });
+    } else if (allCharacters.length > 0) {
+      const fromAll = allCharacters.find(c => c.id === linkId);
+      if (fromAll) {
+        setActiveChar(fromAll);
+        setView('dossier');
+        setDossierTab(searchParams.get('tab') || 'living');
+        setEditSection(null);
+        setSearchParams({}, { replace: true });
+      }
+    }
+  }, [activeRegistry, searchParams, allCharacters]);
+
+  // Load plot threads & arc when dossier opens for a character
+  useEffect(() => {
+    if (view !== 'dossier' || !activeChar) {
+      setCharArc(null);
+      setPlotThreads([]);
+      return;
+    }
+    // Plot threads from API
+    (async () => {
+      try {
+        const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads`, { credentials: 'include' });
+        if (res.ok) {
+          const data = await res.json();
+          setPlotThreads(data.threads || []);
+        }
+      } catch { /* phase 2 */ }
+    })();
+  }, [view, activeChar?.id]);
+
+  // Generate arc from manuscript
+  const generateArc = useCallback(async () => {
+    if (!activeChar) return;
+    setGeneratingArc(true);
+    try {
+      const res = await fetch('/api/v1/memories/generate-character-arc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          character_id: activeChar.id,
+          character_name: activeChar.selected_name || activeChar.display_name,
+          character_type: activeChar.role_type,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCharArc(data.arc || data);
+      } else {
+        setCharArc({
+          chapters: [
+            { chapter: 'Ch 1', event: 'Introduction', shift: 'Belief intact' },
+            { chapter: 'Ch 5', event: 'First pressure', shift: 'Cracks forming' },
+          ],
+          summary: `${activeChar.selected_name || activeChar.display_name}'s arc is still being written.`,
+        });
+      }
+    } catch {
+      setCharArc({ chapters: [], summary: 'Unable to generate arc. Connect to a manuscript first.' });
+    } finally {
+      setGeneratingArc(false);
+    }
+  }, [activeChar]);
+
+  /* ── Plot Thread CRUD ── */
+  const addPlotThread = async () => {
+    if (!activeChar || !threadForm.title.trim()) return;
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(threadForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPlotThreads(data.threads);
+        setShowNewThread(false);
+        setThreadForm({ title: '', description: '', status: 'open', source: '' });
+        showToast('Plot thread added');
+      }
+    } catch (e) { showToast('Failed to add thread', 'error'); }
+  };
+
+  const updatePlotThread = async (threadId) => {
+    if (!activeChar) return;
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads/${threadId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(threadForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPlotThreads(data.threads);
+        setEditingThreadId(null);
+        setThreadForm({ title: '', description: '', status: 'open', source: '' });
+        showToast('Plot thread updated');
+      }
+    } catch (e) { showToast('Failed to update thread', 'error'); }
+  };
+
+  const deletePlotThread = async (threadId) => {
+    if (!activeChar) return;
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads/${threadId}`, {
+        method: 'DELETE',
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPlotThreads(data.threads);
+        showToast('Thread removed');
+      }
+    } catch (e) { showToast('Failed to delete thread', 'error'); }
+  };
+
+  const toggleThreadStatus = async (thread) => {
+    const nextStatus = thread.status === 'open' ? 'active' : thread.status === 'active' ? 'resolved' : 'open';
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}/plot-threads/${thread.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: nextStatus }),
+      });
+      const data = await res.json();
+      if (data.success) setPlotThreads(data.threads);
+    } catch { /* silent */ }
+  };
+
   /* ── Characters + Filtering ── */
 
-  const characters = activeRegistry?.characters || [];
+  const characters = worldMode ? allCharacters : (activeRegistry?.characters || []);
   const sorted = [...characters].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
 
   const eras = [...new Set(sorted.map(c => c.era_introduced).filter(Boolean))];
 
-  const filtered = sorted.filter(c => {
+  // World mode uses simpler type filter; browse mode uses full filter set
+  const filtered = worldMode
+    ? sorted.filter(c => worldType === 'all' || c.role_type === worldType)
+    : sorted.filter(c => {
     if (search) {
       const q = search.toLowerCase();
       const haystack = [c.display_name, c.subtitle, c.description, c.selected_name, c.character_archetype]
@@ -254,6 +637,14 @@ export default function CharacterRegistryPage() {
   /* ── Character Actions ── */
 
   const openDossier = (char) => {
+    if (compareMode) {
+      setCompareSelection(prev => {
+        if (prev.includes(char.id)) return prev.filter(id => id !== char.id);
+        if (prev.length >= 2) return [prev[1], char.id];
+        return [...prev, char.id];
+      });
+      return;
+    }
     setActiveChar(char);
     setView('dossier');
     setDossierTab('overview');
@@ -535,6 +926,36 @@ export default function CharacterRegistryPage() {
     setAiDirection('');
   };
 
+  /* ── Save AI Writer Result to Character Profile ── */
+  const saveAiToProfile = useCallback(async (fields) => {
+    if (!activeChar || !fields || Object.keys(fields).length === 0) return;
+    try {
+      const res = await fetch(`${API}/characters/${activeChar.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(fields),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('AI result saved to profile');
+        // Refresh character data
+        if (activeRegistry?.id) {
+          const refreshed = await fetch(`${API}/registries/${activeRegistry.id}`);
+          const rData = await refreshed.json();
+          if (rData.success) {
+            setActiveRegistry(rData.registry);
+            const updated = (rData.registry?.characters || []).find(c => c.id === activeChar.id);
+            if (updated) setActiveChar(updated);
+          }
+        }
+      } else {
+        showToast(data.error || 'Failed to save', 'error');
+      }
+    } catch (e) {
+      showToast('Failed to save AI result', 'error');
+    }
+  }, [activeChar, activeRegistry, showToast]);
+
   /* ── Stats ── */
   const statusCounts = {
     total: sorted.length,
@@ -542,6 +963,26 @@ export default function CharacterRegistryPage() {
     accepted: sorted.filter(c => c.status === 'accepted').length,
     finalized: sorted.filter(c => c.status === 'finalized').length,
   };
+
+  // World mode stats
+  const worldTypeCounts = characters.reduce((acc, c) => {
+    acc[c.role_type] = (acc[c.role_type] || 0) + 1;
+    return acc;
+  }, {});
+  const generatedCount = characters.filter(c => livingStates[c.id]?.isGenerated).length;
+
+  // Enter world mode
+  const enterWorldMode = useCallback(() => {
+    setWorldMode(true);
+    loadAllCharacters();
+  }, [loadAllCharacters]);
+
+  // Exit world mode
+  const exitWorldMode = useCallback(() => {
+    setWorldMode(false);
+    setWorldType('all');
+    setWorldExpanded({});
+  }, []);
 
 
   /* ================================================================
@@ -628,6 +1069,9 @@ export default function CharacterRegistryPage() {
               <button className="cr-dossier-back-btn" onClick={closeDossier}>
                 ← Back to Registry
               </button>
+              <button className="cr-export-btn" onClick={() => window.print()} title="Print / Export PDF">
+                🖨 Export
+              </button>
             </div>
           )}
 
@@ -679,21 +1123,24 @@ export default function CharacterRegistryPage() {
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (!file) return;
-                        const form = new FormData();
-                        form.append('portrait', file);
+                        const fd = new FormData();
+                        fd.append('portrait', file);
                         try {
                           const resp = await fetch(`${API}/characters/${c.id}/portrait`, {
                             method: 'POST',
-                            body: form,
+                            body: fd,
                           });
                           const data = await resp.json();
                           if (data.success && data.portrait_url) {
-                            setCharacters(prev => prev.map(ch =>
-                              ch.id === c.id ? { ...ch, portrait_url: data.portrait_url } : ch
-                            ));
+                            setActiveChar(prev => ({ ...prev, portrait_url: data.portrait_url }));
+                            if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+                            showToast('Portrait uploaded');
+                          } else {
+                            showToast(data.error || 'Upload failed', 'error');
                           }
                         } catch (err) {
                           console.error('Portrait upload failed:', err);
+                          showToast('Portrait upload failed', 'error');
                         }
                         e.target.value = '';
                       }}
@@ -707,12 +1154,16 @@ export default function CharacterRegistryPage() {
                       onClick={async (e) => {
                         e.stopPropagation();
                         try {
-                          await fetch(`${API}/characters/${c.id}/portrait`, { method: 'DELETE' });
-                          setCharacters(prev => prev.map(ch =>
-                            ch.id === c.id ? { ...ch, portrait_url: null } : ch
-                          ));
+                          const resp = await fetch(`${API}/characters/${c.id}/portrait`, { method: 'DELETE' });
+                          const data = await resp.json();
+                          if (data.success) {
+                            setActiveChar(prev => ({ ...prev, portrait_url: null }));
+                            if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+                            showToast('Portrait removed');
+                          }
                         } catch (err) {
                           console.error('Portrait remove failed:', err);
+                          showToast('Portrait remove failed', 'error');
                         }
                       }}
                     >
@@ -853,7 +1304,231 @@ export default function CharacterRegistryPage() {
 
               {/* Tab Content */}
               <div className="cr-dossier-tab-content">
-                {dossierTab === 'dilemma' ? (
+                {/* ── Living State Tab ── */}
+                {dossierTab === 'living' ? (() => {
+                  const ls = livingStates[c.id] || null;
+                  const mom = MOMENTUM[ls?.momentum || 'dormant'];
+                  const meta = { color: ROLE_COLORS[c.role_type] || '#9a8c9e' };
+                  const isGen = generatingId === c.id;
+                  return (
+                    <div className="cr-living-tab">
+                      {ls?.isGenerated ? (
+                        <>
+                          <div className="cr-living-header">
+                            <h4>Living State</h4>
+                            <div className="cr-living-momentum" style={{ background: mom.color }}>
+                              {mom.symbol} {mom.label}
+                            </div>
+                          </div>
+                          <div className="cr-living-grid">
+                            <div className="cr-living-slot">
+                              <div className="cr-living-slot-label">Knows</div>
+                              <div className="cr-living-slot-text">{ls.currentKnows}</div>
+                            </div>
+                            <div className="cr-living-slot">
+                              <div className="cr-living-slot-label">Wants</div>
+                              <div className="cr-living-slot-text">{ls.currentWants}</div>
+                            </div>
+                            <div className="cr-living-slot cr-living-slot-full">
+                              <div className="cr-living-slot-label cr-living-slot-danger">Unresolved</div>
+                              <div className="cr-living-slot-text">{ls.unresolved}</div>
+                            </div>
+                          </div>
+                          {ls.lastChapter && (
+                            <div className="cr-living-footer">Last seen: {ls.lastChapter}</div>
+                          )}
+                          {/* Confirm / Regenerate actions */}
+                          {!ls.isConfirmed ? (
+                            <div className="cr-living-actions">
+                              <button
+                                className="cr-btn-outline"
+                                style={{ borderColor: meta.color, color: meta.color }}
+                                onClick={() => confirmState(c.id)}
+                              >
+                                ✓ Confirm State
+                              </button>
+                              <button
+                                className="cr-btn-outline"
+                                onClick={() => generateState(c.id)}
+                                disabled={isGen}
+                              >
+                                {isGen ? '✦ Regenerating…' : '↺ Regenerate'}
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="cr-living-actions">
+                              <span className="cr-living-confirmed-badge" style={{ color: meta.color }}>✓ State confirmed</span>
+                              <button className="cr-btn-outline" onClick={() => generateState(c.id)} disabled={isGen}>
+                                {isGen ? '✦ Updating…' : 'Update'}
+                              </button>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="cr-dossier-empty">
+                          <div className="cr-dossier-empty-icon">✦</div>
+                          <p className="cr-dossier-empty-text">No living state generated yet.</p>
+                          <button
+                            className="cr-dossier-empty-btn"
+                            onClick={() => generateState(c.id)}
+                            disabled={isGen}
+                          >
+                            {isGen ? '✦ Generating…' : `✦ Generate ${c.selected_name || c.display_name}'s State`}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+
+                /* ── Arc Timeline Tab ── */
+                : dossierTab === 'arc' ? (() => {
+                  const ls = livingStates[c.id] || null;
+                  const mom = MOMENTUM[ls?.momentum || 'dormant'];
+                  const roleColor = ROLE_COLORS[c.role_type] || '#9a8c9e';
+                  return (
+                    <div className="cr-arc-tab">
+                      {charArc?.summary && <p className="cr-arc-summary">{charArc.summary}</p>}
+                      {charArc && (charArc.chapters || []).length > 0 ? (
+                        <div className="cr-arc-strip">
+                          {(charArc.chapters || []).map((ch, i) => (
+                            <React.Fragment key={i}>
+                              <div className="cr-arc-beat">
+                                <div className="cr-arc-beat-header">
+                                  <span className="cr-arc-chapter-label">{ch.chapter}</span>
+                                  {ch.title && <span className="cr-arc-chapter-title">{ch.title}</span>}
+                                  <span className="cr-arc-momentum" style={{ color: mom.color }}>{mom.symbol}</span>
+                                </div>
+                                <div className="cr-arc-event">{ch.event}</div>
+                                {ch.shift && (
+                                  <div className="cr-arc-shift">
+                                    <span className="cr-arc-shift-label">Belief shift</span>
+                                    {ch.shift}
+                                  </div>
+                                )}
+                              </div>
+                              {i < (charArc.chapters || []).length - 1 && (
+                                <div className="cr-arc-connector" style={{ background: roleColor }} />
+                              )}
+                            </React.Fragment>
+                          ))}
+                        </div>
+                      ) : !charArc ? (
+                        <div className="cr-dossier-empty">
+                          <div className="cr-dossier-empty-icon">📈</div>
+                          <p className="cr-dossier-empty-text">No arc data yet.</p>
+                          <button className="cr-dossier-empty-btn" onClick={generateArc} disabled={generatingArc}>
+                            {generatingArc ? '✦ Generating…' : '✦ Generate Arc from Manuscript'}
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="cr-dossier-empty">
+                          <p className="cr-dossier-empty-text">Arc generated but no chapter beats found yet.</p>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()
+
+                /* ── Plot Threads Tab ── */
+                : dossierTab === 'threads' ? (
+                  <div className="cr-threads-tab">
+                    <div className="cr-threads-header">
+                      <h4>Plot Threads</h4>
+                      <button className="cr-btn-outline" onClick={() => { setShowNewThread(true); setEditingThreadId(null); setThreadForm({ title: '', description: '', status: 'open', source: '' }); }}>
+                        + New Thread
+                      </button>
+                    </div>
+
+                    {/* New / Edit Thread Form */}
+                    {(showNewThread || editingThreadId) && (
+                      <div className="cr-thread-form">
+                        <div className="cr-edit-field">
+                          <label className="cr-edit-label">Thread Title *</label>
+                          <input className="cr-edit-input" value={threadForm.title}
+                            onChange={e => setThreadForm(p => ({ ...p, title: e.target.value }))}
+                            placeholder="e.g. David's resistance to Lala" autoFocus />
+                        </div>
+                        <div className="cr-edit-field">
+                          <label className="cr-edit-label">Description</label>
+                          <textarea className="cr-edit-input cr-edit-textarea" value={threadForm.description}
+                            onChange={e => setThreadForm(p => ({ ...p, description: e.target.value }))}
+                            placeholder="What this thread is about…" rows={2} />
+                        </div>
+                        <div style={{ display: 'flex', gap: 12 }}>
+                          <div className="cr-edit-field" style={{ flex: 1 }}>
+                            <label className="cr-edit-label">Status</label>
+                            <select className="cr-edit-input cr-edit-select" value={threadForm.status}
+                              onChange={e => setThreadForm(p => ({ ...p, status: e.target.value }))}>
+                              <option value="open">Open</option>
+                              <option value="active">Active</option>
+                              <option value="resolved">Resolved</option>
+                            </select>
+                          </div>
+                          <div className="cr-edit-field" style={{ flex: 1 }}>
+                            <label className="cr-edit-label">Source</label>
+                            <input className="cr-edit-input" value={threadForm.source}
+                              onChange={e => setThreadForm(p => ({ ...p, source: e.target.value }))}
+                              placeholder="Ch. 3, Ep. 5…" />
+                          </div>
+                        </div>
+                        <div className="cr-modal-actions">
+                          <button className="cr-edit-cancel-btn" onClick={() => { setShowNewThread(false); setEditingThreadId(null); }}>Cancel</button>
+                          <button className="cr-edit-save-btn"
+                            disabled={!threadForm.title.trim()}
+                            onClick={() => editingThreadId ? updatePlotThread(editingThreadId) : addPlotThread()}>
+                            {editingThreadId ? 'Update Thread' : 'Add Thread'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    {plotThreads.length > 0 ? (
+                      <div className="cr-threads-list">
+                        {plotThreads.map((thread, i) => {
+                          const dotColor = thread.status === 'active' ? '#3d8e42'
+                            : thread.status === 'resolved' ? '#9a8c9e' : '#c9a84c';
+                          return (
+                            <div key={thread.id || i} className="cr-thread-entry">
+                              <div className="cr-thread-dot" style={{ background: dotColor }}
+                                onClick={() => toggleThreadStatus(thread)}
+                                title="Click to cycle status" />
+                              <div className="cr-thread-body">
+                                <div className="cr-thread-title">{thread.title || thread.description}</div>
+                                {thread.description && thread.title && (
+                                  <div className="cr-thread-desc">{thread.description}</div>
+                                )}
+                                <div className="cr-thread-meta">
+                                  <span style={{ color: dotColor }}>{thread.status || 'open'}</span>
+                                  {thread.source && <span className="cr-thread-source">· {thread.source}</span>}
+                                </div>
+                              </div>
+                              <div className="cr-thread-actions">
+                                <button className="cr-thread-edit-btn" onClick={() => {
+                                  setEditingThreadId(thread.id);
+                                  setShowNewThread(false);
+                                  setThreadForm({ title: thread.title || '', description: thread.description || '', status: thread.status || 'open', source: thread.source || '' });
+                                }}>✎</button>
+                                <button className="cr-thread-delete-btn" onClick={() => deletePlotThread(thread.id)}>✕</button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ) : !showNewThread ? (
+                      <div className="cr-dossier-empty">
+                        <div className="cr-dossier-empty-icon">🧵</div>
+                        <p className="cr-dossier-empty-text">No plot threads tracked yet.</p>
+                        <button className="cr-dossier-empty-btn" onClick={() => setShowNewThread(true)}>
+                          + Add First Thread
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                )
+
+                /* ── Dilemma Tab ── */
+                : dossierTab === 'dilemma' ? (
                   <CharacterDilemmaEngine
                     character={{
                       id: c.id,
@@ -867,7 +1542,7 @@ export default function CharacterRegistryPage() {
                     }}
                   />
                 ) : (
-                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear })
+                  renderDossierTab(c, dossierTab, editSection, form, saving, startEdit, cancelEdit, saveSection, F, { aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood, aiOtherChars, setAiOtherChars, aiLength, setAiLength, aiDirection, setAiDirection, aiResult, aiLoading, aiError, aiContextUsed, aiGenerate, aiClear, onSaveToProfile: saveAiToProfile })
                 )}
               </div>
             </div>
@@ -979,15 +1654,21 @@ export default function CharacterRegistryPage() {
         {/* Registry tabs */}
         {registries.length > 0 && (
           <div className="cr-registry-tabs">
+            <button
+              className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
+              onClick={enterWorldMode}
+            >
+              <span className="cr-pill-title">🌍 LalaVerse</span>
+            </button>
             {registries.map(r => (
               <button
                 key={r.id}
-                className={`cr-registry-pill${activeRegistry?.id === r.id ? ' active' : ''}`}
-                onClick={() => fetchRegistry(r.id)}
+                className={`cr-registry-pill${!worldMode && activeRegistry?.id === r.id ? ' active' : ''}`}
+                onClick={() => { exitWorldMode(); fetchRegistry(r.id); }}
               >
                 <span className="cr-pill-title">{r.title || 'Untitled'}</span>
                 {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
-                {activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
+                {!worldMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
               </button>
             ))}
             <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
@@ -995,6 +1676,196 @@ export default function CharacterRegistryPage() {
             </button>
           </div>
         )}
+
+        {/* ── WORLD MODE ── */}
+        {worldMode ? (
+          <>
+            {/* World header */}
+            <div className="cr-world-header">
+              <div className="cr-world-header-left">
+                <h2 className="cr-world-title">LalaVerse</h2>
+                <p className="cr-world-subtitle">
+                  {characters.length} character{characters.length !== 1 ? 's' : ''} · {generatedCount} alive
+                </p>
+              </div>
+            </div>
+
+            {/* Generate All banner */}
+            {generatedCount < characters.length && (
+              <div className="cr-world-gen-all">
+                <span className="cr-world-gen-all-text">
+                  <strong>{characters.length - generatedCount}</strong> character{characters.length - generatedCount !== 1 ? 's' : ''} don't have a living state yet.
+                </span>
+                <button
+                  className="cr-btn-outline"
+                  onClick={generateAllStates}
+                  disabled={generatingAll}
+                >
+                  {generatingAll ? '✦ Generating…' : '✦ Generate All States'}
+                </button>
+              </div>
+            )}
+
+            {/* Type filter bar */}
+            <div className="cr-world-filters">
+              {['all', 'protagonist', 'special', 'pressure', 'mirror', 'support', 'shadow'].map(t => {
+                const typeColor = ROLE_COLORS[t];
+                const count = t === 'all'
+                  ? Object.values(worldTypeCounts).reduce((a, b) => a + b, 0)
+                  : (worldTypeCounts[t] || 0);
+                return (
+                  <button
+                    key={t}
+                    className={`cr-world-filter-btn ${worldType === t ? 'active' : ''}`}
+                    style={worldType === t && typeColor ? { background: `${typeColor}18`, color: typeColor, borderColor: `${typeColor}55` } : {}}
+                    onClick={() => setWorldType(t)}
+                  >
+                    {t === 'all' ? 'All' : ROLE_LABELS[t] || t}
+                    <span className="cr-world-filter-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* World grid */}
+            {filtered.length === 0 ? (
+              <div className="cr-empty-state">
+                <div className="cr-empty-icon">🌍</div>
+                <h2 className="cr-empty-title">No Characters</h2>
+                <p className="cr-empty-desc">No {worldType === 'all' ? '' : worldType + ' '}characters found.</p>
+              </div>
+            ) : (
+              <div className="cr-world-grid">
+                {filtered.map((char, i) => {
+                  const ls = livingStates[char.id] || null;
+                  const meta = { color: ROLE_COLORS[char.role_type] || '#9a8c9e' };
+                  const statusM = { draft: '#9a8c9e', accepted: '#3d8e42', declined: '#c43a2a', finalized: '#c9a84c' };
+                  const expanded = !!worldExpanded[char.id];
+                  const mom = MOMENTUM[ls?.momentum || 'dormant'];
+                  const charName = char.selected_name || char.display_name || '?';
+                  const initials = charName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+
+                  return (
+                    <div
+                      key={char.id}
+                      className={`cr-world-card ${expanded ? 'cr-world-card--expanded' : ''}`}
+                      style={{ '--wc-accent': meta.color, animationDelay: `${i * 60}ms` }}
+                    >
+                      {/* Card header */}
+                      <div className="cr-world-card-header" onClick={() => setWorldExpanded(p => ({ ...p, [char.id]: !p[char.id] }))}>
+                        <div className="cr-world-avatar" style={{ background: `${meta.color}18`, borderColor: `${meta.color}55`, color: meta.color }}>
+                          {initials}
+                        </div>
+                        <div className="cr-world-card-title">
+                          <div className="cr-world-card-name">{charName}</div>
+                          <div className="cr-world-card-role">{char.role_label || char.belief_pressured || '—'}</div>
+                          <div className="cr-world-card-badges">
+                            <span className="cr-world-type-badge" style={{ background: `${meta.color}18`, color: meta.color, borderColor: `${meta.color}55` }}>
+                              {ROLE_LABELS[char.role_type] || char.role_type}
+                            </span>
+                            <span className="cr-world-status-badge">
+                              <span style={{ background: statusM[char.status] || '#9a8c9e' }} className="cr-world-status-dot" />
+                              {char.status}
+                            </span>
+                          </div>
+                        </div>
+                        {/* Mini preview when collapsed */}
+                        {ls?.isGenerated && !expanded && (
+                          <div className="cr-world-card-preview">
+                            <span style={{ color: mom.color }}>{mom.symbol}</span>
+                            {ls.isConfirmed && <span style={{ color: meta.color }}>✓</span>}
+                          </div>
+                        )}
+                        <button className="cr-world-expand-btn">{expanded ? '−' : '+'}</button>
+                      </div>
+
+                      {/* Expanded body */}
+                      {expanded && (
+                        <div className="cr-world-card-body">
+                          <div className="cr-world-card-section">
+                            <div className="cr-world-section-label">LIVING STATE</div>
+                            {ls?.isGenerated ? (
+                              <div className="cr-world-state-body">
+                                <div className="cr-world-state-fields">
+                                  <div className="cr-world-state-field"><span className="cr-world-state-label">KNOWS</span><span>{ls.currentKnows || '—'}</span></div>
+                                  <div className="cr-world-state-field"><span className="cr-world-state-label">WANTS</span><span>{ls.currentWants || '—'}</span></div>
+                                  <div className="cr-world-state-field cr-world-state-unresolved"><span className="cr-world-state-label">UNRESOLVED</span><span>{ls.unresolved || '—'}</span></div>
+                                </div>
+                                <div className="cr-world-state-meta">
+                                  <span style={{ color: mom.color }}>{mom.symbol} {mom.label}</span>
+                                  {ls.lastChapter && <span className="cr-world-last-chapter">Last seen: {ls.lastChapter}</span>}
+                                </div>
+                                {!ls.isConfirmed ? (
+                                  <div className="cr-world-state-actions">
+                                    <button className="cr-btn-outline" style={{ borderColor: meta.color, color: meta.color }} onClick={() => confirmState(char.id)}>✓ Confirm</button>
+                                    <button className="cr-btn-outline" onClick={() => generateState(char.id)} disabled={generatingId === char.id}>↺ Regenerate</button>
+                                  </div>
+                                ) : (
+                                  <div className="cr-world-state-actions">
+                                    <span style={{ color: meta.color, fontWeight: 600 }}>✓ Confirmed</span>
+                                    <button className="cr-btn-outline" onClick={() => generateState(char.id)} disabled={generatingId === char.id}>Update</button>
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="cr-world-state-empty">
+                                <p>No living state yet.</p>
+                                <button
+                                  className="cr-btn-outline"
+                                  style={{ borderColor: meta.color, color: meta.color }}
+                                  onClick={() => generateState(char.id)}
+                                  disabled={generatingId === char.id}
+                                >
+                                  {generatingId === char.id ? '✦ Generating…' : `✦ Generate State`}
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Relationship preview */}
+                          {ls?.relationships?.length > 0 && (
+                            <div className="cr-world-card-section">
+                              <div className="cr-world-section-label">RELATIONSHIPS</div>
+                              <div className="cr-world-rel-list">
+                                {ls.relationships.slice(0, 3).map((rel, ri) => {
+                                  const other = allCharacters.find(c2 => c2.id === rel.characterId);
+                                  const otherName = other ? (other.selected_name || other.display_name) : 'Unknown';
+                                  const otherColor = other ? (ROLE_COLORS[other.role_type] || '#9a8c9e') : '#9a8c9e';
+                                  return (
+                                    <div key={ri} className="cr-world-rel-item">
+                                      <span className="cr-world-rel-dot" style={{ background: otherColor }} />
+                                      <span className="cr-world-rel-name">{otherName}</span>
+                                      <span className="cr-world-rel-type">{rel.type}</span>
+                                      {rel.asymmetric && <span className="cr-world-rel-asym" title="One-way">⇢</span>}
+                                    </div>
+                                  );
+                                })}
+                                {ls.relationships.length > 3 && (
+                                  <p className="cr-world-rel-more">+{ls.relationships.length - 3} more</p>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          <div className="cr-world-card-footer">
+                            <button
+                              className="cr-btn-outline"
+                              style={{ borderColor: meta.color, color: meta.color }}
+                              onClick={() => openDossier(char)}
+                            >
+                              Open Dossier →
+                            </button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+        <>
 
         {/* Registry context bar */}
         {activeRegistry && (
@@ -1037,7 +1908,27 @@ export default function CharacterRegistryPage() {
             <span className="cr-stat-count">{statusCounts.draft}</span>
             <span className="cr-stat-label">Draft</span>
           </div>
+          <div className="cr-stat-actions">
+            <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
+              onClick={() => { setCompareMode(m => !m); setCompareSelection([]); }}>
+              {compareMode ? '✕ Cancel Compare' : '⟷ Compare'}
+            </button>
+          </div>
         </div>
+
+        {/* Compare bar */}
+        {compareMode && (
+          <div className="cr-compare-bar">
+            <span className="cr-compare-bar-text">
+              Select 2 characters to compare ({compareSelection.length}/2)
+            </span>
+            {compareSelection.length === 2 && (
+              <button className="cr-edit-save-btn" onClick={() => setShowCompare(true)}>
+                Compare Now →
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Empty */}
         {sorted.length === 0 ? (
@@ -1060,7 +1951,8 @@ export default function CharacterRegistryPage() {
           /* ── GRID VIEW ── */
           <div className="cr-grid">
             {filtered.map(c => (
-              <CharacterCard key={c.id} c={c} onClick={() => openDossier(c)} />
+              <CharacterCard key={c.id} c={c} onClick={() => openDossier(c)}
+                isCompareSelected={compareMode && compareSelection.includes(c.id)} />
             ))}
           </div>
         ) : (
@@ -1080,6 +1972,8 @@ export default function CharacterRegistryPage() {
             ))}
           </div>
         )}
+      </>
+      )}
       </div>
 
       {/* New Character Modal */}
@@ -1227,6 +2121,69 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
+      {/* Character Comparison Modal */}
+      {showCompare && compareSelection.length === 2 && (() => {
+        const chars = sorted;
+        const a = chars.find(ch => ch.id === compareSelection[0]);
+        const b = chars.find(ch => ch.id === compareSelection[1]);
+        if (!a || !b) return null;
+        const fields = [
+          { label: 'Role', key: 'role_type', fmt: v => ROLE_LABELS[v] || v },
+          { label: 'Archetype', key: 'character_archetype' },
+          { label: 'Canon Tier', key: 'canon_tier' },
+          { label: 'Era', key: 'era_introduced' },
+          { label: 'Status', key: 'status' },
+          { label: 'Core Desire', key: 'core_desire' },
+          { label: 'Core Fear', key: 'core_fear' },
+          { label: 'Core Wound', key: 'core_wound' },
+          { label: 'Mask', key: 'mask_persona' },
+          { label: 'Truth', key: 'truth_persona' },
+          { label: 'Signature Trait', key: 'signature_trait' },
+          { label: 'Emotional Baseline', key: 'emotional_baseline' },
+          { label: 'Core Belief', key: 'core_belief' },
+          { label: 'Pressure Type', key: 'pressure_type' },
+        ];
+        return (
+          <div className="cr-modal-overlay" onClick={() => { setShowCompare(false); setCompareMode(false); setCompareSelection([]); }}>
+            <div className="cr-modal cr-compare-modal" onClick={e => e.stopPropagation()}>
+              <div className="cr-modal-body">
+                <h2 className="cr-modal-title">Character Comparison</h2>
+                <div className="cr-compare-grid">
+                  <div className="cr-compare-header-row">
+                    <div className="cr-compare-label-col"></div>
+                    <div className="cr-compare-char-col">
+                      <span className="cr-compare-char-icon">{a.icon || '◆'}</span>
+                      <span className="cr-compare-char-name">{a.selected_name || a.display_name}</span>
+                    </div>
+                    <div className="cr-compare-char-col">
+                      <span className="cr-compare-char-icon">{b.icon || '◆'}</span>
+                      <span className="cr-compare-char-name">{b.selected_name || b.display_name}</span>
+                    </div>
+                  </div>
+                  {fields.map(f => {
+                    const va = f.fmt ? f.fmt(a[f.key]) : (a[f.key] || '—');
+                    const vb = f.fmt ? f.fmt(b[f.key]) : (b[f.key] || '—');
+                    const diff = va !== vb;
+                    return (
+                      <div key={f.key} className={`cr-compare-row ${diff ? 'cr-compare-diff' : ''}`}>
+                        <div className="cr-compare-label-col">{f.label}</div>
+                        <div className="cr-compare-val-col">{va}</div>
+                        <div className="cr-compare-val-col">{vb}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="cr-modal-actions">
+                  <button className="cr-edit-cancel-btn" onClick={() => { setShowCompare(false); setCompareMode(false); setCompareSelection([]); }}>
+                    Close
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
 
       <CharacterVoiceInterview
@@ -1304,12 +2261,12 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
 /* ================================================================
    CHARACTER CARD (Grid)
    ================================================================ */
-function CharacterCard({ c, onClick }) {
+function CharacterCard({ c, onClick, isCompareSelected }) {
   const isCore = c.canon_tier === 'Core Canon';
   const roleColor = `var(--role-${c.role_type || 'special'})`;
 
   return (
-    <div className={`cr-card ${isCore ? 'canon-core' : ''}`} onClick={onClick}>
+    <div className={`cr-card ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''}`} onClick={onClick}>
       {/* Portrait */}
       <div className="cr-card-portrait" style={{ background: `linear-gradient(135deg, var(--surface2) 0%, var(--surface3) 100%)` }}>
         <div className="cr-card-portrait-bg" style={{ background: roleColor }} />
@@ -1432,11 +2389,18 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EField label="Display Name" value={form.display_name} onChange={v => F('display_name', v)} />
               <EField label="Alias / Selected Name" value={form.selected_name} onChange={v => F('selected_name', v)} />
               <EArea label="Description" value={form.description} onChange={v => F('description', v)} rows={4} />
+              <EArea label="Core Belief" value={form.core_belief} onChange={v => F('core_belief', v)} rows={2} placeholder="The central question this character carries" />
               <EField label="First Appearance" value={form.first_appearance} onChange={v => F('first_appearance', v)} placeholder="Book 1 · Episode 3" />
               <EField label="Era Introduced" value={form.era_introduced} onChange={v => F('era_introduced', v)} />
               <ESelect label="Canon Tier" value={form.canon_tier} onChange={v => F('canon_tier', v)}
                 options={CANON_TIERS.map(t => ({ value: t, label: t }))} allowEmpty />
+              <ESelect label="Appearance Mode" value={form.appearance_mode} onChange={v => F('appearance_mode', v)}
+                options={[{value:'on_page',label:'On Page'},{value:'composite',label:'Composite'},{value:'observed',label:'Observed'},{value:'invisible',label:'Invisible'},{value:'brief',label:'Brief'}]} allowEmpty />
+              <EField label="Pressure Type" value={form.pressure_type} onChange={v => F('pressure_type', v)} placeholder="How this character applies pressure" />
+              <EArea label="Pressure Quote" value={form.pressure_quote} onChange={v => F('pressure_quote', v)} rows={2} placeholder="A line that captures their pressure" />
+              <EField label="Job Options" value={form.job_options} onChange={v => F('job_options', v)} placeholder="Considered professions" />
               <EField label="Creator" value={form.creator} onChange={v => F('creator', v)} />
+              <EArea label="Writer Notes" value={form.writer_notes} onChange={v => F('writer_notes', v)} rows={3} placeholder="Private notes for the writer…" />
             </>
           ) : (
             <>
@@ -1445,10 +2409,28 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   {c.description || c.subtitle}
                 </p>
               )}
+              {c.core_belief && (
+                <div className="cr-dossier-belief-banner">
+                  <span className="cr-dossier-belief-icon">◈</span>
+                  <span className="cr-dossier-belief-text">"{c.core_belief}"</span>
+                </div>
+              )}
               <DRow label="First Appearance" value={c.first_appearance} />
               <DRow label="Era Introduced" value={c.era_introduced} />
               <DRow label="Canon Tier" value={c.canon_tier} accent={c.canon_tier === 'Core Canon'} />
+              <DRow label="Appearance Mode" value={c.appearance_mode?.replace('_', ' ')} />
+              <DRow label="Pressure Type" value={c.pressure_type} />
+              {c.pressure_quote && (
+                <DRow label="Pressure Quote" value={`"${c.pressure_quote}"`} accent />
+              )}
+              <DRow label="Job Options" value={c.job_options} />
               <DRow label="Creator" value={c.creator} />
+              {c.writer_notes && (
+                <div className="cr-dossier-writer-notes">
+                  <span className="cr-dossier-writer-notes-label">✎ Writer Notes</span>
+                  <p className="cr-dossier-writer-notes-text">{c.writer_notes}</p>
+                </div>
+              )}
               {jGet(c.story_presence, 'current_story_status') && (
                 <DRow label="Current Arc" value={jGet(c.story_presence, 'current_story_status')} accent />
               )}
@@ -1477,6 +2459,9 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                 options={ARCHETYPES.map(a => ({ value: a, label: a }))} allowEmpty />
               <EArea label="Signature Trait" value={form.signature_trait} onChange={v => F('signature_trait', v)} rows={2} />
               <EField label="Emotional Baseline" value={form.emotional_baseline} onChange={v => F('emotional_baseline', v)} />
+              <EArea label="Belief Under Pressure" value={form.belief_pressured} onChange={v => F('belief_pressured', v)} rows={2} placeholder="What they believe when the mask cracks" />
+              <EArea label="Emotional Function" value={form.emotional_function} onChange={v => F('emotional_function', v)} rows={2} placeholder="The role they serve emotionally in the story" />
+              <EField label="Wound Depth" value={form.wound_depth} onChange={v => F('wound_depth', v)} placeholder="0–10 scale" />
             </>
           ) : (
             <>
@@ -1525,6 +2510,19 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <DRow label="Archetype" value={c.character_archetype} accent />
               <DRow label="Signature Trait" value={c.signature_trait} />
               <DRow label="Emotional Baseline" value={c.emotional_baseline} />
+              <DRow label="Belief Under Pressure" value={c.belief_pressured} />
+              <DRow label="Emotional Function" value={c.emotional_function} />
+              {c.wound_depth > 0 && (
+                <div className="cr-dossier-row">
+                  <span className="cr-dossier-row-label">Wound Depth</span>
+                  <span className="cr-dossier-row-value">
+                    <span className="cr-wound-meter">
+                      <span className="cr-wound-fill" style={{ width: `${(c.wound_depth || 0) * 10}%` }} />
+                    </span>
+                    {c.wound_depth}/10
+                  </span>
+                </div>
+              )}
 
               {c.personality && (
                 <div className="cr-dossier-pills">
@@ -1606,7 +2604,17 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     case 'relationships':
       return (
         <div className="cr-dossier-section">
-          {sectionHeader('Relationships')}
+          <div className="cr-dossier-section-header">
+            <span className="cr-dossier-section-title">Relationships</span>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <a href="/relationships" className="cr-btn-outline" style={{ textDecoration: 'none', fontSize: 12, padding: '4px 10px' }}>
+                🕸 View Web
+              </a>
+              {!editing && (
+                <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)}>✎ Edit</button>
+              )}
+            </div>
+          </div>
           {editControls}
           {editing ? (
             <>
@@ -1715,7 +2723,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
 
     /* ── AI WRITER ── */
     case 'ai':
-      return <AIWriterTab character={c} ai={ai} />;
+      return <AIWriterTab character={c} ai={ai} onSaveToProfile={ai.onSaveToProfile} />;
 
     default:
       return null;
@@ -1726,7 +2734,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
 /* ================================================================
    AI WRITER TAB
    ================================================================ */
-function AIWriterTab({ character, ai }) {
+function AIWriterTab({ character, ai, onSaveToProfile }) {
   const {
     aiMode, setAiMode, aiPrompt, setAiPrompt, aiMood, setAiMood,
     aiOtherChars, setAiOtherChars, aiLength, setAiLength,
@@ -1869,6 +2877,16 @@ function AIWriterTab({ character, ai }) {
             </div>
           </div>
           <div className="ai-writer-prose">{aiResult.prose}</div>
+          {onSaveToProfile && (
+            <button
+              className="ai-writer-save-btn"
+              onClick={() => onSaveToProfile({
+                writer_notes: `[AI ${aiMode}] ${aiResult.prose?.slice(0, 500)}${aiResult.prose?.length > 500 ? '…' : ''}`,
+              })}
+            >
+              Save to Writer Notes
+            </button>
+          )}
           {aiContextUsed && (
             <div className="ai-writer-context-badge">
               Context: {aiContextUsed.memories || 0} memories · {aiContextUsed.relationships || 0} relationships · {aiContextUsed.recent_lines || 0} lines
@@ -1989,6 +3007,25 @@ function AIWriterTab({ character, ai }) {
             <div className="ai-writer-profile-desc">
               <strong>Bio:</strong> {p.description}
             </div>
+          )}
+          {onSaveToProfile && (
+            <button
+              className="ai-writer-save-btn"
+              onClick={() => {
+                const fields = {};
+                if (p.core_desire) fields.core_desire = p.core_desire;
+                if (p.core_fear) fields.core_fear = p.core_fear;
+                if (p.core_wound) fields.core_wound = p.core_wound;
+                if (p.mask_persona) fields.mask_persona = p.mask_persona;
+                if (p.truth_persona) fields.truth_persona = p.truth_persona;
+                if (p.signature_trait) fields.signature_trait = p.signature_trait;
+                if (p.emotional_baseline) fields.emotional_baseline = p.emotional_baseline;
+                if (p.description) fields.description = p.description;
+                onSaveToProfile(fields);
+              }}
+            >
+              Save Profile to Character Record
+            </button>
           )}
           {p.evidence?.length > 0 && (
             <div className="ai-writer-evidence">
@@ -2138,10 +3175,16 @@ function buildFormForTab(tabKey, c) {
         display_name:     c.display_name || '',
         selected_name:    c.selected_name || '',
         description:      c.description || '',
+        core_belief:      c.core_belief || '',
         first_appearance: c.first_appearance || '',
         era_introduced:   c.era_introduced || '',
         canon_tier:       c.canon_tier || '',
+        appearance_mode:  c.appearance_mode || '',
+        pressure_type:    c.pressure_type || '',
+        pressure_quote:   c.pressure_quote || '',
+        job_options:      c.job_options || '',
         creator:          c.creator || '',
+        writer_notes:     c.writer_notes || '',
       };
     case 'psychology':
       return {
@@ -2153,6 +3196,9 @@ function buildFormForTab(tabKey, c) {
         character_archetype: c.character_archetype || '',
         signature_trait:     c.signature_trait || '',
         emotional_baseline:  c.emotional_baseline || '',
+        belief_pressured:    c.belief_pressured || '',
+        emotional_function:  c.emotional_function || '',
+        wound_depth:         c.wound_depth || '',
       };
     case 'aesthetic':
       return {
@@ -2211,10 +3257,16 @@ function buildPayloadForTab(tabKey, form) {
         display_name:     form.display_name,
         selected_name:    form.selected_name,
         description:      form.description,
+        core_belief:      form.core_belief,
         first_appearance: form.first_appearance,
         era_introduced:   form.era_introduced,
         canon_tier:       form.canon_tier,
+        appearance_mode:  form.appearance_mode,
+        pressure_type:    form.pressure_type,
+        pressure_quote:   form.pressure_quote,
+        job_options:      form.job_options,
         creator:          form.creator,
+        writer_notes:     form.writer_notes,
       };
     case 'psychology':
       return {
@@ -2226,6 +3278,9 @@ function buildPayloadForTab(tabKey, form) {
         character_archetype: form.character_archetype,
         signature_trait:     form.signature_trait,
         emotional_baseline:  form.emotional_baseline,
+        belief_pressured:    form.belief_pressured,
+        emotional_function:  form.emotional_function,
+        wound_depth:         form.wound_depth ? parseFloat(form.wound_depth) : null,
       };
     case 'aesthetic':
       return {

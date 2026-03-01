@@ -251,6 +251,114 @@ router.get('/characters/:id', async (req, res) => {
 });
 
 /**
+ * GET /characters/:id/plot-threads
+ * Returns plot threads stored in extra_fields.plot_threads
+ */
+router.get('/characters/:id/plot-threads', async (req, res) => {
+  try {
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+    const threads = (character.extra_fields?.plot_threads) || [];
+    return res.json({ success: true, threads });
+  } catch (err) {
+    console.error('[CharacterRegistry] GET plot-threads error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /characters/:id/plot-threads
+ * Add a new plot thread
+ */
+router.post('/characters/:id/plot-threads', async (req, res) => {
+  try {
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+
+    const { title, description, status, source } = req.body;
+    if (!title) return res.status(400).json({ success: false, error: 'title is required' });
+
+    const threads = (character.extra_fields?.plot_threads) || [];
+    const newThread = {
+      id: `pt-${Date.now()}`,
+      title,
+      description: description || '',
+      status: status || 'open',
+      source: source || '',
+      created_at: new Date().toISOString(),
+    };
+    threads.push(newThread);
+
+    character.extra_fields = { ...(character.extra_fields || {}), plot_threads: threads };
+    character.changed('extra_fields', true);
+    await character.save();
+
+    return res.json({ success: true, thread: newThread, threads });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST plot-threads error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * PUT /characters/:id/plot-threads/:threadId
+ * Update a plot thread
+ */
+router.put('/characters/:id/plot-threads/:threadId', async (req, res) => {
+  try {
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+
+    const threads = (character.extra_fields?.plot_threads) || [];
+    const idx = threads.findIndex(t => t.id === req.params.threadId);
+    if (idx === -1) return res.status(404).json({ success: false, error: 'Thread not found' });
+
+    const { title, description, status, source } = req.body;
+    if (title !== undefined) threads[idx].title = title;
+    if (description !== undefined) threads[idx].description = description;
+    if (status !== undefined) threads[idx].status = status;
+    if (source !== undefined) threads[idx].source = source;
+    threads[idx].updated_at = new Date().toISOString();
+
+    character.extra_fields = { ...(character.extra_fields || {}), plot_threads: threads };
+    character.changed('extra_fields', true);
+    await character.save();
+
+    return res.json({ success: true, thread: threads[idx], threads });
+  } catch (err) {
+    console.error('[CharacterRegistry] PUT plot-threads error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * DELETE /characters/:id/plot-threads/:threadId
+ * Delete a plot thread
+ */
+router.delete('/characters/:id/plot-threads/:threadId', async (req, res) => {
+  try {
+    const { RegistryCharacter } = getModels();
+    const character = await RegistryCharacter.findByPk(req.params.id);
+    if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
+
+    const threads = (character.extra_fields?.plot_threads) || [];
+    const filtered = threads.filter(t => t.id !== req.params.threadId);
+
+    character.extra_fields = { ...(character.extra_fields || {}), plot_threads: filtered };
+    character.changed('extra_fields', true);
+    await character.save();
+
+    return res.json({ success: true, threads: filtered });
+  } catch (err) {
+    console.error('[CharacterRegistry] DELETE plot-threads error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * PUT /characters/:id
  * Update any character fields
  */
@@ -273,6 +381,8 @@ router.put('/characters/:id', async (req, res) => {
       // Sections 3-8: JSONB
       'aesthetic_dna', 'career_status', 'relationships_map',
       'story_presence', 'voice_signature', 'evolution_tracking',
+      // Section 9: Registry Sync fields
+      'wound_depth', 'belief_pressured', 'emotional_function', 'writer_notes',
     ];
     allowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     await character.save();
