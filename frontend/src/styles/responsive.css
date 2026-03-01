@@ -1197,3 +1197,196 @@
     font-size: 0.75rem !important;
   }
 }
+
+
+/* ============================================================
+   19. SMALL MOBILE (≤480px) — Comprehensive per-page fixes
+   ============================================================
+   App.css no longer injects padding into .app-content > * at
+   mobile widths (it caused triple-stacking → ~280px content on
+   400px screens). Every rule below is the single source of truth
+   for that page's small-screen spacing.
+   ============================================================ */
+
+@media (max-width: 480px) {
+
+  /* ── Home Page ──────────────────────────────────────────── */
+  .home-container {
+    padding: 16px 14px 48px !important;
+  }
+  .home-hero {
+    padding: 20px 16px !important;
+    border-radius: 10px !important;
+    margin-bottom: 20px !important;
+  }
+  .home-hero h1 {
+    font-size: 22px !important;
+  }
+  .hp-universe-card {
+    padding: 16px !important;
+  }
+  .hp-universe-name {
+    font-size: 20px !important;
+  }
+  .hp-section__title {
+    font-size: 18px !important;
+  }
+  .hp-actions {
+    gap: 10px !important;
+  }
+  .hp-action-card {
+    padding: 16px 12px !important;
+    gap: 8px !important;
+  }
+  .hp-action-icon {
+    width: 40px !important;
+    height: 40px !important;
+  }
+  .hp-stat-val {
+    font-size: 26px !important;
+  }
+  .hp-ep-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Book Overview ──────────────────────────────────────── */
+  .bo-header {
+    padding: 14px 12px 10px !important;
+  }
+  .bo-chapter-list {
+    padding: 0 12px !important;
+  }
+  .bo-book-title {
+    font-size: 24px !important;
+  }
+  .bo-title-page {
+    padding: 20px 12px 14px !important;
+  }
+  .bo-title-page .bo-book-title {
+    font-size: 26px !important;
+  }
+  .bo-toc-row {
+    grid-template-columns: 48px 1fr auto !important;
+    padding: 10px 4px !important;
+  }
+  .bo-toc-num {
+    font-size: 10px !important;
+    padding-right: 6px !important;
+  }
+  .bo-toc-title {
+    font-size: 14px !important;
+  }
+  .bo-chapter-card {
+    padding: 16px 14px !important;
+  }
+
+  /* ── World View ─────────────────────────────────────────── */
+  .wv-root {
+    padding: 12px 12px 60px !important;
+  }
+  .wv-header {
+    padding: 8px 0 !important;
+    gap: 6px !important;
+  }
+  .wv-filters {
+    gap: 6px !important;
+    padding: 0 0 8px !important;
+  }
+
+  /* ── Character Home (Dossier) ───────────────────────────── */
+  .ch-hero {
+    margin: 0 !important;
+    padding: 18px 14px 16px !important;
+    border-radius: 10px !important;
+  }
+  .ch-content {
+    padding: 14px 12px 0 !important;
+  }
+  .ch-section-nav {
+    padding: 12px 12px 0 !important;
+    gap: 6px !important;
+  }
+  .ch-topbar {
+    padding: 10px 12px !important;
+  }
+
+  /* ── Show Detail ────────────────────────────────────────── */
+  .show-header {
+    padding: 14px 12px !important;
+  }
+  .show-cover {
+    width: 48px !important;
+    height: 64px !important;
+  }
+  .show-title {
+    font-size: 18px !important;
+  }
+  /* Tab bar scrolls horizontally on small screens */
+  .tab-navigation {
+    padding: 0.5rem 0.75rem !important;
+    gap: 4px !important;
+  }
+  .tab-button {
+    font-size: 11px !important;
+    padding: 6px 10px !important;
+    white-space: nowrap !important;
+  }
+
+  /* ── Episode Detail ─────────────────────────────────────── */
+  .ed-wrap {
+    padding: 0.5rem 0.75rem 1rem !important;
+  }
+  .ed-topbar {
+    padding: 0.4rem 0.75rem !important;
+    flex-wrap: wrap !important;
+    gap: 6px !important;
+  }
+  .ed-summary-grid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+  .ed-quickactions {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 8px !important;
+  }
+
+  /* ── Shows page ─────────────────────────────────────────── */
+  .shows-page,
+  .shows-container {
+    padding: 14px 12px !important;
+  }
+  .shows-grid {
+    gap: 10px !important;
+  }
+
+  /* ── Storyteller / WriteMode ────────────────────────────── */
+  .st-topbar,
+  .wm-topbar {
+    padding: 8px 12px !important;
+    gap: 6px !important;
+  }
+
+  /* ── Character Registry ─────────────────────────────────── */
+  .crp-root,
+  .crp-container {
+    padding: 12px !important;
+  }
+
+  /* ── Generic card / section padding reduction ───────────── */
+  .card-standard,
+  .card-elevated {
+    padding: 14px !important;
+  }
+
+  /* ── Breadcrumbs tighten on small screens ───────────────── */
+  .breadcrumb {
+    font-size: 11px !important;
+    gap: 4px !important;
+    padding: 8px 12px !important;
+  }
+
+  /* ── Page title sizes ───────────────────────────────────── */
+  h1 { font-size: 1.4rem !important; }
+  h2 { font-size: 1.15rem !important; }
+  h3 { font-size: 1rem !important; }
+}

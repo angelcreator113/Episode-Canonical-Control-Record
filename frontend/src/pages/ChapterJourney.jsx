@@ -39,17 +39,6 @@ function detectStage(chapter) {
   return 'plan';
 }
 
-function detectChapterStage(ch) {
-  if (!ch) return 'plan';
-  const lines = ch.lines || [];
-  const approved = lines.filter(l => l.status === 'approved' || l.status === 'edited').length;
-  if (approved >= 5 || ch.prose?.trim() || lines.length > 0) return 'review';
-  if (ch.scene_goal?.trim()) return 'write';
-  const hasContent = ch.what?.trim() || ch.emotionalStart?.trim() || ch.emotionalEnd?.trim();
-  if (hasContent) return 'planned';
-  return 'plan';
-}
-
 const STAGES = [
   { id: 'plan',   label: 'Plan'   },
   { id: 'write',  label: 'Write'  },
@@ -160,18 +149,18 @@ export default function ChapterJourney() {
   const { bookId, chapterId } = useParams();
   const navigate = useNavigate();
 
-  const [loading, setLoading]           = useState(true);
-  const [error, setError]               = useState(null);
-  const [book, setBook]                 = useState(null);
-  const [chapter, setChapter]           = useState(null);
+  const [loading, setLoading]             = useState(true);
+  const [error, setError]                 = useState(null);
+  const [book, setBook]                   = useState(null);
+  const [chapter, setChapter]             = useState(null);
   const [detectedStage, setDetectedStage] = useState('plan');
-  const [activeStage, setActiveStage]   = useState('plan');
-  const [isOverride, setIsOverride]     = useState(false);
-  const [isFlashing, setIsFlashing]     = useState(false);
-  const [stageEnter, setStageEnter]     = useState(false);
+  const [activeStage, setActiveStage]     = useState('plan');
+  const [isOverride, setIsOverride]       = useState(false);
+  const [isFlashing, setIsFlashing]       = useState(false);
+  const [stageEnter, setStageEnter]       = useState(false);
 
-  const prevStageRef = useRef(null);
-  const saveRef = useRef(null); // ref placeholder for child save triggers
+  // Optional ref hook: children that support imperative save can attach here
+  const saveRef = useRef(null);
 
   // ── Load chapter data ──────────────────────────────────────────────────
 
@@ -218,16 +207,11 @@ export default function ChapterJourney() {
     setTimeout(() => setStageEnter(true), 50);
     setActiveStage(newStage);
     setIsOverride(override);
-    prevStageRef.current = activeStage;
   }, [activeStage]);
 
   const handlePillClick = useCallback((stageId) => {
     if (stageId === activeStage) return;
-    if (stageId === detectedStage) {
-      transitionTo(stageId, false);
-      return;
-    }
-    transitionTo(stageId, true);
+    transitionTo(stageId, stageId !== detectedStage);
   }, [activeStage, detectedStage, transitionTo]);
 
   const handleReturnToAuto = useCallback(() => {
@@ -253,12 +237,11 @@ export default function ChapterJourney() {
     await loadChapter();
   }, [loadChapter]);
 
-  // Save button handler — triggers child's save via ref or custom event
+  // Save: try child imperative ref first, fall back to custom event
   const handleRibbonSave = useCallback(() => {
     if (saveRef.current?.save) {
       saveRef.current.save();
     } else {
-      // Dispatch custom event that child can listen for
       window.dispatchEvent(new CustomEvent('cj-ribbon-save', { detail: { stage: activeStage } }));
     }
   }, [activeStage]);
@@ -323,8 +306,8 @@ export default function ChapterJourney() {
       {/* ── Mode Ribbon ────────────────────────────────────────────────── */}
       <div className="cj-ribbon">
 
-        {/* Row 1: mode identity + context + pills + save */}
-        <div className="cj-ribbon-row">
+        {/* Row 1: back + mode identity + chapter context + save */}
+        <div className="cj-ribbon-top">
           <button
             className="cj-back"
             onClick={() => {
@@ -344,7 +327,13 @@ export default function ChapterJourney() {
             <span className="cj-mode-book" title={bookTitle}>{bookTitle}</span>
           </div>
 
-          {/* Stage pills */}
+          <button className="cj-save-btn" onClick={handleRibbonSave} title={SAVE_LABELS[activeStage]}>
+            {SAVE_LABELS[activeStage]}
+          </button>
+        </div>
+
+        {/* Row 2: stage pills + optional override return */}
+        <div className="cj-ribbon-nav">
           <div className="cj-pills">
             {STAGES.map((s, i) => {
               const isActive   = s.id === activeStage;
@@ -370,19 +359,14 @@ export default function ChapterJourney() {
             })}
           </div>
 
-          <div className="cj-ribbon-actions">
-            {isOverride && (
-              <button className="cj-pill-auto" onClick={handleReturnToAuto} title="Return to auto-detected stage">
-                ↺ Return to {STAGES.find(s => s.id === detectedStage)?.label}
-              </button>
-            )}
-            <button className="cj-save-btn" onClick={handleRibbonSave} title={SAVE_LABELS[activeStage]}>
-              {SAVE_LABELS[activeStage]}
+          {isOverride && (
+            <button className="cj-pill-auto" onClick={handleReturnToAuto} title="Return to auto-detected stage">
+              ↺ Return to {STAGES.find(s => s.id === detectedStage)?.label}
             </button>
-          </div>
+          )}
         </div>
 
-        {/* Row 2: structured info blocks */}
+        {/* Row 3: structured info blocks */}
         <div className="cj-ribbon-info">
           {infoBlocks.map((b, i) => (
             <div className="cj-info-block" key={i}>
@@ -392,7 +376,7 @@ export default function ChapterJourney() {
           ))}
         </div>
 
-        {/* Row 3: progress strip */}
+        {/* Row 4: progress strip */}
         <div className="cj-progress-strip">
           <span className="cj-progress-label">{progress.label}</span>
           <div className="cj-progress-track">
@@ -405,7 +389,7 @@ export default function ChapterJourney() {
         </div>
       </div>
 
-      {/* ── Override banner (structured) ─────────────────────────────────── */}
+      {/* ── Override banner ────────────────────────────────────────────────── */}
       {isOverride && (
         <div className="cj-override-banner">
           <div className="cj-override-blocks">

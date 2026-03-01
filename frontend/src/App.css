@@ -234,42 +234,45 @@ html, body {
    Mobile First Approach
 ============================================ */
 
-/* Small Mobile: 320px - 480px */
+/* Small Mobile: 320px - 480px
+   ─────────────────────────────────────────────
+   DO NOT add padding to .app-content > * here.
+   Every complex page (Home, BookOverview, WorldView, etc.)
+   owns its own horizontal spacing through its inner container.
+   Adding padding at this level too creates triple-stacking:
+     App.css (1rem) + page-container (16px) + inner-section (24px)
+   = only ~280px of usable content on a 400px device.
+   Simple "page-wrapper" pages get their own padding below.
+   ─────────────────────────────────────────────*/
 @media (max-width: 480px) {
-  .app-content > * {
+  /* Simple placeholder pages that have no inner layout container */
+  .page-wrapper {
     padding: 1rem;
   }
-  
+
+  .page-wrapper h1 {
+    font-size: 1.5rem;
+  }
+
   .app-footer {
     padding: 0.75rem 1rem;
     font-size: 0.75rem;
   }
-  
+
   .app-footer p {
     font-size: 0.75rem;
-  }
-  
-  .page-wrapper {
-    padding: 0;
-  }
-  
-  .page-wrapper h1 {
-    font-size: 1.5rem;
   }
 }
 
 /* Mobile: 481px - 768px */
 @media (min-width: 481px) and (max-width: 768px) {
-  .app-content > * {
+  /* Same reasoning — pages own their layout at this size too */
+  .page-wrapper {
     padding: 1rem 1.25rem;
   }
-  
+
   .app-footer {
     padding: 1rem 1.5rem;
-  }
-  
-  .page-wrapper {
-    padding: 0;
   }
 }
 
@@ -278,7 +281,7 @@ html, body {
   .app-content > * {
     padding: 1.5rem 2rem;
   }
-  
+
   .app-footer {
     padding: 1rem 2rem;
   }
@@ -289,7 +292,7 @@ html, body {
   .app-content > * {
     padding: 2rem 2.5rem;
   }
-  
+
   .app-footer {
     padding: 1rem 2rem;
   }

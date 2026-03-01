@@ -768,11 +768,11 @@
 
 @media (max-width: 520px) {
   .home-container {
-    padding: 20px 16px 48px;
+    padding: 20px 14px 48px;
   }
 
   .home-hero {
-    padding: 28px 24px;
+    padding: 24px 18px;
   }
 
   .home-hero h1 {
@@ -780,7 +780,7 @@
   }
 
   .hp-universe-card {
-    padding: 20px;
+    padding: 18px;
   }
 
   .hp-stats-row {
@@ -790,5 +790,41 @@
 
   .hp-ep-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 400px) {
+  .home-container {
+    padding: 14px 10px 40px;
+  }
+
+  .home-hero {
+    padding: 18px 14px;
+    margin-bottom: 16px;
+  }
+
+  .home-hero h1 {
+    font-size: 20px;
+  }
+
+  .hp-universe-name {
+    font-size: 18px;
+  }
+
+  .hp-section__title {
+    font-size: 17px;
+  }
+
+  .hp-stat-val {
+    font-size: 24px;
+  }
+
+  .hp-action-card {
+    padding: 14px 10px;
+  }
+
+  .hp-st-card,
+  .hp-shows-card {
+    padding: 16px;
   }
 }
