@@ -5903,10 +5903,26 @@ const SE_STORY_TYPES = [
   { type: 'wrong_win',  label: 'Wrong Win',  description: 'Character succeeds at exactly the wrong moment. Gets what she wanted. It costs something unexpected.' },
 ];
 
+// ─── In-memory cache for story engine task arcs ───────────────────────────────
+const seTaskArcCache = new Map();
+
+// ─── GET /story-engine-tasks/:characterKey ─────────────────────────────────────
+// Returns cached task arc if available; no Claude call.
+router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) => {
+  const { characterKey } = req.params;
+  if (!CHARACTER_DNA[characterKey]) {
+    return res.status(400).json({ error: `Unknown character: ${characterKey}` });
+  }
+  if (seTaskArcCache.has(characterKey)) {
+    return res.json({ cached: true, ...seTaskArcCache.get(characterKey) });
+  }
+  return res.json({ cached: false, tasks: [] });
+});
+
 // ─── POST /generate-story-tasks ───────────────────────────────────────────────
 // Generates the 50-story task arc for a character before stories are written.
 router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
-  const { characterKey } = req.body;
+  const { characterKey, forceRegenerate } = req.body;
 
   if (!characterKey) {
     return res.status(400).json({ error: 'characterKey required' });
@@ -5915,6 +5931,11 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
   const dna = CHARACTER_DNA[characterKey];
   if (!dna) {
     return res.status(400).json({ error: `No character DNA found for ${characterKey}` });
+  }
+
+  // Return cached arc unless regeneration is forced
+  if (!forceRegenerate && seTaskArcCache.has(characterKey)) {
+    return res.json({ cached: true, ...seTaskArcCache.get(characterKey) });
   }
 
   try {
@@ -6003,12 +6024,17 @@ Format:
       return res.status(500).json({ error: 'Failed to parse task arc from Claude.', stop_reason: response.stop_reason, raw_length: raw.length });
     }
 
-    return res.json({
+    const result = {
       character_key: characterKey,
       display_name: dna.display_name,
       world: dna.world,
       tasks: parsed.tasks || [],
-    });
+    };
+
+    // Cache the arc in memory
+    seTaskArcCache.set(characterKey, result);
+
+    return res.json({ cached: false, ...result });
 
   } catch (err) {
     console.error('[generate-story-tasks] error:', err?.message);

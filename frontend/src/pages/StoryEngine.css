@@ -251,6 +251,60 @@
   font-size: 13px;
 }
 
+.se-task-loading-elapsed {
+  font-size: 11px;
+  color: var(--se-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Empty state — no arc generated yet */
+.se-task-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  text-align: center;
+  gap: 12px;
+}
+.se-task-empty-icon { font-size: 36px; }
+.se-task-empty-title { font-size: 15px; font-weight: 600; color: var(--se-text); }
+.se-task-empty-desc  { font-size: 12px; color: var(--se-text-muted); max-width: 260px; line-height: 1.5; }
+.se-btn-generate-arc {
+  margin-top: 8px;
+  padding: 10px 28px;
+  border: none;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #FFFFFF;
+  cursor: pointer;
+  transition: filter 0.15s;
+}
+.se-btn-generate-arc:hover { filter: brightness(1.1); }
+
+/* Task list header with regenerate */
+.se-task-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--se-border);
+  font-size: 11px;
+  color: var(--se-text-dim);
+}
+.se-btn-regen {
+  background: none;
+  border: 1px solid var(--se-border);
+  border-radius: 4px;
+  padding: 3px 8px;
+  font-size: 10px;
+  color: var(--se-text-muted);
+  cursor: pointer;
+  transition: all 0.12s;
+}
+.se-btn-regen:hover { border-color: var(--se-text-muted); color: var(--se-text); }
+
 .se-spinner {
   width: 24px;
   height: 24px;
@@ -353,6 +407,10 @@
 .se-task-generate-btn:hover {
   background: color-mix(in srgb, var(--char-color) 15%, transparent);
 }
+.se-task-generate-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* ── Story column (right) ────────────────────────────────────────────────────── */
 .se-story-column {
@@ -389,6 +447,12 @@
   font-size: 13px;
   color: var(--se-text-muted);
   font-style: italic;
+}
+.se-generating-elapsed {
+  font-size: 12px;
+  color: var(--se-text-dim);
+  font-variant-numeric: tabular-nums;
+  margin-top: 4px;
 }
 
 /* Story panel */

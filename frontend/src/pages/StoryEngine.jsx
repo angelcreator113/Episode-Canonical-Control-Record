@@ -90,7 +90,7 @@ function ArcProgress({ tasks, approvedStories }) {
 }
 
 // ─── Task card (story brief before writing) ───────────────────────────────────
-function TaskCard({ task, isApproved, isActive, onGenerate, onSelect, charColor }) {
+function TaskCard({ task, isApproved, isActive, onGenerate, onSelect, charColor, generating }) {
   return (
     <div
       className={`se-task-card ${isActive ? 'active' : ''} ${isApproved ? 'approved' : ''}`}
@@ -125,8 +125,9 @@ function TaskCard({ task, isApproved, isActive, onGenerate, onSelect, charColor 
         <button
           className="se-task-generate-btn"
           onClick={(e) => { e.stopPropagation(); onGenerate(task); }}
+          disabled={generating}
         >
-          Write
+          {generating ? 'Writing…' : 'Write'}
         </button>
       )}
     </div>
@@ -341,6 +342,10 @@ export default function StoryEngine() {
   const [generating, setGenerating]           = useState(false);
   const [generatingNum, setGeneratingNum]     = useState(null);
 
+  // Elapsed time counter
+  const [elapsed, setElapsed]                 = useState(0);
+  const elapsedRef                            = useRef(null);
+
   // Consistency
   const [consistencyConflicts, setConsistencyConflicts] = useState([]);
   const [consistencyLoading, setConsistencyLoading]     = useState(false);
@@ -351,36 +356,97 @@ export default function StoryEngine() {
 
   const char = CHARACTERS[selectedChar];
 
-  // ── Load task arc when character changes ─────────────────────────────────
+  // ── Elapsed-time timer helper ────────────────────────────────────────────
+  const startTimer = useCallback(() => {
+    setElapsed(0);
+    if (elapsedRef.current) clearInterval(elapsedRef.current);
+    const t0 = Date.now();
+    elapsedRef.current = setInterval(() => setElapsed(Math.round((Date.now() - t0) / 1000)), 1000);
+  }, []);
+
+  const stopTimer = useCallback(() => {
+    if (elapsedRef.current) { clearInterval(elapsedRef.current); elapsedRef.current = null; }
+  }, []);
+
+  useEffect(() => () => stopTimer(), [stopTimer]);
+
+  // ── localStorage helpers for task arc caching ────────────────────────────
+  const cacheKey = (charKey) => `se_tasks_${charKey}`;
+
+  function getCachedTasks(charKey) {
+    try {
+      const raw = localStorage.getItem(cacheKey(charKey));
+      if (!raw) return null;
+      const data = JSON.parse(raw);
+      // Expire after 24 hours
+      if (Date.now() - data.ts > 86400000) { localStorage.removeItem(cacheKey(charKey)); return null; }
+      return data.tasks;
+    } catch { return null; }
+  }
+
+  function setCachedTasks(charKey, taskList) {
+    try {
+      localStorage.setItem(cacheKey(charKey), JSON.stringify({ ts: Date.now(), tasks: taskList }));
+    } catch { /* quota exceeded — ok */ }
+  }
+
+  // ── Load tasks: try localStorage → server cache → show Generate button ──
   useEffect(() => {
-    if (selectedChar) {
-      loadTasks(selectedChar);
-      setStories({});
-      setApprovedStories([]);
-      setActiveTask(null);
-      setActiveStory(null);
-      setConsistencyConflicts([]);
-      setTherapyMemories([]);
+    if (!selectedChar) return;
+    setStories({});
+    setApprovedStories([]);
+    setActiveTask(null);
+    setActiveStory(null);
+    setConsistencyConflicts([]);
+    setTherapyMemories([]);
+
+    // 1. Check localStorage
+    const cached = getCachedTasks(selectedChar);
+    if (cached?.length) {
+      setTasks(cached);
+      setActiveTask(cached[0]);
+      return;
     }
+
+    // 2. Check server-side cache (instant GET, no Claude call)
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/memories/story-engine-tasks/${selectedChar}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.cached && data.tasks?.length) {
+            setTasks(data.tasks);
+            setCachedTasks(selectedChar, data.tasks);
+            setActiveTask(data.tasks[0]);
+            return;
+          }
+        }
+      } catch { /* network error — ignore */ }
+      // 3. No cache anywhere → show empty state with "Generate Arc" button
+      setTasks([]);
+    })();
   }, [selectedChar]);
 
-  async function loadTasks(charKey) {
+  // ── Generate task arc (user-initiated, not automatic) ────────────────────
+  async function handleGenerateArc(forceRegenerate = false) {
     setTasksLoading(true);
+    startTimer();
     try {
       const res = await fetch(`${API_BASE}/memories/generate-story-tasks`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characterKey: charKey }),
+        body: JSON.stringify({ characterKey: selectedChar, forceRegenerate }),
       });
       if (!res.ok) throw new Error('Failed');
       const data = await res.json();
       setTasks(data.tasks || []);
-      // Auto-select first task
+      setCachedTasks(selectedChar, data.tasks || []);
       if (data.tasks?.length) setActiveTask(data.tasks[0]);
     } catch (e) {
-      console.error('loadTasks error:', e);
+      console.error('generateArc error:', e);
     } finally {
       setTasksLoading(false);
+      stopTimer();
     }
   }
 
@@ -392,6 +458,7 @@ export default function StoryEngine() {
     setActiveStory(null);
     setConsistencyConflicts([]);
     setTherapyMemories([]);
+    startTimer();
 
     try {
       // Build previous stories context (last 3 approved)
@@ -431,6 +498,7 @@ export default function StoryEngine() {
     } finally {
       setGenerating(false);
       setGeneratingNum(null);
+      stopTimer();
     }
   }
 
@@ -570,21 +638,50 @@ export default function StoryEngine() {
           {tasksLoading ? (
             <div className="se-task-loading">
               <div className="se-spinner" style={{ borderTopColor: char?.color }} />
-              <span>Building {char?.display_name}'s arc…</span>
+              <span>Building {char?.display_name}'s 50-story arc…</span>
+              <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
+            </div>
+          ) : tasks.length === 0 ? (
+            <div className="se-task-empty">
+              <div className="se-task-empty-icon" style={{ color: char?.color }}>{char?.icon}</div>
+              <div className="se-task-empty-title">No story arc yet for {char?.display_name}</div>
+              <div className="se-task-empty-desc">
+                Generate a 50-story task arc using AI.
+                This takes 2–3 minutes on the first run,
+                then loads instantly from cache.
+              </div>
+              <button
+                className="se-btn se-btn-generate-arc"
+                style={{ background: char?.color }}
+                onClick={() => handleGenerateArc()}
+              >
+                Generate 50-Story Arc
+              </button>
             </div>
           ) : (
-            tasks.map((task) => (
-              <TaskCard
-                key={task.story_number}
-                task={task}
-                isApproved={approvedStories.includes(task.story_number)}
-                isActive={activeTask?.story_number === task.story_number}
-                onGenerate={handleGenerate}
-                onSelect={handleSelectTask}
-                charColor={char?.color}
-                generating={generating && generatingNum === task.story_number}
-              />
-            ))
+            <>
+              <div className="se-task-list-header">
+                <span className="se-task-list-count">{tasks.length} stories</span>
+                <button
+                  className="se-btn se-btn-regen"
+                  onClick={() => { if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) handleGenerateArc(true); }}
+                >
+                  ↻ Regenerate
+                </button>
+              </div>
+              {tasks.map((task) => (
+                <TaskCard
+                  key={task.story_number}
+                  task={task}
+                  isApproved={approvedStories.includes(task.story_number)}
+                  isActive={activeTask?.story_number === task.story_number}
+                  onGenerate={handleGenerate}
+                  onSelect={handleSelectTask}
+                  charColor={char?.color}
+                  generating={generating && generatingNum === task.story_number}
+                />
+              ))}
+            </>
           )}
         </div>
 
@@ -597,6 +694,7 @@ export default function StoryEngine() {
               <div className="se-generating-sub">
                 {char?.display_name}'s world is assembling itself.
               </div>
+              <div className="se-generating-elapsed">{elapsed}s · typically 1–2 minutes</div>
             </div>
           ) : (
             <StoryPanel
