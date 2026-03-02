@@ -102,10 +102,11 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) 
     const height = svgRef.current.clientHeight || 600;
 
     const container = svg.append('g').attr('class', 'rw-container');
-    svg.call(
-      d3.zoom().scaleExtent([0.3, 2.5])
-        .on('zoom', (event) => container.attr('transform', event.transform))
-    );
+
+    // Store zoom for auto-fit
+    const zoomBehavior = d3.zoom().scaleExtent([0.1, 2.5])
+      .on('zoom', (event) => container.attr('transform', event.transform));
+    svg.call(zoomBehavior);
 
     const defs = svg.append('defs');
     const edgeTypes = [...new Set(edges.map(e => e.type))];
@@ -124,12 +125,15 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) 
     })).filter(e => e.source && e.target);
 
     const sim = d3.forceSimulation(simNodes)
+      .velocityDecay(0.45)
       .force('link', d3.forceLink(simEdges).id(d => d.id)
         .distance(e => e.note === 'franchise_hinge' ? 220 : e.strength >= 4 ? 160 : 120)
         .strength(0.4))
-      .force('charge', d3.forceManyBody().strength(-400))
-      .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => (NODE_RADIUS[d.role_type] || 24) + 12));
+      .force('charge', d3.forceManyBody().strength(-200).distanceMax(400))
+      .force('center', d3.forceCenter(width / 2, height / 2).strength(0.05))
+      .force('collision', d3.forceCollide().radius(d => (NODE_RADIUS[d.role_type] || 24) + 12))
+      .force('x', d3.forceX(width / 2).strength(0.03))
+      .force('y', d3.forceY(height / 2).strength(0.03));
 
     const edgeGroup = container.append('g').attr('class', 'rw-edges');
     const edgeLines = edgeGroup.selectAll('line').data(simEdges).join('line')
@@ -147,9 +151,9 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) 
     const nodeGs = nodeGroup.selectAll('g').data(simNodes).join('g')
       .attr('class', 'rw-node-g').style('cursor', 'pointer')
       .call(d3.drag()
-        .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.08).restart(); d.fx = d.x; d.fy = d.y; })
         .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-        .on('end', (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+        .on('end', (event, d) => { if (!event.active) sim.alphaTarget(0); /* keep d.fx/d.fy — pin node where dropped */ })
       )
       .on('click', (event, d) => { event.stopPropagation(); onNodeClick(d); });
 
@@ -173,13 +177,36 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) 
       .attr('fill', d => GRAPH_TYPE_COLORS[d.role_type] || '#94a3b8')
       .text(d => d.label.split(' ').map(w => w[0]).join('').slice(0, 2));
 
+    const pad = 50;
     sim.on('tick', () => {
+      // Clamp nodes within bounds
+      simNodes.forEach(d => {
+        const r = NODE_RADIUS[d.role_type] || 24;
+        if (!d.fx) d.x = Math.max(r + pad, Math.min(width - r - pad, d.x));
+        if (!d.fy) d.y = Math.max(r + pad, Math.min(height - r - pad, d.y));
+      });
+
       edgeLines
         .attr('x1', e => { const r=NODE_RADIUS[e.source.role_type]||24, dx=e.target.x-e.source.x, dy=e.target.y-e.source.y, dist=Math.sqrt(dx*dx+dy*dy)||1; return e.source.x+(dx/dist)*r; })
         .attr('y1', e => { const r=NODE_RADIUS[e.source.role_type]||24, dx=e.target.x-e.source.x, dy=e.target.y-e.source.y, dist=Math.sqrt(dx*dx+dy*dy)||1; return e.source.y+(dy/dist)*r; })
         .attr('x2', e => { const r=(NODE_RADIUS[e.target.role_type]||24)+8, dx=e.target.x-e.source.x, dy=e.target.y-e.source.y, dist=Math.sqrt(dx*dx+dy*dy)||1; return e.target.x-(dx/dist)*r; })
         .attr('y2', e => { const r=(NODE_RADIUS[e.target.role_type]||24)+8, dx=e.target.x-e.source.x, dy=e.target.y-e.source.y, dist=Math.sqrt(dx*dx+dy*dy)||1; return e.target.y-(dy/dist)*r; });
       nodeGs.attr('transform', d => `translate(${d.x},${d.y})`);
+    });
+
+    // Auto-fit zoom once simulation settles
+    sim.on('end', () => {
+      if (!simNodes.length) return;
+      const xs = simNodes.map(d => d.x);
+      const ys = simNodes.map(d => d.y);
+      const x0 = Math.min(...xs) - 60, x1 = Math.max(...xs) + 60;
+      const y0 = Math.min(...ys) - 60, y1 = Math.max(...ys) + 60;
+      const bw = x1 - x0, bh = y1 - y0;
+      const scale = Math.min(width / bw, height / bh, 1.5);
+      const tx = (width - bw * scale) / 2 - x0 * scale;
+      const ty = (height - bh * scale) / 2 - y0 * scale;
+      svg.transition().duration(600)
+        .call(zoomBehavior.transform, d3.zoomIdentity.translate(tx, ty).scale(scale));
     });
 
     return () => sim.stop();
