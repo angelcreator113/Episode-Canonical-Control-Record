@@ -5993,8 +5993,96 @@ async function loadCharacterProfile(characterKey) {
       sections.push(`WRITER'S DESCRIPTION: ${merged.description}`);
     }
 
+    // Extract consciousness layer from writer_notes (structured data for story generation)
     if (merged.writer_notes) {
-      sections.push(`WRITER NOTES: ${merged.writer_notes}`);
+      let writerNotes = {};
+      try { writerNotes = JSON.parse(merged.writer_notes); } catch { writerNotes = null; }
+
+      if (writerNotes && writerNotes.consciousness) {
+        const c = writerNotes.consciousness;
+        const cLines = [];
+        cLines.push('CONSCIOUSNESS (how she exists — not what she wants, but the texture of being her):');
+        if (c.interior_texture) {
+          cLines.push(`  Interior texture: ${c.interior_texture.what_this_sounds_like || ''}`);
+          if (c.interior_texture.story_engine_note) cLines.push(`  [Story Engine] ${c.interior_texture.story_engine_note}`);
+        }
+        if (c.body_consciousness) {
+          cLines.push(`  Body consciousness: Fear lives in ${c.body_consciousness.fear_location || 'unknown'}. The tell: ${c.body_consciousness.tell || ''}`);
+          if (c.body_consciousness.story_engine_note) cLines.push(`  [Story Engine] ${c.body_consciousness.story_engine_note}`);
+        }
+        if (c.temporal_orientation) {
+          cLines.push(`  Temporal: She lives primarily in the ${c.temporal_orientation.primary || 'present'}. ${c.temporal_orientation.pull || ''}`);
+          if (c.temporal_orientation.story_engine_note) cLines.push(`  [Story Engine] ${c.temporal_orientation.story_engine_note}`);
+        }
+        if (c.social_perception) {
+          cLines.push(`  Social perception: ${c.social_perception.accuracy || ''} accuracy. Blind spot: ${c.social_perception.blind_spot || ''}`);
+          if (c.social_perception.story_engine_note) cLines.push(`  [Story Engine] ${c.social_perception.story_engine_note}`);
+        }
+        if (c.self_awareness_calibration) {
+          cLines.push(`  Self-awareness: ${c.self_awareness_calibration.function || ''} — ${c.self_awareness_calibration.accuracy || ''}. Cannot see: ${c.self_awareness_calibration.what_she_cannot_see || ''}`);
+          if (c.self_awareness_calibration.story_engine_note) cLines.push(`  [Story Engine] ${c.self_awareness_calibration.story_engine_note}`);
+        }
+        if (c.change_mechanism) {
+          cLines.push(`  Change mechanism: ${c.change_mechanism.primary || ''}. What bounces off: ${c.change_mechanism.what_bounces_off || ''}. What actually changes her: ${c.change_mechanism.what_actually_changes_her || ''}`);
+          if (c.change_mechanism.story_engine_note) cLines.push(`  [Story Engine] ${c.change_mechanism.story_engine_note}`);
+        }
+        sections.push(cLines.join('\n'));
+      }
+
+      if (writerNotes && writerNotes.inherited_consciousness) {
+        const ic = writerNotes.inherited_consciousness;
+        const icLines = [];
+        icLines.push('INHERITED CONSCIOUSNESS (what transferred from JustAWoman — she does not know):');
+        if (ic.inherited_instincts) {
+          icLines.push(`  Inherited instincts: ${ic.inherited_instincts.what_they_are || ''}`);
+          if (ic.inherited_instincts.story_engine_note) icLines.push(`  [Story Engine] ${ic.inherited_instincts.story_engine_note}`);
+        }
+        if (ic.confidence_without_origin) {
+          icLines.push(`  Confidence without origin: ${ic.confidence_without_origin.quality || ''}. Cracks when: ${ic.confidence_without_origin.when_it_cracks || ''}`);
+          if (ic.confidence_without_origin.story_engine_note) icLines.push(`  [Story Engine] ${ic.confidence_without_origin.story_engine_note}`);
+        }
+        if (ic.playbook_manifestations) {
+          icLines.push(`  Playbook in career: ${ic.playbook_manifestations.in_her_career || ''}. In content: ${ic.playbook_manifestations.in_her_content || ''}`);
+          if (ic.playbook_manifestations.story_engine_note) icLines.push(`  [Story Engine] ${ic.playbook_manifestations.story_engine_note}`);
+        }
+        if (ic.blind_spots) {
+          icLines.push(`  Primary blind spot: ${ic.blind_spots.primary || ''}`);
+          if (ic.blind_spots.story_engine_note) icLines.push(`  [Story Engine] ${ic.blind_spots.story_engine_note}`);
+        }
+        if (ic.resonance_triggers) {
+          icLines.push(`  Resonance trigger: ${ic.resonance_triggers.primary_trigger || ''}. What she calls it: ${ic.resonance_triggers.what_lala_calls_it || ''}`);
+          if (ic.resonance_triggers.story_engine_note) icLines.push(`  [Story Engine] ${ic.resonance_triggers.story_engine_note}`);
+        }
+        sections.push(icLines.join('\n'));
+      }
+
+      if (writerNotes && writerNotes.dilemma_triggers) {
+        const dt = writerNotes.dilemma_triggers;
+        const dtLines = ['DILEMMA TRIGGERS (when to deploy each dilemma in the story):'];
+        if (dt.active_dilemma) {
+          dtLines.push(`  Active: "${dt.active_dilemma.dilemma}" — what keeps it active: ${dt.active_dilemma.what_keeps_it_active || ''}`);
+        }
+        if (dt.latent_1) {
+          dtLines.push(`  Latent 1: "${dt.latent_1.dilemma}" — activates in ${dt.latent_1.activation_domain || 'unknown'} domain. Signal: ${dt.latent_1.activation_signal || ''}`);
+        }
+        if (dt.latent_2) {
+          dtLines.push(`  Latent 2: "${dt.latent_2.dilemma}" — activates in ${dt.latent_2.activation_domain || 'unknown'} domain. Signal: ${dt.latent_2.activation_signal || ''}`);
+        }
+        sections.push(dtLines.join('\n'));
+      }
+
+      // Include any remaining writer_notes content that isn't consciousness data
+      if (writerNotes && typeof writerNotes === 'object') {
+        const otherKeys = Object.keys(writerNotes).filter(k => !['consciousness', 'inherited_consciousness', 'dilemma_triggers'].includes(k));
+        if (otherKeys.length) {
+          const otherNotes = {};
+          for (const k of otherKeys) otherNotes[k] = writerNotes[k];
+          sections.push(`WRITER NOTES (other): ${JSON.stringify(otherNotes)}`);
+        }
+      } else if (typeof merged.writer_notes === 'string' && !writerNotes) {
+        // If writer_notes is not parseable JSON, include raw
+        sections.push(`WRITER NOTES: ${merged.writer_notes}`);
+      }
     }
 
     // Extract memories from extra_fields if available

@@ -706,6 +706,47 @@ export default function CharacterGenerator() {
     setBatch((prev) => prev.filter((r) => r !== result));
   }
 
+  // ── Commit ALL staged characters to a registry at once ──────────────────────
+  const [commitAllLoading, setCommitAllLoading] = useState(false);
+  const [commitAllRegistry, setCommitAllRegistry] = useState('');
+
+  async function handleCommitAll() {
+    const regId = commitAllRegistry || registries?.[0]?.id;
+    if (!regId) return alert('Select a registry first.');
+
+    const pending = batch.filter((r) => r.status === 'generated' && !r._committed);
+    if (!pending.length) return;
+
+    setCommitAllLoading(true);
+    let ok = 0;
+    for (const result of pending) {
+      try {
+        const res = await fetch(`${API_BASE}/character-generator/commit`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            profile: result.profile,
+            seed: result.seed,
+            registryId: regId,
+          }),
+        });
+        if (res.ok) {
+          setBatch((prev) =>
+            prev.map((r) => r === result ? { ...r, _committed: true } : r)
+          );
+          ok++;
+        }
+      } catch { /* continue */ }
+    }
+    loadEcosystem();
+    setCommitAllLoading(false);
+    if (ok === pending.length) {
+      alert(`✓ All ${ok} characters added to registry!`);
+    } else {
+      alert(`${ok}/${pending.length} characters committed. Some failed.`);
+    }
+  }
+
   const approvedCount = seeds.filter((s) => s._status === 'approved').length;
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -794,6 +835,19 @@ export default function CharacterGenerator() {
                 </div>
               )}
 
+              {/* Next-step banner when seeds approved but not yet generated */}
+              {approvedCount > 0 && !batchLoading && (
+                <div className="cg-approval-banner">
+                  <span>✓ {approvedCount} seed{approvedCount > 1 ? 's' : ''} approved — ready to generate full profiles</span>
+                  <button
+                    className="cg-btn cg-btn-generate"
+                    onClick={handleGenerateBatch}
+                  >
+                    Generate {approvedCount} Character{approvedCount > 1 ? 's' : ''}
+                  </button>
+                </div>
+              )}
+
               <div className="cg-seeds-grid">
                 {seeds.map((seed, i) => (
                   <SeedCard
@@ -832,6 +886,33 @@ export default function CharacterGenerator() {
                   <div className="cg-spinner-large" />
                   <div>Building {approvedCount} characters simultaneously…</div>
                   <div className="cg-loading-sub">Full profiles generating in parallel.</div>
+                </div>
+              )}
+
+              {/* Batch commit banner */}
+              {!batchLoading && batch.filter((r) => r.status === 'generated' && !r._committed).length > 0 && (
+                <div className="cg-approval-banner cg-commit-all-banner">
+                  <div className="cg-approval-banner-text">
+                    <strong>{batch.filter((r) => r.status === 'generated' && !r._committed).length}</strong> characters ready to add to registry
+                  </div>
+                  <div className="cg-commit-all-controls">
+                    <select
+                      className="cg-registry-select"
+                      value={commitAllRegistry || registries?.[0]?.id || ''}
+                      onChange={(e) => setCommitAllRegistry(e.target.value)}
+                    >
+                      {(registries || []).map((r) => (
+                        <option key={r.id} value={r.id}>{r.title || r.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      className="cg-btn cg-btn-commit-all"
+                      onClick={handleCommitAll}
+                      disabled={commitAllLoading}
+                    >
+                      {commitAllLoading ? 'Committing…' : `Add All to Registry`}
+                    </button>
+                  </div>
                 </div>
               )}
 
