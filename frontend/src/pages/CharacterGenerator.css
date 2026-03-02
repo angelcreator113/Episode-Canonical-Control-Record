@@ -1158,6 +1158,12 @@
   font-size:   18px;
 }
 
+.cg-commit-target {
+  font-size:   13px;
+  color:       var(--cg-muted);
+  font-weight: 400;
+}
+
 .cg-staging-guidance .cg-commit-all-banner {
   background:    transparent;
   border:        none;

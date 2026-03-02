@@ -697,11 +697,15 @@ export default function CharacterGenerator() {
 
   // ── Commit ALL staged characters to a registry at once ──────────────────────
   const [commitAllLoading, setCommitAllLoading] = useState(false);
-  const [commitAllRegistry, setCommitAllRegistry] = useState('');
+
+  // Auto-match registry to the world the user already selected
+  const matchedRegistry = registries.find((r) => r.book_tag === worldTarget)
+    || registries.find((r) => (r.title || '').toLowerCase().includes(worldTarget))
+    || registries[0];
 
   async function handleCommitAll() {
-    const regId = commitAllRegistry || registries?.[0]?.id;
-    if (!regId) return alert('Select a registry first.');
+    const regId = matchedRegistry?.id;
+    if (!regId) return alert('No registry found for this world.');
 
     const pending = batch.filter((r) => r.status === 'generated' && !r._committed);
     if (!pending.length) return;
@@ -908,32 +912,22 @@ export default function CharacterGenerator() {
                     </div>
                     <div className="cg-guidance-step">
                       <span className="cg-guidance-icon">↓</span>
-                      <span>When ready, choose a registry and <strong>add them all at once</strong> below</span>
+                      <span>When ready, click the button below to <strong>add them all at once</strong></span>
                     </div>
                   </div>
 
                   <div className="cg-commit-all-banner">
                     <div className="cg-commit-all-ready">
                       <strong>{batch.filter((r) => r.status === 'generated' && !r._committed).length}</strong> characters ready
+                      {matchedRegistry && <span className="cg-commit-target"> → {matchedRegistry.title || matchedRegistry.name}</span>}
                     </div>
-                    <div className="cg-commit-all-controls">
-                      <select
-                        className="cg-registry-select cg-registry-select-banner"
-                        value={commitAllRegistry || registries?.[0]?.id || ''}
-                        onChange={(e) => setCommitAllRegistry(e.target.value)}
-                      >
-                        {(registries || []).map((r) => (
-                          <option key={r.id} value={r.id}>{r.title || r.name}</option>
-                        ))}
-                      </select>
-                      <button
-                        className="cg-btn cg-btn-commit-all"
-                        onClick={handleCommitAll}
-                        disabled={commitAllLoading}
-                      >
-                        {commitAllLoading ? 'Committing…' : `Add All to Registry`}
-                      </button>
-                    </div>
+                    <button
+                      className="cg-btn cg-btn-commit-all"
+                      onClick={handleCommitAll}
+                      disabled={commitAllLoading}
+                    >
+                      {commitAllLoading ? 'Committing…' : `Add All to Registry`}
+                    </button>
                   </div>
                 </div>
               )}
