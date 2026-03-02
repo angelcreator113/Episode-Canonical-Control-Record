@@ -66,8 +66,8 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
         model: db.RegistryCharacter,
         as: 'characters',
         attributes: [
-          'id', 'name', 'selected_name', 'role_type', 'status',
-          'world_exists', 'appearance_mode', 'created_at',
+          'id', 'display_name', 'selected_name', 'role_type', 'status',
+          'canon_tier', 'appearance_mode', 'createdAt',
         ],
       }],
     });
@@ -87,8 +87,8 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
       };
 
       const canonCount = {
-        eligible: worldChars.filter((c) => c.world_exists).length,
-        not_eligible: worldChars.filter((c) => !c.world_exists).length,
+        eligible: worldChars.filter((c) => c.canon_tier && c.canon_tier !== 'none').length,
+        not_eligible: worldChars.filter((c) => !c.canon_tier || c.canon_tier === 'none').length,
       };
 
       const saturated = Object.entries(roleCount)
@@ -113,10 +113,10 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
     const book1Chars = allChars.filter((c) =>
       c.appearance_mode?.includes('On-Page') ||
       c.appearance_mode?.includes('Interior') ||
-      ['The Husband', 'JustAWoman', 'Chloe', 'Dana', 'Jade'].includes(c.selected_name || c.name)
+      ['The Husband', 'JustAWoman', 'Chloe', 'Dana', 'Jade'].includes(c.selected_name || c.display_name)
     );
     const lalavorseChars = allChars.filter((c) =>
-      (c.selected_name || c.name) === 'Lala' ||
+      (c.selected_name || c.display_name) === 'Lala' ||
       c.appearance_mode?.includes('creation')
     );
 
@@ -126,7 +126,7 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
         stats: buildWorldStats(book1Chars),
         characters: book1Chars.map((c) => ({
           id: c.id,
-          name: c.selected_name || c.name,
+          name: c.selected_name || c.display_name,
           role_type: c.role_type,
           status: c.status,
         })),
@@ -136,7 +136,7 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
         stats: buildWorldStats(lalavorseChars),
         characters: lalavorseChars.map((c) => ({
           id: c.id,
-          name: c.selected_name || c.name,
+          name: c.selected_name || c.display_name,
           role_type: c.role_type,
           status: c.status,
         })),
@@ -565,14 +565,13 @@ router.post('/commit', optionalAuth, async (req, res) => {
 
     const characterData = {
       registry_id: registryId,
-      name:           seed?.name || identity.name,
+      display_name:   seed?.name || identity.name,
       selected_name:  seed?.name || identity.name,
       role_type:      identity.role_type || seed?.role_type || 'support',
-      type:           identity.role_type || seed?.role_type || 'support',
+      role_label:     identity.role_type || seed?.role_type || 'support',
       appearance_mode: storyPres.worlds?.includes('lalaverse') ? 'On-Page (LalaVerse)' : 'On-Page',
-      world_exists:   identity.canon_eligible || storyPres.canon_eligible || false,
+      canon_tier:       identity.canon_eligible ? 'canon' : 'none',
       status:         'draft',
-      role:           career.job_title || seed?.career || '',
       belief_pressured: psych.core_wound || '',
       emotional_function: psych.desire_line || '',
       personality_matrix: JSON.stringify({
@@ -597,7 +596,7 @@ router.post('/commit', optionalAuth, async (req, res) => {
         plot_threads:    threads,
         active_dilemmas: psych.active_dilemmas,
       }),
-      names_options: JSON.stringify([seed?.name || identity.name]),
+      name_options: JSON.stringify([seed?.name || identity.name]),
       relationships_map: JSON.stringify(
         (rels.proposed_connections || []).reduce((acc, conn) => {
           acc[conn.to_character] = {
@@ -617,8 +616,8 @@ router.post('/commit', optionalAuth, async (req, res) => {
     return res.json({
       success: true,
       character_id: newChar.id,
-      name: newChar.name,
-      message: `${newChar.name} added to registry as draft.`,
+      name: newChar.display_name || newChar.selected_name,
+      message: `${newChar.display_name || newChar.selected_name} added to registry as draft.`,
     });
 
   } catch (err) {
