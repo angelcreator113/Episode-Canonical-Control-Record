@@ -1,6 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate, useBlocker } from 'react-router-dom';
 import './CharacterGenerator.css';
+
+// ─── LocalStorage persistence helpers ─────────────────────────────────────────
+const STORAGE_KEY = 'cg-session';
+function saveSession(data) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* quota */ }
+}
+function loadSession() {
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function clearSession() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+}
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -508,22 +520,56 @@ export default function CharacterGenerator() {
   const [ecosystem, setEcosystem]         = useState(null);
   const [ecoLoading, setEcoLoading]       = useState(true);
 
+  // Restore saved session (if any)
+  const saved = useRef(loadSession());
+
   // Seed proposal
-  const [worldTarget, setWorldTarget]     = useState('book1');
-  const [seeds, setSeeds]                 = useState([]);
+  const [worldTarget, setWorldTarget]     = useState(saved.current?.worldTarget || 'book1');
+  const [seeds, setSeeds]                 = useState(saved.current?.seeds || []);
   const [seedsLoading, setSeedsLoading]   = useState(false);
 
   // Batch generation
-  const [batch, setBatch]                 = useState([]);
+  const [batch, setBatch]                 = useState(saved.current?.batch || []);
   const [batchLoading, setBatchLoading]   = useState(false);
 
   // Staging
-  const [stagingChecks, setStagingChecks] = useState({});
+  const [stagingChecks, setStagingChecks] = useState(saved.current?.stagingChecks || {});
   const [registries, setRegistries]       = useState([]);
 
   // Phase: 'seeds' | 'staging'
-  const [phase, setPhase]                 = useState('seeds');
+  const [phase, setPhase]                 = useState(saved.current?.phase || 'seeds');
   const [approvalFlash, setApprovalFlash] = useState(false);
+
+  // ── Auto-save to localStorage on meaningful state changes ───────────────────
+  useEffect(() => {
+    // Only save when there's actual work to preserve
+    if (seeds.length > 0 || batch.length > 0) {
+      saveSession({ worldTarget, seeds, batch, stagingChecks, phase });
+    }
+  }, [worldTarget, seeds, batch, stagingChecks, phase]);
+
+  // ── Warn before leaving with unsaved work ───────────────────────────────────
+  const hasUnsavedWork = batch.some((r) => r.status === 'generated' && !r._committed);
+
+  useEffect(() => {
+    if (!hasUnsavedWork) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedWork]);
+
+  // Block in-app navigation (React Router)
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      hasUnsavedWork && currentLocation.pathname !== nextLocation.pathname
+  );
+
+  // Clear saved session when everything is committed
+  useEffect(() => {
+    if (batch.length > 0 && batch.every((r) => r._committed)) {
+      clearSession();
+    }
+  }, [batch]);
 
   // Load ecosystem and registries on mount
   useEffect(() => {
@@ -556,6 +602,7 @@ export default function CharacterGenerator() {
     setSeeds([]);
     setBatch([]);
     setPhase('seeds');
+    clearSession();
     try {
       const existingNames = [
         ...(ecosystem?.book1?.characters || []),
@@ -745,6 +792,28 @@ export default function CharacterGenerator() {
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className="cg-page">
+
+      {/* Navigation blocker dialog */}
+      {blocker.state === 'blocked' && (
+        <div className="cg-blocker-overlay">
+          <div className="cg-blocker-dialog">
+            <div className="cg-blocker-title">Uncommitted Characters</div>
+            <div className="cg-blocker-text">
+              You have {batch.filter((r) => r.status === 'generated' && !r._committed).length} characters
+              that haven't been added to the registry yet. Your work is auto-saved and will
+              be here when you come back.
+            </div>
+            <div className="cg-blocker-actions">
+              <button className="cg-btn cg-btn-propose" onClick={() => blocker.reset()}>
+                Stay & Commit
+              </button>
+              <button className="cg-btn cg-btn-discard" onClick={() => blocker.proceed()}>
+                Leave Anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="cg-header">

@@ -1217,3 +1217,47 @@
   gap:         12px;
   margin-top:  8px;
 }
+
+/* ── Navigation Blocker Dialog ─────────────────────────────────────────────── */
+.cg-blocker-overlay {
+  position:        fixed;
+  inset:           0;
+  z-index:         9999;
+  background:      rgba(26, 21, 16, 0.5);
+  backdrop-filter:  blur(3px);
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+}
+
+.cg-blocker-dialog {
+  background:    #fff;
+  border:        1px solid var(--cg-border);
+  border-radius: 12px;
+  padding:       32px;
+  max-width:     420px;
+  width:         90%;
+  box-shadow:    0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.cg-blocker-title {
+  font-family: var(--cg-heading);
+  font-size:   20px;
+  font-weight: 600;
+  color:       var(--cg-ink);
+  margin-bottom: 12px;
+}
+
+.cg-blocker-text {
+  font-family: var(--cg-font);
+  font-size:   14px;
+  color:       var(--cg-muted);
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.cg-blocker-actions {
+  display:         flex;
+  gap:             12px;
+  justify-content: flex-end;
+}
