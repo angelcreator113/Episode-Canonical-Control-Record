@@ -65,9 +65,9 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
   // Priority color
   const priorityColor = pct === 100 ? '#2E8B57' : pct >= 40 ? '#b0922e' : '#C0392B';
 
-  // Don't render if no showId or fully done and collapsed
+  // Don't render if no showId, no data, or setup fully complete
   if (!showId || !status) return null;
-  if (pct === 100 && !open) return null;
+  if (pct === 100) return null;
 
   // If sidebar is collapsed, show a minimal pip
   if (sidebarCollapsed) {
