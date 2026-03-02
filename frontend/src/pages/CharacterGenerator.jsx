@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate, useBlocker } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import './CharacterGenerator.css';
 
 // ─── LocalStorage persistence helpers ─────────────────────────────────────────
@@ -558,11 +558,18 @@ export default function CharacterGenerator() {
     return () => window.removeEventListener('beforeunload', handler);
   }, [hasUnsavedWork]);
 
-  // Block in-app navigation (React Router)
-  const blocker = useBlocker(
-    ({ currentLocation, nextLocation }) =>
-      hasUnsavedWork && currentLocation.pathname !== nextLocation.pathname
-  );
+  // Guard back-button navigation (works with BrowserRouter)
+  useEffect(() => {
+    if (!hasUnsavedWork) return;
+    const onPop = () => {
+      if (!window.confirm('You have uncommitted characters. Your work is auto-saved — leave anyway?')) {
+        window.history.pushState(null, '', window.location.pathname);
+      }
+    };
+    window.history.pushState(null, '', window.location.pathname);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [hasUnsavedWork]);
 
   // Clear saved session when everything is committed
   useEffect(() => {
@@ -795,27 +802,7 @@ export default function CharacterGenerator() {
   return (
     <div className="cg-page">
 
-      {/* Navigation blocker dialog */}
-      {blocker.state === 'blocked' && (
-        <div className="cg-blocker-overlay">
-          <div className="cg-blocker-dialog">
-            <div className="cg-blocker-title">Uncommitted Characters</div>
-            <div className="cg-blocker-text">
-              You have {batch.filter((r) => r.status === 'generated' && !r._committed).length} characters
-              that haven't been added to the registry yet. Your work is auto-saved and will
-              be here when you come back.
-            </div>
-            <div className="cg-blocker-actions">
-              <button className="cg-btn cg-btn-propose" onClick={() => blocker.reset()}>
-                Stay & Commit
-              </button>
-              <button className="cg-btn cg-btn-discard" onClick={() => blocker.proceed()}>
-                Leave Anyway
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Navigation guard handled via popstate + beforeunload; data auto-saved to localStorage */}
 
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="cg-header">
