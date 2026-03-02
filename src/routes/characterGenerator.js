@@ -563,8 +563,14 @@ router.post('/commit', optionalAuth, async (req, res) => {
     const storyPres  = profile.story_presence || {};
     const threads    = profile.plot_threads || [];
 
+    // Generate a unique character_key slug from the name
+    const rawName = seed?.name || identity.name || 'unnamed';
+    const baseKey = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const uniqueKey = `${baseKey}-${Date.now().toString(36)}`;
+
     const characterData = {
       registry_id: registryId,
+      character_key: uniqueKey,
       display_name:   seed?.name || identity.name,
       selected_name:  seed?.name || identity.name,
       role_type:      identity.role_type || seed?.role_type || 'support',
