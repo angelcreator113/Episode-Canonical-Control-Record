@@ -194,9 +194,11 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) 
       nodeGs.attr('transform', d => `translate(${d.x},${d.y})`);
     });
 
-    // Auto-fit zoom once simulation settles
+    // Auto-fit zoom ONLY on initial load (not after drag interactions)
+    let hasAutoFitted = false;
     sim.on('end', () => {
-      if (!simNodes.length) return;
+      if (hasAutoFitted || !simNodes.length) return;
+      hasAutoFitted = true;
       const xs = simNodes.map(d => d.x);
       const ys = simNodes.map(d => d.y);
       const x0 = Math.min(...xs) - 60, x1 = Math.max(...xs) + 60;
