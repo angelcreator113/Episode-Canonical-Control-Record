@@ -16,6 +16,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import VoiceModeButton from '../components/VoiceModeButton';
+import ConsciousnessLayer from '../components/ConsciousnessLayer';
 import './CharacterDossier.css';
 
 /* ─── Section definitions ── */
@@ -27,7 +28,8 @@ const SECTIONS = [
   { key: 'relationships', icon: '🔗', label: 'RELATIONSHIPS',       number: '05' },
   { key: 'story',       icon: '📚', label: 'STORY PRESENCE',         number: '06' },
   { key: 'voice',       icon: '🧠', label: 'VOICE & DIALOGUE',      number: '07' },
-  { key: 'evolution',   icon: '💎', label: 'EVOLUTION TRACKING',     number: '08' },
+  { key: 'consciousness', icon: '◈', label: 'CONSCIOUSNESS',        number: '08' },
+  { key: 'evolution',   icon: '💎', label: 'EVOLUTION TRACKING',     number: '09' },
 ];
 
 /* ─── Role labels ── */
@@ -441,9 +443,36 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
           )}
         </DossierSection>
 
-        {/* ═══ SECTION 8: EVOLUTION TRACKING ═══ */}
+        {/* ═══ SECTION 8: CONSCIOUSNESS ═══ */}
         <DossierSection
           def={SECTIONS[7]}
+          ref={el => sectionRefs.current.consciousness = el}
+          collapsed={collapsed.has('consciousness')}
+          onToggle={() => toggleCollapse('consciousness')}
+          editing={false}
+          onEdit={() => {}}
+          onCancel={() => {}}
+          onSave={() => {}}
+          saving={false}
+          isEmpty={false}
+        >
+          <ConsciousnessLayer
+            character={c}
+            psychology={{
+              core_wound:     c.core_wound || c.belief_pressured,
+              desire_line:    c.core_desire || c.emotional_function,
+              fear_line:      c.core_fear || null,
+              self_deception: null,
+              at_their_best:  null,
+              at_their_worst: null,
+            }}
+            dilemmas={null}
+          />
+        </DossierSection>
+
+        {/* ═══ SECTION 9: EVOLUTION TRACKING ═══ */}
+        <DossierSection
+          def={SECTIONS[8]}
           ref={el => sectionRefs.current.evolution = el}
           collapsed={collapsed.has('evolution')}
           onToggle={() => toggleCollapse('evolution')}

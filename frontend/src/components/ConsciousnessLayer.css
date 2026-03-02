@@ -1,0 +1,693 @@
+/* ==============================================================
+   CONSCIOUSNESS LAYER — Light Parchment Theme
+   The texture of existing with the wound.
+   Location: frontend/src/components/ConsciousnessLayer.css
+   ============================================================== */
+
+/* ─── Design tokens (inherits from dossier) ── */
+.cl-wrap {
+  --cl-bg:          #faf8f5;
+  --cl-surface:     #ffffff;
+  --cl-surface2:    #f5f2ed;
+  --cl-surface3:    #ede8e0;
+  --cl-border:      #e0d8cc;
+  --cl-border2:     #d0c5b5;
+  --cl-gold:        #b8963a;
+  --cl-gold-dim:    #8a7535;
+  --cl-gold-bg:     rgba(201, 168, 76, 0.08);
+  --cl-ink:         #1a1510;
+  --cl-ink-dim:     #6b6050;
+  --cl-ink-faint:   #9a9080;
+  --cl-red:         #d43a2a;
+  --cl-green:       #3d9e42;
+  --cl-violet:      #8b45b5;
+  --cl-violet-dim:  #6a3490;
+  --cl-violet-bg:   rgba(139, 69, 181, 0.06);
+  --cl-violet-border: rgba(139, 69, 181, 0.18);
+
+  --cl-serif:       'Cormorant Garamond', 'Georgia', serif;
+  --cl-sans:        'DM Sans', 'Inter', -apple-system, sans-serif;
+  --cl-mono:        'DM Mono', 'JetBrains Mono', monospace;
+
+  font-family: var(--cl-sans);
+  color: var(--cl-ink);
+  padding: 0;
+}
+
+
+/* ═══════════════════════════════════════
+   LOADING
+   ═══════════════════════════════════════ */
+.cl-loading {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 32px;
+  color: var(--cl-ink-dim);
+  font-size: 14px;
+}
+
+.cl-loading-icon {
+  font-size: 20px;
+  color: var(--cl-gold);
+  animation: cl-pulse 1.5s ease infinite;
+}
+
+@keyframes cl-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+
+/* ═══════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════ */
+.cl-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 0 16px;
+  border-bottom: 1px solid var(--cl-border);
+  margin-bottom: 20px;
+}
+
+.cl-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cl-header-icon {
+  font-size: 24px;
+  color: var(--cl-gold);
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.cl-title {
+  font-family: var(--cl-serif);
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--cl-ink);
+  margin: 0 0 2px;
+  line-height: 1.2;
+}
+
+.cl-subtitle {
+  font-size: 13px;
+  color: var(--cl-ink-dim);
+  margin: 0;
+  font-style: italic;
+}
+
+.cl-header-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+
+/* ═══════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════ */
+.cl-btn {
+  font-family: var(--cl-sans);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.cl-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.cl-btn-gold {
+  background: var(--cl-gold);
+  color: #fff;
+}
+.cl-btn-gold:hover:not(:disabled) {
+  background: var(--cl-gold-dim);
+}
+
+.cl-btn-outline {
+  background: transparent;
+  border: 1px solid var(--cl-border2);
+  color: var(--cl-ink-dim);
+}
+.cl-btn-outline:hover:not(:disabled) {
+  border-color: var(--cl-gold);
+  color: var(--cl-gold);
+}
+
+.cl-btn-ghost {
+  background: transparent;
+  color: var(--cl-ink-dim);
+  padding: 6px 12px;
+}
+.cl-btn-ghost:hover:not(:disabled) {
+  color: var(--cl-ink);
+  background: var(--cl-surface2);
+}
+
+.cl-btn-violet {
+  background: var(--cl-violet);
+  color: #fff;
+}
+.cl-btn-violet:hover:not(:disabled) {
+  background: var(--cl-violet-dim);
+}
+
+.cl-btn-violet-outline {
+  border-color: var(--cl-violet-border);
+  color: var(--cl-violet);
+}
+.cl-btn-violet-outline:hover:not(:disabled) {
+  border-color: var(--cl-violet);
+  background: var(--cl-violet-bg);
+}
+
+
+/* ═══════════════════════════════════════
+   STATUS MESSAGES
+   ═══════════════════════════════════════ */
+.cl-error {
+  padding: 10px 16px;
+  background: rgba(212, 58, 42, 0.06);
+  border: 1px solid rgba(212, 58, 42, 0.2);
+  color: var(--cl-red);
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
+.cl-saved {
+  padding: 10px 16px;
+  background: rgba(61, 158, 66, 0.06);
+  border: 1px solid rgba(61, 158, 66, 0.2);
+  color: var(--cl-green);
+  border-radius: 4px;
+  font-size: 13px;
+  margin-bottom: 16px;
+  animation: cl-fadeIn 0.3s ease;
+}
+
+@keyframes cl-fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+
+/* ═══════════════════════════════════════
+   EMPTY STATE
+   ═══════════════════════════════════════ */
+.cl-empty {
+  text-align: center;
+  padding: 48px 32px;
+  color: var(--cl-ink-dim);
+}
+
+.cl-empty-icon {
+  font-size: 40px;
+  color: var(--cl-gold);
+  opacity: 0.4;
+  margin-bottom: 12px;
+}
+
+.cl-empty h4 {
+  font-family: var(--cl-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cl-ink);
+  margin: 0 0 8px;
+}
+
+.cl-empty p {
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+
+/* ═══════════════════════════════════════
+   CONSCIOUSNESS FIELDS GRID
+   ═══════════════════════════════════════ */
+.cl-fields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .cl-fields {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+/* ═══════════════════════════════════════
+   FIELD CARDS
+   ═══════════════════════════════════════ */
+.cl-card {
+  background: var(--cl-surface);
+  border: 1px solid var(--cl-border);
+  border-radius: 6px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+.cl-card:hover {
+  border-color: var(--cl-gold);
+}
+
+.cl-card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px 10px;
+  border-bottom: 1px solid var(--cl-border);
+  background: var(--cl-surface2);
+}
+
+.cl-card-icon {
+  font-size: 18px;
+  color: var(--cl-gold);
+  flex-shrink: 0;
+}
+
+.cl-card-title {
+  font-family: var(--cl-serif);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--cl-ink);
+  margin: 0;
+  line-height: 1.2;
+}
+
+.cl-card-desc {
+  font-size: 11px;
+  color: var(--cl-ink-faint);
+  font-style: italic;
+}
+
+.cl-card-body {
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+
+/* ── Field items ── */
+.cl-field-item {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.cl-field-key {
+  font-family: var(--cl-mono);
+  font-size: 10px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: var(--cl-gold-dim);
+  font-weight: 600;
+}
+
+.cl-field-val {
+  font-size: 13px;
+  color: var(--cl-ink);
+  line-height: 1.55;
+}
+
+.cl-field-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.cl-field-list li {
+  font-size: 13px;
+  color: var(--cl-ink);
+  line-height: 1.55;
+  padding-left: 14px;
+  position: relative;
+}
+
+.cl-field-list li::before {
+  content: '·';
+  position: absolute;
+  left: 0;
+  color: var(--cl-gold);
+  font-weight: 700;
+}
+
+
+/* ── Story engine note ── */
+.cl-engine-note {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  background: var(--cl-gold-bg);
+  border-left: 2px solid var(--cl-gold);
+  border-radius: 0 4px 4px 0;
+  margin-top: 4px;
+}
+
+.cl-engine-label {
+  font-family: var(--cl-mono);
+  font-size: 9px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--cl-gold-dim);
+  font-weight: 700;
+}
+
+.cl-engine-text {
+  font-size: 12px;
+  color: var(--cl-ink-dim);
+  line-height: 1.55;
+  font-style: italic;
+}
+
+
+/* ═══════════════════════════════════════
+   INHERITED CONSCIOUSNESS (LALA)
+   ═══════════════════════════════════════ */
+.cl-inherited-section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--cl-border);
+}
+
+.cl-inherited-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.cl-inherited-header-left {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cl-inherited-icon {
+  font-size: 22px;
+  color: var(--cl-violet);
+  line-height: 1;
+  margin-top: 2px;
+}
+
+.cl-inherited-title {
+  font-family: var(--cl-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cl-violet);
+  margin: 0 0 2px;
+}
+
+.cl-inherited-subtitle {
+  font-size: 13px;
+  color: var(--cl-ink-dim);
+  margin: 0;
+  font-style: italic;
+}
+
+/* ── Inherited cards ── */
+.cl-card-inherited {
+  border-color: var(--cl-violet-border);
+  background: linear-gradient(135deg, var(--cl-violet-bg) 0%, var(--cl-surface) 100%);
+}
+
+.cl-card-inherited:hover {
+  border-color: var(--cl-violet);
+}
+
+.cl-card-inherited .cl-card-header {
+  background: rgba(139, 69, 181, 0.04);
+  border-bottom-color: var(--cl-violet-border);
+}
+
+.cl-icon-violet {
+  color: var(--cl-violet) !important;
+}
+
+.cl-inherited-fields .cl-card-title {
+  color: var(--cl-violet-dim);
+}
+
+.cl-inherited-fields .cl-field-key {
+  color: var(--cl-violet-dim);
+}
+
+/* ── Violet engine note ── */
+.cl-engine-violet {
+  background: var(--cl-violet-bg);
+  border-left-color: var(--cl-violet);
+}
+
+.cl-engine-violet .cl-engine-label {
+  color: var(--cl-violet-dim);
+}
+
+
+/* ═══════════════════════════════════════
+   DILEMMA TRIGGERS
+   ═══════════════════════════════════════ */
+.cl-triggers-section {
+  margin-top: 28px;
+  padding-top: 24px;
+  border-top: 1px solid var(--cl-border);
+}
+
+.cl-triggers-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.cl-triggers-icon {
+  font-size: 18px;
+  color: var(--cl-gold);
+}
+
+.cl-triggers-title {
+  font-family: var(--cl-serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--cl-ink);
+  margin: 0;
+}
+
+.cl-triggers-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 14px;
+}
+
+.cl-trigger-card {
+  background: var(--cl-surface);
+  border: 1px solid var(--cl-border);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.cl-trigger-active {
+  border-left: 3px solid var(--cl-gold);
+}
+
+.cl-trigger-latent {
+  border-left: 3px solid var(--cl-ink-faint);
+}
+
+.cl-trigger-badge {
+  font-family: var(--cl-mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  font-weight: 700;
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 3px;
+  margin-bottom: 8px;
+}
+
+.cl-trigger-badge.active {
+  background: var(--cl-gold-bg);
+  color: var(--cl-gold-dim);
+}
+
+.cl-trigger-badge.latent {
+  background: var(--cl-surface2);
+  color: var(--cl-ink-faint);
+}
+
+.cl-trigger-dilemma {
+  font-family: var(--cl-serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--cl-ink);
+  margin: 0 0 10px;
+  line-height: 1.4;
+}
+
+
+/* ═══════════════════════════════════════
+   INTERVIEW MODE
+   ═══════════════════════════════════════ */
+.cl-interview {
+  display: flex;
+  flex-direction: column;
+  height: 500px;
+  background: var(--cl-surface);
+  border: 1px solid var(--cl-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.cl-interview-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--cl-surface2);
+  border-bottom: 1px solid var(--cl-border);
+  flex-shrink: 0;
+}
+
+.cl-interview-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--cl-serif);
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--cl-ink);
+  flex: 1;
+}
+
+.cl-interview-icon {
+  color: var(--cl-gold);
+}
+
+.cl-interview-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cl-interview-field {
+  font-family: var(--cl-mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  color: var(--cl-gold-dim);
+  text-transform: uppercase;
+}
+
+.cl-interview-progress {
+  font-family: var(--cl-mono);
+  font-size: 11px;
+  color: var(--cl-ink-faint);
+}
+
+
+/* ── Chat ── */
+.cl-interview-chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background: var(--cl-bg);
+}
+
+.cl-chat-msg {
+  display: flex;
+}
+
+.cl-chat-assistant {
+  justify-content: flex-start;
+}
+
+.cl-chat-user {
+  justify-content: flex-end;
+}
+
+.cl-chat-bubble {
+  max-width: 80%;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cl-chat-assistant .cl-chat-bubble {
+  background: var(--cl-surface);
+  color: var(--cl-ink);
+  border: 1px solid var(--cl-border);
+  border-bottom-left-radius: 2px;
+}
+
+.cl-chat-user .cl-chat-bubble {
+  background: var(--cl-gold);
+  color: #fff;
+  border-bottom-right-radius: 2px;
+}
+
+.cl-chat-typing {
+  color: var(--cl-ink-faint);
+  font-style: italic;
+  animation: cl-pulse 1.5s ease infinite;
+}
+
+
+/* ── Input ── */
+.cl-interview-input-row {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--cl-surface);
+  border-top: 1px solid var(--cl-border);
+  flex-shrink: 0;
+}
+
+.cl-interview-input {
+  flex: 1;
+  resize: none;
+  font-family: var(--cl-sans);
+  font-size: 13px;
+  color: var(--cl-ink);
+  background: var(--cl-bg);
+  border: 1px solid var(--cl-border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+
+.cl-interview-input:focus {
+  border-color: var(--cl-gold);
+}
+
+.cl-interview-input::placeholder {
+  color: var(--cl-ink-faint);
+}
+
+.cl-interview-input-row .cl-btn {
+  align-self: flex-end;
+}

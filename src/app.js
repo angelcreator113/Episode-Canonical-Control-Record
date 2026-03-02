@@ -926,6 +926,15 @@ try {
   console.error('✗ Failed to load Wardrobe Brand routes:', e.message);
 }
 
+// Consciousness Layer routes
+try {
+  const consciousnessRoutes = require('./routes/consciousness');
+  app.use('/api/v1/consciousness', consciousnessRoutes);
+  console.log('✓ Consciousness routes loaded at /api/v1/consciousness');
+} catch (e) {
+  console.error('✗ Failed to load Consciousness routes:', e.message);
+}
+
 // Onboarding wizard routes
 try {
   const onboardingRoutes = require('./routes/onboarding');
