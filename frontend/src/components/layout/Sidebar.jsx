@@ -7,6 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import showService from '../../services/showService';
+import SidebarProgress from '../SidebarProgress';
 import './Sidebar.css';
 
 /* ─── Navigation map ────────────────────────────────────────── */
@@ -224,7 +225,8 @@ function Sidebar({ isOpen, onClose }) {
           ))}
         </nav>
 
-
+        {/* ── Setup Progress ── */}
+        <SidebarProgress showId={shows[0]?.id} collapsed={collapsed} />
 
         {/* ── Footer ── */}
         <div className="sidebar-footer">
