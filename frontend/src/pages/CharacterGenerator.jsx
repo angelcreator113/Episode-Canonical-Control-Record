@@ -794,6 +794,19 @@ export default function CharacterGenerator() {
                 </div>
               )}
 
+              {/* Next-step banner when seeds approved but not yet generated */}
+              {approvedCount > 0 && !batchLoading && (
+                <div className="cg-approval-banner">
+                  <span>✓ {approvedCount} seed{approvedCount > 1 ? 's' : ''} approved — ready to generate full profiles</span>
+                  <button
+                    className="cg-btn cg-btn-generate"
+                    onClick={handleGenerateBatch}
+                  >
+                    Generate {approvedCount} Character{approvedCount > 1 ? 's' : ''}
+                  </button>
+                </div>
+              )}
+
               <div className="cg-seeds-grid">
                 {seeds.map((seed, i) => (
                   <SeedCard
