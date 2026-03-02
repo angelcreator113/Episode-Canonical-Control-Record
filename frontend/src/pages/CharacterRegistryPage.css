@@ -3753,6 +3753,14 @@
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.cr-registry-context:hover .cr-registry-context-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .cr-ctx-btn {
@@ -3796,11 +3804,13 @@
   display: none;
   font-size: 11px;
   margin-left: 4px;
-  opacity: 0.6;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.cr-registry-pill.active .cr-pill-edit-icon {
+.cr-registry-pill.active:hover .cr-pill-edit-icon {
   display: inline;
+  opacity: 0.6;
 }
 
 
