@@ -746,8 +746,10 @@ export default function CharacterGenerator() {
   const [commitAllLoading, setCommitAllLoading] = useState(false);
 
   // Auto-match registry to the world the user already selected
-  const matchedRegistry = registries.find((r) => r.book_tag === worldTarget)
-    || registries.find((r) => (r.title || '').toLowerCase().includes(worldTarget))
+  // Normalize: strip hyphens/spaces for fuzzy match (book1 ↔ book-1, lalaverse ↔ lala-verse)
+  const norm = (s) => (s || '').toLowerCase().replace(/[-_\s]/g, '');
+  const matchedRegistry = registries.find((r) => norm(r.book_tag) === norm(worldTarget))
+    || registries.find((r) => norm(r.title).includes(norm(worldTarget)))
     || registries[0];
 
   async function handleCommitAll() {
