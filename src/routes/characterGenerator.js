@@ -568,14 +568,20 @@ router.post('/commit', optionalAuth, async (req, res) => {
     const baseKey = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const uniqueKey = `${baseKey}-${Date.now().toString(36)}`;
 
+    // Validate enum values against DB constraints
+    const VALID_ROLE_TYPES = ['protagonist', 'pressure', 'mirror', 'support', 'shadow', 'special'];
+    const VALID_APPEARANCE_MODES = ['on_page', 'composite', 'observed', 'invisible', 'brief'];
+    const rawRole = (identity.role_type || seed?.role_type || 'support').toLowerCase().replace(/[^a-z]/g, '');
+    const safeRole = VALID_ROLE_TYPES.includes(rawRole) ? rawRole : 'support';
+
     const characterData = {
       registry_id: registryId,
       character_key: uniqueKey,
       display_name:   seed?.name || identity.name,
       selected_name:  seed?.name || identity.name,
-      role_type:      identity.role_type || seed?.role_type || 'support',
+      role_type:      safeRole,
       role_label:     identity.role_type || seed?.role_type || 'support',
-      appearance_mode: storyPres.worlds?.includes('lalaverse') ? 'On-Page (LalaVerse)' : 'On-Page',
+      appearance_mode: 'on_page',
       canon_tier:       identity.canon_eligible ? 'canon' : 'none',
       status:         'draft',
       belief_pressured: psych.core_wound || '',
