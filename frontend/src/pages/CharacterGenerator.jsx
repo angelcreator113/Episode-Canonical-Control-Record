@@ -232,8 +232,6 @@ function SeedCard({ seed, index, onApprove, onReject, onEdit }) {
 // ─── Staging card (full profile review) ──────────────────────────────────────
 function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
   const [expanded, setExpanded]       = useState(false);
-  const [selectedRegistry, setReg]    = useState(registries?.[0]?.id || '');
-  const [committing, setCommitting]   = useState(false);
 
   const { seed, profile, status, error } = result;
   const color = ROLE_COLORS[seed?.role_type] || '#94a3b8';
@@ -254,13 +252,6 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
       <button className="cg-btn cg-btn-discard" onClick={() => onDiscard(result)}>Remove</button>
     </div>
   );
-
-  async function handleCommit() {
-    if (!selectedRegistry) return alert('Select a registry first.');
-    setCommitting(true);
-    await onCommit(result, selectedRegistry);
-    setCommitting(false);
-  }
 
   return (
     <div className="cg-staging-card" style={{ '--role-color': color }}>
@@ -495,28 +486,10 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
         </div>
       )}
 
-      {/* Commit actions */}
+      {/* Commit actions — simplified to just Discard (batch Add All handles commit) */}
       {!result._committed && (
         <div className="cg-staging-commit">
-          <select
-            className="cg-registry-select"
-            value={selectedRegistry}
-            onChange={(e) => setReg(e.target.value)}
-          >
-            <option value="">Select registry…</option>
-            {(registries || []).map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
           <button className="cg-btn cg-btn-discard" onClick={() => onDiscard(result)}>Discard</button>
-          <button
-            className="cg-btn cg-btn-commit"
-            style={{ background: checks?.can_commit !== false ? color : '#a09a90' }}
-            onClick={handleCommit}
-            disabled={committing || checks?.errors?.length > 0}
-          >
-            {committing ? '…' : `Add to Registry`}
-          </button>
         </div>
       )}
 
@@ -921,28 +894,61 @@ export default function CharacterGenerator() {
                 </div>
               )}
 
-              {/* Batch commit banner */}
+              {/* Guidance + Batch commit banner */}
               {!batchLoading && batch.filter((r) => r.status === 'generated' && !r._committed).length > 0 && (
-                <div className="cg-approval-banner cg-commit-all-banner">
-                  <div className="cg-approval-banner-text">
-                    <strong>{batch.filter((r) => r.status === 'generated' && !r._committed).length}</strong> characters ready to add to registry
+                <div className="cg-staging-guidance">
+                  <div className="cg-guidance-steps">
+                    <div className="cg-guidance-step">
+                      <span className="cg-guidance-icon">▼</span>
+                      <span>Click any character to <strong>expand their full profile</strong> — psychology, voice, dilemmas, relationships</span>
+                    </div>
+                    <div className="cg-guidance-step">
+                      <span className="cg-guidance-icon">✗</span>
+                      <span>Click <strong>Discard</strong> to remove characters you don't want</span>
+                    </div>
+                    <div className="cg-guidance-step">
+                      <span className="cg-guidance-icon">↓</span>
+                      <span>When ready, choose a registry and <strong>add them all at once</strong> below</span>
+                    </div>
                   </div>
-                  <div className="cg-commit-all-controls">
-                    <select
-                      className="cg-registry-select"
-                      value={commitAllRegistry || registries?.[0]?.id || ''}
-                      onChange={(e) => setCommitAllRegistry(e.target.value)}
-                    >
-                      {(registries || []).map((r) => (
-                        <option key={r.id} value={r.id}>{r.title || r.name}</option>
-                      ))}
-                    </select>
-                    <button
-                      className="cg-btn cg-btn-commit-all"
-                      onClick={handleCommitAll}
-                      disabled={commitAllLoading}
-                    >
-                      {commitAllLoading ? 'Committing…' : `Add All to Registry`}
+
+                  <div className="cg-commit-all-banner">
+                    <div className="cg-commit-all-ready">
+                      <strong>{batch.filter((r) => r.status === 'generated' && !r._committed).length}</strong> characters ready
+                    </div>
+                    <div className="cg-commit-all-controls">
+                      <select
+                        className="cg-registry-select cg-registry-select-banner"
+                        value={commitAllRegistry || registries?.[0]?.id || ''}
+                        onChange={(e) => setCommitAllRegistry(e.target.value)}
+                      >
+                        {(registries || []).map((r) => (
+                          <option key={r.id} value={r.id}>{r.title || r.name}</option>
+                        ))}
+                      </select>
+                      <button
+                        className="cg-btn cg-btn-commit-all"
+                        onClick={handleCommitAll}
+                        disabled={commitAllLoading}
+                      >
+                        {commitAllLoading ? 'Committing…' : `Add All to Registry`}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* All committed */}
+              {!batchLoading && batch.length > 0 && batch.every((r) => r._committed) && (
+                <div className="cg-all-committed-banner">
+                  <div className="cg-all-committed-icon">✓</div>
+                  <div className="cg-all-committed-text">All characters added to registry!</div>
+                  <div className="cg-all-committed-actions">
+                    <button className="cg-btn cg-btn-propose" onClick={() => { setPhase('seeds'); setSeeds([]); setBatch([]); }}>
+                      Generate More
+                    </button>
+                    <button className="cg-btn cg-btn-generate" onClick={() => navigate('/character-registry')}>
+                      View Registry →
                     </button>
                   </div>
                 </div>

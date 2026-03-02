@@ -1104,3 +1104,110 @@
 .cg-right::-webkit-scrollbar-thumb:hover {
   background: var(--cg-muted);
 }
+
+/* ── Staging Guidance Section ──────────────────────────────────────────────── */
+.cg-staging-guidance {
+  background:    rgba(184, 150, 58, 0.04);
+  border:        1px solid rgba(184, 150, 58, 0.18);
+  border-radius: var(--cg-radius);
+  padding:       20px 24px;
+  margin-bottom: 20px;
+}
+
+.cg-guidance-steps {
+  display:        flex;
+  flex-direction: column;
+  gap:            10px;
+  margin-bottom:  18px;
+}
+
+.cg-guidance-step {
+  display:     flex;
+  align-items: baseline;
+  gap:         10px;
+  font-family: var(--cg-font);
+  font-size:   13px;
+  color:       var(--cg-ink);
+  line-height: 1.5;
+}
+
+.cg-guidance-icon {
+  flex-shrink:  0;
+  width:        22px;
+  height:       22px;
+  display:      flex;
+  align-items:  center;
+  justify-content: center;
+  border-radius: 50%;
+  background:   rgba(184, 150, 58, 0.12);
+  color:        var(--cg-gold);
+  font-size:    11px;
+  font-weight:  700;
+}
+
+.cg-commit-all-ready {
+  font-family: var(--cg-font);
+  font-size:   14px;
+  color:       var(--cg-ink);
+  margin-bottom: 12px;
+}
+
+.cg-commit-all-ready strong {
+  color:       var(--cg-gold);
+  font-weight: 700;
+  font-size:   18px;
+}
+
+.cg-staging-guidance .cg-commit-all-banner {
+  background:    transparent;
+  border:        none;
+  padding:       0;
+  margin:        0;
+  display:       flex;
+  flex-wrap:     wrap;
+  align-items:   center;
+  gap:           12px;
+}
+
+.cg-registry-select-banner {
+  min-width:     200px;
+}
+
+/* ── All Committed Banner ──────────────────────────────────────────────────── */
+.cg-all-committed-banner {
+  display:         flex;
+  flex-direction:  column;
+  align-items:     center;
+  gap:             12px;
+  padding:         40px 24px;
+  background:      rgba(34, 197, 94, 0.06);
+  border:          1px solid rgba(34, 197, 94, 0.2);
+  border-radius:   var(--cg-radius);
+  margin-bottom:   20px;
+}
+
+.cg-all-committed-icon {
+  width:           48px;
+  height:          48px;
+  display:         flex;
+  align-items:     center;
+  justify-content: center;
+  border-radius:   50%;
+  background:      rgba(34, 197, 94, 0.12);
+  color:           #22c55e;
+  font-size:       24px;
+  font-weight:     700;
+}
+
+.cg-all-committed-text {
+  font-family: var(--cg-font);
+  font-size:   16px;
+  font-weight: 600;
+  color:       var(--cg-ink);
+}
+
+.cg-all-committed-actions {
+  display:     flex;
+  gap:         12px;
+  margin-top:  8px;
+}
