@@ -862,6 +862,15 @@ try {
   console.error('✗ Failed to load Relationship Map routes:', e.message);
 }
 
+// Character Generator routes (batch seed → generate → commit)
+try {
+  const characterGeneratorRoutes = require('./routes/characterGenerator');
+  app.use('/api/v1/character-generator', characterGeneratorRoutes);
+  console.log('✓ Character Generator routes loaded at /api/v1/character-generator');
+} catch (e) {
+  console.error('✗ Failed to load Character Generator routes:', e.message);
+}
+
 // Character Therapy — Psychological Narrative Engine routes
 try {
   const therapyRoutes = require('./routes/therapy');

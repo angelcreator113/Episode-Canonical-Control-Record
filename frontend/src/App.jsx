@@ -82,6 +82,7 @@ const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
 const StoryEngine = lazy(() => import('./pages/StoryEngine'));
+const CharacterGenerator = lazy(() => import('./pages/CharacterGenerator'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
 const ChapterJourney = lazy(() => import('./pages/ChapterJourney'));
@@ -214,7 +215,8 @@ function AppContent() {
   const isWriteMode = location.pathname.startsWith('/write/');
   const isChapterJourney = location.pathname.startsWith('/chapter/');
   const isStoryEngine = location.pathname === '/story-engine';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isPlanWithVoice || isStoryEngine;
+  const isCharacterGenerator = location.pathname === '/character-generator';
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isPlanWithVoice || isStoryEngine || isCharacterGenerator;
   const hideFooter = isFullScreen;
 
   return (
@@ -342,6 +344,7 @@ function AppContent() {
           
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
+          <Route path="/character-generator" element={<CharacterGenerator />} />
           
           {/* PNOS Character Therapy — Psychological Narrative Engine */}
           <Route path="/therapy/:registryId" element={<CharacterTherapy />} />
