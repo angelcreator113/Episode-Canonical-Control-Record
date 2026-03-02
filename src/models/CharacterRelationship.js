@@ -8,32 +8,38 @@ module.exports = (sequelize) => {
       defaultValue: DataTypes.UUIDV4,
       primaryKey: true,
     },
-    show_id:      { type: DataTypes.UUID, allowNull: true },
-    book_id:      { type: DataTypes.UUID, allowNull: true },
-    layer:        { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'real_world' },
-    source_name:  { type: DataTypes.STRING(120), allowNull: false },
-    target_name:  { type: DataTypes.STRING(120), allowNull: false },
-    relationship_type: { type: DataTypes.STRING(40), allowNull: false, defaultValue: 'knows' },
-    direction:    { type: DataTypes.STRING(10), allowNull: false, defaultValue: 'both' },
-    label:        { type: DataTypes.STRING(60) },
-    subtext:      { type: DataTypes.STRING(200) },
-    source_knows: { type: DataTypes.TEXT },
-    target_knows: { type: DataTypes.TEXT },
-    reader_knows: { type: DataTypes.TEXT },
-    status:       { type: DataTypes.STRING(20), allowNull: false, defaultValue: 'active' },
-    appears_in:   { type: DataTypes.JSONB, defaultValue: [] },
-    intensity:    { type: DataTypes.INTEGER, allowNull: false, defaultValue: 3 },
-    notes:        { type: DataTypes.TEXT },
-    source_x:     { type: DataTypes.FLOAT, defaultValue: 0 },
-    source_y:     { type: DataTypes.FLOAT, defaultValue: 0 },
-    target_x:     { type: DataTypes.FLOAT, defaultValue: 0 },
-    target_y:     { type: DataTypes.FLOAT, defaultValue: 0 },
+    character_id_a: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: { model: 'registry_characters', key: 'id' },
+    },
+    character_id_b: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: { model: 'registry_characters', key: 'id' },
+    },
+    relationship_type: { type: DataTypes.STRING(100), allowNull: false },
+    connection_mode:   { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'IRL' },
+    lala_connection:   { type: DataTypes.STRING(100), allowNull: false, defaultValue: 'none' },
+    status:            { type: DataTypes.STRING(50), allowNull: false, defaultValue: 'Active' },
+    notes:             { type: DataTypes.TEXT, allowNull: true },
   }, {
     tableName: 'character_relationships',
     timestamps: true,
     underscored: true,
-    paranoid: false, // No deleted_at column in migration
+    paranoid: false,
   });
+
+  CharacterRelationship.associate = (models) => {
+    CharacterRelationship.belongsTo(models.RegistryCharacter, {
+      foreignKey: 'character_id_a',
+      as: 'characterA',
+    });
+    CharacterRelationship.belongsTo(models.RegistryCharacter, {
+      foreignKey: 'character_id_b',
+      as: 'characterB',
+    });
+  };
 
   return CharacterRelationship;
 };

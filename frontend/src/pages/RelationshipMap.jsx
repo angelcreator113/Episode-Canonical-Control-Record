@@ -1,194 +1,748 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useState, useEffect, useCallback } from 'react';
 
-const API = import.meta.env.VITE_API_URL || 'http://localhost:3002/api/v1';
+// ── Constants ─────────────────────────────────────────────────────────
+const API = '/api/v1';
 
-/* ── colour palettes per layer ── */
-const PALETTE = {
-  real_world: {
-    bg: '#faf8f5', node: '#8b5e34', nodeBorder: '#c49a6c',
-    edge: '#a07850', text: '#3d2b1f', accent: '#b8860b',
-    panelBg: '#ffffff', panelBorder: '#e0d5c7',
-    inputBg: 'rgba(0,0,0,.04)',
-  },
-  lalaverse: {
-    bg: '#f4f2fa', node: '#5b4bb5', nodeBorder: '#9a8ddb',
-    edge: '#7b68ee', text: '#2d1f5e', accent: '#7c3aed',
-    panelBg: '#ffffff', panelBorder: '#d5cff0',
-    inputBg: 'rgba(0,0,0,.04)',
-  },
+const CONNECTION_MODES = ['IRL', 'Online Only', 'Passing', 'Professional', 'One-sided'];
+
+const LALA_CONNECTIONS = [
+  { value: 'none',               label: 'No Lala connection' },
+  { value: 'knows_lala',         label: 'Knows Lala directly' },
+  { value: 'through_justwoman',  label: 'Knows JustAWoman, unaware of Lala' },
+  { value: 'interacts_content',  label: 'Interacts with Lala content (unknowingly)' },
+  { value: 'unaware',            label: 'Completely unaware of Lala' },
+];
+
+const STATUSES = ['Active', 'Past', 'One-sided', 'Complicated'];
+
+const REL_PRESETS = [
+  'Sister', 'Brother', 'Mother', 'Father',
+  'Husband', 'Wife', 'Boyfriend', 'Girlfriend',
+  'Best Friend', 'Friend', 'Acquaintance',
+  'Stylist', 'Designer', 'Brand Contact',
+  'Manager', 'Collaborator', 'Mentor',
+  'Rival', 'Inspiration', 'Fan',
+];
+
+const TYPE_COLORS = {
+  pressure:    '#ef4444',
+  mirror:      '#a855f7',
+  support:     '#14b8a6',
+  shadow:      '#f97316',
+  special:     '#C9A84C',
+  protagonist: '#3b82f6',
 };
 
-const REL_COLOURS = {
-  romantic: '#e74c7b', friendship: '#4ecdc4', rivalry: '#e67e22',
-  mentor: '#3498db', serves: '#9b59b6', sibling: '#2ecc71',
-  unknown: '#95a5a6', family: '#e8b86d', betrayal: '#c0392b',
+const MODE_COLORS = {
+  'IRL':           { bg: '#fef3c7', text: '#92400e', border: '#fbbf24' },
+  'Online Only':   { bg: '#ede9fe', text: '#4c1d95', border: '#8b5cf6' },
+  'Passing':       { bg: '#f3f4f6', text: '#374151', border: '#9ca3af' },
+  'Professional':  { bg: '#dbeafe', text: '#1e3a8a', border: '#60a5fa' },
+  'One-sided':     { bg: '#fce7f3', text: '#831843', border: '#ec4899' },
 };
 
-const STATUS_DOT = { active: '#2ecc71', dormant: '#7f8c8d', broken: '#e74c3c', secret: '#9b59b6' };
+const STATUS_COLORS = {
+  'Active':      { bg: '#dcfce7', text: '#14532d', border: '#22c55e' },
+  'Past':        { bg: '#f3f4f6', text: '#4b5563', border: '#9ca3af' },
+  'One-sided':   { bg: '#fef3c7', text: '#92400e', border: '#fbbf24' },
+  'Complicated': { bg: '#fee2e2', text: '#7f1d1d', border: '#f87171' },
+};
 
-export default function RelationshipMap() {
-  const [searchParams] = useSearchParams();
-  const showId = searchParams.get('show_id') || '';
+const GOLD = '#C9A84C';
+const DARK = '#0d0b09';
 
-  const [layer, setLayer] = useState('real_world');
-  const [rels, setRels] = useState([]);
-  const [selected, setSelected] = useState(null);   // { type:'node'|'edge', data }
-  const [adding, setAdding] = useState(false);
-  const [form, setForm] = useState({});
-  const svgRef = useRef(null);
-  const dragging = useRef(null);
+// ── Helpers ───────────────────────────────────────────────────────────
+function charDisplayName(c) {
+  return c?.selected_name || c?.display_name || 'Unknown';
+}
 
-  const P = PALETTE[layer];
+function getCharName(rel, side) {
+  if (side === 'a') return rel.character_a_selected || rel.character_a_name || '?';
+  return rel.character_b_selected || rel.character_b_name || '?';
+}
 
-  /* ── fetch ── */
-  const load = useCallback(() => {
-    let url = `${API}/relationships?layer=${layer}`;
-    if (showId) url += `&show_id=${showId}`;
-    fetch(url).then(r => r.json()).then(d => setRels(Array.isArray(d) ? d : [])).catch(console.error);
-  }, [layer, showId]);
-  useEffect(load, [load]);
+function otherCharId(rel, focusId) {
+  return rel.character_id_a === focusId ? rel.character_id_b : rel.character_id_a;
+}
 
-  /* ── unique character nodes ── */
-  const nodes = useCallback(() => {
-    const map = {};
-    rels.forEach(r => {
-      if (!map[r.source_name]) map[r.source_name] = { name: r.source_name, x: r.source_x || 200 + Math.random()*400, y: r.source_y || 100 + Math.random()*300 };
-      if (!map[r.target_name]) map[r.target_name] = { name: r.target_name, x: r.target_x || 200 + Math.random()*400, y: r.target_y || 100 + Math.random()*300 };
-    });
-    return Object.values(map);
-  }, [rels]);
-
-  /* ── drag handlers ── */
-  const onMouseDown = (e, name) => { e.stopPropagation(); dragging.current = name; };
-  const onMouseMove = useCallback((e) => {
-    if (!dragging.current || !svgRef.current) return;
-    const pt = svgRef.current.createSVGPoint();
-    pt.x = e.clientX; pt.y = e.clientY;
-    const svg = pt.matrixTransform(svgRef.current.getScreenCTM().inverse());
-    setRels(prev => prev.map(r => {
-      const u = { ...r };
-      if (r.source_name === dragging.current) { u.source_x = svg.x; u.source_y = svg.y; }
-      if (r.target_name === dragging.current) { u.target_x = svg.x; u.target_y = svg.y; }
-      return u;
-    }));
-  }, []);
-  const onMouseUp = useCallback(() => { dragging.current = null; }, []);
-
-  /* ── save positions ── */
-  const savePositions = () => {
-    const positions = rels.map(r => ({ id: r.id, source_x: r.source_x, source_y: r.source_y, target_x: r.target_x, target_y: r.target_y }));
-    fetch(`${API}/relationships/positions`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ positions }) });
-  };
-
-  /* ── seed ── */
-  const seed = () => fetch(`${API}/relationships/seed/book1`, { method:'POST' }).then(load);
-
-  /* ── add relationship ── */
-  const submit = () => {
-    fetch(`${API}/relationships`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ ...form, layer }) })
-      .then(() => { setAdding(false); setForm({}); load(); });
-  };
-
-  /* ── delete ── */
-  const deleteSelected = () => {
-    if (!selected || selected.type !== 'edge') return;
-    fetch(`${API}/relationships/${selected.data.id}`, { method:'DELETE' }).then(() => { setSelected(null); load(); });
-  };
-
-  const n = nodes();
+// ── Sub-components ─────────────────────────────────────────────────────
+function Toast({ message, type, onClose }) {
+  useEffect(() => {
+    const t = setTimeout(onClose, 3200);
+    return () => clearTimeout(t);
+  }, [onClose]);
 
   return (
-    <div style={{ height:'100vh', overflow:'hidden', background: P.bg, color: P.text, fontFamily:'Inter, sans-serif', display:'flex', flexDirection:'column' }}>
-      {/* toolbar */}
-      <div style={{ display:'flex', gap:8, padding:'10px 16px', background: P.panelBg, borderBottom:`1px solid ${P.panelBorder}`, alignItems:'center', flexWrap:'wrap' }}>
-        <button onClick={() => setLayer(layer === 'real_world' ? 'lalaverse' : 'real_world')}
-          style={{ padding:'6px 14px', borderRadius:6, border:`1px solid ${P.accent}`, background:'transparent', color: P.accent, cursor:'pointer', fontWeight:600 }}>
-          {layer === 'real_world' ? '🌍 Real World' : '✦ LalaVerse'}
+    <div style={{
+      position: 'fixed', bottom: 28, right: 28, zIndex: 9999,
+      background: type === 'error' ? '#fee2e2' : '#f0fdf4',
+      border: `1px solid ${type === 'error' ? '#f87171' : '#86efac'}`,
+      color: type === 'error' ? '#7f1d1d' : '#14532d',
+      padding: '10px 18px', borderRadius: 8,
+      fontFamily: 'system-ui, sans-serif', fontSize: 14,
+      boxShadow: '0 4px 16px rgba(0,0,0,0.10)',
+      display: 'flex', alignItems: 'center', gap: 10,
+    }}>
+      <span>{type === 'error' ? '✕' : '✓'}</span>
+      <span>{message}</span>
+    </div>
+  );
+}
+
+function Badge({ label, colorSet }) {
+  if (!colorSet) return (
+    <span style={{
+      display: 'inline-block', fontSize: 11, fontWeight: 500,
+      padding: '2px 8px', borderRadius: 99,
+      background: '#f3f4f6', color: '#374151',
+      border: '1px solid #d1d5db',
+    }}>{label}</span>
+  );
+  return (
+    <span style={{
+      display: 'inline-block', fontSize: 11, fontWeight: 500,
+      padding: '2px 8px', borderRadius: 99,
+      background: colorSet.bg, color: colorSet.text,
+      border: `1px solid ${colorSet.border}`,
+    }}>{label}</span>
+  );
+}
+
+function LalaDot({ lala_connection }) {
+  if (!lala_connection || lala_connection === 'none') return null;
+  const label = LALA_CONNECTIONS.find(l => l.value === lala_connection)?.label || lala_connection;
+  return (
+    <span title={label} style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      fontSize: 11, color: GOLD, fontWeight: 500,
+    }}>
+      ◈ Lala
+    </span>
+  );
+}
+
+function TypeBar({ type }) {
+  const color = TYPE_COLORS[type] || '#9ca3af';
+  return (
+    <span style={{
+      display: 'inline-block', width: 3, height: 14,
+      borderRadius: 2, background: color,
+      flexShrink: 0,
+    }} />
+  );
+}
+
+// ── Main Page ──────────────────────────────────────────────────────────
+export default function RelationshipMap() {
+  const [characters, setCharacters]     = useState([]);
+  const [relationships, setRelationships] = useState([]);
+  const [selectedChar, setSelectedChar] = useState(null);
+  const [showForm, setShowForm]         = useState(false);
+  const [editRel, setEditRel]           = useState(null);
+  const [loading, setLoading]           = useState(true);
+  const [toast, setToast]               = useState(null);
+
+  // form state
+  const emptyForm = {
+    character_id_a:  '',
+    character_id_b:  '',
+    relationship_type: '',
+    relTypeCustom:   '',
+    connection_mode: 'IRL',
+    lala_connection: 'none',
+    status:          'Active',
+    notes:           '',
+  };
+  const [form, setForm] = useState(emptyForm);
+
+  // ── fetch ────────────────────────────────────────────────────────────
+  const fetchAll = useCallback(async () => {
+    try {
+      setLoading(true);
+      const [cRes, rRes] = await Promise.all([
+        fetch(`${API}/character-registry/registries`).then(r => r.json()),
+        fetch(`${API}/relationships`).then(r => r.json()),
+      ]);
+
+      // Characters live nested inside registries
+      const allChars = [];
+      (cRes.registries || []).forEach(reg => {
+        (reg.characters || reg.registry_characters || []).forEach(c => allChars.push(c));
+      });
+      setCharacters(allChars);
+      setRelationships(rRes.relationships || []);
+    } catch (e) {
+      showToast('Failed to load data', 'error');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  // ── toast ────────────────────────────────────────────────────────────
+  function showToast(message, type = 'success') {
+    setToast({ message, type });
+  }
+
+  // ── filtered relationships for selected character ─────────────────────
+  const visibleRelationships = selectedChar
+    ? relationships.filter(
+        r => r.character_id_a === selectedChar.id || r.character_id_b === selectedChar.id
+      )
+    : relationships;
+
+  // ── save (create or update) ───────────────────────────────────────────
+  async function handleSave() {
+    const relType = form.relationship_type === '__custom__'
+      ? form.relTypeCustom.trim()
+      : form.relationship_type.trim();
+
+    if (!relType) return showToast('Relationship type is required', 'error');
+
+    if (!editRel && (!form.character_id_a || !form.character_id_b)) {
+      return showToast('Both characters are required', 'error');
+    }
+
+    const payload = {
+      relationship_type: relType,
+      connection_mode:  form.connection_mode,
+      lala_connection:  form.lala_connection,
+      status:           form.status,
+      notes:            form.notes,
+    };
+
+    if (!editRel) {
+      payload.character_id_a = form.character_id_a;
+      payload.character_id_b = form.character_id_b;
+    }
+
+    const url    = editRel ? `${API}/relationships/${editRel.id}` : `${API}/relationships`;
+    const method = editRel ? 'PUT' : 'POST';
+
+    try {
+      const res  = await fetch(url, {
+        method,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) return showToast(data.error || 'Save failed', 'error');
+
+      showToast(editRel ? 'Relationship updated' : 'Relationship added');
+      setShowForm(false);
+      setEditRel(null);
+      setForm(emptyForm);
+      fetchAll();
+    } catch (e) {
+      showToast('Save failed', 'error');
+    }
+  }
+
+  async function handleDelete(relId) {
+    try {
+      await fetch(`${API}/relationships/${relId}`, { method: 'DELETE' });
+      showToast('Relationship removed');
+      fetchAll();
+    } catch (e) {
+      showToast('Delete failed', 'error');
+    }
+  }
+
+  function openEdit(rel) {
+    setForm({
+      character_id_a:  rel.character_id_a,
+      character_id_b:  rel.character_id_b,
+      relationship_type: rel.relationship_type,
+      relTypeCustom:   '',
+      connection_mode: rel.connection_mode,
+      lala_connection: rel.lala_connection,
+      status:          rel.status,
+      notes:           rel.notes || '',
+    });
+    setEditRel(rel);
+    setShowForm(true);
+  }
+
+  // ── styles ────────────────────────────────────────────────────────────
+  const S = {
+    page: {
+      minHeight: '100vh',
+      background: '#faf9f7',
+      fontFamily: "'DM Sans', system-ui, -apple-system, sans-serif",
+      color: '#1c1917',
+    },
+    header: {
+      background: '#fff',
+      borderBottom: '1px solid #e5e0d8',
+      padding: '20px 32px',
+      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+    },
+    headerLeft: { display: 'flex', flexDirection: 'column', gap: 2 },
+    headerTitle: {
+      fontSize: 20, fontWeight: 700, color: DARK,
+      fontFamily: "'Cormorant Garamond', serif",
+      letterSpacing: '-0.3px', margin: 0,
+    },
+    headerSub: { fontSize: 13, color: '#78716c', margin: 0 },
+    addBtn: {
+      background: GOLD, color: '#fff',
+      border: 'none', borderRadius: 8,
+      padding: '9px 18px', fontSize: 14, fontWeight: 600,
+      cursor: 'pointer', letterSpacing: '0.2px',
+    },
+    layout: {
+      display: 'flex', gap: 0,
+      maxWidth: 1200, margin: '0 auto',
+    },
+    sidebar: {
+      width: 240, flexShrink: 0,
+      borderRight: '1px solid #e5e0d8',
+      background: '#fff',
+      minHeight: 'calc(100vh - 65px)',
+      overflowY: 'auto',
+    },
+    sidebarTitle: {
+      fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+      textTransform: 'uppercase', color: '#78716c',
+      padding: '18px 16px 8px',
+      fontFamily: "'DM Mono', monospace",
+    },
+    sidebarItem: (active) => ({
+      display: 'flex', alignItems: 'center', gap: 8,
+      padding: '9px 16px', cursor: 'pointer',
+      background: active ? '#fef9ec' : 'transparent',
+      borderLeft: active ? `3px solid ${GOLD}` : '3px solid transparent',
+      fontSize: 13,
+      color: active ? DARK : '#57534e',
+      fontWeight: active ? 600 : 400,
+      transition: 'background 0.1s',
+    }),
+    main: {
+      flex: 1, padding: '28px 32px',
+    },
+    sectionLabel: {
+      fontSize: 11, fontWeight: 700, letterSpacing: '0.08em',
+      textTransform: 'uppercase', color: '#78716c',
+      marginBottom: 16,
+      fontFamily: "'DM Mono', monospace",
+    },
+    relCard: {
+      background: '#fff', border: '1px solid #e5e0d8',
+      borderRadius: 10, padding: '16px 20px',
+      marginBottom: 10,
+      display: 'flex', flexDirection: 'column', gap: 10,
+    },
+    relCardTop: {
+      display: 'flex', alignItems: 'center',
+      justifyContent: 'space-between', gap: 8,
+    },
+    relNames: {
+      display: 'flex', alignItems: 'center', gap: 8,
+      fontSize: 14, fontWeight: 600, color: DARK,
+      flexWrap: 'wrap',
+    },
+    relType: {
+      display: 'inline-block',
+      fontSize: 12, fontWeight: 600,
+      color: GOLD,
+      padding: '1px 0',
+    },
+    relMeta: {
+      display: 'flex', flexWrap: 'wrap', gap: 6,
+      alignItems: 'center',
+    },
+    relActions: {
+      display: 'flex', gap: 8, alignItems: 'center',
+    },
+    editBtn: {
+      background: 'transparent', border: `1px solid ${GOLD}`,
+      color: GOLD, borderRadius: 6,
+      padding: '4px 12px', fontSize: 12, cursor: 'pointer',
+    },
+    delBtn: {
+      background: 'transparent', border: '1px solid #fca5a5',
+      color: '#ef4444', borderRadius: 6,
+      padding: '4px 12px', fontSize: 12, cursor: 'pointer',
+    },
+    notes: {
+      fontSize: 12, color: '#78716c',
+      fontStyle: 'italic', marginTop: 2,
+      fontFamily: "'Lora', serif",
+    },
+    // form modal
+    overlay: {
+      position: 'fixed', inset: 0,
+      background: 'rgba(0,0,0,0.25)', zIndex: 1000,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+    },
+    modal: {
+      background: '#fff', borderRadius: 12,
+      width: '100%', maxWidth: 520,
+      maxHeight: '90vh', overflowY: 'auto',
+      padding: 28,
+      boxShadow: '0 20px 60px rgba(0,0,0,0.18)',
+    },
+    modalTitle: {
+      fontSize: 17, fontWeight: 700, color: DARK,
+      fontFamily: "'Cormorant Garamond', serif",
+      marginBottom: 20,
+    },
+    fieldGroup: { marginBottom: 16 },
+    label: {
+      display: 'block', fontSize: 12, fontWeight: 600,
+      color: '#57534e', marginBottom: 5, letterSpacing: '0.03em',
+      fontFamily: "'DM Mono', monospace",
+    },
+    input: {
+      width: '100%', padding: '8px 12px',
+      border: '1px solid #d1cbc3', borderRadius: 7,
+      fontSize: 13, color: DARK, background: '#faf9f7',
+      outline: 'none', boxSizing: 'border-box',
+    },
+    select: {
+      width: '100%', padding: '8px 12px',
+      border: '1px solid #d1cbc3', borderRadius: 7,
+      fontSize: 13, color: DARK, background: '#faf9f7',
+      outline: 'none', boxSizing: 'border-box',
+    },
+    textarea: {
+      width: '100%', padding: '8px 12px',
+      border: '1px solid #d1cbc3', borderRadius: 7,
+      fontSize: 13, color: DARK, background: '#faf9f7',
+      outline: 'none', boxSizing: 'border-box',
+      fontFamily: "'Lora', serif",
+      resize: 'vertical', minHeight: 72,
+    },
+    formActions: {
+      display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 24,
+    },
+    cancelBtn: {
+      background: 'transparent', border: '1px solid #d1cbc3',
+      color: '#57534e', borderRadius: 7,
+      padding: '9px 20px', fontSize: 13, cursor: 'pointer',
+    },
+    saveBtn: {
+      background: GOLD, color: '#fff',
+      border: 'none', borderRadius: 7,
+      padding: '9px 20px', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+    },
+    emptyState: {
+      textAlign: 'center', padding: '60px 20px',
+      color: '#78716c',
+    },
+    emptyIcon: { fontSize: 36, marginBottom: 12, opacity: 0.4 },
+    emptyTitle: { fontSize: 15, fontWeight: 600, color: '#44403c', marginBottom: 6 },
+    emptyDesc: { fontSize: 13 },
+    divider: {
+      fontSize: 14, color: '#9ca3af', fontWeight: 400, margin: '0 4px',
+    },
+  };
+
+  // ── render ────────────────────────────────────────────────────────────
+  return (
+    <div style={S.page}>
+
+      {/* Header */}
+      <div style={S.header}>
+        <div style={S.headerLeft}>
+          <p style={S.headerTitle}>Relationship Map</p>
+          <p style={S.headerSub}>
+            {relationships.length} relationship{relationships.length !== 1 ? 's' : ''} across {characters.length} characters
+          </p>
+        </div>
+        <button style={S.addBtn} onClick={() => {
+          setEditRel(null);
+          setForm(emptyForm);
+          setShowForm(true);
+        }}>
+          + Add Relationship
         </button>
-        <button onClick={() => setAdding(true)} style={{ padding:'6px 14px', borderRadius:6, border:`1px solid ${P.nodeBorder}`, background:'transparent', color: P.text, cursor:'pointer' }}>+ Add</button>
-        <button onClick={savePositions} style={{ padding:'6px 14px', borderRadius:6, border:`1px solid ${P.nodeBorder}`, background:'transparent', color: P.text, cursor:'pointer' }}>💾 Save Layout</button>
-        <button onClick={seed} style={{ padding:'6px 14px', borderRadius:6, border:`1px solid ${P.nodeBorder}`, background:'transparent', color: P.text, cursor:'pointer' }}>🌱 Seed Book 1</button>
-        {selected?.type === 'edge' && <button onClick={deleteSelected} style={{ padding:'6px 14px', borderRadius:6, border:'1px solid #e74c3c', background:'transparent', color:'#e74c3c', cursor:'pointer' }}>🗑 Delete</button>}
-        <span style={{ marginLeft:'auto', fontSize:12, opacity:.6 }}>{rels.length} relationships · {n.length} characters</span>
       </div>
 
-      {/* canvas */}
-      <svg ref={svgRef} style={{ flex:1, background: P.bg }} onMouseMove={onMouseMove} onMouseUp={onMouseUp} onClick={() => setSelected(null)}>
-        <defs>
-          <marker id="arrow" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto"><path d={`M0,0 L8,3 L0,6`} fill={P.edge} /></marker>
-        </defs>
+      <div style={S.layout}>
 
-        {/* edges */}
-        {rels.map(r => {
-          const s = n.find(x => x.name === r.source_name);
-          const t = n.find(x => x.name === r.target_name);
-          if (!s || !t) return null;
-          const mx = (s.x + t.x) / 2, my = (s.y + t.y) / 2 - 30;
-          const col = REL_COLOURS[r.relationship_type] || P.edge;
-          return (
-            <g key={r.id} onClick={e => { e.stopPropagation(); setSelected({ type:'edge', data: r }); }} style={{ cursor:'pointer' }}>
-              <path d={`M${s.x},${s.y} Q${mx},${my} ${t.x},${t.y}`} stroke={col} strokeWidth={selected?.data?.id === r.id ? 3 : 1.5} fill="none"
-                markerEnd={r.direction !== 'both' ? 'url(#arrow)' : undefined} opacity={.8} />
-              <text x={mx} y={my - 6} textAnchor="middle" fill={col} fontSize={10} fontWeight={600}>{r.label || r.relationship_type}</text>
-              {r.status !== 'active' && <circle cx={mx + 30} cy={my - 10} r={4} fill={STATUS_DOT[r.status] || '#999'} />}
-            </g>
-          );
-        })}
+        {/* Sidebar — character list */}
+        <div style={S.sidebar}>
+          <div style={S.sidebarTitle}>Characters</div>
 
-        {/* nodes */}
-        {n.map(nd => (
-          <g key={nd.name} onMouseDown={e => onMouseDown(e, nd.name)} onClick={e => { e.stopPropagation(); setSelected({ type:'node', data: nd }); }} style={{ cursor:'grab' }}>
-            <circle cx={nd.x} cy={nd.y} r={28} fill={P.panelBg} stroke={selected?.data?.name === nd.name ? P.accent : P.nodeBorder} strokeWidth={2} />
-            <text x={nd.x} y={nd.y + 4} textAnchor="middle" fill={P.node} fontSize={11} fontWeight={600}>{nd.name.length > 10 ? nd.name.slice(0,9)+'…' : nd.name}</text>
-          </g>
-        ))}
-      </svg>
+          {/* All view */}
+          <div
+            style={S.sidebarItem(!selectedChar)}
+            onClick={() => setSelectedChar(null)}
+          >
+            <span style={{ fontSize: 15 }}>◎</span>
+            <span>All relationships</span>
+          </div>
 
-      {/* detail panel */}
-      {selected?.type === 'edge' && (
-        <div style={{ position:'absolute', right:16, top:60, width:280, background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:8, padding:16, zIndex:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)' }}>
-          <h4 style={{ margin:'0 0 8px', color: P.accent }}>{selected.data.source_name} → {selected.data.target_name}</h4>
-          <p style={{ margin:4, fontSize:13 }}><b>Type:</b> {selected.data.relationship_type}</p>
-          <p style={{ margin:4, fontSize:13 }}><b>Label:</b> {selected.data.label}</p>
-          <p style={{ margin:4, fontSize:13 }}><b>Status:</b> <span style={{ color: STATUS_DOT[selected.data.status] }}>{selected.data.status}</span></p>
-          <p style={{ margin:4, fontSize:13 }}><b>Intensity:</b> {'★'.repeat(selected.data.intensity)}{'☆'.repeat(5 - selected.data.intensity)}</p>
-          {selected.data.subtext && <p style={{ margin:4, fontSize:12, opacity:.7 }}>{selected.data.subtext}</p>}
-          {layer === 'lalaverse' && <>
-            {selected.data.source_knows && <p style={{ margin:4, fontSize:12 }}>🔮 <b>Source knows:</b> {selected.data.source_knows}</p>}
-            {selected.data.target_knows && <p style={{ margin:4, fontSize:12 }}>🔮 <b>Target knows:</b> {selected.data.target_knows}</p>}
-            {selected.data.reader_knows && <p style={{ margin:4, fontSize:12 }}>📖 <b>Reader knows:</b> {selected.data.reader_knows}</p>}
-          </>}
+          {characters.map(c => {
+            const relCount = relationships.filter(
+              r => r.character_id_a === c.id || r.character_id_b === c.id
+            ).length;
+            return (
+              <div
+                key={c.id}
+                style={S.sidebarItem(selectedChar?.id === c.id)}
+                onClick={() => setSelectedChar(c)}
+              >
+                <TypeBar type={c.role_type} />
+                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {charDisplayName(c)}
+                </span>
+                {relCount > 0 && (
+                  <span style={{ fontSize: 11, color: '#a8a29e', flexShrink: 0 }}>{relCount}</span>
+                )}
+              </div>
+            );
+          })}
         </div>
-      )}
 
-      {selected?.type === 'node' && (
-        <div style={{ position:'absolute', right:16, top:60, width:240, background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:8, padding:16, zIndex:10, boxShadow:'0 4px 16px rgba(0,0,0,.1)' }}>
-          <h4 style={{ margin:'0 0 8px', color: P.accent }}>{selected.data.name}</h4>
-          <p style={{ fontSize:13 }}>Connections: {rels.filter(r => r.source_name === selected.data.name || r.target_name === selected.data.name).length}</p>
+        {/* Main content */}
+        <div style={S.main}>
+          {loading ? (
+            <div style={S.emptyState}>
+              <div style={S.emptyIcon}>⟳</div>
+              <div style={S.emptyTitle}>Loading…</div>
+            </div>
+          ) : visibleRelationships.length === 0 ? (
+            <div style={S.emptyState}>
+              <div style={S.emptyIcon}>◈</div>
+              <div style={S.emptyTitle}>
+                {selectedChar ? `No relationships for ${charDisplayName(selectedChar)} yet` : 'No relationships yet'}
+              </div>
+              <div style={S.emptyDesc}>
+                Add the first relationship to start mapping the world of LalaVerse.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div style={S.sectionLabel}>
+                {selectedChar ? `${charDisplayName(selectedChar)}'s Relationships` : 'All Relationships'}
+                &nbsp;·&nbsp;{visibleRelationships.length}
+              </div>
+
+              {visibleRelationships.map(rel => (
+                <div key={rel.id} style={S.relCard}>
+                  <div style={S.relCardTop}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {/* Names row */}
+                      <div style={S.relNames}>
+                        <span>{getCharName(rel, 'a')}</span>
+                        <span style={S.divider}>—</span>
+                        <span>{getCharName(rel, 'b')}</span>
+                        <span style={{ marginLeft: 4 }}>
+                          <span style={S.relType}>{rel.relationship_type}</span>
+                        </span>
+                      </div>
+
+                      {/* Badges row */}
+                      <div style={S.relMeta}>
+                        <Badge
+                          label={rel.connection_mode}
+                          colorSet={MODE_COLORS[rel.connection_mode]}
+                        />
+                        <Badge
+                          label={rel.status}
+                          colorSet={STATUS_COLORS[rel.status]}
+                        />
+                        <LalaDot lala_connection={rel.lala_connection} />
+                      </div>
+
+                      {/* Notes */}
+                      {rel.notes && (
+                        <div style={S.notes}>"{rel.notes}"</div>
+                      )}
+                    </div>
+
+                    {/* Actions */}
+                    <div style={S.relActions}>
+                      <button style={S.editBtn} onClick={() => openEdit(rel)}>Edit</button>
+                      <button style={S.delBtn} onClick={() => handleDelete(rel.id)}>✕</button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </>
+          )}
         </div>
-      )}
+      </div>
 
-      {/* add modal */}
-      {adding && (
-        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,.3)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:20 }}
-          onClick={() => setAdding(false)}>
-          <div style={{ background: P.panelBg, border:`1px solid ${P.panelBorder}`, borderRadius:12, padding:24, width:360, boxShadow:'0 8px 32px rgba(0,0,0,.12)' }} onClick={e => e.stopPropagation()}>
-            <h3 style={{ margin:'0 0 16px', color: P.accent }}>New Relationship ({layer === 'real_world' ? 'Real World' : 'LalaVerse'})</h3>
-            {['source_name','target_name','relationship_type','direction','label','subtext','status','intensity'].map(f => (
-              <input key={f} placeholder={f} value={form[f]||''} onChange={e => setForm({...form, [f]: e.target.value})}
-                style={{ display:'block', width:'100%', marginBottom:8, padding:'6px 10px', background: P.inputBg, border:`1px solid ${P.panelBorder}`, borderRadius:4, color: P.text, boxSizing:'border-box' }} />
-            ))}
-            {layer === 'lalaverse' && ['source_knows','target_knows','reader_knows'].map(f => (
-              <textarea key={f} placeholder={f} value={form[f]||''} onChange={e => setForm({...form, [f]: e.target.value})} rows={2}
-                style={{ display:'block', width:'100%', marginBottom:8, padding:'6px 10px', background: P.inputBg, border:`1px solid ${P.panelBorder}`, borderRadius:4, color: P.text, boxSizing:'border-box', resize:'vertical' }} />
-            ))}
-            <div style={{ display:'flex', gap:8, marginTop:12 }}>
-              <button onClick={submit} style={{ flex:1, padding:'8px 0', borderRadius:6, border:'none', background: P.accent, color:'#fff', fontWeight:600, cursor:'pointer' }}>Create</button>
-              <button onClick={() => setAdding(false)} style={{ flex:1, padding:'8px 0', borderRadius:6, border:`1px solid ${P.panelBorder}`, background:'transparent', color: P.text, cursor:'pointer' }}>Cancel</button>
+      {/* Add / Edit Modal */}
+      {showForm && (
+        <div style={S.overlay} onClick={e => { if (e.target === e.currentTarget) { setShowForm(false); setEditRel(null); } }}>
+          <div style={S.modal}>
+            <div style={S.modalTitle}>
+              {editRel ? 'Edit Relationship' : 'Add Relationship'}
+            </div>
+
+            {/* Characters — only shown on create */}
+            {!editRel && (
+              <>
+                <div style={S.fieldGroup}>
+                  <label style={S.label}>Character A</label>
+                  <select
+                    style={S.select}
+                    value={form.character_id_a}
+                    onChange={e => setForm(f => ({ ...f, character_id_a: e.target.value }))}
+                  >
+                    <option value="">Select character…</option>
+                    {characters.map(c => (
+                      <option key={c.id} value={c.id}>{charDisplayName(c)}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={S.fieldGroup}>
+                  <label style={S.label}>Character B</label>
+                  <select
+                    style={S.select}
+                    value={form.character_id_b}
+                    onChange={e => setForm(f => ({ ...f, character_id_b: e.target.value }))}
+                  >
+                    <option value="">Select character…</option>
+                    {characters
+                      .filter(c => c.id !== form.character_id_a)
+                      .map(c => (
+                        <option key={c.id} value={c.id}>{charDisplayName(c)}</option>
+                      ))}
+                  </select>
+                </div>
+              </>
+            )}
+
+            {/* Relationship type */}
+            <div style={S.fieldGroup}>
+              <label style={S.label}>Relationship Type</label>
+              <select
+                style={S.select}
+                value={REL_PRESETS.includes(form.relationship_type) ? form.relationship_type : (form.relationship_type ? '__custom__' : '')}
+                onChange={e => {
+                  const v = e.target.value;
+                  if (v === '__custom__') {
+                    setForm(f => ({ ...f, relationship_type: '__custom__' }));
+                  } else {
+                    setForm(f => ({ ...f, relationship_type: v, relTypeCustom: '' }));
+                  }
+                }}
+              >
+                <option value="">Select type…</option>
+                {REL_PRESETS.map(p => <option key={p} value={p}>{p}</option>)}
+                <option value="__custom__">Custom…</option>
+              </select>
+
+              {(form.relationship_type === '__custom__' ||
+                (!REL_PRESETS.includes(form.relationship_type) && form.relationship_type && form.relationship_type !== '__custom__')) && (
+                <input
+                  style={{ ...S.input, marginTop: 8 }}
+                  placeholder="e.g. Brand ambassador, Ghostwriter…"
+                  value={form.relTypeCustom || (form.relationship_type !== '__custom__' ? form.relationship_type : '')}
+                  onChange={e => {
+                    const v = e.target.value;
+                    setForm(f => ({ ...f, relTypeCustom: v, relationship_type: '__custom__' }));
+                  }}
+                />
+              )}
+            </div>
+
+            {/* Connection mode */}
+            <div style={S.fieldGroup}>
+              <label style={S.label}>How They Know Each Other</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {CONNECTION_MODES.map(m => (
+                  <button
+                    key={m}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, connection_mode: m }))}
+                    style={{
+                      padding: '6px 14px', borderRadius: 99,
+                      fontSize: 12, fontWeight: 500,
+                      cursor: 'pointer',
+                      border: form.connection_mode === m
+                        ? `2px solid ${GOLD}` : '1px solid #d1cbc3',
+                      background: form.connection_mode === m ? '#fef9ec' : '#faf9f7',
+                      color: form.connection_mode === m ? '#92400e' : '#57534e',
+                    }}
+                  >
+                    {m}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Lala connection */}
+            <div style={S.fieldGroup}>
+              <label style={S.label}>Connection to Lala</label>
+              <select
+                style={S.select}
+                value={form.lala_connection}
+                onChange={e => setForm(f => ({ ...f, lala_connection: e.target.value }))}
+              >
+                {LALA_CONNECTIONS.map(l => (
+                  <option key={l.value} value={l.value}>{l.label}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Status */}
+            <div style={S.fieldGroup}>
+              <label style={S.label}>Relationship Status</label>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                {STATUSES.map(s => (
+                  <button
+                    key={s}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, status: s }))}
+                    style={{
+                      padding: '6px 14px', borderRadius: 99,
+                      fontSize: 12, fontWeight: 500,
+                      cursor: 'pointer',
+                      border: form.status === s
+                        ? `2px solid ${STATUS_COLORS[s]?.border || GOLD}`
+                        : '1px solid #d1cbc3',
+                      background: form.status === s
+                        ? (STATUS_COLORS[s]?.bg || '#fef9ec')
+                        : '#faf9f7',
+                      color: form.status === s
+                        ? (STATUS_COLORS[s]?.text || DARK)
+                        : '#57534e',
+                    }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div style={S.fieldGroup}>
+              <label style={S.label}>Notes (optional)</label>
+              <textarea
+                style={S.textarea}
+                placeholder="Context, backstory, how this relationship affects the narrative…"
+                value={form.notes}
+                onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
+              />
+            </div>
+
+            <div style={S.formActions}>
+              <button style={S.cancelBtn} onClick={() => { setShowForm(false); setEditRel(null); setForm(emptyForm); }}>
+                Cancel
+              </button>
+              <button style={S.saveBtn} onClick={handleSave}>
+                {editRel ? 'Save Changes' : 'Add Relationship'}
+              </button>
             </div>
           </div>
         </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <Toast
+          message={toast.message}
+          type={toast.type}
+          onClose={() => setToast(null)}
+        />
       )}
     </div>
   );
