@@ -72,7 +72,15 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
       }],
     });
 
-    const allChars = registries.flatMap((r) => r.characters || []);
+    // Group characters by registry book_tag
+    const worldCharsMap = { book1: [], lalaverse: [] };
+    for (const reg of registries) {
+      const tag = reg.book_tag || '';
+      const bucket = tag === 'lalaverse' ? 'lalaverse' : 'book1';
+      for (const c of (reg.characters || [])) {
+        worldCharsMap[bucket].push(c);
+      }
+    }
 
     const buildWorldStats = (worldChars) => {
       const roleCount = {};
@@ -110,21 +118,13 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
       };
     };
 
-    const book1Chars = allChars.filter((c) =>
-      c.appearance_mode?.includes('On-Page') ||
-      c.appearance_mode?.includes('Interior') ||
-      ['The Husband', 'JustAWoman', 'Chloe', 'Dana', 'Jade'].includes(c.selected_name || c.display_name)
-    );
-    const lalavorseChars = allChars.filter((c) =>
-      (c.selected_name || c.display_name) === 'Lala' ||
-      c.appearance_mode?.includes('creation')
-    );
+    const allChars = registries.flatMap((r) => r.characters || []);
 
     return res.json({
       book1: {
         ...WORLD_CONFIGS.book1,
-        stats: buildWorldStats(book1Chars),
-        characters: book1Chars.map((c) => ({
+        stats: buildWorldStats(worldCharsMap.book1),
+        characters: worldCharsMap.book1.map((c) => ({
           id: c.id,
           name: c.selected_name || c.display_name,
           role_type: c.role_type,
@@ -133,8 +133,8 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
       },
       lalaverse: {
         ...WORLD_CONFIGS.lalaverse,
-        stats: buildWorldStats(lalavorseChars),
-        characters: lalavorseChars.map((c) => ({
+        stats: buildWorldStats(worldCharsMap.lalaverse),
+        characters: worldCharsMap.lalaverse.map((c) => ({
           id: c.id,
           name: c.selected_name || c.display_name,
           role_type: c.role_type,
