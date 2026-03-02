@@ -42,13 +42,17 @@ function SidebarProgress({ showId, collapsed: sidebarCollapsed }) {
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
-  // Derive step completion from status
+  // Derive step completion from the steps array or flat fields
+  const stepsArr = status?.steps || [];
+  const stepMap = {};
+  stepsArr.forEach(s => { stepMap[s.id] = s.complete; });
+
   const stepDone = {
-    universe:      !!status?.universe,
-    protagonist:   (status?.characters || 0) > 0,
-    core_cast:     (status?.characters || 0) >= 3,
-    relationships: (status?.relationships || 0) > 0,
-    first_book:    (status?.books || 0) > 0,
+    universe:      stepMap.universe ?? !!status?.universe,
+    protagonist:   stepMap.protagonist ?? (status?.characters || 0) > 0,
+    core_cast:     stepMap.cast ?? (status?.characters || 0) >= 3,
+    relationships: stepMap.web ?? (status?.relationships || 0) > 0,
+    first_book:    stepMap.book ?? (status?.books || 0) > 0,
   };
 
   const doneCount  = Object.values(stepDone).filter(Boolean).length;

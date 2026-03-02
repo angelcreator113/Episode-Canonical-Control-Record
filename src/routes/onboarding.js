@@ -392,7 +392,8 @@ router.get('/status/:showId', optionalAuth, async (req, res) => {
   const { showId } = req.params;
 
   try {
-    const [books, registries] = await Promise.all([
+    // Query all relevant tables in parallel — try show-scoped first
+    let [books, registries, universes] = await Promise.all([
       db.StorytellerBook.findAll({ where: { show_id: showId }, attributes: ['id', 'title'] }),
       db.CharacterRegistry.findAll({
         where: { show_id: showId },
@@ -402,12 +403,42 @@ router.get('/status/:showId', optionalAuth, async (req, res) => {
           attributes: ['id', 'display_name', 'selected_name', 'role_type', 'status', 'canon_tier'],
         }],
       }),
+      // Check for Universe linked to this show (via BookSeries or direct)
+      db.Universe ? db.Universe.findAll({ attributes: ['id', 'name'] }).catch(() => []) : Promise.resolve([]),
     ]);
 
+    // Fallback: if no scoped data found, check for records with show_id = NULL
+    // (common when data was created before show-scoping was enabled)
+    if (registries.length === 0 && books.length === 0) {
+      const Op = db.Sequelize?.Op || require('sequelize').Op;
+      const [fallbackBooks, fallbackRegs] = await Promise.all([
+        db.StorytellerBook.findAll({
+          where: { show_id: { [Op.or]: [showId, null] } },
+          attributes: ['id', 'title'],
+        }).catch(() => []),
+        db.CharacterRegistry.findAll({
+          where: { show_id: { [Op.or]: [showId, null] } },
+          include: [{
+            model: db.RegistryCharacter,
+            as: 'characters',
+            attributes: ['id', 'display_name', 'selected_name', 'role_type', 'status', 'canon_tier'],
+          }],
+        }).catch(() => []),
+      ]);
+      books = fallbackBooks;
+      registries = fallbackRegs;
+    }
+
     const allChars = registries.flatMap((r) => r.characters || []);
-    const hasProtagonist = allChars.some((c) => c.role_type === 'special' && c.status === 'accepted');
+    // A protagonist can be role_type 'special' OR 'protagonist'
+    const hasProtagonist = allChars.some((c) =>
+      (c.role_type === 'special' || c.role_type === 'protagonist') &&
+      (c.status === 'accepted' || c.status === 'finalized')
+    );
     const hasBook = books.length > 0;
-    const castCount = allChars.filter((c) => c.role_type !== 'special').length;
+    const hasUniverse = universes.length > 0;
+    const castCount = allChars.filter((c) => c.role_type !== 'special' && c.role_type !== 'protagonist').length;
+    const totalCharCount = allChars.length;
     const finalizedCount = allChars.filter((c) => c.status === 'finalized').length;
 
     const roleCount = {};
@@ -416,21 +447,22 @@ router.get('/status/:showId', optionalAuth, async (req, res) => {
     });
 
     const steps = [
-      { id: 'universe',    label: 'Universe',        complete: true,           note: 'Created' },
-      { id: 'protagonist', label: 'Protagonist',     complete: hasProtagonist, note: hasProtagonist ? 'Ready' : 'Not set up' },
-      { id: 'cast',        label: 'Core Cast',       complete: castCount >= 3, note: `${castCount} characters` },
-      { id: 'web',         label: 'Relationship Web', complete: castCount >= 2, note: castCount >= 2 ? 'Connections exist' : 'Needs characters' },
-      { id: 'book',        label: 'First Book',      complete: hasBook,        note: hasBook ? books[0]?.title : 'Not created' },
+      { id: 'universe',    label: 'Universe',         complete: hasUniverse,    note: hasUniverse ? universes[0]?.name : 'Not created' },
+      { id: 'protagonist', label: 'Protagonist',      complete: hasProtagonist, note: hasProtagonist ? 'Ready' : 'Not set up' },
+      { id: 'cast',        label: 'Core Cast',        complete: castCount >= 3, note: `${castCount} characters` },
+      { id: 'web',         label: 'Relationship Web',  complete: totalCharCount >= 2, note: totalCharCount >= 2 ? 'Connections possible' : 'Needs characters' },
+      { id: 'book',        label: 'First Book',       complete: hasBook,        note: hasBook ? books[0]?.title : 'Not created' },
     ];
 
     const completedSteps = steps.filter((s) => s.complete).length;
-    const readyToWrite = hasProtagonist && hasBook && castCount >= 2;
+    const readyToWrite = hasProtagonist && hasBook && totalCharCount >= 2;
 
     let nextAction = null;
-    if (!hasProtagonist)  nextAction = { label: 'Set up your protagonist',  route: '/character-generator', priority: 'critical' };
-    else if (castCount < 3) nextAction = { label: 'Generate your core cast', route: '/character-generator', priority: 'high' };
-    else if (!hasBook)      nextAction = { label: 'Create your first book',  route: '/storyteller',         priority: 'high' };
-    else                    nextAction = { label: 'Write Chapter 1',         route: '/storyteller',         priority: 'normal' };
+    if (!hasUniverse)       nextAction = { label: 'Create your universe',    route: '/setup',              priority: 'critical' };
+    else if (!hasProtagonist) nextAction = { label: 'Set up your protagonist', route: '/character-generator', priority: 'critical' };
+    else if (castCount < 3) nextAction = { label: 'Generate your core cast',  route: '/character-generator', priority: 'high' };
+    else if (!hasBook)      nextAction = { label: 'Create your first book',   route: '/storyteller',         priority: 'high' };
+    else                    nextAction = { label: 'Write Chapter 1',          route: '/storyteller',         priority: 'normal' };
 
     return res.json({
       show_id: showId,
@@ -439,7 +471,12 @@ router.get('/status/:showId', optionalAuth, async (req, res) => {
       total_steps: steps.length,
       ready_to_write: readyToWrite,
       next_action: nextAction,
-      character_count: allChars.length,
+      // Flat fields for SidebarProgress compatibility
+      universe: hasUniverse,
+      characters: totalCharCount,
+      relationships: totalCharCount >= 2 ? totalCharCount : 0,
+      books: books.length,
+      character_count: totalCharCount,
       finalized_count: finalizedCount,
       role_distribution: roleCount,
     });
