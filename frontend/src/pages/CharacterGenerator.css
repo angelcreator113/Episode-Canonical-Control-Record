@@ -569,6 +569,56 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Commit All banner (staging phase) ─────────────────────────────────────── */
+.cg-commit-all-banner {
+  background:   rgba(184, 150, 58, 0.08);
+  border-color: rgba(184, 150, 58, 0.25);
+  flex-wrap:    wrap;
+}
+.cg-approval-banner-text {
+  font-family: var(--cg-font);
+  font-size:   14px;
+  color:       var(--cg-ink);
+}
+.cg-approval-banner-text strong {
+  color:       var(--cg-gold);
+  font-weight: 700;
+  font-size:   18px;
+}
+.cg-commit-all-controls {
+  display:     flex;
+  align-items: center;
+  gap:         10px;
+}
+.cg-commit-all-controls .cg-registry-select {
+  font-size:   13px;
+  padding:     8px 12px;
+  border:      1px solid var(--cg-border);
+  border-radius: var(--cg-radius);
+  background:  #fff;
+  font-family: var(--cg-font);
+}
+.cg-btn-commit-all {
+  background:    var(--cg-gold);
+  color:         #fff;
+  padding:       10px 24px;
+  font-size:     14px;
+  font-weight:   600;
+  border:        none;
+  border-radius: var(--cg-radius);
+  cursor:        pointer;
+  font-family:   var(--cg-font);
+  white-space:   nowrap;
+  transition:    background 0.2s;
+}
+.cg-btn-commit-all:hover {
+  background:    var(--cg-gold-dark);
+}
+.cg-btn-commit-all:disabled {
+  opacity: 0.6;
+  cursor:  not-allowed;
+}
+
 .cg-seed-count {
   font-family: var(--cg-font);
   font-size:   12px;
