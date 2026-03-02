@@ -78,6 +78,7 @@ const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
 const BookOverview = lazy(() => import('./pages/BookOverview'));
 const RelationshipWeb = lazy(() => import('./pages/RelationshipWeb'));
+const RelationshipMap = lazy(() => import('./pages/RelationshipMap'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
@@ -355,8 +356,11 @@ function AppContent() {
           {/* PNOS Continuity Engine */}
           <Route path="/continuity" element={<ContinuityEnginePage />} />
           
-          {/* PNOS Character Relationship Web */}
-          <Route path="/relationships" element={<RelationshipWeb />} />
+          {/* PNOS Character Relationship Map (CRUD) */}
+          <Route path="/relationships" element={<RelationshipMap />} />
+          
+          {/* PNOS Character Relationship Web (D3 graph) */}
+          <Route path="/relationship-web" element={<RelationshipWeb />} />
           
           {/* PNOS Story Engine — 50-Story Arc System */}
           <Route path="/story-engine" element={<StoryEngine />} />
