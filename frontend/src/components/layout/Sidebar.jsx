@@ -16,6 +16,7 @@ const NAV = [
     items: [
       { icon: '◈',  label: 'Universe',        route: '/universe' },
       { icon: '🌍', label: 'World View',      route: '/character-registry?view=world' },
+      { icon: '🧬', label: 'Generator',       route: '/character-generator' },
       { icon: '🛋️', label: 'Therapy Room',    route: '/therapy/default' },
       { icon: '📰', label: 'The Press',       route: '/press' },
       { icon: '�', label: 'Relationship Web', route: '/relationships' },
@@ -32,19 +33,19 @@ const NAV = [
   {
     zone: 'STUDIO',
     items: [
-      { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
-      { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
-    ],
-  },
-  {
-    zone: 'PRODUCE',
-    items: [
       {
         icon: '🎬', label: 'Shows', route: '/shows',
         expandable: true,
       },
       { icon: '🎞️', label: 'Scene Library',   route: '/scene-library' },
       { icon: '🖼️', label: 'Template Studio', route: '/template-studio' },
+    ],
+  },
+  {
+    zone: 'PRODUCE',
+    items: [
+      { icon: '🎬', label: 'Scene Composer',  route: '/studio/scene-composer' },
+      { icon: '⏱️', label: 'Timeline Editor', route: '/studio/timeline' },
     ],
   },
   {
