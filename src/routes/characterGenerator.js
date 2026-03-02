@@ -72,7 +72,15 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
       }],
     });
 
-    const allChars = registries.flatMap((r) => r.characters || []);
+    // Group characters by registry book_tag
+    const worldCharsMap = { book1: [], lalaverse: [] };
+    for (const reg of registries) {
+      const tag = reg.book_tag || '';
+      const bucket = tag === 'lalaverse' ? 'lalaverse' : 'book1';
+      for (const c of (reg.characters || [])) {
+        worldCharsMap[bucket].push(c);
+      }
+    }
 
     const buildWorldStats = (worldChars) => {
       const roleCount = {};
@@ -110,21 +118,13 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
       };
     };
 
-    const book1Chars = allChars.filter((c) =>
-      c.appearance_mode?.includes('On-Page') ||
-      c.appearance_mode?.includes('Interior') ||
-      ['The Husband', 'JustAWoman', 'Chloe', 'Dana', 'Jade'].includes(c.selected_name || c.display_name)
-    );
-    const lalavorseChars = allChars.filter((c) =>
-      (c.selected_name || c.display_name) === 'Lala' ||
-      c.appearance_mode?.includes('creation')
-    );
+    const allChars = registries.flatMap((r) => r.characters || []);
 
     return res.json({
       book1: {
         ...WORLD_CONFIGS.book1,
-        stats: buildWorldStats(book1Chars),
-        characters: book1Chars.map((c) => ({
+        stats: buildWorldStats(worldCharsMap.book1),
+        characters: worldCharsMap.book1.map((c) => ({
           id: c.id,
           name: c.selected_name || c.display_name,
           role_type: c.role_type,
@@ -133,8 +133,8 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
       },
       lalaverse: {
         ...WORLD_CONFIGS.lalaverse,
-        stats: buildWorldStats(lalavorseChars),
-        characters: lalavorseChars.map((c) => ({
+        stats: buildWorldStats(worldCharsMap.lalaverse),
+        characters: worldCharsMap.lalaverse.map((c) => ({
           id: c.id,
           name: c.selected_name || c.display_name,
           role_type: c.role_type,
@@ -563,13 +563,25 @@ router.post('/commit', optionalAuth, async (req, res) => {
     const storyPres  = profile.story_presence || {};
     const threads    = profile.plot_threads || [];
 
+    // Generate a unique character_key slug from the name
+    const rawName = seed?.name || identity.name || 'unnamed';
+    const baseKey = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const uniqueKey = `${baseKey}-${Date.now().toString(36)}`;
+
+    // Validate enum values against DB constraints
+    const VALID_ROLE_TYPES = ['protagonist', 'pressure', 'mirror', 'support', 'shadow', 'special'];
+    const VALID_APPEARANCE_MODES = ['on_page', 'composite', 'observed', 'invisible', 'brief'];
+    const rawRole = (identity.role_type || seed?.role_type || 'support').toLowerCase().replace(/[^a-z]/g, '');
+    const safeRole = VALID_ROLE_TYPES.includes(rawRole) ? rawRole : 'support';
+
     const characterData = {
       registry_id: registryId,
+      character_key: uniqueKey,
       display_name:   seed?.name || identity.name,
       selected_name:  seed?.name || identity.name,
-      role_type:      identity.role_type || seed?.role_type || 'support',
+      role_type:      safeRole,
       role_label:     identity.role_type || seed?.role_type || 'support',
-      appearance_mode: storyPres.worlds?.includes('lalaverse') ? 'On-Page (LalaVerse)' : 'On-Page',
+      appearance_mode: 'on_page',
       canon_tier:       identity.canon_eligible ? 'canon' : 'none',
       status:         'draft',
       belief_pressured: psych.core_wound || '',

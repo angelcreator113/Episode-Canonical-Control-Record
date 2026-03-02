@@ -639,8 +639,8 @@ export default function StoryEngine() {
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <div className="se-topbar">
-        <button className="se-btn-back" onClick={() => navigate('/storyteller')}>
-          ← StoryTeller
+        <button className="se-btn-back" onClick={() => navigate('/')}>
+          ← Home
         </button>
         <div className="se-topbar-title">Story Engine</div>
         <WorldToggle worlds={worldToggles} onToggle={handleWorldToggle} />

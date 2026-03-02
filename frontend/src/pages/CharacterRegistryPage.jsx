@@ -273,8 +273,8 @@ export default function CharacterRegistryPage() {
     }
   }, [activeRegistry?.id]);
 
-  // Names to exclude from LalaVerse
-  const WORLD_EXCLUDE = ['chloe', 'justawoman', 'the almost-mentor', 'the witness', 'the husband', 'the digital products customer'];
+  // Names to exclude from All Characters world view (none currently)
+  const WORLD_EXCLUDE = [];
 
   // Load ALL characters across ALL registries + Press (for World mode)
   const loadAllCharacters = useCallback(async () => {
@@ -289,37 +289,15 @@ export default function CharacterRegistryPage() {
         if (r.ok) {
           const d = await r.json();
           const chars = d.registry?.characters || d.characters || [];
+          // Tag each character with its registry name for display in All Characters view
+          for (const ch of chars) {
+            ch._registryTitle = reg.title || 'Unknown';
+            ch._registryTag = reg.book_tag || '';
+          }
           all.push(...chars);
         }
       }
-
-      // Also fetch LalaVerse Press characters
-      try {
-        const pr = await fetch('/api/v1/press/characters', { credentials: 'include' });
-        if (pr.ok) {
-          const pd = await pr.json();
-          const pressList = pd.characters || pd.data || [];
-          for (const pc of pressList) {
-            all.push({
-              id: `press_${pc.slug}`,
-              selected_name: pc.name,
-              display_name: pc.name,
-              role_type: 'special',
-              role_label: pc.publication || pc.tagline,
-              status: 'finalized',
-              belief_pressured: pc.tagline,
-              _isPress: true,
-            });
-          }
-        }
-      } catch { /* press fetch optional */ }
-
-      // Filter out excluded names
-      const filtered = all.filter(c => {
-        const name = (c.selected_name || c.display_name || '').toLowerCase().trim();
-        return !WORLD_EXCLUDE.includes(name);
-      });
-      setAllCharacters(filtered);
+      setAllCharacters(all);
     } catch { /* silent */ }
   }, []);
 
@@ -1654,12 +1632,6 @@ export default function CharacterRegistryPage() {
         {/* Registry tabs */}
         {registries.length > 0 && (
           <div className="cr-registry-tabs">
-            <button
-              className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
-              onClick={enterWorldMode}
-            >
-              <span className="cr-pill-title">🌍 LalaVerse</span>
-            </button>
             {registries.map(r => (
               <button
                 key={r.id}
@@ -1671,6 +1643,13 @@ export default function CharacterRegistryPage() {
                 {!worldMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
               </button>
             ))}
+            <button
+              className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
+              onClick={enterWorldMode}
+              title="View all characters across all registries"
+            >
+              <span className="cr-pill-title">🌍 All Characters</span>
+            </button>
             <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
               +
             </button>
@@ -1683,7 +1662,7 @@ export default function CharacterRegistryPage() {
             {/* World header */}
             <div className="cr-world-header">
               <div className="cr-world-header-left">
-                <h2 className="cr-world-title">LalaVerse</h2>
+                <h2 className="cr-world-title">All Characters</h2>
                 <p className="cr-world-subtitle">
                   {characters.length} character{characters.length !== 1 ? 's' : ''} · {generatedCount} alive
                 </p>
@@ -1935,8 +1914,18 @@ export default function CharacterRegistryPage() {
           <div className="cr-empty-state">
             <div className="cr-empty-icon">◈</div>
             <h2 className="cr-empty-title">No Characters</h2>
-            <p className="cr-empty-desc">Seed the Book 1 cast or create characters manually.</p>
-            <button className="cr-empty-btn" onClick={seedBook1}>Seed Book 1 Cast</button>
+            <p className="cr-empty-desc">
+              {activeRegistry?.book_tag === 'book-1'
+                ? 'Seed the Book 1 cast or create characters manually.'
+                : 'Use the Character Generator or create characters manually.'}
+            </p>
+            {activeRegistry?.book_tag === 'book-1' ? (
+              <button className="cr-empty-btn" onClick={seedBook1}>Seed Book 1 Cast</button>
+            ) : (
+              <button className="cr-empty-btn" onClick={() => navigate('/character-generator')}>
+                Open Character Generator
+              </button>
+            )}
           </div>
         ) : filtered.length === 0 ? (
           <div className="cr-empty-state">
@@ -2274,6 +2263,11 @@ function CharacterCard({ c, onClick, isCompareSelected }) {
           <span className="cr-card-icon">{c.icon}</span>
         ) : (
           <span className="cr-card-initial">{(c.display_name || '?')[0]}</span>
+        )}
+
+        {/* Registry tag (shown in All Characters view) */}
+        {c._registryTitle && (
+          <span className="cr-card-registry-tag">{c._registryTitle}</span>
         )}
 
         {/* Hover overlay */}

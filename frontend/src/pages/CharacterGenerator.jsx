@@ -1,6 +1,18 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './CharacterGenerator.css';
+
+// ─── LocalStorage persistence helpers ─────────────────────────────────────────
+const STORAGE_KEY = 'cg-session';
+function saveSession(data) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* quota */ }
+}
+function loadSession() {
+  try { const raw = localStorage.getItem(STORAGE_KEY); return raw ? JSON.parse(raw) : null; } catch { return null; }
+}
+function clearSession() {
+  try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+}
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
@@ -232,8 +244,6 @@ function SeedCard({ seed, index, onApprove, onReject, onEdit }) {
 // ─── Staging card (full profile review) ──────────────────────────────────────
 function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
   const [expanded, setExpanded]       = useState(false);
-  const [selectedRegistry, setReg]    = useState(registries?.[0]?.id || '');
-  const [committing, setCommitting]   = useState(false);
 
   const { seed, profile, status, error } = result;
   const color = ROLE_COLORS[seed?.role_type] || '#94a3b8';
@@ -254,13 +264,6 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
       <button className="cg-btn cg-btn-discard" onClick={() => onDiscard(result)}>Remove</button>
     </div>
   );
-
-  async function handleCommit() {
-    if (!selectedRegistry) return alert('Select a registry first.');
-    setCommitting(true);
-    await onCommit(result, selectedRegistry);
-    setCommitting(false);
-  }
 
   return (
     <div className="cg-staging-card" style={{ '--role-color': color }}>
@@ -495,28 +498,10 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
         </div>
       )}
 
-      {/* Commit actions */}
+      {/* Commit actions — simplified to just Discard (batch Add All handles commit) */}
       {!result._committed && (
         <div className="cg-staging-commit">
-          <select
-            className="cg-registry-select"
-            value={selectedRegistry}
-            onChange={(e) => setReg(e.target.value)}
-          >
-            <option value="">Select registry…</option>
-            {(registries || []).map((r) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
           <button className="cg-btn cg-btn-discard" onClick={() => onDiscard(result)}>Discard</button>
-          <button
-            className="cg-btn cg-btn-commit"
-            style={{ background: checks?.can_commit !== false ? color : '#a09a90' }}
-            onClick={handleCommit}
-            disabled={committing || checks?.errors?.length > 0}
-          >
-            {committing ? '…' : `Add to Registry`}
-          </button>
         </div>
       )}
 
@@ -535,21 +520,63 @@ export default function CharacterGenerator() {
   const [ecosystem, setEcosystem]         = useState(null);
   const [ecoLoading, setEcoLoading]       = useState(true);
 
+  // Restore saved session (if any)
+  const saved = useRef(loadSession());
+
   // Seed proposal
-  const [worldTarget, setWorldTarget]     = useState('book1');
-  const [seeds, setSeeds]                 = useState([]);
+  const [worldTarget, setWorldTarget]     = useState(saved.current?.worldTarget || 'book1');
+  const [seeds, setSeeds]                 = useState(saved.current?.seeds || []);
   const [seedsLoading, setSeedsLoading]   = useState(false);
 
   // Batch generation
-  const [batch, setBatch]                 = useState([]);
+  const [batch, setBatch]                 = useState(saved.current?.batch || []);
   const [batchLoading, setBatchLoading]   = useState(false);
 
   // Staging
-  const [stagingChecks, setStagingChecks] = useState({});
+  const [stagingChecks, setStagingChecks] = useState(saved.current?.stagingChecks || {});
   const [registries, setRegistries]       = useState([]);
 
   // Phase: 'seeds' | 'staging'
-  const [phase, setPhase]                 = useState('seeds');
+  const [phase, setPhase]                 = useState(saved.current?.phase || 'seeds');
+  const [approvalFlash, setApprovalFlash] = useState(false);
+
+  // ── Auto-save to localStorage on meaningful state changes ───────────────────
+  useEffect(() => {
+    // Only save when there's actual work to preserve
+    if (seeds.length > 0 || batch.length > 0) {
+      saveSession({ worldTarget, seeds, batch, stagingChecks, phase });
+    }
+  }, [worldTarget, seeds, batch, stagingChecks, phase]);
+
+  // ── Warn before leaving with unsaved work ───────────────────────────────────
+  const hasUnsavedWork = batch.some((r) => r.status === 'generated' && !r._committed);
+
+  useEffect(() => {
+    if (!hasUnsavedWork) return;
+    const handler = (e) => { e.preventDefault(); e.returnValue = ''; };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [hasUnsavedWork]);
+
+  // Guard back-button navigation (works with BrowserRouter)
+  useEffect(() => {
+    if (!hasUnsavedWork) return;
+    const onPop = () => {
+      if (!window.confirm('You have uncommitted characters. Your work is auto-saved — leave anyway?')) {
+        window.history.pushState(null, '', window.location.pathname);
+      }
+    };
+    window.history.pushState(null, '', window.location.pathname);
+    window.addEventListener('popstate', onPop);
+    return () => window.removeEventListener('popstate', onPop);
+  }, [hasUnsavedWork]);
+
+  // Clear saved session when everything is committed
+  useEffect(() => {
+    if (batch.length > 0 && batch.every((r) => r._committed)) {
+      clearSession();
+    }
+  }, [batch]);
 
   // Load ecosystem and registries on mount
   useEffect(() => {
@@ -582,6 +609,7 @@ export default function CharacterGenerator() {
     setSeeds([]);
     setBatch([]);
     setPhase('seeds');
+    clearSession();
     try {
       const existingNames = [
         ...(ecosystem?.book1?.characters || []),
@@ -621,11 +649,26 @@ export default function CharacterGenerator() {
   }
   function handleApproveAll() {
     setSeeds((prev) => prev.map((s) => ({ ...s, _status: 'approved' })));
+    // Flash animation on seed cards
+    setApprovalFlash(true);
+    setTimeout(() => setApprovalFlash(false), 800);
+    // Auto-scroll to the generate banner
+    setTimeout(() => {
+      document.querySelector('.cg-approval-banner')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
   }
 
-  // ── Generate batch ────────────────────────────────────────────────────────
-  async function handleGenerateBatch() {
-    const approvedSeeds = seeds.filter((s) => s._status === 'approved');
+  // One-click: Approve All → immediately Generate
+  function handleApproveAllAndGenerate() {
+    const allApproved = seeds.map((s) => ({ ...s, _status: 'approved' }));
+    setSeeds(allApproved);
+    // Pass approved seeds directly — don’t wait for React state
+    handleGenerateBatch(allApproved.filter((s) => s._status === 'approved'));
+  }
+
+  // ── Generate batch ──────────────────────────────────────────────────────────────────
+  async function handleGenerateBatch(overrideSeeds) {
+    const approvedSeeds = overrideSeeds || seeds.filter((s) => s._status === 'approved');
     if (!approvedSeeds.length) return alert('Approve at least one seed first.');
 
     setBatchLoading(true);
@@ -708,11 +751,17 @@ export default function CharacterGenerator() {
 
   // ── Commit ALL staged characters to a registry at once ──────────────────────
   const [commitAllLoading, setCommitAllLoading] = useState(false);
-  const [commitAllRegistry, setCommitAllRegistry] = useState('');
+
+  // Auto-match registry to the world the user already selected
+  // Normalize: strip hyphens/spaces for fuzzy match (book1 ↔ book-1, lalaverse ↔ lala-verse)
+  const norm = (s) => (s || '').toLowerCase().replace(/[-_\s]/g, '');
+  const matchedRegistry = registries.find((r) => norm(r.book_tag) === norm(worldTarget))
+    || registries.find((r) => norm(r.title).includes(norm(worldTarget)))
+    || registries[0];
 
   async function handleCommitAll() {
-    const regId = commitAllRegistry || registries?.[0]?.id;
-    if (!regId) return alert('Select a registry first.');
+    const regId = matchedRegistry?.id;
+    if (!regId) return alert('No registry found for this world.');
 
     const pending = batch.filter((r) => r.status === 'generated' && !r._committed);
     if (!pending.length) return;
@@ -753,13 +802,27 @@ export default function CharacterGenerator() {
   return (
     <div className="cg-page">
 
+      {/* Navigation guard handled via popstate + beforeunload; data auto-saved to localStorage */}
+
       {/* ── Header ──────────────────────────────────────────────────────── */}
       <div className="cg-header">
         <button className="cg-btn-back" onClick={() => navigate('/character-registry')}>
           ← Registry
         </button>
         <div className="cg-header-title">Character Generator</div>
-        <div className="cg-header-sub">Batch · Staged · Committed</div>
+        <div className="cg-step-indicator">
+          <span className={`cg-step${phase === 'seeds' && seeds.length === 0 ? ' cg-step-active' : (seeds.length > 0 || phase === 'staging') ? ' cg-step-done' : ''}`}>
+            <span className="cg-step-num">1</span> Propose
+          </span>
+          <span className="cg-step-arrow">→</span>
+          <span className={`cg-step${phase === 'seeds' && seeds.length > 0 ? ' cg-step-active' : phase === 'staging' ? ' cg-step-done' : ''}`}>
+            <span className="cg-step-num">2</span> Approve & Generate
+          </span>
+          <span className="cg-step-arrow">→</span>
+          <span className={`cg-step${phase === 'staging' && batch.some(r => !r._committed) ? ' cg-step-active' : batch.every(r => r._committed) && batch.length > 0 ? ' cg-step-done' : ''}`}>
+            <span className="cg-step-num">3</span> Commit to Registry
+          </span>
+        </div>
 
         <div className="cg-header-controls">
           <select
@@ -807,16 +870,20 @@ export default function CharacterGenerator() {
                 </div>
                 {seeds.length > 0 && (
                   <div className="cg-phase-actions">
-                    <button className="cg-btn cg-btn-approve-all" onClick={handleApproveAll}>
-                      Approve All
-                    </button>
-                    <button
-                      className="cg-btn cg-btn-generate"
-                      onClick={handleGenerateBatch}
-                      disabled={approvedCount === 0 || batchLoading}
+                    <button className="cg-btn cg-btn-approve-all" onClick={handleApproveAllAndGenerate}
+                      disabled={batchLoading}
                     >
-                      {batchLoading ? 'Generating…' : `Generate ${approvedCount}`}
+                      {batchLoading ? 'Generating…' : 'Approve All & Generate'}
                     </button>
+                    {approvedCount > 0 && approvedCount < seeds.length && (
+                      <button
+                        className="cg-btn cg-btn-generate"
+                        onClick={handleGenerateBatch}
+                        disabled={approvedCount === 0 || batchLoading}
+                      >
+                        {batchLoading ? 'Generating…' : `Generate ${approvedCount}`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -848,7 +915,7 @@ export default function CharacterGenerator() {
                 </div>
               )}
 
-              <div className="cg-seeds-grid">
+              <div className={`cg-seeds-grid${approvalFlash ? ' cg-flash' : ''}`}>
                 {seeds.map((seed, i) => (
                   <SeedCard
                     key={i}
@@ -889,28 +956,51 @@ export default function CharacterGenerator() {
                 </div>
               )}
 
-              {/* Batch commit banner */}
+              {/* Guidance + Batch commit banner */}
               {!batchLoading && batch.filter((r) => r.status === 'generated' && !r._committed).length > 0 && (
-                <div className="cg-approval-banner cg-commit-all-banner">
-                  <div className="cg-approval-banner-text">
-                    <strong>{batch.filter((r) => r.status === 'generated' && !r._committed).length}</strong> characters ready to add to registry
+                <div className="cg-staging-guidance">
+                  <div className="cg-guidance-steps">
+                    <div className="cg-guidance-step">
+                      <span className="cg-guidance-icon">▼</span>
+                      <span>Click any character to <strong>expand their full profile</strong> — psychology, voice, dilemmas, relationships</span>
+                    </div>
+                    <div className="cg-guidance-step">
+                      <span className="cg-guidance-icon">✗</span>
+                      <span>Click <strong>Discard</strong> to remove characters you don't want</span>
+                    </div>
+                    <div className="cg-guidance-step">
+                      <span className="cg-guidance-icon">↓</span>
+                      <span>When ready, click the button below to <strong>add them all at once</strong></span>
+                    </div>
                   </div>
-                  <div className="cg-commit-all-controls">
-                    <select
-                      className="cg-registry-select"
-                      value={commitAllRegistry || registries?.[0]?.id || ''}
-                      onChange={(e) => setCommitAllRegistry(e.target.value)}
-                    >
-                      {(registries || []).map((r) => (
-                        <option key={r.id} value={r.id}>{r.title || r.name}</option>
-                      ))}
-                    </select>
+
+                  <div className="cg-commit-all-banner">
+                    <div className="cg-commit-all-ready">
+                      <strong>{batch.filter((r) => r.status === 'generated' && !r._committed).length}</strong> characters ready
+                      {matchedRegistry && <span className="cg-commit-target"> → {matchedRegistry.title || matchedRegistry.name}</span>}
+                    </div>
                     <button
                       className="cg-btn cg-btn-commit-all"
                       onClick={handleCommitAll}
                       disabled={commitAllLoading}
                     >
                       {commitAllLoading ? 'Committing…' : `Add All to Registry`}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* All committed */}
+              {!batchLoading && batch.length > 0 && batch.every((r) => r._committed) && (
+                <div className="cg-all-committed-banner">
+                  <div className="cg-all-committed-icon">✓</div>
+                  <div className="cg-all-committed-text">All characters added to registry!</div>
+                  <div className="cg-all-committed-actions">
+                    <button className="cg-btn cg-btn-propose" onClick={() => { setPhase('seeds'); setSeeds([]); setBatch([]); }}>
+                      Generate More
+                    </button>
+                    <button className="cg-btn cg-btn-generate" onClick={() => navigate('/character-registry')}>
+                      View Registry →
                     </button>
                   </div>
                 </div>

@@ -518,6 +518,25 @@
   opacity: 0.06;
 }
 
+/* Registry tag shown in All Characters view */
+.cr-card-registry-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: var(--surface1);
+  border: 1px solid var(--border-light, rgba(0,0,0,0.08));
+  border-radius: 4px;
+  padding: 2px 7px;
+  opacity: 0.85;
+}
+
 .cr-card-portrait .cr-card-icon {
   font-size: 56px;
   position: relative;
@@ -3734,6 +3753,14 @@
   display: flex;
   gap: 6px;
   flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.cr-registry-context:hover .cr-registry-context-actions {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .cr-ctx-btn {
@@ -3777,11 +3804,13 @@
   display: none;
   font-size: 11px;
   margin-left: 4px;
-  opacity: 0.6;
+  opacity: 0;
+  transition: opacity 0.2s ease;
 }
 
-.cr-registry-pill.active .cr-pill-edit-icon {
+.cr-registry-pill.active:hover .cr-pill-edit-icon {
   display: inline;
+  opacity: 0.6;
 }
 
 
