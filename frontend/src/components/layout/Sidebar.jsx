@@ -20,8 +20,7 @@ const NAV = [
       { icon: '🧬', label: 'Generator',       route: '/character-generator' },
       { icon: '🛋️', label: 'Therapy Room',    route: '/therapy/default' },
       { icon: '📰', label: 'The Press',       route: '/press' },
-      { icon: '◈',  label: 'Relationship Map', route: '/relationships' },
-      { icon: '🔗', label: 'Relationship Web', route: '/relationship-web' },
+      { icon: '◈',  label: 'Relationships', route: '/relationships' },
     ],
   },
   {

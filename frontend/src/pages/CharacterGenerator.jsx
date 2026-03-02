@@ -4,6 +4,7 @@ import './CharacterGenerator.css';
 
 // ─── LocalStorage persistence helpers ─────────────────────────────────────────
 const STORAGE_KEY = 'cg-session';
+const HISTORY_KEY = 'cg-history';
 function saveSession(data) {
   try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch { /* quota */ }
 }
@@ -12,6 +13,19 @@ function loadSession() {
 }
 function clearSession() {
   try { localStorage.removeItem(STORAGE_KEY); } catch { /* */ }
+}
+function saveToHistory(entry) {
+  try {
+    const raw = localStorage.getItem(HISTORY_KEY);
+    const list = raw ? JSON.parse(raw) : [];
+    list.unshift(entry); // newest first
+    // Keep last 50 generations to avoid quota issues
+    if (list.length > 50) list.length = 50;
+    localStorage.setItem(HISTORY_KEY, JSON.stringify(list));
+  } catch { /* quota */ }
+}
+function loadHistory() {
+  try { const raw = localStorage.getItem(HISTORY_KEY); return raw ? JSON.parse(raw) : []; } catch { return []; }
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -536,9 +550,13 @@ export default function CharacterGenerator() {
   const [stagingChecks, setStagingChecks] = useState(saved.current?.stagingChecks || {});
   const [registries, setRegistries]       = useState([]);
 
-  // Phase: 'seeds' | 'staging'
+  // Phase: 'seeds' | 'staging' | 'history'
   const [phase, setPhase]                 = useState(saved.current?.phase || 'seeds');
   const [approvalFlash, setApprovalFlash] = useState(false);
+
+  // Seed history
+  const [history, setHistory]             = useState([]);
+  const [expandedHistoryIdx, setExpandedHistoryIdx] = useState(null);
 
   // ── Auto-save to localStorage on meaningful state changes ───────────────────
   useEffect(() => {
@@ -578,10 +596,11 @@ export default function CharacterGenerator() {
     }
   }, [batch]);
 
-  // Load ecosystem and registries on mount
+  // Load ecosystem, registries, and history on mount
   useEffect(() => {
     loadEcosystem();
     loadRegistries();
+    setHistory(loadHistory());
   }, []);
 
   async function loadEcosystem() {
@@ -789,6 +808,31 @@ export default function CharacterGenerator() {
     }
     loadEcosystem();
     setCommitAllLoading(false);
+
+    // Save committed batch to history
+    if (ok > 0) {
+      const histEntry = {
+        id: Date.now(),
+        timestamp: new Date().toISOString(),
+        world: worldTarget,
+        registry: matchedRegistry?.title || matchedRegistry?.name || worldTarget,
+        committedCount: ok,
+        totalCount: pending.length,
+        characters: pending.filter((_, i) => i < ok).map(r => ({
+          name: r.profile?.identity?.display_name || r.seed?.name || 'Unknown',
+          role: r.profile?.identity?.role_type || r.seed?.role || '—',
+          career: r.profile?.career?.title || r.seed?.career || '—',
+          age: r.profile?.identity?.age || r.seed?.age || '—',
+          gender: r.profile?.identity?.gender || r.seed?.gender || '—',
+          tension: r.seed?.tension || '—',
+          psychology: r.profile?.psychology?.core_desire || '—',
+          seed: r.seed,
+        })),
+      };
+      saveToHistory(histEntry);
+      setHistory(loadHistory());
+    }
+
     if (ok === pending.length) {
       alert(`✓ All ${ok} characters added to registry!`);
     } else {
@@ -825,6 +869,20 @@ export default function CharacterGenerator() {
         </div>
 
         <div className="cg-header-controls">
+          <button
+            className={`cg-btn cg-btn-history${phase === 'history' ? ' cg-btn-history-active' : ''}`}
+            onClick={() => {
+              if (phase === 'history') {
+                setPhase('seeds');
+              } else {
+                setHistory(loadHistory());
+                setPhase('history');
+              }
+            }}
+            title="View previous generations"
+          >
+            ☰ History {history.length > 0 && <span className="cg-history-badge">{history.length}</span>}
+          </button>
           <select
             className="cg-world-select"
             value={worldTarget}
@@ -1018,6 +1076,99 @@ export default function CharacterGenerator() {
                   />
                 ))}
               </div>
+            </>
+          )}
+
+          {/* History phase */}
+          {phase === 'history' && (
+            <>
+              <div className="cg-phase-header">
+                <div className="cg-panel-title">
+                  Generation History
+                  <span className="cg-seed-count">{history.length} past generation{history.length !== 1 ? 's' : ''}</span>
+                </div>
+                <button
+                  className="cg-btn cg-btn-propose"
+                  onClick={() => setPhase('seeds')}
+                >
+                  ← Back to Generator
+                </button>
+              </div>
+
+              {history.length === 0 && (
+                <div className="cg-empty-state">
+                  <div className="cg-empty-icon">☰</div>
+                  <div>No previous generations yet. Commit characters to start building history.</div>
+                </div>
+              )}
+
+              <div className="cg-history-list">
+                {history.map((entry, idx) => {
+                  const isExpanded = expandedHistoryIdx === idx;
+                  const dt = new Date(entry.timestamp);
+                  const dateStr = dt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+                  const timeStr = dt.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                  return (
+                    <div key={entry.id || idx} className={`cg-history-card${isExpanded ? ' cg-history-card-expanded' : ''}`}>
+                      <div className="cg-history-card-header" onClick={() => setExpandedHistoryIdx(isExpanded ? null : idx)}>
+                        <div className="cg-history-card-left">
+                          <span className="cg-history-icon">{isExpanded ? '▼' : '▶'}</span>
+                          <div className="cg-history-meta">
+                            <span className="cg-history-date">{dateStr} · {timeStr}</span>
+                            <span className="cg-history-world">{WORLD_LABELS[entry.world] || entry.world}</span>
+                          </div>
+                        </div>
+                        <div className="cg-history-card-right">
+                          <span className="cg-history-count">{entry.committedCount} character{entry.committedCount !== 1 ? 's' : ''}</span>
+                          <span className="cg-history-registry">→ {entry.registry}</span>
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <div className="cg-history-card-body">
+                          <div className="cg-history-chars">
+                            {(entry.characters || []).map((ch, ci) => (
+                              <div key={ci} className="cg-history-char">
+                                <div className="cg-history-char-header">
+                                  <span className="cg-history-char-role" style={{ color: ROLE_COLORS[ch.role] || '#546678' }}>
+                                    {ROLE_ICONS[ch.role] || '◆'}{' '}
+                                  </span>
+                                  <span className="cg-history-char-name">{ch.name}</span>
+                                  <span className="cg-history-char-age">{ch.age}{ch.gender ? `, ${ch.gender}` : ''}</span>
+                                </div>
+                                <div className="cg-history-char-details">
+                                  <span className="cg-history-char-career">{ch.career}</span>
+                                  {ch.tension && ch.tension !== '—' && (
+                                    <span className="cg-history-char-tension">⊗ {ch.tension}</span>
+                                  )}
+                                  {ch.psychology && ch.psychology !== '—' && (
+                                    <span className="cg-history-char-psych">Core desire: {ch.psychology}</span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {history.length > 0 && (
+                <div className="cg-history-footer">
+                  <button
+                    className="cg-btn cg-btn-discard"
+                    onClick={() => {
+                      if (window.confirm('Clear all generation history? This cannot be undone.')) {
+                        localStorage.removeItem(HISTORY_KEY);
+                        setHistory([]);
+                      }
+                    }}
+                  >
+                    Clear History
+                  </button>
+                </div>
+              )}
             </>
           )}
         </div>
