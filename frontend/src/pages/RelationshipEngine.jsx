@@ -1168,6 +1168,14 @@ function AddRelationshipModal({ characters, onAdd, onClose }) {
   const valid = form.character_id_a && form.character_id_b
     && form.character_id_a !== form.character_id_b && form.relationship_type;
 
+  // Filter Character B list to same-layer only
+  const charA = characters.find(c => c.id === form.character_id_a);
+  const compatibleB = characters.filter(c => {
+    if (c.id === form.character_id_a) return false;
+    if (!charA) return true; // no A selected yet, show all
+    return layerCompatible(charA, c);
+  });
+
   return (
     <div style={styles.overlay} onClick={onClose}>
       <div style={styles.modal} onClick={e => e.stopPropagation()}>
@@ -1183,11 +1191,11 @@ function AddRelationshipModal({ characters, onAdd, onClose }) {
             {characters.map(c => <option key={c.id} value={c.id}>{charName(c)} ({c.role_type})</option>)}
           </select>
 
-          <label style={styles.label}>Character B</label>
+          <label style={styles.label}>Character B {charA && <span style={{ fontSize: 11, color: T.slate, fontWeight: 400 }}>— showing {charLayer(charA)} layer only</span>}</label>
           <select style={styles.select} value={form.character_id_b}
             onChange={e => setForm(f => ({ ...f, character_id_b: e.target.value }))}>
             <option value="">Select character...</option>
-            {characters.filter(c => c.id !== form.character_id_a).map(c =>
+            {compatibleB.map(c =>
               <option key={c.id} value={c.id}>{charName(c)} ({c.role_type})</option>
             )}
           </select>

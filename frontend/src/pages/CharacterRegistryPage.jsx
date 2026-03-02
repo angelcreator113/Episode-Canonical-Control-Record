@@ -16,7 +16,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './CharacterRegistryPage.css';
-import CharacterVoiceInterview from './CharacterVoiceInterview';
 import CharacterDilemmaEngine from '../components/CharacterDilemmaEngine';
 
 /* ── Auto-scroll active tab into view on mobile ── */
@@ -154,10 +153,6 @@ export default function CharacterRegistryPage() {
   // New character modal
   const [showNewChar, setShowNewChar]     = useState(false);
   const [newCharForm, setNewCharForm]     = useState({ display_name: '', role_type: 'support', icon: '' });
-
-  // Interview
-  const [interviewTarget, setInterviewTarget] = useState(null);
-  const [bookId, setBookId] = useState(null);
 
   // Registry management
   const [showNewRegistry, setShowNewRegistry]     = useState(false);
@@ -1029,9 +1024,6 @@ export default function CharacterRegistryPage() {
             <h1 className="cr-header-title">{c.selected_name || c.display_name}</h1>
           </div>
           <div className="cr-header-right">
-            <button className="cr-header-btn" onClick={() => setInterviewTarget(c)}>
-              {isMobile ? '🎙' : 'Interview'}
-            </button>
             {!isMobile && (
               <button className="cr-header-btn" onClick={() => navigate(`/therapy/${activeRegistry?.id || 'default'}`)}>
                 ◈ Therapy
@@ -1550,20 +1542,6 @@ export default function CharacterRegistryPage() {
         )}
 
         {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-
-        <CharacterVoiceInterview
-          character={interviewTarget}
-          bookId={bookId}
-          open={!!interviewTarget}
-          onClose={() => setInterviewTarget(null)}
-          registryId={activeRegistry?.id}
-          characters={activeRegistry?.Characters || []}
-          onComplete={() => {
-            if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
-            setInterviewTarget(null);
-            showToast('Profile saved from interview');
-          }}
-        />
       </div>
     );
   }
@@ -2174,20 +2152,6 @@ export default function CharacterRegistryPage() {
       })()}
 
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
-
-      <CharacterVoiceInterview
-        character={interviewTarget}
-        bookId={bookId}
-        open={!!interviewTarget}
-        onClose={() => setInterviewTarget(null)}
-        registryId={activeRegistry?.id}
-        characters={activeRegistry?.Characters || []}
-        onComplete={() => {
-          if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
-          setInterviewTarget(null);
-          showToast('Profile saved from interview');
-        }}
-      />
     </div>
   );
 }

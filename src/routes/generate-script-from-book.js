@@ -33,12 +33,66 @@ try {
 
 // ── Models ────────────────────────────────────────────────────────────────
 const db = require('../models');
-const { StorytellerBook, StorytellerChapter, StorytellerLine } = db;
+const { StorytellerBook, StorytellerChapter, StorytellerLine, RegistryCharacter } = db;
 
 // ── Anthropic client ──────────────────────────────────────────────────────
 const anthropic = new Anthropic();
 
 // ── Lala tone helper ──────────────────────────────────────────────────────
+// ── Consciousness extraction (from character writer_notes) ───────────
+function extractConsciousnessBlock(character) {
+  if (!character?.writer_notes) return '';
+  let wn;
+  try { wn = typeof character.writer_notes === 'string' ? JSON.parse(character.writer_notes) : character.writer_notes; } catch { return ''; }
+  if (!wn) return '';
+
+  const parts = [];
+
+  const c = wn.consciousness;
+  if (c) {
+    parts.push('CONSCIOUSNESS (how she exists \u2014 the texture of being her):');
+    if (c.interior_texture) parts.push(`  Interior texture: ${c.interior_texture.what_this_sounds_like || ''}`);
+    if (c.body_consciousness) parts.push(`  Body consciousness: Fear in ${c.body_consciousness.fear_location || '?'}. Tell: ${c.body_consciousness.tell || ''}`);
+    if (c.temporal_orientation) parts.push(`  Temporal: lives in the ${c.temporal_orientation.primary || 'present'}`);
+    if (c.social_perception) parts.push(`  Social: ${c.social_perception.accuracy || '?'} accuracy. Blind spot: ${c.social_perception.blind_spot || ''}`);
+    if (c.self_awareness_calibration) parts.push(`  Self-awareness: ${c.self_awareness_calibration.function || ''} \u2014 ${c.self_awareness_calibration.accuracy || ''}`);
+    if (c.change_mechanism) parts.push(`  Change: ${c.change_mechanism.primary || ''}. Bounces off: ${c.change_mechanism.what_bounces_off || ''}. Moves her: ${c.change_mechanism.what_actually_changes_her || ''}`);
+  }
+
+  const ic = wn.inherited_consciousness;
+  if (ic) {
+    parts.push('INHERITED CONSCIOUSNESS (from JustAWoman \u2014 Lala does not know):');
+    if (ic.inherited_instincts) parts.push(`  Instincts: ${ic.inherited_instincts.what_they_are || ''}`);
+    if (ic.confidence_without_origin) parts.push(`  Confidence: ${ic.confidence_without_origin.quality || ''}. Cracks: ${ic.confidence_without_origin.when_it_cracks || ''}`);
+    if (ic.playbook_manifestations) parts.push(`  Playbook: career=${ic.playbook_manifestations.in_her_career || ''}, content=${ic.playbook_manifestations.in_her_content || ''}`);
+    if (ic.blind_spots) parts.push(`  Blind spot: ${ic.blind_spots.primary || ''}`);
+    if (ic.resonance_triggers) parts.push(`  Resonance: ${ic.resonance_triggers.primary_trigger || ''}`);
+  }
+
+  const dt = wn.dilemma_triggers;
+  if (dt) {
+    if (dt.active_dilemma) parts.push(`  Active dilemma: "${dt.active_dilemma.dilemma}"`);
+  }
+
+  return parts.length ? parts.join('\n') : '';
+}
+
+async function fetchCharacterConsciousness(name) {
+  try {
+    if (!RegistryCharacter) return null;
+    const Op = require('sequelize').Op;
+    const char = await RegistryCharacter.findOne({
+      where: {
+        [Op.or]: [
+          { selected_name: { [Op.iLike]: `%${name}%` } },
+          { display_name: { [Op.iLike]: `%${name}%` } },
+        ],
+        deleted_at: null,
+      },
+    });
+    return char;
+  } catch { return null; }
+}
 function deriveLalaTone(stats) {
   const { confidence = 50, reputation = 50, coins = 400 } = stats || {};
   if (confidence > 80) return 'bold-selective';
@@ -89,6 +143,11 @@ Current Belief: "${context.pnos_belief}"
 APPROVED BOOK LINES TO ADAPT:
 ${lineBlock}
 
+${context.jlawConsciousness ? `JUSTAWOMAN'S CONSCIOUSNESS:
+${context.jlawConsciousness}
+
+USE THIS: Her interior texture shapes how she narrates. Her temporal orientation shapes what she notices. Her change mechanism shapes what moves her.
+` : ''}
 INSTRUCTIONS:
 - Produce one narrator beat per source line.
 - Preserve the emotional truth of each line. Do not invent new facts.
@@ -130,6 +189,11 @@ Dress Code: ${context.dress_code}
 Stakes: ${context.stakes}
 Arc: ${context.episode_arc}
 
+${context.lalaConsciousness ? `LALA'S CONSCIOUSNESS:
+${context.lalaConsciousness}
+
+USE THIS: Let consciousness shape HOW Lala reacts, not just what she says. Her inherited instincts surface as unexplained certainties.
+` : ''}
 INSTRUCTIONS:
 - Generate 3–5 Lala dialogue/reaction beats for this scene.
 - Each beat is 1–2 sentences. In-character, stat-driven.
@@ -259,6 +323,20 @@ router.post('/generate-script-from-book', optionalAuth, async (req, res) => {
 
     const lala_tone = deriveLalaTone(lala_stats);
 
+    // ── Fetch character consciousness data ────────────────────────────────
+    let jlawConsciousness = '';
+    let lalaConsciousness = '';
+    try {
+      const [jlawChar, lalaChar] = await Promise.all([
+        fetchCharacterConsciousness('JustAWoman'),
+        fetchCharacterConsciousness('Lala'),
+      ]);
+      if (jlawChar) jlawConsciousness = extractConsciousnessBlock(jlawChar);
+      if (lalaChar) lalaConsciousness = extractConsciousnessBlock(lalaChar);
+    } catch (e) {
+      console.error('Failed to fetch character consciousness:', e.message);
+    }
+
     const context = {
       book_title:     book.title,
       chapter_title:  chapter.title,
@@ -271,6 +349,8 @@ router.post('/generate-script-from-book', optionalAuth, async (req, res) => {
       pnos_belief,
       lala_stats,
       lala_tone,
+      jlawConsciousness,
+      lalaConsciousness,
     };
 
     // ── Pipeline 1: JLAW beats (from book lines) ─────────────────────────

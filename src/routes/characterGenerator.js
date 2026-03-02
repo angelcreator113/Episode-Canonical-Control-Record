@@ -265,6 +265,40 @@ router.post('/generate-batch', optionalAuth, async (req, res) => {
     .map((c) => `${c.name} (${c.role_type}) — ${c.tension || 'tension unknown'}`)
     .join('\n') || 'none yet';
 
+  // Fetch protagonist consciousness for tonal consistency
+  let protagonistConsciousness = '';
+  try {
+    const genDb = req.app.locals.db || require('../models');
+    const { Op } = require('sequelize');
+    const protag = await genDb.RegistryCharacter.findOne({
+      where: {
+        [Op.or]: [
+          { role_type: 'protagonist' },
+          { selected_name: { [Op.iLike]: '%justaw%' } },
+          { display_name: { [Op.iLike]: '%justaw%' } },
+        ],
+        deleted_at: null,
+      },
+      attributes: ['selected_name', 'display_name', 'writer_notes'],
+    });
+    if (protag?.writer_notes) {
+      let wn = typeof protag.writer_notes === 'string' ? JSON.parse(protag.writer_notes) : protag.writer_notes;
+      const c = wn?.consciousness;
+      if (c) {
+        const lines = [];
+        const pName = protag.selected_name || protag.display_name;
+        lines.push(`PROTAGONIST CONSCIOUSNESS (${pName} — use for tonal calibration):`);
+        if (c.interior_texture) lines.push(`  Interior: ${c.interior_texture.what_this_sounds_like || ''}`);
+        if (c.body_consciousness) lines.push(`  Body: Fear in ${c.body_consciousness.fear_location || '?'}. Tell: ${c.body_consciousness.tell || ''}`);
+        if (c.temporal_orientation) lines.push(`  Temporal: ${c.temporal_orientation.primary || 'present'}`);
+        if (c.change_mechanism) lines.push(`  Change: ${c.change_mechanism.primary || ''}. Moves her: ${c.change_mechanism.what_actually_changes_her || ''}`);
+        protagonistConsciousness = lines.join('\n');
+      }
+    }
+  } catch (e) {
+    console.error('[generate-batch] Failed to fetch protagonist consciousness:', e.message);
+  }
+
   const generateOne = async (seed) => {
     const worldConfig = WORLD_CONFIGS[seed.world] || WORLD_CONFIGS.book1;
     const [ageMin, ageMax] = worldConfig.age_range;
@@ -285,6 +319,7 @@ ${existingStr}
 
 WORLD TONE: ${worldConfig.tone}
 
+${protagonistConsciousness ? `${protagonistConsciousness}\nNew characters should feel like they inhabit the same emotional register — their consciousness should be at this level of specificity.\n` : ''}
 REGISTER: Adult fiction. Explicit — real wounds, real sexuality, real conflict. No softening.
 The profile should read like a file on a real person, not a character description.
 

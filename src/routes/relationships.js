@@ -20,6 +20,34 @@ function getDb() {
   return _db;
 }
 
+// ── Layer mapping: role_type → narrative layer ────────────────────────
+const LAYER_MAP = {
+  protagonist: 'real-world',
+  pressure:    'real-world',
+  support:     'real-world',
+  mirror:      'lalaverse',
+  shadow:      'lalaverse',
+  special:     'series-2',
+};
+
+function getLayer(roleType) {
+  return LAYER_MAP[roleType] || 'unknown';
+}
+
+/**
+ * Cross-layer rule:
+ *  - Real-world characters can only relate to other real-world characters
+ *  - LalaVerse characters can only relate to other lalaverse characters
+ *  - Series-2 can relate to lalaverse (they're narrative mirrors)
+ */
+function isLayerCompatible(layerA, layerB) {
+  if (layerA === layerB) return true;
+  // series-2 (special) may relate to lalaverse (they share the fiction layer)
+  if ((layerA === 'series-2' && layerB === 'lalaverse') ||
+      (layerA === 'lalaverse' && layerB === 'series-2')) return true;
+  return false;
+}
+
 // ── Column SELECT helpers ──────────────────────────────────────────────
 const REL_SELECT = `
   cr.id, cr.character_id_a, cr.character_id_b,
@@ -214,6 +242,26 @@ router.post('/', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'A character cannot have a relationship with themselves' });
     }
 
+    // ── Cross-layer validation ───────────────────────────────────────
+    const [charA] = await db.sequelize.query(
+      'SELECT id, role_type, display_name FROM registry_characters WHERE id = :id',
+      { replacements: { id: character_id_a }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    const [charB] = await db.sequelize.query(
+      'SELECT id, role_type, display_name FROM registry_characters WHERE id = :id',
+      { replacements: { id: character_id_b }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    if (!charA || !charB) {
+      return res.status(404).json({ error: 'One or both characters not found' });
+    }
+    const layerA = getLayer(charA.role_type);
+    const layerB = getLayer(charB.role_type);
+    if (!isLayerCompatible(layerA, layerB)) {
+      return res.status(400).json({
+        error: `Cross-layer relationships not allowed: ${charA.display_name} (${layerA}) cannot have a relationship with ${charB.display_name} (${layerB}). Real-world characters relate only to real-world; LalaVerse characters relate only to LalaVerse.`,
+      });
+    }
+
     const id  = uuidv4();
     const now = new Date();
 
@@ -326,6 +374,8 @@ router.post('/generate', optionalAuth, async (req, res) => {
         role: 'user',
         content: `You are a literary relationship analyst for a creative writing universe called the LalaVerse.
 
+IMPORTANT RULE: Characters from the real world (protagonist, pressure, support role types) can ONLY have relationships with other real-world characters. LalaVerse characters (mirror, shadow role types) can ONLY have relationships with other LalaVerse characters or series-2 (special) characters. NEVER suggest cross-layer relationships between real-world and LalaVerse characters.
+
 Characters in this registry:
 ${charContext}
 ${existingContext}${focusNote}
@@ -365,6 +415,11 @@ No markdown fences, no explanation.`,
       const bExists = characters.find(ch => ch.id === c.character_b_id);
       if (!aExists || !bExists) continue;
       if (c.character_a_id === c.character_b_id) continue;
+
+      // Cross-layer filter: skip incompatible layer pairs
+      const layA = getLayer(aExists.role_type);
+      const layB = getLayer(bExists.role_type);
+      if (!isLayerCompatible(layA, layB)) continue;
 
       const pairKey = `${c.character_a_id}|${c.character_b_id}`;
       const pairKeyRev = `${c.character_b_id}|${c.character_a_id}`;
@@ -437,6 +492,27 @@ router.post('/confirm/:relationshipId', optionalAuth, async (req, res) => {
   try {
     const db = getDb();
     const { relationshipId } = req.params;
+
+    // Fetch the candidate with character role_types for layer check
+    const [candidate] = await db.sequelize.query(
+      `SELECT cr.id, cr.confirmed, ca.role_type AS role_a, cb.role_type AS role_b,
+              ca.display_name AS name_a, cb.display_name AS name_b
+       FROM character_relationships cr
+       LEFT JOIN registry_characters ca ON ca.id = cr.character_id_a
+       LEFT JOIN registry_characters cb ON cb.id = cr.character_id_b
+       WHERE cr.id = :id`,
+      { replacements: { id: relationshipId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+    if (!candidate) return res.status(404).json({ error: 'Relationship not found' });
+
+    // Cross-layer validation on confirm
+    const layA = getLayer(candidate.role_a);
+    const layB = getLayer(candidate.role_b);
+    if (!isLayerCompatible(layA, layB)) {
+      return res.status(400).json({
+        error: `Cannot confirm: ${candidate.name_a} (${layA}) and ${candidate.name_b} (${layB}) are in incompatible layers.`,
+      });
+    }
 
     await db.sequelize.query(
       `UPDATE character_relationships

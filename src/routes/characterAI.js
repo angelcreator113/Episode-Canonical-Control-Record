@@ -308,6 +308,92 @@ function formatRecentStory(allLines) {
   return parts.join('\n');
 }
 
+function formatConsciousness(character) {
+  let writerNotes = null;
+  try {
+    const raw = character.writer_notes;
+    writerNotes = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch { return ''; }
+  if (!writerNotes) return '';
+
+  const parts = [];
+
+  // ── Standard consciousness (all characters) ──
+  const c = writerNotes.consciousness;
+  if (c) {
+    parts.push('═══ CONSCIOUSNESS (how she exists — the texture of being her) ═══');
+    if (c.interior_texture) {
+      parts.push(`Interior texture: ${c.interior_texture.what_this_sounds_like || ''}`);
+      if (c.interior_texture.story_engine_note) parts.push(`  [Story Engine] ${c.interior_texture.story_engine_note}`);
+    }
+    if (c.body_consciousness) {
+      parts.push(`Body consciousness: Fear lives in ${c.body_consciousness.fear_location || 'unknown'}. The tell: ${c.body_consciousness.tell || ''}`);
+      if (c.body_consciousness.story_engine_note) parts.push(`  [Story Engine] ${c.body_consciousness.story_engine_note}`);
+    }
+    if (c.temporal_orientation) {
+      parts.push(`Temporal: Lives primarily in the ${c.temporal_orientation.primary || 'present'}. ${c.temporal_orientation.pull || ''}`);
+      if (c.temporal_orientation.story_engine_note) parts.push(`  [Story Engine] ${c.temporal_orientation.story_engine_note}`);
+    }
+    if (c.social_perception) {
+      parts.push(`Social perception: ${c.social_perception.accuracy || ''} accuracy. Blind spot: ${c.social_perception.blind_spot || ''}`);
+      if (c.social_perception.story_engine_note) parts.push(`  [Story Engine] ${c.social_perception.story_engine_note}`);
+    }
+    if (c.self_awareness_calibration) {
+      parts.push(`Self-awareness: ${c.self_awareness_calibration.function || ''} — ${c.self_awareness_calibration.accuracy || ''}. Cannot see: ${c.self_awareness_calibration.what_she_cannot_see || ''}`);
+      if (c.self_awareness_calibration.story_engine_note) parts.push(`  [Story Engine] ${c.self_awareness_calibration.story_engine_note}`);
+    }
+    if (c.change_mechanism) {
+      parts.push(`Change mechanism: ${c.change_mechanism.primary || ''}. What bounces off: ${c.change_mechanism.what_bounces_off || ''}. What actually changes her: ${c.change_mechanism.what_actually_changes_her || ''}`);
+      if (c.change_mechanism.story_engine_note) parts.push(`  [Story Engine] ${c.change_mechanism.story_engine_note}`);
+    }
+  }
+
+  // ── Inherited consciousness (Lala only) ──
+  const ic = writerNotes.inherited_consciousness;
+  if (ic) {
+    parts.push('');
+    parts.push('═══ INHERITED CONSCIOUSNESS (transferred from JustAWoman — she does not know) ═══');
+    if (ic.inherited_instincts) {
+      parts.push(`Inherited instincts: ${ic.inherited_instincts.what_they_are || ''}`);
+      if (ic.inherited_instincts.story_engine_note) parts.push(`  [Story Engine] ${ic.inherited_instincts.story_engine_note}`);
+    }
+    if (ic.confidence_without_origin) {
+      parts.push(`Confidence without origin: ${ic.confidence_without_origin.quality || ''}. Cracks when: ${ic.confidence_without_origin.when_it_cracks || ''}`);
+      if (ic.confidence_without_origin.story_engine_note) parts.push(`  [Story Engine] ${ic.confidence_without_origin.story_engine_note}`);
+    }
+    if (ic.playbook_manifestations) {
+      parts.push(`Playbook in career: ${ic.playbook_manifestations.in_her_career || ''}. In content: ${ic.playbook_manifestations.in_her_content || ''}`);
+      if (ic.playbook_manifestations.story_engine_note) parts.push(`  [Story Engine] ${ic.playbook_manifestations.story_engine_note}`);
+    }
+    if (ic.blind_spots) {
+      parts.push(`Primary blind spot: ${ic.blind_spots.primary || ''}`);
+      if (ic.blind_spots.story_engine_note) parts.push(`  [Story Engine] ${ic.blind_spots.story_engine_note}`);
+    }
+    if (ic.resonance_triggers) {
+      parts.push(`Resonance trigger: ${ic.resonance_triggers.primary_trigger || ''}. What she calls it: ${ic.resonance_triggers.what_lala_calls_it || ''}`);
+      if (ic.resonance_triggers.story_engine_note) parts.push(`  [Story Engine] ${ic.resonance_triggers.story_engine_note}`);
+    }
+  }
+
+  // ── Dilemma triggers ──
+  const dt = writerNotes.dilemma_triggers;
+  if (dt) {
+    parts.push('');
+    parts.push('═══ DILEMMA TRIGGERS ═══');
+    if (dt.active_dilemma) {
+      parts.push(`Active: "${dt.active_dilemma.dilemma}" — what keeps it active: ${dt.active_dilemma.what_keeps_it_active || ''}`);
+    }
+    if (dt.latent_1) {
+      parts.push(`Latent 1: "${dt.latent_1.dilemma}" — activates in ${dt.latent_1.activation_domain || 'unknown'} domain. Signal: ${dt.latent_1.activation_signal || ''}`);
+    }
+    if (dt.latent_2) {
+      parts.push(`Latent 2: "${dt.latent_2.dilemma}" — activates in ${dt.latent_2.activation_domain || 'unknown'} domain. Signal: ${dt.latent_2.activation_signal || ''}`);
+    }
+  }
+
+  return parts.length ? parts.join('\n') : '';
+}
+
 
 /* ═════════════════════════════════════════════
    ENDPOINT 1: WRITE A SCENE
@@ -326,6 +412,8 @@ router.post('/write-scene', optionalAuth, async (req, res) => {
     const systemPrompt = `${universeContext}
 
 ${formatCharacterBlock(character)}
+
+${formatConsciousness(character)}
 
 ${formatMemories(memories)}
 
@@ -406,6 +494,8 @@ router.post('/character-monologue', optionalAuth, async (req, res) => {
 
 ${formatCharacterBlock(character)}
 
+${formatConsciousness(character)}
+
 ${formatMemories(memories)}
 
 ${formatRelationships(relationships, charName)}
@@ -470,6 +560,8 @@ written and established. Fill in what the story has SHOWN, not what you'd invent
 
 CURRENT PROFILE:
 ${formatCharacterBlock(character)}
+
+${formatConsciousness(character)}
 
 ${formatMemories(memories)}
 
@@ -566,6 +658,8 @@ router.post('/suggest-gaps', optionalAuth, async (req, res) => {
 CURRENT CHARACTER PROFILE:
 ${formatCharacterBlock(character)}
 
+${formatConsciousness(character)}
+
 ${formatMemories(memories)}
 ${formatRelationships(relationships, charName)}
 ${formatTherapy(therapy)}
@@ -638,6 +732,8 @@ router.post('/what-happens-next', optionalAuth, async (req, res) => {
     const systemPrompt = `${universeContext}
 
 ${formatCharacterBlock(character)}
+
+${formatConsciousness(character)}
 
 ${formatMemories(memories)}
 
