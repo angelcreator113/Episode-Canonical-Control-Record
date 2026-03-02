@@ -5818,6 +5818,32 @@ router.get('/relationship-map', optionalAuth, async (req, res) => {
       }
     }
 
+    // All LalaVerse characters are created by JustAWoman — auto-add creation edges
+    const jawKey = resolveKey('justawoman') || resolveKey('just-a-woman');
+    if (jawKey && nodeMap.has(jawKey)) {
+      for (const node of nodes) {
+        if (node.group === 'created' && node.id !== jawKey) {
+          const dk = `${jawKey}→${node.id}`;
+          const rdk = `${node.id}→${jawKey}`;
+          if (!edgeSet.has(dk) && !edgeSet.has(rdk)) {
+            edgeSet.add(dk);
+            edges.push({
+              from: jawKey,
+              to: node.id,
+              direction: 'one_way',
+              type: 'creation',
+              from_knows: 'Created this character for the LalaVerse',
+              to_knows: 'Born from JustAWoman\'s imagination',
+              from_feels: 'Creative ownership and emotional investment',
+              to_feels: null,
+              strength: 4,
+              note: 'LalaVerse creation — authored by JustAWoman',
+            });
+          }
+        }
+      }
+    }
+
     return res.json({
       nodes,
       edges,
