@@ -82,6 +82,59 @@
   text-transform: uppercase;
 }
 
+/* ── Step progress indicator ───────────────────────────────────────────────── */
+.cg-step-indicator {
+  display:       flex;
+  align-items:   center;
+  gap:           6px;
+  font-size:     12px;
+  letter-spacing: 0.02em;
+  color:         var(--cg-dim);
+}
+.cg-step {
+  display:       flex;
+  align-items:   center;
+  gap:           5px;
+  padding:       4px 10px;
+  border-radius: 20px;
+  background:    var(--cg-surface2);
+  transition:    all 0.3s;
+  white-space:   nowrap;
+}
+.cg-step-num {
+  display:        inline-flex;
+  align-items:    center;
+  justify-content: center;
+  width:          18px;
+  height:         18px;
+  border-radius:  50%;
+  background:     var(--cg-border2);
+  color:          var(--cg-surface);
+  font-size:      10px;
+  font-weight:    700;
+  transition:     all 0.3s;
+}
+.cg-step-active {
+  background:     var(--cg-gold-soft);
+  color:          var(--cg-gold);
+  font-weight:    600;
+}
+.cg-step-active .cg-step-num {
+  background:     var(--cg-gold);
+  color:          #FFFFFF;
+}
+.cg-step-done {
+  color:          var(--cg-green);
+}
+.cg-step-done .cg-step-num {
+  background:     var(--cg-green);
+  color:          #FFFFFF;
+}
+.cg-step-arrow {
+  color:          var(--cg-dim);
+  font-size:      11px;
+}
+
 .cg-header-controls {
   margin-left: auto;
   display:     flex;
@@ -145,9 +198,26 @@
 }
 .cg-btn-approve-all {
   background: var(--cg-gold);
+  font-weight: 600;
+  padding: 8px 16px;
 }
-.cg-btn-approve-all:hover {
+.cg-btn-approve-all:hover:not(:disabled) {
   filter: brightness(1.08);
+  box-shadow: 0 2px 12px rgba(176, 146, 46, 0.35);
+}
+.cg-btn-approve-all:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+/* ── Flash animation for seed grid after Approve All ───────────────────── */
+.cg-seeds-grid.cg-flash .cg-seed-card {
+  animation: cg-flash-pulse 0.6s ease-out;
+}
+@keyframes cg-flash-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(176, 146, 46, 0.4); }
+  50%  { box-shadow: 0 0 0 6px rgba(176, 146, 46, 0.2); }
+  100% { box-shadow: 0 0 0 0 rgba(176, 146, 46, 0); }
 }
 
 .cg-btn-edit {

@@ -550,6 +550,7 @@ export default function CharacterGenerator() {
 
   // Phase: 'seeds' | 'staging'
   const [phase, setPhase]                 = useState('seeds');
+  const [approvalFlash, setApprovalFlash] = useState(false);
 
   // Load ecosystem and registries on mount
   useEffect(() => {
@@ -621,11 +622,26 @@ export default function CharacterGenerator() {
   }
   function handleApproveAll() {
     setSeeds((prev) => prev.map((s) => ({ ...s, _status: 'approved' })));
+    // Flash animation on seed cards
+    setApprovalFlash(true);
+    setTimeout(() => setApprovalFlash(false), 800);
+    // Auto-scroll to the generate banner
+    setTimeout(() => {
+      document.querySelector('.cg-approval-banner')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 150);
   }
 
-  // ── Generate batch ────────────────────────────────────────────────────────
-  async function handleGenerateBatch() {
-    const approvedSeeds = seeds.filter((s) => s._status === 'approved');
+  // One-click: Approve All → immediately Generate
+  function handleApproveAllAndGenerate() {
+    const allApproved = seeds.map((s) => ({ ...s, _status: 'approved' }));
+    setSeeds(allApproved);
+    // Pass approved seeds directly — don’t wait for React state
+    handleGenerateBatch(allApproved.filter((s) => s._status === 'approved'));
+  }
+
+  // ── Generate batch ──────────────────────────────────────────────────────────────────
+  async function handleGenerateBatch(overrideSeeds) {
+    const approvedSeeds = overrideSeeds || seeds.filter((s) => s._status === 'approved');
     if (!approvedSeeds.length) return alert('Approve at least one seed first.');
 
     setBatchLoading(true);
@@ -759,7 +775,19 @@ export default function CharacterGenerator() {
           ← Registry
         </button>
         <div className="cg-header-title">Character Generator</div>
-        <div className="cg-header-sub">Batch · Staged · Committed</div>
+        <div className="cg-step-indicator">
+          <span className={`cg-step${phase === 'seeds' && seeds.length === 0 ? ' cg-step-active' : (seeds.length > 0 || phase === 'staging') ? ' cg-step-done' : ''}`}>
+            <span className="cg-step-num">1</span> Propose
+          </span>
+          <span className="cg-step-arrow">→</span>
+          <span className={`cg-step${phase === 'seeds' && seeds.length > 0 ? ' cg-step-active' : phase === 'staging' ? ' cg-step-done' : ''}`}>
+            <span className="cg-step-num">2</span> Approve & Generate
+          </span>
+          <span className="cg-step-arrow">→</span>
+          <span className={`cg-step${phase === 'staging' && batch.some(r => !r._committed) ? ' cg-step-active' : batch.every(r => r._committed) && batch.length > 0 ? ' cg-step-done' : ''}`}>
+            <span className="cg-step-num">3</span> Commit to Registry
+          </span>
+        </div>
 
         <div className="cg-header-controls">
           <select
@@ -807,16 +835,20 @@ export default function CharacterGenerator() {
                 </div>
                 {seeds.length > 0 && (
                   <div className="cg-phase-actions">
-                    <button className="cg-btn cg-btn-approve-all" onClick={handleApproveAll}>
-                      Approve All
-                    </button>
-                    <button
-                      className="cg-btn cg-btn-generate"
-                      onClick={handleGenerateBatch}
-                      disabled={approvedCount === 0 || batchLoading}
+                    <button className="cg-btn cg-btn-approve-all" onClick={handleApproveAllAndGenerate}
+                      disabled={batchLoading}
                     >
-                      {batchLoading ? 'Generating…' : `Generate ${approvedCount}`}
+                      {batchLoading ? 'Generating…' : 'Approve All & Generate'}
                     </button>
+                    {approvedCount > 0 && approvedCount < seeds.length && (
+                      <button
+                        className="cg-btn cg-btn-generate"
+                        onClick={handleGenerateBatch}
+                        disabled={approvedCount === 0 || batchLoading}
+                      >
+                        {batchLoading ? 'Generating…' : `Generate ${approvedCount}`}
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -848,7 +880,7 @@ export default function CharacterGenerator() {
                 </div>
               )}
 
-              <div className="cg-seeds-grid">
+              <div className={`cg-seeds-grid${approvalFlash ? ' cg-flash' : ''}`}>
                 {seeds.map((seed, i) => (
                   <SeedCard
                     key={i}
