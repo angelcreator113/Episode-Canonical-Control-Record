@@ -5665,18 +5665,179 @@ const BOOK1_EDGES = [
   },
 ];
 
-// ─── GET /relationship-map — returns canonical seed data ─────────────────────
+// ─── GET /relationship-map — dynamically built from registry_characters ──────
 router.get('/relationship-map', optionalAuth, async (req, res) => {
-  return res.json({
-    nodes: BOOK1_NODES,
-    edges: BOOK1_EDGES,
-    meta: {
-      book: 'Book 1 — Before Lala',
-      total_nodes: BOOK1_NODES.length,
-      total_edges: BOOK1_EDGES.length,
-      franchise_hinge: 'justawoman → lala',
-    },
-  });
+  const db = req.app.locals.db || require('../models');
+
+  try {
+    // Pull all live characters with their registry info
+    const allChars = await db.RegistryCharacter.findAll({
+      where: { deleted_at: null },
+      include: [{
+        model: db.CharacterRegistry,
+        as: 'registry',
+        attributes: ['id', 'title', 'book_tag'],
+        required: true,
+      }],
+      order: [['display_name', 'ASC']],
+    });
+
+    if (!allChars || allChars.length === 0) {
+      // Fallback to seed data if DB is empty
+      return res.json({
+        nodes: BOOK1_NODES,
+        edges: BOOK1_EDGES,
+        meta: { source: 'seed', book: 'Book 1 — Before Lala' },
+      });
+    }
+
+    // --- Build nodes (deduplicate by character_key) ---
+    const nodeMap = new Map();   // character_key → node object
+
+    // Seed data group map for Book 1 characters we know about
+    const SEED_GROUPS = {};
+    BOOK1_NODES.forEach(n => { SEED_GROUPS[n.id] = n.group; });
+
+    // Build alias map: seed_id ↔ db_key (e.g. "justawoman" ↔ "just-a-woman")
+    // Also maps display_name (lowered) → character_key for relationship target resolution
+    const aliasMap = new Map(); // any alias → canonical character_key
+
+    for (const ch of allChars) {
+      const key = ch.character_key;
+      if (nodeMap.has(key)) continue; // skip duplicate (same char in multiple registries)
+
+      // Determine group: use seed data if available, else infer from book_tag
+      let group = SEED_GROUPS[key] || 'real_world';  
+      if (!SEED_GROUPS[key]) {
+        const tag = ch.registry?.book_tag || '';
+        if (tag === 'lalaverse') group = 'created';
+        // Also check seed by display_name match
+        const seedNode = BOOK1_NODES.find(n => 
+          n.label.toLowerCase() === (ch.display_name || '').toLowerCase()
+        );
+        if (seedNode) group = seedNode.group;
+      }
+
+      const displayName = ch.display_name || ch.selected_name || key;
+      
+      nodeMap.set(key, {
+        id: key,
+        label: displayName,
+        role_type: ch.role_type || 'support',
+        world_exists: true,
+        group,
+        bio: ch.description || ch.personality || '',
+        registry: ch.registry?.book_tag || '',
+      });
+
+      // Register aliases: key itself, lowered display name, and seed-style id
+      aliasMap.set(key, key);
+      aliasMap.set(displayName.toLowerCase(), key);
+      // Find matching seed node by display_name to map seed_id → db_key
+      const seedMatch = BOOK1_NODES.find(n => 
+        n.label.toLowerCase() === displayName.toLowerCase()
+      );
+      if (seedMatch && seedMatch.id !== key) {
+        aliasMap.set(seedMatch.id, key);
+      }
+    }
+
+    // Helper: resolve a relationship target to a canonical node key
+    function resolveKey(target) {
+      if (!target) return null;
+      if (nodeMap.has(target)) return target;
+      const alias = aliasMap.get(target) || aliasMap.get(target.toLowerCase());
+      return alias && nodeMap.has(alias) ? alias : null;
+    }
+
+    const nodes = Array.from(nodeMap.values());
+
+    // --- Build edges from relationships_map ---
+    const edgeSet = new Set(); // "from→to" dedup key
+    const edges = [];
+
+    // Collect seed edges mapped to canonical keys for rich text preservation
+    const seedEdgeMap = new Map();
+    BOOK1_EDGES.forEach(e => {
+      const fromResolved = resolveKey(e.from);
+      const toResolved = resolveKey(e.to);
+      if (fromResolved && toResolved) {
+        seedEdgeMap.set(`${fromResolved}→${toResolved}`, {
+          ...e,
+          from: fromResolved,
+          to: toResolved,
+        });
+      }
+    });
+
+    for (const ch of allChars) {
+      const fromKey = ch.character_key;
+      if (!nodeMap.has(fromKey)) continue;
+      const rels = ch.relationships_map;
+      if (!Array.isArray(rels) || rels.length === 0) continue;
+
+      for (const rel of rels) {
+        const toKey = resolveKey(rel.target);
+        if (!toKey) continue; // skip if target not in our node set
+
+        const dedupKey = `${fromKey}→${toKey}`;
+        const reverseDedupKey = `${toKey}→${fromKey}`;
+
+        // Skip if we already processed this pair (two-way relationships get added once)
+        if (edgeSet.has(dedupKey) || edgeSet.has(reverseDedupKey)) continue;
+        edgeSet.add(dedupKey);
+
+        // Prefer seed edge data if it exists (has richer text)
+        const seedEdge = seedEdgeMap.get(dedupKey) || seedEdgeMap.get(reverseDedupKey);
+
+        if (seedEdge) {
+          edges.push({ ...seedEdge });
+        } else {
+          edges.push({
+            from: fromKey,
+            to: toKey,
+            direction: rel.direction || 'two_way',
+            type: rel.type || 'support',
+            from_knows: rel.knows || null,
+            to_knows: null,
+            from_feels: rel.feels || null,
+            to_feels: null,
+            strength: rel.strength || 3,
+            note: rel.note || null,
+          });
+        }
+      }
+    }
+
+    // Also include seed edges that weren't covered by DB relationships_map
+    for (const [dk, seedEdge] of seedEdgeMap.entries()) {
+      const rdk = `${seedEdge.to}→${seedEdge.from}`;
+      if (!edgeSet.has(dk) && !edgeSet.has(rdk)) {
+        edgeSet.add(dk);
+        edges.push({ ...seedEdge });
+      }
+    }
+
+    return res.json({
+      nodes,
+      edges,
+      meta: {
+        source: 'dynamic',
+        total_nodes: nodes.length,
+        total_edges: edges.length,
+        registries: [...new Set(allChars.map(c => c.registry?.book_tag).filter(Boolean))],
+        franchise_hinge: 'justawoman → lala',
+      },
+    });
+
+  } catch (err) {
+    console.error('[relationship-map] Dynamic build failed, using seed:', err?.message);
+    return res.json({
+      nodes: BOOK1_NODES,
+      edges: BOOK1_EDGES,
+      meta: { source: 'seed_fallback', error: err?.message },
+    });
+  }
 });
 
 // ─── POST /generate-relationship-web — Claude enriches from manuscript ────────
