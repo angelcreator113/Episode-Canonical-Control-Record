@@ -926,6 +926,15 @@ try {
   console.error('✗ Failed to load Wardrobe Brand routes:', e.message);
 }
 
+// Onboarding wizard routes
+try {
+  const onboardingRoutes = require('./routes/onboarding');
+  app.use('/api/v1/onboarding', onboardingRoutes);
+  console.log('✓ Onboarding routes loaded at /api/v1/onboarding');
+} catch (e) {
+  console.error('✗ Failed to load Onboarding routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
