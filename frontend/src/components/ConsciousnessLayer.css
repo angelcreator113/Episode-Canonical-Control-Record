@@ -491,6 +491,28 @@
   font-weight: 600;
   color: var(--cl-ink);
   margin: 0;
+  flex: 1;
+}
+
+.cl-triggers-actions {
+  flex-shrink: 0;
+}
+
+.cl-triggers-empty {
+  text-align: center;
+  padding: 24px 16px;
+  color: var(--cl-ink-faint);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--cl-surface2);
+  border-radius: 6px;
+  border: 1px dashed var(--cl-border);
+}
+
+.cl-triggers-empty p {
+  margin: 0;
+  max-width: 480px;
+  margin: 0 auto;
 }
 
 .cl-triggers-grid {

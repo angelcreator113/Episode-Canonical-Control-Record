@@ -70,6 +70,7 @@ export default function ConsciousnessLayer({ character, psychology, dilemmas }) 
   const [genLala, setGenLala]       = useState(false);
   const [error, setError]           = useState(null);
   const [saved, setSaved]           = useState(false);
+  const [genTriggers, setGenTriggers] = useState(false);
 
   /* ── Interview state ── */
   const [interviewMode, setInterviewMode]   = useState(false);
@@ -263,6 +264,63 @@ export default function ConsciousnessLayer({ character, psychology, dilemmas }) 
     }
   };
 
+  /* ── Auto-dismiss saved notification ── */
+  useEffect(() => {
+    if (saved) {
+      const t = setTimeout(() => setSaved(false), 3000);
+      return () => clearTimeout(t);
+    }
+  }, [saved]);
+
+  /* ── Generate dilemma triggers ── */
+  const handleGenerateTriggers = async () => {
+    if (!data?.consciousness) return;
+    setGenTriggers(true);
+    setError(null);
+    try {
+      const res = await fetch(`${API}/dilemma-triggers`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character: {
+            id: character.id,
+            name: character.selected_name || character.display_name,
+            selected_name: character.selected_name,
+            display_name: character.display_name,
+            role_type: character.role_type,
+            psychology: psychology || {},
+          },
+          dilemmas: dilemmas || {
+            active: psychology?.core_wound || character.belief_pressured || 'unnamed active dilemma',
+            latent_1: psychology?.fear_line || character.core_fear || 'unnamed latent dilemma 1',
+            latent_2: psychology?.desire_line || character.core_desire || 'unnamed latent dilemma 2',
+          },
+          consciousness: data.consciousness,
+        }),
+      });
+      if (!res.ok) throw new Error('Trigger generation failed');
+      setSaved(true);
+      await loadData();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setGenTriggers(false);
+    }
+  };
+
+  /* ── Confirm regenerate ── */
+  const confirmRegenerate = () => {
+    if (!hasConsciousness || window.confirm('Regenerate consciousness profile? This will overwrite the existing one.')) {
+      handleGenerate();
+    }
+  };
+
+  const confirmRegenerateLala = () => {
+    if (!data?.inherited_consciousness || window.confirm('Regenerate inherited consciousness? This will overwrite the existing one.')) {
+      handleGenerateLala();
+    }
+  };
+
   /* Scroll to bottom of chat */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -381,7 +439,7 @@ export default function ConsciousnessLayer({ character, psychology, dilemmas }) 
             </>
           ) : (
             <>
-              <button className="cl-btn cl-btn-outline" onClick={handleGenerate} disabled={generating}>
+              <button className="cl-btn cl-btn-outline" onClick={confirmRegenerate} disabled={generating}>
                 {generating ? '◈ Regenerating…' : '↻ Regenerate'}
               </button>
               <button className="cl-btn cl-btn-outline" onClick={startInterview} disabled={generating}>
@@ -459,7 +517,7 @@ export default function ConsciousnessLayer({ character, psychology, dilemmas }) 
               </button>
             )}
             {inherited && (
-              <button className="cl-btn cl-btn-outline cl-btn-violet-outline" onClick={handleGenerateLala} disabled={genLala}>
+              <button className="cl-btn cl-btn-outline cl-btn-violet-outline" onClick={confirmRegenerateLala} disabled={genLala}>
                 {genLala ? '⟡ Regenerating…' : '↻ Regenerate'}
               </button>
             )}
@@ -501,12 +559,24 @@ export default function ConsciousnessLayer({ character, psychology, dilemmas }) 
         </div>
       )}
 
-      {/* ── Dilemma Triggers (if exist) ── */}
-      {data?.dilemma_triggers && (
+      {/* ── Dilemma Triggers ── */}
+      {hasConsciousness && (
         <div className="cl-triggers-section">
           <div className="cl-triggers-header">
             <span className="cl-triggers-icon">⚡</span>
             <h3 className="cl-triggers-title">Dilemma Triggers</h3>
+            <div className="cl-triggers-actions">
+              {!data?.dilemma_triggers && (
+                <button className="cl-btn cl-btn-gold" onClick={handleGenerateTriggers} disabled={genTriggers}>
+                  {genTriggers ? '⚡ Generating…' : '⚡ Generate Triggers'}
+                </button>
+              )}
+              {data?.dilemma_triggers && (
+                <button className="cl-btn cl-btn-outline" onClick={handleGenerateTriggers} disabled={genTriggers}>
+                  {genTriggers ? '⚡ Regenerating…' : '↻ Regenerate'}
+                </button>
+              )}
+            </div>
           </div>
           <div className="cl-triggers-grid">
             {data.dilemma_triggers.active_dilemma && (
@@ -534,6 +604,12 @@ export default function ConsciousnessLayer({ character, psychology, dilemmas }) 
               </div>
             )}
           </div>
+
+          {!data?.dilemma_triggers && (
+            <div className="cl-triggers-empty">
+              <p>No dilemma triggers yet. Generate them after consciousness is built to tell the Story Engine exactly when to deploy each dilemma.</p>
+            </div>
+          )}
         </div>
       )}
     </div>
