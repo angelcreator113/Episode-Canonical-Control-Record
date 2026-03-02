@@ -560,7 +560,7 @@ export default function CharacterGenerator() {
   async function loadEcosystem() {
     setEcoLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/characters/ecosystem`);
+      const res = await fetch(`${API_BASE}/character-generator/ecosystem`);
       if (res.ok) setEcosystem(await res.json());
     } catch { /* silent */ }
     finally { setEcoLoading(false); }
@@ -588,7 +588,7 @@ export default function CharacterGenerator() {
         ...(ecosystem?.lalaverse?.characters || []),
       ].map((c) => c.name);
 
-      const res = await fetch(`${API_BASE}/characters/propose-seeds`, {
+      const res = await fetch(`${API_BASE}/character-generator/propose-seeds`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -638,7 +638,7 @@ export default function CharacterGenerator() {
         ...(ecosystem?.lalaverse?.characters || []),
       ];
 
-      const res = await fetch(`${API_BASE}/characters/generate-batch`, {
+      const res = await fetch(`${API_BASE}/character-generator/generate-batch`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ seeds: approvedSeeds, existingCharacters }),
@@ -653,7 +653,7 @@ export default function CharacterGenerator() {
         await Promise.all((data.batch || []).map(async (result, i) => {
           if (result.status !== 'generated') return;
           try {
-            const checkRes = await fetch(`${API_BASE}/characters/check-staging`, {
+            const checkRes = await fetch(`${API_BASE}/character-generator/check-staging`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -678,7 +678,7 @@ export default function CharacterGenerator() {
   // ── Commit to registry ────────────────────────────────────────────────────
   async function handleCommit(result, registryId) {
     try {
-      const res = await fetch(`${API_BASE}/characters/commit`, {
+      const res = await fetch(`${API_BASE}/character-generator/commit`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
