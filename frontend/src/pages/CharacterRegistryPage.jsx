@@ -289,37 +289,15 @@ export default function CharacterRegistryPage() {
         if (r.ok) {
           const d = await r.json();
           const chars = d.registry?.characters || d.characters || [];
+          // Tag each character with its registry name for display in All Characters view
+          for (const ch of chars) {
+            ch._registryTitle = reg.title || 'Unknown';
+            ch._registryTag = reg.book_tag || '';
+          }
           all.push(...chars);
         }
       }
-
-      // Also fetch LalaVerse Press characters
-      try {
-        const pr = await fetch('/api/v1/press/characters', { credentials: 'include' });
-        if (pr.ok) {
-          const pd = await pr.json();
-          const pressList = pd.characters || pd.data || [];
-          for (const pc of pressList) {
-            all.push({
-              id: `press_${pc.slug}`,
-              selected_name: pc.name,
-              display_name: pc.name,
-              role_type: 'special',
-              role_label: pc.publication || pc.tagline,
-              status: 'finalized',
-              belief_pressured: pc.tagline,
-              _isPress: true,
-            });
-          }
-        }
-      } catch { /* press fetch optional */ }
-
-      // Filter out excluded names
-      const filtered = all.filter(c => {
-        const name = (c.selected_name || c.display_name || '').toLowerCase().trim();
-        return !WORLD_EXCLUDE.includes(name);
-      });
-      setAllCharacters(filtered);
+      setAllCharacters(all);
     } catch { /* silent */ }
   }, []);
 
@@ -2285,6 +2263,11 @@ function CharacterCard({ c, onClick, isCompareSelected }) {
           <span className="cr-card-icon">{c.icon}</span>
         ) : (
           <span className="cr-card-initial">{(c.display_name || '?')[0]}</span>
+        )}
+
+        {/* Registry tag (shown in All Characters view) */}
+        {c._registryTitle && (
+          <span className="cr-card-registry-tag">{c._registryTitle}</span>
         )}
 
         {/* Hover overlay */}

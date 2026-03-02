@@ -518,6 +518,25 @@
   opacity: 0.06;
 }
 
+/* Registry tag shown in All Characters view */
+.cr-card-registry-tag {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 2;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  background: var(--surface1);
+  border: 1px solid var(--border-light, rgba(0,0,0,0.08));
+  border-radius: 4px;
+  padding: 2px 7px;
+  opacity: 0.85;
+}
+
 .cr-card-portrait .cr-card-icon {
   font-size: 56px;
   position: relative;
