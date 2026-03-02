@@ -21,6 +21,7 @@ const NAV = [
       { icon: '🛋️', label: 'Therapy Room',    route: '/therapy/default' },
       { icon: '📰', label: 'The Press',       route: '/press' },
       { icon: '◈',  label: 'Relationships', route: '/relationships' },
+      { icon: '🌳', label: 'Rel. Engine',   route: '/relationship-engine' },
     ],
   },
   {
