@@ -46,7 +46,6 @@ const ShowSettings = lazy(() => import('./pages/ShowSettings'));
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
 const StorytellerPage = lazy(() => import('./pages/StorytellerPage'));
-const PlanWithVoicePage = lazy(() => import('./pages/PlanWithVoicePage'));
 // Redirect from /book/:id → WriteMode (first chapter)
 const BookToWriteRedirect = () => {
   const { id } = useParams();
@@ -77,7 +76,7 @@ const UniversePage = lazy(() => import('./pages/UniversePage'));
 const ReadingMode = lazy(() => import('./pages/ReadingMode'));
 const WriteMode = lazy(() => import('./pages/WriteMode'));
 const BookOverview = lazy(() => import('./pages/BookOverview'));
-const RelationshipMap = lazy(() => import('./pages/RelationshipMap'));
+const RelationshipEngine = lazy(() => import('./pages/RelationshipEngine'));
 const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
@@ -211,14 +210,13 @@ function AppContent() {
   const isSceneComposer = /\/episodes\/[^/]+\/scene-composer/.test(location.pathname);
   const isExportPage = location.pathname.includes('/export');
   const isStorytellerPage = location.pathname.includes('/storyteller');
-  const isPlanWithVoice = location.pathname === '/plan-with-voice';
   const isReadingMode = location.pathname.includes('/books/') && location.pathname.includes('/read');
   const isWriteMode = location.pathname.startsWith('/write/');
   const isChapterJourney = location.pathname.startsWith('/chapter/');
   const isStoryEngine = location.pathname === '/story-engine';
   const isCharacterGenerator = location.pathname === '/character-generator';
   const isSetupWizard = location.pathname === '/setup';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isPlanWithVoice || isStoryEngine || isCharacterGenerator || isSetupWizard;
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isCharacterGenerator || isSetupWizard;
   const hideFooter = isFullScreen;
 
   return (
@@ -337,7 +335,6 @@ function AppContent() {
           
           {/* StoryTeller Book Editor */}
           <Route path="/storyteller" element={<StorytellerPage />} />
-          <Route path="/plan-with-voice" element={<PlanWithVoicePage />} />
           <Route path="/book/:id" element={<BookToWriteRedirect />} />
           <Route path="/books/:bookId/read" element={<ReadingMode />} />
           <Route path="/chapter/:bookId/:chapterId" element={<ChapterJourney />} />
@@ -355,8 +352,8 @@ function AppContent() {
           {/* PNOS Continuity Engine */}
           <Route path="/continuity" element={<ContinuityEnginePage />} />
           
-          {/* PNOS Character Relationship Map + Web (tabbed) */}
-          <Route path="/relationships" element={<RelationshipMap />} />
+          {/* PNOS Relationships — Unified Tree + Web + Candidates + List */}
+          <Route path="/relationships" element={<RelationshipEngine />} />
           
           {/* PNOS Story Engine — 50-Story Arc System */}
           <Route path="/story-engine" element={<StoryEngine />} />

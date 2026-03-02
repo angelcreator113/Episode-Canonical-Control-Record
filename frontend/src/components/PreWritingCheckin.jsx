@@ -36,7 +36,6 @@
  */
 
 import { useState } from 'react';
-import CharacterVoiceMode from '../pages/CharacterVoiceMode';
 
 function typeColor(type) {
   return {
@@ -143,17 +142,6 @@ export default function PreWritingCheckin({
           </div>
         )}
       </div>
-
-      {/* Voice mode modal */}
-      {selected && (
-        <CharacterVoiceMode
-          character={selected}
-          mode="checkin"
-          chapterContext={chapterContext}
-          open={checkinOpen}
-          onClose={handleCheckinClose}
-        />
-      )}
     </>
   );
 }
