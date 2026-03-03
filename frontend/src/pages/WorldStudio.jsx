@@ -292,43 +292,49 @@ export default function WorldStudio() {
   ══════════════════════════════════════════════════════════════════════ */
 
   return (
-    <div className="ws-shell">
+    <div className="ws-page">
       {/* ── Header ─────────────────────────────────────────────────────── */}
-      <header className="ws-header">
-        <div className="ws-header-left">
-          <h1>World Studio</h1>
-          <p>World Character Generator · Intimate Scene Engine</p>
+      <div className="ws-header">
+        <button className="ws-btn-back" onClick={() => navigate('/universe')}>
+          ← Universe
+        </button>
+        <div className="ws-header-title">World Studio</div>
+
+        <div className="ws-tab-indicator">
+          {['characters', 'scenes', 'triggers'].map(t => (
+            <button
+              key={t}
+              className={`ws-tab-step${tab === t ? ' ws-tab-active' : ''}`}
+              onClick={() => setTab(t)}
+            >
+              <span className="ws-tab-step-icon">
+                {t === 'characters' ? '✦' : t === 'scenes' ? '♡' : '◇'}
+              </span>
+              {t === 'characters' ? `Characters (${characters.length})`
+                : t === 'scenes' ? `Scenes (${scenes.length})`
+                : `Triggers (${triggered.length + oneNightCandidates.length})`}
+            </button>
+          ))}
         </div>
-        <div className="ws-header-actions">
-          <button className="ws-btn-scene" onClick={() => setShowSceneModal(true)}>
+
+        <div className="ws-header-controls">
+          <button className="ws-btn ws-btn-scene-cta" onClick={() => setShowSceneModal(true)}>
             ♡ Write Scene
           </button>
-          <button className="ws-btn-generate" onClick={() => setShowEcoModal(true)}>
+          <button className="ws-btn ws-btn-generate-cta" onClick={() => setShowEcoModal(true)}>
             ✦ Generate Ecosystem
           </button>
         </div>
-      </header>
-
-      {/* ── Tabs ───────────────────────────────────────────────────────── */}
-      <div className="ws-tab-bar">
-        {['characters', 'scenes', 'triggers'].map(t => (
-          <button
-            key={t}
-            className={`ws-tab-btn${tab === t ? ' active' : ''}`}
-            onClick={() => setTab(t)}
-          >
-            {t === 'characters' ? `Characters (${characters.length})`
-              : t === 'scenes' ? `Scenes (${scenes.length})`
-              : `Triggers (${triggered.length + oneNightCandidates.length})`}
-          </button>
-        ))}
       </div>
 
-      {/* ── Main grid ──────────────────────────────────────────────────── */}
-      <div className="ws-main">
+      {/* ── Body ──────────────────────────────────────────────────────── */}
+      <div className="ws-body">
 
-        {/* ── Sidebar ────────────────────────────────────────────────────── */}
-        <div className="ws-sidebar">
+        {/* ── Left sidebar ───────────────────────────────────────────── */}
+        <div className="ws-left">
+          <div className="ws-panel-title">
+            {tab === 'characters' ? 'Characters' : tab === 'scenes' ? 'Scenes' : 'Triggers'}
+          </div>
 
           {/* Characters tab sidebar */}
           {tab === 'characters' && (
@@ -466,8 +472,8 @@ export default function WorldStudio() {
           )}
         </div>
 
-        {/* ── Detail panel ───────────────────────────────────────────────── */}
-        <div className="ws-detail">
+        {/* ── Right detail panel ─────────────────────────────────────── */}
+        <div className="ws-right">
 
           {/* Character detail */}
           {tab === 'characters' && charDetail && (
