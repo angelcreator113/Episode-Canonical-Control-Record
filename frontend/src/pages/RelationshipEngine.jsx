@@ -16,6 +16,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './RelationshipWeb.css';
+import './RelationshipEngine.css';
 
 const API = '/api/v1';
 
@@ -112,6 +113,16 @@ const NODE_RADIUS = {
 // ── Helpers ────────────────────────────────────────────────────────────
 function charName(c) {
   return c.selected_name || c.display_name || c.character_key || '???';
+}
+
+function charLayer(c) {
+  if (c.universe === 'lalaverse' || c.layer === 'lalaverse') return 'lalaverse';
+  if (c.universe === 'series-2' || c.layer === 'series-2') return 'series-2';
+  return 'real-world';
+}
+
+function layerCompatible(a, b) {
+  return charLayer(a) === charLayer(b);
 }
 
 function useToast() {
@@ -424,26 +435,32 @@ export default function RelationshipEngine() {
   // ════════════════════════════════════════════════════════════════════
   // RENDER
   // ════════════════════════════════════════════════════════════════════
+
+  // View-specific title + subtitle for center header
+  const viewLabels = {
+    tree:       { title: 'Family Tree',        sub: `${filteredCharacters.length} characters · ${filteredRelationships.length} relationships` },
+    web:        { title: 'Relationship Web',   sub: 'D3 force-directed graph' },
+    candidates: { title: 'Proposed Seeds',     sub: `${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} pending review` },
+    list:       { title: 'Relationship List',  sub: `${filteredRelationships.length} confirmed` },
+  };
+  const currentLabel = viewLabels[view] || viewLabels.tree;
+
   return (
-    <div style={styles.page}>
+    <div className="cg-shell">
       {/* Toast layer */}
-      <div style={styles.toastContainer}>
+      <div className="cg-toastContainer">
         {toasts.map(t => (
-          <div key={t.id} style={{
-            ...styles.toast,
-            background: t.type === 'error' ? '#fee2e2' : t.type === 'success' ? '#dcfce7' : '#dbeafe',
-            color: t.type === 'error' ? '#7f1d1d' : t.type === 'success' ? '#14532d' : '#1e3a8a',
-          }}>{t.message}</div>
+          <div key={t.id} className={`cg-toast is-${t.type}`}>{t.message}</div>
         ))}
       </div>
 
-      {/* ── Header ──────────────────────────────────────────────────── */}
-      <div style={styles.header}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <h1 style={styles.title}>Relationships</h1>
+      {/* ── Sticky Top Bar ──────────────────────────────────────────── */}
+      <header className="cg-topbar">
+        <div className="cg-topbar-left">
+          <h1 className="cg-pageTitle">Relationships</h1>
           {registries.length > 1 && (
             <select
-              style={styles.select}
+              className="cg-registrySelect"
               value={activeRegistry || ''}
               onChange={e => setActiveRegistry(e.target.value)}
             >
@@ -453,111 +470,161 @@ export default function RelationshipEngine() {
             </select>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+
+        {/* Stepper / Tabs */}
+        <div className="cg-stepper">
           {TABS.map(t => (
             <button
               key={t.key}
+              className={`cg-stepBtn ${view === t.key ? 'is-active' : ''}`}
               onClick={() => setView(t.key)}
-              style={{ ...styles.tabBtn, ...(view === t.key ? styles.tabBtnActive : {}) }}
             >
               {t.label}
-              {t.count > 0 && <span style={styles.badge}>{t.count}</span>}
+              {t.count > 0 && <span className="cg-stepCount">{t.count}</span>}
             </button>
           ))}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={styles.btnPrimary} onClick={() => setAddModalOpen(true)}>+ Add</button>
-          <button style={styles.btnSecondary} onClick={() => setGenModalOpen(true)}>✨ Generate</button>
-        </div>
-      </div>
 
-      {/* ── Filter bar (hidden on Web tab — it uses its own filters) ── */}
-      {view !== 'web' && (
-        <div style={styles.filterBar}>
-          <button
-            onClick={() => setLayerFilter('all')}
-            style={{ ...styles.filterBtn, ...(layerFilter === 'all' ? styles.filterActive : {}) }}
-          >All Layers</button>
-          {Object.entries(LAYER_CONFIG).map(([key, cfg]) => (
-            <button
-              key={key}
-              onClick={() => setLayerFilter(key)}
-              style={{
-                ...styles.filterBtn,
-                ...(layerFilter === key ? { ...styles.filterActive, borderColor: cfg.color, color: cfg.color } : {}),
-              }}
-            >
-              <span style={{ width: 8, height: 8, borderRadius: '50%', background: cfg.color, display: 'inline-block', marginRight: 6 }} />
-              {cfg.label}
-              <span style={styles.filterCount}>{(layers[key] || []).length}</span>
-            </button>
-          ))}
+        <div className="cg-topbar-actions">
+          <button className="cg-btnPrimary" onClick={() => setAddModalOpen(true)}>+ Add</button>
+          <button className="cg-btnSecondary" onClick={() => setGenModalOpen(true)}>✨ Generate</button>
         </div>
-      )}
+      </header>
 
-      {/* ── Main content area ───────────────────────────────────────── */}
-      <div style={styles.mainArea}>
-        {/* Character sidebar (hidden on Web tab — it has its own panel) */}
+      {/* ── 3-Column Body ───────────────────────────────────────────── */}
+      <div className="cg-body">
+
+        {/* ── LEFT: World Ecosystem ─────────────────────────────────── */}
         {view !== 'web' && (
-          <div style={styles.sidebar}>
-            <div style={styles.sidebarHeader}>Characters ({filteredCharacters.length})</div>
-            <div style={styles.sidebarList}>
-              {filteredCharacters.map(c => (
+          <aside className="cg-left">
+            <div className="cg-panel">
+              <div className="cg-panelHeader">
+                <h2 className="cg-panelTitle">World Ecosystem</h2>
+                <span className="cg-panelCount">{filteredCharacters.length}</span>
+              </div>
+
+              {/* Layer filters inside the panel */}
+              <div className="cg-layerFilters">
                 <button
-                  key={c.id}
-                  onClick={() => {
-                    setSelectedChar(prev => prev?.id === c.id ? null : c);
-                    setSelectedRel(null); setDrawerOpen(false);
-                  }}
-                  style={{
-                    ...styles.charCard,
-                    ...(selectedChar?.id === c.id ? styles.charCardActive : {}),
-                    borderLeft: `3px solid ${TYPE_COLORS[c.role_type] || T.slate}`,
-                  }}
-                >
-                  <span style={styles.charIcon}>{c.icon || '◈'}</span>
-                  <div>
-                    <div style={styles.charName}>{charName(c)}</div>
-                    <div style={styles.charRole}>{c.role_type || 'unknown'}</div>
-                  </div>
-                </button>
-              ))}
+                  className={`cg-filterPill ${layerFilter === 'all' ? 'is-active' : ''}`}
+                  onClick={() => setLayerFilter('all')}
+                >All</button>
+                {Object.entries(LAYER_CONFIG).map(([key, cfg]) => (
+                  <button
+                    key={key}
+                    className={`cg-filterPill ${layerFilter === key ? 'is-active' : ''}`}
+                    onClick={() => setLayerFilter(key)}
+                    style={layerFilter === key ? { borderColor: cfg.color, color: cfg.color } : {}}
+                  >
+                    <span className="cg-filterDot" style={{ background: cfg.color }} />
+                    {cfg.label.split('·')[0].trim()}
+                    <span className="cg-filterCount">{(layers[key] || []).length}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Character cards */}
+              <div className="cg-worldList">
+                {filteredCharacters.map(c => (
+                  <button
+                    key={c.id}
+                    className={`cg-worldCard ${selectedChar?.id === c.id ? 'is-active' : ''}`}
+                    onClick={() => {
+                      setSelectedChar(prev => prev?.id === c.id ? null : c);
+                      setSelectedRel(null); setDrawerOpen(false);
+                    }}
+                  >
+                    <div className="cg-worldCard-stripe" style={{ background: TYPE_COLORS[c.role_type] || T.slate }} />
+                    <span className="cg-worldCard-icon">{c.icon || '◈'}</span>
+                    <div className="cg-worldCard-info">
+                      <div className="cg-worldCard-name">{charName(c)}</div>
+                      <div className="cg-worldCard-role">{c.role_type || 'unknown'}</div>
+                    </div>
+                    <span className={`cg-badge is-${c.role_type === 'protagonist' || c.role_type === 'special' ? 'balanced' : 'oversat'}`}>
+                      {c.role_type || '?'}
+                    </span>
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
+          </aside>
         )}
 
-        {/* Main view */}
-        <div style={styles.mainView}>
-          {view === 'web' ? (
-            <WebView navigate={navigate} />
-          ) : loading ? (
-            <div style={styles.loadingBox}>
-              <div style={styles.spinner} />Loading tree data...</div>
-          ) : view === 'tree' ? (
-            <TreeView
-              characters={filteredCharacters}
-              relationships={filteredRelationships}
-              layers={layers}
-              layerFilter={layerFilter}
-              selectedChar={selectedChar}
-              onSelectRel={rel => { setSelectedRel(rel); setDrawerOpen(true); }}
-              onSelectChar={setSelectedChar}
-            />
-          ) : view === 'candidates' ? (
-            <CandidateView candidates={candidates} onConfirm={confirmCandidate} onDismiss={dismissCandidate} />
-          ) : (
-            <ListView relationships={filteredRelationships} onSelect={rel => { setSelectedRel(rel); setDrawerOpen(true); }} />
-          )}
-        </div>
+        {/* ── CENTER: Main Canvas ───────────────────────────────────── */}
+        <main className="cg-main">
+          {/* Main header with title + toolbar */}
+          <div className="cg-mainHeader">
+            <div className="cg-mainHeader-info">
+              <h2 className="cg-mainTitle">{currentLabel.title}</h2>
+              <div className="cg-mainSub">{currentLabel.sub}</div>
+            </div>
+            <div className="cg-toolbar">
+              {view === 'candidates' && candidates.length > 0 && (
+                <button className="cg-toolBtn" onClick={() => setGenModalOpen(true)}>
+                  ✨ Regenerate
+                </button>
+              )}
+              {view === 'list' && (
+                <button className="cg-toolBtn" onClick={() => setView('candidates')}>
+                  View Seeds →
+                </button>
+              )}
+            </div>
+          </div>
 
-        {/* Detail drawer (not shown on Web tab) */}
-        {drawerOpen && selectedRel && view !== 'web' && (
-          <DetailDrawer
-            rel={selectedRel}
-            onClose={() => { setDrawerOpen(false); setSelectedRel(null); }}
-            onUpdate={updates => updateRelationship(selectedRel.id, updates)}
-            onDelete={() => deleteRelationship(selectedRel.id)}
-          />
+          {/* Main content */}
+          <div className="cg-mainContent">
+            <div className="cg-mainContent-inner">
+              {view === 'web' ? (
+                <WebView navigate={navigate} />
+              ) : loading ? (
+                <div className="cg-loading">
+                  <div className="cg-spinner" />
+                  Loading tree data...
+                </div>
+              ) : view === 'tree' ? (
+                <TreeView
+                  characters={filteredCharacters}
+                  relationships={filteredRelationships}
+                  layers={layers}
+                  layerFilter={layerFilter}
+                  selectedChar={selectedChar}
+                  onSelectRel={rel => { setSelectedRel(rel); setDrawerOpen(true); }}
+                  onSelectChar={setSelectedChar}
+                />
+              ) : view === 'candidates' ? (
+                <CandidateView candidates={candidates} onConfirm={confirmCandidate} onDismiss={dismissCandidate} />
+              ) : (
+                <ListView relationships={filteredRelationships} onSelect={rel => { setSelectedRel(rel); setDrawerOpen(true); }} />
+              )}
+            </div>
+          </div>
+        </main>
+
+        {/* ── RIGHT: Inspector / Preview ────────────────────────────── */}
+        {view !== 'web' && (
+          <aside className="cg-right">
+            {drawerOpen && selectedRel ? (
+              <InspectorPanel
+                rel={selectedRel}
+                onClose={() => { setDrawerOpen(false); setSelectedRel(null); }}
+                onUpdate={updates => updateRelationship(selectedRel.id, updates)}
+                onDelete={() => deleteRelationship(selectedRel.id)}
+              />
+            ) : (
+              <div className="cg-inspector">
+                <div className="cg-inspectorHeader">
+                  <h3 className="cg-inspectorTitle">Inspector</h3>
+                </div>
+                <div className="cg-inspectorEmpty">
+                  <span className="cg-inspectorEmpty-icon">🔍</span>
+                  <div className="cg-inspectorEmpty-text">
+                    Select a relationship to inspect
+                  </div>
+                </div>
+              </div>
+            )}
+          </aside>
         )}
       </div>
 
@@ -929,49 +996,82 @@ function TreeView({ characters, relationships, layers, layerFilter, selectedChar
 function CandidateView({ candidates, onConfirm, onDismiss }) {
   if (candidates.length === 0) {
     return (
-      <div style={styles.emptyState}>
-        <span style={{ fontSize: 40 }}>✨</span>
-        <p style={{ color: T.inkLight, fontFamily: T.font }}>
-          No pending candidates. Click <strong>Generate</strong> to create AI suggestions.
+      <div className="cg-empty">
+        <span className="cg-emptyIcon">✨</span>
+        <h3 className="cg-emptyTitle">No Proposed Seeds Yet</h3>
+        <p className="cg-emptyText">
+          Let the AI analyse your character registry and suggest new relationships
+          with tension states, LalaVerse mirrors, and career echoes.
         </p>
+        <div className="cg-emptySteps">
+          <div className="cg-emptyStep">
+            <span className="cg-emptyStepNum">1</span>
+            Select a world
+          </div>
+          <div className="cg-emptyStep">
+            <span className="cg-emptyStepNum">2</span>
+            Generate seeds
+          </div>
+          <div className="cg-emptyStep">
+            <span className="cg-emptyStepNum">3</span>
+            Confirm or dismiss
+          </div>
+        </div>
+        {/* Skeleton preview cards */}
+        <div className="cg-skeletonGrid">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="cg-skeletonCard">
+              <div className="cg-skeletonLine short" />
+              <div className="cg-skeletonLine full" />
+              <div className="cg-skeletonLine medium" />
+            </div>
+          ))}
+        </div>
       </div>
     );
   }
   return (
-    <div style={styles.candidateGrid}>
+    <div className="cg-seedGrid">
       {candidates.map(c => (
-        <div key={c.id} style={styles.candidateCard}>
-          <div style={{ ...styles.candidateStripe, background: `linear-gradient(135deg, ${T.lavender}, ${T.blush})` }} />
-          <div style={styles.candidateBody}>
-            <div style={styles.candidateNames}>
-              <span style={styles.candidateCharName}>{c.character_a_name || 'Character A'}</span>
-              <span style={styles.candidateArrow}>↔</span>
-              <span style={styles.candidateCharName}>{c.character_b_name || 'Character B'}</span>
+        <div key={c.id} className="cg-seedCard">
+          <div className="cg-seedStripe" />
+          <div className="cg-seedBody">
+            <div className="cg-seedTop">
+              <div className="cg-seedNames">
+                <span className="cg-seedName">{c.character_a_name || 'Character A'}</span>
+                <span className="cg-seedArrow">↔</span>
+                <span className="cg-seedName">{c.character_b_name || 'Character B'}</span>
+              </div>
+              <span className="cg-seedMeta">{c.connection_mode}</span>
             </div>
-            <div style={styles.candidateType}>{c.relationship_type}</div>
-            {c.situation && <p style={styles.candidateSituation}>{c.situation}</p>}
-            <div style={styles.pillRow}>
+            <div className="cg-seedType">{c.relationship_type}</div>
+            {c.situation && <p className="cg-seedSituation">{c.situation}</p>}
+            <div className="cg-seedPills">
               {c.tension_state && (
-                <span style={{ ...styles.pill, background: TENSION_COLORS[c.tension_state]?.bg || '#f3f4f6', color: TENSION_COLORS[c.tension_state]?.text || '#374151' }}>
+                <span className={`cg-pill cg-badge is-${c.tension_state}`}>
                   {c.tension_state}
                 </span>
               )}
-              {c.connection_mode && <span style={{ ...styles.pill, background: '#ede9fe', color: '#4c1d95' }}>{c.connection_mode}</span>}
-              {c.pain_point_category && <span style={{ ...styles.pill, background: '#fce7f3', color: '#831843' }}>{c.pain_point_category}</span>}
+              {c.connection_mode && (
+                <span className="cg-pill" style={{ background: '#ede9fe', color: '#4c1d95' }}>{c.connection_mode}</span>
+              )}
+              {c.pain_point_category && (
+                <span className="cg-pill" style={{ background: '#fce7f3', color: '#831843' }}>{c.pain_point_category}</span>
+              )}
             </div>
             {c.lala_mirror && (
-              <div style={styles.candidateMirror}>
-                <span style={{ color: T.lavender, fontWeight: 600 }}>Mirror:</span> {c.lala_mirror}
+              <div className="cg-seedMirror">
+                <strong style={{ color: T.lavender }}>Mirror:</strong> {c.lala_mirror}
               </div>
             )}
             {c.career_echo_potential && (
-              <div style={styles.candidateMirror}>
-                <span style={{ color: T.gold, fontWeight: 600 }}>Career Echo:</span> {c.career_echo_potential}
+              <div className="cg-seedMirror">
+                <strong style={{ color: T.gold }}>Career Echo:</strong> {c.career_echo_potential}
               </div>
             )}
-            <div style={styles.candidateActions}>
-              <button style={styles.confirmBtn} onClick={() => onConfirm(c.id)}>✓ Confirm</button>
-              <button style={styles.dismissBtn} onClick={() => onDismiss(c.id)}>✕ Dismiss</button>
+            <div className="cg-seedActions">
+              <button className="cg-btnConfirm" onClick={() => onConfirm(c.id)}>✓ Confirm</button>
+              <button className="cg-btnDismiss" onClick={() => onDismiss(c.id)}>✕ Dismiss</button>
             </div>
           </div>
         </div>
@@ -986,40 +1086,43 @@ function CandidateView({ candidates, onConfirm, onDismiss }) {
 function ListView({ relationships, onSelect }) {
   if (relationships.length === 0) {
     return (
-      <div style={styles.emptyState}>
-        <span style={{ fontSize: 40 }}>📋</span>
-        <p style={{ color: T.inkLight }}>No confirmed relationships yet.</p>
+      <div className="cg-empty">
+        <span className="cg-emptyIcon">📋</span>
+        <h3 className="cg-emptyTitle">No Confirmed Relationships</h3>
+        <p className="cg-emptyText">
+          Confirm candidate seeds or manually add relationships to populate this list.
+        </p>
       </div>
     );
   }
   return (
-    <div style={{ overflowX: 'auto', padding: 16 }}>
-      <table style={styles.table}>
+    <div className="cg-tableWrap">
+      <table className="cg-table">
         <thead>
           <tr>
-            <th style={styles.th}>Character A</th>
-            <th style={styles.th}>Type</th>
-            <th style={styles.th}>Character B</th>
-            <th style={styles.th}>Mode</th>
-            <th style={styles.th}>Tension</th>
-            <th style={styles.th}>Status</th>
+            <th>Character A</th>
+            <th>Type</th>
+            <th>Character B</th>
+            <th>Mode</th>
+            <th>Tension</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody>
           {relationships.map(r => (
-            <tr key={r.id} style={styles.tr} onClick={() => onSelect(r)}>
-              <td style={styles.td}>{r.character_a_name}</td>
-              <td style={styles.td}><span style={{ ...styles.pill, background: '#f3f4f6' }}>{r.relationship_type}</span></td>
-              <td style={styles.td}>{r.character_b_name}</td>
-              <td style={styles.td}>{r.connection_mode}</td>
-              <td style={styles.td}>
+            <tr key={r.id} onClick={() => onSelect(r)}>
+              <td>{r.character_a_name}</td>
+              <td><span className="cg-pill" style={{ background: '#f3f4f6', color: '#374151' }}>{r.relationship_type}</span></td>
+              <td>{r.character_b_name}</td>
+              <td>{r.connection_mode}</td>
+              <td>
                 {r.tension_state && (
-                  <span style={{ ...styles.pill, background: TENSION_COLORS[r.tension_state]?.bg || '#f3f4f6', color: TENSION_COLORS[r.tension_state]?.text || '#374151' }}>
+                  <span className={`cg-pill cg-badge is-${r.tension_state}`}>
                     {r.tension_state}
                   </span>
                 )}
               </td>
-              <td style={styles.td}>{r.status}</td>
+              <td>{r.status}</td>
             </tr>
           ))}
         </tbody>
@@ -1031,7 +1134,9 @@ function ListView({ relationships, onSelect }) {
 // ════════════════════════════════════════════════════════════════════════
 // DETAIL DRAWER
 // ════════════════════════════════════════════════════════════════════════
-function DetailDrawer({ rel, onClose, onUpdate, onDelete }) {
+// INSPECTOR PANEL (right column)
+// ════════════════════════════════════════════════════════════════════════
+function InspectorPanel({ rel, onClose, onUpdate, onDelete }) {
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState({
     relationship_type: rel.relationship_type || '',
@@ -1049,79 +1154,84 @@ function DetailDrawer({ rel, onClose, onUpdate, onDelete }) {
   const handleSave = () => { onUpdate(form); setEditing(false); };
 
   return (
-    <div style={styles.drawer}>
-      <div style={styles.drawerHeader}>
-        <h3 style={styles.drawerTitle}>Relationship Detail</h3>
-        <button style={styles.closeBtn} onClick={onClose}>✕</button>
+    <div className="cg-inspector">
+      <div className="cg-inspectorHeader">
+        <h3 className="cg-inspectorTitle">Relationship Detail</h3>
+        <button className="cg-closeBtn" onClick={onClose}>✕</button>
       </div>
-      <div style={styles.drawerBody}>
-        <div style={styles.drawerChars}>
-          <div style={styles.drawerCharBox}>
-            <span style={{ fontSize: 20 }}>{rel.character_a_icon || '◈'}</span>
-            <span style={styles.drawerCharName}>{rel.character_a_name}</span>
-            <span style={{ ...styles.pill, background: (TYPE_COLORS[rel.character_a_type] || T.slate) + '22', color: TYPE_COLORS[rel.character_a_type] || T.slate }}>
-              {rel.character_a_type}
-            </span>
+      <div className="cg-inspectorBody">
+        {/* Characters display */}
+        <div className="cg-inspectorChars">
+          <div className="cg-inspectorCharBox">
+            <span className="cg-inspectorCharIcon">{rel.character_a_icon || '◈'}</span>
+            <span className="cg-inspectorCharName">{rel.character_a_name}</span>
+            {rel.character_a_type && (
+              <span className="cg-pill" style={{ background: (TYPE_COLORS[rel.character_a_type] || T.slate) + '22', color: TYPE_COLORS[rel.character_a_type] || T.slate }}>
+                {rel.character_a_type}
+              </span>
+            )}
           </div>
-          <span style={styles.drawerArrow}>↔</span>
-          <div style={styles.drawerCharBox}>
-            <span style={{ fontSize: 20 }}>{rel.character_b_icon || '◈'}</span>
-            <span style={styles.drawerCharName}>{rel.character_b_name}</span>
-            <span style={{ ...styles.pill, background: (TYPE_COLORS[rel.character_b_type] || T.slate) + '22', color: TYPE_COLORS[rel.character_b_type] || T.slate }}>
-              {rel.character_b_type}
-            </span>
+          <span className="cg-inspectorArrow">↔</span>
+          <div className="cg-inspectorCharBox">
+            <span className="cg-inspectorCharIcon">{rel.character_b_icon || '◈'}</span>
+            <span className="cg-inspectorCharName">{rel.character_b_name}</span>
+            {rel.character_b_type && (
+              <span className="cg-pill" style={{ background: (TYPE_COLORS[rel.character_b_type] || T.slate) + '22', color: TYPE_COLORS[rel.character_b_type] || T.slate }}>
+                {rel.character_b_type}
+              </span>
+            )}
           </div>
         </div>
 
         {editing ? (
-          <div style={styles.editForm}>
-            <label style={styles.label}>Relationship Type</label>
-            <input style={styles.input} value={form.relationship_type}
+          <div className="cg-editForm">
+            <label className="cg-formLabel">Relationship Type</label>
+            <input className="cg-formInput" value={form.relationship_type}
               onChange={e => setForm(f => ({ ...f, relationship_type: e.target.value }))} />
-            <label style={styles.label}>Connection Mode</label>
-            <select style={styles.select} value={form.connection_mode}
+            <label className="cg-formLabel">Connection Mode</label>
+            <select className="cg-formSelect" value={form.connection_mode}
               onChange={e => setForm(f => ({ ...f, connection_mode: e.target.value }))}>
               {CONNECTION_MODES.map(m => <option key={m} value={m}>{m}</option>)}
             </select>
-            <label style={styles.label}>Status</label>
-            <select style={styles.select} value={form.status}
+            <label className="cg-formLabel">Status</label>
+            <select className="cg-formSelect" value={form.status}
               onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
               {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
-            <label style={styles.label}>Tension State</label>
-            <select style={styles.select} value={form.tension_state}
+            <label className="cg-formLabel">Tension State</label>
+            <select className="cg-formSelect" value={form.tension_state}
               onChange={e => setForm(f => ({ ...f, tension_state: e.target.value }))}>
               <option value="">None</option>
               {TENSION_STATES.map(t => <option key={t} value={t}>{t}</option>)}
             </select>
-            <label style={styles.label}>Pain Point Category</label>
-            <input style={styles.input} value={form.pain_point_category}
+            <label className="cg-formLabel">Pain Point Category</label>
+            <input className="cg-formInput" value={form.pain_point_category}
               onChange={e => setForm(f => ({ ...f, pain_point_category: e.target.value }))}
               placeholder="e.g. identity, trust, loyalty..." />
-            <label style={styles.label}>Situation</label>
-            <textarea style={{ ...styles.input, minHeight: 60 }} value={form.situation}
+            <label className="cg-formLabel">Situation</label>
+            <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.situation}
               onChange={e => setForm(f => ({ ...f, situation: e.target.value }))} />
-            <label style={styles.label}>Lala Mirror</label>
-            <textarea style={{ ...styles.input, minHeight: 60 }} value={form.lala_mirror}
+            <label className="cg-formLabel">Lala Mirror</label>
+            <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.lala_mirror}
               onChange={e => setForm(f => ({ ...f, lala_mirror: e.target.value }))} />
-            <label style={styles.label}>Career Echo Potential</label>
-            <textarea style={{ ...styles.input, minHeight: 60 }} value={form.career_echo_potential}
+            <label className="cg-formLabel">Career Echo Potential</label>
+            <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.career_echo_potential}
               onChange={e => setForm(f => ({ ...f, career_echo_potential: e.target.value }))} />
-            <label style={styles.label}>Lala Connection</label>
-            <select style={styles.select} value={form.lala_connection}
+            <label className="cg-formLabel">Lala Connection</label>
+            <select className="cg-formSelect" value={form.lala_connection}
               onChange={e => setForm(f => ({ ...f, lala_connection: e.target.value }))}>
               {LALA_CONNECTIONS.map(l => <option key={l.value} value={l.value}>{l.label}</option>)}
             </select>
-            <label style={styles.label}>Notes</label>
-            <textarea style={{ ...styles.input, minHeight: 60 }} value={form.notes}
+            <label className="cg-formLabel">Notes</label>
+            <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.notes}
               onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
-            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button style={styles.btnPrimary} onClick={handleSave}>Save</button>
-              <button style={styles.btnGhost} onClick={() => setEditing(false)}>Cancel</button>
+            <div className="cg-formActions">
+              <button className="cg-btnPrimary" onClick={handleSave}>Save</button>
+              <button className="cg-btnGhost" onClick={() => setEditing(false)}>Cancel</button>
             </div>
           </div>
         ) : (
-          <div style={styles.readFields}>
+          <div>
             <Field label="Type" value={rel.relationship_type} />
             <Field label="Mode" value={rel.connection_mode} />
             <Field label="Status" value={rel.status} />
@@ -1133,9 +1243,9 @@ function DetailDrawer({ rel, onClose, onUpdate, onDelete }) {
             <Field label="Lala Connection"
               value={LALA_CONNECTIONS.find(l => l.value === rel.lala_connection)?.label || rel.lala_connection} />
             <Field label="Notes" value={rel.notes} />
-            <div style={{ display: 'flex', gap: 8, marginTop: 16 }}>
-              <button style={styles.btnPrimary} onClick={() => setEditing(true)}>Edit</button>
-              <button style={styles.btnDanger} onClick={onDelete}>Delete</button>
+            <div className="cg-formActions">
+              <button className="cg-btnPrimary" onClick={() => setEditing(true)}>Edit</button>
+              <button className="cg-btnDanger" onClick={onDelete}>Delete</button>
             </div>
           </div>
         )}
@@ -1147,9 +1257,9 @@ function DetailDrawer({ rel, onClose, onUpdate, onDelete }) {
 function Field({ label, value }) {
   if (!value) return null;
   return (
-    <div style={{ marginBottom: 10 }}>
-      <div style={styles.fieldLabel}>{label}</div>
-      <div style={styles.fieldValue}>{value}</div>
+    <div className="cg-fieldGroup">
+      <div className="cg-fieldLabel">{label}</div>
+      <div className="cg-fieldValue">{value}</div>
     </div>
   );
 }
@@ -1177,22 +1287,22 @@ function AddRelationshipModal({ characters, onAdd, onClose }) {
   });
 
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={styles.modal} onClick={e => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
-          <h3 style={styles.modalTitle}>Add Relationship</h3>
-          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+    <div className="cg-overlay" onClick={onClose}>
+      <div className="cg-modal" onClick={e => e.stopPropagation()}>
+        <div className="cg-modalHeader">
+          <h3 className="cg-modalTitle">Add Relationship</h3>
+          <button className="cg-closeBtn" onClick={onClose}>✕</button>
         </div>
-        <div style={styles.modalBody}>
-          <label style={styles.label}>Character A</label>
-          <select style={styles.select} value={form.character_id_a}
+        <div className="cg-modalBody">
+          <label className="cg-formLabel">Character A</label>
+          <select className="cg-formSelect" value={form.character_id_a}
             onChange={e => setForm(f => ({ ...f, character_id_a: e.target.value }))}>
             <option value="">Select character...</option>
             {characters.map(c => <option key={c.id} value={c.id}>{charName(c)} ({c.role_type})</option>)}
           </select>
 
-          <label style={styles.label}>Character B {charA && <span style={{ fontSize: 11, color: T.slate, fontWeight: 400 }}>— showing {charLayer(charA)} layer only</span>}</label>
-          <select style={styles.select} value={form.character_id_b}
+          <label className="cg-formLabel">Character B {charA && <span className="cg-formHint">— showing {charLayer(charA)} layer only</span>}</label>
+          <select className="cg-formSelect" value={form.character_id_b}
             onChange={e => setForm(f => ({ ...f, character_id_b: e.target.value }))}>
             <option value="">Select character...</option>
             {compatibleB.map(c =>
@@ -1200,55 +1310,54 @@ function AddRelationshipModal({ characters, onAdd, onClose }) {
             )}
           </select>
 
-          <label style={styles.label}>Relationship Type</label>
-          <div style={styles.presetRow}>
+          <label className="cg-formLabel">Relationship Type</label>
+          <div className="cg-presetRow">
             {REL_PRESETS.map(p => (
-              <button key={p} style={{
-                ...styles.presetBtn,
-                ...(form.relationship_type === p.toLowerCase() ? { background: T.gold, color: T.white } : {}),
-              }} onClick={() => setForm(f => ({ ...f, relationship_type: p.toLowerCase() }))}>{p}</button>
+              <button key={p}
+                className={`cg-presetBtn${form.relationship_type === p.toLowerCase() ? ' is-active' : ''}`}
+                onClick={() => setForm(f => ({ ...f, relationship_type: p.toLowerCase() }))}>{p}</button>
             ))}
           </div>
-          <input style={styles.input} value={form.relationship_type}
+          <input className="cg-formInput" value={form.relationship_type}
             onChange={e => setForm(f => ({ ...f, relationship_type: e.target.value }))}
             placeholder="Or type custom..." />
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+          <div className="cg-formGrid">
             <div>
-              <label style={styles.label}>Connection Mode</label>
-              <select style={styles.select} value={form.connection_mode}
+              <label className="cg-formLabel">Connection Mode</label>
+              <select className="cg-formSelect" value={form.connection_mode}
                 onChange={e => setForm(f => ({ ...f, connection_mode: e.target.value }))}>
                 {CONNECTION_MODES.map(m => <option key={m} value={m}>{m}</option>)}
               </select>
             </div>
             <div>
-              <label style={styles.label}>Status</label>
-              <select style={styles.select} value={form.status}
+              <label className="cg-formLabel">Status</label>
+              <select className="cg-formSelect" value={form.status}
                 onChange={e => setForm(f => ({ ...f, status: e.target.value }))}>
                 {STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
           </div>
 
-          <label style={styles.label}>Tension State</label>
-          <select style={styles.select} value={form.tension_state}
+          <label className="cg-formLabel">Tension State</label>
+          <select className="cg-formSelect" value={form.tension_state}
             onChange={e => setForm(f => ({ ...f, tension_state: e.target.value }))}>
             <option value="">None</option>
             {TENSION_STATES.map(t => <option key={t} value={t}>{t}</option>)}
           </select>
 
-          <label style={styles.label}>Situation (optional)</label>
-          <textarea style={{ ...styles.input, minHeight: 60 }} value={form.situation}
+          <label className="cg-formLabel">Situation (optional)</label>
+          <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.situation}
             onChange={e => setForm(f => ({ ...f, situation: e.target.value }))}
             placeholder="Describe the dynamic between them..." />
 
-          <label style={styles.label}>Notes (optional)</label>
-          <textarea style={{ ...styles.input, minHeight: 50 }} value={form.notes}
+          <label className="cg-formLabel">Notes (optional)</label>
+          <textarea className="cg-formInput" style={{ minHeight: 50 }} value={form.notes}
             onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} />
         </div>
-        <div style={styles.modalFooter}>
-          <button style={styles.btnGhost} onClick={onClose}>Cancel</button>
-          <button style={{ ...styles.btnPrimary, opacity: valid ? 1 : 0.5 }}
+        <div className="cg-modalFooter">
+          <button className="cg-btnGhost" onClick={onClose}>Cancel</button>
+          <button className={`cg-btnPrimary${valid ? '' : ' is-disabled'}`}
             disabled={!valid} onClick={() => onAdd(form)}>Create Relationship</button>
         </div>
       </div>
@@ -1262,31 +1371,28 @@ function AddRelationshipModal({ characters, onAdd, onClose }) {
 function GenerateModal({ characters, generating, onGenerate, onClose }) {
   const [focusChar, setFocusChar] = useState('');
   return (
-    <div style={styles.overlay} onClick={onClose}>
-      <div style={{ ...styles.modal, maxWidth: 480 }} onClick={e => e.stopPropagation()}>
-        <div style={styles.modalHeader}>
-          <h3 style={styles.modalTitle}>✨ Generate Candidates</h3>
-          <button style={styles.closeBtn} onClick={onClose}>✕</button>
+    <div className="cg-overlay" onClick={onClose}>
+      <div className="cg-modal cg-modal--narrow" onClick={e => e.stopPropagation()}>
+        <div className="cg-modalHeader">
+          <h3 className="cg-modalTitle">✨ Generate Candidates</h3>
+          <button className="cg-closeBtn" onClick={onClose}>✕</button>
         </div>
-        <div style={styles.modalBody}>
-          <p style={{ color: T.inkLight, fontSize: 14, lineHeight: 1.6, marginBottom: 16 }}>
+        <div className="cg-modalBody">
+          <p className="cg-modalDesc">
             Claude will analyse your character registry and suggest <strong>3–5 new relationships</strong> with
             tension states, LalaVerse mirrors, and career echoes.
           </p>
-          <label style={styles.label}>Focus Character (optional)</label>
-          <select style={styles.select} value={focusChar}
+          <label className="cg-formLabel">Focus Character (optional)</label>
+          <select className="cg-formSelect" value={focusChar}
             onChange={e => setFocusChar(e.target.value)}>
             <option value="">Any character</option>
             {characters.map(c => <option key={c.id} value={c.id}>{charName(c)}</option>)}
           </select>
         </div>
-        <div style={styles.modalFooter}>
-          <button style={styles.btnGhost} onClick={onClose}>Cancel</button>
-          <button style={{
-            ...styles.btnPrimary,
-            background: `linear-gradient(135deg, ${T.lavender}, ${T.blush})`,
-            opacity: generating ? 0.6 : 1,
-          }} disabled={generating} onClick={() => onGenerate(focusChar || null)}>
+        <div className="cg-modalFooter">
+          <button className="cg-btnGhost" onClick={onClose}>Cancel</button>
+          <button className={`cg-btnGenerate${generating ? ' is-generating' : ''}`}
+            disabled={generating} onClick={() => onGenerate(focusChar || null)}>
             {generating ? 'Generating...' : '✨ Generate'}
           </button>
         </div>
@@ -1295,202 +1401,4 @@ function GenerateModal({ characters, generating, onGenerate, onClose }) {
   );
 }
 
-// ════════════════════════════════════════════════════════════════════════
-// STYLES
-// ════════════════════════════════════════════════════════════════════════
-const styles = {
-  page: {
-    display: 'flex', flexDirection: 'column', height: '100%',
-    fontFamily: T.font, background: T.parchment, color: T.ink,
-  },
-  toastContainer: {
-    position: 'fixed', top: 16, right: 16, zIndex: 9999,
-    display: 'flex', flexDirection: 'column', gap: 8,
-  },
-  toast: {
-    padding: '10px 18px', borderRadius: T.radiusSm,
-    fontSize: 13, fontWeight: 500, boxShadow: T.shadow,
-  },
-  header: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-    padding: '16px 24px', borderBottom: `1px solid ${T.border}`,
-    background: T.white, flexWrap: 'wrap', gap: 12,
-  },
-  title: {
-    fontSize: 22, fontWeight: 700, fontFamily: T.fontSerif, color: T.ink, margin: 0,
-  },
-  tabBtn: {
-    padding: '6px 14px', border: `1px solid ${T.border}`, borderRadius: T.radiusSm,
-    background: T.white, color: T.inkLight, fontFamily: T.font, fontSize: 13,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, transition: 'all 0.15s',
-  },
-  tabBtnActive: { background: T.gold, color: T.white, borderColor: T.gold },
-  badge: {
-    background: T.blush, color: T.white, borderRadius: 10,
-    fontSize: 11, fontWeight: 700, padding: '1px 7px', marginLeft: 4,
-  },
-  btnPrimary: {
-    padding: '8px 18px', border: 'none', borderRadius: T.radiusSm,
-    background: T.gold, color: T.white, fontFamily: T.font, fontSize: 13,
-    fontWeight: 600, cursor: 'pointer', transition: 'all 0.15s',
-  },
-  btnSecondary: {
-    padding: '8px 18px', border: `1px solid ${T.lavender}`, borderRadius: T.radiusSm,
-    background: T.white, color: T.lavender, fontFamily: T.font, fontSize: 13,
-    fontWeight: 600, cursor: 'pointer',
-  },
-  btnGhost: {
-    padding: '8px 18px', border: `1px solid ${T.border}`, borderRadius: T.radiusSm,
-    background: 'transparent', color: T.inkLight, fontFamily: T.font, fontSize: 13, cursor: 'pointer',
-  },
-  btnDanger: {
-    padding: '8px 18px', border: '1px solid #fee2e2', borderRadius: T.radiusSm,
-    background: '#fee2e2', color: '#7f1d1d', fontFamily: T.font, fontSize: 13,
-    fontWeight: 600, cursor: 'pointer',
-  },
-  filterBar: {
-    display: 'flex', gap: 8, padding: '10px 24px',
-    borderBottom: `1px solid ${T.border}`, background: T.white, flexWrap: 'wrap',
-  },
-  filterBtn: {
-    padding: '5px 12px', border: `1px solid ${T.border}`, borderRadius: 20,
-    background: T.white, color: T.inkLight, fontFamily: T.font, fontSize: 12,
-    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s',
-  },
-  filterActive: { borderColor: T.gold, color: T.gold, fontWeight: 600 },
-  filterCount: { fontSize: 11, fontFamily: T.fontMono, opacity: 0.7, marginLeft: 4 },
-  mainArea: { display: 'flex', flex: 1, overflow: 'hidden' },
-  sidebar: {
-    width: 220, borderRight: `1px solid ${T.border}`, background: T.white,
-    display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0,
-  },
-  sidebarHeader: {
-    padding: '12px 14px', fontSize: 12, fontWeight: 700, fontFamily: T.fontMono,
-    textTransform: 'uppercase', color: T.slate, letterSpacing: '0.05em',
-    borderBottom: `1px solid ${T.border}`,
-  },
-  sidebarList: { flex: 1, overflowY: 'auto', padding: '8px 8px' },
-  charCard: {
-    display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '8px 10px',
-    border: 'none', background: 'transparent', borderRadius: T.radiusSm,
-    cursor: 'pointer', textAlign: 'left', fontFamily: T.font, transition: 'all 0.12s',
-  },
-  charCardActive: { background: '#f5f0e8' },
-  charIcon: { fontSize: 18, width: 28, textAlign: 'center', flexShrink: 0 },
-  charName: { fontSize: 13, fontWeight: 600, color: T.ink, lineHeight: 1.3 },
-  charRole: { fontSize: 11, color: T.slate, textTransform: 'capitalize' },
-  mainView: { flex: 1, overflow: 'auto', position: 'relative' },
-  loadingBox: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', height: '100%', gap: 12, color: T.inkLight, fontSize: 14, padding: 16,
-  },
-  spinner: {
-    width: 32, height: 32, border: `3px solid ${T.border}`,
-    borderTopColor: T.gold, borderRadius: '50%', animation: 'spin 0.8s linear infinite',
-  },
-  emptyState: {
-    display: 'flex', flexDirection: 'column', alignItems: 'center',
-    justifyContent: 'center', height: '100%', gap: 12, textAlign: 'center', padding: 16,
-  },
-  candidateGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: 16, padding: 16 },
-  candidateCard: {
-    borderRadius: T.radius, overflow: 'hidden', border: `1px solid ${T.border}`,
-    background: T.white, boxShadow: T.shadow, transition: 'box-shadow 0.15s',
-  },
-  candidateStripe: { height: 4 },
-  candidateBody: { padding: 16 },
-  candidateNames: { display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 },
-  candidateCharName: { fontSize: 14, fontWeight: 700, color: T.ink },
-  candidateArrow: { fontSize: 16, color: T.slate },
-  candidateType: {
-    fontSize: 15, fontWeight: 700, color: T.lavender, marginBottom: 6,
-    fontFamily: T.fontSerif, textTransform: 'capitalize',
-  },
-  candidateSituation: { fontSize: 13, color: T.inkLight, lineHeight: 1.5, marginBottom: 8, fontStyle: 'italic' },
-  pillRow: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
-  pill: { padding: '2px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600, fontFamily: T.fontMono, whiteSpace: 'nowrap' },
-  candidateMirror: { fontSize: 12, lineHeight: 1.5, color: T.inkLight, marginBottom: 4 },
-  candidateActions: {
-    display: 'flex', gap: 8, marginTop: 12, borderTop: `1px solid ${T.border}`, paddingTop: 12,
-  },
-  confirmBtn: {
-    flex: 1, padding: '7px 12px', border: 'none', borderRadius: T.radiusSm,
-    background: '#dcfce7', color: '#14532d', fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-  },
-  dismissBtn: {
-    flex: 1, padding: '7px 12px', border: 'none', borderRadius: T.radiusSm,
-    background: '#fee2e2', color: '#7f1d1d', fontFamily: T.font, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-  },
-  table: { width: '100%', borderCollapse: 'collapse', fontFamily: T.font, fontSize: 13 },
-  th: {
-    textAlign: 'left', padding: '10px 12px', fontSize: 11, fontWeight: 700,
-    fontFamily: T.fontMono, textTransform: 'uppercase', color: T.slate,
-    borderBottom: `2px solid ${T.border}`, letterSpacing: '0.04em',
-  },
-  tr: { cursor: 'pointer', transition: 'background 0.1s' },
-  td: { padding: '10px 12px', borderBottom: `1px solid ${T.border}` },
-  drawer: {
-    width: 360, borderLeft: `1px solid ${T.border}`, background: T.white,
-    display: 'flex', flexDirection: 'column', overflow: 'hidden', flexShrink: 0,
-    boxShadow: '-4px 0 16px rgba(0,0,0,.06)',
-  },
-  drawerHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '14px 18px', borderBottom: `1px solid ${T.border}`,
-  },
-  drawerTitle: { fontSize: 16, fontWeight: 700, fontFamily: T.fontSerif, margin: 0 },
-  drawerBody: { flex: 1, overflowY: 'auto', padding: 18 },
-  drawerChars: {
-    display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 8,
-  },
-  drawerCharBox: { display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, flex: 1 },
-  drawerCharName: { fontSize: 13, fontWeight: 700, color: T.ink, textAlign: 'center' },
-  drawerArrow: { fontSize: 20, color: T.slate, flexShrink: 0 },
-  closeBtn: { border: 'none', background: 'none', fontSize: 18, cursor: 'pointer', color: T.slate, padding: 4 },
-  editForm: { display: 'flex', flexDirection: 'column', gap: 4 },
-  readFields: {},
-  fieldLabel: {
-    fontSize: 11, fontWeight: 700, fontFamily: T.fontMono, textTransform: 'uppercase',
-    color: T.slate, marginBottom: 2, letterSpacing: '0.04em',
-  },
-  fieldValue: { fontSize: 14, color: T.ink, lineHeight: 1.5, marginBottom: 4 },
-  label: {
-    fontSize: 12, fontWeight: 600, color: T.inkLight, marginBottom: 4, marginTop: 8,
-    fontFamily: T.font, display: 'block',
-  },
-  input: {
-    width: '100%', padding: '8px 12px', border: `1px solid ${T.border}`,
-    borderRadius: T.radiusSm, fontSize: 14, fontFamily: T.font, color: T.ink,
-    background: T.white, outline: 'none', boxSizing: 'border-box', transition: 'border-color 0.15s',
-  },
-  select: {
-    width: '100%', padding: '8px 12px', border: `1px solid ${T.border}`,
-    borderRadius: T.radiusSm, fontSize: 14, fontFamily: T.font, color: T.ink,
-    background: T.white, outline: 'none', boxSizing: 'border-box',
-  },
-  presetRow: { display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 },
-  presetBtn: {
-    padding: '4px 10px', border: `1px solid ${T.border}`, borderRadius: 14,
-    background: T.white, color: T.inkLight, fontFamily: T.font, fontSize: 12,
-    cursor: 'pointer', transition: 'all 0.12s',
-  },
-  overlay: {
-    position: 'fixed', inset: 0, background: 'rgba(0,0,0,.35)',
-    display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
-  },
-  modal: {
-    background: T.white, borderRadius: T.radius, maxWidth: 580,
-    width: '90%', maxHeight: '85vh', display: 'flex', flexDirection: 'column',
-    boxShadow: T.shadowLg, overflow: 'hidden',
-  },
-  modalHeader: {
-    display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-    padding: '14px 20px', borderBottom: `1px solid ${T.border}`,
-  },
-  modalTitle: { fontSize: 18, fontWeight: 700, fontFamily: T.fontSerif, margin: 0 },
-  modalBody: { flex: 1, overflowY: 'auto', padding: '16px 20px' },
-  modalFooter: {
-    display: 'flex', justifyContent: 'flex-end', gap: 8,
-    padding: '12px 20px', borderTop: `1px solid ${T.border}`,
-  },
-};
+
