@@ -17,6 +17,12 @@ import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterDilemmaEngine from '../components/CharacterDilemmaEngine';
+import {
+  ROLE_COLORS, ROLE_LABELS, ROLE_OPTIONS, ROLE_ICONS,
+  MOMENTUM, CANON_TIERS, DOSSIER_TABS,
+  ARCHETYPES, GLAM_ENERGIES, STORY_STATUSES,
+} from '../constants/characterConstants';
+import useRegistries from '../hooks/useRegistries';
 
 /* ── Auto-scroll active tab into view on mobile ── */
 function useTabAutoScroll(tabRef, activeTab) {
@@ -29,69 +35,10 @@ function useTabAutoScroll(tabRef, activeTab) {
   }, [activeTab]);
 }
 
+/* ── Constants imported from constants/characterConstants.js ── */
+
 const API = '/api/v1/character-registry';
 const AI_API = '/api/v1/character-ai';
-
-/* ── Constants ─────────────────────────────────────────────────── */
-
-const ROLE_LABELS = {
-  protagonist: 'Protagonist',
-  pressure:    'Antagonist',
-  mirror:      'Mirror',
-  support:     'Supporting',
-  shadow:      'Shadow',
-  special:     'Special',
-};
-
-const ROLE_OPTIONS = [
-  { value: 'protagonist', label: 'Protagonist' },
-  { value: 'pressure',    label: 'Antagonist' },
-  { value: 'mirror',      label: 'Mirror' },
-  { value: 'support',     label: 'Supporting' },
-  { value: 'shadow',      label: 'Shadow' },
-  { value: 'special',     label: 'Special' },
-];
-
-const CANON_TIERS = ['Core Canon', 'Licensed', 'Minor'];
-
-const DOSSIER_TABS = [
-  { key: 'overview',      label: 'Overview' },
-  { key: 'living',        label: '✦ Living State' },
-  { key: 'arc',           label: 'Arc Timeline' },
-  { key: 'threads',       label: 'Plot Threads' },
-  { key: 'psychology',    label: 'Psychology' },
-  { key: 'aesthetic',     label: 'Aesthetic DNA' },
-  { key: 'career',        label: 'Career' },
-  { key: 'relationships', label: 'Relationships' },
-  { key: 'story',         label: 'Story Presence' },
-  { key: 'voice',         label: 'Voice' },
-  { key: 'dilemma',       label: 'Dilemma' },
-  { key: 'ai',            label: '✦ AI Writer' },
-];
-
-const MOMENTUM = {
-  rising:  { symbol: '↑', color: '#3d8e42', label: 'Rising' },
-  steady:  { symbol: '→', color: '#9a8c9e', label: 'Steady' },
-  falling: { symbol: '↓', color: '#c43a2a', label: 'Falling' },
-  dormant: { symbol: '·', color: '#6b5c6e', label: 'Dormant' },
-};
-
-const ROLE_COLORS = {
-  protagonist: '#c9a84c',
-  pressure:    '#d46070',
-  mirror:      '#7b8de0',
-  support:     '#5dab62',
-  shadow:      '#9b4dca',
-  special:     '#5ec0b8',
-};
-
-const ARCHETYPES = [
-  'Strategist', 'Dreamer', 'Performer', 'Guardian', 'Rebel',
-  'Visionary', 'Healer', 'Trickster', 'Sage', 'Creator',
-];
-
-const GLAM_ENERGIES = ['Minimal', 'Maximal', 'Editorial'];
-const STORY_STATUSES = ['Active', 'Evolving', 'Archived'];
 
 /* ── JSONB Helpers ──────────────────────────────────────────────── */
 

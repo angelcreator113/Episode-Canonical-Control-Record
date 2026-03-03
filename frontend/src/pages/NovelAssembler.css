@@ -1,0 +1,588 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   NovelAssembler.css
+   Aesthetic: Editorial parchment — warm cream, ink, gold accent
+   Matches StoryEngine design system
+   ──────────────────────────────────────────────────────────────────────────── */
+
+/* ── Variables ───────────────────────────────────────────────────────────────── */
+.na-page {
+  --na-bg:          #FAF7F0;
+  --na-surface:     #FFFFFF;
+  --na-surface2:    #F0EDE6;
+  --na-border:      #E0DCD4;
+  --na-text:        #1C1814;
+  --na-text-muted:  #6B6560;
+  --na-text-dim:    #A09A92;
+  --na-gold:        #b0922e;
+  --na-success:     #0d9668;
+  --na-danger:      #c0392b;
+  --na-crisis:      #b91c1c;
+
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  background: var(--na-bg);
+  color: var(--na-text);
+  font-family: 'DM Sans', sans-serif;
+  overflow: hidden;
+}
+
+/* ── Top bar ─────────────────────────────────────────────────────────────────── */
+.na-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 24px;
+  border-bottom: 1px solid var(--na-border);
+  flex-shrink: 0;
+  background: var(--na-surface);
+}
+
+.na-btn-back {
+  background: none;
+  border: none;
+  color: var(--na-text-muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+  transition: color 0.15s, background 0.15s;
+  min-height: 44px;
+  min-width: 44px;
+  display: flex;
+  align-items: center;
+}
+.na-btn-back:hover {
+  color: var(--na-text);
+  background: var(--na-surface2);
+}
+
+.na-topbar-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--na-text);
+  letter-spacing: 0.02em;
+  margin-right: auto;
+}
+
+.na-topbar-stats {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--na-text-muted);
+  font-weight: 500;
+  letter-spacing: 0.03em;
+}
+
+/* ── Character bar ───────────────────────────────────────────────────────────── */
+.na-char-bar {
+  display: flex;
+  gap: 8px;
+  padding: 10px 24px;
+  border-bottom: 1px solid var(--na-border);
+  background: var(--na-surface);
+  overflow-x: auto;
+  flex-shrink: 0;
+}
+
+.na-char-pill {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  border: 1.5px solid var(--na-border);
+  background: transparent;
+  color: var(--na-text-muted);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+.na-char-pill:hover {
+  border-color: var(--char-color);
+  color: var(--na-text);
+}
+.na-char-pill.active {
+  border-color: var(--char-color);
+  background: var(--char-color);
+  color: #fff;
+}
+
+/* ── Workspace split ─────────────────────────────────────────────────────────── */
+.na-workspace {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+.na-list-column {
+  width: 420px;
+  min-width: 340px;
+  border-right: 1px solid var(--na-border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.na-detail-column {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* ── List header ─────────────────────────────────────────────────────────────── */
+.na-list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--na-border);
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--na-text);
+  flex-shrink: 0;
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────────── */
+.na-btn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: 1px solid var(--na-border);
+  background: transparent;
+  color: var(--na-text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.na-btn:hover:not(:disabled) {
+  border-color: var(--na-gold);
+}
+.na-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.na-btn-new {
+  border: none;
+  color: #fff;
+  font-weight: 600;
+}
+.na-btn-new:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+.na-btn-compile {
+  border-width: 1.5px;
+  font-weight: 600;
+}
+.na-btn-compile:hover {
+  background: rgba(176, 146, 46, 0.06);
+}
+.na-btn-delete {
+  color: var(--na-danger);
+  border-color: rgba(192, 57, 43, 0.15);
+}
+.na-btn-delete:hover {
+  border-color: var(--na-danger);
+  background: rgba(192, 57, 43, 0.04);
+}
+.na-btn-create {
+  width: 100%;
+  border: none;
+  color: #fff;
+  font-weight: 600;
+  padding: 10px;
+  margin-top: 10px;
+}
+.na-btn-create:hover:not(:disabled) {
+  opacity: 0.9;
+}
+
+/* ── Create form ─────────────────────────────────────────────────────────────── */
+.na-create-form {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--na-border);
+  background: var(--na-surface2);
+}
+
+.na-create-input {
+  width: 100%;
+  padding: 10px 14px;
+  border: 1px solid var(--na-border);
+  border-radius: 8px;
+  background: var(--na-surface);
+  color: var(--na-text);
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  box-sizing: border-box;
+  transition: border-color 0.2s;
+}
+.na-create-input:focus {
+  outline: none;
+  border-color: var(--na-gold);
+}
+
+.na-create-label {
+  font-size: 12px;
+  color: var(--na-text-muted);
+  margin: 12px 0 8px;
+  font-weight: 500;
+}
+
+/* ── Story checklist ─────────────────────────────────────────────────────────── */
+.na-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.na-check-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--na-border);
+  background: var(--na-surface);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.na-check-item:hover {
+  border-color: var(--na-gold);
+}
+.na-check-item.checked {
+  border-color: var(--na-gold);
+  background: rgba(176, 146, 46, 0.04);
+}
+
+.na-check-box {
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1.5px solid var(--na-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  flex-shrink: 0;
+  margin-top: 1px;
+  transition: all 0.15s;
+}
+
+.na-check-info {
+  flex: 1;
+  min-width: 0;
+}
+.na-check-num {
+  font-size: 10px;
+  color: var(--na-text-dim);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  font-variant-numeric: tabular-nums;
+}
+.na-check-title {
+  font-size: 13px;
+  color: var(--na-text);
+  margin-top: 2px;
+  line-height: 1.3;
+}
+.na-check-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--na-text-dim);
+}
+
+/* ── Status badges ───────────────────────────────────────────────────────────── */
+.na-status-draft {
+  color: var(--na-text-dim);
+}
+.na-status-approved {
+  color: var(--na-success);
+}
+.na-status-rejected {
+  color: var(--na-danger);
+}
+.na-status-compiled {
+  color: var(--na-gold);
+  font-weight: 600;
+}
+
+/* ── Assembly card ───────────────────────────────────────────────────────────── */
+.na-assembly-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.na-assembly-card {
+  background: var(--na-surface);
+  border: 1px solid var(--na-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: box-shadow 0.2s, border-color 0.2s;
+}
+.na-assembly-card:hover {
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.04);
+  border-color: var(--na-gold);
+}
+
+.na-assembly-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.na-assembly-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--na-text);
+}
+.na-assembly-status {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+
+.na-assembly-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 11px;
+  color: var(--na-text-dim);
+  margin-bottom: 10px;
+}
+
+.na-assembly-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+/* ── Detail view ─────────────────────────────────────────────────────────────── */
+.na-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.na-detail-header {
+  padding-bottom: 14px;
+  border-bottom: 2px solid var(--na-border);
+}
+.na-detail-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: var(--na-text);
+  margin-bottom: 6px;
+}
+.na-detail-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 12px;
+  color: var(--na-text-muted);
+  font-weight: 500;
+}
+
+/* ── Emotional curve ─────────────────────────────────────────────────────────── */
+.na-curve-container {
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--na-surface);
+  border: 1px solid var(--na-border);
+}
+.na-curve-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--na-text-muted);
+  margin-bottom: 12px;
+}
+.na-curve-canvas {
+  width: 100%;
+  max-width: 600px;
+  height: auto;
+  border-radius: 6px;
+}
+
+/* ── Chapters ────────────────────────────────────────────────────────────────── */
+.na-chapters {
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--na-surface);
+  border: 1px solid var(--na-border);
+}
+.na-chapters-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--na-text-muted);
+  margin-bottom: 12px;
+}
+.na-chapter-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(224, 220, 212, 0.5);
+  font-size: 13px;
+}
+.na-chapter-item:last-child {
+  border-bottom: none;
+}
+.na-chapter-num {
+  font-weight: 600;
+  color: var(--na-gold);
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  width: 44px;
+  flex-shrink: 0;
+}
+.na-chapter-title {
+  flex: 1;
+  color: var(--na-text);
+}
+.na-chapter-pos {
+  font-size: 11px;
+  color: var(--na-text-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Preview ─────────────────────────────────────────────────────────────────── */
+.na-preview {
+  padding: 16px;
+  border-radius: 10px;
+  background: var(--na-surface);
+  border: 1px solid var(--na-border);
+}
+.na-preview-title {
+  font-family: 'Playfair Display', Georgia, serif;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--na-text-muted);
+  margin-bottom: 12px;
+}
+.na-preview-text {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--na-text);
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* ── Empty + Loading ─────────────────────────────────────────────────────────── */
+.na-loading {
+  padding: 40px;
+  text-align: center;
+  color: var(--na-text-dim);
+  font-size: 13px;
+}
+
+.na-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  gap: 8px;
+  color: var(--na-text-muted);
+  font-size: 14px;
+  padding: 40px;
+}
+.na-empty-icon {
+  font-size: 36px;
+  margin-bottom: 8px;
+  opacity: 0.5;
+}
+.na-empty-hint {
+  font-size: 12px;
+  color: var(--na-text-dim);
+}
+
+.na-detail-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 8px;
+  color: var(--na-text-muted);
+  font-size: 14px;
+}
+.na-detail-empty-icon {
+  font-size: 48px;
+  margin-bottom: 8px;
+  opacity: 0.4;
+}
+.na-detail-empty-hint {
+  font-size: 12px;
+  color: var(--na-text-dim);
+}
+
+/* ── Compiling spinner ───────────────────────────────────────────────────────── */
+.na-compiling {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+  color: var(--na-text-muted);
+  font-size: 14px;
+}
+
+.na-compiling-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--na-border);
+  border-top-width: 3px;
+  border-radius: 50%;
+  animation: na-spin 0.8s linear infinite;
+}
+
+@keyframes na-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Responsive ──────────────────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .na-workspace {
+    flex-direction: column;
+  }
+  .na-list-column {
+    width: 100%;
+    min-width: 0;
+    border-right: none;
+    border-bottom: 1px solid var(--na-border);
+    max-height: 50vh;
+  }
+  .na-char-bar {
+    padding: 8px 16px;
+  }
+  .na-topbar {
+    padding: 10px 16px;
+  }
+}

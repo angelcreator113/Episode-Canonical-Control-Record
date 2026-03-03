@@ -15,12 +15,12 @@ const NAV = [
   {
     zone: 'WORLD',
     items: [
-      { icon: '◈',  label: 'Universe',        route: '/universe' },
-      { icon: '🌍', label: 'World View',      route: '/character-registry?view=world' },
-      { icon: '🧬', label: 'Generator',       route: '/character-generator' },
-      { icon: '🛋️', label: 'Therapy Room',    route: '/therapy/default' },
-      { icon: '📰', label: 'The Press',       route: '/press' },
-      { icon: '🌳', label: 'Relationships', route: '/relationships' },
+      { icon: '◈',  label: 'Universe',             route: '/universe' },
+      { icon: '📋', label: 'Registry',             route: '/character-registry' },
+      { icon: '🌍', label: 'World View',           route: '/character-registry?view=world' },
+      { icon: '🧬', label: 'Character Generator',  route: '/character-generator' },
+      { icon: '🌳', label: 'Relationships',        route: '/relationships' },
+      { icon: '🛋️', label: 'Therapy',              route: '/therapy/default' },
     ],
   },
   {
@@ -28,6 +28,8 @@ const NAV = [
     items: [
       { icon: '▶',  label: 'Start Session',   route: '/start' },
       { icon: '⚡', label: 'Story Engine',    route: '/story-engine' },
+      { icon: '📱', label: 'Social Import',   route: '/social-import' },
+      { icon: '📖', label: 'Assembler',        route: '/assembler' },
       { icon: '◇',  label: 'Continuity',      route: '/continuity' },
     ],
   },

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import StoryReviewPanel from './StoryReviewPanel';
 import './StoryEngine.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -307,6 +308,19 @@ function StoryPanel({
           ))}
           {therapyLoading && <div className="se-therapy-loading">Extracting memories…</div>}
         </div>
+      )}
+
+      {/* Persistence bridge — save / approve / reject to DB */}
+      {story && (
+        <StoryReviewPanel
+          story={story}
+          characterKey={story.character_key}
+          taskBrief={task}
+          charColor={charColor}
+          onApproved={(saved) => { console.log('Story approved & persisted', saved.id); onApprove(story); }}
+          onRejected={(saved) => { console.log('Story rejected & persisted', saved.id); onReject(story); }}
+          onSaved={(saved)    => { console.log('Story saved', saved.id); }}
+        />
       )}
     </div>
   );
