@@ -19,6 +19,7 @@ const NAV = [
       { icon: '📋', label: 'Registry',             route: '/character-registry' },
       { icon: '🌍', label: 'World View',           route: '/character-registry?view=world' },
       { icon: '🧬', label: 'Character Generator',  route: '/character-generator' },
+      { icon: '✦',  label: 'World Studio',          route: '/world-studio' },
       { icon: '🌳', label: 'Relationships',        route: '/relationships' },
       { icon: '🛋️', label: 'Therapy',              route: '/therapy/default' },
     ],

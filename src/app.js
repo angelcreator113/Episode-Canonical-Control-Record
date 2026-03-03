@@ -626,6 +626,10 @@ app.use('/api/v1', worldRoutes);
 const worldEventRoutes = trackRouteLoad('worldEvents', () => require('./routes/worldEvents'));
 app.use('/api/v1', worldEventRoutes);
 
+// World Studio routes (character ecosystem + intimate scene generator)
+const worldStudioRoutes = trackRouteLoad('worldStudio', () => require('./routes/worldStudio'));
+app.use('/api/v1', worldStudioRoutes);
+
 // Career Goals routes (goal CRUD + sync + suggest-events)
 try {
   const careerGoalRoutes = require('./routes/careerGoals');
