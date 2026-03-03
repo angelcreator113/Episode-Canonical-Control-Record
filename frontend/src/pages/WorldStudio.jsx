@@ -330,154 +330,194 @@ export default function WorldStudio() {
       {/* ── Body ──────────────────────────────────────────────────────── */}
       <div className="ws-body">
 
-        {/* ── Left sidebar ───────────────────────────────────────────── */}
-        <div className="ws-left">
-          <div className="ws-panel-title">
-            {tab === 'characters' ? 'Characters' : tab === 'scenes' ? 'Scenes' : 'Triggers'}
+        {/* ═══ LEFT SIDEBAR ═══════════════════════════════════════════════ */}
+        <aside className="ws-left ws-panel-card">
+          <div className="ws-panel-header">
+            <div className="ws-panel-title">
+              {tab === 'characters' ? 'Characters' : tab === 'scenes' ? 'Scenes' : 'Triggers'}
+            </div>
+            <span className="ws-panel-count">
+              {tab === 'characters' ? filtered.length
+                : tab === 'scenes' ? scenes.length
+                : triggered.length + oneNightCandidates.length}
+            </span>
           </div>
 
-          {/* Characters tab sidebar */}
-          {tab === 'characters' && (
-            <>
-              <div className="ws-filter-row">
-                <button
-                  className={`ws-filter-pill${charFilter === 'all' ? ' active' : ''}`}
-                  onClick={() => setCharFilter('all')}
-                >All</button>
-                {uniqueTypes.map(t => (
+          <div className="ws-panel-body">
+            {/* Characters tab sidebar */}
+            {tab === 'characters' && (
+              <>
+                <div className="ws-filter-row">
                   <button
-                    key={t}
-                    className={`ws-filter-pill${charFilter === t ? ' active' : ''}`}
-                    onClick={() => setCharFilter(t)}
-                  >{TYPES[t] || t}</button>
-                ))}
-              </div>
-
-              {filtered.length === 0 ? (
-                <div className="ws-empty-state">
-                  <div className="ws-empty-icon">✦</div>
-                  <div>No characters yet</div>
-                  <div style={{ marginTop: 4 }}>Generate an ecosystem to begin</div>
-                </div>
-              ) : filtered.map(c => (
-                <div
-                  key={c.id}
-                  className={`ws-char-card${selectedChar === c.id ? ' selected' : ''}`}
-                  onClick={() => setSelectedChar(c.id)}
-                >
-                  <div className="ws-char-card-top">
-                    <span className="ws-char-card-name">{c.name}</span>
-                    <div className="ws-char-card-meta">
-                      {c.intimate_eligible && <span className="ws-char-intimate-dot">♡</span>}
-                      <span className={`ws-char-status ${c.status}`}>{c.status}</span>
-                    </div>
-                  </div>
-                  <div className="ws-char-card-occ">{c.occupation}</div>
-                  <div className="ws-char-card-tags">
-                    <TypeBadge type={c.character_type} small />
-                    <TensionDot tension={c.current_tension} />
-                  </div>
-                  {c.signature && (
-                    <div className="ws-char-card-sig">"{c.signature}"</div>
-                  )}
-                  {c.status === 'draft' && (
+                    className={`ws-filter-pill${charFilter === 'all' ? ' active' : ''}`}
+                    onClick={() => setCharFilter('all')}
+                  >All</button>
+                  {uniqueTypes.map(t => (
                     <button
-                      className="ws-btn-activate"
-                      onClick={(e) => { e.stopPropagation(); activateChar(c.id); }}
-                    >Activate</button>
-                  )}
+                      key={t}
+                      className={`ws-filter-pill${charFilter === t ? ' active' : ''}`}
+                      onClick={() => setCharFilter(t)}
+                    >{TYPES[t] || t}</button>
+                  ))}
                 </div>
-              ))}
-            </>
-          )}
 
-          {/* Scenes tab sidebar */}
-          {tab === 'scenes' && (
-            <>
-              {scenes.length === 0 ? (
-                <div className="ws-empty-state">
-                  <div className="ws-empty-icon">♡</div>
-                  <div>No scenes yet</div>
-                  <div style={{ marginTop: 4 }}>Generate a scene from a character or trigger</div>
-                </div>
-              ) : scenes.map(s => (
-                <div
-                  key={s.id}
-                  className={`ws-scene-card${selectedScene === s.id ? ' selected' : ''}`}
-                  onClick={() => setSelectedScene(s.id)}
-                >
-                  <div className="ws-scene-card-names">
-                    {s.character_a_name}{s.character_b_name ? ` & ${s.character_b_name}` : ''}
+                {filtered.length === 0 ? (
+                  <div className="ws-empty-state">
+                    <div className="ws-empty-icon">✦</div>
+                    <div>No characters yet</div>
+                    <div style={{ marginTop: 4 }}>Generate an ecosystem to begin</div>
                   </div>
-                  <div className="ws-scene-card-meta">
-                    {TYPES[s.scene_type] || s.scene_type} · {s.word_count || '—'} words
-                  </div>
-                  <div className="ws-scene-card-tags">
-                    <span className={`ws-intensity ${s.intensity}`}>{s.intensity}</span>
-                    <span style={{ fontSize: 11, color: s.status === 'approved' ? '#0d9668' : '#b0922e' }}>
-                      {s.status}
-                    </span>
-                  </div>
-                  {s.relationship_shift && (
-                    <div className="ws-scene-card-shift">"{s.relationship_shift}"</div>
-                  )}
-                </div>
-              ))}
-            </>
-          )}
-
-          {/* Triggers tab sidebar */}
-          {tab === 'triggers' && (
-            <>
-              {triggered.length > 0 && (
-                <>
-                  <div className="ws-sidebar-section-label">Tension Triggers</div>
-                  {triggered.map((t, i) => (
-                    <div key={i} className="ws-trigger-card" onClick={() => openSceneFromTrigger(t)}>
-                      <div className="ws-trigger-name">{t.name}</div>
-                      <div className="ws-trigger-occ">{t.occupation}</div>
-                      <div className="ws-trigger-tension">
-                        <TensionDot tension={t.tension_state} />
+                ) : filtered.map(c => (
+                  <div
+                    key={c.id}
+                    className={`ws-char-card${selectedChar === c.id ? ' selected' : ''}`}
+                    onClick={() => setSelectedChar(c.id)}
+                  >
+                    <div className="ws-char-card-top">
+                      <span className="ws-char-card-name">{c.name}</span>
+                      <div className="ws-char-card-meta">
+                        {c.intimate_eligible && <span className="ws-char-intimate-dot">♡</span>}
+                        <span className={`ws-char-status ${c.status}`}>{c.status}</span>
                       </div>
-                      {t.situation && (
-                        <div className="ws-trigger-situation">{t.situation}</div>
-                      )}
-                      <button className="ws-trigger-btn">Write Scene →</button>
                     </div>
-                  ))}
-                </>
-              )}
-              {oneNightCandidates.length > 0 && (
-                <>
-                  <div className="ws-sidebar-section-label" style={{ marginTop: triggered.length > 0 ? 18 : 0 }}>
-                    One Night Candidates
+                    <div className="ws-char-card-occ">{c.occupation}</div>
+                    <div className="ws-char-card-tags">
+                      <TypeBadge type={c.character_type} small />
+                      <TensionDot tension={c.current_tension} />
+                    </div>
+                    {c.signature && (
+                      <div className="ws-char-card-sig">"{c.signature}"</div>
+                    )}
+                    {c.status === 'draft' && (
+                      <button
+                        className="ws-btn-activate"
+                        onClick={(e) => { e.stopPropagation(); activateChar(c.id); }}
+                      >Activate</button>
+                    )}
                   </div>
-                  {oneNightCandidates.map(c => (
-                    <div key={c.id} className="ws-trigger-card" onClick={() => openSceneFromTrigger(c)}>
-                      <div className="ws-trigger-name">{c.name}</div>
-                      <div className="ws-trigger-occ">{c.occupation}</div>
-                      <button className="ws-trigger-btn">Write Scene →</button>
+                ))}
+              </>
+            )}
+
+            {/* Scenes tab sidebar */}
+            {tab === 'scenes' && (
+              <>
+                {scenes.length === 0 ? (
+                  <div className="ws-empty-state">
+                    <div className="ws-empty-icon">♡</div>
+                    <div>No scenes yet</div>
+                    <div style={{ marginTop: 4 }}>Generate a scene from a character or trigger</div>
+                  </div>
+                ) : scenes.map(s => (
+                  <div
+                    key={s.id}
+                    className={`ws-scene-card${selectedScene === s.id ? ' selected' : ''}`}
+                    onClick={() => setSelectedScene(s.id)}
+                  >
+                    <div className="ws-scene-card-names">
+                      {s.character_a_name}{s.character_b_name ? ` & ${s.character_b_name}` : ''}
                     </div>
-                  ))}
-                </>
-              )}
-              {triggered.length === 0 && oneNightCandidates.length === 0 && (
-                <div className="ws-empty-state">
-                  <div className="ws-empty-icon">◇</div>
-                  <div>No triggers active</div>
-                  <div style={{ marginTop: 4 }}>Activate characters and build tension first</div>
-                </div>
-              )}
-            </>
+                    <div className="ws-scene-card-meta">
+                      {TYPES[s.scene_type] || s.scene_type} · {s.word_count || '—'} words
+                    </div>
+                    <div className="ws-scene-card-tags">
+                      <span className={`ws-intensity ${s.intensity}`}>{s.intensity}</span>
+                      <span style={{ fontSize: 11, color: s.status === 'approved' ? '#0d9668' : '#b0922e' }}>
+                        {s.status}
+                      </span>
+                    </div>
+                    {s.relationship_shift && (
+                      <div className="ws-scene-card-shift">"{s.relationship_shift}"</div>
+                    )}
+                  </div>
+                ))}
+              </>
+            )}
+
+            {/* Triggers tab sidebar */}
+            {tab === 'triggers' && (
+              <>
+                {triggered.length > 0 && (
+                  <>
+                    <div className="ws-sidebar-section-label">Tension Triggers</div>
+                    {triggered.map((t, i) => (
+                      <div key={i} className="ws-trigger-card" onClick={() => openSceneFromTrigger(t)}>
+                        <div className="ws-trigger-name">{t.name}</div>
+                        <div className="ws-trigger-occ">{t.occupation}</div>
+                        <div className="ws-trigger-tension">
+                          <TensionDot tension={t.tension_state} />
+                        </div>
+                        {t.situation && (
+                          <div className="ws-trigger-situation">{t.situation}</div>
+                        )}
+                        <button className="ws-trigger-btn">Write Scene →</button>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {oneNightCandidates.length > 0 && (
+                  <>
+                    <div className="ws-sidebar-section-label" style={{ marginTop: triggered.length > 0 ? 18 : 0 }}>
+                      One Night Candidates
+                    </div>
+                    {oneNightCandidates.map(c => (
+                      <div key={c.id} className="ws-trigger-card" onClick={() => openSceneFromTrigger(c)}>
+                        <div className="ws-trigger-name">{c.name}</div>
+                        <div className="ws-trigger-occ">{c.occupation}</div>
+                        <button className="ws-trigger-btn">Write Scene →</button>
+                      </div>
+                    ))}
+                  </>
+                )}
+                {triggered.length === 0 && oneNightCandidates.length === 0 && (
+                  <div className="ws-empty-state">
+                    <div className="ws-empty-icon">◇</div>
+                    <div>No triggers active</div>
+                    <div style={{ marginTop: 4 }}>Activate characters and build tension first</div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </aside>
+
+        {/* ═══ CENTER CANVAS ══════════════════════════════════════════════ */}
+        <main className="ws-main ws-panel-card">
+
+          {/* Characters tab — no characters: big CTA empty state */}
+          {tab === 'characters' && characters.length === 0 && (
+            <div className="ws-center-empty">
+              <div className="ws-center-empty-icon">✦</div>
+              <div className="ws-center-empty-title">Start your World Ecosystem</div>
+              <div className="ws-center-empty-sub">
+                Generate a cast, initial scenes, and narrative triggers for this universe.
+                You can edit everything after generation.
+              </div>
+              <div className="ws-center-empty-actions">
+                <button className="ws-btn ws-btn-generate-cta" onClick={() => setShowEcoModal(true)}>
+                  ✨ Generate Ecosystem
+                </button>
+                <button className="ws-btn ws-btn-scene-cta" onClick={() => setShowSceneModal(true)}>
+                  ♡ Write Scene
+                </button>
+              </div>
+            </div>
           )}
-        </div>
 
-        {/* ── Right detail panel ─────────────────────────────────────── */}
-        <div className="ws-right">
+          {/* Characters tab — data but none selected */}
+          {tab === 'characters' && characters.length > 0 && !charDetail && (
+            <div className="ws-center-empty">
+              <div className="ws-center-empty-icon">✦</div>
+              <div className="ws-center-empty-title">Select a character</div>
+              <div className="ws-center-empty-sub">
+                Choose a character from the sidebar to preview their world profile.
+              </div>
+            </div>
+          )}
 
-          {/* Character detail */}
+          {/* Characters tab — detail (center portion: overview) */}
           {tab === 'characters' && charDetail && (
-            <div className="ws-detail-inner" key={charDetail.id}>
+            <div className="ws-main-inner" key={charDetail.id}>
               <div className="ws-char-detail-badges">
                 <TypeBadge type={charDetail.character_type} />
                 {charDetail.intimate_eligible && <span className="ws-badge-intimate">♡ Intimate Eligible</span>}
@@ -489,7 +529,6 @@ export default function WorldStudio() {
               </div>
               <TensionDot tension={charDetail.current_tension} />
 
-              {/* Aesthetic */}
               {charDetail.aesthetic && (
                 <div style={{ marginTop: 20 }}>
                   <div className="ws-section-label gold">Aesthetic</div>
@@ -497,14 +536,12 @@ export default function WorldStudio() {
                 </div>
               )}
 
-              {/* Signature */}
               {charDetail.signature && (
                 <blockquote className="ws-signature-quote">
                   {charDetail.signature}
                 </blockquote>
               )}
 
-              {/* Wants */}
               <div className="ws-section-label">What They Want</div>
               <div className="ws-want-grid">
                 <div className="ws-want-card">
@@ -517,7 +554,6 @@ export default function WorldStudio() {
                 </div>
               </div>
 
-              {/* From Lala */}
               {charDetail.what_they_want_from_lala && (
                 <>
                   <div className="ws-section-label">What They Want From Lala</div>
@@ -526,92 +562,39 @@ export default function WorldStudio() {
                   </div>
                 </>
               )}
-
-              {/* How They Meet */}
-              {charDetail.how_they_meet && (
-                <>
-                  <div className="ws-section-label teal">How They Meet</div>
-                  <div className="ws-dynamic-card">
-                    <div className="ws-dynamic-text">{charDetail.how_they_meet}</div>
-                  </div>
-                </>
-              )}
-
-              {/* Dynamic */}
-              {charDetail.dynamic && (
-                <>
-                  <div className="ws-section-label lavender">Dynamic</div>
-                  <div className="ws-dynamic-card">
-                    <div className="ws-dynamic-text">{charDetail.dynamic}</div>
-                  </div>
-                </>
-              )}
-
-              {/* Intimate Profile */}
-              {charDetail.intimate_eligible && (
-                <>
-                  <div className="ws-section-label rose">Intimate Profile</div>
-                  <div className="ws-intimate-profile">
-                    {charDetail.intimate_style && (
-                      <div className="ws-intimate-field">
-                        <div className="ws-intimate-field-label">Intimate Style</div>
-                        <div className="ws-intimate-field-text">{charDetail.intimate_style}</div>
-                      </div>
-                    )}
-                    {charDetail.intimate_dynamic && (
-                      <div className="ws-intimate-field">
-                        <div className="ws-intimate-field-label">Dynamic</div>
-                        <div className="ws-intimate-field-text">{charDetail.intimate_dynamic}</div>
-                      </div>
-                    )}
-                    {charDetail.what_lala_feels && (
-                      <div className="ws-intimate-field">
-                        <div className="ws-intimate-field-label">What Lala Feels</div>
-                        <div className="ws-intimate-field-text">{charDetail.what_lala_feels}</div>
-                      </div>
-                    )}
-                    <button
-                      className="ws-btn-write-scene"
-                      onClick={() => openSceneForChar(charDetail.id)}
-                    >♡ Write Intimate Scene</button>
-                  </div>
-                </>
-              )}
-
-              {/* Arc */}
-              <div className="ws-section-label">Arc</div>
-              <div className="ws-arc-grid">
-                {charDetail.arc_role && (
-                  <div className="ws-want-card">
-                    <div className="ws-section-label" style={{ marginBottom: 4 }}>Role in Lala's Arc</div>
-                    <div className="ws-want-card-value">{charDetail.arc_role}</div>
-                  </div>
-                )}
-                {charDetail.exit_reason && (
-                  <div className="ws-want-card">
-                    <div className="ws-section-label" style={{ marginBottom: 4 }}>Exit</div>
-                    <div className="ws-want-card-value">{charDetail.exit_reason}</div>
-                  </div>
-                )}
-              </div>
-
-              {/* Registry link */}
-              {charDetail.registry_character_id && (
-                <div style={{ marginTop: 20 }}>
-                  <button
-                    className="ws-btn-registry-link"
-                    onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}
-                  >
-                    📋 View in Character Registry
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
-          {/* Scene detail */}
+          {/* Scenes tab — no scenes: CTA */}
+          {tab === 'scenes' && scenes.length === 0 && (
+            <div className="ws-center-empty">
+              <div className="ws-center-empty-icon">♡</div>
+              <div className="ws-center-empty-title">No scenes yet</div>
+              <div className="ws-center-empty-sub">
+                Generate an intimate scene between two characters to begin. Scenes include approach, scene text, and aftermath.
+              </div>
+              <div className="ws-center-empty-actions">
+                <button className="ws-btn ws-btn-scene-cta" onClick={() => setShowSceneModal(true)}>
+                  ♡ Write Scene
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Scenes tab — data but none selected */}
+          {tab === 'scenes' && scenes.length > 0 && !sceneDetail && (
+            <div className="ws-center-empty">
+              <div className="ws-center-empty-icon">♡</div>
+              <div className="ws-center-empty-title">Select a scene</div>
+              <div className="ws-center-empty-sub">
+                Choose a scene from the sidebar to read.
+              </div>
+            </div>
+          )}
+
+          {/* Scenes tab — scene detail (center: the beats) */}
           {tab === 'scenes' && sceneDetail && (
-            <div className="ws-detail-inner" key={sceneDetail.id}>
+            <div className="ws-main-inner" key={sceneDetail.id}>
               <div className="ws-scene-header-type">
                 {TYPES[sceneDetail.scene_type] || sceneDetail.scene_type}
               </div>
@@ -626,7 +609,6 @@ export default function WorldStudio() {
                 <span style={{ fontSize: 11, color: '#8A8278' }}>{sceneDetail.word_count} words</span>
               </div>
 
-              {/* Three beats */}
               {sceneDetail.approach_text && (
                 <div className="ws-beat">
                   <div className="ws-section-label gold">The Approach</div>
@@ -652,16 +634,141 @@ export default function WorldStudio() {
                 </div>
               )}
 
-              {/* Relationship shift */}
               {sceneDetail.relationship_shift && (
                 <blockquote className="ws-shift-quote">
                   {sceneDetail.relationship_shift}
                 </blockquote>
               )}
+            </div>
+          )}
 
-              {/* Continuations */}
+          {/* Triggers tab — empty */}
+          {tab === 'triggers' && triggered.length === 0 && oneNightCandidates.length === 0 && (
+            <div className="ws-center-empty">
+              <div className="ws-center-empty-icon">◇</div>
+              <div className="ws-center-empty-title">No triggers active</div>
+              <div className="ws-center-empty-sub">
+                Activate characters and build tension. Triggers appear when tension states reach critical levels.
+              </div>
+            </div>
+          )}
+
+          {/* Triggers tab — triggers exist but no character selected */}
+          {tab === 'triggers' && (triggered.length > 0 || oneNightCandidates.length > 0) && (
+            <div className="ws-center-empty">
+              <div className="ws-center-empty-icon">◇</div>
+              <div className="ws-center-empty-title">Tap a trigger</div>
+              <div className="ws-center-empty-sub">
+                Select a tension trigger from the sidebar to generate a scene.
+              </div>
+            </div>
+          )}
+        </main>
+
+        {/* ═══ RIGHT INSPECTOR ════════════════════════════════════════════ */}
+        <aside className="ws-right ws-panel-card">
+          <div className="ws-panel-header">
+            <div className="ws-panel-title">
+              {tab === 'characters' ? 'World Profile' : tab === 'scenes' ? 'Scene Info' : 'Inspector'}
+            </div>
+          </div>
+
+          {/* Character inspector (deeper details) */}
+          {tab === 'characters' && charDetail && (
+            <div className="ws-panel-body">
+              {charDetail.how_they_meet && (
+                <div className="ws-inspector-field">
+                  <div className="ws-section-label teal">How They Meet</div>
+                  <div className="ws-dynamic-card">
+                    <div className="ws-dynamic-text">{charDetail.how_they_meet}</div>
+                  </div>
+                </div>
+              )}
+
+              {charDetail.dynamic && (
+                <div className="ws-inspector-field">
+                  <div className="ws-section-label lavender">Dynamic</div>
+                  <div className="ws-dynamic-card">
+                    <div className="ws-dynamic-text">{charDetail.dynamic}</div>
+                  </div>
+                </div>
+              )}
+
+              {charDetail.intimate_eligible && (
+                <div className="ws-inspector-field">
+                  <div className="ws-section-label rose">Intimate Profile</div>
+                  <div className="ws-intimate-profile">
+                    {charDetail.intimate_style && (
+                      <div className="ws-intimate-field">
+                        <div className="ws-intimate-field-label">Intimate Style</div>
+                        <div className="ws-intimate-field-text">{charDetail.intimate_style}</div>
+                      </div>
+                    )}
+                    {charDetail.intimate_dynamic && (
+                      <div className="ws-intimate-field">
+                        <div className="ws-intimate-field-label">Dynamic</div>
+                        <div className="ws-intimate-field-text">{charDetail.intimate_dynamic}</div>
+                      </div>
+                    )}
+                    {charDetail.what_lala_feels && (
+                      <div className="ws-intimate-field">
+                        <div className="ws-intimate-field-label">What Lala Feels</div>
+                        <div className="ws-intimate-field-text">{charDetail.what_lala_feels}</div>
+                      </div>
+                    )}
+                    <button
+                      className="ws-btn-write-scene"
+                      onClick={() => openSceneForChar(charDetail.id)}
+                    >♡ Write Intimate Scene</button>
+                  </div>
+                </div>
+              )}
+
+              <div className="ws-inspector-field">
+                <div className="ws-section-label">Arc</div>
+                <div className="ws-arc-grid">
+                  {charDetail.arc_role && (
+                    <div className="ws-want-card">
+                      <div className="ws-section-label" style={{ marginBottom: 4 }}>Role in Lala's Arc</div>
+                      <div className="ws-want-card-value">{charDetail.arc_role}</div>
+                    </div>
+                  )}
+                  {charDetail.exit_reason && (
+                    <div className="ws-want-card">
+                      <div className="ws-section-label" style={{ marginBottom: 4 }}>Exit</div>
+                      <div className="ws-want-card-value">{charDetail.exit_reason}</div>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {charDetail.registry_character_id && (
+                <div style={{ marginTop: 8 }}>
+                  <button
+                    className="ws-btn-registry-link"
+                    onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}
+                  >
+                    📋 View in Character Registry
+                  </button>
+                </div>
+              )}
+
+              {charDetail.status === 'draft' && (
+                <div style={{ marginTop: 12 }}>
+                  <button
+                    className="ws-btn-activate"
+                    onClick={() => activateChar(charDetail.id)}
+                  >Activate Character</button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Scene inspector (continuations + actions) */}
+          {tab === 'scenes' && sceneDetail && (
+            <div className="ws-panel-body">
               {continuations.length > 0 && (
-                <>
+                <div className="ws-inspector-field">
                   <div className="ws-section-label lavender">Morning After</div>
                   {continuations.map(cont => (
                     <div key={cont.id} className="ws-continuation">
@@ -679,10 +786,9 @@ export default function WorldStudio() {
                       )}
                     </div>
                   ))}
-                </>
+                </div>
               )}
 
-              {/* Actions */}
               <div className="ws-actions">
                 {sceneDetail.status === 'draft' && (
                   <>
@@ -707,28 +813,22 @@ export default function WorldStudio() {
             </div>
           )}
 
-          {/* Triggers — detail is the same as character detail when a trigger is selected */}
-          {tab === 'triggers' && !selectedChar && !selectedScene && (
-            <div className="ws-empty-detail">
-              <div className="ws-empty-detail-icon">◇</div>
-              <div className="ws-empty-detail-text">Select a trigger to preview the character</div>
+          {/* Inspector empty state */}
+          {!((tab === 'characters' && charDetail) || (tab === 'scenes' && sceneDetail)) && (
+            <div className="ws-inspector-empty">
+              <div className="ws-inspector-empty-icon">
+                {tab === 'characters' ? '✦' : tab === 'scenes' ? '♡' : '◇'}
+              </div>
+              <div>
+                {tab === 'characters'
+                  ? 'Select a character to view their world profile'
+                  : tab === 'scenes'
+                  ? 'Select a scene to view details'
+                  : 'Select a trigger to preview'}
+              </div>
             </div>
           )}
-
-          {/* Empty states */}
-          {tab === 'characters' && !charDetail && (
-            <div className="ws-empty-detail">
-              <div className="ws-empty-detail-icon">✦</div>
-              <div className="ws-empty-detail-text">Select a character to view their world profile</div>
-            </div>
-          )}
-          {tab === 'scenes' && !sceneDetail && (
-            <div className="ws-empty-detail">
-              <div className="ws-empty-detail-icon">♡</div>
-              <div className="ws-empty-detail-text">Select a scene to read</div>
-            </div>
-          )}
-        </div>
+        </aside>
       </div>
 
       {/* ═══════════════════════════════════════════════════════════════════
