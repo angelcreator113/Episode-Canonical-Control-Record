@@ -20,6 +20,7 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import ProductionTab from './ProductionTab';
 import Wardrobe from './Wardrobe';
 import AssetLibrary from './AssetLibrary';
+import SocialImport from './SocialImport';
 import './UniversePage.css';
 
 function useWindowWidth() {
@@ -46,7 +47,7 @@ export default function UniversePage() {
   const isMobile = width < 640;
   const isTablet = width >= 640 && width < 1024;
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = ['universe','series','production','wardrobe','assets'].includes(searchParams.get('tab'))
+  const initialTab = ['universe','social-import','series','production','wardrobe','assets'].includes(searchParams.get('tab'))
     ? searchParams.get('tab') : 'universe';
   const [activeTab, setActiveTab] = useState(initialTab);
 
@@ -105,7 +106,8 @@ export default function UniversePage() {
   if (!universe) return <ErrorState onRetry={load} />;
 
   const px = isMobile ? 16 : isTablet ? 28 : 48;
-  const tabIcons = { universe: '🌌', series: '📚', production: '🎬', wardrobe: '👗', assets: '📁' };
+  const tabIcons = { universe: '🌌', 'social-import': '📱', series: '📚', production: '🎬', wardrobe: '👗', assets: '📁' };
+  const tabLabels = { universe: 'Universe', 'social-import': 'Social Import', series: 'Series', production: 'Production', wardrobe: 'Wardrobe', assets: 'Assets' };
 
   return (
     <div className="up-shell">
@@ -142,14 +144,14 @@ export default function UniversePage() {
 
       {/* Tab bar */}
       <div className="up-tab-bar" style={isMobile ? { padding: '8px 16px', overflowX: 'auto' } : isTablet ? { padding: '10px 28px' } : undefined}>
-        {['universe', 'series', 'production', 'wardrobe', 'assets'].map(tab => (
+        {['universe', 'social-import', 'series', 'production', 'wardrobe', 'assets'].map(tab => (
           <button
             key={tab}
             className={`up-tab-btn${activeTab === tab ? ' active' : ''}`}
             style={isMobile ? { flexShrink: 0, textAlign: 'center', fontSize: 12, whiteSpace: 'nowrap' } : undefined}
             onClick={() => switchTab(tab)}
           >
-            {tabIcons[tab]} {tab.charAt(0).toUpperCase() + tab.slice(1)}
+            {tabIcons[tab]} {tabLabels[tab]}
           </button>
         ))}
       </div>
@@ -166,6 +168,9 @@ export default function UniversePage() {
             isMobile={isMobile}
             isTablet={isTablet}
           />
+        )}
+        {activeTab === 'social-import' && (
+          <SocialImport embedded={true} />
         )}
         {activeTab === 'series' && (
           <SeriesTab

@@ -28,8 +28,7 @@ const NAV = [
     items: [
       { icon: '▶',  label: 'Start Session',   route: '/start' },
       { icon: '⚡', label: 'Story Engine',    route: '/story-engine' },
-      { icon: '📱', label: 'Social Import',   route: '/social-import' },
-      { icon: '📖', label: 'Assembler',        route: '/assembler' },
+      { icon: '', label: 'Assembler',        route: '/assembler' },
       { icon: '◇',  label: 'Continuity',      route: '/continuity' },
     ],
   },

@@ -257,7 +257,7 @@ function ImportCard({ item, onStatusChange, onDetectLala, onDelete }) {
 }
 
 // ── Main Page ──────────────────────────────────────────────────────────────
-export default function SocialImport() {
+export default function SocialImport({ embedded = false }) {
   const navigate = useNavigate();
   const [selectedChar, setSelectedChar] = useState('justawoman');
   const [imports, setImports] = useState([]);
@@ -341,16 +341,18 @@ export default function SocialImport() {
 
   return (
     <div className="si-page">
-      {/* Top bar */}
-      <div className="si-topbar">
-        <button className="si-btn-back" onClick={() => navigate('/')}>← Home</button>
-        <div className="si-topbar-title">Social Import Pipeline</div>
-        <div className="si-topbar-stats">
-          <span>{imports.length} imports</span>
-          <span>{canonCount} canon</span>
-          {lalaCount > 0 && <span className="si-topbar-lala">✦ {lalaCount} Lala</span>}
+      {/* Top bar — hidden when embedded in Universe page */}
+      {!embedded && (
+        <div className="si-topbar">
+          <button className="si-btn-back" onClick={() => navigate('/')}>← Home</button>
+          <div className="si-topbar-title">Social Import Pipeline</div>
+          <div className="si-topbar-stats">
+            <span>{imports.length} imports</span>
+            <span>{canonCount} canon</span>
+            {lalaCount > 0 && <span className="si-topbar-lala">✦ {lalaCount} Lala</span>}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Character bar */}
       <div className="si-char-bar">
