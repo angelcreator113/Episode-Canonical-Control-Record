@@ -47,6 +47,8 @@ try {
 
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
+// Ensure dotenv is loaded before creating the client (PM2 may not pass env vars)
+require('dotenv').config({ override: false });
 const anthropic = new Anthropic();
 
 // ── Memory extraction prompt ───────────────────────────────────────────────
