@@ -743,13 +743,16 @@ export default function WorldStudio() {
             <div className="ws-modal-subtitle">Claude builds a full cast of world characters from a single prompt</div>
 
             <div className="ws-form-field">
-              <div className="ws-form-label">City / Setting</div>
-              <input
-                className="ws-form-input"
-                placeholder="e.g. Los Angeles, Paris, a fictional city…"
+              <div className="ws-form-label">Universe</div>
+              <select
+                className="ws-form-select"
                 value={ecoForm.city}
                 onChange={e => setEcoForm(f => ({ ...f, city: e.target.value }))}
-              />
+              >
+                <option value="">Select universe…</option>
+                <option value="LalaVerse">LalaVerse</option>
+                <option value="Book 1">Book 1</option>
+              </select>
             </div>
 
             <div className="ws-form-field">
