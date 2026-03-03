@@ -37,8 +37,9 @@ try {
 } catch (e) { optionalAuth = (q, r, n) => n(); }
 
 // ── DB ─────────────────────────────────────────────────────────────────────
-const db = req => req.app.get('sequelize') || req.app.locals.sequelize;
-const Q  = (req, sql, opts) => db(req).query(sql, { type: db(req).QueryTypes.SELECT, ...opts });
+const models = require('../models');
+const sequelize = models.sequelize;
+const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
 async function claude(system, user, maxTokens = 2000) {
   try {
@@ -86,10 +87,10 @@ async function findOrCreateLalaVerseRegistry(req) {
   if (existing) return existing.id;
 
   const regId = uuidv4();
-  await db(req).query(
+  await sequelize.query(
     `INSERT INTO character_registries (id, name, book_tag, description, created_at, updated_at)
      VALUES (:id, 'LalaVerse', 'lalaverse', 'Auto-created by World Studio', NOW(), NOW())`,
-    { replacements: { id: regId }, type: db(req).QueryTypes.INSERT }
+    { replacements: { id: regId }, type: sequelize.QueryTypes.INSERT }
   );
   return regId;
 }
@@ -103,7 +104,7 @@ async function syncToRegistry(req, worldCharId, c, registryId) {
   const charKey = (c.name || 'char').toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 80) + '_' + worldCharId.substring(0, 8);
   const roleType = ROLE_MAP[c.character_type] || 'special';
 
-  await db(req).query(
+  await sequelize.query(
     `INSERT INTO registry_characters
        (id, registry_id, character_key, display_name, selected_name, subtitle,
         role_type, role_label, appearance_mode, status,
@@ -185,14 +186,14 @@ async function syncToRegistry(req, worldCharId, c, registryId) {
         name_options: JSON.stringify([c.name]),
         world_char_id: worldCharId,
       },
-      type: db(req).QueryTypes.INSERT,
+      type: sequelize.QueryTypes.INSERT,
     }
   );
 
   // Update world_characters with the cross-link
-  await db(req).query(
+  await sequelize.query(
     `UPDATE world_characters SET registry_character_id = :rcId WHERE id = :wcId`,
-    { replacements: { rcId, wcId: worldCharId }, type: db(req).QueryTypes.UPDATE }
+    { replacements: { rcId, wcId: worldCharId }, type: sequelize.QueryTypes.UPDATE }
   );
 
   return rcId;
@@ -309,10 +310,10 @@ Return JSON only:
 
     // Create batch record
     const batchId = uuidv4();
-    await db(req).query(
+    await sequelize.query(
       `INSERT INTO world_character_batches (id, show_id, series_label, world_context, character_count, generation_notes, created_at, updated_at)
        VALUES (:id, :show_id, :label, :context, :count, :notes, NOW(), NOW())`,
-      { replacements: { id: batchId, show_id: show_id || null, label: series_label, context: JSON.stringify(world_context), count: parsed.characters.length, notes: parsed.generation_notes || '' }, type: db(req).QueryTypes.INSERT }
+      { replacements: { id: batchId, show_id: show_id || null, label: series_label, context: JSON.stringify(world_context), count: parsed.characters.length, notes: parsed.generation_notes || '' }, type: sequelize.QueryTypes.INSERT }
     );
 
     // Insert each character + sync to registry
@@ -320,7 +321,7 @@ Return JSON only:
     const inserted = [];
     for (const c of parsed.characters) {
       const charId = uuidv4();
-      await db(req).query(
+      await sequelize.query(
         `INSERT INTO world_characters
            (id, batch_id, name, age_range, occupation, world_location, character_type,
             intimate_eligible, aesthetic, signature,
@@ -353,7 +354,7 @@ Return JSON only:
             arc_role: c.arc_role || null, exit_reason: c.exit_reason || null,
             career_echo: c.career_echo_connection || false,
           },
-          type: db(req).QueryTypes.INSERT,
+          type: sequelize.QueryTypes.INSERT,
         }
       );
 
@@ -423,7 +424,7 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
     });
     if (!updates.length) return res.status(400).json({ error: 'No fields to update' });
     updates.push('updated_at = NOW()');
-    await db(req).query(`UPDATE world_characters SET ${updates.join(', ')} WHERE id = :id`, { replacements: rep, type: db(req).QueryTypes.UPDATE });
+    await sequelize.query(`UPDATE world_characters SET ${updates.join(', ')} WHERE id = :id`, { replacements: rep, type: sequelize.QueryTypes.UPDATE });
     const [char] = await Q(req, 'SELECT * FROM world_characters WHERE id = :id', { replacements: { id: req.params.id } });
     res.json({ character: char });
   } catch (err) {
@@ -434,11 +435,11 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
 // POST /world/characters/:id/activate
 router.post('/world/characters/:id/activate', optionalAuth, async (req, res) => {
   try {
-    await db(req).query(`UPDATE world_characters SET status = 'active', updated_at = NOW() WHERE id = :id`, { replacements: { id: req.params.id }, type: db(req).QueryTypes.UPDATE });
+    await sequelize.query(`UPDATE world_characters SET status = 'active', updated_at = NOW() WHERE id = :id`, { replacements: { id: req.params.id }, type: sequelize.QueryTypes.UPDATE });
     // Sync → registry: accepted
-    await db(req).query(
+    await sequelize.query(
       `UPDATE registry_characters SET status = 'accepted', updated_at = NOW() WHERE world_character_id = :id`,
-      { replacements: { id: req.params.id }, type: db(req).QueryTypes.UPDATE }
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
     ).catch(() => {});
     res.json({ activated: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -447,11 +448,11 @@ router.post('/world/characters/:id/activate', optionalAuth, async (req, res) => 
 // POST /world/characters/:id/archive
 router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
   try {
-    await db(req).query(`UPDATE world_characters SET status = 'archived', updated_at = NOW() WHERE id = :id`, { replacements: { id: req.params.id }, type: db(req).QueryTypes.UPDATE });
+    await sequelize.query(`UPDATE world_characters SET status = 'archived', updated_at = NOW() WHERE id = :id`, { replacements: { id: req.params.id }, type: sequelize.QueryTypes.UPDATE });
     // Sync → registry: declined
-    await db(req).query(
+    await sequelize.query(
       `UPDATE registry_characters SET status = 'declined', updated_at = NOW() WHERE world_character_id = :id`,
-      { replacements: { id: req.params.id }, type: db(req).QueryTypes.UPDATE }
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
     ).catch(() => {});
     res.json({ archived: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
@@ -614,7 +615,7 @@ Return JSON only:
 
     // Save scene
     const sceneId = uuidv4();
-    await db(req).query(
+    await sequelize.query(
       `INSERT INTO intimate_scenes
          (id, character_a_id, character_b_id, character_a_name, character_b_name,
           book_id, scene_type, location, world_context, career_stage, trigger_tension,
@@ -642,7 +643,7 @@ Return JSON only:
           shift: parsed.relationship_shift || null,
           new_tension: parsed.new_tension_state || 'Stable',
         },
-        type: db(req).QueryTypes.INSERT,
+        type: sequelize.QueryTypes.INSERT,
       }
     );
 
@@ -711,10 +712,10 @@ router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => 
         `SELECT COALESCE(MAX(order_index), -1) AS max_idx FROM storyteller_chapters WHERE book_id = :bid`,
         { replacements: { bid: book_id } }
       );
-      await db(req).query(
+      await sequelize.query(
         `INSERT INTO storyteller_chapters (id, book_id, title, order_index, story_type, created_at, updated_at)
          VALUES (:id, :book_id, :title, :order_index, 'intimate_scene', NOW(), NOW())`,
-        { replacements: { id: targetChapterId, book_id, title: `${scene.scene_type.replace(/_/g, ' ')} — ${scene.character_a_name} & ${scene.character_b_name || 'unknown'}`, order_index: (maxOrder?.max_idx ?? -1) + 1 }, type: db(req).QueryTypes.INSERT }
+        { replacements: { id: targetChapterId, book_id, title: `${scene.scene_type.replace(/_/g, ' ')} — ${scene.character_a_name} & ${scene.character_b_name || 'unknown'}`, order_index: (maxOrder?.max_idx ?? -1) + 1 }, type: sequelize.QueryTypes.INSERT }
       );
     }
 
@@ -728,10 +729,10 @@ router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => 
       for (let i = 0; i < beats.length; i++) {
         const paragraphs = beats[i].text.split(/\n\n+/).filter(p => p.trim());
         for (let j = 0; j < paragraphs.length; j++) {
-          await db(req).query(
+          await sequelize.query(
             `INSERT INTO storyteller_lines (id, chapter_id, text, status, order_index, source_type, source_ref, created_at, updated_at)
              VALUES (:id, :chapter_id, :text, 'approved', :order_index, 'intimate_scene', :source_ref, NOW(), NOW())`,
-            { replacements: { id: uuidv4(), chapter_id: targetChapterId, text: paragraphs[j], order_index: i * 100 + j, source_ref: sceneId }, type: db(req).QueryTypes.INSERT }
+            { replacements: { id: uuidv4(), chapter_id: targetChapterId, text: paragraphs[j], order_index: i * 100 + j, source_ref: sceneId }, type: sequelize.QueryTypes.INSERT }
           );
         }
       }
@@ -739,14 +740,14 @@ router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => 
 
     // 2. Update relationship tension state
     if (scene.new_tension_state && scene.character_b_id) {
-      await db(req).query(
+      await sequelize.query(
         `UPDATE character_relationships SET tension_state = :state, updated_at = NOW()
          WHERE (character_id_a = :a AND character_id_b = :b) OR (character_id_a = :b AND character_id_b = :a)`,
-        { replacements: { state: scene.new_tension_state, a: scene.character_a_id, b: scene.character_b_id }, type: db(req).QueryTypes.UPDATE }
+        { replacements: { state: scene.new_tension_state, a: scene.character_a_id, b: scene.character_b_id }, type: sequelize.QueryTypes.UPDATE }
       ).catch(() => {});
-      await db(req).query(
+      await sequelize.query(
         `UPDATE world_characters SET current_tension = :state, updated_at = NOW() WHERE id = :id`,
-        { replacements: { state: scene.new_tension_state, id: scene.character_b_id }, type: db(req).QueryTypes.UPDATE }
+        { replacements: { state: scene.new_tension_state, id: scene.character_b_id }, type: sequelize.QueryTypes.UPDATE }
       );
     }
 
@@ -760,7 +761,7 @@ router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => 
       logged_at: new Date().toISOString(),
     };
     // Log to continuity beats if timeline exists (soft fail)
-    await db(req).query(
+    await sequelize.query(
       `INSERT INTO continuity_beats (id, timeline_id, name, location, time_tag, note, order_index, created_at, updated_at)
        SELECT :id, ct.id, :name, :location, :time_tag, :note, COALESCE(MAX(cb.order_index), 0) + 1, NOW(), NOW()
        FROM continuity_timelines ct
@@ -776,7 +777,7 @@ router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => 
           time_tag: `Scene ${scene.scene_type}`,
           note: scene.relationship_shift || scene.intensity,
         },
-        type: db(req).QueryTypes.INSERT,
+        type: sequelize.QueryTypes.INSERT,
       }
     ).catch(() => {});
 
@@ -791,10 +792,10 @@ Return JSON: { "memory_statement": "what she now knows or feels", "memory_type":
     );
     const mem = parseJSON(memoryResult);
     if (mem?.memory_statement) {
-      await db(req).query(
+      await sequelize.query(
         `INSERT INTO storyteller_memories (id, type, statement, confidence, confirmed, source_ref, created_at, updated_at)
          VALUES (:id, :type, :statement, :confidence, false, :source, NOW(), NOW())`,
-        { replacements: { id: uuidv4(), type: mem.memory_type || 'character_dynamic', statement: mem.memory_statement, confidence: mem.confidence || 0.8, source: `intimate_scene:${sceneId}` }, type: db(req).QueryTypes.INSERT }
+        { replacements: { id: uuidv4(), type: mem.memory_type || 'character_dynamic', statement: mem.memory_statement, confidence: mem.confidence || 0.8, source: `intimate_scene:${sceneId}` }, type: sequelize.QueryTypes.INSERT }
       ).catch(() => {});
     }
 
@@ -802,9 +803,9 @@ Return JSON: { "memory_statement": "what she now knows or feels", "memory_type":
     generateContinuation(req, scene, 'morning_after').catch(e => console.error('Continuation error:', e));
 
     // Update scene status
-    await db(req).query(
+    await sequelize.query(
       `UPDATE intimate_scenes SET status = 'approved', scene_logged = true, tension_updated = true, memory_extracted = true, chapter_id = :chapter_id, updated_at = NOW() WHERE id = :id`,
-      { replacements: { id: sceneId, chapter_id: targetChapterId || null }, type: db(req).QueryTypes.UPDATE }
+      { replacements: { id: sceneId, chapter_id: targetChapterId || null }, type: sequelize.QueryTypes.UPDATE }
     );
 
     res.json({ approved: true, chapter_id: targetChapterId, continuation_generating: true, scene_event: sceneEvent });
@@ -837,15 +838,15 @@ Write 2-3 paragraphs. Start with a sensory detail. End with her moving forward �
   const contId = uuidv4();
   const wordCount = result.split(/\s+/).length;
 
-  await db(req).query(
+  await sequelize.query(
     `INSERT INTO scene_continuations (id, scene_id, continuation_type, text, word_count, status, created_at, updated_at)
      VALUES (:id, :scene_id, :type, :text, :wc, 'draft', NOW(), NOW())`,
-    { replacements: { id: contId, scene_id: scene.id, type: continuationType, text: result.trim(), wc: wordCount }, type: db(req).QueryTypes.INSERT }
+    { replacements: { id: contId, scene_id: scene.id, type: continuationType, text: result.trim(), wc: wordCount }, type: sequelize.QueryTypes.INSERT }
   );
 
-  await db(req).query(
+  await sequelize.query(
     `UPDATE intimate_scenes SET continuation_generated = true, updated_at = NOW() WHERE id = :id`,
-    { replacements: { id: scene.id }, type: db(req).QueryTypes.UPDATE }
+    { replacements: { id: scene.id }, type: sequelize.QueryTypes.UPDATE }
   );
 }
 
@@ -865,9 +866,9 @@ router.post('/world/scenes/:sceneId/continue', optionalAuth, async (req, res) =>
 // DELETE /world/scenes/:sceneId
 router.delete('/world/scenes/:sceneId', optionalAuth, async (req, res) => {
   try {
-    await db(req).query(
+    await sequelize.query(
       `DELETE FROM intimate_scenes WHERE id = :id AND status = 'draft'`,
-      { replacements: { id: req.params.sceneId }, type: db(req).QueryTypes.DELETE }
+      { replacements: { id: req.params.sceneId }, type: sequelize.QueryTypes.DELETE }
     );
     res.json({ deleted: true });
   } catch (err) {
@@ -899,17 +900,17 @@ router.post('/world/continuations/:contId/approve', optionalAuth, async (req, re
       const paragraphs = cont.text.split(/\n\n+/).filter(p => p.trim());
       const [maxOrder] = await Q(req, `SELECT COALESCE(MAX(order_index), -1) AS max_idx FROM storyteller_lines WHERE chapter_id = :cid`, { replacements: { cid: chapter_id } });
       for (let i = 0; i < paragraphs.length; i++) {
-        await db(req).query(
+        await sequelize.query(
           `INSERT INTO storyteller_lines (id, chapter_id, text, status, order_index, source_type, source_ref, created_at, updated_at)
            VALUES (:id, :chapter_id, :text, 'approved', :order_index, 'scene_continuation', :source, NOW(), NOW())`,
-          { replacements: { id: uuidv4(), chapter_id, text: paragraphs[i], order_index: (maxOrder?.max_idx ?? -1) + 1 + i, source: cont.id }, type: db(req).QueryTypes.INSERT }
+          { replacements: { id: uuidv4(), chapter_id, text: paragraphs[i], order_index: (maxOrder?.max_idx ?? -1) + 1 + i, source: cont.id }, type: sequelize.QueryTypes.INSERT }
         );
       }
     }
 
-    await db(req).query(
+    await sequelize.query(
       `UPDATE scene_continuations SET status = 'approved', chapter_id = :chapter_id, updated_at = NOW() WHERE id = :id`,
-      { replacements: { id: req.params.contId, chapter_id: chapter_id || null }, type: db(req).QueryTypes.UPDATE }
+      { replacements: { id: req.params.contId, chapter_id: chapter_id || null }, type: sequelize.QueryTypes.UPDATE }
     );
 
     res.json({ approved: true });
