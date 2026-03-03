@@ -339,7 +339,9 @@ export default function CharacterRegistryPage() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
-      }).catch(() => { /* non-critical */ });
+      })
+        .then(r => { if (!r.ok) console.warn('[ConfirmState] PUT failed:', r.status); })
+        .catch(err => console.warn('[ConfirmState] Network error:', err.message));
     }
   }, [livingStates, allCharacters, activeRegistry]);
 

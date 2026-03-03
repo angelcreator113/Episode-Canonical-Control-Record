@@ -362,8 +362,11 @@ router.delete('/characters/:id/plot-threads/:threadId', async (req, res) => {
  * PUT /characters/:id
  * Update any character fields
  */
-router.put('/characters/:id', async (req, res) => {
+router.put('/characters/:id', express.json(), async (req, res) => {
   try {
+    if (!req.body || typeof req.body !== 'object') {
+      return res.status(400).json({ success: false, error: 'Request body is required' });
+    }
     const { RegistryCharacter } = getModels();
     const character = await RegistryCharacter.findByPk(req.params.id);
     if (!character) return res.status(404).json({ success: false, error: 'Character not found' });
