@@ -62,6 +62,142 @@ function parseJSON(raw) {
   catch (_) { return null; }
 }
 
+// ── Registry sync helpers ──────────────────────────────────────────────────
+// Map World Studio character types → Registry role_type enum
+const ROLE_MAP = {
+  love_interest:   'special',
+  industry_peer:   'mirror',
+  mentor:          'support',
+  antagonist:      'shadow',
+  rival:           'pressure',
+  collaborator:    'mirror',
+  one_night_stand: 'special',
+  recurring:       'special',
+};
+
+/**
+ * Find (or create) the LalaVerse registry so generated characters
+ * can be inserted into registry_characters with a valid registry_id.
+ */
+async function findOrCreateLalaVerseRegistry(req) {
+  const [existing] = await Q(req,
+    `SELECT id FROM character_registries WHERE book_tag = 'lalaverse' LIMIT 1`
+  ).catch(() => []);
+  if (existing) return existing.id;
+
+  const regId = uuidv4();
+  await db(req).query(
+    `INSERT INTO character_registries (id, name, book_tag, description, created_at, updated_at)
+     VALUES (:id, 'LalaVerse', 'lalaverse', 'Auto-created by World Studio', NOW(), NOW())`,
+    { replacements: { id: regId }, type: db(req).QueryTypes.INSERT }
+  );
+  return regId;
+}
+
+/**
+ * Create a registry_characters entry from a world_character,
+ * then cross-link both records.
+ */
+async function syncToRegistry(req, worldCharId, c, registryId) {
+  const rcId = uuidv4();
+  const charKey = (c.name || 'char').toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 80) + '_' + worldCharId.substring(0, 8);
+  const roleType = ROLE_MAP[c.character_type] || 'special';
+
+  await db(req).query(
+    `INSERT INTO registry_characters
+       (id, registry_id, character_key, display_name, selected_name, subtitle,
+        role_type, role_label, appearance_mode, status,
+        core_desire, core_fear, signature_trait, description,
+        personality_matrix, aesthetic_dna, career_status,
+        relationships_map, voice_signature, story_presence,
+        evolution_tracking, extra_fields, name_options,
+        world_character_id, sort_order, created_at, updated_at)
+     VALUES
+       (:id, :registry_id, :char_key, :display_name, :selected_name, :subtitle,
+        :role_type, :role_label, 'on_page', 'draft',
+        :core_desire, :core_fear, :signature_trait, :description,
+        :personality_matrix, :aesthetic_dna, :career_status,
+        :relationships_map, :voice_signature, :story_presence,
+        :evolution_tracking, :extra_fields, :name_options,
+        :world_char_id, 0, NOW(), NOW())`,
+    {
+      replacements: {
+        id: rcId,
+        registry_id: registryId,
+        char_key: charKey,
+        display_name: c.name,
+        selected_name: c.name,
+        subtitle: [c.age_range, c.occupation].filter(Boolean).join(' · ') || null,
+        role_type: roleType,
+        role_label: c.character_type || null,
+        core_desire: c.surface_want || null,
+        core_fear: c.real_want || null,
+        signature_trait: c.signature || null,
+        description: [c.occupation, c.dynamic].filter(Boolean).join('. ') || null,
+
+        personality_matrix: JSON.stringify({
+          core_wound: null, desire_line: c.surface_want || null,
+          fear_line: c.real_want || null, coping_mechanism: null,
+          self_deception: null, at_their_best: null, at_their_worst: null,
+        }),
+        aesthetic_dna: JSON.stringify({
+          era_aesthetic: c.aesthetic || null, color_palette: null,
+          signature_silhouette: null, signature_accessories: null,
+          glam_energy: null, visual_evolution_notes: null,
+        }),
+        career_status: JSON.stringify({
+          profession: c.occupation || null, career_goal: c.surface_want || null,
+          reputation_level: null, brand_relationships: null,
+          financial_status: null, public_recognition: null,
+          ongoing_arc: c.arc_role || null,
+        }),
+        relationships_map: JSON.stringify({
+          allies: null, rivals: null, mentors: null,
+          love_interests: null, business_partners: null,
+          dynamic_notes: c.dynamic || null,
+          tension_type: c.tension_type || null,
+          what_they_want_from_lala: c.what_they_want_from_lala || null,
+        }),
+        voice_signature: JSON.stringify({
+          speech_pattern: null, vocabulary_tone: null,
+          catchphrases: c.signature || null,
+          internal_monologue_style: null, emotional_reactivity: null,
+        }),
+        story_presence: JSON.stringify({
+          appears_in_books: 'lalaverse',
+          current_story_status: c.how_they_meet || null,
+          unresolved_threads: null,
+          future_potential: c.exit_reason ? 'Will exit' : 'Yes',
+        }),
+        evolution_tracking: JSON.stringify({
+          version_history: null,
+          era_changes: c.world_location || null,
+          personality_shifts: null,
+        }),
+        extra_fields: JSON.stringify({
+          source: 'world_studio',
+          world_character_id: worldCharId,
+          intimate_eligible: c.intimate_eligible || false,
+          intimate_style: c.intimate_style || null,
+          intimate_dynamic: c.intimate_dynamic || null,
+          what_lala_feels: c.what_lala_feels || null,
+        }),
+        name_options: JSON.stringify([c.name]),
+        world_char_id: worldCharId,
+      },
+      type: db(req).QueryTypes.INSERT,
+    }
+  );
+
+  // Update world_characters with the cross-link
+  await db(req).query(
+    `UPDATE world_characters SET registry_character_id = :rcId WHERE id = :wcId`,
+    { replacements: { rcId, wcId: worldCharId }, type: db(req).QueryTypes.UPDATE }
+  );
+
+  return rcId;
+}
+
 // Variable scene length logic based on relationship depth and type
 function resolveSceneLength(characterType, sceneType, dynamic) {
   // One-night stands: punchy, electric, not drawn out
@@ -179,7 +315,8 @@ Return JSON only:
       { replacements: { id: batchId, show_id: show_id || null, label: series_label, context: JSON.stringify(world_context), count: parsed.characters.length, notes: parsed.generation_notes || '' }, type: db(req).QueryTypes.INSERT }
     );
 
-    // Insert each character
+    // Insert each character + sync to registry
+    const lalaRegistryId = await findOrCreateLalaVerseRegistry(req);
     const inserted = [];
     for (const c of parsed.characters) {
       const charId = uuidv4();
@@ -219,7 +356,10 @@ Return JSON only:
           type: db(req).QueryTypes.INSERT,
         }
       );
-      inserted.push({ ...c, id: charId });
+
+      // Sync to canonical registry
+      const rcId = await syncToRegistry(req, charId, c, lalaRegistryId);
+      inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
     res.status(201).json({ characters: inserted, batch_id: batchId, count: inserted.length, generation_notes: parsed.generation_notes });
@@ -295,6 +435,11 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
 router.post('/world/characters/:id/activate', optionalAuth, async (req, res) => {
   try {
     await db(req).query(`UPDATE world_characters SET status = 'active', updated_at = NOW() WHERE id = :id`, { replacements: { id: req.params.id }, type: db(req).QueryTypes.UPDATE });
+    // Sync → registry: accepted
+    await db(req).query(
+      `UPDATE registry_characters SET status = 'accepted', updated_at = NOW() WHERE world_character_id = :id`,
+      { replacements: { id: req.params.id }, type: db(req).QueryTypes.UPDATE }
+    ).catch(() => {});
     res.json({ activated: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
@@ -303,6 +448,11 @@ router.post('/world/characters/:id/activate', optionalAuth, async (req, res) => 
 router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
   try {
     await db(req).query(`UPDATE world_characters SET status = 'archived', updated_at = NOW() WHERE id = :id`, { replacements: { id: req.params.id }, type: db(req).QueryTypes.UPDATE });
+    // Sync → registry: declined
+    await db(req).query(
+      `UPDATE registry_characters SET status = 'declined', updated_at = NOW() WHERE world_character_id = :id`,
+      { replacements: { id: req.params.id }, type: db(req).QueryTypes.UPDATE }
+    ).catch(() => {});
     res.json({ archived: true });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });

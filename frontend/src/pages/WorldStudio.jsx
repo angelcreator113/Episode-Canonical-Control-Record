@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import './WorldStudio.css';
 
 const API = '/api/v1';
@@ -46,6 +47,7 @@ function TensionDot({ tension }) {
 
 /* ════════════════════════════════════════════════════════════════════════ */
 export default function WorldStudio() {
+  const navigate = useNavigate();
   /* ── State ─────────────────────────────────────────────────────────── */
   const [tab, setTab] = useState('characters');
 
@@ -586,6 +588,18 @@ export default function WorldStudio() {
                   </div>
                 )}
               </div>
+
+              {/* Registry link */}
+              {charDetail.registry_character_id && (
+                <div style={{ marginTop: 20 }}>
+                  <button
+                    className="ws-btn-registry-link"
+                    onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}
+                  >
+                    📋 View in Character Registry
+                  </button>
+                </div>
+              )}
             </div>
           )}
 

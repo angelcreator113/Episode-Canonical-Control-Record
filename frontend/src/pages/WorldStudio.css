@@ -512,6 +512,25 @@
   gap: 12px;
 }
 
+/* Registry link */
+.ws-btn-registry-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 20px;
+  border-radius: 8px;
+  background: rgba(96, 128, 192, 0.10);
+  color: #406080;
+  border: 1px solid rgba(96, 128, 192, 0.25);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.ws-btn-registry-link:hover {
+  background: rgba(96, 128, 192, 0.18);
+}
+
 /* ── Scene detail ──────────────────────────────────────────────────────── */
 .ws-scene-header-type {
   font-size: 12px;
