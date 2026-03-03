@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { ROLE_COLORS, ROLE_ICONS, MOMENTUM_COLORS, WORLD_LABELS } from '../constants/characterConstants';
+import useRegistries from '../hooks/useRegistries';
 import './CharacterGenerator.css';
 
 // ─── LocalStorage persistence helpers ─────────────────────────────────────────
@@ -29,35 +31,6 @@ function loadHistory() {
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
-
-// ─── Constants ────────────────────────────────────────────────────────────────
-const ROLE_COLORS = {
-  pressure:    '#c0392b',
-  mirror:      '#7c3aed',
-  support:     '#0d9668',
-  shadow:      '#546678',
-  special:     '#b0922e',
-};
-
-const ROLE_ICONS = {
-  pressure:    '⊗',
-  mirror:      '◎',
-  support:     '◉',
-  shadow:      '◆',
-  special:     '✦',
-};
-
-const MOMENTUM_COLORS = {
-  rising:   '#0d9668',
-  steady:   '#b0922e',
-  falling:  '#c0392b',
-  dormant:  '#94a3b8',
-};
-
-const WORLD_LABELS = {
-  book1:     'Book 1',
-  lalaverse: 'LalaVerse',
-};
 
 // ─── Ecosystem panel ──────────────────────────────────────────────────────────
 function EcosystemPanel({ ecosystem, loading }) {
@@ -548,7 +521,9 @@ export default function CharacterGenerator() {
 
   // Staging
   const [stagingChecks, setStagingChecks] = useState(saved.current?.stagingChecks || {});
-  const [registries, setRegistries]       = useState([]);
+
+  // Registries — shared hook
+  const { registries } = useRegistries();
 
   // Phase: 'seeds' | 'staging' | 'history'
   const [phase, setPhase]                 = useState(saved.current?.phase || 'seeds');
@@ -596,10 +571,9 @@ export default function CharacterGenerator() {
     }
   }, [batch]);
 
-  // Load ecosystem, registries, and history on mount
+  // Load ecosystem and history on mount (registries loaded by useRegistries hook)
   useEffect(() => {
     loadEcosystem();
-    loadRegistries();
     setHistory(loadHistory());
   }, []);
 
@@ -610,16 +584,6 @@ export default function CharacterGenerator() {
       if (res.ok) setEcosystem(await res.json());
     } catch { /* silent */ }
     finally { setEcoLoading(false); }
-  }
-
-  async function loadRegistries() {
-    try {
-      const res = await fetch(`${API_BASE}/character-registry/registries`);
-      if (res.ok) {
-        const data = await res.json();
-        setRegistries(data.registries || data || []);
-      }
-    } catch { /* silent */ }
   }
 
   // ── Propose seeds ─────────────────────────────────────────────────────────
@@ -751,8 +715,9 @@ export default function CharacterGenerator() {
       });
 
       if (res.ok) {
+        const data = await res.json();
         setBatch((prev) =>
-          prev.map((r) => r === result ? { ...r, _committed: true } : r)
+          prev.map((r) => r === result ? { ...r, _committed: true, _charId: data.character_id } : r)
         );
         loadEcosystem(); // Refresh ecosystem after commit
       } else {
@@ -834,7 +799,8 @@ export default function CharacterGenerator() {
     }
 
     if (ok === pending.length) {
-      alert(`✓ All ${ok} characters added to registry!`);
+      const goTo = window.confirm(`✓ All ${ok} characters added to registry!\n\nOpen registry to view them?`);
+      if (goTo) navigate(`/character-registry`);
     } else {
       alert(`${ok}/${pending.length} characters committed. Some failed.`);
     }

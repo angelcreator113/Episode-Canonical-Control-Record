@@ -71,6 +71,9 @@ let TimelineData; // Scene Composer & Timeline Editor integration
 let StorytellerBook, StorytellerChapter, StorytellerLine; // StoryTeller Book Editor models
 let StorytellerMemory; // StoryTeller Memory Bank model
 let StorytellerEcho; // StoryTeller Decision Echo model
+let StorytellerStory; // Story Engine persistence model
+let SocialMediaImport; // Social media import pipeline model
+let NovelAssembly; // Novel assembler model
 let Universe, BookSeries; // Universe + Book Series models
 let CharacterRegistry, RegistryCharacter; // PNOS Character Registry models
 let ContinuityTimeline, ContinuityCharacter, ContinuityBeat, ContinuityBeatCharacter; // Continuity Engine models
@@ -244,6 +247,11 @@ try {
   TherapyPendingSession = require('./TherapyPendingSession')(sequelize);
   WardrobeContentAssignment = require('./WardrobeContentAssignment')(sequelize);
 
+  // Story Engine persistence + Social Import + Novel Assembler
+  StorytellerStory = require('./StorytellerStory')(sequelize);
+  SocialMediaImport = require('./SocialMediaImport')(sequelize);
+  NovelAssembly = require('./NovelAssembly')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -321,6 +329,9 @@ const requiredModels = {
   CharacterRelationship,
   CharacterTherapyProfile,
   PressCareer,
+  StorytellerStory,
+  SocialMediaImport,
+  NovelAssembly,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1504,3 +1515,6 @@ module.exports.LalaverseBrand = LalaverseBrand;
 module.exports.WardrobeBrandTag = WardrobeBrandTag;
 module.exports.TherapyPendingSession = TherapyPendingSession;
 module.exports.WardrobeContentAssignment = WardrobeContentAssignment;
+module.exports.StorytellerStory = StorytellerStory;
+module.exports.SocialMediaImport = SocialMediaImport;
+module.exports.NovelAssembly = NovelAssembly;

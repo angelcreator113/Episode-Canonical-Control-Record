@@ -835,6 +835,15 @@ try {
   console.error('✗ Failed to load Script Bridge routes:', e.message);
 }
 
+// Stories — Persistence + Social Import + Novel Assembler
+try {
+  const storiesRoutes = require('./routes/stories');
+  app.use('/api/v1/stories', storiesRoutes);
+  console.log('✓ Stories routes loaded at /api/v1/stories');
+} catch (e) {
+  console.error('✗ Failed to load Stories routes:', e.message);
+}
+
 // Universe routes (PNOS world-building layer)
 try {
   const universeRoutes = require('./routes/universe');
