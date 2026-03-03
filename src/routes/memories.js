@@ -5252,9 +5252,9 @@ router.post('/generate-living-state', optionalAuth, async (req, res) => {
         const lines = await StorytellerLine.findAll({
           where: {
             chapter_id: chapter.id,
-            content: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
+            text: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
           },
-          attributes: ['content', 'sort_order'],
+          attributes: ['text', 'sort_order'],
           order: [['sort_order', 'ASC']],
           limit: 10,
           raw: true,
@@ -5263,7 +5263,7 @@ router.post('/generate-living-state', optionalAuth, async (req, res) => {
         if (lines.length > 0) {
           lastChapter = `${book.title} — ${chapter.title}`;
           manuscriptSnippets.push(
-            ...lines.map(l => `[${chapter.title}] ${l.content}`)
+            ...lines.map(l => `[${chapter.title}] ${l.text}`)
           );
         }
       }
@@ -5374,7 +5374,7 @@ router.post('/generate-character-arc', optionalAuth, async (req, res) => {
         const lineCount = await StorytellerLine.count({
           where: {
             chapter_id: chapter.id,
-            content: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
+            text: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
           },
         });
 
@@ -5383,9 +5383,9 @@ router.post('/generate-character-arc', optionalAuth, async (req, res) => {
           const sample = await StorytellerLine.findOne({
             where: {
               chapter_id: chapter.id,
-              content: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
+              text: { [db.Sequelize.Op.iLike]: `%${characterName}%` },
             },
-            attributes: ['content'],
+            attributes: ['text'],
             order: [['sort_order', 'ASC']],
             raw: true,
           });
@@ -5395,7 +5395,7 @@ router.post('/generate-character-arc', optionalAuth, async (req, res) => {
             chapter: chapter.title,
             sortOrder: chapter.sort_order,
             mentions: lineCount,
-            sample: sample?.content?.substring(0, 200) || '',
+            sample: sample?.text?.substring(0, 200) || '',
           });
         }
       }
@@ -5894,7 +5894,7 @@ router.post('/generate-relationship-web', optionalAuth, async (req, res) => {
       });
     }
 
-    const manuscriptExcerpt = lines.map((l) => l.content).join('\n');
+    const manuscriptExcerpt = lines.map((l) => l.text || l.content).join('\n');
 
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
