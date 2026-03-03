@@ -2333,7 +2333,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               {c.writer_notes && (
                 <div className="cr-dossier-writer-notes">
                   <span className="cr-dossier-writer-notes-label">✎ Writer Notes</span>
-                  <p className="cr-dossier-writer-notes-text">{c.writer_notes}</p>
+                  <p className="cr-dossier-writer-notes-text" style={{ whiteSpace: 'pre-line' }}>{c.writer_notes}</p>
                 </div>
               )}
               {jGet(c.story_presence, 'current_story_status') && (

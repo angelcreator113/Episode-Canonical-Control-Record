@@ -609,6 +609,44 @@ router.post('/commit', optionalAuth, async (req, res) => {
     const rawRole = (identity.role_type || seed?.role_type || 'support').toLowerCase().replace(/[^a-z]/g, '');
     const safeRole = VALID_ROLE_TYPES.includes(rawRole) ? rawRole : 'support';
 
+    // ── Build relationships_map in the structure the Registry expects ──
+    const relMap = { allies: '', rivals: '', mentors: '', love_interests: '', business_partners: '', dynamic_notes: '' };
+    const typeToCategory = {
+      support: 'allies', familial: 'allies',
+      pressure: 'rivals', shadow: 'rivals',
+      mirror: 'mentors',
+      romantic: 'love_interests',
+      transactional: 'business_partners',
+    };
+    (rels.proposed_connections || []).forEach(conn => {
+      const cat = typeToCategory[conn.relationship_type] || 'allies';
+      const label = `${conn.to_character} (${conn.from_feels || conn.relationship_type})`;
+      relMap[cat] = relMap[cat] ? `${relMap[cat]}, ${label}` : label;
+    });
+    // Gather rich relationship context as dynamic notes
+    const relNotes = [
+      rels.romantic_status && `Status: ${rels.romantic_status}`,
+      rels.romantic_detail,
+      rels.what_they_want_from_love && `Wants from love: ${rels.what_they_want_from_love}`,
+      rels.how_they_fight && `Fights by: ${rels.how_they_fight}`,
+      rels.last_ending_taught_them && `Last ending taught: ${rels.last_ending_taught_them}`,
+      rels.who_they_call_at_2am && `2 AM call: ${rels.who_they_call_at_2am}`,
+    ].filter(Boolean).join('. ');
+    if (relNotes) relMap.dynamic_notes = relNotes;
+
+    // ── Build concise writer notes (not a data dump) ──
+    const writerNoteLines = [
+      dilemma.active && `Active Dilemma: ${dilemma.active}`,
+      dilemma.latent_1 && `Latent Dilemma 1: ${dilemma.latent_1}`,
+      dilemma.latent_2 && `Latent Dilemma 2: ${dilemma.latent_2}`,
+      dilemma.collision_potential && `Collision: ${dilemma.collision_potential}`,
+      living.unresolved && `Unresolved: ${living.unresolved}`,
+      ...(psych.active_dilemmas || []).map(d => `Dilemma: ${d}`),
+      ...(threads || []).map(t => `Thread: ${t.thread} [${t.status}] — ${t.activation_condition}`),
+    ].filter(Boolean).join('\n');
+
+    const arcTimeline = profile.arc_timeline || {};
+
     const characterData = {
       registry_id: registryId,
       character_key: uniqueKey,
@@ -617,10 +655,25 @@ router.post('/commit', optionalAuth, async (req, res) => {
       role_type:      safeRole,
       role_label:     identity.role_type || seed?.role_type || 'support',
       appearance_mode: 'on_page',
-      canon_tier:       identity.canon_eligible ? 'canon' : 'none',
+      canon_tier:     identity.canon_eligible ? 'canon' : 'none',
       status:         'draft',
-      belief_pressured: psych.core_wound || '',
+
+      // ── Psychology flat fields ──
+      core_desire:        psych.desire_line || '',
+      core_fear:          psych.fear_line || '',
+      core_wound:         psych.core_wound || '',
+      mask_persona:       psych.self_deception || '',
+      truth_persona:      psych.at_their_worst || '',
+      character_archetype: identity.role_type || seed?.role_type || '',
+      signature_trait:    psych.coping_mechanism || '',
+      emotional_baseline: living.current_emotional_state || '',
+      belief_pressured:   psych.core_wound || '',
       emotional_function: psych.desire_line || '',
+      description:        seed?.career
+        ? `${seed.career}. ${living.current_emotional_state || ''}`
+        : (living.current_emotional_state || ''),
+
+      // ── personality_matrix JSONB ──
       personality_matrix: JSON.stringify({
         core_wound:        psych.core_wound,
         desire_line:       psych.desire_line,
@@ -630,32 +683,61 @@ router.post('/commit', optionalAuth, async (req, res) => {
         at_their_best:     psych.at_their_best,
         at_their_worst:    psych.at_their_worst,
       }),
-      writer_notes: JSON.stringify({
-        seed,
-        living_state:    living,
-        arc_timeline:    profile.arc_timeline,
-        aesthetic_dna:   aesthetic,
-        career,
-        relationships:   rels,
-        voice,
-        dilemma,
-        story_presence:  storyPres,
-        plot_threads:    threads,
-        active_dilemmas: psych.active_dilemmas,
+
+      // ── career_status JSONB ──
+      career_status: JSON.stringify({
+        profession:         career.job_title || '',
+        career_goal:        career.success_to_them || '',
+        reputation_level:   career.success_to_everyone_else || '',
+        brand_relationships: (career.career_tasks || []).join(', '),
+        financial_status:   career.industry || '',
+        public_recognition: career.job_antagonist || '',
+        ongoing_arc:        career.career_wound || '',
       }),
+
+      // ── aesthetic_dna JSONB ──
+      aesthetic_dna: JSON.stringify({
+        era_aesthetic:          aesthetic.style || '',
+        color_palette:          aesthetic.social_media_aesthetic || '',
+        signature_silhouette:   aesthetic.visual_signature || '',
+        signature_accessories:  aesthetic.signature_object || '',
+        glam_energy:            aesthetic.room_presence || '',
+        visual_evolution_notes: '',
+      }),
+
+      // ── relationships_map JSONB ──
+      relationships_map: JSON.stringify(relMap),
+
+      // ── voice_signature JSONB ──
+      voice_signature: JSON.stringify({
+        speech_pattern:          voice.how_they_speak || '',
+        vocabulary_tone:         voice.signature_sentence_structure || '',
+        catchphrases:            voice.their_tell || '',
+        internal_monologue_style: voice.what_they_never_say_directly || '',
+        emotional_reactivity:    voice.what_silence_means_for_them || '',
+      }),
+
+      // ── story_presence JSONB ──
+      story_presence: JSON.stringify({
+        appears_in_books:    (storyPres.worlds || []).join(', '),
+        appears_in_shows:    '',
+        appears_in_series:   '',
+        current_story_status: storyPres.first_appearance_trigger || '',
+        unresolved_threads:  (storyPres.story_types_suited_for || []).join(', '),
+        future_potential:    storyPres.can_introduce_new_characters ? 'Yes' : 'No',
+      }),
+
+      // ── evolution_tracking JSONB ──
+      evolution_tracking: JSON.stringify({
+        version_history:    arcTimeline.what_just_happened || '',
+        era_changes:        arcTimeline.where_they_are || '',
+        personality_shifts: arcTimeline.what_they_are_avoiding || '',
+      }),
+
+      // ── Writer notes (human-readable, not a JSON dump) ──
+      writer_notes: writerNoteLines || '',
+
       name_options: JSON.stringify([seed?.name || identity.name]),
-      relationships_map: JSON.stringify(
-        (rels.proposed_connections || []).reduce((acc, conn) => {
-          acc[conn.to_character] = {
-            direction:   conn.direction,
-            type:        conn.relationship_type,
-            from_knows:  conn.from_knows,
-            to_knows:    conn.to_knows,
-            from_feels:  conn.from_feels,
-          };
-          return acc;
-        }, {})
-      ),
     };
 
     const newChar = await db.RegistryCharacter.create(characterData);
