@@ -42,6 +42,7 @@ const DecisionAnalyticsDashboard = lazy(() => import('./pages/DecisionAnalyticsD
 const TimelineEditor = lazy(() => import('./pages/TimelineEditor'));
 const EvaluateEpisode = lazy(() => import('./pages/EvaluateEpisode'));
 const WorldAdmin = lazy(() => import('./pages/WorldAdmin'));
+const WorldStudio = lazy(() => import('./pages/WorldStudio'));
 const ShowSettings = lazy(() => import('./pages/ShowSettings'));
 const ExportPage = lazy(() => import('./pages/ExportPage'));
 const AssetLibrary = lazy(() => import('./pages/AssetLibrary'));
@@ -81,7 +82,6 @@ const SessionStart = lazy(() => import('./pages/SessionStart'));
 const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
 const StoryEngine = lazy(() => import('./pages/StoryEngine'));
-const SocialImport = lazy(() => import('./pages/SocialImport'));
 const NovelAssembler = lazy(() => import('./pages/NovelAssembler'));
 const CharacterGenerator = lazy(() => import('./pages/CharacterGenerator'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
@@ -216,11 +216,12 @@ function AppContent() {
   const isWriteMode = location.pathname.startsWith('/write/');
   const isChapterJourney = location.pathname.startsWith('/chapter/');
   const isStoryEngine = location.pathname === '/story-engine';
-  const isSocialImport = location.pathname === '/social-import';
+  // Social Import is now embedded in Universe page as a tab
   const isAssembler = location.pathname === '/assembler';
   const isCharacterGenerator = location.pathname === '/character-generator';
+  const isWorldStudio = location.pathname === '/world-studio';
   const isSetupWizard = location.pathname === '/setup';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isSocialImport || isAssembler || isCharacterGenerator || isSetupWizard;
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isAssembler || isCharacterGenerator || isWorldStudio || isSetupWizard;
   const hideFooter = isFullScreen;
 
   return (
@@ -361,9 +362,12 @@ function AppContent() {
           
           {/* PNOS Story Engine — 50-Story Arc System */}
           <Route path="/story-engine" element={<StoryEngine />} />
+
+          {/* World Studio — Character Ecosystem + Intimate Scene Generator */}
+          <Route path="/world-studio" element={<WorldStudio />} />
           
-          {/* PNOS Social Import Pipeline */}
-          <Route path="/social-import" element={<SocialImport />} />
+          {/* PNOS Social Import Pipeline — redirects to Universe tab */}
+          <Route path="/social-import" element={<Navigate to="/universe?tab=social-import" replace />} />
           
           {/* PNOS Novel Assembler */}
           <Route path="/assembler" element={<NovelAssembler />} />

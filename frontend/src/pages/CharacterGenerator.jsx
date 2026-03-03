@@ -511,7 +511,10 @@ export default function CharacterGenerator() {
   const saved = useRef(loadSession());
 
   // Seed proposal
-  const [worldTarget, setWorldTarget]     = useState(saved.current?.worldTarget || 'book1');
+  const [worldTarget, setWorldTarget]     = useState(
+    (saved.current?.worldTarget === 'lalaverse' || saved.current?.worldTarget === 'both')
+      ? 'book1' : (saved.current?.worldTarget || 'book1')
+  );
   const [seeds, setSeeds]                 = useState(saved.current?.seeds || []);
   const [seedsLoading, setSeedsLoading]   = useState(false);
 
@@ -852,11 +855,16 @@ export default function CharacterGenerator() {
           <select
             className="cg-world-select"
             value={worldTarget}
-            onChange={(e) => setWorldTarget(e.target.value)}
+            onChange={(e) => {
+              if (e.target.value === 'lalaverse') {
+                navigate('/world-studio');
+                return;
+              }
+              setWorldTarget(e.target.value);
+            }}
           >
             <option value="book1">Book 1 World</option>
-            <option value="lalaverse">LalaVerse</option>
-            <option value="both">Both Worlds</option>
+            <option value="lalaverse">LalaVerse → World Studio</option>
           </select>
           <button
             className="cg-btn cg-btn-propose"
