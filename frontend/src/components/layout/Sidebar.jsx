@@ -16,9 +16,7 @@ const NAV = [
     zone: 'WORLD',
     items: [
       { icon: '◈',  label: 'Universe',             route: '/universe' },
-      { icon: '📋', label: 'Registry',             route: '/character-registry' },
-      { icon: '🌍', label: 'World View',           route: '/character-registry?view=world' },
-      { icon: '🧬', label: 'Character Generator',  route: '/character-generator' },
+      { icon: '🌍', label: 'World Characters',     route: '/character-registry?view=world' },
       { icon: '✦',  label: 'World Studio',          route: '/world-studio' },
       { icon: '🌳', label: 'Relationships',        route: '/relationships' },
       { icon: '🛋️', label: 'Therapy',              route: '/therapy/default' },
