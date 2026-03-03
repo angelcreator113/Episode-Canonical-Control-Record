@@ -138,7 +138,7 @@ function useToast() {
 // ════════════════════════════════════════════════════════════════════════
 // D3 FORCE GRAPH HOOK (for Web tab)
 // ════════════════════════════════════════════════════════════════════════
-function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) {
+function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDragRef) {
   useEffect(() => {
     const d3 = window.d3;
     if (!d3 || !svgRef.current || !nodes.length) return;
@@ -190,7 +190,9 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) 
         }).strength(0.4))
       .force('charge', d3.forceManyBody().strength(-400))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => (NODE_RADIUS[d.role_type] || 24) + 12));
+      .force('collision', d3.forceCollide().radius(d => (NODE_RADIUS[d.role_type] || 24) + 12))
+      .alphaDecay(0.03)
+      .velocityDecay(0.4);
 
     // Edges
     const edgeGroup = container.append('g').attr('class', 'rw-edges');
@@ -214,9 +216,9 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) 
       .attr('class', 'rw-node-g')
       .style('cursor', 'pointer')
       .call(d3.drag()
-        .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.3).restart(); d.fx = d.x; d.fy = d.y; })
+        .on('start', (event, d) => { if (!event.active) sim.alphaTarget(0.15).restart(); d.fx = d.x; d.fy = d.y; })
         .on('drag', (event, d) => { d.fx = event.x; d.fy = event.y; })
-        .on('end', (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; })
+        .on('end', (event, d) => { if (!event.active) sim.alphaTarget(0); d.fx = null; d.fy = null; lastDragRef.current = Date.now(); })
       )
       .on('click', (event, d) => { event.stopPropagation(); onNodeClick(d); });
 
@@ -262,7 +264,7 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover) 
     });
 
     return () => sim.stop();
-  }, [nodes, edges, onNodeClick, onEdgeHover]);
+  }, [nodes, edges, onNodeClick, onEdgeHover, lastDragRef]);
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -697,7 +699,11 @@ function WebView({ navigate }) {
     } catch { /* non-critical */ }
   }
 
+  const lastDragRef = useRef(0);
+
   const handleNodeClick = useCallback(node => {
+    // Ignore clicks that immediately follow a drag
+    if (Date.now() - lastDragRef.current < 200) return;
     setSelectedNode(prev => prev?.id === node.id ? null : node);
   }, []);
 
@@ -718,7 +724,7 @@ function WebView({ navigate }) {
   const visibleEdges = edges.filter(e => visibleNodeIds.has(e.from) && visibleNodeIds.has(e.to));
 
   // Render D3
-  useD3RelationshipGraph(svgRef, visibleNodes, visibleEdges, handleNodeClick, handleEdgeHover);
+  useD3RelationshipGraph(svgRef, visibleNodes, visibleEdges, handleNodeClick, handleEdgeHover, lastDragRef);
 
   if (webLoading) {
     return (

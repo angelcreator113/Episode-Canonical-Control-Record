@@ -553,6 +553,9 @@
   flex: 1;
   overflow: auto;
   position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 /* ── Seed Grid (Candidates) ──────────────────────────────────────────────── */
