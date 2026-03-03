@@ -235,6 +235,12 @@
   min-height: 0;
 }
 
+/* When left/right panels are absent (e.g. Web view), let main span full width */
+.cg-body > .cg-main:first-child:last-child,
+.cg-body > .cg-main:only-child {
+  grid-column: 1 / -1;
+}
+
 /* ═══ Left Sidebar — World Ecosystem ═════════════════════════════════════════ */
 .cg-left {
   position: sticky;
