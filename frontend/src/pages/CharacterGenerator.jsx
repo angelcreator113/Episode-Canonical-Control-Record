@@ -344,8 +344,9 @@ function SeedCard({ seed, index, onApprove, onReject, onEdit }) {
 }
 
 // ─── Staging card (full profile review) ──────────────────────────────────────
-function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
+function StagingCard({ result, checks, onCommit, onDiscard, onDelete, registries }) {
   const [expanded, setExpanded]       = useState(false);
+  const [deleting, setDeleting]       = useState(false);
 
   const { seed, profile, status, error } = result;
   const color = ROLE_COLORS[seed?.role_type] || '#94a3b8';
@@ -608,7 +609,22 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
       )}
 
       {result._committed && (
-        <div className="cg-staging-committed">✓ Added to Registry</div>
+        <div className="cg-staging-committed">
+          <span>✓ Added to Registry</span>
+          <button
+            className="cg-btn cg-btn-delete-committed"
+            disabled={deleting}
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!window.confirm(`Delete ${seed?.name} from registry? This cannot be undone.`)) return;
+              setDeleting(true);
+              await onDelete(result);
+              setDeleting(false);
+            }}
+          >
+            {deleting ? '…' : '✕ Delete'}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -855,6 +871,30 @@ export default function CharacterGenerator() {
 
   function handleDiscard(result) {
     setBatch((prev) => prev.filter((r) => r !== result));
+  }
+
+  // ── Delete committed character from registry ──────────────────────────────
+  async function handleDeleteCommitted(result) {
+    const charId = result._charId;
+    if (!charId) {
+      // No ID tracked — just remove from staging
+      setBatch((prev) => prev.filter((r) => r !== result));
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/character-registry/characters/${charId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setBatch((prev) => prev.filter((r) => r !== result));
+        loadEcosystem();
+      } else {
+        const err = await res.json();
+        alert('Delete failed: ' + (err.error || 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
   }
 
   // ── Commit ALL staged characters to a registry at once ──────────────────────
@@ -1173,6 +1213,7 @@ export default function CharacterGenerator() {
                     checks={stagingChecks[i]}
                     onCommit={handleCommit}
                     onDiscard={handleDiscard}
+                    onDelete={handleDeleteCommitted}
                     registries={registries}
                   />
                 ))}
