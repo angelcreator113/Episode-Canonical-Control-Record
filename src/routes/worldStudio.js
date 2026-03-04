@@ -41,7 +41,7 @@ const models = require('../models');
 const sequelize = models.sequelize;
 const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
-async function claude(system, user, maxTokens = 2000) {
+async function claude(system, user, maxTokens = 4000) {
   try {
     const Anthropic = require('@anthropic-ai/sdk');
     const client    = new Anthropic();
@@ -51,6 +51,9 @@ async function claude(system, user, maxTokens = 2000) {
       system,
       messages: [{ role: 'user', content: user }],
     });
+    if (msg.stop_reason === 'max_tokens') {
+      console.warn(`Claude response truncated (max_tokens=${maxTokens}). Consider increasing limit.`);
+    }
     return msg.content[0]?.text || '';
   } catch (e) {
     console.error('Claude error:', e.message);
@@ -300,7 +303,7 @@ Return JSON only:
   ],
   "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
 }`,
-      3000
+      10000
     );
 
     const parsed = parseJSON(result);
@@ -1007,7 +1010,7 @@ Return JSON only:
   ],
   "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
 }`,
-      3000
+      10000
     );
 
     const parsed = parseJSON(result);
