@@ -435,26 +435,25 @@ export default function CharacterRegistryPage() {
   }, [allCharacters, activeRegistry, livingStates]);
 
   const confirmState = useCallback((charId) => {
-    const confirmedState = { ...livingStates[charId], isConfirmed: true };
-    const updated = {
-      ...livingStates,
-      [charId]: confirmedState,
-    };
-    setLivingStates(updated);
-    localStorage.setItem('wv_living_states', JSON.stringify(updated));
-    // Persist confirmation to DB
-    const character = allCharacters.find(c => c.id === charId) ||
-                      (activeRegistry?.characters || []).find(c => c.id === charId);
-    if (character) {
-      fetch(`${API}/characters/${charId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
-      })
-        .then(r => { if (!r.ok) console.warn('[ConfirmState] PUT failed:', r.status); })
-        .catch(err => console.warn('[ConfirmState] Network error:', err.message));
-    }
-  }, [livingStates, allCharacters, activeRegistry]);
+    setLivingStates(prev => {
+      const confirmedState = { ...prev[charId], isConfirmed: true };
+      const updated = { ...prev, [charId]: confirmedState };
+      localStorage.setItem('wv_living_states', JSON.stringify(updated));
+      // Persist confirmation to DB
+      const character = allCharacters.find(c => c.id === charId) ||
+                        (activeRegistry?.characters || []).find(c => c.id === charId);
+      if (character) {
+        fetch(`${API}/characters/${charId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
+        })
+          .then(r => { if (!r.ok) console.warn('[ConfirmState] PUT failed:', r.status); })
+          .catch(err => console.warn('[ConfirmState] Network error:', err.message));
+      }
+      return updated;
+    });
+  }, [allCharacters, activeRegistry]);
 
   const generateAllStates = useCallback(async () => {
     const charList = worldMode ? allCharacters : (activeRegistry?.characters || []);
@@ -1986,7 +1985,27 @@ export default function CharacterRegistryPage() {
                   if (unconfirmed.length === 0) return null;
                   return (
                     <button className="cr-btn-outline" style={{ borderColor: '#3d8e42', color: '#3d8e42' }}
-                      onClick={() => { unconfirmed.forEach(c => confirmState(c.id)); showToast(`Confirmed ${unconfirmed.length} states`); }}>
+                      onClick={() => {
+                        // Batch confirm all unconfirmed states in one setState
+                        setLivingStates(prev => {
+                          const updated = { ...prev };
+                          unconfirmed.forEach(c => {
+                            updated[c.id] = { ...prev[c.id], isConfirmed: true };
+                          });
+                          localStorage.setItem('wv_living_states', JSON.stringify(updated));
+                          // Persist each confirmation to DB
+                          unconfirmed.forEach(c => {
+                            const confirmedState = updated[c.id];
+                            fetch(`${API}/characters/${c.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ evolution_tracking: { ...c.evolution_tracking, living_state: confirmedState } }),
+                            }).catch(() => {});
+                          });
+                          return updated;
+                        });
+                        showToast(`Confirmed ${unconfirmed.length} states`);
+                      }}>
                       ✓ Confirm All ({unconfirmed.length})
                     </button>
                   );
