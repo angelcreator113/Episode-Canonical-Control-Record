@@ -138,16 +138,25 @@ function useToast() {
 // ════════════════════════════════════════════════════════════════════════
 // D3 FORCE GRAPH HOOK (for Web tab)
 // ════════════════════════════════════════════════════════════════════════
-function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDragRef) {
+function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDragRef, d3Ready) {
   useEffect(() => {
     const d3 = window.d3;
-    if (!d3 || !svgRef.current || !nodes.length) return;
+    if (!d3Ready || !d3 || !svgRef.current || !nodes.length) return;
+
+    let cancelled = false;
+    let sim = null;
+    let resizeObserver = null;
+
+    // Defer one frame so the CSS layout is fully settled before reading dimensions
+    const raf = requestAnimationFrame(() => {
+      if (cancelled || !svgRef.current) return;
 
     const svg = d3.select(svgRef.current);
     svg.selectAll('*').remove();
 
-    const width  = svgRef.current.clientWidth  || 900;
-    const height = svgRef.current.clientHeight || 600;
+    const rect  = svgRef.current.getBoundingClientRect();
+    const width  = rect.width  || 900;
+    const height = rect.height || 600;
 
     const container = svg.append('g').attr('class', 'rw-container');
     svg.call(
@@ -181,7 +190,7 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, 
     })).filter(e => e.source && e.target);
 
     // Force simulation
-    const sim = d3.forceSimulation(simNodes)
+    sim = d3.forceSimulation(simNodes)
       .force('link', d3.forceLink(simEdges).id(d => d.id)
         .distance(e => {
           if (e.note === 'franchise_hinge') return 220;
@@ -263,8 +272,31 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, 
       nodeGs.attr('transform', d => `translate(${d.x},${d.y})`);
     });
 
-    return () => sim.stop();
-  }, [nodes, edges, onNodeClick, onEdgeHover, lastDragRef]);
+    // Watch for container resize — debounced re-center
+    let resizeTimer = null;
+    resizeObserver = new ResizeObserver(entries => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        for (const entry of entries) {
+          const { width: w, height: h } = entry.contentRect;
+          if (w > 0 && h > 0 && sim) {
+            sim.force('center', d3.forceCenter(w / 2, h / 2));
+            sim.alpha(0.15).restart();
+          }
+        }
+      }, 200);
+    });
+    resizeObserver.observe(svgRef.current);
+
+    }); // end requestAnimationFrame
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+      if (sim) sim.stop();
+      if (resizeObserver) resizeObserver.disconnect();
+    };
+  }, [nodes, edges, onNodeClick, onEdgeHover, lastDragRef, d3Ready]);
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -718,13 +750,18 @@ function WebView({ navigate }) {
     navigate(charId ? `/character-registry?character=${charId}` : '/character-registry?view=world');
   }, [navigate, nameToId]);
 
-  // Filter
-  const visibleNodes = filter === 'all' ? nodes : nodes.filter(n => n.group === filter);
-  const visibleNodeIds = new Set(visibleNodes.map(n => n.id));
-  const visibleEdges = edges.filter(e => visibleNodeIds.has(e.from) && visibleNodeIds.has(e.to));
+  // Filter — memoize so new array refs are only created when data/filter actually change
+  const visibleNodes = useMemo(
+    () => filter === 'all' ? nodes : nodes.filter(n => n.group === filter),
+    [nodes, filter]
+  );
+  const visibleEdges = useMemo(() => {
+    const ids = new Set(visibleNodes.map(n => n.id));
+    return edges.filter(e => ids.has(e.from) && ids.has(e.to));
+  }, [edges, visibleNodes]);
 
   // Render D3
-  useD3RelationshipGraph(svgRef, visibleNodes, visibleEdges, handleNodeClick, handleEdgeHover, lastDragRef);
+  useD3RelationshipGraph(svgRef, visibleNodes, visibleEdges, handleNodeClick, handleEdgeHover, lastDragRef, d3Loaded);
 
   if (webLoading) {
     return (

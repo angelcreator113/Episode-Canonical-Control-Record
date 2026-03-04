@@ -218,10 +218,8 @@ function AppContent() {
   const isStoryEngine = location.pathname === '/story-engine';
   // Social Import is now embedded in Universe page as a tab
   const isAssembler = location.pathname === '/assembler';
-  const isCharacterGenerator = location.pathname === '/character-generator';
-  const isWorldStudio = location.pathname === '/world-studio';
   const isSetupWizard = location.pathname === '/setup';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isAssembler || isCharacterGenerator || isWorldStudio || isSetupWizard;
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isAssembler || isSetupWizard;
   const hideFooter = isFullScreen;
 
   return (
@@ -348,7 +346,7 @@ function AppContent() {
           
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
-          <Route path="/character-generator" element={<CharacterGenerator />} />
+          <Route path="/character-generator" element={<Navigate to="/world-studio" replace />} />
           <Route path="/setup" element={<SetupWizard />} />
           
           {/* PNOS Character Therapy — Psychological Narrative Engine */}
@@ -363,7 +361,7 @@ function AppContent() {
           {/* PNOS Story Engine — 50-Story Arc System */}
           <Route path="/story-engine" element={<StoryEngine />} />
 
-          {/* World Studio — Character Ecosystem + Intimate Scene Generator */}
+          {/* World Studio — LalaVerse world character + scene hub */}
           <Route path="/world-studio" element={<WorldStudio />} />
           
           {/* PNOS Social Import Pipeline — redirects to Universe tab */}

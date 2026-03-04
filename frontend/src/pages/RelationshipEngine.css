@@ -34,12 +34,18 @@
 
 /* ═══ Shell ═══════════════════════════════════════════════════════════════════ */
 .cg-shell {
-  min-height: 100vh;
+  height: 100%;
   display: flex;
   flex-direction: column;
   background: var(--cg-paper);
   color: var(--cg-ink);
   font-family: var(--cg-font);
+  overflow: hidden;
+}
+
+/* Override .app-content > * { min-height: 100% } — shell must fit, not overflow */
+.app-content > .cg-shell {
+  min-height: 0;
 }
 
 /* ═══ Top Bar (sticky) ════════════════════════════════════════════════════════ */
@@ -226,23 +232,27 @@
 }
 
 /* ═══ 3-Column Body ══════════════════════════════════════════════════════════ */
-.cg-body {
+/* Scoped under .cg-shell to avoid collision with CharacterGenerator.css
+   which defines .cg-body as display:flex — we need display:grid here. */
+.cg-shell .cg-body {
   display: grid;
-  grid-template-columns: 320px minmax(560px, 1fr) 360px;
+  grid-template-columns: 320px minmax(0, 1fr) 360px;
+  grid-template-rows: 1fr;
   gap: 18px;
   padding: 18px;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
 }
 
 /* When left/right panels are absent (e.g. Web view), let main span full width */
-.cg-body > .cg-main:first-child:last-child,
-.cg-body > .cg-main:only-child {
+.cg-shell .cg-body > .cg-main:first-child:last-child,
+.cg-shell .cg-body > .cg-main:only-child {
   grid-column: 1 / -1;
 }
 
 /* ═══ Left Sidebar — World Ecosystem ═════════════════════════════════════════ */
-.cg-left {
+.cg-shell .cg-left {
   position: sticky;
   top: 74px;
   align-self: start;
@@ -542,7 +552,7 @@
   border-radius: var(--cg-radius);
   box-shadow: var(--cg-shadow);
   flex: 1;
-  min-height: 520px;
+  min-height: 0;
   overflow: hidden;
   position: relative;
   display: flex;
@@ -810,7 +820,7 @@
 .cg-skeletonLine.full { width: 100%; }
 
 /* ═══ Right Panel — Inspector ════════════════════════════════════════════════ */
-.cg-right {
+.cg-shell .cg-right {
   position: sticky;
   top: 74px;
   align-self: start;
@@ -1220,29 +1230,29 @@
 
 /* ═══ Responsive ═════════════════════════════════════════════════════════════ */
 @media (max-width: 1200px) {
-  .cg-body {
+  .cg-shell .cg-body {
     grid-template-columns: 280px 1fr;
   }
-  .cg-right {
+  .cg-shell .cg-right {
     display: none;
   }
 }
 
 @media (max-width: 860px) {
-  .cg-body {
+  .cg-shell .cg-body {
     grid-template-columns: 1fr;
     padding: 12px;
     gap: 12px;
   }
-  .cg-left {
+  .cg-shell .cg-left {
     position: static;
     max-height: none;
     order: 2;
   }
-  .cg-main {
+  .cg-shell .cg-main {
     order: 1;
   }
-  .cg-right {
+  .cg-shell .cg-right {
     display: none;
   }
   .cg-topbar {

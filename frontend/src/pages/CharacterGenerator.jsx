@@ -32,8 +32,120 @@ function loadHistory() {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
+// ─── World Builder mini-panel (ecosystem generation for empty worlds) ────────
+function WorldBuilderPanel({ worldTarget, ecosystem, onEcosystemGenerated }) {
+  const [showForm, setShowForm] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [form, setForm] = useState({
+    city: '', industry: '', career_stage: 'early_career', character_count: 8,
+  });
+
+  const worldStats = ecosystem?.[worldTarget]?.stats;
+  const isEmpty = !worldStats || worldStats.total === 0;
+
+  if (!isEmpty) return null;
+
+  return (
+    <div className="cg-world-builder">
+      <div className="cg-world-builder-header">
+        <div className="cg-world-builder-icon">✦</div>
+        <div className="cg-world-builder-text">
+          <div className="cg-world-builder-title">
+            {worldTarget === 'lalaverse' ? 'LalaVerse' : 'Book 1'} is empty
+          </div>
+          <div className="cg-world-builder-sub">
+            Generate a character ecosystem first, or propose seeds directly
+          </div>
+        </div>
+      </div>
+
+      {!showForm ? (
+        <button
+          className="cg-btn cg-btn-world-build"
+          onClick={() => setShowForm(true)}
+        >
+          ✨ Build World Ecosystem
+        </button>
+      ) : (
+        <div className="cg-world-builder-form">
+          <div className="cg-wb-row">
+            <label>City / Setting</label>
+            <input
+              placeholder={worldTarget === 'lalaverse' ? 'Fashion capital, digital world…' : 'Suburban America, a major city…'}
+              value={form.city}
+              onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+            />
+          </div>
+          <div className="cg-wb-row">
+            <label>Industry / Focus</label>
+            <input
+              placeholder={worldTarget === 'lalaverse' ? 'Content creation and fashion' : 'Professional careers, family life'}
+              value={form.industry}
+              onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}
+            />
+          </div>
+          <div className="cg-wb-row-inline">
+            <div className="cg-wb-row">
+              <label>Career Stage</label>
+              <select value={form.career_stage} onChange={e => setForm(f => ({ ...f, career_stage: e.target.value }))}>
+                <option value="early_career">Early Career</option>
+                <option value="mid_career">Mid Career</option>
+                <option value="established">Established</option>
+                <option value="mixed">Mixed</option>
+              </select>
+            </div>
+            <div className="cg-wb-row">
+              <label>Characters</label>
+              <input
+                type="number" min={4} max={20}
+                value={form.character_count}
+                onChange={e => setForm(f => ({ ...f, character_count: parseInt(e.target.value) || 8 }))}
+              />
+            </div>
+          </div>
+          <div className="cg-wb-actions">
+            <button className="cg-btn cg-btn-cancel" onClick={() => setShowForm(false)}>Cancel</button>
+            <button
+              className="cg-btn cg-btn-generate"
+              disabled={generating}
+              onClick={async () => {
+                setGenerating(true);
+                try {
+                  const res = await fetch(`${API_BASE}/world/generate-ecosystem`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      world_context: {
+                        city: form.city || (worldTarget === 'lalaverse' ? 'a fashion capital' : 'a major city'),
+                        industry: form.industry || (worldTarget === 'lalaverse' ? 'content creation and fashion' : 'professional careers'),
+                        career_stage: form.career_stage,
+                      },
+                      character_count: form.character_count,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (data.characters || data.count) {
+                    setShowForm(false);
+                    if (onEcosystemGenerated) onEcosystemGenerated();
+                  }
+                } catch (e) {
+                  console.error('Ecosystem generation failed:', e);
+                } finally {
+                  setGenerating(false);
+                }
+              }}
+            >
+              {generating ? 'Generating…' : `Generate ${form.character_count} Characters`}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Ecosystem panel ──────────────────────────────────────────────────────────
-function EcosystemPanel({ ecosystem, loading }) {
+function EcosystemPanel({ ecosystem, loading, worldTarget }) {
   if (loading) return (
     <div className="cg-ecosystem-loading">
       <div className="cg-spinner" />
@@ -43,7 +155,10 @@ function EcosystemPanel({ ecosystem, loading }) {
 
   if (!ecosystem) return null;
 
-  const worlds = ['book1', 'lalaverse'];
+  // Show relevant worlds based on target
+  const worlds = worldTarget === 'both' ? ['book1', 'lalaverse']
+    : worldTarget === 'lalaverse' ? ['lalaverse']
+    : ['book1'];
 
   return (
     <div className="cg-ecosystem">
@@ -512,8 +627,7 @@ export default function CharacterGenerator() {
 
   // Seed proposal
   const [worldTarget, setWorldTarget]     = useState(
-    (saved.current?.worldTarget === 'lalaverse' || saved.current?.worldTarget === 'both')
-      ? 'book1' : (saved.current?.worldTarget || 'book1')
+    saved.current?.worldTarget || 'book1'
   );
   const [seeds, setSeeds]                 = useState(saved.current?.seeds || []);
   const [seedsLoading, setSeedsLoading]   = useState(false);
@@ -602,20 +716,27 @@ export default function CharacterGenerator() {
         ...(ecosystem?.lalaverse?.characters || []),
       ].map((c) => c.name);
 
-      const res = await fetch(`${API_BASE}/character-generator/propose-seeds`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          world: worldTarget,
-          existing_names: existingNames,
-          ecosystem_stats: ecosystem,
-        }),
-      });
+      // "both" mode: fetch seeds for each world in parallel, merge
+      const worldsToFetch = worldTarget === 'both' ? ['book1', 'lalaverse'] : [worldTarget];
 
-      if (res.ok) {
-        const data = await res.json();
-        setSeeds((data.seeds || []).map((s) => ({ ...s, _status: 'pending' })));
-      }
+      const allSeeds = [];
+      await Promise.all(worldsToFetch.map(async (w) => {
+        const res = await fetch(`${API_BASE}/character-generator/propose-seeds`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            world: w,
+            existing_names: existingNames,
+            ecosystem_stats: ecosystem?.[w]?.stats || ecosystem,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          allSeeds.push(...(data.seeds || []));
+        }
+      }));
+
+      setSeeds(allSeeds.map((s) => ({ ...s, _status: 'pending' })));
     } catch (e) {
       console.error('propose seeds error:', e);
     } finally {
@@ -855,16 +976,11 @@ export default function CharacterGenerator() {
           <select
             className="cg-world-select"
             value={worldTarget}
-            onChange={(e) => {
-              if (e.target.value === 'lalaverse') {
-                navigate('/world-studio');
-                return;
-              }
-              setWorldTarget(e.target.value);
-            }}
+            onChange={(e) => setWorldTarget(e.target.value)}
           >
             <option value="book1">Book 1 World</option>
-            <option value="lalaverse">LalaVerse → World Studio</option>
+            <option value="lalaverse">LalaVerse</option>
+            <option value="both">Both Worlds</option>
           </select>
           <button
             className="cg-btn cg-btn-propose"
@@ -882,7 +998,12 @@ export default function CharacterGenerator() {
         {/* Left: ecosystem */}
         <div className="cg-left">
           <div className="cg-panel-title">World Ecosystem</div>
-          <EcosystemPanel ecosystem={ecosystem} loading={ecoLoading} />
+          <WorldBuilderPanel
+            worldTarget={worldTarget === 'both' ? 'lalaverse' : worldTarget}
+            ecosystem={ecosystem}
+            onEcosystemGenerated={loadEcosystem}
+          />
+          <EcosystemPanel ecosystem={ecosystem} loading={ecoLoading} worldTarget={worldTarget} />
         </div>
 
         {/* Right: seeds or staging */}

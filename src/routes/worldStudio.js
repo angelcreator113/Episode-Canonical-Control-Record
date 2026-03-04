@@ -919,4 +919,206 @@ router.post('/world/continuations/:contId/approve', optionalAuth, async (req, re
   }
 });
 
+// ══════════════════════════════════════════════════════════════════════════════
+// PREVIEW FLOW  (generate-ecosystem-preview → select → generate-ecosystem-confirm)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /world/generate-ecosystem-preview
+ * Same Claude prompt as generate-ecosystem BUT does NOT commit to DB.
+ * Returns preview characters so the user can select/deselect before confirming.
+ */
+router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) => {
+  try {
+    const {
+      series_label = 'lalaverse_s1',
+      world_context = {},
+      character_count = 8,
+    } = req.body;
+
+    const {
+      city         = 'a major city',
+      industry     = 'content creation and fashion',
+      career_stage = 'early career — rising but not arrived',
+      era          = 'now',
+      protagonist  = 'Lala',
+    } = world_context;
+
+    // Fetch existing to avoid duplication
+    const existing = await Q(req, `
+      SELECT name, character_type, occupation FROM world_characters
+      WHERE status != 'archived' ORDER BY created_at DESC LIMIT 20
+    `);
+
+    const result = await claude(
+      `You create vivid, complex characters for LalaVerse — a fictional world where Lala, a confident AI fashion game character who became sentient, is building her life and career.
+
+Lala has JustAWoman's entire confidence playbook running invisibly underneath her. She's magnetic, styled, direct. She knows what she wants. She doesn't always know why she wants it.
+
+Create characters who feel like real people — with their own ambitions, contradictions, secrets, and desires. Not props. Not types. People who change Lala's trajectory by existing in her world.
+
+Character types needed:
+- love_interest: someone she could actually fall for. Complex. Not available in a simple way.
+- industry_peer: another creator or brand figure at a similar level. Collaborative energy that hides competitive undercurrent.
+- mentor: someone ahead of her who sees something in her. Their help comes with their own agenda.
+- antagonist: not a villain. Someone whose success or presence makes Lala's path harder without meaning to.
+- one_night_stand: someone she meets once. The encounter means something even if they don't stay.
+- rival: direct competition. They respect each other and can't stand each other.
+- collaborator: someone she creates with. Creative chemistry that bleeds into everything else.
+
+For intimate_eligible characters: write intimate_style, intimate_dynamic, and what_lala_feels with honesty and specificity. These inform how scenes between them are generated. Be real about desire, tension, and what makes physical connection between these specific people feel true to who they are.`,
+
+      `Generate ${character_count} world characters for LalaVerse.
+
+PROTAGONIST: ${protagonist}
+WORLD: ${city}, ${industry} industry
+CAREER STAGE: ${career_stage}
+ERA: ${era}
+
+${existing.length > 0 ? `EXISTING CHARACTERS (don't duplicate):\n${existing.map(e => `- ${e.name} (${e.character_type})`).join('\n')}` : ''}
+
+Include at least: 2 love_interest or one_night_stand, 2 industry_peer, 1 mentor, 1 antagonist or rival, 1 collaborator.
+
+Return JSON only:
+{
+  "characters": [
+    {
+      "name": "full name",
+      "age_range": "e.g. late 20s",
+      "occupation": "specific job/role",
+      "world_location": "where they exist in LalaVerse",
+      "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
+      "intimate_eligible": true|false,
+      "aesthetic": "how they look, dress, move — specific and visual",
+      "signature": "the one thing about them that is unforgettable",
+      "surface_want": "what they'd tell you they want",
+      "real_want": "what they'd never admit",
+      "what_they_want_from_lala": "what they're actually seeking from her specifically",
+      "how_they_meet": "the specific scenario — not generic",
+      "dynamic": "the texture of their connection with Lala",
+      "tension_type": "romantic|professional|creative|power|unspoken",
+      "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
+      "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
+      "what_lala_feels": "what Lala physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
+      "arc_role": "how this character changes Lala's trajectory",
+      "exit_reason": "how or why they leave her world, or null if they stay",
+      "career_echo_connection": true|false
+    }
+  ],
+  "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
+}`,
+      3000
+    );
+
+    const parsed = parseJSON(result);
+    if (!parsed?.characters?.length) {
+      return res.status(500).json({ error: 'Preview generation failed — Claude returned no characters' });
+    }
+
+    // Return characters WITHOUT committing to DB
+    res.json({
+      characters: parsed.characters,
+      generation_notes: parsed.generation_notes || '',
+      count: parsed.characters.length,
+    });
+  } catch (err) {
+    console.error('generate-ecosystem-preview error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /world/generate-ecosystem-confirm
+ * Takes the user-selected characters from the preview and commits them to DB + registry.
+ */
+router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) => {
+  try {
+    const {
+      characters = [],
+      generation_notes = '',
+      show_id,
+      series_label = 'lalaverse_s1',
+    } = req.body;
+
+    if (!characters.length) {
+      return res.status(400).json({ error: 'No characters to confirm' });
+    }
+
+    // Create batch record
+    const batchId = uuidv4();
+    await sequelize.query(
+      `INSERT INTO world_character_batches (id, show_id, series_label, world_context, character_count, generation_notes, created_at, updated_at)
+       VALUES (:id, :show_id, :label, :context, :count, :notes, NOW(), NOW())`,
+      {
+        replacements: {
+          id: batchId,
+          show_id: show_id || null,
+          label: series_label,
+          context: JSON.stringify({ source: 'preview_confirm' }),
+          count: characters.length,
+          notes: generation_notes,
+        },
+        type: sequelize.QueryTypes.INSERT,
+      }
+    );
+
+    // Insert each character + sync to registry
+    const lalaRegistryId = await findOrCreateLalaVerseRegistry(req);
+    const inserted = [];
+    for (const c of characters) {
+      const charId = uuidv4();
+      await sequelize.query(
+        `INSERT INTO world_characters
+           (id, batch_id, name, age_range, occupation, world_location, character_type,
+            intimate_eligible, aesthetic, signature,
+            surface_want, real_want, what_they_want_from_lala,
+            how_they_meet, dynamic, tension_type,
+            intimate_style, intimate_dynamic, what_lala_feels,
+            arc_role, exit_reason, career_echo_connection,
+            status, current_tension, created_at, updated_at)
+         VALUES
+           (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
+            :intimate_eligible, :aesthetic, :signature,
+            :surface_want, :real_want, :what_from_lala,
+            :how_meet, :dynamic, :tension_type,
+            :intimate_style, :intimate_dynamic, :what_lala_feels,
+            :arc_role, :exit_reason, :career_echo,
+            'draft', 'Stable', NOW(), NOW())`,
+        {
+          replacements: {
+            id: charId, batch_id: batchId,
+            name: c.name, age_range: c.age_range || null, occupation: c.occupation || null,
+            world_location: c.world_location || null, char_type: c.character_type,
+            intimate_eligible: c.intimate_eligible || false,
+            aesthetic: c.aesthetic || null, signature: c.signature || null,
+            surface_want: c.surface_want || null, real_want: c.real_want || null,
+            what_from_lala: c.what_they_want_from_lala || null,
+            how_meet: c.how_they_meet || null, dynamic: c.dynamic || null,
+            tension_type: c.tension_type || null,
+            intimate_style: c.intimate_style || null, intimate_dynamic: c.intimate_dynamic || null,
+            what_lala_feels: c.what_lala_feels || null,
+            arc_role: c.arc_role || null, exit_reason: c.exit_reason || null,
+            career_echo: c.career_echo_connection || false,
+          },
+          type: sequelize.QueryTypes.INSERT,
+        }
+      );
+
+      // Sync to canonical registry
+      const rcId = await syncToRegistry(req, charId, c, lalaRegistryId);
+      inserted.push({ ...c, id: charId, registry_character_id: rcId });
+    }
+
+    res.status(201).json({
+      characters: inserted,
+      batch_id: batchId,
+      count: inserted.length,
+      generation_notes,
+    });
+  } catch (err) {
+    console.error('generate-ecosystem-confirm error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
