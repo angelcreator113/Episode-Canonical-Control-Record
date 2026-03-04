@@ -220,6 +220,11 @@ export default function WorldStudio() {
   const [selectedChar, setSelectedChar] = useState(null);
   const [charDetail, setCharDetail]     = useState(null);
   const [charFilter, setCharFilter]     = useState('all');
+  const [charSearch, setCharSearch]     = useState('');
+  const [charScenes, setCharScenes]     = useState([]);
+  const [editMode, setEditMode]         = useState(false);
+  const [editForm, setEditForm]         = useState({});
+  const [saving, setSaving]             = useState(false);
 
   /* ── Scenes ────────────────────────────────────────────────────────── */
   const [scenes, setScenes]             = useState([]);
@@ -230,6 +235,8 @@ export default function WorldStudio() {
   /* ── Triggers ──────────────────────────────────────────────────────── */
   const [triggered, setTriggered]             = useState([]);
   const [oneNightCandidates, setOneNightCandidates] = useState([]);
+  const [selectedTrigger, setSelectedTrigger] = useState(null);
+  const [triggerDetail, setTriggerDetail]     = useState(null);
 
   /* ── Preview flow (generate → preview → select → confirm) ─────────── */
   const [previewChars, setPreviewChars]     = useState([]);
@@ -244,6 +251,9 @@ export default function WorldStudio() {
   const [approving, setApproving]           = useState(false);
   const [showSceneModal, setShowSceneModal] = useState(false);
   const [toast, setToast]                   = useState(null);
+  const [bulkActivating, setBulkActivating] = useState(false);
+  const [batches, setBatches]               = useState([]);
+  const [showBatches, setShowBatches]       = useState(false);
 
   /* ── Scene form ────────────────────────────────────────────────────── */
   const [sceneForm, setSceneForm] = useState({
@@ -298,6 +308,16 @@ export default function WorldStudio() {
       const r = await fetch(`${API}/world/characters/${id}`);
       const d = await r.json();
       setCharDetail(d.character || null);
+      setCharScenes(d.scenes || []);
+      setEditMode(false);
+    } catch (e) { console.error(e); }
+  }, []);
+
+  const loadBatches = useCallback(async () => {
+    try {
+      const r = await fetch(`${API}/world/batches`);
+      const d = await r.json();
+      setBatches(d.batches || []);
     } catch (e) { console.error(e); }
   }, []);
 
@@ -478,8 +498,85 @@ export default function WorldStudio() {
     setShowSceneModal(true);
   };
 
+  /* ── Character edit / archive / bulk ────────────────────────────────── */
+  const startEdit = () => {
+    if (!charDetail) return;
+    setEditForm({
+      name: charDetail.name || '',
+      age_range: charDetail.age_range || '',
+      occupation: charDetail.occupation || '',
+      world_location: charDetail.world_location || '',
+      aesthetic: charDetail.aesthetic || '',
+      surface_want: charDetail.surface_want || '',
+      real_want: charDetail.real_want || '',
+      what_they_want_from_lala: charDetail.what_they_want_from_lala || '',
+      how_they_meet: charDetail.how_they_meet || '',
+      dynamic: charDetail.dynamic || '',
+      intimate_style: charDetail.intimate_style || '',
+      arc_role: charDetail.arc_role || '',
+    });
+    setEditMode(true);
+  };
+
+  const saveCharEdit = async () => {
+    if (!selectedChar) return;
+    setSaving(true);
+    try {
+      const r = await fetch(`${API}/world/characters/${selectedChar}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editForm),
+      });
+      const d = await r.json();
+      if (d.character) {
+        flash('Character updated');
+        setEditMode(false);
+        loadCharDetail(selectedChar);
+        loadCharacters();
+      } else flash(d.error || 'Update failed', 'error');
+    } catch (e) { flash(e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const archiveChar = async (id) => {
+    try {
+      await fetch(`${API}/world/characters/${id}/archive`, { method: 'POST' });
+      flash('Character archived');
+      setSelectedChar(null); setCharDetail(null);
+      loadCharacters();
+    } catch (e) { flash(e.message, 'error'); }
+  };
+
+  const bulkActivate = async () => {
+    const drafts = characters.filter(c => c.status === 'draft');
+    if (!drafts.length) { flash('No drafts to activate', 'error'); return; }
+    setBulkActivating(true);
+    try {
+      for (const c of drafts) {
+        await fetch(`${API}/world/characters/${c.id}/activate`, { method: 'POST' });
+      }
+      flash(`${drafts.length} characters activated`);
+      loadCharacters();
+      if (selectedChar) loadCharDetail(selectedChar);
+    } catch (e) { flash(e.message, 'error'); }
+    finally { setBulkActivating(false); }
+  };
+
+  const selectTrigger = async (char) => {
+    setSelectedTrigger(char);
+    try {
+      const r = await fetch(`${API}/world/characters/${char.id}`);
+      const d = await r.json();
+      setTriggerDetail(d.character || null);
+    } catch (e) { console.error(e); }
+  };
+
   /* ── Filtered characters ───────────────────────────────────────────── */
-  const filtered = charFilter === 'all' ? characters : characters.filter(c => c.character_type === charFilter);
+  const filtered = characters.filter(c => {
+    if (charFilter !== 'all' && c.character_type !== charFilter) return false;
+    if (charSearch && !(c.name || '').toLowerCase().includes(charSearch.toLowerCase())) return false;
+    return true;
+  });
   const uniqueTypes = [...new Set(characters.map(c => c.character_type))];
 
   /* ── Filtered registry characters ──────────────────────────────────── */
@@ -531,6 +628,11 @@ export default function WorldStudio() {
         <div className="ws-header-controls">
           {tab !== 'registry' && (
             <>
+              {characters.filter(c => c.status === 'draft').length > 0 && (
+                <button className="ws-btn ws-btn-green" onClick={bulkActivate} disabled={bulkActivating}>
+                  {bulkActivating ? '⏳…' : `✓ Activate ${characters.filter(c => c.status === 'draft').length} Drafts`}
+                </button>
+              )}
               <button className="ws-btn ws-btn-rose" onClick={() => setShowSceneModal(true)}>
                 ♡ Write Scene
               </button>
@@ -541,6 +643,36 @@ export default function WorldStudio() {
           )}
         </div>
       </header>
+
+      {/* ── STATS BAR ─────────────────────────────────────────────────── */}
+      <div className="ws-stats-bar">
+        <div className="ws-stat">
+          <span className="ws-stat-value">{characters.length}</span>
+          <span className="ws-stat-label">Characters</span>
+        </div>
+        <div className="ws-stat">
+          <span className="ws-stat-value ws-stat-value-green">{characters.filter(c => c.status === 'active').length}</span>
+          <span className="ws-stat-label">Active</span>
+        </div>
+        <div className="ws-stat">
+          <span className="ws-stat-value ws-stat-value-muted">{characters.filter(c => c.status === 'draft').length}</span>
+          <span className="ws-stat-label">Draft</span>
+        </div>
+        <div className="ws-stat-divider" />
+        <div className="ws-stat">
+          <span className="ws-stat-value ws-stat-value-rose">{scenes.length}</span>
+          <span className="ws-stat-label">Scenes</span>
+        </div>
+        <div className="ws-stat">
+          <span className="ws-stat-value ws-stat-value-orange">{triggered.length + oneNightCandidates.length}</span>
+          <span className="ws-stat-label">Triggers</span>
+        </div>
+        <div className="ws-stat-divider" />
+        <div className="ws-stat">
+          <span className="ws-stat-value ws-stat-value-teal">{[...new Set(characters.map(c => c.character_type))].length}</span>
+          <span className="ws-stat-label">Types</span>
+        </div>
+      </div>
 
       {/* ── BODY ──────────────────────────────────────────────────────── */}
       <div className="ws-body">
@@ -555,6 +687,12 @@ export default function WorldStudio() {
             {/* Characters sidebar */}
             {tab === 'characters' && (
               <>
+                <input
+                  className="ws-sidebar-search"
+                  placeholder="Search characters…"
+                  value={charSearch}
+                  onChange={e => setCharSearch(e.target.value)}
+                />
                 <div className="ws-filter-row">
                   <button
                     className={`ws-filter-pill ${charFilter === 'all' ? 'ws-filter-pill-active' : ''}`}
@@ -607,7 +745,7 @@ export default function WorldStudio() {
                   <>
                     <div className="ws-section-label ws-section-label-orange">Tension Triggers</div>
                     {triggered.map((t, i) => (
-                      <div key={i} className="ws-trigger-card" onClick={() => openSceneFromTrigger(t)}>
+                      <div key={i} className={`ws-trigger-card ${selectedTrigger?.id === t.id ? 'ws-trigger-card-active' : ''}`} onClick={() => selectTrigger(t)}>
                         <div className="ws-trigger-card-name">{t.name}</div>
                         <div className="ws-trigger-card-occupation">{t.occupation}</div>
                         <Badge className="ws-badge-tension" style={{ marginTop: 6 }}>{t.tension_state || 'High'}</Badge>
@@ -619,7 +757,7 @@ export default function WorldStudio() {
                   <>
                     <div className="ws-section-label ws-section-label-rose">One Night Candidates</div>
                     {oneNightCandidates.map(c => (
-                      <div key={c.id} className="ws-trigger-card" onClick={() => openSceneFromTrigger(c)}>
+                      <div key={c.id} className={`ws-trigger-card ${selectedTrigger?.id === c.id ? 'ws-trigger-card-active' : ''}`} onClick={() => selectTrigger(c)}>
                         <div className="ws-trigger-card-name">{c.name}</div>
                         <div className="ws-trigger-card-occupation">{c.occupation}</div>
                       </div>
@@ -661,58 +799,190 @@ export default function WorldStudio() {
           )}
 
           {tab === 'characters' && characters.length > 0 && !charDetail && (
-            <div className="ws-empty">
-              <div className="ws-empty-icon">✦</div>
-              <div className="ws-empty-title">Select a character</div>
-              <div className="ws-empty-text">Choose from the sidebar to view their world profile</div>
+            <div className="ws-dashboard">
+              <div className="ws-dashboard-title">Ecosystem Overview</div>
+
+              {/* Type distribution */}
+              <div className="ws-dash-section">
+                <div className="ws-dash-section-label">Character Types</div>
+                <div className="ws-dash-type-grid">
+                  {uniqueTypes.map(t => {
+                    const count = characters.filter(c => c.character_type === t).length;
+                    const pct = Math.round((count / characters.length) * 100);
+                    return (
+                      <div key={t} className="ws-dash-type-card" onClick={() => { setCharFilter(t); }}>
+                        <div className="ws-dash-type-name">{TYPES[t] || t}</div>
+                        <div className="ws-dash-type-bar">
+                          <div className="ws-dash-type-bar-fill" style={{ width: `${pct}%` }} />
+                        </div>
+                        <div className="ws-dash-type-count">{count} ({pct}%)</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Relationship web mini */}
+              {characters.length >= 2 && (
+                <div className="ws-dash-section">
+                  <div className="ws-dash-section-label">Relationship Web</div>
+                  <svg className="ws-relationship-web" viewBox="0 0 400 260">
+                    {/* Lines between characters */}
+                    {characters.slice(0, 12).map((c, i) => {
+                      const angle = (i / Math.min(characters.length, 12)) * Math.PI * 2 - Math.PI / 2;
+                      const cx = 200 + Math.cos(angle) * 100;
+                      const cy = 130 + Math.sin(angle) * 90;
+                      return characters.slice(i + 1, 12).map((c2, j) => {
+                        const a2 = ((i + j + 1) / Math.min(characters.length, 12)) * Math.PI * 2 - Math.PI / 2;
+                        const cx2 = 200 + Math.cos(a2) * 100;
+                        const cy2 = 130 + Math.sin(a2) * 90;
+                        return (c.character_type === c2.character_type || c.intimate_eligible && c2.intimate_eligible)
+                          ? <line key={`${c.id}-${c2.id}`} x1={cx} y1={cy} x2={cx2} y2={cy2} className="ws-web-line" />
+                          : null;
+                      });
+                    })}
+                    {/* Character nodes */}
+                    {characters.slice(0, 12).map((c, i) => {
+                      const angle = (i / Math.min(characters.length, 12)) * Math.PI * 2 - Math.PI / 2;
+                      const cx = 200 + Math.cos(angle) * 100;
+                      const cy = 130 + Math.sin(angle) * 90;
+                      return (
+                        <g key={c.id} className="ws-web-node" onClick={() => setSelectedChar(c.id)}>
+                          <circle cx={cx} cy={cy} r={c.intimate_eligible ? 14 : 10}
+                            className={`ws-web-circle ws-web-circle-${c.character_type || 'default'}`} />
+                          <text x={cx} y={cy + (c.intimate_eligible ? 24 : 20)} className="ws-web-label">{c.name?.split(' ')[0]}</text>
+                        </g>
+                      );
+                    })}
+                  </svg>
+                </div>
+              )}
+
+              {/* Recent characters */}
+              <div className="ws-dash-section">
+                <div className="ws-dash-section-label">Recent Characters</div>
+                <div className="ws-dash-recent-grid">
+                  {characters.slice(0, 6).map(c => (
+                    <div key={c.id} className="ws-dash-recent-card" onClick={() => setSelectedChar(c.id)}>
+                      <Badge className={TYPE_BADGE[c.character_type]}>{TYPES[c.character_type]}</Badge>
+                      <div className="ws-dash-recent-name">{c.name}</div>
+                      <div className="ws-dash-recent-meta">{c.occupation}</div>
+                      <Badge className={c.status === 'active' ? 'ws-badge-approved' : 'ws-badge-draft'}>{c.status}</Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
           {tab === 'characters' && charDetail && (
             <div key={charDetail.id} className="ws-detail">
-              <div className="ws-detail-header-badges">
-                <Badge className={TYPE_BADGE[charDetail.character_type]}>{TYPES[charDetail.character_type]}</Badge>
-                {charDetail.intimate_eligible && <Badge className="ws-badge-intimate">♡ Intimate Eligible</Badge>}
-                {charDetail.tension_type && <Badge className="ws-badge-tension">{charDetail.tension_type} tension</Badge>}
-              </div>
-              <h2 className="ws-detail-name">{charDetail.name}</h2>
-              <div className="ws-detail-meta">
-                {charDetail.age_range} · {charDetail.occupation} · {charDetail.world_location}
-              </div>
-
-              {charDetail.aesthetic && (
-                <div className="ws-detail-section">
-                  <div className="ws-section-label ws-section-label-gold">Aesthetic</div>
-                  <div className="ws-detail-text">{charDetail.aesthetic}</div>
+              <div className="ws-detail-toolbar">
+                <div className="ws-detail-header-badges">
+                  <Badge className={TYPE_BADGE[charDetail.character_type]}>{TYPES[charDetail.character_type]}</Badge>
+                  {charDetail.intimate_eligible && <Badge className="ws-badge-intimate">♡ Intimate Eligible</Badge>}
+                  {charDetail.tension_type && <Badge className="ws-badge-tension">{charDetail.tension_type} tension</Badge>}
+                  <Badge className={charDetail.status === 'active' ? 'ws-badge-approved' : charDetail.status === 'archived' ? 'ws-badge-archived' : 'ws-badge-draft'}>{charDetail.status}</Badge>
                 </div>
-              )}
-
-              {charDetail.signature && (
-                <blockquote className="ws-detail-blockquote">
-                  {charDetail.signature}
-                </blockquote>
-              )}
-
-              <div className="ws-section-label">What They Want</div>
-              <div className="ws-detail-grid">
-                <div className="ws-want-card">
-                  <div className="ws-want-card-label ws-want-card-label-gold">Surface</div>
-                  <div className="ws-want-card-text">{charDetail.surface_want}</div>
-                </div>
-                <div className="ws-want-card">
-                  <div className="ws-want-card-label ws-want-card-label-rose">Real</div>
-                  <div className="ws-want-card-text">{charDetail.real_want}</div>
+                <div className="ws-detail-actions">
+                  {!editMode && <button className="ws-btn ws-btn-ghost ws-btn-sm" onClick={startEdit}>✎ Edit</button>}
+                  {editMode && <button className="ws-btn ws-btn-ghost ws-btn-sm" onClick={() => setEditMode(false)}>✕ Cancel</button>}
+                  {editMode && <button className="ws-btn ws-btn-gold ws-btn-sm" onClick={saveCharEdit} disabled={saving}>{saving ? 'Saving…' : '✓ Save'}</button>}
+                  {charDetail.status !== 'archived' && !editMode && (
+                    <button className="ws-btn ws-btn-ghost ws-btn-sm ws-btn-muted" onClick={() => archiveChar(charDetail.id)}>Archive</button>
+                  )}
                 </div>
               </div>
 
-              {charDetail.what_they_want_from_lala && (
-                <div className="ws-detail-section" style={{ marginTop: 20 }}>
-                  <div className="ws-section-label ws-section-label-teal">What They Want From Lala</div>
-                  <div className="ws-inspector-card">{charDetail.what_they_want_from_lala}</div>
+              {!editMode ? (
+                <>
+                  <h2 className="ws-detail-name">{charDetail.name}</h2>
+                  <div className="ws-detail-meta">
+                    {charDetail.age_range} · {charDetail.occupation} · {charDetail.world_location}
+                  </div>
+
+                  {charDetail.aesthetic && (
+                    <div className="ws-detail-section">
+                      <div className="ws-section-label ws-section-label-gold">Aesthetic</div>
+                      <div className="ws-detail-text">{charDetail.aesthetic}</div>
+                    </div>
+                  )}
+
+                  {charDetail.signature && (
+                    <blockquote className="ws-detail-blockquote">
+                      {charDetail.signature}
+                    </blockquote>
+                  )}
+
+                  <div className="ws-section-label">What They Want</div>
+                  <div className="ws-detail-grid">
+                    <div className="ws-want-card">
+                      <div className="ws-want-card-label ws-want-card-label-gold">Surface</div>
+                      <div className="ws-want-card-text">{charDetail.surface_want}</div>
+                    </div>
+                    <div className="ws-want-card">
+                      <div className="ws-want-card-label ws-want-card-label-rose">Real</div>
+                      <div className="ws-want-card-text">{charDetail.real_want}</div>
+                    </div>
+                  </div>
+
+                  {charDetail.what_they_want_from_lala && (
+                    <div className="ws-detail-section" style={{ marginTop: 20 }}>
+                      <div className="ws-section-label ws-section-label-teal">What They Want From Lala</div>
+                      <div className="ws-inspector-card">{charDetail.what_they_want_from_lala}</div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                /* ── EDIT MODE ── */
+                <div className="ws-edit-form">
+                  {[
+                    { key: 'name', label: 'Name' },
+                    { key: 'age_range', label: 'Age Range' },
+                    { key: 'occupation', label: 'Occupation' },
+                    { key: 'world_location', label: 'Location' },
+                    { key: 'aesthetic', label: 'Aesthetic', long: true },
+                    { key: 'surface_want', label: 'Surface Want', long: true },
+                    { key: 'real_want', label: 'Real Want', long: true },
+                    { key: 'what_they_want_from_lala', label: 'What They Want From Lala', long: true },
+                    { key: 'how_they_meet', label: 'How They Meet', long: true },
+                    { key: 'dynamic', label: 'Dynamic', long: true },
+                    { key: 'intimate_style', label: 'Intimate Style', long: true },
+                    { key: 'arc_role', label: 'Arc Role', long: true },
+                  ].map(f => (
+                    <div key={f.key} className="ws-edit-field">
+                      <label className="ws-edit-label">{f.label}</label>
+                      {f.long ? (
+                        <textarea className="ws-textarea ws-edit-textarea" value={editForm[f.key] || ''}
+                          onChange={e => setEditForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
+                      ) : (
+                        <input className="ws-input" value={editForm[f.key] || ''}
+                          onChange={e => setEditForm(prev => ({ ...prev, [f.key]: e.target.value }))} />
+                      )}
+                    </div>
+                  ))}
                 </div>
               )}
 
-              {charDetail.status === 'draft' && (
+              {/* Scene history */}
+              {!editMode && charScenes.length > 0 && (
+                <div className="ws-detail-section" style={{ marginTop: 24 }}>
+                  <div className="ws-section-label ws-section-label-rose">Scene History ({charScenes.length})</div>
+                  <div className="ws-scene-history">
+                    {charScenes.map(s => (
+                      <div key={s.id} className="ws-scene-history-card" onClick={() => { setTab('scenes'); setSelectedScene(s.id); }}>
+                        <div className="ws-scene-history-type">{TYPES[s.scene_type] || s.scene_type}</div>
+                        <div className="ws-scene-history-meta">
+                          {s.character_a_name}{s.character_b_name ? ` & ${s.character_b_name}` : ''}
+                        </div>
+                        <Badge className={s.status === 'approved' ? 'ws-badge-approved' : 'ws-badge-draft'}>{s.status}</Badge>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {charDetail.status === 'draft' && !editMode && (
                 <button className="ws-btn ws-btn-green" style={{ marginTop: 20 }}
                   onClick={() => activateChar(charDetail.id)}>
                   Activate Character
@@ -784,19 +1054,64 @@ export default function WorldStudio() {
             </div>
           )}
 
-          {/* ─── Triggers: center prompt ─── */}
-          {tab === 'triggers' && (
+          {/* ─── Triggers: center content ─── */}
+          {tab === 'triggers' && !selectedTrigger && (
             <div className="ws-empty">
               <div className="ws-empty-icon">◇</div>
               <div className="ws-empty-title">
                 {(triggered.length + oneNightCandidates.length) > 0
-                  ? 'Tap a trigger from the sidebar'
+                  ? 'Select a trigger from the sidebar'
                   : 'No triggers active'}
               </div>
               <div className="ws-empty-text">
                 {(triggered.length + oneNightCandidates.length) > 0
-                  ? 'Select a tension trigger to generate a scene'
+                  ? 'Click a tension trigger to view character details and generate a scene'
                   : 'Activate characters and build tension first'}
+              </div>
+            </div>
+          )}
+
+          {tab === 'triggers' && selectedTrigger && triggerDetail && (
+            <div className="ws-detail">
+              <div className="ws-detail-header-badges">
+                <Badge className={TYPE_BADGE[triggerDetail.character_type]}>{TYPES[triggerDetail.character_type]}</Badge>
+                {triggerDetail.intimate_eligible && <Badge className="ws-badge-intimate">♡ Intimate Eligible</Badge>}
+                {triggerDetail.tension_type && <Badge className="ws-badge-tension">{triggerDetail.tension_type} tension</Badge>}
+                {selectedTrigger.tension_state && <Badge className="ws-badge-tension-state">{selectedTrigger.tension_state}</Badge>}
+              </div>
+              <h2 className="ws-detail-name">{triggerDetail.name}</h2>
+              <div className="ws-detail-meta">
+                {triggerDetail.age_range} · {triggerDetail.occupation} · {triggerDetail.world_location}
+              </div>
+
+              {triggerDetail.aesthetic && (
+                <div className="ws-detail-section">
+                  <div className="ws-section-label ws-section-label-gold">Aesthetic</div>
+                  <div className="ws-detail-text">{triggerDetail.aesthetic}</div>
+                </div>
+              )}
+
+              {triggerDetail.dynamic && (
+                <div className="ws-detail-section">
+                  <div className="ws-section-label ws-section-label-lavender">Dynamic</div>
+                  <div className="ws-detail-text">{triggerDetail.dynamic}</div>
+                </div>
+              )}
+
+              {triggerDetail.what_they_want_from_lala && (
+                <div className="ws-detail-section">
+                  <div className="ws-section-label ws-section-label-teal">What They Want From Lala</div>
+                  <div className="ws-detail-text">{triggerDetail.what_they_want_from_lala}</div>
+                </div>
+              )}
+
+              <div className="ws-trigger-action-bar">
+                <button className="ws-btn ws-btn-rose ws-btn-lg" onClick={() => openSceneFromTrigger(selectedTrigger)}>
+                  ♡ Write Scene with {triggerDetail.name?.split(' ')[0]}
+                </button>
+                <button className="ws-btn ws-btn-outline" onClick={() => { setTab('characters'); setSelectedChar(triggerDetail.id); }}>
+                  View Full Profile →
+                </button>
               </div>
             </div>
           )}
@@ -946,6 +1261,31 @@ export default function WorldStudio() {
             {/* Scene inspector */}
             {tab === 'scenes' && sceneDetail && (
               <>
+                {/* Character mini-profiles */}
+                {(sceneDetail.character_a_profile || sceneDetail.character_b_profile) && (
+                  <div className="ws-inspector-section">
+                    <div className="ws-inspector-field-label ws-inspector-field-label-gold">Characters</div>
+                    {sceneDetail.character_a_profile && (
+                      <div className="ws-inspector-char-mini">
+                        <div className="ws-inspector-char-mini-name">{sceneDetail.character_a_profile.name || sceneDetail.character_a_name}</div>
+                        <div className="ws-inspector-char-mini-meta">{sceneDetail.character_a_profile.occupation}</div>
+                        {sceneDetail.character_a_profile.intimate_style && (
+                          <div className="ws-inspector-char-mini-detail">{sceneDetail.character_a_profile.intimate_style}</div>
+                        )}
+                      </div>
+                    )}
+                    {sceneDetail.character_b_profile && (
+                      <div className="ws-inspector-char-mini">
+                        <div className="ws-inspector-char-mini-name">{sceneDetail.character_b_profile.name || sceneDetail.character_b_name}</div>
+                        <div className="ws-inspector-char-mini-meta">{sceneDetail.character_b_profile.occupation}</div>
+                        {sceneDetail.character_b_profile.intimate_style && (
+                          <div className="ws-inspector-char-mini-detail">{sceneDetail.character_b_profile.intimate_style}</div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
                 {continuations.length > 0 && (
                   <div className="ws-inspector-section">
                     <div className="ws-inspector-field-label ws-inspector-field-label-lavender">Morning After</div>
@@ -991,7 +1331,7 @@ export default function WorldStudio() {
             )}
 
             {/* Inspector empty */}
-            {!((tab === 'characters' && charDetail) || (tab === 'scenes' && sceneDetail)) && (
+            {!((tab === 'characters' && charDetail) || (tab === 'scenes' && sceneDetail) || (tab === 'triggers' && triggerDetail)) && (
               <div className="ws-empty ws-empty-small">
                 <div className="ws-empty-icon">
                   {tab === 'characters' ? '✦' : tab === 'scenes' ? '♡' : '◇'}
@@ -1000,6 +1340,30 @@ export default function WorldStudio() {
                   {tab === 'characters' ? 'Select a character' : tab === 'scenes' ? 'Select a scene' : 'Select a trigger'}
                 </div>
               </div>
+            )}
+
+            {/* Trigger inspector */}
+            {tab === 'triggers' && triggerDetail && (
+              <>
+                {triggerDetail.how_they_meet && (
+                  <div className="ws-inspector-section">
+                    <div className="ws-inspector-field-label ws-inspector-field-label-teal">How They Meet</div>
+                    <div className="ws-inspector-card">{triggerDetail.how_they_meet}</div>
+                  </div>
+                )}
+                {triggerDetail.intimate_style && (
+                  <div className="ws-inspector-section">
+                    <div className="ws-inspector-field-label ws-inspector-field-label-rose">Intimate Style</div>
+                    <div className="ws-inspector-card">{triggerDetail.intimate_style}</div>
+                  </div>
+                )}
+                {triggerDetail.arc_role && (
+                  <div className="ws-inspector-section">
+                    <div className="ws-inspector-field-label ws-inspector-field-label-gold">Arc Role</div>
+                    <div className="ws-inspector-card">{triggerDetail.arc_role}</div>
+                  </div>
+                )}
+              </>
             )}
           </aside>
         )}
