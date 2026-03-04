@@ -415,6 +415,26 @@ router.delete('/characters/:id', async (req, res) => {
 });
 
 /**
+ * POST /characters/bulk-delete
+ * Bulk soft-delete multiple characters by id array
+ */
+router.post('/characters/bulk-delete', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    }
+    const { RegistryCharacter } = getModels();
+    const { Op } = require('sequelize');
+    const deleted = await RegistryCharacter.destroy({ where: { id: { [Op.in]: ids } } });
+    return res.json({ success: true, deleted, message: `${deleted} character(s) deleted` });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST /characters/bulk-delete error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /characters/:id/select-name
  * Select one of the name_options
  */

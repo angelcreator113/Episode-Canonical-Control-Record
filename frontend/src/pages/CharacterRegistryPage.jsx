@@ -232,6 +232,12 @@ export default function CharacterRegistryPage() {
   const [compareSelection, setCompareSelection] = useState([]);  // array of char ids (max 2)
   const [showCompare, setShowCompare]   = useState(false);
 
+  // Bulk selection / delete state
+  const [selectMode, setSelectMode]               = useState(false);
+  const [selectedIds, setSelectedIds]             = useState(new Set());
+  const [bulkDeleting, setBulkDeleting]           = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type, key: Date.now() });
   }, []);
@@ -639,9 +645,59 @@ export default function CharacterRegistryPage() {
     setFilters(prev => ({ ...prev, [key]: prev[key] === val ? null : val }));
   };
 
+  /* ── Bulk Selection helpers ── */
+  const toggleSelectId = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(new Set(filtered.map(c => c.id)));
+  };
+
+  const deselectAll = () => setSelectedIds(new Set());
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setShowBulkDeleteConfirm(false);
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const res = await fetch(`${API}/characters/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`${data.deleted} character(s) deleted`);
+        exitSelectMode();
+        await fetchRegistries();
+      } else {
+        showToast(data.error || 'Bulk delete failed', 'error');
+      }
+    } catch (e) {
+      showToast('Bulk delete failed: ' + e.message, 'error');
+    } finally {
+      setBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
+    }
+  };
+
   /* ── Character Actions ── */
 
   const openDossier = (char) => {
+    if (selectMode) {
+      toggleSelectId(char.id);
+      return;
+    }
     if (compareMode) {
       setCompareSelection(prev => {
         if (prev.includes(char.id)) return prev.filter(id => id !== char.id);
@@ -1899,8 +1955,12 @@ export default function CharacterRegistryPage() {
           </div>
           <div className="cr-stat-actions">
             <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
-              onClick={() => { setCompareMode(m => !m); setCompareSelection([]); }}>
+              onClick={() => { setCompareMode(m => !m); setCompareSelection([]); if (selectMode) exitSelectMode(); }}>
               {compareMode ? '✕ Cancel Compare' : '⟷ Compare'}
+            </button>
+            <button className={`cr-btn-outline cr-select-toggle ${selectMode ? 'active' : ''}`}
+              onClick={() => { if (selectMode) { exitSelectMode(); } else { setSelectMode(true); if (compareMode) { setCompareMode(false); setCompareSelection([]); } } }}>
+              {selectMode ? '✕ Cancel Select' : '☐ Select'}
             </button>
           </div>
         </div>
@@ -1914,6 +1974,30 @@ export default function CharacterRegistryPage() {
             {compareSelection.length === 2 && (
               <button className="cr-edit-save-btn" onClick={() => setShowCompare(true)}>
                 Compare Now →
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Bulk select bar */}
+        {selectMode && (
+          <div className="cr-bulk-bar">
+            <div className="cr-bulk-bar-left">
+              <span className="cr-bulk-bar-count">{selectedIds.size} selected</span>
+              <button className="cr-bulk-bar-btn" onClick={selectAllFiltered}>
+                Select All ({filtered.length})
+              </button>
+              {selectedIds.size > 0 && (
+                <button className="cr-bulk-bar-btn" onClick={deselectAll}>Deselect All</button>
+              )}
+            </div>
+            {selectedIds.size > 0 && (
+              <button
+                className="cr-bulk-bar-delete"
+                onClick={() => setShowBulkDeleteConfirm(true)}
+                disabled={bulkDeleting}
+              >
+                🗑 Delete {selectedIds.size}
               </button>
             )}
           </div>
@@ -1951,7 +2035,8 @@ export default function CharacterRegistryPage() {
           <div className="cr-grid">
             {filtered.map(c => (
               <CharacterCard key={c.id} c={c} onClick={() => openDossier(c)}
-                isCompareSelected={compareMode && compareSelection.includes(c.id)} />
+                isCompareSelected={compareMode && compareSelection.includes(c.id)}
+                selectMode={selectMode} isSelected={selectedIds.has(c.id)} />
             ))}
           </div>
         ) : (
@@ -1967,7 +2052,8 @@ export default function CharacterRegistryPage() {
               <span></span>
             </div>
             {filtered.map(c => (
-              <CharacterRow key={c.id} c={c} onClick={() => openDossier(c)} />
+              <CharacterRow key={c.id} c={c} onClick={() => openDossier(c)}
+                selectMode={selectMode} isSelected={selectedIds.has(c.id)} />
             ))}
           </div>
         )}
@@ -2120,6 +2206,31 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
+      {/* Bulk Delete Confirmation */}
+      {showBulkDeleteConfirm && (
+        <div className="cr-modal-overlay" onClick={() => setShowBulkDeleteConfirm(false)}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <div className="cr-delete-confirm">
+                <div className="cr-delete-icon">🗑</div>
+                <h2 className="cr-delete-title">Delete {selectedIds.size} Character{selectedIds.size > 1 ? 's' : ''}?</h2>
+                <p className="cr-delete-desc">
+                  This will permanently remove the selected characters. This action cannot be undone.
+                </p>
+                <div className="cr-delete-actions">
+                  <button className="cr-delete-cancel" onClick={() => setShowBulkDeleteConfirm(false)}>
+                    Cancel
+                  </button>
+                  <button className="cr-delete-btn" onClick={bulkDelete} disabled={bulkDeleting}>
+                    {bulkDeleting ? 'Deleting…' : `Delete ${selectedIds.size} Character${selectedIds.size > 1 ? 's' : ''}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Character Comparison Modal */}
       {showCompare && compareSelection.length === 2 && (() => {
         const chars = sorted;
@@ -2246,12 +2357,19 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
 /* ================================================================
    CHARACTER CARD (Grid)
    ================================================================ */
-function CharacterCard({ c, onClick, isCompareSelected }) {
+function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode }) {
   const isCore = c.canon_tier === 'Core Canon';
   const roleColor = `var(--role-${c.role_type || 'special'})`;
 
   return (
-    <div className={`cr-card ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''}`} onClick={onClick}>
+    <div className={`cr-card ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''} ${isSelected ? 'bulk-selected' : ''}`} onClick={onClick}>
+      {/* Selection checkbox */}
+      {selectMode && (
+        <div className={`cr-card-checkbox ${isSelected ? 'checked' : ''}`}
+          onClick={e => { e.stopPropagation(); onClick(); }}>
+          {isSelected ? '✓' : ''}
+        </div>
+      )}
       {/* Portrait */}
       <div className="cr-card-portrait" style={{ background: `linear-gradient(135deg, var(--surface2) 0%, var(--surface3) 100%)` }}>
         <div className="cr-card-portrait-bg" style={{ background: roleColor }} />
@@ -2301,12 +2419,19 @@ function CharacterCard({ c, onClick, isCompareSelected }) {
 /* ================================================================
    CHARACTER ROW (List)
    ================================================================ */
-function CharacterRow({ c, onClick }) {
+function CharacterRow({ c, onClick, isSelected, selectMode }) {
   const isCore = c.canon_tier === 'Core Canon';
 
   return (
-    <div className={`cr-list-row ${isCore ? 'canon-core' : ''}`} onClick={onClick}>
-      <span className="cr-list-icon">{c.icon || '◆'}</span>
+    <div className={`cr-list-row ${isCore ? 'canon-core' : ''} ${isSelected ? 'bulk-selected' : ''}`} onClick={onClick}>
+      {selectMode ? (
+        <span className={`cr-row-checkbox ${isSelected ? 'checked' : ''}`}
+          onClick={e => { e.stopPropagation(); onClick(); }}>
+          {isSelected ? '✓' : ''}
+        </span>
+      ) : (
+        <span className="cr-list-icon">{c.icon || '◆'}</span>
+      )}
       <div className="cr-list-name-cell">
         <span className="cr-list-name">{c.selected_name || c.display_name}</span>
         {c.subtitle && <span className="cr-list-subtitle">{c.subtitle}</span>}
