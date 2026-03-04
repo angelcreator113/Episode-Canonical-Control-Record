@@ -1821,7 +1821,7 @@ export default function CharacterRegistryPage() {
                             {ls.isConfirmed && <span style={{ color: meta.color }}>✓</span>}
                           </div>
                         )}
-                        <button className="cr-world-expand-btn">{expanded ? '−' : '+'}</button>
+                        <button className="cr-world-expand-btn" onClick={e => { e.stopPropagation(); setWorldExpanded(p => ({ ...p, [char.id]: !p[char.id] })); }}>{expanded ? '−' : '+'}</button>
                       </div>
 
                       {/* Expanded body */}
@@ -1842,13 +1842,13 @@ export default function CharacterRegistryPage() {
                                 </div>
                                 {!ls.isConfirmed ? (
                                   <div className="cr-world-state-actions">
-                                    <button className="cr-btn-outline" style={{ borderColor: meta.color, color: meta.color }} onClick={() => confirmState(char.id)}>✓ Confirm</button>
-                                    <button className="cr-btn-outline" onClick={() => generateState(char.id)} disabled={generatingId === char.id}>↺ Regenerate</button>
+                                    <button className="cr-btn-outline" style={{ borderColor: meta.color, color: meta.color }} onClick={e => { e.stopPropagation(); confirmState(char.id); }}>✓ Confirm</button>
+                                    <button className="cr-btn-outline" onClick={e => { e.stopPropagation(); generateState(char.id); }} disabled={generatingId === char.id}>↺ Regenerate</button>
                                   </div>
                                 ) : (
                                   <div className="cr-world-state-actions">
                                     <span style={{ color: meta.color, fontWeight: 600 }}>✓ Confirmed</span>
-                                    <button className="cr-btn-outline" onClick={() => generateState(char.id)} disabled={generatingId === char.id}>Update</button>
+                                    <button className="cr-btn-outline" onClick={e => { e.stopPropagation(); generateState(char.id); }} disabled={generatingId === char.id}>Update</button>
                                   </div>
                                 )}
                               </div>
@@ -1858,7 +1858,7 @@ export default function CharacterRegistryPage() {
                                 <button
                                   className="cr-btn-outline"
                                   style={{ borderColor: meta.color, color: meta.color }}
-                                  onClick={() => generateState(char.id)}
+                                  onClick={e => { e.stopPropagation(); generateState(char.id); }}
                                   disabled={generatingId === char.id}
                                 >
                                   {generatingId === char.id ? '✦ Generating…' : `✦ Generate State`}
@@ -1896,7 +1896,7 @@ export default function CharacterRegistryPage() {
                             <button
                               className="cr-btn-outline"
                               style={{ borderColor: meta.color, color: meta.color }}
-                              onClick={() => openDossier(char)}
+                              onClick={e => { e.stopPropagation(); openDossier(char); }}
                             >
                               Open Dossier →
                             </button>
