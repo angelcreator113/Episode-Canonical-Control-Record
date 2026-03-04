@@ -859,6 +859,7 @@ export default function CharacterGenerator() {
 
   // ── Commit ALL staged characters to a registry at once ──────────────────────
   const [commitAllLoading, setCommitAllLoading] = useState(false);
+  const commitLockRef = useRef(false); // Prevent double-click race condition
 
   // Auto-match registry to the world the user already selected
   // Normalize: strip hyphens/spaces for fuzzy match (book1 ↔ book-1, lalaverse ↔ lala-verse)
@@ -868,11 +869,15 @@ export default function CharacterGenerator() {
     || registries[0];
 
   async function handleCommitAll() {
+    // Guard against double-click (React setState is async, so use a ref)
+    if (commitLockRef.current) return;
+    commitLockRef.current = true;
+
     const regId = matchedRegistry?.id;
-    if (!regId) return alert('No registry found for this world.');
+    if (!regId) { commitLockRef.current = false; return alert('No registry found for this world.'); }
 
     const pending = batch.filter((r) => r.status === 'generated' && !r._committed);
-    if (!pending.length) return;
+    if (!pending.length) { commitLockRef.current = false; return; }
 
     setCommitAllLoading(true);
     let ok = 0;
@@ -897,6 +902,7 @@ export default function CharacterGenerator() {
     }
     loadEcosystem();
     setCommitAllLoading(false);
+    commitLockRef.current = false; // Release lock
 
     // Save committed batch to history
     if (ok > 0) {
@@ -1104,8 +1110,8 @@ export default function CharacterGenerator() {
               {batchLoading && (
                 <div className="cg-loading-state">
                   <div className="cg-spinner-large" />
-                  <div>Building {approvedCount} characters simultaneously…</div>
-                  <div className="cg-loading-sub">Full profiles generating in parallel.</div>
+                  <div>Building {approvedCount} characters one by one…</div>
+                  <div className="cg-loading-sub">Each character takes ~30 seconds. Please wait.</div>
                 </div>
               )}
 
