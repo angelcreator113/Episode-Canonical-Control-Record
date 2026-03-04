@@ -46,7 +46,7 @@ async function claude(system, user, maxTokens = 4000) {
     const Anthropic = require('@anthropic-ai/sdk');
     const client    = new Anthropic();
     const msg = await client.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: user }],
