@@ -435,6 +435,84 @@ router.post('/characters/bulk-delete', async (req, res) => {
 });
 
 /**
+ * POST /characters/bulk-status
+ * Bulk update status for multiple characters
+ */
+router.post('/characters/bulk-status', async (req, res) => {
+  try {
+    const { ids, status } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    }
+    const validStatuses = ['draft', 'accepted', 'finalized', 'declined'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ success: false, error: `status must be one of: ${validStatuses.join(', ')}` });
+    }
+    const { RegistryCharacter } = getModels();
+    const [updated] = await RegistryCharacter.update({ status }, { where: { id: { [Op.in]: ids } } });
+    return res.json({ success: true, updated, message: `${updated} character(s) updated to ${status}` });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST /characters/bulk-status error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /characters/bulk-move
+ * Move multiple characters to a different registry
+ */
+router.post('/characters/bulk-move', async (req, res) => {
+  try {
+    const { ids, registryId } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'ids must be a non-empty array' });
+    }
+    if (!registryId) {
+      return res.status(400).json({ success: false, error: 'registryId is required' });
+    }
+    const { RegistryCharacter, CharacterRegistry } = getModels();
+    const registry = await CharacterRegistry.findByPk(registryId);
+    if (!registry) return res.status(404).json({ success: false, error: 'Target registry not found' });
+    const [moved] = await RegistryCharacter.update({ registry_id: registryId }, { where: { id: { [Op.in]: ids } } });
+    return res.json({ success: true, moved, message: `${moved} character(s) moved to ${registry.title}` });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST /characters/bulk-move error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * POST /characters/:id/clone
+ * Duplicate a character with all profile data
+ */
+router.post('/characters/:id/clone', async (req, res) => {
+  try {
+    const { RegistryCharacter } = getModels();
+    const original = await RegistryCharacter.findByPk(req.params.id);
+    if (!original) return res.status(404).json({ success: false, error: 'Character not found' });
+
+    const data = original.toJSON();
+    // Remove unique fields
+    delete data.id;
+    delete data.created_at;
+    delete data.updated_at;
+    delete data.deleted_at;
+    // Mark as draft copy
+    data.display_name = `${data.display_name} (Copy)`;
+    data.character_key = `${data.character_key}-copy-${Date.now()}`;
+    data.status = 'draft';
+    data.selected_name = null;
+    data.sort_order = (data.sort_order || 0) + 1;
+
+    const clone = await RegistryCharacter.create(data);
+    return res.json({ success: true, character: clone, message: 'Character cloned' });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST /characters/:id/clone error:', err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * POST /characters/:id/select-name
  * Select one of the name_options
  */

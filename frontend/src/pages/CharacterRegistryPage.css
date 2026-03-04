@@ -5431,6 +5431,311 @@
   color: var(--accent, #6366f1);
 }
 
+/* ================================================================
+   PHASE 16 UPGRADES — Sort, Card Sizes, Quick-Edit, World Colors
+   ================================================================ */
+
+/* ── Sort Dropdown ── */
+.cr-stat-sort {
+  display: flex;
+  align-items: center;
+  margin-left: auto;
+}
+.cr-sort-select {
+  padding: 5px 10px;
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  background: var(--surface2, rgba(255,255,255,.06));
+  color: var(--ink, #1C1814);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color .2s;
+}
+.cr-sort-select:hover,
+.cr-sort-select:focus {
+  border-color: var(--gold, #C9A84C);
+}
+
+/* ── Card Size Toggle ── */
+.cr-card-size-toggle {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  background: var(--surface2, rgba(255,255,255,.06));
+  border: 1px solid rgba(255,255,255,.12);
+  border-radius: 6px;
+  padding: 2px;
+}
+.cr-size-btn {
+  padding: 4px 8px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ink-secondary, #888);
+  font-size: 14px;
+  cursor: pointer;
+  transition: all .15s;
+  line-height: 1;
+}
+.cr-size-btn:hover {
+  color: var(--ink, #1C1814);
+  background: rgba(255,255,255,.1);
+}
+.cr-size-btn.active {
+  color: var(--gold, #C9A84C);
+  background: rgba(201,168,76,.12);
+}
+
+/* ── Export Button ── */
+.cr-export-toggle {
+  font-size: 12px !important;
+}
+.cr-export-toggle:disabled {
+  opacity: .5;
+  cursor: wait;
+}
+
+/* ── Grid Size Variants ── */
+.cr-grid-compact {
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)) !important;
+  gap: 10px !important;
+}
+.cr-grid-large {
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+  gap: 20px !important;
+}
+
+/* ── Card Size: Compact ── */
+.cr-card.cr-card-compact {
+  min-height: auto;
+}
+.cr-card.cr-card-compact .cr-card-portrait {
+  height: 80px;
+}
+.cr-card.cr-card-compact .cr-card-icon,
+.cr-card.cr-card-compact .cr-card-initial {
+  font-size: 1.6rem;
+}
+.cr-card.cr-card-compact .cr-card-body {
+  padding: 8px 10px;
+}
+.cr-card.cr-card-compact .cr-card-name {
+  font-size: 13px;
+}
+.cr-card.cr-card-compact .cr-card-role {
+  font-size: 10px;
+}
+.cr-card.cr-card-compact .cr-card-hover {
+  display: none;
+}
+
+/* ── Card Size: Large ── */
+.cr-card.cr-card-large .cr-card-portrait {
+  height: 180px;
+}
+.cr-card.cr-card-large .cr-card-icon,
+.cr-card.cr-card-large .cr-card-initial {
+  font-size: 3.2rem;
+}
+.cr-card.cr-card-large .cr-card-body {
+  padding: 14px 16px;
+}
+.cr-card.cr-card-large .cr-card-name {
+  font-size: 17px;
+}
+
+/* ── Card Timeline (large cards only) ── */
+.cr-card-timeline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid rgba(255,255,255,.08);
+  font-size: 10px;
+  color: var(--ink-secondary, #888);
+}
+.cr-card-timeline-label {
+  text-transform: uppercase;
+  letter-spacing: .5px;
+  font-weight: 600;
+  opacity: .6;
+}
+.cr-card-timeline-date {
+  font-weight: 500;
+}
+
+/* ── Relationship Badge ── */
+.cr-card-rel-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  padding: 2px 7px;
+  background: rgba(0,0,0,.55);
+  backdrop-filter: blur(4px);
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  pointer-events: none;
+}
+
+/* ── Quick-Edit Button ── */
+.cr-card-quick-edit-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 5;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(0,0,0,.45);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 13px;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s, transform .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.cr-card:hover .cr-card-quick-edit-btn {
+  opacity: 1;
+}
+.cr-card-quick-edit-btn:hover {
+  background: var(--gold, #C9A84C);
+  transform: scale(1.1);
+}
+
+/* ── Quick-Edit Overlay ── */
+.cr-card-quick-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  background: rgba(28,24,20,.92);
+  backdrop-filter: blur(8px);
+  border-radius: inherit;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px 14px;
+  justify-content: center;
+}
+.cr-quick-input,
+.cr-quick-select {
+  width: 100%;
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 6px;
+  background: rgba(255,255,255,.08);
+  color: #fff;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  transition: border-color .15s;
+}
+.cr-quick-input:focus,
+.cr-quick-select:focus {
+  border-color: var(--gold, #C9A84C);
+}
+.cr-quick-btns {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+}
+.cr-quick-save {
+  flex: 1;
+  padding: 6px;
+  border: none;
+  border-radius: 6px;
+  background: var(--gold, #C9A84C);
+  color: var(--ink, #1C1814);
+  font-weight: 700;
+  font-size: 12px;
+  cursor: pointer;
+  transition: opacity .15s;
+}
+.cr-quick-save:hover { opacity: .85; }
+.cr-quick-cancel {
+  padding: 6px 10px;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 6px;
+  background: transparent;
+  color: #fff;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background .15s;
+}
+.cr-quick-cancel:hover {
+  background: rgba(255,255,255,.1);
+}
+
+/* ── World Mode Color Coding ── */
+.cr-world-card.cr-world-confirmed {
+  border-left: 4px solid #22c55e;
+}
+.cr-world-card.cr-world-unconfirmed {
+  border-left: 4px solid #f59e0b;
+}
+.cr-world-card.cr-world-nostate {
+  border-left: 4px solid rgba(255,255,255,.15);
+}
+
+/* ── World Header Actions ── */
+.cr-world-header-actions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.cr-world-header-actions button {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  border-radius: 5px;
+  border: 1px solid rgba(255,255,255,.15);
+  background: rgba(255,255,255,.06);
+  color: var(--ink-secondary, #888);
+  cursor: pointer;
+  transition: all .15s;
+}
+.cr-world-header-actions button:hover {
+  border-color: var(--gold, #C9A84C);
+  color: var(--gold, #C9A84C);
+}
+
+/* ── Bulk Bar — Status & Move Buttons ── */
+.cr-bulk-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.cr-bulk-bar-status,
+.cr-bulk-bar-move {
+  padding: 6px 14px !important;
+  background: rgba(255,255,255,.22) !important;
+  border-color: rgba(255,255,255,.4) !important;
+  font-size: 12px !important;
+}
+.cr-bulk-bar-status:hover,
+.cr-bulk-bar-move:hover {
+  background: rgba(255,255,255,.35) !important;
+}
+
+/* ── Clone Action Button ── */
+.cr-dossier-action-btn.clone {
+  background: rgba(201,168,76,.12);
+  border-color: rgba(201,168,76,.3);
+  color: var(--gold, #C9A84C);
+}
+.cr-dossier-action-btn.clone:hover {
+  background: rgba(201,168,76,.2);
+  border-color: var(--gold, #C9A84C);
+}
+
 /* ── Print Styles ── */
 @media print {
   body * { visibility: hidden; }

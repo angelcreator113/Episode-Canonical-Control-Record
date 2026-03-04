@@ -238,6 +238,28 @@ export default function CharacterRegistryPage() {
   const [bulkDeleting, setBulkDeleting]           = useState(false);
   const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
 
+  // Bulk status / move modals
+  const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+  const [bulkStatusTarget, setBulkStatusTarget]       = useState('accepted');
+  const [showBulkMoveModal, setShowBulkMoveModal]     = useState(false);
+  const [bulkMoveTarget, setBulkMoveTarget]           = useState('');
+
+  // Card size: 'compact' | 'normal' | 'large'
+  const [cardSize, setCardSize]   = useState('normal');
+
+  // Sort option: 'default' | 'name' | 'role' | 'status' | 'recent'
+  const [sortBy, setSortBy]       = useState('default');
+
+  // Quick-edit inline
+  const [quickEditId, setQuickEditId]       = useState(null);
+  const [quickEditForm, setQuickEditForm]   = useState({});
+
+  // Portrait gallery view (extends viewMode)
+  // viewMode can now be 'grid' | 'list' | 'gallery'
+
+  // Export state
+  const [exporting, setExporting] = useState(false);
+
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type, key: Date.now() });
   }, []);
@@ -614,18 +636,43 @@ export default function CharacterRegistryPage() {
   /* ── Characters + Filtering ── */
 
   const characters = worldMode ? allCharacters : (activeRegistry?.characters || []);
-  const sorted = [...characters].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  const sorted = useMemo(() => {
+    let arr = [...characters];
+    switch (sortBy) {
+      case 'name':    arr.sort((a, b) => (a.selected_name || a.display_name || '').localeCompare(b.selected_name || b.display_name || '')); break;
+      case 'role':    arr.sort((a, b) => (a.role_type || '').localeCompare(b.role_type || '')); break;
+      case 'status':  arr.sort((a, b) => (a.status || '').localeCompare(b.status || '')); break;
+      case 'recent':  arr.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0)); break;
+      default:        arr.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    }
+    return arr;
+  }, [characters, sortBy]);
 
   const eras = [...new Set(sorted.map(c => c.era_introduced).filter(Boolean))];
 
-  // World mode uses simpler type filter; browse mode uses full filter set
+  // World mode uses simpler type filter + search; browse mode uses full filter set
   const filtered = worldMode
-    ? sorted.filter(c => worldType === 'all' || c.role_type === worldType)
+    ? sorted.filter(c => {
+      if (worldType !== 'all' && c.role_type !== worldType) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        const haystack = [c.display_name, c.selected_name, c.role_type, c.subtitle, c.description]
+          .filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    })
     : sorted.filter(c => {
     if (search) {
       const q = search.toLowerCase();
-      const haystack = [c.display_name, c.subtitle, c.description, c.selected_name, c.character_archetype]
-        .filter(Boolean).join(' ').toLowerCase();
+      const haystack = [
+        c.display_name, c.subtitle, c.description, c.selected_name,
+        c.character_archetype, c.core_desire, c.core_fear, c.core_wound,
+        c.personality, c.writer_notes, c.role_label, c.belief_pressured,
+        c.core_belief, c.pressure_type, c.role_type,
+        ROLE_LABELS[c.role_type],
+      ].filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     if (filters.canon === 'Core Canon' && c.canon_tier !== 'Core Canon') return false;
@@ -690,6 +737,199 @@ export default function CharacterRegistryPage() {
       setShowBulkDeleteConfirm(false);
     }
   };
+
+  /* ── Bulk Status Update ── */
+  const bulkUpdateStatus = async () => {
+    if (selectedIds.size === 0 || !bulkStatusTarget) return;
+    try {
+      const res = await fetch(`${API}/characters/bulk-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds], status: bulkStatusTarget }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`${data.updated} character(s) → ${bulkStatusTarget}`);
+        exitSelectMode();
+        setShowBulkStatusModal(false);
+        await fetchRegistries();
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Status update failed', 'error');
+      }
+    } catch (e) {
+      showToast('Status update failed: ' + e.message, 'error');
+    }
+  };
+
+  /* ── Bulk Move to Registry ── */
+  const bulkMoveToRegistry = async () => {
+    if (selectedIds.size === 0 || !bulkMoveTarget) return;
+    try {
+      const res = await fetch(`${API}/characters/bulk-move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds], registryId: bulkMoveTarget }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message);
+        exitSelectMode();
+        setShowBulkMoveModal(false);
+        await fetchRegistries();
+        if (activeRegistry?.id) await fetchRegistry(activeRegistry.id);
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Move failed', 'error');
+      }
+    } catch (e) {
+      showToast('Move failed: ' + e.message, 'error');
+    }
+  };
+
+  /* ── Clone Character ── */
+  const cloneCharacter = async (charId) => {
+    try {
+      const res = await fetch(`${API}/characters/${charId}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Character cloned');
+        if (activeRegistry?.id) await fetchRegistry(activeRegistry.id);
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Clone failed', 'error');
+      }
+    } catch (e) {
+      showToast('Clone failed: ' + e.message, 'error');
+    }
+  };
+
+  /* ── Export Registry as JSON ── */
+  const exportRegistryJSON = useCallback(() => {
+    const data = worldMode ? allCharacters : (activeRegistry?.characters || []);
+    if (data.length === 0) return showToast('Nothing to export', 'error');
+    setExporting(true);
+    try {
+      const exportData = {
+        exported_at: new Date().toISOString(),
+        registry: worldMode ? 'All Characters' : activeRegistry?.title,
+        character_count: data.length,
+        characters: data.map(c => ({
+          id: c.id,
+          display_name: c.display_name,
+          selected_name: c.selected_name,
+          role_type: c.role_type,
+          role_label: c.role_label,
+          status: c.status,
+          canon_tier: c.canon_tier,
+          character_archetype: c.character_archetype,
+          description: c.description,
+          core_desire: c.core_desire,
+          core_fear: c.core_fear,
+          core_wound: c.core_wound,
+          mask_persona: c.mask_persona,
+          truth_persona: c.truth_persona,
+          belief_pressured: c.belief_pressured,
+          core_belief: c.core_belief,
+          personality: c.personality,
+          signature_trait: c.signature_trait,
+          emotional_baseline: c.emotional_baseline,
+          voice_signature: c.voice_signature,
+          aesthetic_dna: c.aesthetic_dna,
+          career_status: c.career_status,
+          relationships_map: c.relationships_map,
+          story_presence: c.story_presence,
+          evolution_tracking: c.evolution_tracking,
+          writer_notes: c.writer_notes,
+          portrait_url: c.portrait_url,
+          created_at: c.created_at,
+          updated_at: c.updated_at,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(worldMode ? 'all-characters' : activeRegistry?.title || 'registry').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Export downloaded');
+    } catch (e) {
+      showToast('Export failed', 'error');
+    } finally {
+      setExporting(false);
+    }
+  }, [worldMode, allCharacters, activeRegistry, showToast]);
+
+  /* ── Quick-Edit Inline ── */
+  const startQuickEdit = (char) => {
+    setQuickEditId(char.id);
+    setQuickEditForm({
+      display_name: char.display_name || '',
+      role_type: char.role_type || 'support',
+      status: char.status || 'draft',
+    });
+  };
+
+  const saveQuickEdit = async () => {
+    if (!quickEditId) return;
+    try {
+      const res = await fetch(`${API}/characters/${quickEditId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quickEditForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Updated');
+        setQuickEditId(null);
+        setQuickEditForm({});
+        if (activeRegistry?.id) await fetchRegistry(activeRegistry.id);
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Update failed', 'error');
+      }
+    } catch (e) {
+      showToast('Update failed', 'error');
+    }
+  };
+
+  /* ── Keyboard Navigation ── */
+  useEffect(() => {
+    const handler = (e) => {
+      // Only active in browse view
+      if (view !== 'browse') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      if (e.key === 'Escape') {
+        if (selectMode) { exitSelectMode(); e.preventDefault(); }
+        else if (compareMode) { setCompareMode(false); setCompareSelection([]); e.preventDefault(); }
+        else if (showFilters) { setShowFilters(false); e.preventDefault(); }
+      }
+      if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.querySelector('.cr-search-input')?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [view, selectMode, compareMode, showFilters]);
+
+  /* ── Relationship count helper ── */
+  const getRelCount = useCallback((char) => {
+    const rm = char.relationships_map;
+    if (!rm || typeof rm !== 'object') return 0;
+    let count = 0;
+    ['allies', 'rivals', 'mentors', 'love_interests', 'business_partners'].forEach(key => {
+      const val = rm[key];
+      if (val && typeof val === 'string') count += val.split(',').filter(s => s.trim()).length;
+    });
+    return count;
+  }, []);
 
   /* ── Character Actions ── */
 
@@ -1339,6 +1579,9 @@ export default function CharacterRegistryPage() {
                       </button>
                     </>
                   )}
+                  <button className="cr-dossier-action-btn clone" onClick={() => cloneCharacter(c.id)} title="Duplicate this character">
+                    ⧉ Clone
+                  </button>
                 </div>
               </div>
             </div>
@@ -1731,7 +1974,23 @@ export default function CharacterRegistryPage() {
                 <h2 className="cr-world-title">All Characters</h2>
                 <p className="cr-world-subtitle">
                   {characters.length} character{characters.length !== 1 ? 's' : ''} · {generatedCount} alive
+                  {' · '}{characters.filter(c => livingStates[c.id]?.isConfirmed).length} confirmed
                 </p>
+              </div>
+              <div className="cr-world-header-actions">
+                <button className="cr-btn-outline" onClick={exportRegistryJSON} disabled={exporting}>
+                  📥 Export JSON
+                </button>
+                {(() => {
+                  const unconfirmed = characters.filter(c => livingStates[c.id]?.isGenerated && !livingStates[c.id]?.isConfirmed);
+                  if (unconfirmed.length === 0) return null;
+                  return (
+                    <button className="cr-btn-outline" style={{ borderColor: '#3d8e42', color: '#3d8e42' }}
+                      onClick={() => { unconfirmed.forEach(c => confirmState(c.id)); showToast(`Confirmed ${unconfirmed.length} states`); }}>
+                      ✓ Confirm All ({unconfirmed.length})
+                    </button>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1793,7 +2052,7 @@ export default function CharacterRegistryPage() {
                   return (
                     <div
                       key={char.id}
-                      className={`cr-world-card ${expanded ? 'cr-world-card--expanded' : ''}`}
+                      className={`cr-world-card ${expanded ? 'cr-world-card--expanded' : ''} ${ls?.isConfirmed ? 'cr-world-confirmed' : ls?.isGenerated ? 'cr-world-unconfirmed' : 'cr-world-nostate'}`}
                       style={{ '--wc-accent': meta.color, animationDelay: `${i * 60}ms` }}
                     >
                       {/* Card header */}
@@ -1953,7 +2212,29 @@ export default function CharacterRegistryPage() {
             <span className="cr-stat-count">{statusCounts.draft}</span>
             <span className="cr-stat-label">Draft</span>
           </div>
+
+          {/* Sort dropdown */}
+          <div className="cr-stat-sort">
+            <select className="cr-sort-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <option value="default">Sort: Default</option>
+              <option value="name">Sort: Name</option>
+              <option value="role">Sort: Role</option>
+              <option value="status">Sort: Status</option>
+              <option value="recent">Sort: Recent</option>
+            </select>
+          </div>
+
+          {/* Card size toggle */}
+          <div className="cr-card-size-toggle">
+            <button className={`cr-size-btn ${cardSize === 'compact' ? 'active' : ''}`} onClick={() => setCardSize('compact')} title="Compact">▪</button>
+            <button className={`cr-size-btn ${cardSize === 'normal' ? 'active' : ''}`} onClick={() => setCardSize('normal')} title="Normal">▦</button>
+            <button className={`cr-size-btn ${cardSize === 'large' ? 'active' : ''}`} onClick={() => setCardSize('large')} title="Large">▣</button>
+          </div>
+
           <div className="cr-stat-actions">
+            <button className="cr-btn-outline cr-export-toggle" onClick={exportRegistryJSON} disabled={exporting} title="Export registry as JSON">
+              📥 Export
+            </button>
             <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
               onClick={() => { setCompareMode(m => !m); setCompareSelection([]); if (selectMode) exitSelectMode(); }}>
               {compareMode ? '✕ Cancel Compare' : '⟷ Compare'}
@@ -1992,13 +2273,21 @@ export default function CharacterRegistryPage() {
               )}
             </div>
             {selectedIds.size > 0 && (
-              <button
-                className="cr-bulk-bar-delete"
-                onClick={() => setShowBulkDeleteConfirm(true)}
-                disabled={bulkDeleting}
-              >
-                🗑 Delete {selectedIds.size}
-              </button>
+              <div className="cr-bulk-bar-right">
+                <button className="cr-bulk-bar-btn cr-bulk-bar-status" onClick={() => setShowBulkStatusModal(true)}>
+                  ✎ Status
+                </button>
+                <button className="cr-bulk-bar-btn cr-bulk-bar-move" onClick={() => setShowBulkMoveModal(true)}>
+                  ↗ Move
+                </button>
+                <button
+                  className="cr-bulk-bar-delete"
+                  onClick={() => setShowBulkDeleteConfirm(true)}
+                  disabled={bulkDeleting}
+                >
+                  🗑 Delete {selectedIds.size}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -2032,11 +2321,17 @@ export default function CharacterRegistryPage() {
           </div>
         ) : (viewMode === 'grid' || isMobile) ? (
           /* ── GRID VIEW ── */
-          <div className="cr-grid">
+          <div className={`cr-grid ${cardSize !== 'normal' ? `cr-grid-${cardSize}` : ''}`}>
             {filtered.map(c => (
               <CharacterCard key={c.id} c={c} onClick={() => openDossier(c)}
                 isCompareSelected={compareMode && compareSelection.includes(c.id)}
-                selectMode={selectMode} isSelected={selectedIds.has(c.id)} />
+                selectMode={selectMode} isSelected={selectedIds.has(c.id)}
+                cardSize={cardSize} relCount={getRelCount(c)}
+                quickEditId={quickEditId} quickEditForm={quickEditForm}
+                onQuickEdit={() => startQuickEdit(c)}
+                onQuickEditChange={(field, val) => setQuickEditForm(p => ({ ...p, [field]: val }))}
+                onQuickEditSave={saveQuickEdit}
+                onQuickEditCancel={() => setQuickEditId(null)} />
             ))}
           </div>
         ) : (
@@ -2231,6 +2526,59 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
+      {/* Bulk Status Modal */}
+      {showBulkStatusModal && (
+        <div className="cr-modal-overlay" onClick={() => setShowBulkStatusModal(false)}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <h2 className="cr-modal-title">Update Status — {selectedIds.size} Character{selectedIds.size > 1 ? 's' : ''}</h2>
+              <p className="cr-modal-subtitle">Set the status for all selected characters.</p>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">New Status</label>
+                <select className="cr-edit-input cr-edit-select" value={bulkStatusTarget}
+                  onChange={e => setBulkStatusTarget(e.target.value)}>
+                  <option value="draft">Draft</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="finalized">Finalized (Canon)</option>
+                  <option value="declined">Declined</option>
+                </select>
+              </div>
+              <div className="cr-modal-actions">
+                <button className="cr-edit-cancel-btn" onClick={() => setShowBulkStatusModal(false)}>Cancel</button>
+                <button className="cr-edit-save-btn" onClick={() => bulkUpdateStatus(bulkStatusTarget)}>Apply to {selectedIds.size}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Move Modal */}
+      {showBulkMoveModal && (
+        <div className="cr-modal-overlay" onClick={() => setShowBulkMoveModal(false)}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <h2 className="cr-modal-title">Move {selectedIds.size} Character{selectedIds.size > 1 ? 's' : ''}</h2>
+              <p className="cr-modal-subtitle">Choose a destination registry.</p>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Destination Registry</label>
+                <select className="cr-edit-input cr-edit-select" value={bulkMoveTarget}
+                  onChange={e => setBulkMoveTarget(e.target.value)}>
+                  <option value="">— Select —</option>
+                  {registries.filter(r => r.id !== activeRegistryId).map(r => (
+                    <option key={r.id} value={r.id}>{r.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="cr-modal-actions">
+                <button className="cr-edit-cancel-btn" onClick={() => setShowBulkMoveModal(false)}>Cancel</button>
+                <button className="cr-edit-save-btn" onClick={() => bulkMoveToRegistry(bulkMoveTarget)}
+                  disabled={!bulkMoveTarget}>Move to Registry</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Character Comparison Modal */}
       {showCompare && compareSelection.length === 2 && (() => {
         const chars = sorted;
@@ -2252,6 +2600,14 @@ export default function CharacterRegistryPage() {
           { label: 'Emotional Baseline', key: 'emotional_baseline' },
           { label: 'Core Belief', key: 'core_belief' },
           { label: 'Pressure Type', key: 'pressure_type' },
+          { label: 'Belief Pressured', key: 'belief_pressured' },
+          { label: 'Personality', key: 'personality' },
+          { label: 'Appearance Mode', key: 'appearance_mode', fmt: v => v?.replace('_', ' ') || '—' },
+          { label: 'First Appearance', key: 'first_appearance' },
+          { label: 'Relationships', key: 'relationships_map', fmt: v => {
+            if (!v) return '—';
+            try { const obj = typeof v === 'string' ? JSON.parse(v) : v; return Object.keys(obj).filter(k => obj[k]).length + ' connections'; } catch { return '—'; }
+          }},
         ];
         return (
           <div className="cr-modal-overlay" onClick={() => { setShowCompare(false); setCompareMode(false); setCompareSelection([]); }}>
@@ -2357,12 +2713,14 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
 /* ================================================================
    CHARACTER CARD (Grid)
    ================================================================ */
-function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode }) {
+function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, cardSize = 'normal', relCount = 0,
+  quickEditId, quickEditForm, onQuickEdit, onQuickEditChange, onQuickEditSave, onQuickEditCancel }) {
   const isCore = c.canon_tier === 'Core Canon';
   const roleColor = `var(--role-${c.role_type || 'special'})`;
+  const isQuickEditing = quickEditId === c.id;
 
   return (
-    <div className={`cr-card ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''} ${isSelected ? 'bulk-selected' : ''}`} onClick={onClick}>
+    <div className={`cr-card cr-card-${cardSize} ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''} ${isSelected ? 'bulk-selected' : ''}`} onClick={onClick}>
       {/* Selection checkbox */}
       {selectMode && (
         <div className={`cr-card-checkbox ${isSelected ? 'checked' : ''}`}
@@ -2370,6 +2728,35 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode }
           {isSelected ? '✓' : ''}
         </div>
       )}
+
+      {/* Quick-edit pencil */}
+      {!selectMode && !isQuickEditing && (
+        <button className="cr-card-quick-edit-btn" onClick={e => { e.stopPropagation(); onQuickEdit(); }} title="Quick Edit">✎</button>
+      )}
+
+      {/* Quick-edit overlay */}
+      {isQuickEditing && (
+        <div className="cr-card-quick-overlay" onClick={e => e.stopPropagation()}>
+          <input className="cr-quick-input" value={quickEditForm.display_name || ''}
+            onChange={e => onQuickEditChange('display_name', e.target.value)} placeholder="Name" autoFocus />
+          <select className="cr-quick-select" value={quickEditForm.role_type || ''}
+            onChange={e => onQuickEditChange('role_type', e.target.value)}>
+            {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select className="cr-quick-select" value={quickEditForm.status || ''}
+            onChange={e => onQuickEditChange('status', e.target.value)}>
+            <option value="draft">Draft</option>
+            <option value="accepted">Accepted</option>
+            <option value="finalized">Finalized</option>
+            <option value="declined">Declined</option>
+          </select>
+          <div className="cr-quick-btns">
+            <button className="cr-quick-save" onClick={onQuickEditSave}>Save</button>
+            <button className="cr-quick-cancel" onClick={onQuickEditCancel}>✕</button>
+          </div>
+        </div>
+      )}
+
       {/* Portrait */}
       <div className="cr-card-portrait" style={{ background: `linear-gradient(135deg, var(--surface2) 0%, var(--surface3) 100%)` }}>
         <div className="cr-card-portrait-bg" style={{ background: roleColor }} />
@@ -2382,6 +2769,13 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode }
         {/* Registry tag (shown in All Characters view) */}
         {c._registryTitle && (
           <span className="cr-card-registry-tag">{c._registryTitle}</span>
+        )}
+
+        {/* Relationship count badge */}
+        {relCount > 0 && (
+          <span className="cr-card-rel-badge" title={`${relCount} relationship${relCount > 1 ? 's' : ''}`}>
+            🔗 {relCount}
+          </span>
         )}
 
         {/* Hover overlay */}
@@ -2401,7 +2795,7 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode }
         <span className={`cr-card-role ${c.role_type}`}>
           {c.role_label || ROLE_LABELS[c.role_type] || c.role_type}
         </span>
-        {c.character_archetype && (
+        {c.character_archetype && cardSize !== 'compact' && (
           <div className="cr-card-archetype">{c.character_archetype}</div>
         )}
         <div className="cr-card-bottom">
@@ -2410,6 +2804,12 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode }
           ) : <span />}
           <span className={`cr-card-status-badge ${c.status}`}>{c.status}</span>
         </div>
+        {cardSize === 'large' && c.updated_at && (
+          <div className="cr-card-timeline">
+            <span className="cr-card-timeline-label">Updated</span>
+            <span className="cr-card-timeline-date">{new Date(c.updated_at).toLocaleDateString()}</span>
+          </div>
+        )}
       </div>
     </div>
   );
