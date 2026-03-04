@@ -4863,6 +4863,87 @@
   font-size: var(--fs-sm, 13px);
 }
 
+/* ── Writer Notes: formatted JSON sections ── */
+.wn-formatted {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 6px;
+}
+.wn-section {
+  background: rgba(201, 168, 76, 0.06);
+  border: 1px solid rgba(201, 168, 76, 0.18);
+  border-radius: 6px;
+  overflow: hidden;
+}
+.wn-section[open] > .wn-section-title {
+  border-bottom: 1px solid rgba(201, 168, 76, 0.12);
+}
+.wn-section-title {
+  cursor: pointer;
+  padding: 8px 12px;
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--ink, #1C1814);
+  text-transform: capitalize;
+  user-select: none;
+  list-style: none;
+}
+.wn-section-title::-webkit-details-marker { display: none; }
+.wn-section-title::before {
+  content: '▸ ';
+  display: inline-block;
+  transition: transform .15s ease;
+  font-size: 10px;
+  margin-right: 4px;
+}
+.wn-section[open] > .wn-section-title::before {
+  transform: rotate(90deg);
+}
+.wn-section-body {
+  padding: 8px 12px 10px;
+}
+.wn-row {
+  display: flex;
+  gap: 8px;
+  padding: 3px 0;
+  font-size: 12.5px;
+  line-height: 1.5;
+  border-bottom: 1px solid rgba(0,0,0,.04);
+}
+.wn-row:last-child { border-bottom: none; }
+.wn-key {
+  flex-shrink: 0;
+  min-width: 120px;
+  max-width: 160px;
+  font-weight: 600;
+  color: var(--ink, #1C1814);
+  text-transform: capitalize;
+  font-size: 11.5px;
+  padding-top: 1px;
+}
+.wn-val {
+  flex: 1;
+  color: var(--ink-secondary, #555);
+  word-break: break-word;
+}
+.wn-sub-block {
+  padding-left: 8px;
+  border-left: 2px solid rgba(201, 168, 76, 0.25);
+  margin: 4px 0;
+}
+.wn-list {
+  list-style: none;
+  padding: 0; margin: 0;
+}
+.wn-list-item {
+  padding: 4px 0;
+  border-bottom: 1px solid rgba(0,0,0,.03);
+  font-size: 12.5px;
+  color: var(--ink-secondary, #555);
+}
+.wn-list-item:last-child { border-bottom: none; }
+
 /* ── Wound Depth Meter (Psychology tab) ── */
 .cr-wound-meter {
   display: flex;

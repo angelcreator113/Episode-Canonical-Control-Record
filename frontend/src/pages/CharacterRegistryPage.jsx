@@ -47,6 +47,89 @@ const jGet = (obj, key) => (obj && typeof obj === 'object' ? obj[key] || '' : ''
 /* Check if a JSON object has any non-empty value */
 const hasJsonData = (obj) => obj && typeof obj === 'object' && Object.values(obj).some(v => v && String(v).trim());
 
+/* ── Writer Notes smart renderer ── */
+function WriterNotesDisplay({ notes }) {
+  if (!notes) return null;
+
+  // Try to parse as JSON
+  let parsed = null;
+  try {
+    const trimmed = notes.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      parsed = JSON.parse(trimmed);
+    }
+  } catch (_) { /* not JSON, that's fine */ }
+
+  // Plain text — render directly
+  if (!parsed || typeof parsed !== 'object') {
+    return <p className="cr-dossier-writer-notes-text" style={{ whiteSpace: 'pre-line' }}>{notes}</p>;
+  }
+
+  // Helper: render a value (string, array, object) as readable text
+  const renderValue = (val) => {
+    if (val == null || val === '') return null;
+    if (Array.isArray(val)) {
+      if (val.length === 0) return null;
+      return (
+        <ul className="wn-list">
+          {val.map((item, i) => (
+            <li key={i} className="wn-list-item">
+              {typeof item === 'object' ? renderObject(item) : String(item)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    if (typeof val === 'object') return renderObject(val);
+    return <span>{String(val)}</span>;
+  };
+
+  const renderObject = (obj) => (
+    <div className="wn-sub-block">
+      {Object.entries(obj).filter(([, v]) => v != null && v !== '').map(([k, v]) => (
+        <div key={k} className="wn-row">
+          <span className="wn-key">{k.replace(/_/g, ' ')}</span>
+          <span className="wn-val">{typeof v === 'object' ? renderValue(v) : String(v)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  // Known top-level section labels
+  const sectionLabels = {
+    seed: '🌱 Seed',
+    living_state: '💭 Living State',
+    arc_timeline: '📐 Arc Timeline',
+    aesthetic_dna: '🎨 Aesthetic DNA',
+    career: '💼 Career',
+    relationships: '❤️ Relationships',
+    voice: '🗣️ Voice',
+    dilemma: '⚖️ Dilemma',
+    story_presence: '📖 Story Presence',
+    plot_threads: '🧵 Plot Threads',
+    psychology: '🧠 Psychology',
+    identity: '🪪 Identity',
+    visual: '👁️ Visual',
+  };
+
+  const entries = Object.entries(parsed).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
+
+  if (entries.length === 0) {
+    return <p className="cr-dossier-writer-notes-text" style={{ color: '#999' }}>Empty notes.</p>;
+  }
+
+  return (
+    <div className="wn-formatted">
+      {entries.map(([key, value]) => (
+        <details key={key} className="wn-section" open>
+          <summary className="wn-section-title">{sectionLabels[key] || key.replace(/_/g, ' ')}</summary>
+          <div className="wn-section-body">{renderValue(value)}</div>
+        </details>
+      ))}
+    </div>
+  );
+}
+
 /* Empty state shown when a tab has no data */
 function EmptyState({ label, onEdit }) {
   return (
@@ -2335,7 +2418,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               {c.writer_notes && (
                 <div className="cr-dossier-writer-notes">
                   <span className="cr-dossier-writer-notes-label">✎ Writer Notes</span>
-                  <p className="cr-dossier-writer-notes-text" style={{ whiteSpace: 'pre-line' }}>{c.writer_notes}</p>
+                  <WriterNotesDisplay notes={c.writer_notes} />
                 </div>
               )}
               {jGet(c.story_presence, 'current_story_status') && (
