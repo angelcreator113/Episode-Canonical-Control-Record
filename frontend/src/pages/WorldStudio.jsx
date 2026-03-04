@@ -547,6 +547,16 @@ export default function WorldStudio() {
     } catch (e) { flash(e.message, 'error'); }
   };
 
+  const deleteChar = async (id) => {
+    if (!window.confirm('Delete this character permanently? This also removes their linked scenes.')) return;
+    try {
+      await fetch(`${API}/world/characters/${id}`, { method: 'DELETE' });
+      flash('Character deleted');
+      setSelectedChar(null); setCharDetail(null); setCharScenes([]);
+      loadCharacters(); loadScenes(); loadTriggers();
+    } catch (e) { flash(e.message, 'error'); }
+  };
+
   const bulkActivate = async () => {
     const drafts = characters.filter(c => c.status === 'draft');
     if (!drafts.length) { flash('No drafts to activate', 'error'); return; }
@@ -890,6 +900,9 @@ export default function WorldStudio() {
                   {editMode && <button className="ws-btn ws-btn-gold ws-btn-sm" onClick={saveCharEdit} disabled={saving}>{saving ? 'Saving…' : '✓ Save'}</button>}
                   {charDetail.status !== 'archived' && !editMode && (
                     <button className="ws-btn ws-btn-ghost ws-btn-sm ws-btn-muted" onClick={() => archiveChar(charDetail.id)}>Archive</button>
+                  )}
+                  {!editMode && (
+                    <button className="ws-btn ws-btn-danger ws-btn-sm" onClick={() => deleteChar(charDetail.id)}>🗑 Delete</button>
                   )}
                 </div>
               </div>

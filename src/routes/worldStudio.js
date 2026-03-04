@@ -461,6 +461,28 @@ router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// DELETE /world/characters/:id
+router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
+  try {
+    // Remove linked registry character
+    await sequelize.query(
+      `DELETE FROM registry_characters WHERE world_character_id = :id`,
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
+    ).catch(() => {});
+    // Remove linked scenes
+    await sequelize.query(
+      `DELETE FROM intimate_scenes WHERE character_a_id = :id OR character_b_id = :id`,
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
+    ).catch(() => {});
+    // Delete the character
+    await sequelize.query(
+      `DELETE FROM world_characters WHERE id = :id`,
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
+    );
+    res.json({ deleted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // GET /world/batches
 router.get('/world/batches', optionalAuth, async (req, res) => {
   try {
