@@ -34,6 +34,8 @@
   --pink-bg:     rgba(244, 184, 203, 0.15);
   --pink-hover:  #eb9cb5;
   --wine:        #9b4dca;
+  --accent:      #9b4dca;
+  --accent-rgb:  155, 77, 202;
 
   --role-protagonist: var(--gold);
   --role-pressure:    #d46070;
@@ -4039,7 +4041,7 @@
 }
 
 .cr-living-slot-full {
-  border-left: 3px solid var(--accent);
+  border-left: 3px solid var(--accent, #9b4dca);
 }
 
 .cr-living-slot-danger {
@@ -4105,7 +4107,7 @@
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent, #9b4dca);
   border: 2px solid var(--card);
   box-shadow: 0 0 0 2px var(--border);
 }
@@ -4132,7 +4134,7 @@
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
-  color: var(--accent);
+  color: var(--accent, #9b4dca);
   background: var(--blush);
   padding: 2px 10px;
   border-radius: 999px;
@@ -4171,7 +4173,7 @@
 
 .cr-arc-shift-label {
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent, #9b4dca);
 }
 
 /* ═══════════════════════════════════════════════════════════════════════
@@ -4248,15 +4250,15 @@
   border-radius: var(--radius);
   font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--accent);
+  color: var(--accent, #9b4dca);
   background: transparent;
-  border: 1.5px solid var(--accent);
+  border: 1.5px solid var(--accent, #9b4dca);
   cursor: pointer;
   transition: background 0.2s, color 0.2s;
 }
 
 .cr-btn-outline:hover {
-  background: var(--accent);
+  background: var(--accent, #9b4dca);
   color: #fff;
 }
 
