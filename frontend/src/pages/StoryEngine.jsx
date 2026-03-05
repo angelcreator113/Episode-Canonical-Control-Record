@@ -157,6 +157,7 @@ function StoryPanel({
   consistencyConflicts, consistencyLoading,
   therapyMemories, therapyLoading,
   onAddToRegistry,
+  registryUpdate,
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(story?.text || '');
@@ -336,6 +337,14 @@ function StoryPanel({
         </div>
       )}
 
+      {/* Registry feedback notification */}
+      {registryUpdate && (
+        <div className="se-registry-update">
+          <span className="se-registry-icon">🔄</span>
+          <span className="se-registry-text">{registryUpdate}</span>
+        </div>
+      )}
+
       {/* Persistence bridge — save / approve / reject to DB */}
       {story && (
         <StoryReviewPanel
@@ -395,6 +404,9 @@ export default function StoryEngine() {
   // Therapy memories
   const [therapyMemories, setTherapyMemories] = useState([]);
   const [therapyLoading, setTherapyLoading]   = useState(false);
+
+  // Registry feedback notification
+  const [registryUpdate, setRegistryUpdate]   = useState(null);
 
   const char = CHARACTERS[selectedChar];
 
@@ -593,10 +605,10 @@ export default function StoryEngine() {
     startTimer();
 
     try {
-      // Build previous stories context (last 3 approved)
+      // Build previous stories context — send ALL approved for richer continuity
       const previousStories = approvedStories
         .filter((n) => n < task.story_number)
-        .slice(-3)
+        .sort((a, b) => a - b)
         .map((n) => ({
           number: n,
           title: stories[n]?.title || `Story ${n}`,
@@ -644,6 +656,7 @@ export default function StoryEngine() {
 
     // Extract memories for therapy room
     setTherapyLoading(true);
+    let extractedMemories = null;
     try {
       const res = await fetch(`${API_BASE}/memories/extract-story-memories`, {
         method: 'POST',
@@ -659,11 +672,36 @@ export default function StoryEngine() {
       if (res.ok) {
         const data = await res.json();
         setTherapyMemories(data.pain_points || []);
+        extractedMemories = data;
       }
     } catch (e) {
       console.error('extract memories error:', e);
     } finally {
       setTherapyLoading(false);
+    }
+
+    // Registry feedback loop — update character profile based on story events
+    try {
+      const regRes = await fetch(`${API_BASE}/memories/story-engine-update-registry`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          characterKey: selectedChar,
+          storyNumber: story.story_number,
+          storyTitle: story.title,
+          storyText: story.text,
+          extractedMemories,
+        }),
+      });
+      if (regRes.ok) {
+        const regData = await regRes.json();
+        if (regData.updated) {
+          setRegistryUpdate(`Registry updated: ${regData.summary}`);
+          setTimeout(() => setRegistryUpdate(null), 8000);
+        }
+      }
+    } catch (e) {
+      console.error('registry update error:', e);
     }
   }
 
@@ -923,6 +961,7 @@ export default function StoryEngine() {
               therapyMemories={therapyMemories}
               therapyLoading={therapyLoading}
               onAddToRegistry={handleAddToRegistry}
+              registryUpdate={registryUpdate}
             />
           )}
         </div>

@@ -803,6 +803,27 @@
   padding: 8px 0;
 }
 
+/* ── Registry feedback notification ──────────────────────────────────────────── */
+.se-registry-update {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  margin: 12px 24px;
+  background: linear-gradient(135deg, rgba(13, 150, 104, 0.15), rgba(102, 126, 234, 0.1));
+  border: 1px solid rgba(13, 150, 104, 0.3);
+  border-radius: 8px;
+  font-size: 13px;
+  color: #43e97b;
+  animation: se-registry-fade-in 0.4s ease;
+}
+.se-registry-icon { font-size: 16px; }
+.se-registry-text { line-height: 1.4; }
+@keyframes se-registry-fade-in {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .se-workspace { flex-direction: column; }
