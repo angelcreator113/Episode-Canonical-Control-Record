@@ -47,6 +47,89 @@ const jGet = (obj, key) => (obj && typeof obj === 'object' ? obj[key] || '' : ''
 /* Check if a JSON object has any non-empty value */
 const hasJsonData = (obj) => obj && typeof obj === 'object' && Object.values(obj).some(v => v && String(v).trim());
 
+/* ── Writer Notes smart renderer ── */
+function WriterNotesDisplay({ notes }) {
+  if (!notes) return null;
+
+  // Try to parse as JSON
+  let parsed = null;
+  try {
+    const trimmed = notes.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      parsed = JSON.parse(trimmed);
+    }
+  } catch (_) { /* not JSON, that's fine */ }
+
+  // Plain text — render directly
+  if (!parsed || typeof parsed !== 'object') {
+    return <p className="cr-dossier-writer-notes-text" style={{ whiteSpace: 'pre-line' }}>{notes}</p>;
+  }
+
+  // Helper: render a value (string, array, object) as readable text
+  const renderValue = (val) => {
+    if (val == null || val === '') return null;
+    if (Array.isArray(val)) {
+      if (val.length === 0) return null;
+      return (
+        <ul className="wn-list">
+          {val.map((item, i) => (
+            <li key={i} className="wn-list-item">
+              {typeof item === 'object' ? renderObject(item) : String(item)}
+            </li>
+          ))}
+        </ul>
+      );
+    }
+    if (typeof val === 'object') return renderObject(val);
+    return <span>{String(val)}</span>;
+  };
+
+  const renderObject = (obj) => (
+    <div className="wn-sub-block">
+      {Object.entries(obj).filter(([, v]) => v != null && v !== '').map(([k, v]) => (
+        <div key={k} className="wn-row">
+          <span className="wn-key">{k.replace(/_/g, ' ')}</span>
+          <span className="wn-val">{typeof v === 'object' ? renderValue(v) : String(v)}</span>
+        </div>
+      ))}
+    </div>
+  );
+
+  // Known top-level section labels
+  const sectionLabels = {
+    seed: '🌱 Seed',
+    living_state: '💭 Living State',
+    arc_timeline: '📐 Arc Timeline',
+    aesthetic_dna: '🎨 Aesthetic DNA',
+    career: '💼 Career',
+    relationships: '❤️ Relationships',
+    voice: '🗣️ Voice',
+    dilemma: '⚖️ Dilemma',
+    story_presence: '📖 Story Presence',
+    plot_threads: '🧵 Plot Threads',
+    psychology: '🧠 Psychology',
+    identity: '🪪 Identity',
+    visual: '👁️ Visual',
+  };
+
+  const entries = Object.entries(parsed).filter(([, v]) => v != null && v !== '' && !(Array.isArray(v) && v.length === 0));
+
+  if (entries.length === 0) {
+    return <p className="cr-dossier-writer-notes-text" style={{ color: '#999' }}>Empty notes.</p>;
+  }
+
+  return (
+    <div className="wn-formatted">
+      {entries.map(([key, value]) => (
+        <details key={key} className="wn-section" open>
+          <summary className="wn-section-title">{sectionLabels[key] || key.replace(/_/g, ' ')}</summary>
+          <div className="wn-section-body">{renderValue(value)}</div>
+        </details>
+      ))}
+    </div>
+  );
+}
+
 /* Empty state shown when a tab has no data */
 function EmptyState({ label, onEdit }) {
   return (
@@ -148,6 +231,34 @@ export default function CharacterRegistryPage() {
   const [compareMode, setCompareMode]   = useState(false);
   const [compareSelection, setCompareSelection] = useState([]);  // array of char ids (max 2)
   const [showCompare, setShowCompare]   = useState(false);
+
+  // Bulk selection / delete state
+  const [selectMode, setSelectMode]               = useState(false);
+  const [selectedIds, setSelectedIds]             = useState(new Set());
+  const [bulkDeleting, setBulkDeleting]           = useState(false);
+  const [showBulkDeleteConfirm, setShowBulkDeleteConfirm] = useState(false);
+
+  // Bulk status / move modals
+  const [showBulkStatusModal, setShowBulkStatusModal] = useState(false);
+  const [bulkStatusTarget, setBulkStatusTarget]       = useState('accepted');
+  const [showBulkMoveModal, setShowBulkMoveModal]     = useState(false);
+  const [bulkMoveTarget, setBulkMoveTarget]           = useState('');
+
+  // Card size: 'compact' | 'normal' | 'large'
+  const [cardSize, setCardSize]   = useState('normal');
+
+  // Sort option: 'default' | 'name' | 'role' | 'status' | 'recent'
+  const [sortBy, setSortBy]       = useState('default');
+
+  // Quick-edit inline
+  const [quickEditId, setQuickEditId]       = useState(null);
+  const [quickEditForm, setQuickEditForm]   = useState({});
+
+  // Portrait gallery view (extends viewMode)
+  // viewMode can now be 'grid' | 'list' | 'gallery'
+
+  // Export state
+  const [exporting, setExporting] = useState(false);
 
   const showToast = useCallback((msg, type = 'success') => {
     setToast({ msg, type, key: Date.now() });
@@ -324,24 +435,25 @@ export default function CharacterRegistryPage() {
   }, [allCharacters, activeRegistry, livingStates]);
 
   const confirmState = useCallback((charId) => {
-    const confirmedState = { ...livingStates[charId], isConfirmed: true };
-    const updated = {
-      ...livingStates,
-      [charId]: confirmedState,
-    };
-    setLivingStates(updated);
-    localStorage.setItem('wv_living_states', JSON.stringify(updated));
-    // Persist confirmation to DB
-    const character = allCharacters.find(c => c.id === charId) ||
-                      (activeRegistry?.characters || []).find(c => c.id === charId);
-    if (character) {
-      fetch(`${API}/characters/${charId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
-      }).catch(() => { /* non-critical */ });
-    }
-  }, [livingStates, allCharacters, activeRegistry]);
+    setLivingStates(prev => {
+      const confirmedState = { ...prev[charId], isConfirmed: true };
+      const updated = { ...prev, [charId]: confirmedState };
+      localStorage.setItem('wv_living_states', JSON.stringify(updated));
+      // Persist confirmation to DB
+      const character = allCharacters.find(c => c.id === charId) ||
+                        (activeRegistry?.characters || []).find(c => c.id === charId);
+      if (character) {
+        fetch(`${API}/characters/${charId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
+        })
+          .then(r => { if (!r.ok) console.warn('[ConfirmState] PUT failed:', r.status); })
+          .catch(err => console.warn('[ConfirmState] Network error:', err.message));
+      }
+      return updated;
+    });
+  }, [allCharacters, activeRegistry]);
 
   const generateAllStates = useCallback(async () => {
     const charList = worldMode ? allCharacters : (activeRegistry?.characters || []);
@@ -523,18 +635,43 @@ export default function CharacterRegistryPage() {
   /* ── Characters + Filtering ── */
 
   const characters = worldMode ? allCharacters : (activeRegistry?.characters || []);
-  const sorted = [...characters].sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+
+  const sorted = useMemo(() => {
+    let arr = [...characters];
+    switch (sortBy) {
+      case 'name':    arr.sort((a, b) => (a.selected_name || a.display_name || '').localeCompare(b.selected_name || b.display_name || '')); break;
+      case 'role':    arr.sort((a, b) => (a.role_type || '').localeCompare(b.role_type || '')); break;
+      case 'status':  arr.sort((a, b) => (a.status || '').localeCompare(b.status || '')); break;
+      case 'recent':  arr.sort((a, b) => new Date(b.updated_at || 0) - new Date(a.updated_at || 0)); break;
+      default:        arr.sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+    }
+    return arr;
+  }, [characters, sortBy]);
 
   const eras = [...new Set(sorted.map(c => c.era_introduced).filter(Boolean))];
 
-  // World mode uses simpler type filter; browse mode uses full filter set
+  // World mode uses simpler type filter + search; browse mode uses full filter set
   const filtered = worldMode
-    ? sorted.filter(c => worldType === 'all' || c.role_type === worldType)
+    ? sorted.filter(c => {
+      if (worldType !== 'all' && c.role_type !== worldType) return false;
+      if (search) {
+        const q = search.toLowerCase();
+        const haystack = [c.display_name, c.selected_name, c.role_type, c.subtitle, c.description]
+          .filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(q)) return false;
+      }
+      return true;
+    })
     : sorted.filter(c => {
     if (search) {
       const q = search.toLowerCase();
-      const haystack = [c.display_name, c.subtitle, c.description, c.selected_name, c.character_archetype]
-        .filter(Boolean).join(' ').toLowerCase();
+      const haystack = [
+        c.display_name, c.subtitle, c.description, c.selected_name,
+        c.character_archetype, c.core_desire, c.core_fear, c.core_wound,
+        c.personality, c.writer_notes, c.role_label, c.belief_pressured,
+        c.core_belief, c.pressure_type, c.role_type,
+        ROLE_LABELS[c.role_type],
+      ].filter(Boolean).join(' ').toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     if (filters.canon === 'Core Canon' && c.canon_tier !== 'Core Canon') return false;
@@ -554,9 +691,252 @@ export default function CharacterRegistryPage() {
     setFilters(prev => ({ ...prev, [key]: prev[key] === val ? null : val }));
   };
 
+  /* ── Bulk Selection helpers ── */
+  const toggleSelectId = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectAllFiltered = () => {
+    setSelectedIds(new Set(filtered.map(c => c.id)));
+  };
+
+  const deselectAll = () => setSelectedIds(new Set());
+
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+    setShowBulkDeleteConfirm(false);
+  };
+
+  const bulkDelete = async () => {
+    if (selectedIds.size === 0) return;
+    setBulkDeleting(true);
+    try {
+      const res = await fetch(`${API}/characters/bulk-delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`${data.deleted} character(s) deleted`);
+        exitSelectMode();
+        await fetchRegistries();
+      } else {
+        showToast(data.error || 'Bulk delete failed', 'error');
+      }
+    } catch (e) {
+      showToast('Bulk delete failed: ' + e.message, 'error');
+    } finally {
+      setBulkDeleting(false);
+      setShowBulkDeleteConfirm(false);
+    }
+  };
+
+  /* ── Bulk Status Update ── */
+  const bulkUpdateStatus = async () => {
+    if (selectedIds.size === 0 || !bulkStatusTarget) return;
+    try {
+      const res = await fetch(`${API}/characters/bulk-status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds], status: bulkStatusTarget }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`${data.updated} character(s) → ${bulkStatusTarget}`);
+        exitSelectMode();
+        setShowBulkStatusModal(false);
+        await fetchRegistries();
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Status update failed', 'error');
+      }
+    } catch (e) {
+      showToast('Status update failed: ' + e.message, 'error');
+    }
+  };
+
+  /* ── Bulk Move to Registry ── */
+  const bulkMoveToRegistry = async () => {
+    if (selectedIds.size === 0 || !bulkMoveTarget) return;
+    try {
+      const res = await fetch(`${API}/characters/bulk-move`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds], registryId: bulkMoveTarget }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(data.message);
+        exitSelectMode();
+        setShowBulkMoveModal(false);
+        await fetchRegistries();
+        if (activeRegistry?.id) await fetchRegistry(activeRegistry.id);
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Move failed', 'error');
+      }
+    } catch (e) {
+      showToast('Move failed: ' + e.message, 'error');
+    }
+  };
+
+  /* ── Clone Character ── */
+  const cloneCharacter = async (charId) => {
+    try {
+      const res = await fetch(`${API}/characters/${charId}/clone`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Character cloned');
+        if (activeRegistry?.id) await fetchRegistry(activeRegistry.id);
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Clone failed', 'error');
+      }
+    } catch (e) {
+      showToast('Clone failed: ' + e.message, 'error');
+    }
+  };
+
+  /* ── Export Registry as JSON ── */
+  const exportRegistryJSON = useCallback(() => {
+    const data = worldMode ? allCharacters : (activeRegistry?.characters || []);
+    if (data.length === 0) return showToast('Nothing to export', 'error');
+    setExporting(true);
+    try {
+      const exportData = {
+        exported_at: new Date().toISOString(),
+        registry: worldMode ? 'All Characters' : activeRegistry?.title,
+        character_count: data.length,
+        characters: data.map(c => ({
+          id: c.id,
+          display_name: c.display_name,
+          selected_name: c.selected_name,
+          role_type: c.role_type,
+          role_label: c.role_label,
+          status: c.status,
+          canon_tier: c.canon_tier,
+          character_archetype: c.character_archetype,
+          description: c.description,
+          core_desire: c.core_desire,
+          core_fear: c.core_fear,
+          core_wound: c.core_wound,
+          mask_persona: c.mask_persona,
+          truth_persona: c.truth_persona,
+          belief_pressured: c.belief_pressured,
+          core_belief: c.core_belief,
+          personality: c.personality,
+          signature_trait: c.signature_trait,
+          emotional_baseline: c.emotional_baseline,
+          voice_signature: c.voice_signature,
+          aesthetic_dna: c.aesthetic_dna,
+          career_status: c.career_status,
+          relationships_map: c.relationships_map,
+          story_presence: c.story_presence,
+          evolution_tracking: c.evolution_tracking,
+          writer_notes: c.writer_notes,
+          portrait_url: c.portrait_url,
+          created_at: c.created_at,
+          updated_at: c.updated_at,
+        })),
+      };
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${(worldMode ? 'all-characters' : activeRegistry?.title || 'registry').replace(/\s+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      showToast('Export downloaded');
+    } catch (e) {
+      showToast('Export failed', 'error');
+    } finally {
+      setExporting(false);
+    }
+  }, [worldMode, allCharacters, activeRegistry, showToast]);
+
+  /* ── Quick-Edit Inline ── */
+  const startQuickEdit = (char) => {
+    setQuickEditId(char.id);
+    setQuickEditForm({
+      display_name: char.display_name || '',
+      role_type: char.role_type || 'support',
+      status: char.status || 'draft',
+    });
+  };
+
+  const saveQuickEdit = async () => {
+    if (!quickEditId) return;
+    try {
+      const res = await fetch(`${API}/characters/${quickEditId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(quickEditForm),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Updated');
+        setQuickEditId(null);
+        setQuickEditForm({});
+        if (activeRegistry?.id) await fetchRegistry(activeRegistry.id);
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Update failed', 'error');
+      }
+    } catch (e) {
+      showToast('Update failed', 'error');
+    }
+  };
+
+  /* ── Keyboard Navigation ── */
+  useEffect(() => {
+    const handler = (e) => {
+      // Only active in browse view
+      if (view !== 'browse') return;
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') return;
+      if (e.key === 'Escape') {
+        if (selectMode) { exitSelectMode(); e.preventDefault(); }
+        else if (compareMode) { setCompareMode(false); setCompareSelection([]); e.preventDefault(); }
+        else if (showFilters) { setShowFilters(false); e.preventDefault(); }
+      }
+      if (e.key === 'f' && (e.ctrlKey || e.metaKey)) {
+        e.preventDefault();
+        document.querySelector('.cr-search-input')?.focus();
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [view, selectMode, compareMode, showFilters]);
+
+  /* ── Relationship count helper ── */
+  const getRelCount = useCallback((char) => {
+    const rm = char.relationships_map;
+    if (!rm || typeof rm !== 'object') return 0;
+    let count = 0;
+    ['allies', 'rivals', 'mentors', 'love_interests', 'business_partners'].forEach(key => {
+      const val = rm[key];
+      if (val && typeof val === 'string') count += val.split(',').filter(s => s.trim()).length;
+    });
+    return count;
+  }, []);
+
   /* ── Character Actions ── */
 
   const openDossier = (char) => {
+    if (selectMode) {
+      toggleSelectId(char.id);
+      return;
+    }
     if (compareMode) {
       setCompareSelection(prev => {
         if (prev.includes(char.id)) return prev.filter(id => id !== char.id);
@@ -1198,6 +1578,9 @@ export default function CharacterRegistryPage() {
                       </button>
                     </>
                   )}
+                  <button className="cr-dossier-action-btn clone" onClick={() => cloneCharacter(c.id)} title="Duplicate this character">
+                    ⧉ Clone
+                  </button>
                 </div>
               </div>
             </div>
@@ -1590,7 +1973,43 @@ export default function CharacterRegistryPage() {
                 <h2 className="cr-world-title">All Characters</h2>
                 <p className="cr-world-subtitle">
                   {characters.length} character{characters.length !== 1 ? 's' : ''} · {generatedCount} alive
+                  {' · '}{characters.filter(c => livingStates[c.id]?.isConfirmed).length} confirmed
                 </p>
+              </div>
+              <div className="cr-world-header-actions">
+                <button className="cr-btn-outline" onClick={exportRegistryJSON} disabled={exporting}>
+                  📥 Export JSON
+                </button>
+                {(() => {
+                  const unconfirmed = characters.filter(c => livingStates[c.id]?.isGenerated && !livingStates[c.id]?.isConfirmed);
+                  if (unconfirmed.length === 0) return null;
+                  return (
+                    <button className="cr-btn-outline" style={{ borderColor: '#3d8e42', color: '#3d8e42' }}
+                      onClick={() => {
+                        // Batch confirm all unconfirmed states in one setState
+                        setLivingStates(prev => {
+                          const updated = { ...prev };
+                          unconfirmed.forEach(c => {
+                            updated[c.id] = { ...prev[c.id], isConfirmed: true };
+                          });
+                          localStorage.setItem('wv_living_states', JSON.stringify(updated));
+                          // Persist each confirmation to DB
+                          unconfirmed.forEach(c => {
+                            const confirmedState = updated[c.id];
+                            fetch(`${API}/characters/${c.id}`, {
+                              method: 'PUT',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ evolution_tracking: { ...c.evolution_tracking, living_state: confirmedState } }),
+                            }).catch(() => {});
+                          });
+                          return updated;
+                        });
+                        showToast(`Confirmed ${unconfirmed.length} states`);
+                      }}>
+                      ✓ Confirm All ({unconfirmed.length})
+                    </button>
+                  );
+                })()}
               </div>
             </div>
 
@@ -1652,7 +2071,7 @@ export default function CharacterRegistryPage() {
                   return (
                     <div
                       key={char.id}
-                      className={`cr-world-card ${expanded ? 'cr-world-card--expanded' : ''}`}
+                      className={`cr-world-card ${expanded ? 'cr-world-card--expanded' : ''} ${ls?.isConfirmed ? 'cr-world-confirmed' : ls?.isGenerated ? 'cr-world-unconfirmed' : 'cr-world-nostate'}`}
                       style={{ '--wc-accent': meta.color, animationDelay: `${i * 60}ms` }}
                     >
                       {/* Card header */}
@@ -1680,7 +2099,7 @@ export default function CharacterRegistryPage() {
                             {ls.isConfirmed && <span style={{ color: meta.color }}>✓</span>}
                           </div>
                         )}
-                        <button className="cr-world-expand-btn">{expanded ? '−' : '+'}</button>
+                        <button className="cr-world-expand-btn" onClick={e => { e.stopPropagation(); setWorldExpanded(p => ({ ...p, [char.id]: !p[char.id] })); }}>{expanded ? '−' : '+'}</button>
                       </div>
 
                       {/* Expanded body */}
@@ -1701,13 +2120,13 @@ export default function CharacterRegistryPage() {
                                 </div>
                                 {!ls.isConfirmed ? (
                                   <div className="cr-world-state-actions">
-                                    <button className="cr-btn-outline" style={{ borderColor: meta.color, color: meta.color }} onClick={() => confirmState(char.id)}>✓ Confirm</button>
-                                    <button className="cr-btn-outline" onClick={() => generateState(char.id)} disabled={generatingId === char.id}>↺ Regenerate</button>
+                                    <button className="cr-btn-outline" style={{ borderColor: meta.color, color: meta.color }} onClick={e => { e.stopPropagation(); confirmState(char.id); }}>✓ Confirm</button>
+                                    <button className="cr-btn-outline" onClick={e => { e.stopPropagation(); generateState(char.id); }} disabled={generatingId === char.id}>↺ Regenerate</button>
                                   </div>
                                 ) : (
                                   <div className="cr-world-state-actions">
                                     <span style={{ color: meta.color, fontWeight: 600 }}>✓ Confirmed</span>
-                                    <button className="cr-btn-outline" onClick={() => generateState(char.id)} disabled={generatingId === char.id}>Update</button>
+                                    <button className="cr-btn-outline" onClick={e => { e.stopPropagation(); generateState(char.id); }} disabled={generatingId === char.id}>Update</button>
                                   </div>
                                 )}
                               </div>
@@ -1717,7 +2136,7 @@ export default function CharacterRegistryPage() {
                                 <button
                                   className="cr-btn-outline"
                                   style={{ borderColor: meta.color, color: meta.color }}
-                                  onClick={() => generateState(char.id)}
+                                  onClick={e => { e.stopPropagation(); generateState(char.id); }}
                                   disabled={generatingId === char.id}
                                 >
                                   {generatingId === char.id ? '✦ Generating…' : `✦ Generate State`}
@@ -1755,7 +2174,7 @@ export default function CharacterRegistryPage() {
                             <button
                               className="cr-btn-outline"
                               style={{ borderColor: meta.color, color: meta.color }}
-                              onClick={() => openDossier(char)}
+                              onClick={e => { e.stopPropagation(); openDossier(char); }}
                             >
                               Open Dossier →
                             </button>
@@ -1812,10 +2231,36 @@ export default function CharacterRegistryPage() {
             <span className="cr-stat-count">{statusCounts.draft}</span>
             <span className="cr-stat-label">Draft</span>
           </div>
+
+          {/* Sort dropdown */}
+          <div className="cr-stat-sort">
+            <select className="cr-sort-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
+              <option value="default">Sort: Default</option>
+              <option value="name">Sort: Name</option>
+              <option value="role">Sort: Role</option>
+              <option value="status">Sort: Status</option>
+              <option value="recent">Sort: Recent</option>
+            </select>
+          </div>
+
+          {/* Card size toggle */}
+          <div className="cr-card-size-toggle">
+            <button className={`cr-size-btn ${cardSize === 'compact' ? 'active' : ''}`} onClick={() => setCardSize('compact')} title="Compact">▪</button>
+            <button className={`cr-size-btn ${cardSize === 'normal' ? 'active' : ''}`} onClick={() => setCardSize('normal')} title="Normal">▦</button>
+            <button className={`cr-size-btn ${cardSize === 'large' ? 'active' : ''}`} onClick={() => setCardSize('large')} title="Large">▣</button>
+          </div>
+
           <div className="cr-stat-actions">
+            <button className="cr-btn-outline cr-export-toggle" onClick={exportRegistryJSON} disabled={exporting} title="Export registry as JSON">
+              📥 Export
+            </button>
             <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
-              onClick={() => { setCompareMode(m => !m); setCompareSelection([]); }}>
+              onClick={() => { setCompareMode(m => !m); setCompareSelection([]); if (selectMode) exitSelectMode(); }}>
               {compareMode ? '✕ Cancel Compare' : '⟷ Compare'}
+            </button>
+            <button className={`cr-btn-outline cr-select-toggle ${selectMode ? 'active' : ''}`}
+              onClick={() => { if (selectMode) { exitSelectMode(); } else { setSelectMode(true); if (compareMode) { setCompareMode(false); setCompareSelection([]); } } }}>
+              {selectMode ? '✕ Cancel Select' : '☐ Select'}
             </button>
           </div>
         </div>
@@ -1830,6 +2275,38 @@ export default function CharacterRegistryPage() {
               <button className="cr-edit-save-btn" onClick={() => setShowCompare(true)}>
                 Compare Now →
               </button>
+            )}
+          </div>
+        )}
+
+        {/* Bulk select bar */}
+        {selectMode && (
+          <div className="cr-bulk-bar">
+            <div className="cr-bulk-bar-left">
+              <span className="cr-bulk-bar-count">{selectedIds.size} selected</span>
+              <button className="cr-bulk-bar-btn" onClick={selectAllFiltered}>
+                Select All ({filtered.length})
+              </button>
+              {selectedIds.size > 0 && (
+                <button className="cr-bulk-bar-btn" onClick={deselectAll}>Deselect All</button>
+              )}
+            </div>
+            {selectedIds.size > 0 && (
+              <div className="cr-bulk-bar-right">
+                <button className="cr-bulk-bar-btn cr-bulk-bar-status" onClick={() => setShowBulkStatusModal(true)}>
+                  ✎ Status
+                </button>
+                <button className="cr-bulk-bar-btn cr-bulk-bar-move" onClick={() => setShowBulkMoveModal(true)}>
+                  ↗ Move
+                </button>
+                <button
+                  className="cr-bulk-bar-delete"
+                  onClick={() => setShowBulkDeleteConfirm(true)}
+                  disabled={bulkDeleting}
+                >
+                  🗑 Delete {selectedIds.size}
+                </button>
+              </div>
             )}
           </div>
         )}
@@ -1863,10 +2340,17 @@ export default function CharacterRegistryPage() {
           </div>
         ) : (viewMode === 'grid' || isMobile) ? (
           /* ── GRID VIEW ── */
-          <div className="cr-grid">
+          <div className={`cr-grid ${cardSize !== 'normal' ? `cr-grid-${cardSize}` : ''}`}>
             {filtered.map(c => (
               <CharacterCard key={c.id} c={c} onClick={() => openDossier(c)}
-                isCompareSelected={compareMode && compareSelection.includes(c.id)} />
+                isCompareSelected={compareMode && compareSelection.includes(c.id)}
+                selectMode={selectMode} isSelected={selectedIds.has(c.id)}
+                cardSize={cardSize} relCount={getRelCount(c)}
+                quickEditId={quickEditId} quickEditForm={quickEditForm}
+                onQuickEdit={() => startQuickEdit(c)}
+                onQuickEditChange={(field, val) => setQuickEditForm(p => ({ ...p, [field]: val }))}
+                onQuickEditSave={saveQuickEdit}
+                onQuickEditCancel={() => setQuickEditId(null)} />
             ))}
           </div>
         ) : (
@@ -1882,7 +2366,8 @@ export default function CharacterRegistryPage() {
               <span></span>
             </div>
             {filtered.map(c => (
-              <CharacterRow key={c.id} c={c} onClick={() => openDossier(c)} />
+              <CharacterRow key={c.id} c={c} onClick={() => openDossier(c)}
+                selectMode={selectMode} isSelected={selectedIds.has(c.id)} />
             ))}
           </div>
         )}
@@ -2035,6 +2520,84 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
+      {/* Bulk Delete Confirmation */}
+      {showBulkDeleteConfirm && (
+        <div className="cr-modal-overlay" onClick={() => setShowBulkDeleteConfirm(false)}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <div className="cr-delete-confirm">
+                <div className="cr-delete-icon">🗑</div>
+                <h2 className="cr-delete-title">Delete {selectedIds.size} Character{selectedIds.size > 1 ? 's' : ''}?</h2>
+                <p className="cr-delete-desc">
+                  This will permanently remove the selected characters. This action cannot be undone.
+                </p>
+                <div className="cr-delete-actions">
+                  <button className="cr-delete-cancel" onClick={() => setShowBulkDeleteConfirm(false)}>
+                    Cancel
+                  </button>
+                  <button className="cr-delete-btn" onClick={bulkDelete} disabled={bulkDeleting}>
+                    {bulkDeleting ? 'Deleting…' : `Delete ${selectedIds.size} Character${selectedIds.size > 1 ? 's' : ''}`}
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Status Modal */}
+      {showBulkStatusModal && (
+        <div className="cr-modal-overlay" onClick={() => setShowBulkStatusModal(false)}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <h2 className="cr-modal-title">Update Status — {selectedIds.size} Character{selectedIds.size > 1 ? 's' : ''}</h2>
+              <p className="cr-modal-subtitle">Set the status for all selected characters.</p>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">New Status</label>
+                <select className="cr-edit-input cr-edit-select" value={bulkStatusTarget}
+                  onChange={e => setBulkStatusTarget(e.target.value)}>
+                  <option value="draft">Draft</option>
+                  <option value="accepted">Accepted</option>
+                  <option value="finalized">Finalized (Canon)</option>
+                  <option value="declined">Declined</option>
+                </select>
+              </div>
+              <div className="cr-modal-actions">
+                <button className="cr-edit-cancel-btn" onClick={() => setShowBulkStatusModal(false)}>Cancel</button>
+                <button className="cr-edit-save-btn" onClick={() => bulkUpdateStatus(bulkStatusTarget)}>Apply to {selectedIds.size}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Bulk Move Modal */}
+      {showBulkMoveModal && (
+        <div className="cr-modal-overlay" onClick={() => setShowBulkMoveModal(false)}>
+          <div className="cr-modal" onClick={e => e.stopPropagation()}>
+            <div className="cr-modal-body">
+              <h2 className="cr-modal-title">Move {selectedIds.size} Character{selectedIds.size > 1 ? 's' : ''}</h2>
+              <p className="cr-modal-subtitle">Choose a destination registry.</p>
+              <div className="cr-edit-field">
+                <label className="cr-edit-label">Destination Registry</label>
+                <select className="cr-edit-input cr-edit-select" value={bulkMoveTarget}
+                  onChange={e => setBulkMoveTarget(e.target.value)}>
+                  <option value="">— Select —</option>
+                  {registries.filter(r => r.id !== activeRegistryId).map(r => (
+                    <option key={r.id} value={r.id}>{r.title}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="cr-modal-actions">
+                <button className="cr-edit-cancel-btn" onClick={() => setShowBulkMoveModal(false)}>Cancel</button>
+                <button className="cr-edit-save-btn" onClick={() => bulkMoveToRegistry(bulkMoveTarget)}
+                  disabled={!bulkMoveTarget}>Move to Registry</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Character Comparison Modal */}
       {showCompare && compareSelection.length === 2 && (() => {
         const chars = sorted;
@@ -2056,6 +2619,14 @@ export default function CharacterRegistryPage() {
           { label: 'Emotional Baseline', key: 'emotional_baseline' },
           { label: 'Core Belief', key: 'core_belief' },
           { label: 'Pressure Type', key: 'pressure_type' },
+          { label: 'Belief Pressured', key: 'belief_pressured' },
+          { label: 'Personality', key: 'personality' },
+          { label: 'Appearance Mode', key: 'appearance_mode', fmt: v => v?.replace('_', ' ') || '—' },
+          { label: 'First Appearance', key: 'first_appearance' },
+          { label: 'Relationships', key: 'relationships_map', fmt: v => {
+            if (!v) return '—';
+            try { const obj = typeof v === 'string' ? JSON.parse(v) : v; return Object.keys(obj).filter(k => obj[k]).length + ' connections'; } catch { return '—'; }
+          }},
         ];
         return (
           <div className="cr-modal-overlay" onClick={() => { setShowCompare(false); setCompareMode(false); setCompareSelection([]); }}>
@@ -2161,12 +2732,50 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
 /* ================================================================
    CHARACTER CARD (Grid)
    ================================================================ */
-function CharacterCard({ c, onClick, isCompareSelected }) {
+function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, cardSize = 'normal', relCount = 0,
+  quickEditId, quickEditForm, onQuickEdit, onQuickEditChange, onQuickEditSave, onQuickEditCancel }) {
   const isCore = c.canon_tier === 'Core Canon';
   const roleColor = `var(--role-${c.role_type || 'special'})`;
+  const isQuickEditing = quickEditId === c.id;
 
   return (
-    <div className={`cr-card ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''}`} onClick={onClick}>
+    <div className={`cr-card cr-card-${cardSize} ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''} ${isSelected ? 'bulk-selected' : ''}`} onClick={onClick}>
+      {/* Selection checkbox */}
+      {selectMode && (
+        <div className={`cr-card-checkbox ${isSelected ? 'checked' : ''}`}
+          onClick={e => { e.stopPropagation(); onClick(); }}>
+          {isSelected ? '✓' : ''}
+        </div>
+      )}
+
+      {/* Quick-edit pencil */}
+      {!selectMode && !isQuickEditing && (
+        <button className="cr-card-quick-edit-btn" onClick={e => { e.stopPropagation(); onQuickEdit(); }} title="Quick Edit">✎</button>
+      )}
+
+      {/* Quick-edit overlay */}
+      {isQuickEditing && (
+        <div className="cr-card-quick-overlay" onClick={e => e.stopPropagation()}>
+          <input className="cr-quick-input" value={quickEditForm.display_name || ''}
+            onChange={e => onQuickEditChange('display_name', e.target.value)} placeholder="Name" autoFocus />
+          <select className="cr-quick-select" value={quickEditForm.role_type || ''}
+            onChange={e => onQuickEditChange('role_type', e.target.value)}>
+            {ROLE_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+          </select>
+          <select className="cr-quick-select" value={quickEditForm.status || ''}
+            onChange={e => onQuickEditChange('status', e.target.value)}>
+            <option value="draft">Draft</option>
+            <option value="accepted">Accepted</option>
+            <option value="finalized">Finalized</option>
+            <option value="declined">Declined</option>
+          </select>
+          <div className="cr-quick-btns">
+            <button className="cr-quick-save" onClick={onQuickEditSave}>Save</button>
+            <button className="cr-quick-cancel" onClick={onQuickEditCancel}>✕</button>
+          </div>
+        </div>
+      )}
+
       {/* Portrait */}
       <div className="cr-card-portrait" style={{ background: `linear-gradient(135deg, var(--surface2) 0%, var(--surface3) 100%)` }}>
         <div className="cr-card-portrait-bg" style={{ background: roleColor }} />
@@ -2179,6 +2788,13 @@ function CharacterCard({ c, onClick, isCompareSelected }) {
         {/* Registry tag (shown in All Characters view) */}
         {c._registryTitle && (
           <span className="cr-card-registry-tag">{c._registryTitle}</span>
+        )}
+
+        {/* Relationship count badge */}
+        {relCount > 0 && (
+          <span className="cr-card-rel-badge" title={`${relCount} relationship${relCount > 1 ? 's' : ''}`}>
+            🔗 {relCount}
+          </span>
         )}
 
         {/* Hover overlay */}
@@ -2198,7 +2814,7 @@ function CharacterCard({ c, onClick, isCompareSelected }) {
         <span className={`cr-card-role ${c.role_type}`}>
           {c.role_label || ROLE_LABELS[c.role_type] || c.role_type}
         </span>
-        {c.character_archetype && (
+        {c.character_archetype && cardSize !== 'compact' && (
           <div className="cr-card-archetype">{c.character_archetype}</div>
         )}
         <div className="cr-card-bottom">
@@ -2207,6 +2823,12 @@ function CharacterCard({ c, onClick, isCompareSelected }) {
           ) : <span />}
           <span className={`cr-card-status-badge ${c.status}`}>{c.status}</span>
         </div>
+        {cardSize === 'large' && c.updated_at && (
+          <div className="cr-card-timeline">
+            <span className="cr-card-timeline-label">Updated</span>
+            <span className="cr-card-timeline-date">{new Date(c.updated_at).toLocaleDateString()}</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2216,12 +2838,19 @@ function CharacterCard({ c, onClick, isCompareSelected }) {
 /* ================================================================
    CHARACTER ROW (List)
    ================================================================ */
-function CharacterRow({ c, onClick }) {
+function CharacterRow({ c, onClick, isSelected, selectMode }) {
   const isCore = c.canon_tier === 'Core Canon';
 
   return (
-    <div className={`cr-list-row ${isCore ? 'canon-core' : ''}`} onClick={onClick}>
-      <span className="cr-list-icon">{c.icon || '◆'}</span>
+    <div className={`cr-list-row ${isCore ? 'canon-core' : ''} ${isSelected ? 'bulk-selected' : ''}`} onClick={onClick}>
+      {selectMode ? (
+        <span className={`cr-row-checkbox ${isSelected ? 'checked' : ''}`}
+          onClick={e => { e.stopPropagation(); onClick(); }}>
+          {isSelected ? '✓' : ''}
+        </span>
+      ) : (
+        <span className="cr-list-icon">{c.icon || '◆'}</span>
+      )}
       <div className="cr-list-name-cell">
         <span className="cr-list-name">{c.selected_name || c.display_name}</span>
         {c.subtitle && <span className="cr-list-subtitle">{c.subtitle}</span>}
@@ -2333,7 +2962,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               {c.writer_notes && (
                 <div className="cr-dossier-writer-notes">
                   <span className="cr-dossier-writer-notes-label">✎ Writer Notes</span>
-                  <p className="cr-dossier-writer-notes-text" style={{ whiteSpace: 'pre-line' }}>{c.writer_notes}</p>
+                  <WriterNotesDisplay notes={c.writer_notes} />
                 </div>
               )}
               {jGet(c.story_presence, 'current_story_status') && (

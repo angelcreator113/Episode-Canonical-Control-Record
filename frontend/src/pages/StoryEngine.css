@@ -134,8 +134,34 @@
   flex-shrink: 0;
   overflow-x: auto;
   scrollbar-width: none;
+  flex-wrap: wrap;
 }
 .se-char-bar::-webkit-scrollbar { display: none; }
+
+.se-char-loading {
+  padding: 12px 0;
+  color: var(--se-text-muted);
+  font-size: 13px;
+}
+
+.se-char-world-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.se-char-world-divider {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--se-text-muted);
+  padding: 4px 8px;
+  border-right: 2px solid var(--se-border);
+  margin-right: 2px;
+  white-space: nowrap;
+}
 
 .se-char-pill {
   display: flex;

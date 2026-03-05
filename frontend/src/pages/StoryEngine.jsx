@@ -5,14 +5,24 @@ import './StoryEngine.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
-// ─── Character meta (mirrors backend CHARACTER_DNA) ───────────────────────────
-const CHARACTERS = {
-  justawoman: { display_name: 'JustAWoman', icon: '♛', role_type: 'special',  world: 'book1',    color: '#9a7d1e' },
-  david:      { display_name: 'David',      icon: '◈',  role_type: 'pressure', world: 'book1',    color: '#c0392b' },
-  dana:       { display_name: 'Dana',       icon: '◉',  role_type: 'support',  world: 'book1',    color: '#0d9668' },
-  chloe:      { display_name: 'Chloe',      icon: '◎',  role_type: 'mirror',   world: 'book1',    color: '#7c3aed' },
-  jade:       { display_name: 'Jade',       icon: '◆',  role_type: 'shadow',   world: 'book1',    color: '#546678' },
+// ─── Fallback characters (used if DB fetch fails) ────────────────────────────
+const FALLBACK_CHARACTERS = {
+  justawoman: { display_name: 'JustAWoman', icon: '♛', role_type: 'special',  world: 'book-1',    color: '#9a7d1e' },
+  david:      { display_name: 'David',      icon: '◈',  role_type: 'pressure', world: 'book-1',    color: '#c0392b' },
+  dana:       { display_name: 'Dana',       icon: '◉',  role_type: 'support',  world: 'book-1',    color: '#0d9668' },
+  chloe:      { display_name: 'Chloe',      icon: '◎',  role_type: 'mirror',   world: 'book-1',    color: '#7c3aed' },
+  jade:       { display_name: 'Jade',       icon: '◆',  role_type: 'shadow',   world: 'book-1',    color: '#546678' },
   lala:       { display_name: 'Lala',       icon: '✦',  role_type: 'special',  world: 'lalaverse', color: '#d63384' },
+};
+
+// ─── Role-type → color mapping for dynamic characters ─────────────────────────
+const ROLE_COLORS = {
+  protagonist: '#9a7d1e',
+  special:     '#9a7d1e',
+  pressure:    '#c0392b',
+  mirror:      '#7c3aed',
+  support:     '#0d9668',
+  shadow:      '#546678',
 };
 
 const PHASE_COLORS = {
@@ -36,13 +46,18 @@ const TYPE_ICONS = {
 };
 
 // ─── World toggle ─────────────────────────────────────────────────────────────
+const WORLD_LABELS = {
+  'book-1': 'Book 1 World',
+  'lalaverse': 'LalaVerse',
+};
+
 function WorldToggle({ worlds, onToggle }) {
   return (
     <div className="se-world-toggles">
       {Object.entries(worlds).map(([worldId, open]) => (
         <div key={worldId} className={`se-world-toggle ${open ? 'open' : 'closed'}`}>
           <div className="se-world-toggle-label">
-            {worldId === 'book1' ? 'Book 1 World' : 'LalaVerse'}
+            {WORLD_LABELS[worldId] || worldId}
           </div>
           <div className="se-world-toggle-status">
             New characters {open ? 'open' : 'locked'}
@@ -141,6 +156,7 @@ function StoryPanel({
   onApprove, onReject, onEdit, onCheckConsistency,
   consistencyConflicts, consistencyLoading,
   therapyMemories, therapyLoading,
+  onAddToRegistry,
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(story?.text || '');
@@ -256,8 +272,18 @@ function StoryPanel({
         <div className="se-new-char-alert">
           <span className="se-new-char-icon">+</span>
           <span>New character introduced: <strong>{story.new_character_name}</strong> — {story.new_character_role}</span>
-          <button className="se-new-char-approve">Add to Registry</button>
-          <button className="se-new-char-reject">Story Only</button>
+          <button
+            className="se-new-char-approve"
+            onClick={() => onAddToRegistry && onAddToRegistry(story)}
+          >
+            Add to Registry
+          </button>
+          <button
+            className="se-new-char-reject"
+            onClick={() => {/* Story Only — dismiss alert */}}
+          >
+            Story Only
+          </button>
         </div>
       )}
 
@@ -330,15 +356,17 @@ function StoryPanel({
 export default function StoryEngine() {
   const navigate = useNavigate();
 
+  // Dynamic characters from DB
+  const [CHARACTERS, setCHARACTERS] = useState(FALLBACK_CHARACTERS);
+  const [charsLoading, setCharsLoading] = useState(true);
+  const [worldsList, setWorldsList] = useState([]);
+
   // Character selection
-  const [selectedChar, setSelectedChar]       = useState('justawoman');
-  const [activeWorld, setActiveWorld]         = useState('book1');
+  const [selectedChar, setSelectedChar]       = useState('');
+  const [activeWorld, setActiveWorld]         = useState('book-1');
 
   // World creation toggles
-  const [worldToggles, setWorldToggles]       = useState({
-    book1:     true,
-    lalaverse: true,
-  });
+  const [worldToggles, setWorldToggles]       = useState({});
 
   // Task arc (50 story briefs)
   const [tasks, setTasks]                     = useState([]);
@@ -383,6 +411,66 @@ export default function StoryEngine() {
   }, []);
 
   useEffect(() => () => stopTimer(), [stopTimer]);
+
+  // ── Load characters dynamically from DB ──────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/memories/story-engine-characters`);
+        if (!res.ok) throw new Error('Failed to load');
+        const data = await res.json();
+
+        if (cancelled) return;
+
+        // Build CHARACTERS dict from the API response
+        const chars = {};
+        const worlds = Object.keys(data.worlds || {});
+
+        for (const world of worlds) {
+          for (const c of data.worlds[world]) {
+            chars[c.character_key] = {
+              id: c.id,
+              display_name: c.display_name,
+              icon: c.icon || '◈',
+              role_type: c.role_type,
+              world: c.world,
+              color: ROLE_COLORS[c.role_type] || '#546678',
+              portrait_url: c.portrait_url,
+              has_dna: c.has_dna,
+            };
+          }
+        }
+
+        if (Object.keys(chars).length > 0) {
+          setCHARACTERS(chars);
+          setWorldsList(worlds);
+          // Build world toggles
+          const toggles = {};
+          for (const w of worlds) toggles[w] = true;
+          setWorldToggles(toggles);
+          // Select first character if none selected
+          if (!selectedChar) {
+            const firstKey = Object.keys(chars)[0];
+            setSelectedChar(firstKey);
+          }
+        } else {
+          // Fallback if no characters in DB
+          setCHARACTERS(FALLBACK_CHARACTERS);
+          setWorldToggles({ 'book-1': true, lalaverse: true });
+          if (!selectedChar) setSelectedChar('justawoman');
+        }
+      } catch (err) {
+        console.error('Failed to load SE characters from DB:', err);
+        setCHARACTERS(FALLBACK_CHARACTERS);
+        setWorldToggles({ 'book-1': true, lalaverse: true });
+        if (!selectedChar) setSelectedChar('justawoman');
+      } finally {
+        if (!cancelled) setCharsLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── localStorage helpers for caching ─────────────────────────────────────
   const cacheKey     = (charKey) => `se_tasks_${charKey}`;
@@ -589,6 +677,56 @@ export default function StoryEngine() {
     setCachedStories(selectedChar, nextStories, approvedStories);
   }
 
+  // ── Add new character from a story to the registry ────────────────────────
+  async function handleAddToRegistry(story) {
+    if (!story.new_character_name) return;
+    try {
+      const res = await fetch(`${API_BASE}/memories/story-engine-add-character`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_name: story.new_character_name,
+          character_role: story.new_character_role,
+          world: char?.world || 'book-1',
+          story_number: story.story_number,
+          story_title: story.title,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.already_existed) {
+          alert(`${story.new_character_name} already exists in the registry.`);
+        } else {
+          alert(`${story.new_character_name} added to the registry as draft.`);
+          // Refresh character list
+          const charRes = await fetch(`${API_BASE}/memories/story-engine-characters`);
+          if (charRes.ok) {
+            const charData = await charRes.json();
+            const chars = {};
+            for (const world of Object.keys(charData.worlds || {})) {
+              for (const c of charData.worlds[world]) {
+                chars[c.character_key] = {
+                  id: c.id,
+                  display_name: c.display_name,
+                  icon: c.icon || '◈',
+                  role_type: c.role_type,
+                  world: c.world,
+                  color: ROLE_COLORS[c.role_type] || '#546678',
+                  portrait_url: c.portrait_url,
+                  has_dna: c.has_dna,
+                };
+              }
+            }
+            if (Object.keys(chars).length > 0) setCHARACTERS(chars);
+          }
+        }
+      }
+    } catch (e) {
+      console.error('addToRegistry error:', e);
+      alert('Failed to add character to registry.');
+    }
+  }
+
   // ── Edit a story — triggers cascade check ────────────────────────────────
   async function handleEdit(story, newText) {
     const updated = { ...story, text: newText, word_count: newText.split(/\s+/).length };
@@ -662,18 +800,43 @@ export default function StoryEngine() {
 
       {/* ── Character selector ────────────────────────────────────────────── */}
       <div className="se-char-bar">
-        {Object.entries(CHARACTERS).map(([key, c]) => (
-          <button
-            key={key}
-            className={`se-char-pill ${selectedChar === key ? 'active' : ''}`}
-            style={{ '--char-color': c.color }}
-            onClick={() => setSelectedChar(key)}
-          >
-            <span className="se-char-icon">{c.icon}</span>
-            <span className="se-char-name">{c.display_name}</span>
-            <span className="se-char-world">{c.world === 'lalaverse' ? 'LV' : 'B1'}</span>
-          </button>
-        ))}
+        {charsLoading ? (
+          <div className="se-char-loading">Loading characters…</div>
+        ) : (
+          (() => {
+            // Group characters by world for visual separation
+            const grouped = {};
+            for (const [key, c] of Object.entries(CHARACTERS)) {
+              const w = c.world || 'unknown';
+              if (!grouped[w]) grouped[w] = [];
+              grouped[w].push([key, c]);
+            }
+            const worldOrder = Object.keys(grouped).sort();
+            const WORLD_SHORT = { 'book-1': 'B1', lalaverse: 'LV' };
+
+            return worldOrder.map((world, wi) => (
+              <div key={world} className="se-char-world-group">
+                {worldOrder.length > 1 && (
+                  <span className="se-char-world-divider">
+                    {WORLD_LABELS[world] || world}
+                  </span>
+                )}
+                {grouped[world].map(([key, c]) => (
+                  <button
+                    key={key}
+                    className={`se-char-pill ${selectedChar === key ? 'active' : ''}`}
+                    style={{ '--char-color': c.color }}
+                    onClick={() => setSelectedChar(key)}
+                  >
+                    <span className="se-char-icon">{c.icon}</span>
+                    <span className="se-char-name">{c.display_name}</span>
+                    <span className="se-char-world">{WORLD_SHORT[c.world] || c.world?.slice(0, 3)?.toUpperCase()}</span>
+                  </button>
+                ))}
+              </div>
+            ));
+          })()
+        )}
       </div>
 
       {/* ── Arc progress ──────────────────────────────────────────────────── */}
@@ -759,6 +922,7 @@ export default function StoryEngine() {
               consistencyLoading={consistencyLoading}
               therapyMemories={therapyMemories}
               therapyLoading={therapyLoading}
+              onAddToRegistry={handleAddToRegistry}
             />
           )}
         </div>

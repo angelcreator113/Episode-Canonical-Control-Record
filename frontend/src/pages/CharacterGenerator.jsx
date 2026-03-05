@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ROLE_COLORS, ROLE_ICONS, MOMENTUM_COLORS, WORLD_LABELS } from '../constants/characterConstants';
 import useRegistries from '../hooks/useRegistries';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { arrayMove, SortableContext, useSortable, rectSortingStrategy } from '@dnd-kit/sortable';
+import { CSS as DndCSS } from '@dnd-kit/utilities';
 import './CharacterGenerator.css';
 
 // ─── LocalStorage persistence helpers ─────────────────────────────────────────
@@ -32,8 +35,315 @@ function loadHistory() {
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
 
+// ─── Utility functions ────────────────────────────────────────────────────────────────
+function computeCompleteness(profile) {
+  if (!profile) return 0;
+  const fields = [
+    profile.identity?.name, profile.identity?.age, profile.identity?.gender,
+    profile.living_state?.knows, profile.living_state?.wants, profile.living_state?.unresolved,
+    profile.living_state?.current_location, profile.living_state?.momentum,
+    profile.psychology?.core_wound, profile.psychology?.desire_line, profile.psychology?.fear_line,
+    profile.psychology?.coping_mechanism, profile.psychology?.self_deception,
+    profile.aesthetic_dna?.visual_signature, profile.aesthetic_dna?.style, profile.aesthetic_dna?.signature_object,
+    profile.career?.job_title, profile.career?.industry, profile.career?.career_wound,
+    profile.relationships?.romantic_status, profile.relationships?.romantic_detail,
+    profile.voice?.how_they_speak, profile.voice?.signature_sentence_structure,
+    profile.dilemma?.active, profile.dilemma?.latent_1,
+    ...(profile.plot_threads || []).map(t => t.thread),
+  ];
+  const filled = fields.filter(v => v && String(v).trim()).length;
+  return Math.round((filled / fields.length) * 100);
+}
+
+function exportBatchAsJSON(batch) {
+  const data = batch
+    .filter(r => r.status === 'generated' && r.profile)
+    .map(r => ({ seed: r.seed, profile: r.profile }));
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `character-profiles-${new Date().toISOString().slice(0, 10)}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ─── CompletionRing ─────────────────────────────────────────────────────────────────
+function CompletionRing({ percent, size = 32 }) {
+  const r = (size - 4) / 2;
+  const circ = 2 * Math.PI * r;
+  const offset = circ - (percent / 100) * circ;
+  const color = percent >= 90 ? 'var(--cg-green)' : percent >= 60 ? 'var(--cg-gold)' : 'var(--cg-red)';
+  return (
+    <svg width={size} height={size} className="cg-completion-ring">
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke="var(--cg-border)" strokeWidth="3" />
+      <circle cx={size/2} cy={size/2} r={r} fill="none" stroke={color} strokeWidth="3"
+        strokeDasharray={circ} strokeDashoffset={offset} strokeLinecap="round"
+        transform={`rotate(-90 ${size/2} ${size/2})`}
+        style={{ transition: 'stroke-dashoffset 0.6s ease' }} />
+      <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
+        style={{ fontSize: size < 36 ? '8px' : '10px', fill: 'var(--cg-muted)', fontWeight: 700 }}>
+        {percent}%
+      </text>
+    </svg>
+  );
+}
+
+// ─── SkeletonCard (loading placeholder) ───────────────────────────────────────────
+function SkeletonCard({ index }) {
+  return (
+    <div className="cg-staging-card cg-skeleton-card" style={{ animationDelay: `${index * 0.15}s` }}>
+      <div className="cg-staging-bar cg-skeleton-bar" />
+      <div style={{ padding: '18px 22px' }}>
+        <div className="cg-skeleton-line cg-skeleton-name" />
+        <div className="cg-skeleton-line cg-skeleton-meta-line" />
+        <div className="cg-skeleton-line cg-skeleton-tension-line" />
+      </div>
+    </div>
+  );
+}
+
+// ─── RelationshipWebPreview ─────────────────────────────────────────────────────────
+function RelationshipWebPreview({ batch }) {
+  const generated = batch.filter(r => r.status === 'generated' && r.profile);
+  if (generated.length < 2) return null;
+  const svgSize = 300;
+  const cx = svgSize / 2, cy = svgSize / 2, radius = 110;
+  const nodes = generated.map((r, i) => {
+    const angle = (2 * Math.PI * i) / generated.length - Math.PI / 2;
+    return {
+      x: cx + radius * Math.cos(angle),
+      y: cy + radius * Math.sin(angle),
+      name: r.seed?.name || r.profile?.identity?.name || '?',
+      role: r.seed?.role_type || r.profile?.identity?.role_type,
+      connections: r.profile?.relationships?.proposed_connections || [],
+    };
+  });
+  const edges = [];
+  nodes.forEach((node, i) => {
+    (node.connections || []).forEach(conn => {
+      const target = (conn.to_character || '').toLowerCase();
+      const targetIdx = nodes.findIndex((n, j) => j !== i && (
+        n.name.toLowerCase().includes(target) || target.includes(n.name.toLowerCase())
+      ));
+      if (targetIdx >= 0) {
+        const exists = edges.some(e => (e.from === i && e.to === targetIdx) || (e.from === targetIdx && e.to === i));
+        if (!exists) edges.push({ from: i, to: targetIdx, type: conn.relationship_type });
+      }
+    });
+  });
+  const typeColor = { pressure: 'var(--cg-red)', romantic: '#e07070', shadow: '#9b4dca', support: 'var(--cg-green)', mirror: '#7b8de0' };
+  return (
+    <div className="cg-rel-web">
+      <div className="cg-rel-web-title">Relationship Web</div>
+      <svg width={svgSize} height={svgSize} className="cg-rel-web-svg">
+        {edges.map((e, i) => (
+          <line key={i}
+            x1={nodes[e.from].x} y1={nodes[e.from].y}
+            x2={nodes[e.to].x} y2={nodes[e.to].y}
+            stroke={typeColor[e.type] || 'var(--cg-border2)'} strokeWidth="1.5" opacity="0.6"
+            strokeDasharray={e.type === 'pressure' ? '4,3' : 'none'} />
+        ))}
+        {nodes.map((n, i) => (
+          <g key={i}>
+            <circle cx={n.x} cy={n.y} r="20" fill={ROLE_COLORS[n.role] || '#94a3b8'} opacity="0.12"
+              stroke={ROLE_COLORS[n.role] || '#94a3b8'} strokeWidth="2" />
+            <text x={n.x} y={n.y + 4} textAnchor="middle" dominantBaseline="central"
+              fontSize="13" fill={ROLE_COLORS[n.role] || '#94a3b8'} fontWeight="700">
+              {ROLE_ICONS[n.role] || '◆'}
+            </text>
+            <text x={n.x} y={n.y + 32} textAnchor="middle"
+              fontSize="10" fill="var(--cg-muted)" fontWeight="600">
+              {n.name.length > 10 ? n.name.slice(0, 9) + '…' : n.name}
+            </text>
+          </g>
+        ))}
+      </svg>
+      {edges.length > 0 && (
+        <div className="cg-rel-web-legend">
+          {edges.map((e, i) => (
+            <span key={i} className="cg-rel-web-edge-label">
+              <span style={{ color: typeColor[e.type] || 'var(--cg-muted)' }}>●</span>
+              {' '}{nodes[e.from].name.split(' ')[0]} → {nodes[e.to].name.split(' ')[0]}
+              <span className="cg-rel-web-type">{e.type}</span>
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ComparisonModal ───────────────────────────────────────────────────────────────
+function ComparisonModal({ batch, onClose }) {
+  const generated = batch.filter(r => r.status === 'generated' && r.profile);
+  const [idxA, setIdxA] = useState(0);
+  const [idxB, setIdxB] = useState(Math.min(1, generated.length - 1));
+  if (generated.length < 2) return null;
+  const a = generated[idxA], b = generated[idxB];
+  const fields = [
+    { label: 'Role', get: r => `${ROLE_ICONS[r.seed?.role_type] || ''} ${r.seed?.role_type || '—'}` },
+    { label: 'Age / Gender', get: r => `${r.profile?.identity?.age || r.seed?.age || '—'}, ${r.profile?.identity?.gender || r.seed?.gender || '—'}` },
+    { label: 'Career', get: r => r.profile?.career?.job_title || r.seed?.career || '—' },
+    { label: 'Tension', get: r => r.seed?.tension || '—' },
+    { label: 'Core Wound', get: r => r.profile?.psychology?.core_wound || '—' },
+    { label: 'Desire Line', get: r => r.profile?.psychology?.desire_line || '—' },
+    { label: 'Fear Line', get: r => r.profile?.psychology?.fear_line || '—' },
+    { label: 'Active Dilemma', get: r => r.profile?.dilemma?.active || '—' },
+    { label: 'Momentum', get: r => r.profile?.living_state?.momentum || '—' },
+    { label: 'Voice', get: r => r.profile?.voice?.how_they_speak || '—' },
+    { label: 'Romantic Status', get: r => r.profile?.relationships?.romantic_status || '—' },
+    { label: 'Visual Sig.', get: r => r.profile?.aesthetic_dna?.visual_signature || '—' },
+  ];
+  return (
+    <div className="cg-compare-overlay" onClick={onClose}>
+      <div className="cg-compare-modal" onClick={e => e.stopPropagation()}>
+        <div className="cg-compare-header">
+          <span className="cg-compare-title">Compare Characters</span>
+          <button className="cg-btn cg-btn-cancel" onClick={onClose}>✕</button>
+        </div>
+        <div className="cg-compare-selectors">
+          <select className="cg-world-select" value={idxA} onChange={e => setIdxA(+e.target.value)}>
+            {generated.map((r, i) => <option key={i} value={i}>{r.seed?.name}</option>)}
+          </select>
+          <span className="cg-compare-vs">vs</span>
+          <select className="cg-world-select" value={idxB} onChange={e => setIdxB(+e.target.value)}>
+            {generated.map((r, i) => <option key={i} value={i}>{r.seed?.name}</option>)}
+          </select>
+        </div>
+        <div className="cg-compare-table">
+          <div className="cg-compare-row cg-compare-row-header">
+            <div className="cg-compare-label">Field</div>
+            <div className="cg-compare-val">{a?.seed?.name}</div>
+            <div className="cg-compare-val">{b?.seed?.name}</div>
+          </div>
+          {fields.map((f, i) => (
+            <div key={i} className="cg-compare-row">
+              <div className="cg-compare-label">{f.label}</div>
+              <div className="cg-compare-val">{f.get(a)}</div>
+              <div className="cg-compare-val">{f.get(b)}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── World Builder mini-panel (ecosystem generation for empty worlds) ────────
+function WorldBuilderPanel({ worldTarget, ecosystem, onEcosystemGenerated }) {
+  const [showForm, setShowForm] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [form, setForm] = useState({
+    city: '', industry: '', career_stage: 'early_career', character_count: 8,
+  });
+
+  const worldStats = ecosystem?.[worldTarget]?.stats;
+  const isEmpty = !worldStats || worldStats.total === 0;
+
+  if (!isEmpty) return null;
+
+  return (
+    <div className="cg-world-builder">
+      <div className="cg-world-builder-header">
+        <div className="cg-world-builder-icon">✦</div>
+        <div className="cg-world-builder-text">
+          <div className="cg-world-builder-title">
+            {worldTarget === 'lalaverse' ? 'LalaVerse' : 'Book 1'} is empty
+          </div>
+          <div className="cg-world-builder-sub">
+            Generate a character ecosystem first, or propose seeds directly
+          </div>
+        </div>
+      </div>
+
+      {!showForm ? (
+        <button
+          className="cg-btn cg-btn-world-build"
+          onClick={() => setShowForm(true)}
+        >
+          ✨ Build World Ecosystem
+        </button>
+      ) : (
+        <div className="cg-world-builder-form">
+          <div className="cg-wb-row">
+            <label>City / Setting</label>
+            <input
+              placeholder={worldTarget === 'lalaverse' ? 'Fashion capital, digital world…' : 'Suburban America, a major city…'}
+              value={form.city}
+              onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+            />
+          </div>
+          <div className="cg-wb-row">
+            <label>Industry / Focus</label>
+            <input
+              placeholder={worldTarget === 'lalaverse' ? 'Content creation and fashion' : 'Professional careers, family life'}
+              value={form.industry}
+              onChange={e => setForm(f => ({ ...f, industry: e.target.value }))}
+            />
+          </div>
+          <div className="cg-wb-row-inline">
+            <div className="cg-wb-row">
+              <label>Career Stage</label>
+              <select value={form.career_stage} onChange={e => setForm(f => ({ ...f, career_stage: e.target.value }))}>
+                <option value="early_career">Early Career</option>
+                <option value="mid_career">Mid Career</option>
+                <option value="established">Established</option>
+                <option value="mixed">Mixed</option>
+              </select>
+            </div>
+            <div className="cg-wb-row">
+              <label>Characters</label>
+              <input
+                type="number" min={4} max={20}
+                value={form.character_count}
+                onChange={e => setForm(f => ({ ...f, character_count: parseInt(e.target.value) || 8 }))}
+              />
+            </div>
+          </div>
+          <div className="cg-wb-actions">
+            <button className="cg-btn cg-btn-cancel" onClick={() => setShowForm(false)}>Cancel</button>
+            <button
+              className="cg-btn cg-btn-generate"
+              disabled={generating}
+              onClick={async () => {
+                setGenerating(true);
+                try {
+                  const res = await fetch(`${API_BASE}/world/generate-ecosystem`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      world_context: {
+                        city: form.city || (worldTarget === 'lalaverse' ? 'a fashion capital' : 'a major city'),
+                        industry: form.industry || (worldTarget === 'lalaverse' ? 'content creation and fashion' : 'professional careers'),
+                        career_stage: form.career_stage,
+                      },
+                      character_count: form.character_count,
+                    }),
+                  });
+                  const data = await res.json();
+                  if (data.characters || data.count) {
+                    setShowForm(false);
+                    if (onEcosystemGenerated) onEcosystemGenerated();
+                  }
+                } catch (e) {
+                  console.error('Ecosystem generation failed:', e);
+                } finally {
+                  setGenerating(false);
+                }
+              }}
+            >
+              {generating ? 'Generating…' : `Generate ${form.character_count} Characters`}
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Ecosystem panel ──────────────────────────────────────────────────────────
-function EcosystemPanel({ ecosystem, loading }) {
+function EcosystemPanel({ ecosystem, loading, worldTarget }) {
   if (loading) return (
     <div className="cg-ecosystem-loading">
       <div className="cg-spinner" />
@@ -43,7 +353,10 @@ function EcosystemPanel({ ecosystem, loading }) {
 
   if (!ecosystem) return null;
 
-  const worlds = ['book1', 'lalaverse'];
+  // Show relevant worlds based on target
+  const worlds = worldTarget === 'both' ? ['book1', 'lalaverse']
+    : worldTarget === 'lalaverse' ? ['lalaverse']
+    : ['book1'];
 
   return (
     <div className="cg-ecosystem">
@@ -106,7 +419,7 @@ function EcosystemPanel({ ecosystem, loading }) {
 }
 
 // ─── Seed card ────────────────────────────────────────────────────────────────
-function SeedCard({ seed, index, onApprove, onReject, onEdit }) {
+function SeedCard({ seed, index, onApprove, onReject, onEdit, dragListeners }) {
   const [editing, setEditing]   = useState(false);
   const [editSeed, setEditSeed] = useState(seed);
   const color = ROLE_COLORS[seed.role_type] || '#94a3b8';
@@ -191,7 +504,12 @@ function SeedCard({ seed, index, onApprove, onReject, onEdit }) {
         ) : (
           <>
             <div className="cg-seed-top">
-              <div className="cg-seed-name">{seed.name}</div>
+              <div className="cg-seed-name-row">
+                {dragListeners && (
+                  <span className="cg-drag-handle" {...dragListeners} title="Drag to reorder">≡</span>
+                )}
+                <div className="cg-seed-name">{seed.name}</div>
+              </div>
               <div className="cg-seed-meta">
                 <span className="cg-seed-age">{seed.age}</span>
                 <span className="cg-seed-gender">{seed.gender}</span>
@@ -228,9 +546,31 @@ function SeedCard({ seed, index, onApprove, onReject, onEdit }) {
   );
 }
 
+// ─── Sortable seed card wrapper ──────────────────────────────────────────────
+function SortableSeedCard({ id, seed, index, onApprove, onReject, onEdit }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style = {
+    transform: DndCSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    zIndex: isDragging ? 10 : 'auto',
+    position: 'relative',
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      <SeedCard seed={seed} index={index} onApprove={onApprove} onReject={onReject}
+        onEdit={onEdit} dragListeners={listeners} />
+    </div>
+  );
+}
+
 // ─── Staging card (full profile review) ──────────────────────────────────────
-function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
+function StagingCard({ result, checks, onCommit, onDiscard, onDelete, onRegenerate, onUpdateProfile, onRewriteField, registries }) {
   const [expanded, setExpanded]       = useState(false);
+  const [deleting, setDeleting]       = useState(false);
+  const [editMode, setEditMode]       = useState(false);
+  const [editedProfile, setEditedProfile] = useState({});
+  const [rewritingField, setRewritingField] = useState(null);
 
   const { seed, profile, status, error } = result;
   const color = ROLE_COLORS[seed?.role_type] || '#94a3b8';
@@ -246,9 +586,12 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
 
   if (status === 'failed') return (
     <div className="cg-staging-card cg-staging-failed">
-      <div className="cg-staging-name">{seed?.name}</div>
+      <div className="cg-staging-name" style={{ padding: '18px 22px 0' }}>{seed?.name}</div>
       <div className="cg-staging-error">Generation failed: {error}</div>
-      <button className="cg-btn cg-btn-discard" onClick={() => onDiscard(result)}>Remove</button>
+      <div className="cg-staging-commit">
+        <button className="cg-btn cg-btn-discard" onClick={() => onDiscard(result)}>Remove</button>
+        <button className="cg-btn cg-btn-generate" onClick={() => onRegenerate(result)}>↻ Retry</button>
+      </div>
     </div>
   );
 
@@ -259,7 +602,10 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
       {/* Header */}
       <div className="cg-staging-header" onClick={() => setExpanded((p) => !p)}>
         <div className="cg-staging-header-left">
-          <div className="cg-staging-name">{seed?.name}</div>
+          <div className="cg-staging-name-row">
+            <div className="cg-staging-name">{seed?.name}</div>
+            {profile && <CompletionRing percent={computeCompleteness(profile)} />}
+          </div>
           <div className="cg-staging-meta">
             <span>{identity.age || seed?.age}</span>
             <span>{identity.gender || seed?.gender}</span>
@@ -271,7 +617,14 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
           </div>
           <div className="cg-staging-tension">"{seed?.tension}"</div>
         </div>
-        <div className="cg-staging-expand">{expanded ? '▲' : '▼'}</div>
+        <div className="cg-staging-header-right">
+          {expanded && !result._committed && (
+            <button className="cg-btn cg-btn-edit" onClick={(e) => { e.stopPropagation(); setEditMode(m => !m); }}>
+              {editMode ? '✓ Done' : '✎ Edit'}
+            </button>
+          )}
+          <div className="cg-staging-expand">{expanded ? '▲' : '▼'}</div>
+        </div>
       </div>
 
       {/* Checks */}
@@ -291,6 +644,53 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
           {!checks.errors?.length && !checks.warnings?.length && (
             <div className="cg-check cg-check-ok">✓ No conflicts detected</div>
           )}
+        </div>
+      )}
+
+      {/* Edit panel (inline profile editing + AI rewrite) */}
+      {expanded && editMode && profile && !result._committed && (
+        <div className="cg-edit-panel">
+          <div className="cg-edit-panel-title">
+            Edit Key Fields <span className="cg-dim">Click ↻ AI to regenerate any field</span>
+          </div>
+          {[
+            { label: 'Core Wound', key: 'psychology.core_wound', val: psych.core_wound },
+            { label: 'Desire Line', key: 'psychology.desire_line', val: psych.desire_line },
+            { label: 'Fear Line', key: 'psychology.fear_line', val: psych.fear_line },
+            { label: 'Active Dilemma', key: 'dilemma.active', val: dilemma.active },
+            { label: 'How They Speak', key: 'voice.how_they_speak', val: voice.how_they_speak },
+            { label: 'Visual Signature', key: 'aesthetic_dna.visual_signature', val: aesthetic.visual_signature },
+            { label: 'Career', key: 'career.job_title', val: career.job_title },
+            { label: 'Signature Sentence', key: 'voice.signature_sentence_structure', val: voice.signature_sentence_structure },
+          ].map(f => (
+            <div key={f.key} className="cg-edit-field">
+              <div className="cg-edit-field-header">
+                <label>{f.label}</label>
+                <button className="cg-btn-field-rewrite"
+                  disabled={rewritingField === f.key}
+                  onClick={async () => {
+                    setRewritingField(f.key);
+                    const newVal = await onRewriteField(result, f.key, editedProfile[f.key] ?? f.val);
+                    if (newVal) setEditedProfile(p => ({ ...p, [f.key]: newVal }));
+                    setRewritingField(null);
+                  }}>
+                  {rewritingField === f.key ? '…' : '↻ AI'}
+                </button>
+              </div>
+              <textarea className="cg-edit-textarea"
+                value={editedProfile[f.key] ?? f.val ?? ''}
+                onChange={e => setEditedProfile(p => ({ ...p, [f.key]: e.target.value }))}
+                rows={2} />
+            </div>
+          ))}
+          <div className="cg-edit-panel-actions">
+            <button className="cg-btn cg-btn-cancel" onClick={() => { setEditMode(false); setEditedProfile({}); }}>Cancel</button>
+            <button className="cg-btn cg-btn-save" onClick={() => {
+              onUpdateProfile(result, editedProfile);
+              setEditMode(false);
+              setEditedProfile({});
+            }}>Save Changes</button>
+          </div>
         </div>
       )}
 
@@ -485,15 +885,33 @@ function StagingCard({ result, checks, onCommit, onDiscard, registries }) {
         </div>
       )}
 
-      {/* Commit actions — simplified to just Discard (batch Add All handles commit) */}
+      {/* Commit actions */}
       {!result._committed && (
         <div className="cg-staging-commit">
           <button className="cg-btn cg-btn-discard" onClick={() => onDiscard(result)}>Discard</button>
+          {onRegenerate && (
+            <button className="cg-btn cg-btn-edit" onClick={() => onRegenerate(result)}>↻ Regenerate</button>
+          )}
         </div>
       )}
 
       {result._committed && (
-        <div className="cg-staging-committed">✓ Added to Registry</div>
+        <div className="cg-staging-committed">
+          <span>✓ Added to Registry</span>
+          <button
+            className="cg-btn cg-btn-delete-committed"
+            disabled={deleting}
+            onClick={async (e) => {
+              e.stopPropagation();
+              if (!window.confirm(`Delete ${seed?.name} from registry? This cannot be undone.`)) return;
+              setDeleting(true);
+              await onDelete(result);
+              setDeleting(false);
+            }}
+          >
+            {deleting ? '…' : '✕ Delete'}
+          </button>
+        </div>
       )}
     </div>
   );
@@ -512,8 +930,7 @@ export default function CharacterGenerator() {
 
   // Seed proposal
   const [worldTarget, setWorldTarget]     = useState(
-    (saved.current?.worldTarget === 'lalaverse' || saved.current?.worldTarget === 'both')
-      ? 'book1' : (saved.current?.worldTarget || 'book1')
+    saved.current?.worldTarget || 'book1'
   );
   const [seeds, setSeeds]                 = useState(saved.current?.seeds || []);
   const [seedsLoading, setSeedsLoading]   = useState(false);
@@ -535,6 +952,18 @@ export default function CharacterGenerator() {
   // Seed history
   const [history, setHistory]             = useState([]);
   const [expandedHistoryIdx, setExpandedHistoryIdx] = useState(null);
+
+  // ── New feature state ───────────────────────────────────────────────────────
+  const [seedCount, setSeedCount]         = useState(10);
+  const [stagingFilter, setStagingFilter] = useState({ text: '', role: '', status: '' });
+  const [trash, setTrash]                 = useState([]);
+  const [showTrash, setShowTrash]         = useState(false);
+  const [showComparison, setShowComparison] = useState(false);
+
+  // Drag-and-drop sensors
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
 
   // ── Auto-save to localStorage on meaningful state changes ───────────────────
   useEffect(() => {
@@ -602,20 +1031,28 @@ export default function CharacterGenerator() {
         ...(ecosystem?.lalaverse?.characters || []),
       ].map((c) => c.name);
 
-      const res = await fetch(`${API_BASE}/character-generator/propose-seeds`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          world: worldTarget,
-          existing_names: existingNames,
-          ecosystem_stats: ecosystem,
-        }),
-      });
+      // "both" mode: fetch seeds for each world in parallel, merge
+      const worldsToFetch = worldTarget === 'both' ? ['book1', 'lalaverse'] : [worldTarget];
 
-      if (res.ok) {
-        const data = await res.json();
-        setSeeds((data.seeds || []).map((s) => ({ ...s, _status: 'pending' })));
-      }
+      const allSeeds = [];
+      await Promise.all(worldsToFetch.map(async (w) => {
+        const res = await fetch(`${API_BASE}/character-generator/propose-seeds`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            world: w,
+            count: worldTarget === 'both' ? Math.ceil(seedCount / 2) : seedCount,
+            existing_names: existingNames,
+            ecosystem_stats: ecosystem?.[w]?.stats || ecosystem,
+          }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          allSeeds.push(...(data.seeds || []));
+        }
+      }));
+
+      setSeeds(allSeeds.map((s) => ({ ...s, _status: 'pending' })));
     } catch (e) {
       console.error('propose seeds error:', e);
     } finally {
@@ -734,10 +1171,132 @@ export default function CharacterGenerator() {
 
   function handleDiscard(result) {
     setBatch((prev) => prev.filter((r) => r !== result));
+    setTrash(prev => [...prev, result]);
+  }
+
+  function handleRestoreFromTrash(result) {
+    setTrash(prev => prev.filter(r => r !== result));
+    setBatch(prev => [...prev, result]);
+  }
+
+  // ── Regenerate a single character (retry failed or re-run generated) ────────
+  async function handleRegenerate(result) {
+    const seed = result.seed;
+    if (!seed) return;
+    setBatch(prev => prev.map(r => r === result ? { ...r, status: 'regenerating', error: null } : r));
+    try {
+      const existingCharacters = [
+        ...(ecosystem?.book1?.characters || []),
+        ...(ecosystem?.lalaverse?.characters || []),
+      ];
+      const res = await fetch(`${API_BASE}/character-generator/generate-batch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seeds: [seed], existingCharacters }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const newResult = data.batch?.[0];
+        if (newResult) {
+          setBatch(prev => prev.map(r =>
+            r.seed?.name === seed.name && (r.status === 'regenerating' || r === result)
+              ? newResult : r
+          ));
+        }
+      }
+    } catch (e) {
+      console.error('Regenerate failed:', e);
+      setBatch(prev => prev.map(r =>
+        r.seed?.name === seed.name && r.status === 'regenerating'
+          ? { ...r, status: 'failed', error: e.message } : r
+      ));
+    }
+  }
+
+  // ── Update profile fields from inline editing ──────────────────────────────
+  function handleUpdateProfile(result, editedFields) {
+    setBatch(prev => prev.map(r => {
+      if (r !== result) return r;
+      const updated = { ...r, profile: JSON.parse(JSON.stringify(r.profile)) };
+      Object.entries(editedFields).forEach(([path, value]) => {
+        const parts = path.split('.');
+        let obj = updated.profile;
+        for (let i = 0; i < parts.length - 1; i++) {
+          if (!obj[parts[i]]) obj[parts[i]] = {};
+          obj = obj[parts[i]];
+        }
+        obj[parts[parts.length - 1]] = value;
+      });
+      return updated;
+    }));
+  }
+
+  // ── AI rewrite a single profile field ──────────────────────────────────────
+  async function handleRewriteField(result, fieldPath, currentValue) {
+    try {
+      const res = await fetch(`${API_BASE}/character-generator/rewrite-field`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fieldPath,
+          currentValue,
+          characterContext: {
+            name: result.seed?.name,
+            role: result.seed?.role_type,
+            tension: result.seed?.tension,
+            world: result.seed?.world,
+          },
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        return data.newValue;
+      }
+    } catch (e) {
+      console.error('Rewrite failed:', e);
+    }
+    return null;
+  }
+
+  // ── Drag-and-drop reorder seeds ────────────────────────────────────────────
+  function handleDragEnd(event) {
+    const { active, over } = event;
+    if (active.id !== over?.id) {
+      setSeeds(prev => {
+        const oldIndex = prev.findIndex((_, i) => `seed-${i}` === active.id);
+        const newIndex = prev.findIndex((_, i) => `seed-${i}` === over.id);
+        return arrayMove(prev, oldIndex, newIndex);
+      });
+    }
+  }
+
+  // ── Delete committed character from registry ──────────────────────────────
+  async function handleDeleteCommitted(result) {
+    const charId = result._charId;
+    if (!charId) {
+      // No ID tracked — just remove from staging
+      setBatch((prev) => prev.filter((r) => r !== result));
+      return;
+    }
+    try {
+      const res = await fetch(`${API_BASE}/character-registry/characters/${charId}`, {
+        method: 'DELETE',
+      });
+      if (res.ok) {
+        setBatch((prev) => prev.filter((r) => r !== result));
+        loadEcosystem();
+      } else {
+        const err = await res.json();
+        alert('Delete failed: ' + (err.error || 'Unknown error'));
+      }
+    } catch (e) {
+      alert('Delete failed: ' + e.message);
+    }
   }
 
   // ── Commit ALL staged characters to a registry at once ──────────────────────
   const [commitAllLoading, setCommitAllLoading] = useState(false);
+  const commitLockRef = useRef(false); // Prevent double-click race condition
 
   // Auto-match registry to the world the user already selected
   // Normalize: strip hyphens/spaces for fuzzy match (book1 ↔ book-1, lalaverse ↔ lala-verse)
@@ -747,11 +1306,15 @@ export default function CharacterGenerator() {
     || registries[0];
 
   async function handleCommitAll() {
+    // Guard against double-click (React setState is async, so use a ref)
+    if (commitLockRef.current) return;
+    commitLockRef.current = true;
+
     const regId = matchedRegistry?.id;
-    if (!regId) return alert('No registry found for this world.');
+    if (!regId) { commitLockRef.current = false; return alert('No registry found for this world.'); }
 
     const pending = batch.filter((r) => r.status === 'generated' && !r._committed);
-    if (!pending.length) return;
+    if (!pending.length) { commitLockRef.current = false; return; }
 
     setCommitAllLoading(true);
     let ok = 0;
@@ -776,6 +1339,7 @@ export default function CharacterGenerator() {
     }
     loadEcosystem();
     setCommitAllLoading(false);
+    commitLockRef.current = false; // Release lock
 
     // Save committed batch to history
     if (ok > 0) {
@@ -855,23 +1419,28 @@ export default function CharacterGenerator() {
           <select
             className="cg-world-select"
             value={worldTarget}
-            onChange={(e) => {
-              if (e.target.value === 'lalaverse') {
-                navigate('/world-studio');
-                return;
-              }
-              setWorldTarget(e.target.value);
-            }}
+            onChange={(e) => setWorldTarget(e.target.value)}
           >
             <option value="book1">Book 1 World</option>
-            <option value="lalaverse">LalaVerse → World Studio</option>
+            <option value="lalaverse">LalaVerse</option>
+            <option value="both">Both Worlds</option>
+          </select>
+          <select
+            className="cg-seed-count-select"
+            value={seedCount}
+            onChange={(e) => setSeedCount(+e.target.value)}
+          >
+            <option value={5}>5 seeds</option>
+            <option value={10}>10 seeds</option>
+            <option value={15}>15 seeds</option>
+            <option value={20}>20 seeds</option>
           </select>
           <button
             className="cg-btn cg-btn-propose"
             onClick={handleProposeSeeds}
             disabled={seedsLoading}
           >
-            {seedsLoading ? '…' : 'Propose 10 Seeds'}
+            {seedsLoading ? '…' : `Propose ${seedCount} Seeds`}
           </button>
         </div>
       </div>
@@ -882,7 +1451,12 @@ export default function CharacterGenerator() {
         {/* Left: ecosystem */}
         <div className="cg-left">
           <div className="cg-panel-title">World Ecosystem</div>
-          <EcosystemPanel ecosystem={ecosystem} loading={ecoLoading} />
+          <WorldBuilderPanel
+            worldTarget={worldTarget === 'both' ? 'lalaverse' : worldTarget}
+            ecosystem={ecosystem}
+            onEcosystemGenerated={loadEcosystem}
+          />
+          <EcosystemPanel ecosystem={ecosystem} loading={ecoLoading} worldTarget={worldTarget} />
         </div>
 
         {/* Right: seeds or staging */}
@@ -930,7 +1504,7 @@ export default function CharacterGenerator() {
               {!seedsLoading && seeds.length === 0 && (
                 <div className="cg-empty-state">
                   <div className="cg-empty-icon">◎</div>
-                  <div>Select a world and click "Propose 10 Seeds" to begin.</div>
+                  <div>Select a world and click "Propose Seeds" to begin.</div>
                 </div>
               )}
 
@@ -947,18 +1521,23 @@ export default function CharacterGenerator() {
                 </div>
               )}
 
-              <div className={`cg-seeds-grid${approvalFlash ? ' cg-flash' : ''}`}>
-                {seeds.map((seed, i) => (
-                  <SeedCard
-                    key={i}
-                    seed={seed}
-                    index={i}
-                    onApprove={handleApproveSeed}
-                    onReject={handleRejectSeed}
-                    onEdit={handleEditSeed}
-                  />
-                ))}
-              </div>
+              <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+                <SortableContext items={seeds.map((_, i) => `seed-${i}`)} strategy={rectSortingStrategy}>
+                  <div className={`cg-seeds-grid${approvalFlash ? ' cg-flash' : ''}`}>
+                    {seeds.map((seed, i) => (
+                      <SortableSeedCard
+                        key={`seed-${i}`}
+                        id={`seed-${i}`}
+                        seed={seed}
+                        index={i}
+                        onApprove={handleApproveSeed}
+                        onReject={handleRejectSeed}
+                        onEdit={handleEditSeed}
+                      />
+                    ))}
+                  </div>
+                </SortableContext>
+              </DndContext>
             </>
           )}
 
@@ -981,11 +1560,18 @@ export default function CharacterGenerator() {
               </div>
 
               {batchLoading && (
-                <div className="cg-loading-state">
-                  <div className="cg-spinner-large" />
-                  <div>Building {approvedCount} characters simultaneously…</div>
-                  <div className="cg-loading-sub">Full profiles generating in parallel.</div>
-                </div>
+                <>
+                  <div className="cg-loading-state">
+                    <div className="cg-spinner-large" />
+                    <div>Building {approvedCount} characters one by one…</div>
+                    <div className="cg-loading-sub">Each character takes ~30 seconds. Please wait.</div>
+                  </div>
+                  <div className="cg-staging-list">
+                    {Array.from({ length: approvedCount }, (_, i) => (
+                      <SkeletonCard key={i} index={i} />
+                    ))}
+                  </div>
+                </>
               )}
 
               {/* Guidance + Batch commit banner */}
@@ -1039,17 +1625,117 @@ export default function CharacterGenerator() {
               )}
 
               <div className="cg-staging-list">
-                {batch.map((result, i) => (
-                  <StagingCard
-                    key={i}
-                    result={result}
-                    checks={stagingChecks[i]}
-                    onCommit={handleCommit}
-                    onDiscard={handleDiscard}
-                    registries={registries}
-                  />
-                ))}
+                {(() => {
+                  const filteredBatch = batch.filter(r => {
+                    if (stagingFilter.text && !r.seed?.name?.toLowerCase().includes(stagingFilter.text.toLowerCase())) return false;
+                    if (stagingFilter.role && r.seed?.role_type !== stagingFilter.role) return false;
+                    if (stagingFilter.status === 'pending' && (r._committed || r.status === 'failed')) return false;
+                    if (stagingFilter.status === 'committed' && !r._committed) return false;
+                    if (stagingFilter.status === 'failed' && r.status !== 'failed') return false;
+                    return true;
+                  });
+
+                  return (
+                    <>
+                      {/* Filter bar */}
+                      {batch.length > 2 && (
+                        <div className="cg-staging-filter-bar">
+                          <input
+                            className="cg-staging-search"
+                            placeholder="Search by name…"
+                            value={stagingFilter.text}
+                            onChange={e => setStagingFilter(f => ({ ...f, text: e.target.value }))}
+                          />
+                          <select
+                            className="cg-staging-filter-select"
+                            value={stagingFilter.role}
+                            onChange={e => setStagingFilter(f => ({ ...f, role: e.target.value }))}
+                          >
+                            <option value="">All Roles</option>
+                            {['pressure', 'mirror', 'support', 'shadow', 'special'].map(r => (
+                              <option key={r} value={r}>{r}</option>
+                            ))}
+                          </select>
+                          <select
+                            className="cg-staging-filter-select"
+                            value={stagingFilter.status}
+                            onChange={e => setStagingFilter(f => ({ ...f, status: e.target.value }))}
+                          >
+                            <option value="">All Status</option>
+                            <option value="pending">Pending</option>
+                            <option value="committed">Committed</option>
+                            <option value="failed">Failed</option>
+                          </select>
+                        </div>
+                      )}
+
+                      {/* Staging tools bar */}
+                      {batch.filter(r => r.status === 'generated').length > 0 && (
+                        <div className="cg-staging-tools-bar">
+                          <button className="cg-btn cg-btn-tool" onClick={() => exportBatchAsJSON(batch)}>
+                            ↓ Export JSON
+                          </button>
+                          {batch.filter(r => r.status === 'generated' && r.profile).length >= 2 && (
+                            <button className="cg-btn cg-btn-tool" onClick={() => setShowComparison(true)}>
+                              ⇆ Compare
+                            </button>
+                          )}
+                          {trash.length > 0 && (
+                            <button
+                              className={`cg-btn cg-btn-tool cg-btn-trash${showTrash ? ' cg-btn-trash-active' : ''}`}
+                              onClick={() => setShowTrash(t => !t)}
+                            >
+                              🗑 Trash ({trash.length})
+                            </button>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Trash panel */}
+                      {showTrash && trash.length > 0 && (
+                        <div className="cg-trash-panel">
+                          <div className="cg-trash-header">Discarded Characters</div>
+                          {trash.map((r, i) => (
+                            <div key={i} className="cg-trash-item">
+                              <span className="cg-trash-name">{r.seed?.name || 'Unknown'}</span>
+                              <span className="cg-trash-role" style={{ color: ROLE_COLORS[r.seed?.role_type] }}>
+                                {ROLE_ICONS[r.seed?.role_type]} {r.seed?.role_type}
+                              </span>
+                              <button className="cg-btn cg-btn-restore" onClick={() => handleRestoreFromTrash(r)}>
+                                ↩ Restore
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+
+                      {/* Character cards */}
+                      {filteredBatch.map((result, i) => (
+                        <StagingCard
+                          key={i}
+                          result={result}
+                          checks={stagingChecks[batch.indexOf(result)]}
+                          onCommit={handleCommit}
+                          onDiscard={handleDiscard}
+                          onDelete={handleDeleteCommitted}
+                          onRegenerate={handleRegenerate}
+                          onUpdateProfile={handleUpdateProfile}
+                          onRewriteField={handleRewriteField}
+                          registries={registries}
+                        />
+                      ))}
+
+                      {/* Relationship Web */}
+                      <RelationshipWebPreview batch={batch} />
+                    </>
+                  );
+                })()}
               </div>
+
+              {/* Comparison modal */}
+              {showComparison && (
+                <ComparisonModal batch={batch} onClose={() => setShowComparison(false)} />
+              )}
             </>
           )}
 

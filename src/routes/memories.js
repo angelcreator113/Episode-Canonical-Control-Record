@@ -47,6 +47,8 @@ try {
 
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
+// Ensure dotenv is loaded before creating the client (PM2 may not pass env vars)
+require('dotenv').config({ override: false });
 const anthropic = new Anthropic();
 
 // ── Memory extraction prompt ───────────────────────────────────────────────
@@ -5957,6 +5959,127 @@ No preamble, no markdown.`,
 // STORY ENGINE — 50-Story Arc System
 // ═══════════════════════════════════════════════════════════════════════════════
 
+// ─── GET /story-engine-characters ─────────────────────────────────────────────
+// Returns all accepted/finalized registry characters grouped by world (book_tag)
+// so the Story Engine UI can dynamically populate its character selector.
+router.get('/story-engine-characters', optionalAuth, async (req, res) => {
+  try {
+    const { Op } = require('sequelize');
+    const { CharacterRegistry, RegistryCharacter } = require('../models');
+
+    const characters = await RegistryCharacter.findAll({
+      where: {
+        status: { [Op.in]: ['accepted', 'finalized'] },
+      },
+      include: [{
+        model: CharacterRegistry,
+        as: 'registry',
+        attributes: ['id', 'title', 'book_tag'],
+      }],
+      attributes: [
+        'id', 'character_key', 'display_name', 'icon', 'role_type',
+        'core_desire', 'core_fear', 'core_wound', 'description',
+        'career_status', 'portrait_url',
+      ],
+      order: [['sort_order', 'ASC'], ['display_name', 'ASC']],
+    });
+
+    // Group by world (book_tag)
+    const byWorld = {};
+    const seen = new Set(); // deduplicate by character_key
+    for (const char of characters) {
+      const world = char.registry?.book_tag || 'unknown';
+      // Skip duplicates (same character_key in same world)
+      const dedupeKey = `${world}:${char.character_key}`;
+      if (seen.has(dedupeKey)) continue;
+      seen.add(dedupeKey);
+
+      if (!byWorld[world]) byWorld[world] = [];
+      byWorld[world].push({
+        id: char.id,
+        character_key: char.character_key,
+        display_name: char.display_name,
+        icon: char.icon || '◈',
+        role_type: char.role_type,
+        world,
+        portrait_url: char.portrait_url || null,
+        has_dna: !!CHARACTER_DNA[char.character_key],
+      });
+    }
+
+    return res.json({
+      success: true,
+      worlds: byWorld,
+      total: characters.length,
+    });
+  } catch (err) {
+    console.error('[story-engine-characters] error:', err?.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ─── POST /story-engine-add-character ─────────────────────────────────────────
+// Add a new character introduced in a story to the character registry.
+router.post('/story-engine-add-character', optionalAuth, async (req, res) => {
+  try {
+    const { CharacterRegistry, RegistryCharacter } = require('../models');
+    const { character_name, character_role, world, story_number, story_title } = req.body;
+
+    if (!character_name) {
+      return res.status(400).json({ error: 'character_name required' });
+    }
+
+    // Find the right registry based on world
+    const bookTag = world || 'book-1';
+    let registry = await CharacterRegistry.findOne({ where: { book_tag: bookTag } });
+    if (!registry) {
+      // Fallback to first registry
+      registry = await CharacterRegistry.findOne({ order: [['created_at', 'ASC']] });
+    }
+    if (!registry) {
+      return res.status(404).json({ error: 'No registry found' });
+    }
+
+    // Generate a character_key from the name
+    const charKey = character_name.toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+    // Check if already exists
+    const existing = await RegistryCharacter.findOne({
+      where: { registry_id: registry.id, character_key: charKey },
+    });
+    if (existing) {
+      return res.json({ success: true, character: existing, already_existed: true });
+    }
+
+    const newChar = await RegistryCharacter.create({
+      registry_id: registry.id,
+      character_key: charKey,
+      display_name: character_name,
+      role_type: mapRoleType(character_role),
+      status: 'draft',
+      description: `Introduced in Story ${story_number}: "${story_title}". Role: ${character_role || 'unknown'}.`,
+      icon: '◈',
+    });
+
+    return res.json({ success: true, character: newChar, already_existed: false });
+  } catch (err) {
+    console.error('[story-engine-add-character] error:', err?.message);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Helper: map free-text role description to valid role_type enum
+function mapRoleType(role) {
+  if (!role) return 'support';
+  const r = role.toLowerCase();
+  if (r.includes('protagonist') || r.includes('main') || r.includes('lead')) return 'protagonist';
+  if (r.includes('pressure') || r.includes('antagonist') || r.includes('rival')) return 'pressure';
+  if (r.includes('mirror') || r.includes('parallel') || r.includes('reflection')) return 'mirror';
+  if (r.includes('shadow') || r.includes('dark') || r.includes('hidden')) return 'shadow';
+  if (r.includes('special') || r.includes('unique') || r.includes('mystical')) return 'special';
+  return 'support';
+}
+
 // ─── Character DNA — drives obstacle and task generation ──────────────────────
 const CHARACTER_DNA = {
   justawoman: {
@@ -6087,8 +6210,13 @@ const SE_DB_KEY_MAP = {
 
 // ─── Load rich character profile from DB ──────────────────────────────────────
 async function loadCharacterProfile(characterKey) {
-  const dbKeys = SE_DB_KEY_MAP[characterKey];
-  if (!dbKeys?.length) return null;
+  // First try the explicit SE_DB_KEY_MAP for legacy characters
+  let dbKeys = SE_DB_KEY_MAP[characterKey];
+
+  // If not in the map, try using the characterKey directly as a DB key
+  if (!dbKeys?.length) {
+    dbKeys = [characterKey];
+  }
 
   try {
     const rows = await RegistryCharacter.findAll({
@@ -6307,9 +6435,7 @@ const seTaskArcCache = new Map();
 // Returns cached task arc if available; no Claude call.
 router.get('/story-engine-tasks/:characterKey', optionalAuth, async (req, res) => {
   const { characterKey } = req.params;
-  if (!CHARACTER_DNA[characterKey]) {
-    return res.status(400).json({ error: `Unknown character: ${characterKey}` });
-  }
+  // Accept any character key — hardcoded DNA or dynamic DB character
   if (seTaskArcCache.has(characterKey)) {
     return res.json({ cached: true, ...seTaskArcCache.get(characterKey) });
   }
@@ -6325,9 +6451,52 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
     return res.status(400).json({ error: 'characterKey required' });
   }
 
-  const dna = CHARACTER_DNA[characterKey];
+  // Try hardcoded DNA first, then build from DB
+  let dna = CHARACTER_DNA[characterKey];
+  let dynamicChar = false;
+
   if (!dna) {
-    return res.status(400).json({ error: `No character DNA found for ${characterKey}` });
+    // Dynamic character — build DNA from the DB profile
+    const dbProfile = await loadCharacterProfile(characterKey);
+    if (!dbProfile) {
+      return res.status(400).json({ error: `No character DNA or DB profile found for ${characterKey}` });
+    }
+
+    // Fetch the RegistryCharacter row for basic fields
+    const { Op } = require('sequelize');
+    const { RegistryCharacter } = require('../models');
+    const charRow = await RegistryCharacter.findOne({
+      where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+      order: [['updated_at', 'DESC']],
+    });
+
+    if (!charRow) {
+      return res.status(400).json({ error: `No accepted/finalized character found for ${characterKey}` });
+    }
+
+    const plain = charRow.get({ plain: true });
+    const career = plain.career_status || {};
+
+    dna = {
+      display_name: plain.display_name,
+      role_type: plain.role_type || 'support',
+      job: career.current || plain.description?.slice(0, 200) || 'To be developed across stories.',
+      desire_line: plain.core_desire || 'To be developed.',
+      fear_line: plain.core_fear || 'To be developed.',
+      wound: plain.core_wound || 'To be developed.',
+      strengths: plain.personality_matrix?.strengths || (plain.signature_trait ? [plain.signature_trait] : ['Resilience', 'Adaptability']),
+      job_antagonist: 'To be developed across stories.',
+      personal_antagonist: 'To be developed across stories.',
+      recurring_object: 'To be developed across stories.',
+      world: 'dynamic',
+      domains: {
+        career: career.current || 'To be developed across stories.',
+        romantic: 'To be developed across stories.',
+        family: 'To be developed across stories.',
+        friends: 'To be developed across stories.',
+      },
+    };
+    dynamicChar = true;
   }
 
   // Return cached arc unless regeneration is forced
@@ -6336,11 +6505,13 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
   }
 
   try {
-    // Load rich profile from DB
-    const dbProfile = await loadCharacterProfile(characterKey);
+    // Load rich profile from DB (for both hardcoded and dynamic characters)
+    const dbProfile = dynamicChar ? await loadCharacterProfile(characterKey) : await loadCharacterProfile(characterKey);
     const profileSection = dbProfile
-      ? `\n\nCHARACTER PROFILE FROM REGISTRY (use this to enrich every story brief — this is who she really is):\n${dbProfile}`
+      ? `\n\nCHARACTER PROFILE FROM REGISTRY (use this to enrich every story brief — this is who they really are):\n${dbProfile}`
       : '';
+
+    const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
     const systemPrompt = `You are building a 50-story arc for ${dna.display_name}.
 
@@ -6349,7 +6520,7 @@ CHARACTER DNA:
 - Desire line: ${dna.desire_line}
 - Fear line: ${dna.fear_line}
 - Wound: ${dna.wound}
-- Strengths: ${dna.strengths.join(', ')}
+- Strengths: ${strengthsList}
 - Job antagonist: ${dna.job_antagonist}
 - Personal antagonist: ${dna.personal_antagonist}
 - Recurring object: ${dna.recurring_object}
@@ -6459,9 +6630,40 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     return res.status(400).json({ error: 'characterKey, storyNumber, and taskBrief required' });
   }
 
-  const dna = CHARACTER_DNA[characterKey];
+  // Try hardcoded DNA first, then build from DB (same logic as generate-story-tasks)
+  let dna = CHARACTER_DNA[characterKey];
+
   if (!dna) {
-    return res.status(400).json({ error: `No character DNA for ${characterKey}` });
+    const { Op } = require('sequelize');
+    const { RegistryCharacter } = require('../models');
+    const charRow = await RegistryCharacter.findOne({
+      where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+      order: [['updated_at', 'DESC']],
+    });
+    if (!charRow) {
+      return res.status(400).json({ error: `No character DNA or DB profile for ${characterKey}` });
+    }
+    const plain = charRow.get({ plain: true });
+    const career = plain.career_status || {};
+    dna = {
+      display_name: plain.display_name,
+      role_type: plain.role_type || 'support',
+      job: career.current || plain.description?.slice(0, 200) || 'To be developed.',
+      desire_line: plain.core_desire || 'To be developed.',
+      fear_line: plain.core_fear || 'To be developed.',
+      wound: plain.core_wound || 'To be developed.',
+      strengths: plain.personality_matrix?.strengths || (plain.signature_trait ? [plain.signature_trait] : ['Resilience', 'Adaptability']),
+      job_antagonist: 'To be developed.',
+      personal_antagonist: 'To be developed.',
+      recurring_object: 'To be developed.',
+      world: 'dynamic',
+      domains: {
+        career: career.current || 'To be developed.',
+        romantic: 'To be developed.',
+        family: 'To be developed.',
+        friends: 'To be developed.',
+      },
+    };
   }
 
   const fallback = () => res.json({
@@ -6478,8 +6680,10 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     // Load rich profile from DB
     const dbProfile = await loadCharacterProfile(characterKey);
     const profileSection = dbProfile
-      ? `\n\nCHARACTER PROFILE FROM REGISTRY (ground the story in these details — this is who she really is):\n${dbProfile}`
+      ? `\n\nCHARACTER PROFILE FROM REGISTRY (ground the story in these details — this is who they really are):\n${dbProfile}`
       : '';
+
+    const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
     const systemPrompt = `You are writing Story ${storyNumber} of 50 in ${dna.display_name}'s arc.
 
@@ -6489,7 +6693,7 @@ Job: ${dna.job}
 Desire line: ${dna.desire_line}
 Fear line: ${dna.fear_line}
 Wound: ${dna.wound}
-Strengths: ${dna.strengths.join(', ')}
+Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
 Recurring object: ${dna.recurring_object}${profileSection}

@@ -11,6 +11,8 @@
  *   PUT    /world/characters/:id         — update character
  *   POST   /world/characters/:id/activate — set status = active
  *   POST   /world/characters/:id/archive  — set status = archived
+ *   DELETE /world/characters/:id         — delete character + registry + relationships
+ *   POST   /world/seed-relationships     — seed relationship candidates for all active chars
  *   GET    /world/batches                — list generation batches
  *
  * Intimate Scene routes:
@@ -41,7 +43,7 @@ const models = require('../models');
 const sequelize = models.sequelize;
 const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
-async function claude(system, user, maxTokens = 2000) {
+async function claude(system, user, maxTokens = 4000) {
   try {
     const Anthropic = require('@anthropic-ai/sdk');
     const client    = new Anthropic();
@@ -51,6 +53,9 @@ async function claude(system, user, maxTokens = 2000) {
       system,
       messages: [{ role: 'user', content: user }],
     });
+    if (msg.stop_reason === 'max_tokens') {
+      console.warn(`Claude response truncated (max_tokens=${maxTokens}). Consider increasing limit.`);
+    }
     return msg.content[0]?.text || '';
   } catch (e) {
     console.error('Claude error:', e.message);
@@ -61,6 +66,12 @@ async function claude(system, user, maxTokens = 2000) {
 function parseJSON(raw) {
   try { return JSON.parse((raw || '').replace(/```json|```/g, '').trim()); }
   catch (_) { return null; }
+}
+
+function safeJson(val, fallback = []) {
+  if (!val) return fallback;
+  if (typeof val === 'object') return val;
+  try { return JSON.parse(val); } catch { return fallback; }
 }
 
 // ── Registry sync helpers ──────────────────────────────────────────────────
@@ -76,6 +87,76 @@ const ROLE_MAP = {
   recurring:       'special',
 };
 
+// Map World Studio character_type → relationship_type for character_relationships
+const REL_TYPE_MAP = {
+  love_interest:   'Love Interest',
+  industry_peer:   'Industry Peer',
+  mentor:          'Mentor',
+  antagonist:      'Antagonist',
+  rival:           'Rival',
+  collaborator:    'Collaborator',
+  one_night_stand: 'One Night Stand',
+  recurring:       'Recurring',
+};
+
+// Map World Studio tension_type → character_relationships tension_state
+const TENSION_MAP = {
+  romantic:     'simmering',
+  professional: 'calm',
+  creative:     'simmering',
+  power:        'volatile',
+  unspoken:     'simmering',
+};
+
+// Map World Studio character_type → connection_mode
+const CONNECTION_MODE_MAP = {
+  love_interest:   'IRL',
+  industry_peer:   'Professional',
+  mentor:          'Professional',
+  antagonist:      'IRL',
+  rival:           'Professional',
+  collaborator:    'Professional',
+  one_night_stand: 'Passing',
+  recurring:       'IRL',
+};
+
+// Natural inter-character pairing rules: [typeA, typeB, rel_type, conn_mode, tension, romantic?]
+const INTER_CHAR_PAIRINGS = [
+  ['love_interest', 'rival',           'Romantic Rivalry',    'IRL',          'volatile',   true],
+  ['love_interest', 'love_interest',   'Love Triangle',       'IRL',          'simmering',  true],
+  ['love_interest', 'one_night_stand', 'Complicated History', 'IRL',          'simmering',  true],
+  ['industry_peer', 'collaborator',    'Professional Ally',   'Professional', 'calm',       false],
+  ['industry_peer', 'industry_peer',   'Industry Connection', 'Professional', 'calm',       false],
+  ['industry_peer', 'rival',           'Professional Rival',  'Professional', 'simmering',  false],
+  ['mentor',        'antagonist',      'Power Struggle',      'Professional', 'volatile',   false],
+  ['mentor',        'collaborator',    'Mentorship',          'Professional', 'calm',       false],
+  ['antagonist',    'rival',           'Dark Alliance',       'IRL',          'simmering',  false],
+  ['collaborator',  'collaborator',    'Creative Partners',   'Professional', 'calm',       false],
+  ['rival',         'rival',           'Mutual Rivalry',      'Professional', 'volatile',   false],
+  ['one_night_stand','rival',          'Unexpected Link',     'IRL',          'simmering',  false],
+];
+
+// Sexuality compatibility for romantic pairings
+function areSexuallyCompatible(a, b) {
+  const sA = (a.sexuality || '').toLowerCase();
+  const sB = (b.sexuality || '').toLowerCase();
+  // If either has no sexuality defined, allow the pairing (data not yet generated)
+  if (!sA || !sB) return true;
+  // Bisexual/pansexual/queer are compatible with anyone
+  const flexA = ['bisexual', 'pansexual', 'queer', 'fluid'].includes(sA);
+  const flexB = ['bisexual', 'pansexual', 'queer', 'fluid'].includes(sB);
+  if (flexA || flexB) return true;
+  // Straight characters: only compatible with opposite orientation markers
+  // Gay/lesbian: only compatible with same orientation markers
+  // Since we don't track gender separately, use orientation labels:
+  // straight + straight = compatible (opposite genders assumed)
+  if (sA === 'straight' && sB === 'straight') return true;
+  // gay + gay or lesbian + lesbian = compatible
+  if (sA === sB && ['gay', 'lesbian'].includes(sA)) return true;
+  // All other combos (straight + gay, etc.) = not compatible
+  return false;
+}
+
 /**
  * Find (or create) the LalaVerse registry so generated characters
  * can be inserted into registry_characters with a valid registry_id.
@@ -88,7 +169,7 @@ async function findOrCreateLalaVerseRegistry(req) {
 
   const regId = uuidv4();
   await sequelize.query(
-    `INSERT INTO character_registries (id, name, book_tag, description, created_at, updated_at)
+    `INSERT INTO character_registries (id, title, book_tag, description, created_at, updated_at)
      VALUES (:id, 'LalaVerse', 'lalaverse', 'Auto-created by World Studio', NOW(), NOW())`,
     { replacements: { id: regId }, type: sequelize.QueryTypes.INSERT }
   );
@@ -178,6 +259,7 @@ async function syncToRegistry(req, worldCharId, c, registryId) {
         extra_fields: JSON.stringify({
           source: 'world_studio',
           world_character_id: worldCharId,
+          sexuality: c.sexuality || null,
           intimate_eligible: c.intimate_eligible || false,
           intimate_style: c.intimate_style || null,
           intimate_dynamic: c.intimate_dynamic || null,
@@ -196,7 +278,181 @@ async function syncToRegistry(req, worldCharId, c, registryId) {
     { replacements: { rcId, wcId: worldCharId }, type: sequelize.QueryTypes.UPDATE }
   );
 
+  // Auto-seed a relationship candidate linking this character to Lala
+  await syncRelationships(rcId, c, registryId);
+
   return rcId;
+}
+
+/**
+ * After creating a registry_characters entry, auto-seed a character_relationships
+ * row linking the new character to Lala (the protagonist) as an unconfirmed candidate.
+ * This feeds the Relationship Engine → Candidates tab.
+ */
+async function syncRelationships(rcId, c, registryId) {
+  try {
+    // Find Lala (the protagonist) in the same registry
+    // Check role_type first, then fall back to display_name
+    let [lala] = await sequelize.query(
+      `SELECT id FROM registry_characters
+       WHERE registry_id = :registry_id AND role_type = 'protagonist' AND deleted_at IS NULL
+       LIMIT 1`,
+      { replacements: { registry_id: registryId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (!lala) {
+      [lala] = await sequelize.query(
+        `SELECT id FROM registry_characters
+         WHERE registry_id = :registry_id AND LOWER(display_name) = 'lala' AND deleted_at IS NULL
+         LIMIT 1`,
+        { replacements: { registry_id: registryId }, type: sequelize.QueryTypes.SELECT }
+      );
+    }
+    if (!lala) {
+      console.warn('syncRelationships: No protagonist found in registry', registryId);
+      return null;
+    }
+    // Don't create a self-relationship
+    if (lala.id === rcId) return null;
+
+    // Check for existing relationship between these two
+    const [existing] = await sequelize.query(
+      `SELECT id FROM character_relationships
+       WHERE (character_id_a = :a AND character_id_b = :b)
+          OR (character_id_a = :b AND character_id_b = :a)
+       LIMIT 1`,
+      { replacements: { a: lala.id, b: rcId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (existing) return existing.id;
+
+    const relId = uuidv4();
+    await sequelize.query(
+      `INSERT INTO character_relationships
+         (id, character_id_a, character_id_b, relationship_type,
+          connection_mode, lala_connection, status, situation,
+          tension_state, pain_point_category, notes,
+          confirmed, created_at, updated_at)
+       VALUES
+         (:id, :char_a, :char_b, :rel_type,
+          :conn_mode, 'knows_lala', 'Active', :situation,
+          :tension_state, :pain_cat, :notes,
+          false, NOW(), NOW())`,
+      {
+        replacements: {
+          id: relId,
+          char_a: lala.id,
+          char_b: rcId,
+          rel_type: REL_TYPE_MAP[c.character_type] || 'Connection',
+          conn_mode: CONNECTION_MODE_MAP[c.character_type] || 'IRL',
+          situation: c.dynamic || null,
+          tension_state: TENSION_MAP[c.tension_type] || 'calm',
+          pain_cat: null,
+          notes: c.what_they_want_from_lala || null,
+        },
+        type: sequelize.QueryTypes.INSERT,
+      }
+    );
+    console.log(`syncRelationships: Created candidate relationship ${relId} (Lala ↔ ${c.name})`);
+    return relId;
+  } catch (err) {
+    console.error('syncRelationships error (non-fatal):', err.message);
+    return null;
+  }
+}
+
+/**
+ * Seed inter-character relationships (not just Lala-centric).
+ * Takes an array of { registry_character_id, name, character_type, tension_type, dynamic }
+ * and creates candidate relationships between natural pairings.
+ *
+ * @param {Array} characters - world chars with registry_character_id set
+ * @param {string} registryId - the registry these characters belong to
+ * @returns {number} count of relationships created
+ */
+async function seedInterCharacterRelationships(characters, registryId) {
+  let created = 0;
+  const pairs = [];
+
+  // Build all possible pairs from INTER_CHAR_PAIRINGS rules
+  for (let i = 0; i < characters.length; i++) {
+    for (let j = i + 1; j < characters.length; j++) {
+      const a = characters[i];
+      const b = characters[j];
+      if (!a.registry_character_id || !b.registry_character_id) continue;
+
+      // Try to find a matching pairing rule (check both orderings)
+      const rule = INTER_CHAR_PAIRINGS.find(
+        ([tA, tB]) =>
+          (a.character_type === tA && b.character_type === tB) ||
+          (a.character_type === tB && b.character_type === tA)
+      );
+      if (rule) {
+        // For romantic pairings, check sexuality compatibility
+        const isRomantic = rule[5];
+        if (isRomantic && !areSexuallyCompatible(a, b)) continue;
+        pairs.push({ a, b, rule });
+      }
+    }
+  }
+
+  // Limit to avoid flooding: max 5 inter-char relationships per batch
+  // Prioritize volatile/simmering tension over calm
+  pairs.sort((x, y) => {
+    const tensionRank = { volatile: 0, simmering: 1, calm: 2 };
+    return (tensionRank[x.rule[4]] ?? 2) - (tensionRank[y.rule[4]] ?? 2);
+  });
+  const selected = pairs.slice(0, 5);
+
+  for (const { a, b, rule } of selected) {
+    const [, , relType, connMode, tension] = rule;
+    try {
+      // Check if relationship already exists between these two
+      const [existing] = await sequelize.query(
+        `SELECT id FROM character_relationships
+         WHERE (character_id_a = :idA AND character_id_b = :idB)
+            OR (character_id_a = :idB AND character_id_b = :idA)
+         LIMIT 1`,
+        { replacements: { idA: a.registry_character_id, idB: b.registry_character_id }, type: sequelize.QueryTypes.SELECT }
+      );
+      if (existing) continue;
+
+      const relId = uuidv4();
+      // Combine both characters' dynamics for the situation note
+      const situation = [a.dynamic, b.dynamic].filter(Boolean).join(' / ') || null;
+      const notes = `Inter-character: ${a.name} (${a.character_type}) ↔ ${b.name} (${b.character_type})`;
+
+      await sequelize.query(
+        `INSERT INTO character_relationships
+           (id, character_id_a, character_id_b, relationship_type,
+            connection_mode, lala_connection, status, situation,
+            tension_state, pain_point_category, notes,
+            confirmed, created_at, updated_at)
+         VALUES
+           (:id, :char_a, :char_b, :rel_type,
+            :conn_mode, 'independent', 'Active', :situation,
+            :tension_state, :pain_cat, :notes,
+            false, NOW(), NOW())`,
+        {
+          replacements: {
+            id: relId,
+            char_a: a.registry_character_id,
+            char_b: b.registry_character_id,
+            rel_type: relType,
+            conn_mode: connMode,
+            situation,
+            tension_state: tension,
+            pain_cat: null,
+            notes,
+          },
+          type: sequelize.QueryTypes.INSERT,
+        }
+      );
+      console.log(`seedInterChar: Created ${relType} candidate ${relId} (${a.name} ↔ ${b.name})`);
+      created++;
+    } catch (err) {
+      console.error(`seedInterChar error (${a.name} ↔ ${b.name}):`, err.message);
+    }
+  }
+  return created;
 }
 
 // Variable scene length logic based on relationship depth and type
@@ -281,6 +537,7 @@ Return JSON only:
       "occupation": "specific job/role",
       "world_location": "where they exist in LalaVerse",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
+      "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
       "aesthetic": "how they look, dress, move — specific and visual",
       "signature": "the one thing about them that is unforgettable",
@@ -295,12 +552,19 @@ Return JSON only:
       "what_lala_feels": "what Lala physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
       "arc_role": "how this character changes Lala's trajectory",
       "exit_reason": "how or why they leave her world, or null if they stay",
-      "career_echo_connection": true|false
+      "career_echo_connection": true|false,
+      "attracted_to": "who they actually pursue — specific, not a label (e.g. 'men with authority she can dismantle, women who are further ahead than her')",
+      "how_they_love": "their connection pattern (e.g. 'avoidant until she isn't, then fully in')",
+      "desire_they_wont_admit": "the thing that complicates the above (dimmed, private)",
+      "family_layer": "real_world | lalaverse | series_2",
+      "origin_story": "where they came from before Lala's world",
+      "public_persona": "how the world sees them",
+      "private_reality": "what only close people know"
     }
   ],
   "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
 }`,
-      3000
+      10000
     );
 
     const parsed = parseJSON(result);
@@ -324,25 +588,32 @@ Return JSON only:
       await sequelize.query(
         `INSERT INTO world_characters
            (id, batch_id, name, age_range, occupation, world_location, character_type,
-            intimate_eligible, aesthetic, signature,
+            sexuality, intimate_eligible, aesthetic, signature,
             surface_want, real_want, what_they_want_from_lala,
             how_they_meet, dynamic, tension_type,
             intimate_style, intimate_dynamic, what_lala_feels,
             arc_role, exit_reason, career_echo_connection,
+            attracted_to, how_they_love, desire_they_wont_admit,
+            relationship_graph, family_layer, origin_story,
+            public_persona, private_reality,
             status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
-            :intimate_eligible, :aesthetic, :signature,
+            :sexuality, :intimate_eligible, :aesthetic, :signature,
             :surface_want, :real_want, :what_from_lala,
             :how_meet, :dynamic, :tension_type,
             :intimate_style, :intimate_dynamic, :what_lala_feels,
             :arc_role, :exit_reason, :career_echo,
+            :attracted_to, :how_they_love, :desire_they_wont_admit,
+            :relationship_graph, :family_layer, :origin_story,
+            :public_persona, :private_reality,
             'draft', 'Stable', NOW(), NOW())`,
         {
           replacements: {
             id: charId, batch_id: batchId,
             name: c.name, age_range: c.age_range || null, occupation: c.occupation || null,
             world_location: c.world_location || null, char_type: c.character_type,
+            sexuality: c.sexuality || null,
             intimate_eligible: c.intimate_eligible || false,
             aesthetic: c.aesthetic || null, signature: c.signature || null,
             surface_want: c.surface_want || null, real_want: c.real_want || null,
@@ -353,6 +624,14 @@ Return JSON only:
             what_lala_feels: c.what_lala_feels || null,
             arc_role: c.arc_role || null, exit_reason: c.exit_reason || null,
             career_echo: c.career_echo_connection || false,
+            attracted_to: c.attracted_to || null,
+            how_they_love: c.how_they_love || null,
+            desire_they_wont_admit: c.desire_they_wont_admit || null,
+            relationship_graph: JSON.stringify(c.relationship_graph || []),
+            family_layer: c.family_layer || null,
+            origin_story: c.origin_story || null,
+            public_persona: c.public_persona || null,
+            private_reality: c.private_reality || null,
           },
           type: sequelize.QueryTypes.INSERT,
         }
@@ -363,7 +642,11 @@ Return JSON only:
       inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
-    res.status(201).json({ characters: inserted, batch_id: batchId, count: inserted.length, generation_notes: parsed.generation_notes });
+    // Seed inter-character relationships (not just Lala-centric)
+    const interCount = await seedInterCharacterRelationships(inserted, lalaRegistryId);
+    console.log(`generate-ecosystem: Seeded ${interCount} inter-character relationship(s)`);
+
+    res.status(201).json({ characters: inserted, batch_id: batchId, count: inserted.length, inter_relationships: interCount, generation_notes: parsed.generation_notes });
   } catch (err) {
     console.error('generate-ecosystem error:', err);
     res.status(500).json({ error: err.message });
@@ -414,9 +697,12 @@ router.get('/world/characters/:id', optionalAuth, async (req, res) => {
 // PUT /world/characters/:id
 router.put('/world/characters/:id', optionalAuth, async (req, res) => {
   try {
-    const fields = ['name','age_range','occupation','aesthetic','signature','surface_want','real_want',
+    const fields = ['name','age_range','occupation','world_location','sexuality','aesthetic','signature','surface_want','real_want',
       'what_they_want_from_lala','how_they_meet','dynamic','tension_type','intimate_style',
-      'intimate_dynamic','what_lala_feels','arc_role','exit_reason','current_tension','status'];
+      'intimate_dynamic','what_lala_feels','arc_role','exit_reason','current_tension','status',
+      'attracted_to','how_they_love','desire_they_wont_admit','relationship_graph',
+      'family_layer','origin_story','public_persona','private_reality',
+      'gender','ethnicity','species','is_alive','death_date','death_cause','death_impact'];
     const updates = [];
     const rep = { id: req.params.id };
     fields.forEach(f => {
@@ -458,6 +744,82 @@ router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// DELETE /world/characters/:id
+router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
+  try {
+    // Remove linked relationship rows (via registry_characters)
+    const [rc] = await Q(req,
+      `SELECT id FROM registry_characters WHERE world_character_id = :id`,
+      { replacements: { id: req.params.id } }
+    ).catch(() => []);
+    if (rc) {
+      await sequelize.query(
+        `DELETE FROM character_relationships WHERE character_id_a = :rcId OR character_id_b = :rcId`,
+        { replacements: { rcId: rc.id }, type: sequelize.QueryTypes.DELETE }
+      ).catch(() => {});
+    }
+    // Remove linked registry character
+    await sequelize.query(
+      `DELETE FROM registry_characters WHERE world_character_id = :id`,
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
+    ).catch(() => {});
+    // Remove linked scenes
+    await sequelize.query(
+      `DELETE FROM intimate_scenes WHERE character_a_id = :id OR character_b_id = :id`,
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
+    ).catch(() => {});
+    // Remove extended relationships
+    await sequelize.query(
+      `DELETE FROM character_relationships_extended WHERE character_id = :id OR related_character_id = :id`,
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
+    ).catch(() => {});
+    // Delete the character
+    await sequelize.query(
+      `DELETE FROM world_characters WHERE id = :id`,
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
+    );
+    res.json({ deleted: true });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /world/seed-relationships — manually seed relationship candidates for all active world characters
+router.post('/world/seed-relationships', optionalAuth, async (req, res) => {
+  try {
+    const registryId = await findOrCreateLalaVerseRegistry(req);
+
+    // Get all active world characters that have a registry_character_id
+    const worldChars = await Q(req, `
+      SELECT wc.id, wc.name, wc.character_type, wc.tension_type,
+             wc.dynamic, wc.what_they_want_from_lala,
+             wc.registry_character_id, wc.sexuality
+      FROM world_characters wc
+      WHERE wc.status = 'active'
+        AND wc.registry_character_id IS NOT NULL
+      ORDER BY wc.name
+    `);
+
+    // 1) Lala-centric relationships (existing behaviour)
+    let lalaSeeded = 0;
+    for (const wc of worldChars) {
+      const relId = await syncRelationships(wc.registry_character_id, wc, registryId);
+      if (relId) lalaSeeded++;
+    }
+
+    // 2) Inter-character relationships (new)
+    const interSeeded = await seedInterCharacterRelationships(worldChars, registryId);
+
+    res.json({
+      lala_seeded: lalaSeeded,
+      inter_seeded: interSeeded,
+      total_active: worldChars.length,
+      message: `Seeded ${lalaSeeded} Lala relationship(s) + ${interSeeded} inter-character relationship(s) from ${worldChars.length} active characters`,
+    });
+  } catch (err) {
+    console.error('seed-relationships error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /world/batches
 router.get('/world/batches', optionalAuth, async (req, res) => {
   try {
@@ -473,24 +835,26 @@ router.get('/world/batches', optionalAuth, async (req, res) => {
 // GET /world/tension-check — scan all active world character relationships for scene triggers
 router.get('/world/tension-check', optionalAuth, async (req, res) => {
   try {
-    // Characters eligible for intimate scenes with non-Stable tension
+    // Characters eligible for intimate scenes with non-calm tension
+    // Join through registry_characters since character_relationships references registry IDs
     const triggered = await Q(req, `
       SELECT wc.*,
              cr.tension_state, cr.situation, cr.relationship_type, cr.connection_mode,
              cr.id AS relationship_id
       FROM world_characters wc
+      JOIN registry_characters rc ON rc.world_character_id = wc.id AND rc.deleted_at IS NULL
       LEFT JOIN character_relationships cr
-        ON (cr.character_id_a::text = wc.id::text OR cr.character_id_b::text = wc.id::text)
+        ON (cr.character_id_a = rc.id OR cr.character_id_b = rc.id)
         AND cr.confirmed = true
-        AND cr.tension_state IN ('Friction Building', 'Unresolved', 'Broken')
+        AND cr.tension_state IN ('simmering', 'volatile', 'fractured')
       WHERE wc.intimate_eligible = true
         AND wc.status = 'active'
         AND cr.id IS NOT NULL
       ORDER BY
         CASE cr.tension_state
-          WHEN 'Unresolved' THEN 1
-          WHEN 'Friction Building' THEN 2
-          WHEN 'Broken' THEN 3
+          WHEN 'volatile' THEN 1
+          WHEN 'simmering' THEN 2
+          WHEN 'fractured' THEN 3
         END
     `).catch(() => []);
 
@@ -917,6 +1281,413 @@ router.post('/world/continuations/:contId/approve', optionalAuth, async (req, re
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PREVIEW FLOW  (generate-ecosystem-preview → select → generate-ecosystem-confirm)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * POST /world/generate-ecosystem-preview
+ * Same Claude prompt as generate-ecosystem BUT does NOT commit to DB.
+ * Returns preview characters so the user can select/deselect before confirming.
+ */
+router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) => {
+  try {
+    const {
+      series_label = 'lalaverse_s1',
+      world_context = {},
+      character_count = 8,
+    } = req.body;
+
+    const {
+      city         = 'a major city',
+      industry     = 'content creation and fashion',
+      career_stage = 'early career — rising but not arrived',
+      era          = 'now',
+      protagonist  = 'Lala',
+    } = world_context;
+
+    // Fetch existing to avoid duplication
+    const existing = await Q(req, `
+      SELECT name, character_type, occupation FROM world_characters
+      WHERE status != 'archived' ORDER BY created_at DESC LIMIT 20
+    `);
+
+    const result = await claude(
+      `You create vivid, complex characters for LalaVerse — a fictional world where Lala, a confident AI fashion game character who became sentient, is building her life and career.
+
+Lala has JustAWoman's entire confidence playbook running invisibly underneath her. She's magnetic, styled, direct. She knows what she wants. She doesn't always know why she wants it.
+
+Create characters who feel like real people — with their own ambitions, contradictions, secrets, and desires. Not props. Not types. People who change Lala's trajectory by existing in her world.
+
+Character types needed:
+- love_interest: someone she could actually fall for. Complex. Not available in a simple way.
+- industry_peer: another creator or brand figure at a similar level. Collaborative energy that hides competitive undercurrent.
+- mentor: someone ahead of her who sees something in her. Their help comes with their own agenda.
+- antagonist: not a villain. Someone whose success or presence makes Lala's path harder without meaning to.
+- one_night_stand: someone she meets once. The encounter means something even if they don't stay.
+- rival: direct competition. They respect each other and can't stand each other.
+- collaborator: someone she creates with. Creative chemistry that bleeds into everything else.
+
+For intimate_eligible characters: write intimate_style, intimate_dynamic, and what_lala_feels with honesty and specificity. These inform how scenes between them are generated. Be real about desire, tension, and what makes physical connection between these specific people feel true to who they are.`,
+
+      `Generate ${character_count} world characters for LalaVerse.
+
+PROTAGONIST: ${protagonist}
+WORLD: ${city}, ${industry} industry
+CAREER STAGE: ${career_stage}
+ERA: ${era}
+
+${existing.length > 0 ? `EXISTING CHARACTERS (don't duplicate):\n${existing.map(e => `- ${e.name} (${e.character_type})`).join('\n')}` : ''}
+
+Include at least: 2 love_interest or one_night_stand, 2 industry_peer, 1 mentor, 1 antagonist or rival, 1 collaborator.
+
+Return JSON only:
+{
+  "characters": [
+    {
+      "name": "full name",
+      "age_range": "e.g. late 20s",
+      "occupation": "specific job/role",
+      "world_location": "where they exist in LalaVerse",
+      "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
+      "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
+      "intimate_eligible": true|false,
+      "aesthetic": "how they look, dress, move — specific and visual",
+      "signature": "the one thing about them that is unforgettable",
+      "surface_want": "what they'd tell you they want",
+      "real_want": "what they'd never admit",
+      "what_they_want_from_lala": "what they're actually seeking from her specifically",
+      "how_they_meet": "the specific scenario — not generic",
+      "dynamic": "the texture of their connection with Lala",
+      "tension_type": "romantic|professional|creative|power|unspoken",
+      "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
+      "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
+      "what_lala_feels": "what Lala physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
+      "arc_role": "how this character changes Lala's trajectory",
+      "exit_reason": "how or why they leave her world, or null if they stay",
+      "career_echo_connection": true|false,
+      "attracted_to": "who they actually pursue — specific, not a label (e.g. 'men with authority she can dismantle, women who are further ahead than her')",
+      "how_they_love": "their connection pattern (e.g. 'avoidant until she isn't, then fully in')",
+      "desire_they_wont_admit": "the thing that complicates the above (dimmed, private)",
+      "family_layer": "real_world | lalaverse | series_2",
+      "origin_story": "where they came from before Lala's world",
+      "public_persona": "how the world sees them",
+      "private_reality": "what only close people know"
+    }
+  ],
+  "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
+}`,
+      10000
+    );
+
+    const parsed = parseJSON(result);
+    if (!parsed?.characters?.length) {
+      return res.status(500).json({ error: 'Preview generation failed — Claude returned no characters' });
+    }
+
+    // Return characters WITHOUT committing to DB
+    res.json({
+      characters: parsed.characters,
+      generation_notes: parsed.generation_notes || '',
+      count: parsed.characters.length,
+    });
+  } catch (err) {
+    console.error('generate-ecosystem-preview error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /world/generate-ecosystem-confirm
+ * Takes the user-selected characters from the preview and commits them to DB + registry.
+ */
+router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) => {
+  try {
+    const {
+      characters = [],
+      generation_notes = '',
+      show_id,
+      series_label = 'lalaverse_s1',
+    } = req.body;
+
+    if (!characters.length) {
+      return res.status(400).json({ error: 'No characters to confirm' });
+    }
+
+    // Create batch record
+    const batchId = uuidv4();
+    await sequelize.query(
+      `INSERT INTO world_character_batches (id, show_id, series_label, world_context, character_count, generation_notes, created_at, updated_at)
+       VALUES (:id, :show_id, :label, :context, :count, :notes, NOW(), NOW())`,
+      {
+        replacements: {
+          id: batchId,
+          show_id: show_id || null,
+          label: series_label,
+          context: JSON.stringify({ source: 'preview_confirm' }),
+          count: characters.length,
+          notes: generation_notes,
+        },
+        type: sequelize.QueryTypes.INSERT,
+      }
+    );
+
+    // Insert each character + sync to registry
+    const lalaRegistryId = await findOrCreateLalaVerseRegistry(req);
+    const inserted = [];
+    for (const c of characters) {
+      const charId = uuidv4();
+      await sequelize.query(
+        `INSERT INTO world_characters
+           (id, batch_id, name, age_range, occupation, world_location, character_type,
+            sexuality, intimate_eligible, aesthetic, signature,
+            surface_want, real_want, what_they_want_from_lala,
+            how_they_meet, dynamic, tension_type,
+            intimate_style, intimate_dynamic, what_lala_feels,
+            arc_role, exit_reason, career_echo_connection,
+            attracted_to, how_they_love, desire_they_wont_admit,
+            relationship_graph, family_layer, origin_story,
+            public_persona, private_reality,
+            status, current_tension, created_at, updated_at)
+         VALUES
+           (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
+            :sexuality, :intimate_eligible, :aesthetic, :signature,
+            :surface_want, :real_want, :what_from_lala,
+            :how_meet, :dynamic, :tension_type,
+            :intimate_style, :intimate_dynamic, :what_lala_feels,
+            :arc_role, :exit_reason, :career_echo,
+            :attracted_to, :how_they_love, :desire_they_wont_admit,
+            :relationship_graph, :family_layer, :origin_story,
+            :public_persona, :private_reality,
+            'draft', 'Stable', NOW(), NOW())`,
+        {
+          replacements: {
+            id: charId, batch_id: batchId,
+            name: c.name, age_range: c.age_range || null, occupation: c.occupation || null,
+            world_location: c.world_location || null, char_type: c.character_type,
+            sexuality: c.sexuality || null,
+            intimate_eligible: c.intimate_eligible || false,
+            aesthetic: c.aesthetic || null, signature: c.signature || null,
+            surface_want: c.surface_want || null, real_want: c.real_want || null,
+            what_from_lala: c.what_they_want_from_lala || null,
+            how_meet: c.how_they_meet || null, dynamic: c.dynamic || null,
+            tension_type: c.tension_type || null,
+            intimate_style: c.intimate_style || null, intimate_dynamic: c.intimate_dynamic || null,
+            what_lala_feels: c.what_lala_feels || null,
+            arc_role: c.arc_role || null, exit_reason: c.exit_reason || null,
+            career_echo: c.career_echo_connection || false,
+            attracted_to: c.attracted_to || null,
+            how_they_love: c.how_they_love || null,
+            desire_they_wont_admit: c.desire_they_wont_admit || null,
+            relationship_graph: JSON.stringify(c.relationship_graph || []),
+            family_layer: c.family_layer || null,
+            origin_story: c.origin_story || null,
+            public_persona: c.public_persona || null,
+            private_reality: c.private_reality || null,
+          },
+          type: sequelize.QueryTypes.INSERT,
+        }
+      );
+
+      // Sync to canonical registry
+      const rcId = await syncToRegistry(req, charId, c, lalaRegistryId);
+      inserted.push({ ...c, id: charId, registry_character_id: rcId });
+    }
+
+    // Seed inter-character relationships (not just Lala-centric)
+    const interCount = await seedInterCharacterRelationships(inserted, lalaRegistryId);
+    console.log(`generate-ecosystem-confirm: Seeded ${interCount} inter-character relationship(s)`);
+
+    res.status(201).json({
+      characters: inserted,
+      batch_id: batchId,
+      count: inserted.length,
+      inter_relationships: interCount,
+      generation_notes,
+    });
+  } catch (err) {
+    console.error('generate-ecosystem-confirm error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RELATIONSHIP GRAPH CRUD  (inline JSONB + extended table)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /world/characters/:id/relationships
+router.get('/world/characters/:id/relationships', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    // Also fetch from extended table
+    let extended = [];
+    try {
+      extended = await Q(req,
+        `SELECT * FROM character_relationships_extended
+         WHERE character_id = :id ORDER BY created_at DESC`,
+        { replacements: { id: req.params.id } }
+      );
+    } catch (_) {}
+
+    res.json({
+      relationship_graph: safeJson(char.relationship_graph),
+      extended,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /world/characters/:id/relationships
+router.post('/world/characters/:id/relationships', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    const {
+      related_character_id, related_character_name, related_character_source,
+      relationship_type, family_role, history_summary, current_status,
+      tension_state, romantic_eligible, knows_about_transfer, series_layer, notes,
+    } = req.body;
+
+    const relId = uuidv4();
+
+    // 1. Write to extended table
+    try {
+      await sequelize.query(
+        `INSERT INTO character_relationships_extended
+         (id, character_id, related_character_id, related_character_name,
+          related_character_source, relationship_type, family_role,
+          history_summary, current_status, tension_state,
+          romantic_eligible, knows_about_transfer, series_layer, notes,
+          created_at, updated_at)
+         VALUES
+         (:id, :cid, :rid, :rname, :rsource, :rtype, :frole,
+          :history, :cstatus, :tension,
+          :romantic, :transfer, :layer, :notes,
+          NOW(), NOW())`,
+        {
+          replacements: {
+            id: relId, cid: req.params.id,
+            rid: related_character_id || null,
+            rname: related_character_name || null,
+            rsource: related_character_source || 'world_characters',
+            rtype: relationship_type || null,
+            frole: family_role || null,
+            history: history_summary || null,
+            cstatus: current_status || 'active',
+            tension: tension_state || 'Stable',
+            romantic: !!romantic_eligible,
+            transfer: !!knows_about_transfer,
+            layer: series_layer || null,
+            notes: notes || null,
+          },
+          type: sequelize.QueryTypes.INSERT,
+        }
+      );
+    } catch (e) { console.error('extended table write failed:', e.message); }
+
+    // 2. Append to JSONB graph on world_characters
+    const graph = safeJson(char.relationship_graph);
+    graph.push({
+      rel_id: relId,
+      character_id: related_character_id || null,
+      character_name: related_character_name || '',
+      relationship_type: relationship_type || '',
+      family_role: family_role || null,
+      history_summary: history_summary || '',
+      current_status: current_status || 'active',
+      knows_about_transfer: !!knows_about_transfer,
+      notes: notes || '',
+    });
+    await sequelize.query(
+      `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
+      { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+    );
+
+    res.json({ relationship: { id: relId }, graph });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /world/characters/:id/relationships/:relId
+router.put('/world/characters/:id/relationships/:relId', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    // Update extended table row
+    const extFields = [
+      'related_character_name', 'relationship_type', 'family_role',
+      'history_summary', 'current_status', 'tension_state',
+      'romantic_eligible', 'knows_about_transfer', 'series_layer', 'notes',
+    ];
+    const updates = [];
+    const rep = { relId: req.params.relId, cid: req.params.id };
+    extFields.forEach(f => {
+      if (req.body[f] !== undefined) { updates.push(`${f} = :${f}`); rep[f] = req.body[f]; }
+    });
+    if (updates.length) {
+      updates.push('updated_at = NOW()');
+      try {
+        await sequelize.query(
+          `UPDATE character_relationships_extended SET ${updates.join(', ')} WHERE id = :relId AND character_id = :cid`,
+          { replacements: rep, type: sequelize.QueryTypes.UPDATE }
+        );
+      } catch (_) {}
+    }
+
+    // Update JSONB graph
+    const graph = safeJson(char.relationship_graph);
+    const idx = graph.findIndex(r => r.rel_id === req.params.relId);
+    if (idx !== -1) {
+      graph[idx] = { ...graph[idx], ...req.body };
+      await sequelize.query(
+        `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
+        { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+      );
+    }
+
+    res.json({ updated: true, graph });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /world/characters/:id/relationships/:relId
+router.delete('/world/characters/:id/relationships/:relId', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    // Remove from extended table
+    try {
+      await sequelize.query(
+        `DELETE FROM character_relationships_extended WHERE id = :relId AND character_id = :cid`,
+        { replacements: { relId: req.params.relId, cid: req.params.id }, type: sequelize.QueryTypes.DELETE }
+      );
+    } catch (_) {}
+
+    // Remove from JSONB graph
+    const graph = safeJson(char.relationship_graph).filter(r => r.rel_id !== req.params.relId);
+    await sequelize.query(
+      `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
+      { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+    );
+
+    res.json({ deleted: true, graph });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;

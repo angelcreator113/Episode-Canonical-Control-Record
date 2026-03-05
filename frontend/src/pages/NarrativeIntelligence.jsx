@@ -55,6 +55,13 @@ const TYPE_CONFIG = {
     bg:     'rgba(198,168,94,0.06)',
     border: 'rgba(198,168,94,0.2)',
   },
+  intimate_scene_trigger: {
+    label:  '♡ INTIMATE TRIGGER',
+    color:  '#c06070',
+    icon:   '♡',
+    bg:     'rgba(192,96,112,0.06)',
+    border: 'rgba(192,96,112,0.18)',
+  },
 };
 
 export default function NarrativeIntelligence({
@@ -71,7 +78,19 @@ export default function NarrativeIntelligence({
   const [copied, setCopied]           = useState(false);
   const [accepting, setAccepting]     = useState(false);
   const [expanded, setExpanded]       = useState(false);
+  const [worldChars, setWorldChars]   = useState([]);
+  const [intimateTrigger, setIntimateTrigger] = useState(null);
+  const [generatingScene, setGeneratingScene] = useState(false);
   const hasFetched = useRef(false);
+
+  // Load world characters for intimacy-trigger detection
+  useEffect(() => {
+    if (!book?.id) return;
+    fetch(`/api/v1/world/characters?book_id=${book.id}`)
+      .then(r => r.ok ? r.json() : Promise.reject())
+      .then(d => setWorldChars(d.characters || d || []))
+      .catch(() => {});
+  }, [book?.id]);
 
   // Auto-fetch when component mounts
   useEffect(() => {
@@ -80,6 +99,42 @@ export default function NarrativeIntelligence({
     hasFetched.current = true;
     fetchSuggestion();
   }, []);
+
+  /* ── Intimacy trigger detection ───────────────────────────────────── */
+  function checkIntimacyTrigger(recentLines) {
+    if (!worldChars.length) return;
+    const recentText = recentLines.join(' ').toLowerCase();
+    // Find world characters mentioned in the recent manuscript lines
+    const mentioned = worldChars.filter(wc => {
+      const name = (wc.name || wc.display_name || '').toLowerCase();
+      return name && recentText.includes(name);
+    });
+    if (mentioned.length === 0) return;
+
+    // Check for tension / intimacy keywords in recent text
+    const tensionWords = [
+      'close', 'breath', 'skin', 'lips', 'touch', 'heat',
+      'pulse', 'tension', 'pull', 'lean', 'whisper', 'eye',
+      'alone', 'dark', 'night', 'room', 'bed', 'door',
+    ];
+    const tensionHits = tensionWords.filter(w => recentText.includes(w)).length;
+    if (tensionHits < 2) return; // need at least 2 tension signals
+
+    // Pick the strongest candidate (prefer characters with attracted_to / intimate_style set)
+    const ranked = mentioned
+      .filter(c => c.attracted_to || c.intimate_style || c.intimate_dynamic)
+      .sort((a, b) => {
+        const score = c => (c.attracted_to ? 1 : 0) + (c.intimate_style ? 1 : 0) + (c.intimate_dynamic ? 1 : 0);
+        return score(b) - score(a);
+      });
+    const candidate = ranked[0] || mentioned[0];
+
+    setIntimateTrigger({
+      character:  candidate,
+      tension:    tensionHits,
+      scene_type: tensionHits >= 5 ? 'first_encounter' : 'charged_moment',
+    });
+  }
 
   async function fetchSuggestion() {
     if (!book || !chapter) return;
@@ -120,6 +175,9 @@ export default function NarrativeIntelligence({
       if (!res.ok) throw new Error(data.error);
       setSuggestion(data.suggestion);
       setExpanded(true);
+
+      // Check for intimacy trigger after NI fetch
+      checkIntimacyTrigger(recentLines);
     } catch (err) {
       console.error('NarrativeIntelligence fetch error:', err);
       // Fail silently — don't interrupt writing
@@ -163,6 +221,61 @@ export default function NarrativeIntelligence({
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
     });
+  }
+
+  /* ── Generate intimate scene via memories patch ───────────────────── */
+  async function handleGenerateIntimateScene() {
+    if (!intimateTrigger?.character) return;
+    setGeneratingScene(true);
+    try {
+      const recentLines = lines
+        .slice(Math.max(0, lineIndex - 9), lineIndex + 1)
+        .map(l => l.content || l.text || '')
+        .filter(Boolean);
+
+      const res = await fetch(`${MEMORIES_API}/generate-intimate-scene`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chapter_id:   chapter.id,
+          character_id: intimateTrigger.character.id,
+          scene_type:   intimateTrigger.scene_type || 'charged_moment',
+          career_stage: intimateTrigger.character.career_stage || 'early_career',
+          recent_lines: recentLines,
+          chapter_brief: {
+            title:                 chapter.title,
+            theme:                 chapter.theme,
+            scene_goal:            chapter.scene_goal,
+            emotional_state_start: chapter.emotional_state_start,
+            emotional_state_end:   chapter.emotional_state_end,
+          },
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+
+      // Accept all generated lines into the chapter as pending
+      if (data.lines?.length) {
+        for (const line of data.lines) {
+          await fetch(`${STORYTELLER_API}/chapters/${chapter.id}/lines`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              text:        line.content || line.text,
+              source_tags: ['intimate_scene', intimateTrigger.character.name],
+              group_label: `Intimate scene — ${intimateTrigger.character.name}`,
+              status:      'pending',
+            }),
+          });
+        }
+        onAccept?.({ count: data.lines.length, type: 'intimate_scene' });
+      }
+      setIntimateTrigger(null);
+    } catch (err) {
+      console.error('Intimate scene generation error:', err);
+    } finally {
+      setGeneratingScene(false);
+    }
   }
 
   if (dismissed) return null;
@@ -283,6 +396,39 @@ export default function NarrativeIntelligence({
             <div style={s.whatToDo}>{suggestion.what_to_do}</div>
           )}
 
+        </div>
+      )}
+
+      {/* ── Intimate scene trigger card ──────────────────────────── */}
+      {intimateTrigger && (
+        <div style={s.intimateTriggerBar}>
+          <div style={s.intimateTriggerLeft}>
+            <span style={s.intimateIcon}>♡</span>
+            <span style={s.intimateLabel}>
+              TENSION DETECTED — {intimateTrigger.character.name}
+            </span>
+            <span style={s.intimateHint}>
+              {intimateTrigger.tension >= 5
+                ? 'Strong intimate thread in recent lines.'
+                : 'Charged atmosphere building.'}
+            </span>
+          </div>
+          <div style={s.intimateTriggerActions}>
+            <button
+              style={s.intimateGenerateBtn}
+              onClick={handleGenerateIntimateScene}
+              disabled={generatingScene}
+            >
+              {generatingScene ? 'Writing scene…' : 'Generate scene'}
+            </button>
+            <button
+              style={s.intimateDismissBtn}
+              onClick={() => setIntimateTrigger(null)}
+              title="Dismiss"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
     </div>
@@ -493,5 +639,73 @@ const s = {
     fontStyle: 'italic',
     borderTop: '1px solid rgba(30,25,20,0.06)',
     paddingTop: 8,
+  },
+
+  /* ── Intimate trigger styles ────────────────────────────────────── */
+  intimateTriggerBar: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '10px 14px',
+    background: 'rgba(192,96,112,0.06)',
+    borderTop: '1px solid rgba(192,96,112,0.15)',
+    gap: 12,
+  },
+  intimateTriggerLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+    minWidth: 0,
+  },
+  intimateIcon: {
+    fontSize: 14,
+    color: '#c06070',
+    flexShrink: 0,
+  },
+  intimateLabel: {
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 11,
+    letterSpacing: '0.12em',
+    fontWeight: 600,
+    color: '#c06070',
+    whiteSpace: 'nowrap',
+  },
+  intimateHint: {
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 11,
+    color: 'rgba(192,96,112,0.6)',
+    letterSpacing: '0.03em',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  intimateTriggerActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  intimateGenerateBtn: {
+    background: '#c06070',
+    border: 'none',
+    borderRadius: 2,
+    fontFamily: 'DM Mono, monospace',
+    fontSize: 11,
+    letterSpacing: '0.08em',
+    color: 'white',
+    padding: '5px 12px',
+    cursor: 'pointer',
+    transition: 'opacity 0.12s',
+    whiteSpace: 'nowrap',
+  },
+  intimateDismissBtn: {
+    background: 'none',
+    border: 'none',
+    color: 'rgba(192,96,112,0.4)',
+    fontSize: 13,
+    cursor: 'pointer',
+    padding: '2px 4px',
+    lineHeight: 1,
   },
 };

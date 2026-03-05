@@ -158,10 +158,12 @@ router.get('/ecosystem', optionalAuth, async (req, res) => {
 router.post('/propose-seeds', optionalAuth, async (req, res) => {
   const {
     world,
+    count: seedCount,
     role_type_focus,
     existing_names,
     ecosystem_stats,
   } = req.body;
+  const count = Math.min(Math.max(parseInt(seedCount) || 10, 1), 25);
 
   const worldConfig = world === 'lalaverse' ? WORLD_CONFIGS.lalaverse : WORLD_CONFIGS.book1;
   const [ageMin, ageMax] = worldConfig.age_range;
@@ -175,7 +177,7 @@ router.post('/propose-seeds', optionalAuth, async (req, res) => {
       ? `Current role distribution: ${JSON.stringify(ecosystem_stats.roleCount)}. Saturated roles (avoid adding more): ${ecosystem_stats.saturated?.join(', ') || 'none'}. Empty roles (prioritize): ${ecosystem_stats.empty?.join(', ') || 'none'}.`
       : '';
 
-    const systemPrompt = `You are proposing 10 character seeds for the ${worldConfig.label}.
+    const systemPrompt = `You are proposing ${count} character seeds for the ${worldConfig.label}.
 
 WORLD CONTEXT:
 ${worldConfig.setting}
@@ -225,9 +227,9 @@ Return ONLY valid JSON — no preamble, no markdown:
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 3000,
+      max_tokens: Math.max(3000, count * 300),
       system: systemPrompt,
-      messages: [{ role: 'user', content: 'Propose 10 character seeds.' }],
+      messages: [{ role: 'user', content: `Propose ${count} character seeds.` }],
     });
 
     const raw = response.content?.[0]?.text || '';
@@ -468,7 +470,19 @@ Generate a complete profile. Return ONLY valid JSON:
   };
 
   try {
-    const results = await Promise.all(seeds.map(generateOne));
+    // Generate sequentially to avoid Anthropic rate limits (parallel kills 7 of 8)
+    const results = [];
+    for (let i = 0; i < seeds.length; i++) {
+      console.log(`[generate-batch] Generating ${i + 1}/${seeds.length}: ${seeds[i].name}`);
+      const result = await generateOne(seeds[i]);
+      results.push(result);
+      // Small delay between calls to stay within rate limits
+      if (i < seeds.length - 1) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    }
+
+    console.log(`[generate-batch] Done: ${results.filter((r) => r.status === 'generated').length} generated, ${results.filter((r) => r.status === 'failed').length} failed`);
 
     return res.json({
       batch: results,
@@ -598,8 +612,31 @@ router.post('/commit', optionalAuth, async (req, res) => {
     const storyPres  = profile.story_presence || {};
     const threads    = profile.plot_threads || [];
 
-    // Generate a unique character_key slug from the name
+    // ── Duplicate guard: check if character with same name already exists in registry ──
     const rawName = seed?.name || identity.name || 'unnamed';
+    const { Op } = require('sequelize');
+    const existing = await db.RegistryCharacter.findOne({
+      where: {
+        registry_id: registryId,
+        [Op.or]: [
+          { display_name: rawName },
+          { selected_name: rawName },
+        ],
+        deleted_at: null,
+      },
+    });
+    if (existing) {
+      console.log(`[commit] Duplicate blocked: "${rawName}" already exists in registry ${registryId} (id: ${existing.id})`);
+      return res.json({
+        success: true,
+        character_id: existing.id,
+        name: existing.display_name || existing.selected_name,
+        message: `${rawName} already exists in registry (duplicate prevented).`,
+        duplicate: true,
+      });
+    }
+
+    // Generate a unique character_key slug from the name
     const baseKey = rawName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
     const uniqueKey = `${baseKey}-${Date.now().toString(36)}`;
 
@@ -752,6 +789,35 @@ router.post('/commit', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('[commit] error:', err?.message);
     return res.status(500).json({ error: 'Commit failed: ' + err?.message });
+  }
+});
+
+// ─── POST /rewrite-field ──────────────────────────────────────────────────────
+router.post('/rewrite-field', optionalAuth, async (req, res) => {
+  const { fieldPath, currentValue, characterContext } = req.body;
+  if (!fieldPath || !currentValue) {
+    return res.status(400).json({ error: 'fieldPath and currentValue required' });
+  }
+
+  try {
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 500,
+      system: `You are rewriting a single character profile field for an AI-generated character. Match the adult-fiction register — specific, grounded, no softening. Return ONLY the new text (no quotes, no preamble, no explanation).\n\nCharacter: ${characterContext?.name || 'Unknown'}\nRole: ${characterContext?.role || '?'}\nTension: ${characterContext?.tension || '?'}\nWorld: ${characterContext?.world || '?'}`,
+      messages: [{
+        role: 'user',
+        content: `Rewrite this "${fieldPath}" field. Keep the same level of specificity but give a fresh take:\n\nCurrent: ${currentValue}\n\nNew version:`,
+      }],
+    });
+
+    const newValue = response.content?.[0]?.text?.trim() || currentValue;
+    return res.json({ fieldPath, newValue });
+  } catch (err) {
+    console.error('[rewrite-field] error:', err?.message);
+    return res.status(500).json({ error: 'Rewrite failed: ' + err?.message });
   }
 });
 
