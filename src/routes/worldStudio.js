@@ -114,21 +114,42 @@ const CONNECTION_MODE_MAP = {
   recurring:       'IRL',
 };
 
-// Natural inter-character pairing rules: [typeA, typeB, rel_type, conn_mode, tension]
+// Natural inter-character pairing rules: [typeA, typeB, rel_type, conn_mode, tension, romantic?]
 const INTER_CHAR_PAIRINGS = [
-  ['love_interest', 'rival',           'Romantic Rivalry',    'IRL',          'volatile'],
-  ['love_interest', 'love_interest',   'Love Triangle',       'IRL',          'simmering'],
-  ['love_interest', 'one_night_stand', 'Complicated History', 'IRL',          'simmering'],
-  ['industry_peer', 'collaborator',    'Professional Ally',   'Professional', 'calm'],
-  ['industry_peer', 'industry_peer',   'Industry Connection', 'Professional', 'calm'],
-  ['industry_peer', 'rival',           'Professional Rival',  'Professional', 'simmering'],
-  ['mentor',        'antagonist',      'Power Struggle',      'Professional', 'volatile'],
-  ['mentor',        'collaborator',    'Mentorship',          'Professional', 'calm'],
-  ['antagonist',    'rival',           'Dark Alliance',       'IRL',          'simmering'],
-  ['collaborator',  'collaborator',    'Creative Partners',   'Professional', 'calm'],
-  ['rival',         'rival',           'Mutual Rivalry',      'Professional', 'volatile'],
-  ['one_night_stand','rival',          'Unexpected Link',     'IRL',          'simmering'],
+  ['love_interest', 'rival',           'Romantic Rivalry',    'IRL',          'volatile',   true],
+  ['love_interest', 'love_interest',   'Love Triangle',       'IRL',          'simmering',  true],
+  ['love_interest', 'one_night_stand', 'Complicated History', 'IRL',          'simmering',  true],
+  ['industry_peer', 'collaborator',    'Professional Ally',   'Professional', 'calm',       false],
+  ['industry_peer', 'industry_peer',   'Industry Connection', 'Professional', 'calm',       false],
+  ['industry_peer', 'rival',           'Professional Rival',  'Professional', 'simmering',  false],
+  ['mentor',        'antagonist',      'Power Struggle',      'Professional', 'volatile',   false],
+  ['mentor',        'collaborator',    'Mentorship',          'Professional', 'calm',       false],
+  ['antagonist',    'rival',           'Dark Alliance',       'IRL',          'simmering',  false],
+  ['collaborator',  'collaborator',    'Creative Partners',   'Professional', 'calm',       false],
+  ['rival',         'rival',           'Mutual Rivalry',      'Professional', 'volatile',   false],
+  ['one_night_stand','rival',          'Unexpected Link',     'IRL',          'simmering',  false],
 ];
+
+// Sexuality compatibility for romantic pairings
+function areSexuallyCompatible(a, b) {
+  const sA = (a.sexuality || '').toLowerCase();
+  const sB = (b.sexuality || '').toLowerCase();
+  // If either has no sexuality defined, allow the pairing (data not yet generated)
+  if (!sA || !sB) return true;
+  // Bisexual/pansexual/queer are compatible with anyone
+  const flexA = ['bisexual', 'pansexual', 'queer', 'fluid'].includes(sA);
+  const flexB = ['bisexual', 'pansexual', 'queer', 'fluid'].includes(sB);
+  if (flexA || flexB) return true;
+  // Straight characters: only compatible with opposite orientation markers
+  // Gay/lesbian: only compatible with same orientation markers
+  // Since we don't track gender separately, use orientation labels:
+  // straight + straight = compatible (opposite genders assumed)
+  if (sA === 'straight' && sB === 'straight') return true;
+  // gay + gay or lesbian + lesbian = compatible
+  if (sA === sB && ['gay', 'lesbian'].includes(sA)) return true;
+  // All other combos (straight + gay, etc.) = not compatible
+  return false;
+}
 
 /**
  * Find (or create) the LalaVerse registry so generated characters
@@ -232,6 +253,7 @@ async function syncToRegistry(req, worldCharId, c, registryId) {
         extra_fields: JSON.stringify({
           source: 'world_studio',
           world_character_id: worldCharId,
+          sexuality: c.sexuality || null,
           intimate_eligible: c.intimate_eligible || false,
           intimate_style: c.intimate_style || null,
           intimate_dynamic: c.intimate_dynamic || null,
@@ -358,6 +380,9 @@ async function seedInterCharacterRelationships(characters, registryId) {
           (a.character_type === tB && b.character_type === tA)
       );
       if (rule) {
+        // For romantic pairings, check sexuality compatibility
+        const isRomantic = rule[5];
+        if (isRomantic && !areSexuallyCompatible(a, b)) continue;
         pairs.push({ a, b, rule });
       }
     }
@@ -506,6 +531,7 @@ Return JSON only:
       "occupation": "specific job/role",
       "world_location": "where they exist in LalaVerse",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
+      "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
       "aesthetic": "how they look, dress, move — specific and visual",
       "signature": "the one thing about them that is unforgettable",
@@ -549,7 +575,7 @@ Return JSON only:
       await sequelize.query(
         `INSERT INTO world_characters
            (id, batch_id, name, age_range, occupation, world_location, character_type,
-            intimate_eligible, aesthetic, signature,
+            sexuality, intimate_eligible, aesthetic, signature,
             surface_want, real_want, what_they_want_from_lala,
             how_they_meet, dynamic, tension_type,
             intimate_style, intimate_dynamic, what_lala_feels,
@@ -557,7 +583,7 @@ Return JSON only:
             status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
-            :intimate_eligible, :aesthetic, :signature,
+            :sexuality, :intimate_eligible, :aesthetic, :signature,
             :surface_want, :real_want, :what_from_lala,
             :how_meet, :dynamic, :tension_type,
             :intimate_style, :intimate_dynamic, :what_lala_feels,
@@ -568,6 +594,7 @@ Return JSON only:
             id: charId, batch_id: batchId,
             name: c.name, age_range: c.age_range || null, occupation: c.occupation || null,
             world_location: c.world_location || null, char_type: c.character_type,
+            sexuality: c.sexuality || null,
             intimate_eligible: c.intimate_eligible || false,
             aesthetic: c.aesthetic || null, signature: c.signature || null,
             surface_want: c.surface_want || null, real_want: c.real_want || null,
@@ -643,7 +670,7 @@ router.get('/world/characters/:id', optionalAuth, async (req, res) => {
 // PUT /world/characters/:id
 router.put('/world/characters/:id', optionalAuth, async (req, res) => {
   try {
-    const fields = ['name','age_range','occupation','aesthetic','signature','surface_want','real_want',
+    const fields = ['name','age_range','occupation','world_location','sexuality','aesthetic','signature','surface_want','real_want',
       'what_they_want_from_lala','how_they_meet','dynamic','tension_type','intimate_style',
       'intimate_dynamic','what_lala_feels','arc_role','exit_reason','current_tension','status'];
     const updates = [];
@@ -729,7 +756,7 @@ router.post('/world/seed-relationships', optionalAuth, async (req, res) => {
     const worldChars = await Q(req, `
       SELECT wc.id, wc.name, wc.character_type, wc.tension_type,
              wc.dynamic, wc.what_they_want_from_lala,
-             wc.registry_character_id
+             wc.registry_character_id, wc.sexuality
       FROM world_characters wc
       WHERE wc.status = 'active'
         AND wc.registry_character_id IS NOT NULL
@@ -1290,6 +1317,7 @@ Return JSON only:
       "occupation": "specific job/role",
       "world_location": "where they exist in LalaVerse",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
+      "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
       "aesthetic": "how they look, dress, move — specific and visual",
       "signature": "the one thing about them that is unforgettable",
@@ -1372,7 +1400,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       await sequelize.query(
         `INSERT INTO world_characters
            (id, batch_id, name, age_range, occupation, world_location, character_type,
-            intimate_eligible, aesthetic, signature,
+            sexuality, intimate_eligible, aesthetic, signature,
             surface_want, real_want, what_they_want_from_lala,
             how_they_meet, dynamic, tension_type,
             intimate_style, intimate_dynamic, what_lala_feels,
@@ -1380,7 +1408,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
-            :intimate_eligible, :aesthetic, :signature,
+            :sexuality, :intimate_eligible, :aesthetic, :signature,
             :surface_want, :real_want, :what_from_lala,
             :how_meet, :dynamic, :tension_type,
             :intimate_style, :intimate_dynamic, :what_lala_feels,
@@ -1391,6 +1419,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             id: charId, batch_id: batchId,
             name: c.name, age_range: c.age_range || null, occupation: c.occupation || null,
             world_location: c.world_location || null, char_type: c.character_type,
+            sexuality: c.sexuality || null,
             intimate_eligible: c.intimate_eligible || false,
             aesthetic: c.aesthetic || null, signature: c.signature || null,
             surface_want: c.surface_want || null, real_want: c.real_want || null,

@@ -88,7 +88,7 @@ function PreviewCard({ char, selected, onToggle }) {
         </div>
       </div>
       <div className="ws-preview-card-meta">
-        {char.age_range} · {char.occupation}
+        {char.age_range} · {char.occupation}{char.sexuality ? ` · ${char.sexuality}` : ''}
       </div>
       <div className="ws-preview-card-badges">
         <Badge className={badgeCls}>{TYPES[char.character_type] || char.character_type}</Badge>
@@ -506,6 +506,7 @@ export default function WorldStudio() {
       age_range: charDetail.age_range || '',
       occupation: charDetail.occupation || '',
       world_location: charDetail.world_location || '',
+      sexuality: charDetail.sexuality || '',
       aesthetic: charDetail.aesthetic || '',
       surface_want: charDetail.surface_want || '',
       real_want: charDetail.real_want || '',
@@ -912,6 +913,7 @@ export default function WorldStudio() {
                 <div className="ws-detail-header-badges">
                   <Badge className={TYPE_BADGE[charDetail.character_type]}>{TYPES[charDetail.character_type]}</Badge>
                   {charDetail.intimate_eligible && <Badge className="ws-badge-intimate">♡ Intimate Eligible</Badge>}
+                  {charDetail.sexuality && <Badge className="ws-badge-sexuality">{charDetail.sexuality}</Badge>}
                   {charDetail.tension_type && <Badge className="ws-badge-tension">{charDetail.tension_type} tension</Badge>}
                   <Badge className={charDetail.status === 'active' ? 'ws-badge-approved' : charDetail.status === 'archived' ? 'ws-badge-archived' : 'ws-badge-draft'}>{charDetail.status}</Badge>
                 </div>
@@ -932,7 +934,7 @@ export default function WorldStudio() {
                 <>
                   <h2 className="ws-detail-name">{charDetail.name}</h2>
                   <div className="ws-detail-meta">
-                    {charDetail.age_range} · {charDetail.occupation} · {charDetail.world_location}
+                    {charDetail.age_range} · {charDetail.occupation} · {charDetail.world_location}{charDetail.sexuality ? ` · ${charDetail.sexuality}` : ''}
                   </div>
 
                   {charDetail.aesthetic && (
@@ -975,6 +977,7 @@ export default function WorldStudio() {
                     { key: 'age_range', label: 'Age Range' },
                     { key: 'occupation', label: 'Occupation' },
                     { key: 'world_location', label: 'Location' },
+                    { key: 'sexuality', label: 'Sexuality' },
                     { key: 'aesthetic', label: 'Aesthetic', long: true },
                     { key: 'surface_want', label: 'Surface Want', long: true },
                     { key: 'real_want', label: 'Real Want', long: true },
