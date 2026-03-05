@@ -248,12 +248,21 @@ async function syncToRegistry(req, worldCharId, c, registryId) {
 async function syncRelationships(rcId, c, registryId) {
   try {
     // Find Lala (the protagonist) in the same registry
-    const [lala] = await sequelize.query(
+    // Check role_type first, then fall back to display_name
+    let [lala] = await sequelize.query(
       `SELECT id FROM registry_characters
        WHERE registry_id = :registry_id AND role_type = 'protagonist' AND deleted_at IS NULL
        LIMIT 1`,
       { replacements: { registry_id: registryId }, type: sequelize.QueryTypes.SELECT }
     );
+    if (!lala) {
+      [lala] = await sequelize.query(
+        `SELECT id FROM registry_characters
+         WHERE registry_id = :registry_id AND LOWER(display_name) = 'lala' AND deleted_at IS NULL
+         LIMIT 1`,
+        { replacements: { registry_id: registryId }, type: sequelize.QueryTypes.SELECT }
+      );
+    }
     if (!lala) {
       console.warn('syncRelationships: No protagonist found in registry', registryId);
       return null;
