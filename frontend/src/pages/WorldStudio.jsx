@@ -337,7 +337,7 @@ export default function WorldStudio() {
         <button className="ws-btn-back" onClick={() => navigate(-1)}>← Back</button>
 
         <div>
-          <div className="ws-header-title">World Studio</div>
+          <div className="ws-header-title">Create World</div>
           <div className="ws-header-sub">Characters · Registry</div>
         </div>
 
@@ -936,7 +936,7 @@ export default function WorldStudio() {
                 <div>
                   <div className="ws-dashboard-title">PNOS Character Registry</div>
                   <div style={{ fontSize: 12, color: 'var(--ws-muted)', marginTop: 4 }}>
-                    Psychological forces — read-only in World Studio. Edit in the Character Registry.
+                    Psychological forces — read-only in Create World. Edit in the Character Registry.
                   </div>
                 </div>
                 <button className="ws-btn ws-btn-lavender" onClick={() => navigate('/character-interview')}>
@@ -1165,7 +1165,7 @@ export default function WorldStudio() {
                   onChange={e => setRelForm(p => ({ ...p, related_character_name: e.target.value }))} />
               </div>
               <div className="ws-form-row">
-                <label className="ws-form-label">Character (if in World Studio)</label>
+                <label className="ws-form-label">Character (if in Create World)</label>
                 <select className="ws-select" style={{ width: '100%' }}
                   value={relForm.related_character_id}
                   onChange={e => {
