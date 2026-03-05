@@ -572,6 +572,24 @@ export default function WorldStudio() {
     finally { setBulkActivating(false); }
   };
 
+  const [seeding, setSeeding] = useState(false);
+  const seedRelationships = async () => {
+    setSeeding(true);
+    try {
+      const r = await fetch(`${API}/world/seed-relationships`, { method: 'POST' });
+      const d = await r.json();
+      if (d.seeded !== undefined) {
+        flash(`${d.message}`);
+        if (d.seeded > 0) {
+          flash('Go to Relationships → Candidates to review');
+        }
+      } else {
+        flash(d.error || 'Seed failed', 'error');
+      }
+    } catch (e) { flash(e.message, 'error'); }
+    finally { setSeeding(false); }
+  };
+
   const selectTrigger = async (char) => {
     setSelectedTrigger(char);
     try {
@@ -645,6 +663,9 @@ export default function WorldStudio() {
               )}
               <button className="ws-btn ws-btn-rose" onClick={() => setShowSceneModal(true)}>
                 ♡ Write Scene
+              </button>
+              <button className="ws-btn ws-btn-lavender" onClick={seedRelationships} disabled={seeding}>
+                {seeding ? '⏳…' : '🔗 Seed Relationships'}
               </button>
               <button className="ws-btn ws-btn-gold" onClick={generatePreview} disabled={generating}>
                 {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
@@ -1263,10 +1284,16 @@ export default function WorldStudio() {
                   </div>
                 )}
                 {charDetail.registry_character_id && (
-                  <button className="ws-btn ws-btn-outline ws-btn-full"
-                    onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}>
-                    📋 View in Character Registry
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                    <button className="ws-btn ws-btn-outline ws-btn-full"
+                      onClick={() => navigate(`/character-registry?highlight=${charDetail.registry_character_id}`)}>
+                      📋 View in Character Registry
+                    </button>
+                    <button className="ws-btn ws-btn-lavender ws-btn-full"
+                      onClick={() => navigate('/relationships')}>
+                      🔗 View Relationships
+                    </button>
+                  </div>
                 )}
               </>
             )}

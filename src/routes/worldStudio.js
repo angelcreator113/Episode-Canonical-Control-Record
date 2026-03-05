@@ -11,6 +11,8 @@
  *   PUT    /world/characters/:id         — update character
  *   POST   /world/characters/:id/activate — set status = active
  *   POST   /world/characters/:id/archive  — set status = archived
+ *   DELETE /world/characters/:id         — delete character + registry + relationships
+ *   POST   /world/seed-relationships     — seed relationship candidates for all active chars
  *   GET    /world/batches                — list generation batches
  *
  * Intimate Scene routes:
@@ -77,6 +79,39 @@ const ROLE_MAP = {
   collaborator:    'mirror',
   one_night_stand: 'special',
   recurring:       'special',
+};
+
+// Map World Studio character_type → relationship_type for character_relationships
+const REL_TYPE_MAP = {
+  love_interest:   'Love Interest',
+  industry_peer:   'Industry Peer',
+  mentor:          'Mentor',
+  antagonist:      'Antagonist',
+  rival:           'Rival',
+  collaborator:    'Collaborator',
+  one_night_stand: 'One Night Stand',
+  recurring:       'Recurring',
+};
+
+// Map World Studio tension_type → character_relationships tension_state
+const TENSION_MAP = {
+  romantic:     'simmering',
+  professional: 'calm',
+  creative:     'simmering',
+  power:        'volatile',
+  unspoken:     'simmering',
+};
+
+// Map World Studio character_type → connection_mode
+const CONNECTION_MODE_MAP = {
+  love_interest:   'IRL',
+  industry_peer:   'Professional',
+  mentor:          'Professional',
+  antagonist:      'IRL',
+  rival:           'Professional',
+  collaborator:    'Professional',
+  one_night_stand: 'Passing',
+  recurring:       'IRL',
 };
 
 /**
@@ -199,7 +234,76 @@ async function syncToRegistry(req, worldCharId, c, registryId) {
     { replacements: { rcId, wcId: worldCharId }, type: sequelize.QueryTypes.UPDATE }
   );
 
+  // Auto-seed a relationship candidate linking this character to Lala
+  await syncRelationships(rcId, c, registryId);
+
   return rcId;
+}
+
+/**
+ * After creating a registry_characters entry, auto-seed a character_relationships
+ * row linking the new character to Lala (the protagonist) as an unconfirmed candidate.
+ * This feeds the Relationship Engine → Candidates tab.
+ */
+async function syncRelationships(rcId, c, registryId) {
+  try {
+    // Find Lala (the protagonist) in the same registry
+    const [lala] = await sequelize.query(
+      `SELECT id FROM registry_characters
+       WHERE registry_id = :registry_id AND role_type = 'protagonist' AND deleted_at IS NULL
+       LIMIT 1`,
+      { replacements: { registry_id: registryId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (!lala) {
+      console.warn('syncRelationships: No protagonist found in registry', registryId);
+      return null;
+    }
+    // Don't create a self-relationship
+    if (lala.id === rcId) return null;
+
+    // Check for existing relationship between these two
+    const [existing] = await sequelize.query(
+      `SELECT id FROM character_relationships
+       WHERE (character_id_a = :a AND character_id_b = :b)
+          OR (character_id_a = :b AND character_id_b = :a)
+       LIMIT 1`,
+      { replacements: { a: lala.id, b: rcId }, type: sequelize.QueryTypes.SELECT }
+    );
+    if (existing) return existing.id;
+
+    const relId = uuidv4();
+    await sequelize.query(
+      `INSERT INTO character_relationships
+         (id, character_id_a, character_id_b, relationship_type,
+          connection_mode, lala_connection, status, situation,
+          tension_state, pain_point_category, notes,
+          confirmed, created_at, updated_at)
+       VALUES
+         (:id, :char_a, :char_b, :rel_type,
+          :conn_mode, 'knows_lala', 'Active', :situation,
+          :tension_state, :pain_cat, :notes,
+          false, NOW(), NOW())`,
+      {
+        replacements: {
+          id: relId,
+          char_a: lala.id,
+          char_b: rcId,
+          rel_type: REL_TYPE_MAP[c.character_type] || 'Connection',
+          conn_mode: CONNECTION_MODE_MAP[c.character_type] || 'IRL',
+          situation: c.dynamic || null,
+          tension_state: TENSION_MAP[c.tension_type] || 'calm',
+          pain_cat: null,
+          notes: c.what_they_want_from_lala || null,
+        },
+        type: sequelize.QueryTypes.INSERT,
+      }
+    );
+    console.log(`syncRelationships: Created candidate relationship ${relId} (Lala ↔ ${c.name})`);
+    return relId;
+  } catch (err) {
+    console.error('syncRelationships error (non-fatal):', err.message);
+    return null;
+  }
 }
 
 // Variable scene length logic based on relationship depth and type
@@ -464,6 +568,17 @@ router.post('/world/characters/:id/archive', optionalAuth, async (req, res) => {
 // DELETE /world/characters/:id
 router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
   try {
+    // Remove linked relationship rows (via registry_characters)
+    const [rc] = await Q(req,
+      `SELECT id FROM registry_characters WHERE world_character_id = :id`,
+      { replacements: { id: req.params.id } }
+    ).catch(() => []);
+    if (rc) {
+      await sequelize.query(
+        `DELETE FROM character_relationships WHERE character_id_a = :rcId OR character_id_b = :rcId`,
+        { replacements: { rcId: rc.id }, type: sequelize.QueryTypes.DELETE }
+      ).catch(() => {});
+    }
     // Remove linked registry character
     await sequelize.query(
       `DELETE FROM registry_characters WHERE world_character_id = :id`,
@@ -483,6 +598,39 @@ router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// POST /world/seed-relationships — manually seed relationship candidates for all active world characters
+router.post('/world/seed-relationships', optionalAuth, async (req, res) => {
+  try {
+    const registryId = await findOrCreateLalaVerseRegistry(req);
+
+    // Get all active world characters that have a registry_character_id
+    const worldChars = await Q(req, `
+      SELECT wc.id, wc.name, wc.character_type, wc.tension_type,
+             wc.dynamic, wc.what_they_want_from_lala,
+             wc.registry_character_id
+      FROM world_characters wc
+      WHERE wc.status = 'active'
+        AND wc.registry_character_id IS NOT NULL
+      ORDER BY wc.name
+    `);
+
+    let seeded = 0;
+    for (const wc of worldChars) {
+      const relId = await syncRelationships(wc.registry_character_id, wc, registryId);
+      if (relId) seeded++;
+    }
+
+    res.json({
+      seeded,
+      total_active: worldChars.length,
+      message: `Seeded ${seeded} relationship candidate(s) of ${worldChars.length} active characters`,
+    });
+  } catch (err) {
+    console.error('seed-relationships error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // GET /world/batches
 router.get('/world/batches', optionalAuth, async (req, res) => {
   try {
@@ -498,24 +646,26 @@ router.get('/world/batches', optionalAuth, async (req, res) => {
 // GET /world/tension-check — scan all active world character relationships for scene triggers
 router.get('/world/tension-check', optionalAuth, async (req, res) => {
   try {
-    // Characters eligible for intimate scenes with non-Stable tension
+    // Characters eligible for intimate scenes with non-calm tension
+    // Join through registry_characters since character_relationships references registry IDs
     const triggered = await Q(req, `
       SELECT wc.*,
              cr.tension_state, cr.situation, cr.relationship_type, cr.connection_mode,
              cr.id AS relationship_id
       FROM world_characters wc
+      JOIN registry_characters rc ON rc.world_character_id = wc.id AND rc.deleted_at IS NULL
       LEFT JOIN character_relationships cr
-        ON (cr.character_id_a::text = wc.id::text OR cr.character_id_b::text = wc.id::text)
+        ON (cr.character_id_a = rc.id OR cr.character_id_b = rc.id)
         AND cr.confirmed = true
-        AND cr.tension_state IN ('Friction Building', 'Unresolved', 'Broken')
+        AND cr.tension_state IN ('simmering', 'volatile', 'fractured')
       WHERE wc.intimate_eligible = true
         AND wc.status = 'active'
         AND cr.id IS NOT NULL
       ORDER BY
         CASE cr.tension_state
-          WHEN 'Unresolved' THEN 1
-          WHEN 'Friction Building' THEN 2
-          WHEN 'Broken' THEN 3
+          WHEN 'volatile' THEN 1
+          WHEN 'simmering' THEN 2
+          WHEN 'fractured' THEN 3
         END
     `).catch(() => []);
 
