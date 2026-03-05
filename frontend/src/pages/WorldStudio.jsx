@@ -1,13 +1,20 @@
 /**
- * WorldStudio.jsx  v3 — CSS classes edition
+ * WorldStudio.jsx  v3.1 — Identity + Death + Ensemble-World edition
  *
  * Two tabs only:
  *   Characters — world character profiles (generate, activate, edit)
+ *               + identity (gender/ethnicity/species) + death tracking
  *               + desire profile + relationship graph + family franchise layer
  *   Registry   — PNOS characters, read-only, with Voice Interview link
  *
- * Scenes tab REMOVED — scene generation moves to Narrative Intelligence
- * Triggers tab REMOVED — tension surfaces inside Story Engine NI
+ * v3.1 additions:
+ *   - Species badge on non-human characters
+ *   - Death indicator † in sidebar + detail
+ *   - Identity row (gender / ethnicity / species)
+ *   - Death notice block with cause + narrative impact
+ *   - Edit form with identity + death fields
+ *   - Relationship modal: family_role, is_blood / is_romantic / conflict / franchise awareness
+ *   - Stats bar: deceased count
  *
  * Styling via WorldStudio.css — no inline style objects.
  */
@@ -118,6 +125,8 @@ export default function WorldStudio() {
     history_summary: '', current_status: 'active',
     tension_state: 'Stable', romantic_eligible: false,
     knows_about_transfer: false, series_layer: 'lalaverse', notes: '',
+    is_blood_relation: false, is_romantic: false,
+    conflict_summary: '', knows_about_connection: false,
   });
   const [savingRel, setSavingRel] = useState(false);
 
@@ -398,6 +407,12 @@ export default function WorldStudio() {
           <span className="ws-stat-label">Intimate</span>
         </div>
         <div className="ws-stat">
+          <span className="ws-stat-value ws-stat-value-deceased">
+            {characters.filter(c => c.is_alive === false).length}
+          </span>
+          <span className="ws-stat-label">† Deceased</span>
+        </div>
+        <div className="ws-stat">
           <span className="ws-stat-value ws-stat-value-teal">{regChars.length}</span>
           <span className="ws-stat-label">PNOS Registry</span>
         </div>
@@ -441,11 +456,17 @@ export default function WorldStudio() {
               ) : filtered.map(c => (
                 <div
                   key={c.id}
-                  className={`ws-char-card ${selectedChar === c.id ? 'ws-char-card-selected' : ''}`}
+                  className={`ws-char-card ${selectedChar === c.id ? 'ws-char-card-selected' : ''} ${c.is_alive === false ? 'ws-char-card-deceased' : ''}`}
                   onClick={() => setSelectedChar(c.id)}
                 >
                   <div className="ws-char-card-top">
-                    <span className="ws-char-card-name">{c.name}</span>
+                    <span className="ws-char-card-name">
+                      {c.is_alive === false && <span className="ws-deceased-marker">†</span>}
+                      {c.name}
+                    </span>
+                    {c.species && c.species !== 'human' && (
+                      <span className="ws-species-badge">{c.species}</span>
+                    )}
                     {c.intimate_eligible && <span className="ws-char-card-intimate">♡</span>}
                     <span className={`ws-char-card-status ${c.status === 'active' ? 'ws-char-card-status-active' : 'ws-char-card-status-draft'}`}>
                       {c.status}
@@ -617,10 +638,41 @@ export default function WorldStudio() {
 
               {!editMode ? (
                 <>
-                  <h2 className="ws-detail-name">{charDetail.name}</h2>
+                  <h2 className={`ws-detail-name ${charDetail.is_alive === false ? 'ws-detail-name-deceased' : ''}`}>
+                    {charDetail.is_alive === false && <span className="ws-deceased-marker-lg">†</span>}
+                    {charDetail.name}
+                  </h2>
                   <div className="ws-detail-meta">
                     {[charDetail.age_range, charDetail.occupation, charDetail.world_location].filter(Boolean).join(' · ')}
                   </div>
+
+                  {/* Identity Row */}
+                  {(charDetail.gender || charDetail.ethnicity || (charDetail.species && charDetail.species !== 'human')) && (
+                    <div className="ws-identity-row">
+                      {charDetail.gender && <span className="ws-identity-chip">{charDetail.gender}</span>}
+                      {charDetail.ethnicity && <span className="ws-identity-chip">{charDetail.ethnicity}</span>}
+                      {charDetail.species && charDetail.species !== 'human' && (
+                        <span className="ws-identity-chip ws-identity-chip-species">{charDetail.species}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Death Notice */}
+                  {charDetail.is_alive === false && (
+                    <div className="ws-death-notice">
+                      <div className="ws-death-notice-header">† Deceased</div>
+                      {charDetail.death_cause && (
+                        <div className="ws-death-notice-field">
+                          <span className="ws-death-notice-label">Cause:</span> {charDetail.death_cause}
+                        </div>
+                      )}
+                      {charDetail.death_impact && (
+                        <div className="ws-death-notice-field">
+                          <span className="ws-death-notice-label">Narrative Impact:</span> {charDetail.death_impact}
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {charDetail.aesthetic && (
                     <div className="ws-detail-section">
@@ -696,6 +748,8 @@ export default function WorldStudio() {
                           <div className="ws-rel-item-badges">
                             <Badge cls="">{rel.relationship_type?.replace(/_/g, ' ')}</Badge>
                             {rel.current_status && <Badge cls="ws-badge-draft">{rel.current_status}</Badge>}
+                            {rel.is_romantic && <Badge cls="ws-badge-intimate">♡</Badge>}
+                            {rel.is_blood_relation && <Badge cls="ws-badge-protagonist">Blood</Badge>}
                             {rel.rel_id && (
                               <button className="ws-rel-remove" onClick={() => deleteRelationship(rel.rel_id)}>✕</button>
                             )}
@@ -703,6 +757,12 @@ export default function WorldStudio() {
                         </div>
                         {rel.family_role && (
                           <div className="ws-rel-family-role">Family role: {rel.family_role}</div>
+                        )}
+                        {rel.conflict_summary && (
+                          <div className="ws-rel-conflict">⚡ {rel.conflict_summary}</div>
+                        )}
+                        {rel.knows_about_connection && (
+                          <div className="ws-rel-awareness">👁 Knows about the connection</div>
                         )}
                         {rel.history_summary && (
                           <div className="ws-rel-history">{rel.history_summary}</div>
@@ -792,6 +852,68 @@ export default function WorldStudio() {
                       }
                     </div>
                   ))}
+
+                  {/* Identity Fields */}
+                  <div className="ws-edit-section-label">Identity</div>
+                  <div className="ws-edit-field">
+                    <label className="ws-edit-label">Gender</label>
+                    <input className="ws-input" list="gender-options"
+                      value={editForm.gender || ''}
+                      onChange={e => setEditForm(p => ({ ...p, gender: e.target.value }))} />
+                    <datalist id="gender-options">
+                      {['Male', 'Female', 'Non-binary', 'Trans man', 'Trans woman', 'Genderfluid', 'Agender'].map(g => (
+                        <option key={g} value={g} />
+                      ))}
+                    </datalist>
+                  </div>
+                  <div className="ws-edit-field">
+                    <label className="ws-edit-label">Ethnicity</label>
+                    <input className="ws-input"
+                      value={editForm.ethnicity || ''}
+                      onChange={e => setEditForm(p => ({ ...p, ethnicity: e.target.value }))}
+                      placeholder="e.g. Black, Korean, Mixed-race…" />
+                  </div>
+                  <div className="ws-edit-field">
+                    <label className="ws-edit-label">Species</label>
+                    <input className="ws-input" list="species-options"
+                      value={editForm.species || 'human'}
+                      onChange={e => setEditForm(p => ({ ...p, species: e.target.value }))} />
+                    <datalist id="species-options">
+                      {['human', 'vampire', 'werewolf', 'fae', 'demon', 'angel', 'hybrid', 'shifter', 'witch', 'god'].map(s => (
+                        <option key={s} value={s} />
+                      ))}
+                    </datalist>
+                  </div>
+
+                  {/* Death Tracking */}
+                  <div className="ws-edit-section-label">Life Status</div>
+                  <div className="ws-edit-field">
+                    <label className="ws-edit-label ws-edit-label-checkbox">
+                      <input type="checkbox"
+                        checked={editForm.is_alive !== false}
+                        onChange={e => setEditForm(p => ({ ...p, is_alive: e.target.checked }))} />
+                      Character is alive
+                    </label>
+                  </div>
+                  {editForm.is_alive === false && (
+                    <>
+                      <div className="ws-edit-field">
+                        <label className="ws-edit-label">Cause of Death</label>
+                        <textarea className="ws-textarea ws-edit-textarea"
+                          value={editForm.death_cause || ''}
+                          onChange={e => setEditForm(p => ({ ...p, death_cause: e.target.value }))}
+                          placeholder="How did they die?" />
+                      </div>
+                      <div className="ws-edit-field">
+                        <label className="ws-edit-label">Narrative Impact</label>
+                        <textarea className="ws-textarea ws-edit-textarea"
+                          value={editForm.death_impact || ''}
+                          onChange={e => setEditForm(p => ({ ...p, death_impact: e.target.value }))}
+                          placeholder="What does their death mean for the story?" />
+                      </div>
+                    </>
+                  )}
+
                   <div className="ws-edit-field">
                     <label className="ws-edit-label">Family Layer</label>
                     <select className="ws-select"
@@ -1116,7 +1238,7 @@ export default function WorldStudio() {
               </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 16, marginTop: 4 }}>
+            <div style={{ display: 'flex', gap: 16, marginTop: 4, flexWrap: 'wrap' }}>
               <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ws-muted)', cursor: 'pointer' }}>
                 <input type="checkbox" checked={relForm.romantic_eligible}
                   onChange={e => setRelForm(p => ({ ...p, romantic_eligible: e.target.checked }))} />
@@ -1127,6 +1249,28 @@ export default function WorldStudio() {
                   onChange={e => setRelForm(p => ({ ...p, knows_about_transfer: e.target.checked }))} />
                 Knows about transfer
               </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ws-muted)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={relForm.is_blood_relation}
+                  onChange={e => setRelForm(p => ({ ...p, is_blood_relation: e.target.checked }))} />
+                Blood relation
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ws-muted)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={relForm.is_romantic}
+                  onChange={e => setRelForm(p => ({ ...p, is_romantic: e.target.checked }))} />
+                Romantic
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--ws-muted)', cursor: 'pointer' }}>
+                <input type="checkbox" checked={relForm.knows_about_connection}
+                  onChange={e => setRelForm(p => ({ ...p, knows_about_connection: e.target.checked }))} />
+                Knows about connection
+              </label>
+            </div>
+
+            <div className="ws-form-row" style={{ marginTop: 8 }}>
+              <label className="ws-form-label">Conflict Summary</label>
+              <textarea className="ws-textarea" placeholder="The conflict between them, independent of Lala…"
+                value={relForm.conflict_summary}
+                onChange={e => setRelForm(p => ({ ...p, conflict_summary: e.target.value }))} />
             </div>
 
             <div className="ws-modal-footer" style={{ marginTop: 20 }}>

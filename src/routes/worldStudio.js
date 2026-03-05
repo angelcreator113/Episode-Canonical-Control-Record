@@ -701,7 +701,8 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
       'what_they_want_from_lala','how_they_meet','dynamic','tension_type','intimate_style',
       'intimate_dynamic','what_lala_feels','arc_role','exit_reason','current_tension','status',
       'attracted_to','how_they_love','desire_they_wont_admit','relationship_graph',
-      'family_layer','origin_story','public_persona','private_reality'];
+      'family_layer','origin_story','public_persona','private_reality',
+      'gender','ethnicity','species','is_alive','death_date','death_cause','death_impact'];
     const updates = [];
     const rep = { id: req.params.id };
     fields.forEach(f => {

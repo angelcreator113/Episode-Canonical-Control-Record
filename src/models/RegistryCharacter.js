@@ -120,6 +120,40 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
+    /* ── Identity Fields ── */
+    gender: {
+      type: DataTypes.STRING(80),
+      allowNull: true,
+    },
+    ethnicity: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
+    species: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+      defaultValue: 'human',
+    },
+
+    /* ── Death Tracking ── */
+    is_alive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    death_date: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    death_cause: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    death_impact: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+
     /* ── Section 2: Essence Profile ── */
     core_desire: {
       type: DataTypes.TEXT,

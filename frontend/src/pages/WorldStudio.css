@@ -1127,3 +1127,131 @@
     border-bottom: 1px solid var(--ws-border);
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════════
+   v3.1 ADDITIONS — Identity · Death · Ensemble-World
+═══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── Identity Row ──────────────────────────────────────────────────────────── */
+.ws-identity-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin: 8px 0 12px;
+}
+.ws-identity-chip {
+  font-size: 11px;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--ws-border);
+  color: var(--ws-muted);
+  letter-spacing: 0.3px;
+}
+.ws-identity-chip-species {
+  background: rgba(180,130,255,0.12);
+  border-color: rgba(180,130,255,0.3);
+  color: #c9a0ff;
+}
+
+/* ── Species Badge (sidebar) ───────────────────────────────────────────────── */
+.ws-species-badge {
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 10px;
+  background: rgba(180,130,255,0.15);
+  color: #c9a0ff;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+}
+
+/* ── Deceased States ───────────────────────────────────────────────────────── */
+.ws-char-card-deceased {
+  opacity: 0.7;
+  border-left: 3px solid rgba(120,120,120,0.5);
+}
+.ws-char-card-deceased:hover {
+  opacity: 0.85;
+}
+.ws-deceased-marker {
+  color: #888;
+  margin-right: 4px;
+  font-weight: 600;
+}
+.ws-deceased-marker-lg {
+  color: #888;
+  margin-right: 6px;
+  font-size: 1.2em;
+  font-weight: 700;
+}
+.ws-detail-name-deceased {
+  color: #999 !important;
+}
+.ws-stat-value-deceased {
+  color: #888;
+}
+
+/* ── Death Notice Block ────────────────────────────────────────────────────── */
+.ws-death-notice {
+  background: rgba(100,100,100,0.08);
+  border: 1px solid rgba(120,120,120,0.25);
+  border-radius: 10px;
+  padding: 14px 18px;
+  margin: 12px 0 16px;
+}
+.ws-death-notice-header {
+  font-size: 13px;
+  font-weight: 700;
+  color: #999;
+  margin-bottom: 8px;
+  letter-spacing: 0.5px;
+}
+.ws-death-notice-field {
+  font-size: 12px;
+  color: var(--ws-muted);
+  margin-top: 6px;
+  line-height: 1.5;
+}
+.ws-death-notice-label {
+  font-weight: 600;
+  color: #aaa;
+}
+
+/* ── Relationship Items (ensemble) ─────────────────────────────────────────── */
+.ws-rel-conflict {
+  font-size: 11px;
+  color: var(--ws-accent-rose, #e4889b);
+  margin-top: 4px;
+  line-height: 1.45;
+  font-style: italic;
+}
+.ws-rel-awareness {
+  font-size: 11px;
+  color: var(--ws-muted);
+  margin-top: 3px;
+}
+
+/* ── Edit Form Section Labels ──────────────────────────────────────────────── */
+.ws-edit-section-label {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ws-accent-gold, #c5a55a);
+  margin: 20px 0 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--ws-border);
+}
+.ws-edit-label-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.ws-edit-label-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--ws-accent-gold, #c5a55a);
+}

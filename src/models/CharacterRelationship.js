@@ -29,6 +29,19 @@ module.exports = (sequelize) => {
     lala_mirror:            { type: DataTypes.TEXT, allowNull: true },
     career_echo_potential:  { type: DataTypes.TEXT, allowNull: true },
     confirmed:              { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+
+    /* ── Ensemble-World Fields ── */
+    // family_role: mother | father | sister | brother | aunt | uncle | cousin |
+    //   grandmother | grandfather | daughter | son | niece | nephew | stepmother | stepsister | etc.
+    family_role:            { type: DataTypes.STRING(120), allowNull: true, defaultValue: null },
+    // is_blood_relation: true = biological family. false = found family, step, or chosen.
+    is_blood_relation:      { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // is_romantic: Explicit romantic flag — enables filtering independent of relationship_type label.
+    is_romantic:            { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+    // conflict_summary: The conflict between character A and character B — independent of Lala.
+    conflict_summary:       { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
+    // knows_about_connection: Does character B know about character A's connection to Lala / JustAWoman?
+    knows_about_connection: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
   }, {
     tableName: 'character_relationships',
     timestamps: true,
