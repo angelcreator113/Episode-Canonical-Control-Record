@@ -114,6 +114,22 @@ const CONNECTION_MODE_MAP = {
   recurring:       'IRL',
 };
 
+// Natural inter-character pairing rules: [typeA, typeB, rel_type, conn_mode, tension]
+const INTER_CHAR_PAIRINGS = [
+  ['love_interest', 'rival',           'Romantic Rivalry',    'IRL',          'volatile'],
+  ['love_interest', 'love_interest',   'Love Triangle',       'IRL',          'simmering'],
+  ['love_interest', 'one_night_stand', 'Complicated History', 'IRL',          'simmering'],
+  ['industry_peer', 'collaborator',    'Professional Ally',   'Professional', 'calm'],
+  ['industry_peer', 'industry_peer',   'Industry Connection', 'Professional', 'calm'],
+  ['industry_peer', 'rival',           'Professional Rival',  'Professional', 'simmering'],
+  ['mentor',        'antagonist',      'Power Struggle',      'Professional', 'volatile'],
+  ['mentor',        'collaborator',    'Mentorship',          'Professional', 'calm'],
+  ['antagonist',    'rival',           'Dark Alliance',       'IRL',          'simmering'],
+  ['collaborator',  'collaborator',    'Creative Partners',   'Professional', 'calm'],
+  ['rival',         'rival',           'Mutual Rivalry',      'Professional', 'volatile'],
+  ['one_night_stand','rival',          'Unexpected Link',     'IRL',          'simmering'],
+];
+
 /**
  * Find (or create) the LalaVerse registry so generated characters
  * can be inserted into registry_characters with a valid registry_id.
@@ -315,6 +331,99 @@ async function syncRelationships(rcId, c, registryId) {
   }
 }
 
+/**
+ * Seed inter-character relationships (not just Lala-centric).
+ * Takes an array of { registry_character_id, name, character_type, tension_type, dynamic }
+ * and creates candidate relationships between natural pairings.
+ *
+ * @param {Array} characters - world chars with registry_character_id set
+ * @param {string} registryId - the registry these characters belong to
+ * @returns {number} count of relationships created
+ */
+async function seedInterCharacterRelationships(characters, registryId) {
+  let created = 0;
+  const pairs = [];
+
+  // Build all possible pairs from INTER_CHAR_PAIRINGS rules
+  for (let i = 0; i < characters.length; i++) {
+    for (let j = i + 1; j < characters.length; j++) {
+      const a = characters[i];
+      const b = characters[j];
+      if (!a.registry_character_id || !b.registry_character_id) continue;
+
+      // Try to find a matching pairing rule (check both orderings)
+      const rule = INTER_CHAR_PAIRINGS.find(
+        ([tA, tB]) =>
+          (a.character_type === tA && b.character_type === tB) ||
+          (a.character_type === tB && b.character_type === tA)
+      );
+      if (rule) {
+        pairs.push({ a, b, rule });
+      }
+    }
+  }
+
+  // Limit to avoid flooding: max 5 inter-char relationships per batch
+  // Prioritize volatile/simmering tension over calm
+  pairs.sort((x, y) => {
+    const tensionRank = { volatile: 0, simmering: 1, calm: 2 };
+    return (tensionRank[x.rule[4]] ?? 2) - (tensionRank[y.rule[4]] ?? 2);
+  });
+  const selected = pairs.slice(0, 5);
+
+  for (const { a, b, rule } of selected) {
+    const [, , relType, connMode, tension] = rule;
+    try {
+      // Check if relationship already exists between these two
+      const [existing] = await sequelize.query(
+        `SELECT id FROM character_relationships
+         WHERE (character_id_a = :idA AND character_id_b = :idB)
+            OR (character_id_a = :idB AND character_id_b = :idA)
+         LIMIT 1`,
+        { replacements: { idA: a.registry_character_id, idB: b.registry_character_id }, type: sequelize.QueryTypes.SELECT }
+      );
+      if (existing) continue;
+
+      const relId = uuidv4();
+      // Combine both characters' dynamics for the situation note
+      const situation = [a.dynamic, b.dynamic].filter(Boolean).join(' / ') || null;
+      const notes = `Inter-character: ${a.name} (${a.character_type}) ↔ ${b.name} (${b.character_type})`;
+
+      await sequelize.query(
+        `INSERT INTO character_relationships
+           (id, character_id_a, character_id_b, relationship_type,
+            connection_mode, lala_connection, status, situation,
+            tension_state, pain_point_category, notes,
+            confirmed, created_at, updated_at)
+         VALUES
+           (:id, :char_a, :char_b, :rel_type,
+            :conn_mode, 'independent', 'Active', :situation,
+            :tension_state, :pain_cat, :notes,
+            false, NOW(), NOW())`,
+        {
+          replacements: {
+            id: relId,
+            char_a: a.registry_character_id,
+            char_b: b.registry_character_id,
+            rel_type: relType,
+            conn_mode: connMode,
+            situation,
+            tension_state: tension,
+            pain_cat: null,
+            notes,
+          },
+          type: sequelize.QueryTypes.INSERT,
+        }
+      );
+      console.log(`seedInterChar: Created ${relType} candidate ${relId} (${a.name} ↔ ${b.name})`);
+      created++;
+    } catch (err) {
+      console.error(`seedInterChar error (${a.name} ↔ ${b.name}):`, err.message);
+    }
+  }
+  return created;
+}
+
 // Variable scene length logic based on relationship depth and type
 function resolveSceneLength(characterType, sceneType, dynamic) {
   // One-night stands: punchy, electric, not drawn out
@@ -479,7 +588,11 @@ Return JSON only:
       inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
-    res.status(201).json({ characters: inserted, batch_id: batchId, count: inserted.length, generation_notes: parsed.generation_notes });
+    // Seed inter-character relationships (not just Lala-centric)
+    const interCount = await seedInterCharacterRelationships(inserted, lalaRegistryId);
+    console.log(`generate-ecosystem: Seeded ${interCount} inter-character relationship(s)`);
+
+    res.status(201).json({ characters: inserted, batch_id: batchId, count: inserted.length, inter_relationships: interCount, generation_notes: parsed.generation_notes });
   } catch (err) {
     console.error('generate-ecosystem error:', err);
     res.status(500).json({ error: err.message });
@@ -623,16 +736,21 @@ router.post('/world/seed-relationships', optionalAuth, async (req, res) => {
       ORDER BY wc.name
     `);
 
-    let seeded = 0;
+    // 1) Lala-centric relationships (existing behaviour)
+    let lalaSeeded = 0;
     for (const wc of worldChars) {
       const relId = await syncRelationships(wc.registry_character_id, wc, registryId);
-      if (relId) seeded++;
+      if (relId) lalaSeeded++;
     }
 
+    // 2) Inter-character relationships (new)
+    const interSeeded = await seedInterCharacterRelationships(worldChars, registryId);
+
     res.json({
-      seeded,
+      lala_seeded: lalaSeeded,
+      inter_seeded: interSeeded,
       total_active: worldChars.length,
-      message: `Seeded ${seeded} relationship candidate(s) of ${worldChars.length} active characters`,
+      message: `Seeded ${lalaSeeded} Lala relationship(s) + ${interSeeded} inter-character relationship(s) from ${worldChars.length} active characters`,
     });
   } catch (err) {
     console.error('seed-relationships error:', err);
@@ -1293,10 +1411,15 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
+    // Seed inter-character relationships (not just Lala-centric)
+    const interCount = await seedInterCharacterRelationships(inserted, lalaRegistryId);
+    console.log(`generate-ecosystem-confirm: Seeded ${interCount} inter-character relationship(s)`);
+
     res.status(201).json({
       characters: inserted,
       batch_id: batchId,
       count: inserted.length,
+      inter_relationships: interCount,
       generation_notes,
     });
   } catch (err) {
