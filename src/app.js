@@ -830,6 +830,15 @@ try {
   console.error('✗ Failed to load Memories routes:', e.message);
 }
 
+// Intimate Scene Generation (memories patch — beats + morning-after)
+try {
+  const intimatePatch = require('./routes/memoriesRoutes-intimate-patch');
+  app.use('/api/v1/memories', intimatePatch);
+  console.log('✓ Intimate scene patch loaded at /api/v1/memories/generate-intimate-scene');
+} catch (e) {
+  console.error('✗ Failed to load intimate scene patch:', e.message);
+}
+
 // Script Bridge routes (generate episode scripts from book lines)
 try {
   const scriptFromBook = require('./routes/generate-script-from-book');

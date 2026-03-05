@@ -48,7 +48,7 @@ async function claude(system, user, maxTokens = 4000) {
     const Anthropic = require('@anthropic-ai/sdk');
     const client    = new Anthropic();
     const msg = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
+      model: 'claude-opus-4-5',
       max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: user }],
@@ -66,6 +66,12 @@ async function claude(system, user, maxTokens = 4000) {
 function parseJSON(raw) {
   try { return JSON.parse((raw || '').replace(/```json|```/g, '').trim()); }
   catch (_) { return null; }
+}
+
+function safeJson(val, fallback = []) {
+  if (!val) return fallback;
+  if (typeof val === 'object') return val;
+  try { return JSON.parse(val); } catch { return fallback; }
 }
 
 // ── Registry sync helpers ──────────────────────────────────────────────────
@@ -546,7 +552,14 @@ Return JSON only:
       "what_lala_feels": "what Lala physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
       "arc_role": "how this character changes Lala's trajectory",
       "exit_reason": "how or why they leave her world, or null if they stay",
-      "career_echo_connection": true|false
+      "career_echo_connection": true|false,
+      "attracted_to": "who they actually pursue — specific, not a label (e.g. 'men with authority she can dismantle, women who are further ahead than her')",
+      "how_they_love": "their connection pattern (e.g. 'avoidant until she isn't, then fully in')",
+      "desire_they_wont_admit": "the thing that complicates the above (dimmed, private)",
+      "family_layer": "real_world | lalaverse | series_2",
+      "origin_story": "where they came from before Lala's world",
+      "public_persona": "how the world sees them",
+      "private_reality": "what only close people know"
     }
   ],
   "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
@@ -580,6 +593,9 @@ Return JSON only:
             how_they_meet, dynamic, tension_type,
             intimate_style, intimate_dynamic, what_lala_feels,
             arc_role, exit_reason, career_echo_connection,
+            attracted_to, how_they_love, desire_they_wont_admit,
+            relationship_graph, family_layer, origin_story,
+            public_persona, private_reality,
             status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
@@ -588,6 +604,9 @@ Return JSON only:
             :how_meet, :dynamic, :tension_type,
             :intimate_style, :intimate_dynamic, :what_lala_feels,
             :arc_role, :exit_reason, :career_echo,
+            :attracted_to, :how_they_love, :desire_they_wont_admit,
+            :relationship_graph, :family_layer, :origin_story,
+            :public_persona, :private_reality,
             'draft', 'Stable', NOW(), NOW())`,
         {
           replacements: {
@@ -605,6 +624,14 @@ Return JSON only:
             what_lala_feels: c.what_lala_feels || null,
             arc_role: c.arc_role || null, exit_reason: c.exit_reason || null,
             career_echo: c.career_echo_connection || false,
+            attracted_to: c.attracted_to || null,
+            how_they_love: c.how_they_love || null,
+            desire_they_wont_admit: c.desire_they_wont_admit || null,
+            relationship_graph: JSON.stringify(c.relationship_graph || []),
+            family_layer: c.family_layer || null,
+            origin_story: c.origin_story || null,
+            public_persona: c.public_persona || null,
+            private_reality: c.private_reality || null,
           },
           type: sequelize.QueryTypes.INSERT,
         }
@@ -672,7 +699,9 @@ router.put('/world/characters/:id', optionalAuth, async (req, res) => {
   try {
     const fields = ['name','age_range','occupation','world_location','sexuality','aesthetic','signature','surface_want','real_want',
       'what_they_want_from_lala','how_they_meet','dynamic','tension_type','intimate_style',
-      'intimate_dynamic','what_lala_feels','arc_role','exit_reason','current_tension','status'];
+      'intimate_dynamic','what_lala_feels','arc_role','exit_reason','current_tension','status',
+      'attracted_to','how_they_love','desire_they_wont_admit','relationship_graph',
+      'family_layer','origin_story','public_persona','private_reality'];
     const updates = [];
     const rep = { id: req.params.id };
     fields.forEach(f => {
@@ -736,6 +765,11 @@ router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
     // Remove linked scenes
     await sequelize.query(
       `DELETE FROM intimate_scenes WHERE character_a_id = :id OR character_b_id = :id`,
+      { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
+    ).catch(() => {});
+    // Remove extended relationships
+    await sequelize.query(
+      `DELETE FROM character_relationships_extended WHERE character_id = :id OR related_character_id = :id`,
       { replacements: { id: req.params.id }, type: sequelize.QueryTypes.DELETE }
     ).catch(() => {});
     // Delete the character
@@ -1332,7 +1366,14 @@ Return JSON only:
       "what_lala_feels": "what Lala physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
       "arc_role": "how this character changes Lala's trajectory",
       "exit_reason": "how or why they leave her world, or null if they stay",
-      "career_echo_connection": true|false
+      "career_echo_connection": true|false,
+      "attracted_to": "who they actually pursue — specific, not a label (e.g. 'men with authority she can dismantle, women who are further ahead than her')",
+      "how_they_love": "their connection pattern (e.g. 'avoidant until she isn't, then fully in')",
+      "desire_they_wont_admit": "the thing that complicates the above (dimmed, private)",
+      "family_layer": "real_world | lalaverse | series_2",
+      "origin_story": "where they came from before Lala's world",
+      "public_persona": "how the world sees them",
+      "private_reality": "what only close people know"
     }
   ],
   "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
@@ -1405,6 +1446,9 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             how_they_meet, dynamic, tension_type,
             intimate_style, intimate_dynamic, what_lala_feels,
             arc_role, exit_reason, career_echo_connection,
+            attracted_to, how_they_love, desire_they_wont_admit,
+            relationship_graph, family_layer, origin_story,
+            public_persona, private_reality,
             status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
@@ -1413,6 +1457,9 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             :how_meet, :dynamic, :tension_type,
             :intimate_style, :intimate_dynamic, :what_lala_feels,
             :arc_role, :exit_reason, :career_echo,
+            :attracted_to, :how_they_love, :desire_they_wont_admit,
+            :relationship_graph, :family_layer, :origin_story,
+            :public_persona, :private_reality,
             'draft', 'Stable', NOW(), NOW())`,
         {
           replacements: {
@@ -1430,6 +1477,14 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             what_lala_feels: c.what_lala_feels || null,
             arc_role: c.arc_role || null, exit_reason: c.exit_reason || null,
             career_echo: c.career_echo_connection || false,
+            attracted_to: c.attracted_to || null,
+            how_they_love: c.how_they_love || null,
+            desire_they_wont_admit: c.desire_they_wont_admit || null,
+            relationship_graph: JSON.stringify(c.relationship_graph || []),
+            family_layer: c.family_layer || null,
+            origin_story: c.origin_story || null,
+            public_persona: c.public_persona || null,
+            private_reality: c.private_reality || null,
           },
           type: sequelize.QueryTypes.INSERT,
         }
@@ -1455,6 +1510,183 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
     console.error('generate-ecosystem-confirm error:', err);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ══════════════════════════════════════════════════════════════════════════════
+// RELATIONSHIP GRAPH CRUD  (inline JSONB + extended table)
+// ══════════════════════════════════════════════════════════════════════════════
+
+// GET /world/characters/:id/relationships
+router.get('/world/characters/:id/relationships', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    // Also fetch from extended table
+    let extended = [];
+    try {
+      extended = await Q(req,
+        `SELECT * FROM character_relationships_extended
+         WHERE character_id = :id ORDER BY created_at DESC`,
+        { replacements: { id: req.params.id } }
+      );
+    } catch (_) {}
+
+    res.json({
+      relationship_graph: safeJson(char.relationship_graph),
+      extended,
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// POST /world/characters/:id/relationships
+router.post('/world/characters/:id/relationships', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    const {
+      related_character_id, related_character_name, related_character_source,
+      relationship_type, family_role, history_summary, current_status,
+      tension_state, romantic_eligible, knows_about_transfer, series_layer, notes,
+    } = req.body;
+
+    const relId = uuidv4();
+
+    // 1. Write to extended table
+    try {
+      await sequelize.query(
+        `INSERT INTO character_relationships_extended
+         (id, character_id, related_character_id, related_character_name,
+          related_character_source, relationship_type, family_role,
+          history_summary, current_status, tension_state,
+          romantic_eligible, knows_about_transfer, series_layer, notes,
+          created_at, updated_at)
+         VALUES
+         (:id, :cid, :rid, :rname, :rsource, :rtype, :frole,
+          :history, :cstatus, :tension,
+          :romantic, :transfer, :layer, :notes,
+          NOW(), NOW())`,
+        {
+          replacements: {
+            id: relId, cid: req.params.id,
+            rid: related_character_id || null,
+            rname: related_character_name || null,
+            rsource: related_character_source || 'world_characters',
+            rtype: relationship_type || null,
+            frole: family_role || null,
+            history: history_summary || null,
+            cstatus: current_status || 'active',
+            tension: tension_state || 'Stable',
+            romantic: !!romantic_eligible,
+            transfer: !!knows_about_transfer,
+            layer: series_layer || null,
+            notes: notes || null,
+          },
+          type: sequelize.QueryTypes.INSERT,
+        }
+      );
+    } catch (e) { console.error('extended table write failed:', e.message); }
+
+    // 2. Append to JSONB graph on world_characters
+    const graph = safeJson(char.relationship_graph);
+    graph.push({
+      rel_id: relId,
+      character_id: related_character_id || null,
+      character_name: related_character_name || '',
+      relationship_type: relationship_type || '',
+      family_role: family_role || null,
+      history_summary: history_summary || '',
+      current_status: current_status || 'active',
+      knows_about_transfer: !!knows_about_transfer,
+      notes: notes || '',
+    });
+    await sequelize.query(
+      `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
+      { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+    );
+
+    res.json({ relationship: { id: relId }, graph });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// PUT /world/characters/:id/relationships/:relId
+router.put('/world/characters/:id/relationships/:relId', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    // Update extended table row
+    const extFields = [
+      'related_character_name', 'relationship_type', 'family_role',
+      'history_summary', 'current_status', 'tension_state',
+      'romantic_eligible', 'knows_about_transfer', 'series_layer', 'notes',
+    ];
+    const updates = [];
+    const rep = { relId: req.params.relId, cid: req.params.id };
+    extFields.forEach(f => {
+      if (req.body[f] !== undefined) { updates.push(`${f} = :${f}`); rep[f] = req.body[f]; }
+    });
+    if (updates.length) {
+      updates.push('updated_at = NOW()');
+      try {
+        await sequelize.query(
+          `UPDATE character_relationships_extended SET ${updates.join(', ')} WHERE id = :relId AND character_id = :cid`,
+          { replacements: rep, type: sequelize.QueryTypes.UPDATE }
+        );
+      } catch (_) {}
+    }
+
+    // Update JSONB graph
+    const graph = safeJson(char.relationship_graph);
+    const idx = graph.findIndex(r => r.rel_id === req.params.relId);
+    if (idx !== -1) {
+      graph[idx] = { ...graph[idx], ...req.body };
+      await sequelize.query(
+        `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
+        { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+      );
+    }
+
+    res.json({ updated: true, graph });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// DELETE /world/characters/:id/relationships/:relId
+router.delete('/world/characters/:id/relationships/:relId', optionalAuth, async (req, res) => {
+  try {
+    const [char] = await Q(req,
+      'SELECT id, relationship_graph FROM world_characters WHERE id = :id',
+      { replacements: { id: req.params.id } }
+    );
+    if (!char) return res.status(404).json({ error: 'Not found' });
+
+    // Remove from extended table
+    try {
+      await sequelize.query(
+        `DELETE FROM character_relationships_extended WHERE id = :relId AND character_id = :cid`,
+        { replacements: { relId: req.params.relId, cid: req.params.id }, type: sequelize.QueryTypes.DELETE }
+      );
+    } catch (_) {}
+
+    // Remove from JSONB graph
+    const graph = safeJson(char.relationship_graph).filter(r => r.rel_id !== req.params.relId);
+    await sequelize.query(
+      `UPDATE world_characters SET relationship_graph = :graph, updated_at = NOW() WHERE id = :id`,
+      { replacements: { graph: JSON.stringify(graph), id: req.params.id }, type: sequelize.QueryTypes.UPDATE }
+    );
+
+    res.json({ deleted: true, graph });
+  } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
 module.exports = router;
