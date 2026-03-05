@@ -91,7 +91,7 @@ async function findOrCreateLalaVerseRegistry(req) {
 
   const regId = uuidv4();
   await sequelize.query(
-    `INSERT INTO character_registries (id, name, book_tag, description, created_at, updated_at)
+    `INSERT INTO character_registries (id, title, book_tag, description, created_at, updated_at)
      VALUES (:id, 'LalaVerse', 'lalaverse', 'Auto-created by World Studio', NOW(), NOW())`,
     { replacements: { id: regId }, type: sequelize.QueryTypes.INSERT }
   );
