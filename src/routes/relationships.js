@@ -36,15 +36,20 @@ function getLayer(roleType) {
 
 /**
  * Cross-layer rule:
- *  - Real-world characters can only relate to other real-world characters
- *  - LalaVerse characters can only relate to other lalaverse characters
- *  - Series-2 can relate to lalaverse (they're narrative mirrors)
+ *  - Characters in the same registry are always compatible (same fictional universe)
+ *  - Otherwise: real-world ↔ real-world, lalaverse ↔ lalaverse, series-2 ↔ lalaverse
  */
-function isLayerCompatible(layerA, layerB) {
+function isLayerCompatible(layerA, layerB, sameRegistry = false) {
+  if (sameRegistry) return true;
   if (layerA === layerB) return true;
   // series-2 (special) may relate to lalaverse (they share the fiction layer)
   if ((layerA === 'series-2' && layerB === 'lalaverse') ||
       (layerA === 'lalaverse' && layerB === 'series-2')) return true;
+  // real-world protagonist can relate to lalaverse characters in their own universe
+  if ((layerA === 'real-world' && layerB === 'lalaverse') ||
+      (layerA === 'lalaverse' && layerB === 'real-world')) return true;
+  if ((layerA === 'real-world' && layerB === 'series-2') ||
+      (layerA === 'series-2' && layerB === 'real-world')) return true;
   return false;
 }
 
@@ -244,11 +249,11 @@ router.post('/', optionalAuth, async (req, res) => {
 
     // ── Cross-layer validation ───────────────────────────────────────
     const [charA] = await db.sequelize.query(
-      'SELECT id, role_type, display_name FROM registry_characters WHERE id = :id',
+      'SELECT id, role_type, display_name, registry_id FROM registry_characters WHERE id = :id',
       { replacements: { id: character_id_a }, type: db.sequelize.QueryTypes.SELECT }
     );
     const [charB] = await db.sequelize.query(
-      'SELECT id, role_type, display_name FROM registry_characters WHERE id = :id',
+      'SELECT id, role_type, display_name, registry_id FROM registry_characters WHERE id = :id',
       { replacements: { id: character_id_b }, type: db.sequelize.QueryTypes.SELECT }
     );
     if (!charA || !charB) {
@@ -256,9 +261,10 @@ router.post('/', optionalAuth, async (req, res) => {
     }
     const layerA = getLayer(charA.role_type);
     const layerB = getLayer(charB.role_type);
-    if (!isLayerCompatible(layerA, layerB)) {
+    const sameReg = charA.registry_id && charA.registry_id === charB.registry_id;
+    if (!isLayerCompatible(layerA, layerB, sameReg)) {
       return res.status(400).json({
-        error: `Cross-layer relationships not allowed: ${charA.display_name} (${layerA}) cannot have a relationship with ${charB.display_name} (${layerB}). Real-world characters relate only to real-world; LalaVerse characters relate only to LalaVerse.`,
+        error: `Cross-layer relationships not allowed: ${charA.display_name} (${layerA}) cannot have a relationship with ${charB.display_name} (${layerB}).`,
       });
     }
 
@@ -416,10 +422,10 @@ No markdown fences, no explanation.`,
       if (!aExists || !bExists) continue;
       if (c.character_a_id === c.character_b_id) continue;
 
-      // Cross-layer filter: skip incompatible layer pairs
+      // Cross-layer filter: skip incompatible layer pairs (same-registry always OK)
       const layA = getLayer(aExists.role_type);
       const layB = getLayer(bExists.role_type);
-      if (!isLayerCompatible(layA, layB)) continue;
+      if (!isLayerCompatible(layA, layB, true)) continue;  // generate is per-registry
 
       const pairKey = `${c.character_a_id}|${c.character_b_id}`;
       const pairKeyRev = `${c.character_b_id}|${c.character_a_id}`;
@@ -493,10 +499,11 @@ router.post('/confirm/:relationshipId', optionalAuth, async (req, res) => {
     const db = getDb();
     const { relationshipId } = req.params;
 
-    // Fetch the candidate with character role_types for layer check
+    // Fetch the candidate with character role_types + registry_id for layer check
     const [candidate] = await db.sequelize.query(
       `SELECT cr.id, cr.confirmed, ca.role_type AS role_a, cb.role_type AS role_b,
-              ca.display_name AS name_a, cb.display_name AS name_b
+              ca.display_name AS name_a, cb.display_name AS name_b,
+              ca.registry_id AS reg_a, cb.registry_id AS reg_b
        FROM character_relationships cr
        LEFT JOIN registry_characters ca ON ca.id = cr.character_id_a
        LEFT JOIN registry_characters cb ON cb.id = cr.character_id_b
@@ -505,10 +512,11 @@ router.post('/confirm/:relationshipId', optionalAuth, async (req, res) => {
     );
     if (!candidate) return res.status(404).json({ error: 'Relationship not found' });
 
-    // Cross-layer validation on confirm
+    // Cross-layer validation on confirm (same-registry characters are always compatible)
     const layA = getLayer(candidate.role_a);
     const layB = getLayer(candidate.role_b);
-    if (!isLayerCompatible(layA, layB)) {
+    const sameReg = candidate.reg_a && candidate.reg_a === candidate.reg_b;
+    if (!isLayerCompatible(layA, layB, sameReg)) {
       return res.status(400).json({
         error: `Cannot confirm: ${candidate.name_a} (${layA}) and ${candidate.name_b} (${layB}) are in incompatible layers.`,
       });
