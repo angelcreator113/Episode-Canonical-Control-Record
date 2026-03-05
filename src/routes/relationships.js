@@ -35,17 +35,15 @@ function getLayer(roleType) {
 }
 
 /**
- * Cross-layer rule:
- *  - Real-world characters can only relate to other real-world characters
- *  - LalaVerse characters can only relate to other lalaverse characters
- *  - Series-2 can relate to lalaverse (they're narrative mirrors)
+ * Cross-layer rule (relaxed):
+ *  - role_type is a narrative archetype, NOT a world-layer indicator
+ *  - A "shadow" or "mirror" can exist in the real world alongside protagonists
+ *  - Only block truly impossible combos (none currently — all are valid)
+ *  - When a dedicated world_layer column exists, tighten this back up
  */
 function isLayerCompatible(layerA, layerB) {
-  if (layerA === layerB) return true;
-  // series-2 (special) may relate to lalaverse (they share the fiction layer)
-  if ((layerA === 'series-2' && layerB === 'lalaverse') ||
-      (layerA === 'lalaverse' && layerB === 'series-2')) return true;
-  return false;
+  // All narrative-role layers are compatible with each other
+  return true;
 }
 
 // ── Column SELECT helpers ──────────────────────────────────────────────
