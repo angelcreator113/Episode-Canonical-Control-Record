@@ -27,6 +27,11 @@ import './WorldStudio.css';
 const API = '/api/v1';
 
 /* ── Constants ──────────────────────────────────────────────────────── */
+const WORLD_OPTIONS = [
+  { tag: 'lalaverse', label: 'LalaVerse', icon: '✦' },
+  { tag: 'book-1',    label: 'Book 1 · Before Lala', icon: '◈' },
+];
+
 const TYPES = {
   love_interest:   'Love Interest',
   industry_peer:   'Industry Peer',
@@ -98,6 +103,9 @@ export default function WorldStudio() {
 
   /* ── Tab ─────────────────────────────────────────────────────────── */
   const [tab, setTab] = useState('characters');
+
+  /* ── World selector ──────────────────────────────────────────────── */
+  const [worldTag, setWorldTag] = useState('lalaverse');
 
   /* ── Characters ───────────────────────────────────────────────────── */
   const [characters,     setCharacters]     = useState([]);
@@ -185,7 +193,8 @@ export default function WorldStudio() {
     setGenerating(true);
     try {
       const r = await fetch(`${API}/world/generate-ecosystem-preview`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ world_tag: worldTag }),
       });
       const d = await r.json();
       if (d.characters?.length) {
@@ -205,7 +214,7 @@ export default function WorldStudio() {
     try {
       const r = await fetch(`${API}/world/generate-ecosystem-confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characters: selected, generation_notes: previewNotes }),
+        body: JSON.stringify({ characters: selected, generation_notes: previewNotes, world_tag: worldTag }),
       });
       const d = await r.json();
       if (d.characters) {
@@ -271,7 +280,10 @@ export default function WorldStudio() {
   const seedRelationships = async () => {
     setSeeding(true);
     try {
-      const r = await fetch(`${API}/world/seed-relationships`, { method: 'POST' });
+      const r = await fetch(`${API}/world/seed-relationships`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ world_tag: worldTag }),
+      });
       const d = await r.json();
       flash(d.message || 'Done');
     } catch (e) { flash(e.message, 'error'); }
@@ -353,6 +365,20 @@ export default function WorldStudio() {
             >
               {t.label}
               <span className="ws-tab-count">{t.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* World Picker */}
+        <div className="ws-world-picker">
+          {WORLD_OPTIONS.map(w => (
+            <button
+              key={w.tag}
+              className={`ws-world-btn ${worldTag === w.tag ? 'ws-world-btn-active' : ''}`}
+              onClick={() => setWorldTag(w.tag)}
+            >
+              <span className="ws-world-btn-icon">{w.icon}</span>
+              {w.label}
             </button>
           ))}
         </div>
@@ -548,10 +574,10 @@ export default function WorldStudio() {
           {/* Characters: empty state */}
           {tab === 'characters' && characters.length === 0 && (
             <div className="ws-empty">
-              <div className="ws-empty-icon">✦</div>
-              <div className="ws-empty-title">Start your World Ecosystem</div>
+              <div className="ws-empty-icon">{WORLD_OPTIONS.find(w => w.tag === worldTag)?.icon || '✦'}</div>
+              <div className="ws-empty-title">Start your {WORLD_OPTIONS.find(w => w.tag === worldTag)?.label || 'World'} Ecosystem</div>
               <div className="ws-empty-text">
-                Generate a full cast of world characters. Preview them, select who stays, confirm.
+                Generate a full cast of world characters for <strong>{WORLD_OPTIONS.find(w => w.tag === worldTag)?.label}</strong>. Preview them, select who stays, confirm.
               </div>
               <div className="ws-empty-actions">
                 <button className="ws-btn ws-btn-gold ws-btn-lg" onClick={generatePreview} disabled={generating}>
@@ -921,6 +947,7 @@ export default function WorldStudio() {
                       onChange={e => setEditForm(p => ({ ...p, family_layer: e.target.value }))}>
                       <option value="real_world">Real World</option>
                       <option value="lalaverse">LalaVerse</option>
+                      <option value="book-1">Book 1 · Before Lala</option>
                       <option value="series_2">Series 2</option>
                     </select>
                   </div>
@@ -1232,6 +1259,7 @@ export default function WorldStudio() {
                   value={relForm.series_layer}
                   onChange={e => setRelForm(p => ({ ...p, series_layer: e.target.value }))}>
                   <option value="lalaverse">LalaVerse</option>
+                  <option value="book-1">Book 1 · Before Lala</option>
                   <option value="real_world">Real World</option>
                   <option value="series_2">Series 2</option>
                 </select>
