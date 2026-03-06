@@ -1170,16 +1170,157 @@
 @media (max-width: 1200px) {
   .ws-inspector, .ws-sidebar { width: 260px; min-width: 240px; }
 }
+
+/* ── Tablet ────────────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .ws-body { flex-direction: column; }
   .ws-sidebar, .ws-inspector {
     width:        100%;
     min-width:    unset;
-    max-height:   200px;
+    max-height:   260px;
     border-right: none;
     border-left:  none;
     border-bottom: 1px solid var(--ws-border);
   }
+  .ws-header { gap: 10px; padding: 12px 16px; }
+  .ws-header-controls { flex-wrap: wrap; gap: 6px; }
+  .ws-stats-bar { gap: 16px; padding: 8px 16px; flex-wrap: wrap; }
+}
+
+/* ── Mobile ────────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  /* Header — vertical stacking */
+  .ws-header {
+    flex-direction: column;
+    align-items:    stretch;
+    gap:            10px;
+    padding:        12px 14px;
+  }
+  .ws-header > button.ws-btn-back {
+    align-self: flex-start;
+    padding: 5px 10px;
+    font-size: 12px;
+  }
+  .ws-header-title { font-size: 20px; }
+  .ws-header-sub   { font-size: 10px; }
+  .ws-header-controls {
+    margin-left: 0;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    width: 100%;
+  }
+  .ws-header-controls .ws-btn {
+    padding: 7px 8px;
+    font-size: 11px;
+    text-align: center;
+    white-space: nowrap;
+  }
+  /* Make the Generate button span full width on its own row */
+  .ws-header-controls .ws-btn:last-child:nth-child(odd) {
+    grid-column: 1 / -1;
+  }
+
+  /* Tab bar — full width */
+  .ws-tab-bar {
+    width: 100%;
+    justify-content: center;
+  }
+  .ws-tab { flex: 1; justify-content: center; padding: 7px 10px; font-size: 12px; }
+
+  /* World picker — full width */
+  .ws-world-picker {
+    width: 100%;
+    justify-content: center;
+  }
+  .ws-world-btn { flex: 1; justify-content: center; font-size: 11px; padding: 5px 8px; }
+
+  /* Stats bar — 3-column grid */
+  .ws-stats-bar {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 6px 10px;
+    padding: 10px 14px;
+  }
+  .ws-stat { flex-direction: row; gap: 6px; justify-content: center; }
+  .ws-stat-value { font-size: 16px; }
+  .ws-stat-label { font-size: 9px; }
+  .ws-stat-divider { display: none; }
+
+  /* Body — single column */
+  .ws-body { flex-direction: column; }
+  .ws-sidebar, .ws-inspector {
+    width:        100%;
+    min-width:    unset;
+    max-height:   45vh;
+    border-right: none;
+    border-left:  none;
+    border-bottom: 1px solid var(--ws-border);
+    padding: 12px 10px;
+  }
+  .ws-sidebar::after, .ws-inspector::before { display: none; }
+  .ws-sidebar-title { font-size: 16px; margin-bottom: 8px; }
+
+  /* Filter pills — horizontal scroll */
+  .ws-filter-row {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+  }
+  .ws-filter-row::-webkit-scrollbar { display: none; }
+  .ws-filter-pill { flex-shrink: 0; font-size: 10px; padding: 3px 10px; }
+
+  /* Sidebar search */
+  .ws-sidebar-search { font-size: 13px; padding: 8px 10px; }
+
+  /* Character cards — more compact */
+  .ws-char-card { padding: 10px; }
+  .ws-char-card-name { font-size: 14px; }
+  .ws-char-card-occupation { font-size: 11px; margin-bottom: 4px; }
+  .ws-char-card-signature { font-size: 10px; margin-top: 4px; }
+
+  /* Main content */
+  .ws-main { padding: 16px 12px; }
+  .ws-detail-name { font-size: 24px; }
+  .ws-detail-meta { font-size: 12px; }
+  .ws-detail-grid { grid-template-columns: 1fr; gap: 8px; }
+  .ws-detail-blockquote { font-size: 14px; padding-left: 12px; }
+  .ws-detail-toolbar { flex-direction: column; gap: 8px; }
+  .ws-detail-actions { flex-wrap: wrap; }
+
+  /* Dashboard */
+  .ws-dashboard { padding: 16px 12px; }
+  .ws-dashboard-title { font-size: 20px; margin-bottom: 16px; }
+  .ws-dash-type-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .ws-dash-recent-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+
+  /* Modal */
+  .ws-modal { width: 95vw; padding: 16px; max-height: 90vh; }
+  .ws-modal-title { font-size: 18px; }
+  .ws-modal-grid { grid-template-columns: 1fr; gap: 10px; }
+  .ws-modal-footer { flex-direction: column; gap: 10px; }
+  .ws-modal-footer-actions { width: 100%; justify-content: stretch; }
+  .ws-modal-footer-actions .ws-btn { flex: 1; text-align: center; }
+
+  /* Preview cards */
+  .ws-preview-card-name { font-size: 15px; }
+  .ws-preview-card-meta { font-size: 11px; }
+
+  /* Registry grid */
+  .ws-registry-grid { grid-template-columns: 1fr; }
+
+  /* Forms */
+  .ws-form-grid { grid-template-columns: 1fr; gap: 10px; }
+
+  /* Toast */
+  .ws-toast { right: 12px; left: 12px; bottom: 16px; text-align: center; font-size: 13px; padding: 10px 16px; }
+
+  /* Edit form */
+  .ws-edit-form { gap: 10px; }
+  .ws-edit-textarea { min-height: 50px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
