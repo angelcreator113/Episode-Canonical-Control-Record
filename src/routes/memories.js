@@ -6413,6 +6413,108 @@ async function loadCharacterProfile(characterKey) {
   }
 }
 
+// ─── Load storyteller memories for a character (for story generation context) ─
+async function loadStoryMemories(characterKey) {
+  try {
+    const { Op } = require('sequelize');
+    const { RegistryCharacter } = require('../models');
+
+    // Find the character's ID first
+    const charRow = await RegistryCharacter.findOne({
+      where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+      attributes: ['id'],
+      order: [['updated_at', 'DESC']],
+    });
+    if (!charRow) return null;
+
+    const memories = await StorytellerMemory.findAll({
+      where: { character_id: charRow.id },
+      order: [['created_at', 'DESC']],
+      limit: 100,
+    });
+
+    if (!memories.length) return null;
+
+    const painPoints = memories.filter(m => m.type === 'pain_point');
+    const beliefShifts = memories.filter(m => m.type === 'belief_shift');
+    const therapyOpenings = memories.filter(m => m.type === 'therapy_opening');
+
+    const sections = [];
+
+    if (painPoints.length) {
+      sections.push('ACCUMULATED PAIN POINTS (from previous stories — build on these, don\'t repeat):\n' +
+        painPoints.slice(0, 15).map(m => `  • [${m.source_ref}] ${m.statement}`).join('\n'));
+    }
+
+    if (beliefShifts.length) {
+      sections.push('BELIEF SHIFTS SO FAR (the character is evolving — track where she is now):\n' +
+        beliefShifts.slice(0, 10).map(m => `  • [${m.source_ref}] ${m.statement}`).join('\n'));
+    }
+
+    if (therapyOpenings.length) {
+      sections.push('THERAPEUTIC THREADS (unresolved emotional threads to weave in):\n' +
+        therapyOpenings.slice(0, 5).map(m => `  • [${m.source_ref}] ${m.statement}`).join('\n'));
+    }
+
+    return sections.length ? sections.join('\n\n') : null;
+  } catch (err) {
+    console.error('[loadStoryMemories] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load cross-character world state (what's happening to other chars in same world) ─
+async function loadWorldState(characterKey, worldBookTag) {
+  try {
+    if (!worldBookTag) return null;
+
+    const { Op } = require('sequelize');
+    const { RegistryCharacter, CharacterRegistry } = require('../models');
+
+    // Find all characters in the same world (excluding current character)
+    const sameWorldChars = await RegistryCharacter.findAll({
+      where: {
+        character_key: { [Op.ne]: characterKey },
+        status: { [Op.in]: ['accepted', 'finalized'] },
+      },
+      include: [{
+        model: CharacterRegistry,
+        as: 'registry',
+        where: { book_tag: worldBookTag },
+        attributes: ['book_tag'],
+      }],
+      attributes: ['id', 'character_key', 'display_name'],
+    });
+
+    if (!sameWorldChars.length) return null;
+
+    // Load latest story memories for each character in the world
+    const worldEvents = [];
+    for (const char of sameWorldChars.slice(0, 8)) {
+      const recentMemories = await StorytellerMemory.findAll({
+        where: { character_id: char.id },
+        order: [['created_at', 'DESC']],
+        limit: 3,
+      });
+
+      if (recentMemories.length) {
+        const events = recentMemories.map(m =>
+          `  • [${m.source_ref}] ${m.statement}`
+        ).join('\n');
+        worldEvents.push(`${char.display_name}:\n${events}`);
+      }
+    }
+
+    if (!worldEvents.length) return null;
+
+    return 'WORLD STATE — What is happening to other characters in this world (weave connections where natural):\n\n' +
+      worldEvents.join('\n\n');
+  } catch (err) {
+    console.error('[loadWorldState] error:', err?.message);
+    return null;
+  }
+}
+
 // ─── 50-story arc phases ──────────────────────────────────────────────────────
 const SE_ARC_PHASES = {
   establishment: { range: [1, 10],  label: 'Establishment', description: 'Who she is. Her rhythms. What she reaches for and what she\'s afraid of. The reader learns her world.' },
@@ -6511,6 +6613,18 @@ router.post('/generate-story-tasks', optionalAuth, async (req, res) => {
       ? `\n\nCHARACTER PROFILE FROM REGISTRY (use this to enrich every story brief — this is who they really are):\n${dbProfile}`
       : '';
 
+    // Load existing story memories to inform arc planning
+    const storyMemories = await loadStoryMemories(characterKey);
+    const memoriesSection = storyMemories
+      ? `\n\n${storyMemories}`
+      : '';
+
+    // Load cross-character world state for collision story planning
+    const worldState = await loadWorldState(characterKey, dna.world);
+    const worldSection = worldState
+      ? `\n\n${worldState}`
+      : '';
+
     const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
     const systemPrompt = `You are building a 50-story arc for ${dna.display_name}.
@@ -6527,7 +6641,7 @@ CHARACTER DNA:
 - Career domain: ${dna.domains.career}
 - Romantic domain: ${dna.domains.romantic}
 - Family domain: ${dna.domains.family}
-- Friends domain: ${dna.domains.friends}${profileSection}
+- Friends domain: ${dna.domains.friends}${profileSection}${memoriesSection}${worldSection}
 
 ARC PHASES:
 - Stories 1-10: Establishment — who she is, her rhythms, her world
@@ -6549,6 +6663,9 @@ RULES:
 - Adult themes: real marriage tension, financial stress, sexuality, exhaustion, ambition, loneliness
 - New characters can be introduced (max 1 per story) — flag them with new_character: true
 - Each story is 3300-4800 words
+- If WORLD STATE is provided, use other characters for collision stories — don't invent strangers when the world already has people
+- If ACCUMULATED PAIN POINTS or BELIEF SHIFTS are provided, the arc should build on those — not repeat them, but deepen them
+- Multiple plotlines should interweave across the 50 stories — career subplot, romantic subplot, family subplot, friendship subplot — each with its own mini-arc within the 50-story structure
 
 Return ONLY valid JSON — no preamble, no markdown.
 Format:
@@ -6673,14 +6790,41 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
   });
 
   try {
-    const previousContext = previousStories?.length
-      ? `PREVIOUS STORIES (for continuity):\n${previousStories.map((s) => `- Story ${s.number}: "${s.title}" — ${s.summary}`).join('\n')}`
-      : 'This is the first story in the arc.';
+    // Build previous stories context — use ALL approved, not just last 3
+    let previousContext;
+    if (previousStories?.length) {
+      // Separate recent (detailed) from older (summarized) for token efficiency
+      const recent = previousStories.slice(-5);
+      const older = previousStories.slice(0, -5);
+
+      let contextParts = [];
+      if (older.length) {
+        contextParts.push('EARLIER ARC STORIES (condensed):\n' +
+          older.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
+      }
+      contextParts.push('RECENT STORIES (for direct continuity):\n' +
+        recent.map(s => `- Story ${s.number}: "${s.title}" — ${s.summary}`).join('\n'));
+      previousContext = contextParts.join('\n\n');
+    } else {
+      previousContext = 'This is the first story in the arc.';
+    }
 
     // Load rich profile from DB
     const dbProfile = await loadCharacterProfile(characterKey);
     const profileSection = dbProfile
       ? `\n\nCHARACTER PROFILE FROM REGISTRY (ground the story in these details — this is who they really are):\n${dbProfile}`
+      : '';
+
+    // Load accumulated story memories (pain points, belief shifts, therapy threads)
+    const storyMemories = await loadStoryMemories(characterKey);
+    const memoriesSection = storyMemories
+      ? `\n\n${storyMemories}`
+      : '';
+
+    // Load cross-character world state
+    const worldState = await loadWorldState(characterKey, dna.world);
+    const worldSection = worldState
+      ? `\n\n${worldState}`
       : '';
 
     const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
@@ -6696,7 +6840,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}
+Recurring object: ${dna.recurring_object}${profileSection}${memoriesSection}${worldSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -6728,6 +6872,13 @@ CRAFT RULES:
 - Do not summarize. Show every scene. Trust the reader.
 - The character\'s desire line and fear line must both be active throughout.
 - New character introductions: one paragraph only in the story — name, one physical detail, one line of dialogue that reveals their entire persona.
+
+MULTI-PLOT & CONTINUITY RULES:
+- If WORLD STATE is provided, naturally reference or intersect with other characters' storylines where organic. Don't force crossovers — let shared spaces (the same city, industry, social circle) create natural collisions.
+- If ACCUMULATED PAIN POINTS are provided, build on them — the character carries these forward. Don't re-explain the pain, let it surface in behavior, avoidance, or unexpected tenderness.
+- If BELIEF SHIFTS are provided, they represent where the character IS NOW psychologically. Write from the post-shift place, not the pre-shift one.
+- If THERAPEUTIC THREADS are provided, let one unresolved thread echo in this story — not as the main plot, but as emotional texture.
+- Collision stories should ideally involve a character from the WORLD STATE if available.
 
 Write the complete story now. No preamble. Begin with the title, then the story.`;
 
@@ -6976,6 +7127,162 @@ Return ONLY valid JSON:
   } catch (err) {
     console.error('[extract-story-memories] error:', err?.message);
     return res.json({ memories_extracted: 0, fallback: true });
+  }
+});
+
+// ─── POST /story-engine-update-registry ──────────────────────────────────────
+// After story approval + memory extraction, use Claude to determine what
+// registry fields should be updated based on story events and belief shifts.
+// This closes the feedback loop: story → memories → registry evolution.
+router.post('/story-engine-update-registry', optionalAuth, async (req, res) => {
+  const { characterKey, storyNumber, storyTitle, storyText, extractedMemories } = req.body;
+
+  if (!characterKey || !storyText) {
+    return res.status(400).json({ error: 'characterKey and storyText required' });
+  }
+
+  try {
+    const { Op } = require('sequelize');
+    const { RegistryCharacter } = require('../models');
+
+    // Find the character
+    const charRow = await RegistryCharacter.findOne({
+      where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+      order: [['updated_at', 'DESC']],
+    });
+
+    if (!charRow) {
+      return res.status(404).json({ error: `Character ${characterKey} not found` });
+    }
+
+    const plain = charRow.get({ plain: true });
+
+    // Build context for Claude to analyze what changed
+    const currentState = {
+      core_desire: plain.core_desire,
+      core_fear: plain.core_fear,
+      core_wound: plain.core_wound,
+      relationships_map: plain.relationships_map || {},
+      evolution_tracking: plain.evolution_tracking || {},
+      personality_matrix: plain.personality_matrix || {},
+    };
+
+    const memorySummary = extractedMemories
+      ? `\nEXTRACTED MEMORIES FROM THIS STORY:\nPain Points: ${JSON.stringify(extractedMemories.pain_points || [])}\nBelief Shifts: ${JSON.stringify(extractedMemories.belief_shifts || [])}\nTherapy Opening: ${extractedMemories.therapy_opening || 'None'}`
+      : '';
+
+    const systemPrompt = `You are a character registry analyst. A new story has been approved for ${plain.display_name}. Based on the story content and extracted memories, determine what character registry fields should be updated.
+
+CURRENT REGISTRY STATE:
+Core Desire: ${currentState.core_desire || 'Not set'}
+Core Fear: ${currentState.core_fear || 'Not set'}
+Core Wound: ${currentState.core_wound || 'Not set'}
+Relationships Map: ${JSON.stringify(currentState.relationships_map)}
+Evolution Tracking: ${JSON.stringify(currentState.evolution_tracking)}
+${memorySummary}
+
+RULES:
+- Only update fields that genuinely shifted based on this story's events
+- core_desire, core_fear, core_wound should RARELY change — only if the story shows a fundamental shift
+- relationships_map should update if new relationships form, existing ones deepen/rupture, or power dynamics shift
+- evolution_tracking should capture the character's arc progression — what phase they're in, what's different now
+- personality_matrix updates only if the story reveals new strengths, new weaknesses, or changed traits
+- Be conservative — don't rewrite the character, track the evolution
+- If nothing meaningfully changed, return empty updates
+
+Return ONLY valid JSON:
+{
+  "updates": {
+    "relationships_map": { "merge": true, "data": { "character_name": { "status": "deepened|strained|new|broken", "dynamic": "one line about the current state" } } },
+    "evolution_tracking": { "merge": true, "data": { "current_phase": "string", "last_story": ${storyNumber}, "arc_position": "establishment|pressure|crisis|integration", "recent_shift": "what changed", "accumulated_wounds": ["list of active wounds"], "growth_edges": ["where growth is happening"] } },
+    "personality_matrix": { "merge": true, "data": { "new_strengths": [], "new_vulnerabilities": [], "trait_shifts": [] } }
+  },
+  "core_updates": {
+    "core_desire": null,
+    "core_fear": null,
+    "core_wound": null,
+    "belief_pressured": null
+  },
+  "summary": "one-sentence summary of what evolved"
+}
+
+Set any field to null if it should NOT be updated.`;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      system: systemPrompt,
+      messages: [{
+        role: 'user',
+        content: `Story ${storyNumber}: "${storyTitle || 'Untitled'}"\n\n${storyText.slice(0, 3000)}`,
+      }],
+    });
+
+    const raw = response.content?.[0]?.text || '';
+    let parsed;
+    try {
+      parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch {
+      return res.json({ updated: false, reason: 'Could not parse Claude response' });
+    }
+
+    // Apply updates to the character
+    const updatePayload = {};
+    let fieldsUpdated = 0;
+
+    // Core field updates (only if Claude explicitly set them)
+    if (parsed.core_updates) {
+      if (parsed.core_updates.core_desire) { updatePayload.core_desire = parsed.core_updates.core_desire; fieldsUpdated++; }
+      if (parsed.core_updates.core_fear) { updatePayload.core_fear = parsed.core_updates.core_fear; fieldsUpdated++; }
+      if (parsed.core_updates.core_wound) { updatePayload.core_wound = parsed.core_updates.core_wound; fieldsUpdated++; }
+      if (parsed.core_updates.belief_pressured) { updatePayload.belief_pressured = parsed.core_updates.belief_pressured; fieldsUpdated++; }
+    }
+
+    // Merge-style JSONB updates
+    if (parsed.updates) {
+      if (parsed.updates.relationships_map?.data) {
+        const existing = plain.relationships_map || {};
+        updatePayload.relationships_map = { ...existing, ...parsed.updates.relationships_map.data };
+        fieldsUpdated++;
+      }
+      if (parsed.updates.evolution_tracking?.data) {
+        const existing = plain.evolution_tracking || {};
+        updatePayload.evolution_tracking = { ...existing, ...parsed.updates.evolution_tracking.data };
+        fieldsUpdated++;
+      }
+      if (parsed.updates.personality_matrix?.data) {
+        const existing = plain.personality_matrix || {};
+        // Merge arrays instead of overwriting
+        const newData = parsed.updates.personality_matrix.data;
+        if (newData.new_strengths?.length) {
+          existing.strengths = [...new Set([...(existing.strengths || []), ...newData.new_strengths])];
+        }
+        if (newData.new_vulnerabilities?.length) {
+          existing.vulnerabilities = [...new Set([...(existing.vulnerabilities || []), ...newData.new_vulnerabilities])];
+        }
+        if (newData.trait_shifts?.length) {
+          existing.trait_shifts = [...(existing.trait_shifts || []), ...newData.trait_shifts];
+        }
+        updatePayload.personality_matrix = existing;
+        fieldsUpdated++;
+      }
+    }
+
+    if (fieldsUpdated > 0) {
+      await charRow.update(updatePayload);
+      console.log(`[story-engine-update-registry] Updated ${fieldsUpdated} fields for ${characterKey} after story ${storyNumber}`);
+    }
+
+    return res.json({
+      updated: fieldsUpdated > 0,
+      fields_updated: fieldsUpdated,
+      summary: parsed.summary || 'No changes detected.',
+      updates_applied: Object.keys(updatePayload),
+    });
+
+  } catch (err) {
+    console.error('[story-engine-update-registry] error:', err?.message);
+    return res.json({ updated: false, error: err?.message });
   }
 });
 
