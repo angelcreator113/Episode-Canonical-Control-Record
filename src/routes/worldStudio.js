@@ -89,6 +89,11 @@ const ROLE_MAP = {
   collaborator:    'mirror',
   one_night_stand: 'special',
   recurring:       'special',
+  spouse:          'support',
+  partner:         'special',
+  temptation:      'shadow',
+  ex:              'pressure',
+  confidant:       'support',
 };
 
 // Map World Studio character_type → relationship_type for character_relationships
@@ -101,6 +106,11 @@ const REL_TYPE_MAP = {
   collaborator:    'Collaborator',
   one_night_stand: 'One Night Stand',
   recurring:       'Recurring',
+  spouse:          'Spouse',
+  partner:         'Partner',
+  temptation:      'Temptation',
+  ex:              'Ex',
+  confidant:       'Confidant',
 };
 
 // Map World Studio tension_type → character_relationships tension_state
@@ -110,6 +120,11 @@ const TENSION_MAP = {
   creative:     'simmering',
   power:        'volatile',
   unspoken:     'simmering',
+  moral:        'simmering',
+  fidelity:     'volatile',
+  temptation:   'simmering',
+  betrayal:     'fractured',
+  guilt:        'simmering',
 };
 
 // Map World Studio character_type → connection_mode
@@ -122,10 +137,16 @@ const CONNECTION_MODE_MAP = {
   collaborator:    'Professional',
   one_night_stand: 'Passing',
   recurring:       'IRL',
+  spouse:          'IRL',
+  partner:         'IRL',
+  temptation:      'IRL',
+  ex:              'IRL',
+  confidant:       'IRL',
 };
 
 // Natural inter-character pairing rules: [typeA, typeB, rel_type, conn_mode, tension, romantic?]
 const INTER_CHAR_PAIRINGS = [
+  // Original pairings
   ['love_interest', 'rival',           'Romantic Rivalry',    'IRL',          'volatile',   true],
   ['love_interest', 'love_interest',   'Love Triangle',       'IRL',          'simmering',  true],
   ['love_interest', 'one_night_stand', 'Complicated History', 'IRL',          'simmering',  true],
@@ -138,6 +159,21 @@ const INTER_CHAR_PAIRINGS = [
   ['collaborator',  'collaborator',    'Creative Partners',   'Professional', 'calm',       false],
   ['rival',         'rival',           'Mutual Rivalry',      'Professional', 'volatile',   false],
   ['one_night_stand','rival',          'Unexpected Link',     'IRL',          'simmering',  false],
+  // Fidelity & moral dynamics
+  ['spouse',        'temptation',      'Fidelity Test',       'IRL',          'volatile',   false],
+  ['spouse',        'love_interest',   'Emotional Affair Risk','IRL',         'simmering',  false],
+  ['spouse',        'ex',              'Unfinished History',  'IRL',          'simmering',  false],
+  ['partner',       'temptation',      'Loyalty vs Desire',   'IRL',          'volatile',   true],
+  ['partner',       'rival',           'Partner Under Pressure','IRL',        'simmering',  false],
+  ['partner',       'ex',              'Past vs Present',     'IRL',          'simmering',  false],
+  ['temptation',    'love_interest',   'Competing Attractions','IRL',         'simmering',  true],
+  ['temptation',    'one_night_stand', 'Dangerous Pattern',   'IRL',          'volatile',   true],
+  ['temptation',    'confidant',       'The Friend Who Knows','IRL',          'simmering',  false],
+  ['ex',            'love_interest',   'Old vs New',          'IRL',          'simmering',  true],
+  ['ex',            'ex',              'Shared Damage',       'IRL',          'simmering',  false],
+  ['spouse',        'spouse',          'Married Couple',      'IRL',          'calm',       true],
+  ['spouse',        'confidant',       'Trust Circle',        'IRL',          'calm',       false],
+  ['confidant',     'antagonist',      'Divided Loyalty',     'IRL',          'volatile',   false],
 ];
 
 // Sexuality compatibility for romantic pairings
@@ -205,7 +241,7 @@ Lala has JustAWoman's entire confidence playbook running invisibly underneath he
 
 Create characters who feel like real people — with their own ambitions, contradictions, secrets, and desires. Not props. Not types. People who change Lala's trajectory by existing in her world.
 
-Character types needed:
+Character types available:
 - love_interest: someone she could actually fall for. Complex. Not available in a simple way.
 - industry_peer: another creator or brand figure at a similar level. Collaborative energy that hides competitive undercurrent.
 - mentor: someone ahead of her who sees something in her. Their help comes with their own agenda.
@@ -213,6 +249,18 @@ Character types needed:
 - one_night_stand: someone she meets once. The encounter means something even if they don't stay.
 - rival: direct competition. They respect each other and can't stand each other.
 - collaborator: someone she creates with. Creative chemistry that bleeds into everything else.
+- spouse: someone who is married — to another character or to someone offscreen. Their commitment is real but so is the complexity.
+- partner: someone in a committed relationship (not married). Their loyalty is tested by circumstances.
+- temptation: someone who exists to test another character's commitment. They're not evil — they're magnetic, and the pull is real.
+- ex: someone from a character's past. The history didn't end clean.
+- confidant: a trusted friend who knows secrets. Their loyalty can become a weapon or a shield.
+
+CHARACTERS MUST HAVE MORAL DEPTH:
+- Some characters are faithful and choose loyalty even when tested. A faithful character's story is about the COST of staying loyal when desire pulls elsewhere.
+- Some characters cheat, lie, or betray — not because they're villains but because they're human.
+- Some characters are the temptation — they pursue someone taken, and their reasons are complicated.
+- Arguments, breakups, reconciliations, and moral choices should be baked into character DNA.
+- Every character has a moral code — even the ones who violate it.
 
 For intimate_eligible characters: write intimate_style, intimate_dynamic, and what_lala_feels with honesty and specificity. These inform how scenes between them are generated. Be real about desire, tension, and what makes physical connection between these specific people feel true to who they are.`,
   },
@@ -232,7 +280,7 @@ JustAWoman is a woman navigating a world that was never designed for her — cor
 
 Create characters who are deeply entangled in her world — people she can't escape, people she shouldn't trust, people she needs despite knowing better. Every character should feel like they have their own gravity.
 
-Character types needed:
+Character types available:
 - love_interest: someone she shouldn't want. Complex. Probably dangerous in some way — emotionally, professionally, or both.
 - industry_peer: someone in her professional orbit. The relationship is never purely professional.
 - mentor: someone older or more powerful who sees her potential. Their guidance always costs something.
@@ -240,6 +288,20 @@ Character types needed:
 - one_night_stand: an encounter that reveals something about who she is right now. Brief but meaningful.
 - rival: someone who mirrors her in uncomfortable ways. The competition is personal.
 - collaborator: someone she builds something with. Trust is earned slowly and can shatter fast.
+- spouse: someone married — maybe to her, maybe to someone else. The marriage is real and messy. Commitment doesn't mean simple.
+- partner: someone in a committed relationship. Their loyalty is tested by the world around them.
+- temptation: the person who makes someone question everything they said they'd never do. They don't have to try — they just are.
+- ex: someone from her past or another character's past. The wound is still open even if they pretend it isn't.
+- confidant: a friend who knows too much. Sometimes the most dangerous person in the room is the one who keeps your secrets.
+
+CHARACTERS MUST HAVE MORAL DEPTH:
+- Characters argue, cheat, stay faithful, break up, reconcile, betray, and forgive — sometimes all in the same story.
+- A married man who stays faithful is interesting because of what he's resisting, not because he's boring.
+- A woman who pursues someone taken is interesting because she knows it's wrong and does it anyway.
+- Infidelity isn't a plot device. It's a character reveal. Show why it happens.
+- Faithfulness isn't passive. It's a choice made against real temptation, and it costs something.
+- Breakups happen because two real people ran out of ways to stay. Show the exhaustion.
+- Every character should have a moral code — even the ones who violate it.
 
 For intimate_eligible characters: write intimate_style, intimate_dynamic, and what she feels with honesty and specificity. This is a grittier, more emotionally charged world than LalaVerse. The intimacy is rawer, more complicated, often tangled up in power and vulnerability.`,
   },
@@ -583,7 +645,9 @@ ERA: ${era}
 
 ${existing.length > 0 ? `EXISTING CHARACTERS (don't duplicate):\n${existing.map(e => `- ${e.name} (${e.character_type})`).join('\n')}` : ''}
 
-Include at least: 2 love_interest or one_night_stand, 2 industry_peer, 1 mentor, 1 antagonist or rival, 1 collaborator.
+Include a MIX of character types. At minimum: 2 love_interest or one_night_stand, 1 industry_peer, 1 mentor or collaborator, 1 antagonist or rival.
+Also include at least 1 of: spouse, partner, temptation, or ex — to create fidelity/moral tension.
+At least one character should be committed (married or partnered) and at least one should test that commitment.
 
 Return JSON only:
 {
@@ -593,7 +657,11 @@ Return JSON only:
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
       "world_location": "where they exist in ${wCfg.title}",
-      "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
+      "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant",
+      "relationship_status": "single|dating|engaged|married|divorced|separated|its_complicated — their actual status, not what they tell people",
+      "committed_to": "name of the person they're committed to (another character or offscreen person), or null if single",
+      "moral_code": "1-2 sentences about their personal ethics — what lines they won't cross, or what lines they pretend they won't cross",
+      "fidelity_pattern": "faithful_tested|faithful_untested|emotionally_unfaithful|physically_unfaithful|serial_cheater|loyal_until_broken|would_never|already_has — how they behave when commitment meets temptation",
       "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
       "aesthetic": "how they look, dress, move — specific and visual",
@@ -603,14 +671,14 @@ Return JSON only:
       "what_they_want_from_lala": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
       "dynamic": "the texture of their connection with ${protagonist}",
-      "tension_type": "romantic|professional|creative|power|unspoken",
+      "tension_type": "romantic|professional|creative|power|unspoken|moral|fidelity|temptation|betrayal|guilt",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
       "what_lala_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
       "arc_role": "how this character changes ${protagonist}'s trajectory",
       "exit_reason": "how or why they leave her world, or null if they stay",
       "career_echo_connection": true|false,
-      "attracted_to": "who they actually pursue — specific, not a label (e.g. 'men with authority she can dismantle, women who are further ahead than her')",
+      "attracted_to": "who they actually pursue — specific, not a label",
       "how_they_love": "their connection pattern (e.g. 'avoidant until she isn't, then fully in')",
       "desire_they_wont_admit": "the thing that complicates the above (dimmed, private)",
       "family_layer": "real_world | ${world_tag} | series_2",
@@ -619,7 +687,7 @@ Return JSON only:
       "private_reality": "what only close people know"
     }
   ],
-  "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
+  "generation_notes": "brief note on ecosystem logic — who connects to who, what tensions exist, which characters test each other's loyalty/fidelity, who argues, who stays, who leaves"
 }`,
       10000
     );
@@ -653,6 +721,7 @@ Return JSON only:
             attracted_to, how_they_love, desire_they_wont_admit,
             relationship_graph, family_layer, origin_story,
             public_persona, private_reality,
+            relationship_status, committed_to, moral_code, fidelity_pattern,
             status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
@@ -664,6 +733,7 @@ Return JSON only:
             :attracted_to, :how_they_love, :desire_they_wont_admit,
             :relationship_graph, :family_layer, :origin_story,
             :public_persona, :private_reality,
+            :relationship_status, :committed_to, :moral_code, :fidelity_pattern,
             'draft', 'Stable', NOW(), NOW())`,
         {
           replacements: {
@@ -689,6 +759,10 @@ Return JSON only:
             origin_story: c.origin_story || null,
             public_persona: c.public_persona || null,
             private_reality: c.private_reality || null,
+            relationship_status: c.relationship_status || null,
+            committed_to: c.committed_to || null,
+            moral_code: c.moral_code || null,
+            fidelity_pattern: c.fidelity_pattern || null,
             world_tag: world_tag,
           },
           type: sequelize.QueryTypes.INSERT,
@@ -1403,7 +1477,9 @@ ERA: ${era}
 
 ${existing.length > 0 ? `EXISTING CHARACTERS (don't duplicate):\n${existing.map(e => `- ${e.name} (${e.character_type})`).join('\n')}` : ''}
 
-Include at least: 2 love_interest or one_night_stand, 2 industry_peer, 1 mentor, 1 antagonist or rival, 1 collaborator.
+Include a MIX of character types. At minimum: 2 love_interest or one_night_stand, 1 industry_peer, 1 mentor or collaborator, 1 antagonist or rival.
+Also include at least 1 of: spouse, partner, temptation, or ex — to create fidelity/moral tension.
+At least one character should be committed (married or partnered) and at least one should test that commitment.
 
 Return JSON only:
 {
@@ -1413,7 +1489,11 @@ Return JSON only:
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
       "world_location": "where they exist in ${wCfg.title}",
-      "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
+      "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand|spouse|partner|temptation|ex|confidant",
+      "relationship_status": "single|dating|engaged|married|divorced|separated|its_complicated — their actual status, not what they tell people",
+      "committed_to": "name of the person they're committed to (another character or offscreen person), or null if single",
+      "moral_code": "1-2 sentences about their personal ethics — what lines they won't cross, or what lines they pretend they won't cross",
+      "fidelity_pattern": "faithful_tested|faithful_untested|emotionally_unfaithful|physically_unfaithful|serial_cheater|loyal_until_broken|would_never|already_has — how they behave when commitment meets temptation",
       "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
       "aesthetic": "how they look, dress, move — specific and visual",
@@ -1423,14 +1503,14 @@ Return JSON only:
       "what_they_want_from_lala": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
       "dynamic": "the texture of their connection with ${protagonist}",
-      "tension_type": "romantic|professional|creative|power|unspoken",
+      "tension_type": "romantic|professional|creative|power|unspoken|moral|fidelity|temptation|betrayal|guilt",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
       "what_lala_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
       "arc_role": "how this character changes ${protagonist}'s trajectory",
       "exit_reason": "how or why they leave her world, or null if they stay",
       "career_echo_connection": true|false,
-      "attracted_to": "who they actually pursue — specific, not a label (e.g. 'men with authority she can dismantle, women who are further ahead than her')",
+      "attracted_to": "who they actually pursue — specific, not a label",
       "how_they_love": "their connection pattern (e.g. 'avoidant until she isn't, then fully in')",
       "desire_they_wont_admit": "the thing that complicates the above (dimmed, private)",
       "family_layer": "real_world | ${world_tag} | series_2",
@@ -1439,7 +1519,7 @@ Return JSON only:
       "private_reality": "what only close people know"
     }
   ],
-  "generation_notes": "brief note on the ecosystem logic — who connects to who, what tensions exist between them"
+  "generation_notes": "brief note on ecosystem logic — who connects to who, what tensions exist, which characters test each other's loyalty/fidelity, who argues, who stays, who leaves"
 }`,
       10000
     );
@@ -1516,6 +1596,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             attracted_to, how_they_love, desire_they_wont_admit,
             relationship_graph, family_layer, origin_story,
             public_persona, private_reality,
+            relationship_status, committed_to, moral_code, fidelity_pattern,
             world_tag, status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
@@ -1527,6 +1608,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             :attracted_to, :how_they_love, :desire_they_wont_admit,
             :relationship_graph, :family_layer, :origin_story,
             :public_persona, :private_reality,
+            :relationship_status, :committed_to, :moral_code, :fidelity_pattern,
             :world_tag, 'draft', 'Stable', NOW(), NOW())`,
         {
           replacements: {
@@ -1552,6 +1634,10 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             origin_story: c.origin_story || null,
             public_persona: c.public_persona || null,
             private_reality: c.private_reality || null,
+            relationship_status: c.relationship_status || null,
+            committed_to: c.committed_to || null,
+            moral_code: c.moral_code || null,
+            fidelity_pattern: c.fidelity_pattern || null,
             world_tag: world_tag,
           },
           type: sequelize.QueryTypes.INSERT,

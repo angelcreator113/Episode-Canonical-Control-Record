@@ -376,6 +376,14 @@ router.post('/generate', optionalAuth, async (req, res) => {
 
 IMPORTANT RULE: Characters from the real world (protagonist, pressure, support role types) can ONLY have relationships with other real-world characters. LalaVerse characters (mirror, shadow role types) can ONLY have relationships with other LalaVerse characters or series-2 (special) characters. NEVER suggest cross-layer relationships between real-world and LalaVerse characters.
 
+MORAL DEPTH RULE: Relationships should reflect real human complexity:
+- Marriages and partnerships CAN be tested by temptation, jealousy, or emotional affairs.
+- Characters can be faithful (choosing loyalty despite being tempted), unfaithful (acting on desire despite commitment), or somewhere in between.
+- Arguments, betrayals, reconciliations, and moral choices should be reflected in the situation and tension_state.
+- "Fidelity Test" is a valid relationship_type: one character tests another's commitment just by existing.
+- "Emotional Affair" is a valid relationship_type: an intimate bond that never becomes physical but is still a betrayal.
+- A character can be a "temptation" — someone who pulls a committed person toward a choice they'll have to live with.
+
 Characters in this registry:
 ${charContext}
 ${existingContext}${focusNote}
@@ -384,12 +392,12 @@ Generate 3 to 5 NEW relationship suggestions that don't already exist.
 For each, provide:
 - character_a_id (exact UUID from the list above)
 - character_b_id (exact UUID from the list above)
-- relationship_type (string like "sister", "rival", "mentor", "therapist", "ex-partner", etc.)
+- relationship_type (string like "sister", "rival", "mentor", "therapist", "ex-partner", "spouse", "fidelity_test", "temptation", "emotional_affair", "the_one_who_stayed", "the_one_who_left", etc.)
 - connection_mode (one of: IRL, Online Only, Passing, Professional, One-sided)
-- situation (1-2 sentences describing the dynamic)
+- situation (1-2 sentences describing the dynamic — include moral tension if relevant: who's tempted, who's faithful, who's lied, who's choosing)
 - tension_state (one of: calm, simmering, volatile, fractured, healing)
 - lala_connection (one of: none, knows_lala, through_justwoman, interacts_content, unaware)
-- pain_point_category (like "identity", "trust", "ambition", "loyalty", "family", "self-worth")
+- pain_point_category (like "identity", "trust", "ambition", "loyalty", "family", "self-worth", "fidelity", "betrayal", "guilt", "temptation")
 - lala_mirror (1 sentence: how this relationship mirrors in the LalaVerse)
 - career_echo_potential (1 sentence: career/professional echo)
 
