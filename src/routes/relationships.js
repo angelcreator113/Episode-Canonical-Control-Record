@@ -365,12 +365,14 @@ router.post('/generate', optionalAuth, async (req, res) => {
     const Anthropic = require('@anthropic-ai/sdk');
     const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const message = await claude.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: `You are a literary relationship analyst for a creative writing universe called the LalaVerse.
+    let message;
+    try {
+      message = await claude.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: `You are a literary relationship analyst for a creative writing universe called the LalaVerse.
 
 IMPORTANT RULE: Characters from the real world (protagonist, pressure, support role types) can ONLY have relationships with other real-world characters. LalaVerse characters (mirror, shadow role types) can ONLY have relationships with other LalaVerse characters or series-2 (special) characters. NEVER suggest cross-layer relationships between real-world and LalaVerse characters.
 
@@ -393,8 +395,21 @@ For each, provide:
 
 Return ONLY valid JSON: { "candidates": [ ... ] }
 No markdown fences, no explanation.`,
-      }],
-    });
+        }],
+      });
+    } catch (aiErr) {
+      const errMsg = aiErr?.message || String(aiErr);
+      const isCredits = errMsg.includes('credit balance') || errMsg.includes('billing') || aiErr?.status === 402;
+      const isRate = errMsg.includes('rate') || aiErr?.status === 429;
+      console.error('Claude API error:', errMsg);
+      if (isCredits) {
+        return res.status(402).json({ error: 'AI credits exhausted. Please top up your Anthropic account to generate relationships.' });
+      }
+      if (isRate) {
+        return res.status(429).json({ error: 'AI rate limit reached. Please wait a moment and try again.' });
+      }
+      return res.status(502).json({ error: 'AI service unavailable. ' + errMsg.slice(0, 200) });
+    }
 
     let candidates = [];
     try {

@@ -451,13 +451,17 @@ export default function RelationshipEngine() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg = errData.error || `Server error (${res.status})`;
+        throw new Error(msg);
+      }
       const data = await res.json();
       setCandidates(prev => [...(data.candidates || []), ...prev]);
       showToast(`Generated ${data.count} candidate(s)`, 'success');
       setGenModalOpen(false);
       setView('candidates');
-    } catch { showToast('AI generation failed', 'error'); }
+    } catch (err) { showToast(err.message || 'AI generation failed', 'error'); }
     finally { setGenerating(false); }
   };
 
