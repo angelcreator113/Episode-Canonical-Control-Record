@@ -44,11 +44,11 @@ const sequelize = models.sequelize;
 const Q  = (req, sql, opts) => sequelize.query(sql, { type: sequelize.QueryTypes.SELECT, ...opts });
 
 async function claude(system, user, maxTokens = 4000) {
+  const Anthropic = require('@anthropic-ai/sdk');
+  const client    = new Anthropic();
   try {
-    const Anthropic = require('@anthropic-ai/sdk');
-    const client    = new Anthropic();
     const msg = await client.messages.create({
-      model: 'claude-opus-4-5',
+      model: 'claude-sonnet-4-20250514',
       max_tokens: maxTokens,
       system,
       messages: [{ role: 'user', content: user }],
@@ -57,9 +57,13 @@ async function claude(system, user, maxTokens = 4000) {
       console.warn(`Claude response truncated (max_tokens=${maxTokens}). Consider increasing limit.`);
     }
     return msg.content[0]?.text || '';
-  } catch (e) {
-    console.error('Claude error:', e.message);
-    return null;
+  } catch (aiErr) {
+    const errMsg = String(aiErr?.error?.error?.message || aiErr?.message || aiErr);
+    console.error('Claude API error:', errMsg);
+    // Re-throw with status info so callers can return proper HTTP codes
+    const err = new Error(errMsg);
+    err.aiStatus = aiErr?.status || (errMsg.includes('credit balance') ? 402 : errMsg.includes('rate') ? 429 : 502);
+    throw err;
   }
 }
 
@@ -702,8 +706,9 @@ Return JSON only:
 
     res.status(201).json({ characters: inserted, batch_id: batchId, count: inserted.length, inter_relationships: interCount, generation_notes: parsed.generation_notes });
   } catch (err) {
-    console.error('generate-ecosystem error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('generate-ecosystem error:', err.message);
+    const status = err.aiStatus || 500;
+    res.status(status).json({ error: err.message });
   }
 });
 
@@ -1070,8 +1075,9 @@ Return JSON only:
     const [scene] = await Q(req, 'SELECT * FROM intimate_scenes WHERE id = :id', { replacements: { id: sceneId } });
     res.status(201).json({ scene, characters: { a: charA, b: charB } });
   } catch (err) {
-    console.error('scene generate error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('scene generate error:', err.message);
+    const status = err.aiStatus || 500;
+    res.status(status).json({ error: err.message });
   }
 });
 
@@ -1202,14 +1208,20 @@ router.post('/world/scenes/:sceneId/approve', optionalAuth, async (req, res) => 
     ).catch(() => {});
 
     // 4. Extract memory
-    const memoryResult = await claude(
-      `Extract the emotional memory from this intimate scene. Be specific about what she learns about herself, about desire, about power, about what she wants.`,
-      `SCENE: ${scene.full_text?.substring(0, 1500)}
+    let memoryResult;
+    try {
+      memoryResult = await claude(
+        `Extract the emotional memory from this intimate scene. Be specific about what she learns about herself, about desire, about power, about what she wants.`,
+        `SCENE: ${scene.full_text?.substring(0, 1500)}
 CHARACTER: ${scene.character_a_name}
 RELATIONSHIP SHIFT: ${scene.relationship_shift}
 
 Return JSON: { "memory_statement": "what she now knows or feels", "memory_type": "belief|constraint|character_dynamic|pain_point", "confidence": 0.0-1.0 }`
-    );
+      );
+    } catch (memErr) {
+      console.error('Memory extraction Claude error:', memErr.message);
+      memoryResult = null;
+    }
     const mem = parseJSON(memoryResult);
     if (mem?.memory_statement) {
       await sequelize.query(
@@ -1236,7 +1248,9 @@ Return JSON: { "memory_statement": "what she now knows or feels", "memory_type":
 });
 
 async function generateContinuation(req, scene, continuationType) {
-  const result = await claude(
+  let result;
+  try {
+    result = await claude(
     `You write the morning-after or story continuation that follows an intimate scene in LalaVerse.
 This is not a wrap-up. It's the next moment — what she notices when she wakes, what the light looks like, what his absence or presence means. One to three paragraphs. Then the story continues — her life doesn't stop because something happened.
 Write in close third person. Present and specific. The intimate encounter happened. The world goes on. She goes on.`,
@@ -1252,6 +1266,10 @@ CHARACTER B: ${scene.character_b_name || 'the other person'}
 
 Write 2-3 paragraphs. Start with a sensory detail. End with her moving forward — toward something in her actual life. Her career, her next thing, the day ahead. She doesn't linger longer than the scene deserves.`
   );
+  } catch (contErr) {
+    console.error('Continuation Claude error:', contErr.message);
+    return;
+  }
 
   if (!result) return;
 
@@ -1438,8 +1456,9 @@ Return JSON only:
       count: parsed.characters.length,
     });
   } catch (err) {
-    console.error('generate-ecosystem-preview error:', err);
-    res.status(500).json({ error: err.message });
+    console.error('generate-ecosystem-preview error:', err.message);
+    const status = err.aiStatus || 500;
+    res.status(status).json({ error: err.message });
   }
 });
 

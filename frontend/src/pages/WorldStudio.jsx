@@ -206,13 +206,15 @@ export default function WorldStudio() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ world_tag: worldTag }),
       });
-      const d = await r.json();
-      if (d.characters?.length) {
+      const d = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        flash(d.error || `AI generation failed (${r.status})`, 'error');
+      } else if (d.characters?.length) {
         setPreviewChars(d.characters);
         setPreviewNotes(d.generation_notes || '');
         setPreviewSel(new Set(d.characters.map((_, i) => i)));
         setShowPreview(true);
-      } else flash(d.error || 'Generation failed', 'error');
+      } else flash('Generation returned no characters', 'error');
     } catch (e) { flash(e.message, 'error'); }
     finally { setGenerating(false); }
   };
