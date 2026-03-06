@@ -111,6 +111,8 @@ const REL_TYPE_MAP = {
   temptation:      'Temptation',
   ex:              'Ex',
   confidant:       'Confidant',
+  friend:          'Friend',
+  coworker:        'Coworker',
 };
 
 // Map World Studio tension_type → character_relationships tension_state
@@ -142,6 +144,8 @@ const CONNECTION_MODE_MAP = {
   temptation:      'IRL',
   ex:              'IRL',
   confidant:       'IRL',
+  friend:          'IRL',
+  coworker:        'Professional',
 };
 
 // Natural inter-character pairing rules: [typeA, typeB, rel_type, conn_mode, tension, romantic?]
@@ -174,6 +178,19 @@ const INTER_CHAR_PAIRINGS = [
   ['spouse',        'spouse',          'Married Couple',      'IRL',          'calm',       true],
   ['spouse',        'confidant',       'Trust Circle',        'IRL',          'calm',       false],
   ['confidant',     'antagonist',      'Divided Loyalty',     'IRL',          'volatile',   false],
+  // Friend & coworker pairings
+  ['friend',         'friend',          'Close Friends',       'IRL',          'calm',       false],
+  ['friend',         'love_interest',   'Blurred Lines',       'IRL',          'simmering',  true],
+  ['friend',         'rival',           'Friendly Rivalry',    'IRL',          'simmering',  false],
+  ['friend',         'confidant',       'Inner Circle',        'IRL',          'calm',       false],
+  ['friend',         'ex',              'Stayed Friends',      'IRL',          'simmering',  false],
+  ['friend',         'temptation',      'Dangerous Friendship','IRL',          'simmering',  true],
+  ['coworker',       'coworker',        'Office Dynamic',      'Professional', 'calm',       false],
+  ['coworker',       'rival',           'Workplace Rivalry',   'Professional', 'simmering',  false],
+  ['coworker',       'mentor',          'Office Mentorship',   'Professional', 'calm',       false],
+  ['coworker',       'love_interest',   'Office Romance',      'Professional', 'simmering',  true],
+  ['coworker',       'friend',          'Work Friends',        'IRL',          'calm',       false],
+  ['coworker',       'antagonist',      'Office Politics',     'Professional', 'volatile',   false],
 ];
 
 // Sexuality compatibility for romantic pairings
@@ -254,6 +271,8 @@ Character types available:
 - temptation: someone who exists to test another character's commitment. They're not evil — they're magnetic, and the pull is real.
 - ex: someone from a character's past. The history didn't end clean.
 - confidant: a trusted friend who knows secrets. Their loyalty can become a weapon or a shield.
+- friend: someone in her life she genuinely likes and trusts. The friendship is real — not strategic. They show up, they listen, they call her on her shit.
+- coworker: someone she works alongside daily. Not a mentor, not a rival — someone who shares the grind. The relationship is shaped by proximity and shared pressure.
 
 CHARACTERS MUST HAVE MORAL DEPTH:
 - Some characters are faithful and choose loyalty even when tested. A faithful character's story is about the COST of staying loyal when desire pulls elsewhere.
@@ -293,6 +312,8 @@ Character types available:
 - temptation: the person who makes someone question everything they said they'd never do. They don't have to try — they just are.
 - ex: someone from her past or another character's past. The wound is still open even if they pretend it isn't.
 - confidant: a friend who knows too much. Sometimes the most dangerous person in the room is the one who keeps your secrets.
+- friend: someone who is genuinely in her corner. No agenda, no leverage — just real human connection. In a world full of transactional relationships, a friend is rare and precious.
+- coworker: someone she sees every day at work. They share deadlines, office politics, and the kind of bond that only comes from surviving the same corporate battlefield together.
 
 CHARACTERS MUST HAVE MORAL DEPTH:
 - Characters argue, cheat, stay faithful, break up, reconcile, betray, and forgive — sometimes all in the same story.
