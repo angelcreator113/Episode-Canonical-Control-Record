@@ -157,13 +157,13 @@ export default function WorldStudio() {
   }, []);
 
   /* ── Loaders ─────────────────────────────────────────────────────── */
-  const loadCharacters = useCallback(async () => {
+  const loadCharacters = useCallback(async (tag) => {
     try {
-      const r = await fetch(`${API}/world/characters`);
+      const r = await fetch(`${API}/world/characters?world_tag=${encodeURIComponent(tag || worldTag)}`);
       const d = await r.json();
       setCharacters(d.characters || []);
     } catch (e) { console.error(e); }
-  }, []);
+  }, [worldTag]);
 
   const loadCharDetail = useCallback(async (id) => {
     try {
@@ -182,11 +182,20 @@ export default function WorldStudio() {
     } catch (e) { setRegChars([]); }
   }, []);
 
-  useEffect(() => { loadCharacters(); }, []);
+  useEffect(() => {
+    loadCharacters(worldTag);
+    setSelectedChar(null);
+    setCharDetail(null);
+    setEditMode(false);
+  }, [worldTag]);
   useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
   useEffect(() => {
-    if (registries.length && !activeRegId) setActiveRegId(registries[0].id);
-  }, [registries]);
+    // Auto-select registry matching current world's book_tag
+    if (registries.length) {
+      const match = registries.find(r => (r.book_tag || r.title || '').toLowerCase().includes(worldTag === 'lalaverse' ? 'lalaverse' : 'book-1'));
+      setActiveRegId(match ? match.id : registries[0].id);
+    }
+  }, [registries, worldTag]);
   useEffect(() => { if (activeRegId) loadRegChars(activeRegId); }, [activeRegId]);
 
   /* ── Ecosystem generate / preview / confirm ───────────────────────── */
@@ -491,6 +500,11 @@ export default function WorldStudio() {
                       {c.is_alive === false && <span className="ws-deceased-marker">†</span>}
                       {c.name}
                     </span>
+                    {c.world_tag && c.world_tag !== worldTag && (
+                      <span className="ws-world-badge-mini" title={c.world_tag}>
+                        {WORLD_OPTIONS.find(w => w.tag === c.world_tag)?.icon || '?'}
+                      </span>
+                    )}
                     {c.species && c.species !== 'human' && (
                       <span className="ws-species-badge">{c.species}</span>
                     )}

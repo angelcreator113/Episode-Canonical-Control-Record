@@ -253,6 +253,20 @@
   font-size: 13px;
 }
 
+/* mini world badge on sidebar cards (shown when char is from a different world) */
+.ws-world-badge-mini {
+  display:        inline-flex;
+  align-items:    center;
+  justify-content:center;
+  width:          18px;
+  height:         18px;
+  font-size:      11px;
+  border-radius:  50%;
+  background:     var(--ws-surface3);
+  border:         1px solid var(--ws-border2);
+  flex-shrink:    0;
+}
+
 /* ── Buttons ───────────────────────────────────────────────────────────────── */
 .ws-btn {
   padding:       8px 18px;

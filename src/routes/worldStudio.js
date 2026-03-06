@@ -685,6 +685,7 @@ Return JSON only:
             origin_story: c.origin_story || null,
             public_persona: c.public_persona || null,
             private_reality: c.private_reality || null,
+            world_tag: world_tag,
           },
           type: sequelize.QueryTypes.INSERT,
         }
@@ -709,9 +710,10 @@ Return JSON only:
 // GET /world/characters
 router.get('/world/characters', optionalAuth, async (req, res) => {
   try {
-    const { character_type, status, intimate_eligible } = req.query;
+    const { character_type, status, intimate_eligible, world_tag } = req.query;
     let where = 'WHERE 1=1';
     const rep = {};
+    if (world_tag)         { where += ' AND world_tag = :world_tag';          rep.world_tag = world_tag; }
     if (character_type)    { where += ' AND character_type = :type';         rep.type = character_type; }
     if (status)            { where += ' AND status = :status';                rep.status = status; }
     if (intimate_eligible) { where += ` AND intimate_eligible = ${intimate_eligible === 'true'}`; }
@@ -1495,7 +1497,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             attracted_to, how_they_love, desire_they_wont_admit,
             relationship_graph, family_layer, origin_story,
             public_persona, private_reality,
-            status, current_tension, created_at, updated_at)
+            world_tag, status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
             :sexuality, :intimate_eligible, :aesthetic, :signature,
@@ -1506,7 +1508,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             :attracted_to, :how_they_love, :desire_they_wont_admit,
             :relationship_graph, :family_layer, :origin_story,
             :public_persona, :private_reality,
-            'draft', 'Stable', NOW(), NOW())`,
+            :world_tag, 'draft', 'Stable', NOW(), NOW())`,
         {
           replacements: {
             id: charId, batch_id: batchId,
@@ -1531,6 +1533,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             origin_story: c.origin_story || null,
             public_persona: c.public_persona || null,
             private_reality: c.private_reality || null,
+            world_tag: world_tag,
           },
           type: sequelize.QueryTypes.INSERT,
         }
