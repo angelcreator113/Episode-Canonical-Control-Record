@@ -176,6 +176,7 @@ export default function UniversePage() {
           <SeriesTab
             series={series}
             books={books}
+            shows={shows}
             universeId={LALAVERSE_ID}
             onChanged={() => { load(); showToast('Series updated'); }}
             showToast={showToast}
@@ -496,7 +497,7 @@ function UniverseTab({ universe, series, books, onSaved, showToast, isMobile, is
 //  TAB 2 — SERIES
 // ══════════════════════════════════════════════════════════════════════════
 
-function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, isTablet }) {
+function SeriesTab({ series, books, shows, universeId, onChanged, showToast, isMobile, isTablet }) {
   const [creating, setCreating]   = useState(false);
   const [newName, setNewName]     = useState('');
   const [newDesc, setNewDesc]     = useState('');
@@ -504,6 +505,21 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
   const [editingEra, setEditingEra] = useState(null); // bookId
   const [eraValues, setEraValues]   = useState({});
   const [assigning, setAssigning]   = useState(null); // bookId being assigned
+
+  async function linkShow(seriesId, showId) {
+    try {
+      const res = await fetch(`${UNIVERSE_API}/series/${seriesId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ show_id: showId || null }),
+      });
+      if (!res.ok) throw new Error('Failed to link show');
+      showToast(showId ? 'Show linked to series' : 'Show unlinked');
+      onChanged();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  }
 
   async function assignToSeries(bookId, seriesId) {
     try {
@@ -637,6 +653,21 @@ function SeriesTab({ series, books, universeId, onChanged, showToast, isMobile, 
                 {ser.description && (
                   <div className="up-series-desc" style={isMobile ? { maxWidth: '100%' } : undefined}>{ser.description}</div>
                 )}
+                {/* Link to show */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 6 }}>
+                  <span style={{ fontSize: 12, color: 'rgba(26,26,46,0.45)', letterSpacing: '0.04em', textTransform: 'uppercase' }}>Show:</span>
+                  <select
+                    className="up-assign-select"
+                    style={{ maxWidth: isMobile ? 'none' : 220, fontSize: 12, padding: '6px 10px' }}
+                    value={ser.show_id || ''}
+                    onChange={e => linkShow(ser.id, e.target.value || null)}
+                  >
+                    <option value=''>— None —</option>
+                    {(shows || []).map(sh => (
+                      <option key={sh.id} value={sh.id}>{sh.title || sh.name}</option>
+                    ))}
+                  </select>
+                </div>
               </div>
               {!isMobile && (
                 <button className="up-btn-delete" onClick={() => deleteSeries(ser.id)} title='Delete series'>✕</button>
