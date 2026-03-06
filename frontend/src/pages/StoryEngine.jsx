@@ -106,17 +106,19 @@ function ArcProgress({ tasks, approvedStories }) {
 }
 
 // ─── Task card (story brief before writing) ───────────────────────────────────
-function TaskCard({ task, isApproved, isActive, onGenerate, onSelect, charColor, generating }) {
+function TaskCard({ task, isApproved, isSaved, isActive, onGenerate, onSelect, charColor, generating }) {
   return (
     <div
-      className={`se-task-card ${isActive ? 'active' : ''} ${isApproved ? 'approved' : ''}`}
+      className={`se-task-card ${isActive ? 'active' : ''} ${isApproved ? 'approved' : ''} ${isSaved ? 'saved' : ''}`}
       style={{ '--char-color': charColor }}
       onClick={() => onSelect(task)}
     >
       <div className="se-task-number">
         {isApproved
           ? <span className="se-task-check">✓</span>
-          : <span>{task.story_number}</span>
+          : isSaved
+            ? <span className="se-task-saved-icon" title="Saved — review later">📥</span>
+            : <span>{task.story_number}</span>
         }
       </div>
       <div className="se-task-body">
@@ -131,6 +133,9 @@ function TaskCard({ task, isApproved, isActive, onGenerate, onSelect, charColor,
           >
             {PHASE_LABELS[task.phase]}
           </span>
+          {isSaved && !isApproved && (
+            <span className="se-task-saved-badge">saved</span>
+          )}
           {task.new_character && (
             <span className="se-task-new-char">+ {task.new_character_name}</span>
           )}
@@ -143,7 +148,7 @@ function TaskCard({ task, isApproved, isActive, onGenerate, onSelect, charColor,
           onClick={(e) => { e.stopPropagation(); onGenerate(task); }}
           disabled={generating}
         >
-          {generating ? 'Writing…' : 'Write'}
+          {generating ? 'Writing…' : isSaved ? 'Rewrite' : 'Write'}
         </button>
       )}
     </div>
@@ -154,6 +159,7 @@ function TaskCard({ task, isApproved, isActive, onGenerate, onSelect, charColor,
 function StoryPanel({
   story, task, charColor, charName,
   onApprove, onReject, onEdit, onCheckConsistency,
+  onSaveForLater, savingForLater,
   consistencyConflicts, consistencyLoading,
   therapyMemories, therapyLoading,
   onAddToRegistry,
@@ -244,6 +250,13 @@ function StoryPanel({
                 {consistencyLoading ? '…' : 'Check'}
               </button>
               <button className="se-btn se-btn-reject" onClick={() => onReject(story)}>Reject</button>
+              <button
+                className="se-btn se-btn-save-later"
+                onClick={() => onSaveForLater(story)}
+                disabled={savingForLater}
+              >
+                {savingForLater ? 'Saving…' : '📥 Save for Later'}
+              </button>
               <button
                 className="se-btn se-btn-approve"
                 style={{ background: charColor }}
@@ -384,6 +397,7 @@ export default function StoryEngine() {
   // Generated stories (storyNumber → story object)
   const [stories, setStories]                 = useState({});
   const [approvedStories, setApprovedStories] = useState([]); // story numbers
+  const [savedStories, setSavedStories]       = useState([]); // story numbers saved as draft in DB
 
   // Active story/task in right panel
   const [activeTask, setActiveTask]           = useState(null);
@@ -407,6 +421,9 @@ export default function StoryEngine() {
 
   // Registry feedback notification
   const [registryUpdate, setRegistryUpdate]   = useState(null);
+
+  // Save-for-later state
+  const [savingForLater, setSavingForLater]   = useState(false);
 
   const char = CHARACTERS[selectedChar];
 
@@ -526,15 +543,16 @@ export default function StoryEngine() {
     } catch { /* quota exceeded */ }
   }
 
-  // ── Load tasks + stories: try localStorage → server cache → empty state ──
+  // ── Load tasks + stories: try localStorage → DB → server cache → empty state ──
   useEffect(() => {
     if (!selectedChar) return;
     setActiveTask(null);
     setActiveStory(null);
     setConsistencyConflicts([]);
     setTherapyMemories([]);
+    setSavedStories([]);
 
-    // Restore any previously-written stories for this character
+    // Restore any previously-written stories for this character from localStorage
     const cachedStoryData = getCachedStories(selectedChar);
     if (cachedStoryData) {
       setStories(cachedStoryData.stories);
@@ -543,6 +561,48 @@ export default function StoryEngine() {
       setStories({});
       setApprovedStories([]);
     }
+
+    // Also load DB-persisted stories (saved for later / approved) — merges with cache
+    (async () => {
+      try {
+        const dbRes = await fetch(`${API_BASE}/stories/character/${selectedChar}`);
+        if (dbRes.ok) {
+          const dbData = await dbRes.json();
+          if (dbData.stories?.length) {
+            const dbStories = {};
+            const dbApproved = [];
+            const dbSaved = [];
+            for (const s of dbData.stories) {
+              dbStories[s.story_number] = {
+                story_number: s.story_number,
+                title: s.title,
+                text: s.text,
+                phase: s.phase,
+                story_type: s.story_type,
+                word_count: s.word_count,
+                new_character: s.new_character,
+                new_character_name: s.new_character_name,
+                new_character_role: s.new_character_role,
+                opening_line: s.opening_line,
+                character_key: s.character_key,
+                db_id: s.id,
+                db_status: s.status,
+              };
+              if (s.status === 'approved') dbApproved.push(s.story_number);
+              if (s.status === 'draft' || s.status === 'approved') dbSaved.push(s.story_number);
+            }
+            // Merge: DB data takes precedence (it's the persisted truth)
+            setStories(prev => ({ ...prev, ...dbStories }));
+            setApprovedStories(prev => [...new Set([...prev, ...dbApproved])]);
+            setSavedStories(dbSaved);
+            // Update localStorage cache with DB data
+            setCachedStories(selectedChar,
+              { ...(cachedStoryData?.stories || {}), ...dbStories },
+              [...new Set([...(cachedStoryData?.approved || []), ...dbApproved])]);
+          }
+        }
+      } catch { /* network error — localStorage fallback still active */ }
+    })();
 
     // 1. Check localStorage for task arc
     const cached = getCachedTasks(selectedChar);
@@ -648,10 +708,53 @@ export default function StoryEngine() {
     }
   }
 
+  // ── Save a story for later (persist to DB as draft, don't approve) ────────
+  async function handleSaveForLater(story) {
+    setSavingForLater(true);
+    try {
+      const res = await fetch(`${API_BASE}/stories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_key: selectedChar,
+          story_number: story.story_number,
+          title: story.title,
+          text: story.text,
+          phase: story.phase,
+          story_type: story.story_type,
+          word_count: story.word_count || story.text?.split(/\s+/).length,
+          status: 'draft',
+          task_brief: tasks.find(t => t.story_number === story.story_number),
+          new_character: story.new_character,
+          new_character_name: story.new_character_name,
+          new_character_role: story.new_character_role,
+          opening_line: story.opening_line,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        const nextSaved = [...new Set([...savedStories, story.story_number])];
+        setSavedStories(nextSaved);
+        // Update the story object with DB info
+        const nextStories = { ...stories, [story.story_number]: { ...story, db_id: data.story?.id, db_status: 'draft' } };
+        setStories(nextStories);
+        setCachedStories(selectedChar, nextStories, approvedStories);
+        setRegistryUpdate('📥 Story saved — come back to review & approve anytime');
+        setTimeout(() => setRegistryUpdate(null), 5000);
+      }
+    } catch (e) {
+      console.error('saveForLater error:', e);
+      alert('Failed to save story. Please try again.');
+    } finally {
+      setSavingForLater(false);
+    }
+  }
   // ── Approve a story ───────────────────────────────────────────────────────
   async function handleApprove(story) {
     const nextApproved = [...new Set([...approvedStories, story.story_number])];
     setApprovedStories(nextApproved);
+    // Track as saved too (approved implies saved)
+    setSavedStories(prev => [...new Set([...prev, story.story_number])]);
     setCachedStories(selectedChar, stories, nextApproved);
 
     // Extract memories for therapy room
@@ -911,7 +1014,15 @@ export default function StoryEngine() {
           ) : (
             <>
               <div className="se-task-list-header">
-                <span className="se-task-list-count">{tasks.length} stories</span>
+                <span className="se-task-list-count">
+                  {tasks.length} stories
+                  {(() => {
+                    const queueCount = savedStories.filter(n => !approvedStories.includes(n)).length;
+                    return queueCount > 0 ? (
+                      <span className="se-reading-queue-badge">📥 {queueCount} to review</span>
+                    ) : null;
+                  })()}
+                </span>
                 <button
                   className="se-btn se-btn-regen"
                   onClick={() => { if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) handleGenerateArc(true); }}
@@ -924,6 +1035,7 @@ export default function StoryEngine() {
                   key={task.story_number}
                   task={task}
                   isApproved={approvedStories.includes(task.story_number)}
+                  isSaved={savedStories.includes(task.story_number) && !approvedStories.includes(task.story_number)}
                   isActive={activeTask?.story_number === task.story_number}
                   onGenerate={handleGenerate}
                   onSelect={handleSelectTask}
@@ -956,6 +1068,8 @@ export default function StoryEngine() {
               onReject={handleReject}
               onEdit={handleEdit}
               onCheckConsistency={handleCheckConsistency}
+              onSaveForLater={handleSaveForLater}
+              savingForLater={savingForLater}
               consistencyConflicts={consistencyConflicts}
               consistencyLoading={consistencyLoading}
               therapyMemories={therapyMemories}

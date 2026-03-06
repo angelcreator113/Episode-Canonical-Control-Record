@@ -824,6 +824,59 @@
   to   { opacity: 1; transform: translateY(0); }
 }
 
+/* ── Save for Later / Reading queue ──────────────────────────────────────────── */
+.se-btn-save-later {
+  background: linear-gradient(135deg, #1e3a5f, #2d5a8c) !important;
+  color: #7ec8e3 !important;
+  border: 1px solid rgba(126, 200, 227, 0.3) !important;
+  font-weight: 500;
+}
+.se-btn-save-later:hover {
+  background: linear-gradient(135deg, #2d5a8c, #3d6a9c) !important;
+  border-color: rgba(126, 200, 227, 0.5) !important;
+}
+.se-btn-save-later:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.se-reading-queue-badge {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 2px 8px;
+  background: linear-gradient(135deg, rgba(126, 200, 227, 0.2), rgba(30, 58, 95, 0.4));
+  border: 1px solid rgba(126, 200, 227, 0.3);
+  border-radius: 10px;
+  font-size: 11px;
+  color: #7ec8e3;
+  font-weight: 500;
+  vertical-align: middle;
+}
+
+/* Task card — saved state */
+.se-task-card.saved {
+  border-left: 3px solid #3d8ec9;
+  background: linear-gradient(90deg, rgba(61, 142, 201, 0.06), transparent);
+}
+.se-task-card.saved .se-task-number {
+  color: #5baed6;
+}
+.se-task-saved-icon {
+  font-size: 14px;
+}
+.se-task-saved-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  background: rgba(61, 142, 201, 0.2);
+  border: 1px solid rgba(61, 142, 201, 0.3);
+  border-radius: 8px;
+  font-size: 10px;
+  color: #5baed6;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 900px) {
   .se-workspace { flex-direction: column; }
