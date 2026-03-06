@@ -541,6 +541,16 @@
   color: var(--si-text-dim);
 }
 
+/* ── Embedded mode (inside UniversePage) ─────────────────────────────────────── */
+.up-tab-content .si-page {
+  height: auto;
+  min-height: 0;
+  overflow: visible;
+}
+.up-tab-content .si-workspace {
+  min-height: 400px;
+}
+
 /* ── Responsive ──────────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
   .si-workspace {
@@ -551,12 +561,59 @@
     min-width: 0;
     border-right: none;
     border-bottom: 1px solid var(--si-border);
-    max-height: 50vh;
+    max-height: none;
+    overflow-y: visible;
+  }
+  .si-list-column {
+    min-height: 300px;
   }
   .si-char-bar {
-    padding: 8px 16px;
+    padding: 8px 12px;
+    gap: 6px;
+  }
+  .si-char-pill {
+    padding: 5px 10px;
+    font-size: 11px;
+    gap: 4px;
   }
   .si-topbar {
     padding: 10px 16px;
+  }
+  .si-topbar-title {
+    font-size: 15px;
+  }
+  .si-form-column {
+    padding: 14px 12px;
+  }
+  .si-form-header {
+    font-size: 14px;
+  }
+  .si-platform-btn {
+    padding: 5px 8px;
+    font-size: 10px;
+  }
+  .si-filter-bar {
+    padding: 10px 12px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+  }
+  .si-filter-bar::-webkit-scrollbar {
+    display: none;
+  }
+  .si-filter-btn {
+    flex-shrink: 0;
+    font-size: 11px;
+  }
+  .si-card-list {
+    padding: 12px;
+  }
+  .si-card {
+    padding: 12px;
+  }
+  .si-card-actions {
+    flex-wrap: wrap;
+    gap: 6px;
   }
 }
