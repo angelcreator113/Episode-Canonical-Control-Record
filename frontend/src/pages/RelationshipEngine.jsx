@@ -138,7 +138,7 @@ function useToast() {
 // ════════════════════════════════════════════════════════════════════════
 // D3 FORCE GRAPH HOOK (for Web tab)
 // ════════════════════════════════════════════════════════════════════════
-function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDragRef, d3Ready) {
+function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, lastDragRef, d3Ready, selectedNodeId) {
   useEffect(() => {
     const d3 = window.d3;
     if (!d3Ready || !d3 || !svgRef.current || !nodes.length) return;
@@ -180,8 +180,21 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, 
         .attr('fill', color).attr('opacity', 0.8);
     });
 
-    // Clone for D3 mutation
-    const simNodes = nodes.map(n => ({ ...n }));
+    // Group positions for pre-layout clustering
+    const groupCenters = {
+      'real_world': { x: width * 0.25, y: height * 0.3 },
+      'online':     { x: width * 0.75, y: height * 0.3 },
+      'created':    { x: width * 0.5,  y: height * 0.7 },
+    };
+    const defaultCenter = { x: width / 2, y: height / 2 };
+
+    // Clone for D3 mutation — pre-position by group for faster settling
+    const simNodes = nodes.map((n, i) => {
+      const gc = groupCenters[n.group] || defaultCenter;
+      const angle = (i / Math.max(1, nodes.length)) * 2 * Math.PI;
+      const spread = 80 + Math.random() * 40;
+      return { ...n, x: gc.x + Math.cos(angle) * spread, y: gc.y + Math.sin(angle) * spread };
+    });
     const nodeMap  = Object.fromEntries(simNodes.map(n => [n.id, n]));
     const simEdges = edges.map(e => ({
       ...e,
@@ -189,7 +202,7 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, 
       target: nodeMap[e.to],
     })).filter(e => e.source && e.target);
 
-    // Force simulation
+    // Force simulation — faster settling with clustering
     sim = d3.forceSimulation(simNodes)
       .force('link', d3.forceLink(simEdges).id(d => d.id)
         .distance(e => {
@@ -197,11 +210,14 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, 
           if (e.strength >= 4) return 160;
           return 120;
         }).strength(0.4))
-      .force('charge', d3.forceManyBody().strength(-400))
+      .force('charge', d3.forceManyBody().strength(-350))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(d => (NODE_RADIUS[d.role_type] || 24) + 12))
-      .alphaDecay(0.03)
-      .velocityDecay(0.4);
+      .force('collision', d3.forceCollide().radius(d => (NODE_RADIUS[d.role_type] || 24) + 14))
+      // Clustering forces — pull nodes toward their group region
+      .force('clusterX', d3.forceX(d => (groupCenters[d.group] || defaultCenter).x).strength(0.08))
+      .force('clusterY', d3.forceY(d => (groupCenters[d.group] || defaultCenter).y).strength(0.08))
+      .alphaDecay(0.05)
+      .velocityDecay(0.6);
 
     // Edges
     const edgeGroup = container.append('g').attr('class', 'rw-edges');
@@ -272,6 +288,33 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, 
       nodeGs.attr('transform', d => `translate(${d.x},${d.y})`);
     });
 
+    // Focus highlight — dim unconnected nodes/edges when a node is selected
+    function applyFocus(focusId) {
+      if (!focusId) {
+        nodeGs.style('opacity', 1);
+        edgeLines.style('opacity', e => e.note === 'franchise_hinge' ? 1 : 0.55);
+        return;
+      }
+      const connectedIds = new Set([focusId]);
+      simEdges.forEach(e => {
+        const srcId = typeof e.source === 'object' ? e.source.id : e.source;
+        const tgtId = typeof e.target === 'object' ? e.target.id : e.target;
+        if (srcId === focusId) connectedIds.add(tgtId);
+        if (tgtId === focusId) connectedIds.add(srcId);
+      });
+      nodeGs.style('opacity', d => connectedIds.has(d.id) ? 1 : 0.12);
+      edgeLines.style('opacity', e => {
+        const srcId = typeof e.source === 'object' ? e.source.id : e.source;
+        const tgtId = typeof e.target === 'object' ? e.target.id : e.target;
+        return (srcId === focusId || tgtId === focusId) ? 0.85 : 0.06;
+      }).attr('stroke-width', e => {
+        const srcId = typeof e.source === 'object' ? e.source.id : e.source;
+        const tgtId = typeof e.target === 'object' ? e.target.id : e.target;
+        return (srcId === focusId || tgtId === focusId) ? 3 : 1;
+      });
+    }
+    applyFocus(selectedNodeId);
+
     // Watch for container resize — debounced re-center
     let resizeTimer = null;
     resizeObserver = new ResizeObserver(entries => {
@@ -296,7 +339,7 @@ function useD3RelationshipGraph(svgRef, nodes, edges, onNodeClick, onEdgeHover, 
       if (sim) sim.stop();
       if (resizeObserver) resizeObserver.disconnect();
     };
-  }, [nodes, edges, onNodeClick, onEdgeHover, lastDragRef, d3Ready]);
+  }, [nodes, edges, onNodeClick, onEdgeHover, lastDragRef, d3Ready, selectedNodeId]);
 }
 
 // ════════════════════════════════════════════════════════════════════════
@@ -408,13 +451,17 @@ export default function RelationshipEngine() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
-      if (!res.ok) throw new Error();
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        const msg = errData.error || `Server error (${res.status})`;
+        throw new Error(msg);
+      }
       const data = await res.json();
       setCandidates(prev => [...(data.candidates || []), ...prev]);
       showToast(`Generated ${data.count} candidate(s)`, 'success');
       setGenModalOpen(false);
       setView('candidates');
-    } catch { showToast('AI generation failed', 'error'); }
+    } catch (err) { showToast(err.message || 'AI generation failed', 'error'); }
     finally { setGenerating(false); }
   };
 
@@ -761,7 +808,7 @@ function WebView({ navigate }) {
   }, [edges, visibleNodes]);
 
   // Render D3
-  useD3RelationshipGraph(svgRef, visibleNodes, visibleEdges, handleNodeClick, handleEdgeHover, lastDragRef, d3Loaded);
+  useD3RelationshipGraph(svgRef, visibleNodes, visibleEdges, handleNodeClick, handleEdgeHover, lastDragRef, d3Loaded, selectedNode?.id);
 
   if (webLoading) {
     return (
@@ -916,50 +963,83 @@ function WebCharacterPanel({ node, edges, onNavigate, onClose }) {
 }
 
 function WebLegend() {
+  const [collapsed, setCollapsed] = useState(true);
   return (
-    <div className="rw-legend">
-      <div className="rw-legend-title">Connections</div>
-      {Object.entries(EDGE_COLORS).map(([type, color]) => (
-        <div key={type} className="rw-legend-item">
-          <div className="rw-legend-line" style={{ background: color }} />
-          <span>{type}</span>
-        </div>
-      ))}
-      <div className="rw-legend-divider" />
-      <div className="rw-legend-item"><span className="rw-legend-arrow">→</span><span>one-way (unaware)</span></div>
-      <div className="rw-legend-item"><span className="rw-legend-arrow">↔</span><span>two-way</span></div>
+    <div className="rw-legend" style={{
+      maxHeight: collapsed ? 32 : 300,
+      overflow: 'hidden',
+      transition: 'max-height 0.25s ease',
+      cursor: 'pointer',
+    }} onClick={() => setCollapsed(c => !c)}>
+      <div className="rw-legend-title" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{ fontSize: 10, transform: collapsed ? 'rotate(-90deg)' : 'rotate(0)', transition: 'transform 0.2s' }}>▼</span>
+        Legend
+      </div>
+      {!collapsed && (
+        <>
+          {Object.entries(EDGE_COLORS).map(([type, color]) => (
+            <div key={type} className="rw-legend-item">
+              <div className="rw-legend-line" style={{ background: color }} />
+              <span>{type}</span>
+            </div>
+          ))}
+          <div className="rw-legend-divider" />
+          <div className="rw-legend-item"><span className="rw-legend-arrow">→</span><span>one-way (unaware)</span></div>
+          <div className="rw-legend-item"><span className="rw-legend-arrow">↔</span><span>two-way</span></div>
+        </>
+      )}
     </div>
   );
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// TREE VIEW — SVG three-layer visualization
+// TREE VIEW — Improved layered visualization with zoom, hover, focus
 // ════════════════════════════════════════════════════════════════════════
 function TreeView({ characters, relationships, layers, layerFilter, selectedChar, onSelectRel, onSelectChar }) {
-  const svgRef = useRef(null);
-  const [dims, setDims] = useState({ w: 900, h: 600 });
+  const containerRef = useRef(null);
+  const [dims, setDims] = useState({ w: 1200, h: 700 });
+  const [hoveredNode, setHoveredNode] = useState(null);
+  const [hoveredEdge, setHoveredEdge] = useState(null);
+  const [viewBox, setViewBox] = useState(null);
+  const [isPanning, setIsPanning] = useState(false);
+  const panStart = useRef(null);
 
+  // Responsive sizing
   useEffect(() => {
-    const el = svgRef.current?.parentElement;
-    if (el) setDims({ w: el.clientWidth, h: Math.max(500, el.clientHeight) });
-  }, [characters]);
+    const el = containerRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(entries => {
+      for (const e of entries) {
+        const { width, height } = e.contentRect;
+        if (width > 0 && height > 0) setDims({ w: width, h: Math.max(500, height) });
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const layerKeys = layerFilter === 'all'
+    ? ['real-world', 'lalaverse', 'series-2']
+    : [layerFilter];
+
+  // Calculate dynamic dimensions based on character count
+  const maxCharsInLayer = Math.max(1, ...layerKeys.map(lk => (layers[lk] || []).length));
+  const svgW = Math.max(dims.w, maxCharsInLayer * 120 + 80);
+  const bandH = Math.max(200, dims.h / (layerKeys.length + 0.3));
+  const svgH = bandH * layerKeys.length + 60;
 
   const nodePositions = useMemo(() => {
     const pos = {};
-    const layerKeys = layerFilter === 'all'
-      ? ['real-world', 'lalaverse', 'series-2']
-      : [layerFilter];
-    const bandH = dims.h / (layerKeys.length + 0.5);
     layerKeys.forEach((lk, li) => {
       const chars = layers[lk] || [];
-      const bandY = bandH * (li + 0.5);
-      const spacing = dims.w / (chars.length + 1);
+      const bandY = bandH * li + bandH * 0.55;
+      const spacing = svgW / (chars.length + 1);
       chars.forEach((c, ci) => {
         pos[c.id] = { x: spacing * (ci + 1), y: bandY, char: c, layer: lk };
       });
     });
     return pos;
-  }, [characters, layers, layerFilter, dims]);
+  }, [characters, layers, layerFilter, svgW, bandH]);
 
   const edges = useMemo(() => {
     return relationships.filter(
@@ -971,64 +1051,312 @@ function TreeView({ characters, relationships, layers, layerFilter, selectedChar
     }));
   }, [relationships, nodePositions]);
 
-  const layerKeys = layerFilter === 'all'
-    ? ['real-world', 'lalaverse', 'series-2']
-    : [layerFilter];
-  const bandH = dims.h / (layerKeys.length + 0.5);
+  // Connections for selected character — highlight those edges
+  const selectedConns = useMemo(() => {
+    if (!selectedChar) return new Set();
+    const ids = new Set();
+    relationships.forEach(r => {
+      if (r.character_id_a === selectedChar.id || r.character_id_b === selectedChar.id) {
+        ids.add(r.character_id_a);
+        ids.add(r.character_id_b);
+      }
+    });
+    return ids;
+  }, [selectedChar, relationships]);
+
+  // Zoom with mouse wheel
+  const handleWheel = useCallback((e) => {
+    e.preventDefault();
+    const factor = e.deltaY > 0 ? 1.1 : 0.9;
+    setViewBox(prev => {
+      const vb = prev || { x: 0, y: 0, w: svgW, h: svgH };
+      const cx = vb.x + vb.w / 2;
+      const cy = vb.y + vb.h / 2;
+      const nw = Math.min(svgW * 3, Math.max(300, vb.w * factor));
+      const nh = Math.min(svgH * 3, Math.max(200, vb.h * factor));
+      return { x: cx - nw / 2, y: cy - nh / 2, w: nw, h: nh };
+    });
+  }, [svgW, svgH]);
+
+  // Pan with mouse drag
+  const handleMouseDown = useCallback((e) => {
+    if (e.target.closest('.tree-interactive')) return;
+    setIsPanning(true);
+    panStart.current = { x: e.clientX, y: e.clientY, vb: viewBox || { x: 0, y: 0, w: svgW, h: svgH } };
+  }, [viewBox, svgW, svgH]);
+
+  const handleMouseMove = useCallback((e) => {
+    if (!isPanning || !panStart.current) return;
+    const dx = (e.clientX - panStart.current.x) * (panStart.current.vb.w / dims.w);
+    const dy = (e.clientY - panStart.current.y) * (panStart.current.vb.h / dims.h);
+    setViewBox({
+      x: panStart.current.vb.x - dx,
+      y: panStart.current.vb.y - dy,
+      w: panStart.current.vb.w,
+      h: panStart.current.vb.h,
+    });
+  }, [isPanning, dims]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsPanning(false);
+    panStart.current = null;
+  }, []);
+
+  const vb = viewBox || { x: 0, y: 0, w: svgW, h: svgH };
+
+  // Calculate curved path for edges to avoid overlap
+  const edgePath = useCallback((from, to, idx, total) => {
+    if (Math.abs(from.y - to.y) > 10) {
+      // Cross-layer: use a gentle S-curve
+      const midY = (from.y + to.y) / 2;
+      const offset = total > 1 ? (idx - (total - 1) / 2) * 30 : 0;
+      return `M${from.x},${from.y} C${from.x + offset},${midY} ${to.x - offset},${midY} ${to.x},${to.y}`;
+    }
+    // Same layer: arc above
+    const dx = to.x - from.x;
+    const dist = Math.abs(dx);
+    const arcH = Math.min(80, dist * 0.3) + (idx * 15);
+    const midX = (from.x + to.x) / 2;
+    const midY = from.y - arcH;
+    return `M${from.x},${from.y} Q${midX},${midY} ${to.x},${to.y}`;
+  }, []);
+
+  // Group edges by pair for offset calculation
+  const edgePairCounts = useMemo(() => {
+    const counts = {};
+    edges.forEach(e => {
+      const key = [e.from.char.id, e.to.char.id].sort().join('-');
+      counts[key] = (counts[key] || 0) + 1;
+    });
+    return counts;
+  }, [edges]);
+
+  const edgePairIndex = {};
 
   return (
-    <div style={{ width: '100%', height: '100%', overflow: 'auto' }}>
-      <svg ref={svgRef} width={dims.w} height={dims.h} style={{ display: 'block', background: T.parchment }}>
+    <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', position: 'relative' }}>
+      {/* Zoom controls */}
+      <div style={{
+        position: 'absolute', top: 12, right: 12, zIndex: 5,
+        display: 'flex', flexDirection: 'column', gap: 4,
+        background: 'rgba(250,247,240,0.9)', borderRadius: 8, padding: 4,
+        border: `1px solid ${T.border}`, boxShadow: T.shadow,
+      }}>
+        <button onClick={() => setViewBox(prev => {
+          const vb = prev || { x: 0, y: 0, w: svgW, h: svgH };
+          const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
+          const nw = vb.w * 0.8, nh = vb.h * 0.8;
+          return { x: cx - nw / 2, y: cy - nh / 2, w: nw, h: nh };
+        })} style={{ width: 28, height: 28, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, borderRadius: 4 }}
+          title="Zoom in">+</button>
+        <button onClick={() => setViewBox(prev => {
+          const vb = prev || { x: 0, y: 0, w: svgW, h: svgH };
+          const cx = vb.x + vb.w / 2, cy = vb.y + vb.h / 2;
+          const nw = Math.min(svgW * 3, vb.w * 1.25), nh = Math.min(svgH * 3, vb.h * 1.25);
+          return { x: cx - nw / 2, y: cy - nh / 2, w: nw, h: nh };
+        })} style={{ width: 28, height: 28, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 16, borderRadius: 4 }}
+          title="Zoom out">−</button>
+        <button onClick={() => setViewBox(null)}
+          style={{ width: 28, height: 28, border: 'none', background: 'transparent', cursor: 'pointer', fontSize: 12, borderRadius: 4 }}
+          title="Reset view">⟲</button>
+      </div>
+
+      <svg
+        width={dims.w} height={dims.h}
+        viewBox={`${vb.x} ${vb.y} ${vb.w} ${vb.h}`}
+        style={{ display: 'block', background: T.parchment, cursor: isPanning ? 'grabbing' : 'grab' }}
+        onWheel={handleWheel}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+      >
+        {/* Layer bands */}
         {layerKeys.map((lk, li) => {
           const cfg = LAYER_CONFIG[lk];
           return (
             <g key={lk}>
-              <rect x={0} y={bandH * li} width={dims.w} height={bandH} fill={cfg.color} opacity={0.04} />
-              <text x={16} y={bandH * li + 24} fill={cfg.color} opacity={0.6}
-                style={{ fontSize: 13, fontFamily: T.fontMono, fontWeight: 600 }}>
+              <rect x={vb.x - 50} y={bandH * li} width={svgW + 100} height={bandH}
+                fill={cfg.color} opacity={0.04} />
+              <text x={vb.x + 16} y={bandH * li + 28} fill={cfg.color} opacity={0.55}
+                style={{ fontSize: 12, fontFamily: T.fontMono, fontWeight: 700, letterSpacing: '0.06em' }}>
                 {cfg.label.toUpperCase()}
               </text>
-              <line x1={0} y1={bandH * (li + 1)} x2={dims.w} y2={bandH * (li + 1)}
-                stroke={cfg.color} strokeOpacity={0.15} strokeDasharray="6,4" />
+              <line x1={vb.x - 50} y1={bandH * (li + 1)} x2={svgW + 50} y2={bandH * (li + 1)}
+                stroke={cfg.color} strokeOpacity={0.12} strokeDasharray="8,6" />
             </g>
           );
         })}
+
+        {/* Edges — curved paths */}
         {edges.map((e, i) => {
+          const pairKey = [e.from.char.id, e.to.char.id].sort().join('-');
+          const pairTotal = edgePairCounts[pairKey] || 1;
+          edgePairIndex[pairKey] = (edgePairIndex[pairKey] || 0) + 1;
+          const pairIdx = edgePairIndex[pairKey] - 1;
+
           const tensionColor = e.rel.tension_state && TENSION_COLORS[e.rel.tension_state]
             ? TENSION_COLORS[e.rel.tension_state].text : T.slate;
-          const midX = (e.from.x + e.to.x) / 2;
-          const midY = (e.from.y + e.to.y) / 2;
+
+          const isConnected = selectedChar && (
+            e.rel.character_id_a === selectedChar.id || e.rel.character_id_b === selectedChar.id
+          );
+          const isDimmed = selectedChar && !isConnected;
+          const isHovered = hoveredEdge === i;
+
           return (
-            <g key={i} style={{ cursor: 'pointer' }} onClick={() => onSelectRel(e.rel)}>
-              <line x1={e.from.x} y1={e.from.y} x2={e.to.x} y2={e.to.y}
-                stroke={tensionColor} strokeWidth={2} opacity={0.5} />
-              <text x={midX} y={midY - 6} textAnchor="middle" fill={tensionColor}
-                style={{ fontSize: 10, fontFamily: T.fontMono }}>
-                {e.rel.relationship_type}
-              </text>
+            <g key={i} className="tree-interactive"
+              style={{ cursor: 'pointer' }}
+              onClick={() => onSelectRel(e.rel)}
+              onMouseEnter={() => setHoveredEdge(i)}
+              onMouseLeave={() => setHoveredEdge(null)}
+            >
+              <path
+                d={edgePath(e.from, e.to, pairIdx, pairTotal)}
+                fill="none"
+                stroke={tensionColor}
+                strokeWidth={isHovered ? 3 : isConnected ? 2.5 : 1.5}
+                opacity={isDimmed ? 0.12 : isHovered ? 0.9 : 0.45}
+                strokeDasharray={e.rel.tension_state === 'fractured' ? '4,3' : 'none'}
+              />
+              {/* Edge label only shown on hover or when connected to selected */}
+              {(isHovered || isConnected) && (
+                <text
+                  x={(e.from.x + e.to.x) / 2}
+                  y={Math.abs(e.from.y - e.to.y) > 10
+                    ? (e.from.y + e.to.y) / 2 - 8
+                    : e.from.y - Math.min(60, Math.abs(e.to.x - e.from.x) * 0.25) - 6
+                  }
+                  textAnchor="middle" fill={tensionColor}
+                  style={{ fontSize: 9, fontFamily: T.fontMono, fontWeight: 600 }}
+                >
+                  {e.rel.relationship_type}
+                  {e.rel.tension_state ? ` · ${e.rel.tension_state}` : ''}
+                </text>
+              )}
             </g>
           );
         })}
+
+        {/* Nodes */}
         {Object.entries(nodePositions).map(([cId, pos]) => {
           const isSelected = selectedChar?.id === cId;
+          const isConnected = selectedConns.has(cId);
+          const isDimmed = selectedChar && !isSelected && !isConnected;
+          const isHovered = hoveredNode === cId;
           const typeColor = TYPE_COLORS[pos.char.role_type] || T.slate;
+          const r = isSelected ? 24 : isHovered ? 22 : 18;
+
           return (
             <g key={cId} transform={`translate(${pos.x}, ${pos.y})`}
-              style={{ cursor: 'pointer' }} onClick={() => onSelectChar(pos.char)}>
-              {isSelected && <circle r={28} fill={typeColor} opacity={0.15} />}
-              <circle r={20} fill={T.white} stroke={typeColor} strokeWidth={isSelected ? 3 : 2} />
-              <text textAnchor="middle" dominantBaseline="central" style={{ fontSize: 14 }}>
-                {pos.char.icon || '◈'}
+              className="tree-interactive"
+              style={{ cursor: 'pointer' }}
+              onClick={() => onSelectChar(pos.char)}
+              onMouseEnter={() => setHoveredNode(cId)}
+              onMouseLeave={() => setHoveredNode(null)}
+            >
+              {/* Selection glow */}
+              {(isSelected || isHovered) && (
+                <circle r={r + 8} fill={typeColor} opacity={isSelected ? 0.12 : 0.06} />
+              )}
+              {/* Main circle */}
+              <circle r={r} fill={isDimmed ? '#f0ede8' : T.white}
+                stroke={typeColor}
+                strokeWidth={isSelected ? 3 : 2}
+                opacity={isDimmed ? 0.4 : 1}
+              />
+              {/* Initials */}
+              <text textAnchor="middle" dominantBaseline="central"
+                fill={isDimmed ? T.slate : typeColor}
+                opacity={isDimmed ? 0.3 : 1}
+                style={{ fontSize: r > 20 ? 13 : 11, fontFamily: T.font, fontWeight: 700 }}>
+                {charName(pos.char).split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()}
               </text>
-              <text y={32} textAnchor="middle" fill={T.ink}
-                style={{ fontSize: 11, fontFamily: T.font, fontWeight: 500 }}>
-                {charName(pos.char).length > 14 ? charName(pos.char).slice(0, 12) + '…' : charName(pos.char)}
+              {/* Name label */}
+              <text y={r + 16} textAnchor="middle" fill={isDimmed ? T.slate : T.ink}
+                opacity={isDimmed ? 0.25 : 1}
+                style={{ fontSize: 10, fontFamily: T.font, fontWeight: 600 }}>
+                {charName(pos.char).length > 18 ? charName(pos.char).slice(0, 16) + '…' : charName(pos.char)}
               </text>
-              <rect x={-16} y={38} width={32} height={3} rx={1.5} fill={typeColor} opacity={0.6} />
+              {/* Role bar */}
+              <rect x={-14} y={r + 22} width={28} height={2.5} rx={1.25}
+                fill={typeColor} opacity={isDimmed ? 0.1 : 0.5} />
+              {/* Connection count badge */}
+              {!isDimmed && (() => {
+                const count = relationships.filter(r => r.character_id_a === cId || r.character_id_b === cId).length;
+                return count > 0 ? (
+                  <g transform={`translate(${r - 2}, ${-r + 2})`}>
+                    <circle r={8} fill={typeColor} />
+                    <text textAnchor="middle" dominantBaseline="central" fill={T.white}
+                      style={{ fontSize: 8, fontWeight: 700 }}>{count}</text>
+                  </g>
+                ) : null;
+              })()}
             </g>
           );
         })}
+
+        {/* Hover tooltip */}
+        {hoveredNode && nodePositions[hoveredNode] && (() => {
+          const pos = nodePositions[hoveredNode];
+          const c = pos.char;
+          const rels = relationships.filter(r => r.character_id_a === hoveredNode || r.character_id_b === hoveredNode);
+          const tooltipW = 180;
+          const tooltipH = 50 + rels.length * 14;
+          const tx = pos.x + 30;
+          const ty = pos.y - tooltipH / 2;
+          return (
+            <g transform={`translate(${tx}, ${ty})`} style={{ pointerEvents: 'none' }}>
+              <rect width={tooltipW} height={tooltipH} rx={6} fill="rgba(250,247,240,0.95)"
+                stroke={T.border} strokeWidth={1} filter="url(#treeShadow)" />
+              <text x={10} y={20} fill={T.ink} style={{ fontSize: 12, fontFamily: T.font, fontWeight: 700 }}>
+                {charName(c)}
+              </text>
+              <text x={10} y={34} fill={TYPE_COLORS[c.role_type] || T.slate}
+                style={{ fontSize: 10, fontFamily: T.fontMono, fontWeight: 600 }}>
+                {c.role_type} · {rels.length} connection{rels.length !== 1 ? 's' : ''}
+              </text>
+              {rels.slice(0, 4).map((r, ri) => {
+                const other = r.character_id_a === hoveredNode ? r.character_b_name : r.character_a_name;
+                return (
+                  <text key={ri} x={10} y={50 + ri * 14} fill={T.inkLight}
+                    style={{ fontSize: 9, fontFamily: T.font }}>
+                    {r.relationship_type} → {other || '?'}
+                  </text>
+                );
+              })}
+              {rels.length > 4 && (
+                <text x={10} y={50 + 4 * 14} fill={T.slate}
+                  style={{ fontSize: 9, fontFamily: T.fontMono }}>
+                  +{rels.length - 4} more…
+                </text>
+              )}
+            </g>
+          );
+        })()}
+
+        {/* SVG filter for tooltip shadow */}
+        <defs>
+          <filter id="treeShadow" x="-10%" y="-10%" width="120%" height="130%">
+            <feDropShadow dx="0" dy="2" stdDeviation="4" floodOpacity="0.12" />
+          </filter>
+        </defs>
       </svg>
+
+      {/* Bottom stats bar */}
+      <div style={{
+        position: 'absolute', bottom: 8, left: '50%', transform: 'translateX(-50%)',
+        display: 'flex', gap: 16, padding: '6px 16px',
+        background: 'rgba(250,247,240,0.92)', borderRadius: 20,
+        border: `1px solid ${T.border}`, fontSize: 11, fontFamily: T.fontMono,
+        color: T.inkLight, boxShadow: T.shadow,
+      }}>
+        <span>{characters.length} characters</span>
+        <span style={{ opacity: 0.3 }}>·</span>
+        <span>{relationships.length} relationships</span>
+        <span style={{ opacity: 0.3 }}>·</span>
+        <span>Scroll to zoom · Drag to pan</span>
+      </div>
     </div>
   );
 }

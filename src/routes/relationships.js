@@ -365,14 +365,24 @@ router.post('/generate', optionalAuth, async (req, res) => {
     const Anthropic = require('@anthropic-ai/sdk');
     const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-    const message = await claude.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 2000,
-      messages: [{
-        role: 'user',
-        content: `You are a literary relationship analyst for a creative writing universe called the LalaVerse.
+    let message;
+    try {
+      message = await claude.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        messages: [{
+          role: 'user',
+          content: `You are a literary relationship analyst for a creative writing universe called the LalaVerse.
 
 IMPORTANT RULE: Characters from the real world (protagonist, pressure, support role types) can ONLY have relationships with other real-world characters. LalaVerse characters (mirror, shadow role types) can ONLY have relationships with other LalaVerse characters or series-2 (special) characters. NEVER suggest cross-layer relationships between real-world and LalaVerse characters.
+
+MORAL DEPTH RULE: Relationships should reflect real human complexity:
+- Marriages and partnerships CAN be tested by temptation, jealousy, or emotional affairs.
+- Characters can be faithful (choosing loyalty despite being tempted), unfaithful (acting on desire despite commitment), or somewhere in between.
+- Arguments, betrayals, reconciliations, and moral choices should be reflected in the situation and tension_state.
+- "Fidelity Test" is a valid relationship_type: one character tests another's commitment just by existing.
+- "Emotional Affair" is a valid relationship_type: an intimate bond that never becomes physical but is still a betrayal.
+- A character can be a "temptation" — someone who pulls a committed person toward a choice they'll have to live with.
 
 Characters in this registry:
 ${charContext}
@@ -382,19 +392,32 @@ Generate 3 to 5 NEW relationship suggestions that don't already exist.
 For each, provide:
 - character_a_id (exact UUID from the list above)
 - character_b_id (exact UUID from the list above)
-- relationship_type (string like "sister", "rival", "mentor", "therapist", "ex-partner", etc.)
+- relationship_type (string like "sister", "rival", "mentor", "therapist", "ex-partner", "spouse", "fidelity_test", "temptation", "emotional_affair", "the_one_who_stayed", "the_one_who_left", etc.)
 - connection_mode (one of: IRL, Online Only, Passing, Professional, One-sided)
-- situation (1-2 sentences describing the dynamic)
+- situation (1-2 sentences describing the dynamic — include moral tension if relevant: who's tempted, who's faithful, who's lied, who's choosing)
 - tension_state (one of: calm, simmering, volatile, fractured, healing)
 - lala_connection (one of: none, knows_lala, through_justwoman, interacts_content, unaware)
-- pain_point_category (like "identity", "trust", "ambition", "loyalty", "family", "self-worth")
+- pain_point_category (like "identity", "trust", "ambition", "loyalty", "family", "self-worth", "fidelity", "betrayal", "guilt", "temptation")
 - lala_mirror (1 sentence: how this relationship mirrors in the LalaVerse)
 - career_echo_potential (1 sentence: career/professional echo)
 
 Return ONLY valid JSON: { "candidates": [ ... ] }
 No markdown fences, no explanation.`,
-      }],
-    });
+        }],
+      });
+    } catch (aiErr) {
+      const errMsg = aiErr?.message || String(aiErr);
+      const isCredits = errMsg.includes('credit balance') || errMsg.includes('billing') || aiErr?.status === 402;
+      const isRate = errMsg.includes('rate') || aiErr?.status === 429;
+      console.error('Claude API error:', errMsg);
+      if (isCredits) {
+        return res.status(402).json({ error: 'AI credits exhausted. Please top up your Anthropic account to generate relationships.' });
+      }
+      if (isRate) {
+        return res.status(429).json({ error: 'AI rate limit reached. Please wait a moment and try again.' });
+      }
+      return res.status(502).json({ error: 'AI service unavailable. ' + errMsg.slice(0, 200) });
+    }
 
     let candidates = [];
     try {
