@@ -154,6 +154,141 @@ function WorldToggle({ worlds, onToggle }) {
   );
 }
 
+// ─── Searchable character dropdown ────────────────────────────────────────────
+const WORLD_SHORT = { 'book-1': 'B1', lalaverse: 'LV' };
+
+function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const dropdownRef = useRef(null);
+  const searchRef = useRef(null);
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    const handler = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Auto-focus search when opened
+  useEffect(() => {
+    if (open && searchRef.current) searchRef.current.focus();
+  }, [open]);
+
+  const selected = characters[selectedChar];
+
+  // Group and filter characters
+  const grouped = useMemo(() => {
+    const groups = {};
+    for (const [key, c] of Object.entries(characters)) {
+      const w = c.world || 'unknown';
+      if (!groups[w]) groups[w] = [];
+      groups[w].push([key, c]);
+    }
+    // Filter by search
+    if (search.trim()) {
+      const q = search.toLowerCase();
+      const filtered = {};
+      for (const [world, chars] of Object.entries(groups)) {
+        const matches = chars.filter(([, c]) => c.display_name.toLowerCase().includes(q));
+        if (matches.length) filtered[world] = matches;
+      }
+      return filtered;
+    }
+    return groups;
+  }, [characters, search]);
+
+  const worldOrder = Object.keys(grouped).sort();
+  const totalCount = Object.values(characters).length;
+
+  if (loading) {
+    return <div className="se-char-selector"><div className="se-char-loading">Loading characters…</div></div>;
+  }
+
+  return (
+    <div className="se-char-selector" ref={dropdownRef}>
+      {/* Trigger button — shows selected character */}
+      <button
+        className="se-char-trigger"
+        onClick={() => setOpen(prev => !prev)}
+        style={{ '--char-color': selected?.color }}
+      >
+        {selected?.portrait_url ? (
+          <img className="se-char-portrait" src={selected.portrait_url} alt="" />
+        ) : (
+          <span className="se-char-icon">{selected?.icon || '◇'}</span>
+        )}
+        <span className="se-char-trigger-name">{selected?.display_name || 'Select character'}</span>
+        <span className="se-char-trigger-world">{WORLD_SHORT[selected?.world] || selected?.world?.slice(0, 3)?.toUpperCase()}</span>
+        <span className="se-char-trigger-count">{totalCount} characters</span>
+        <span className={`se-char-trigger-arrow ${open ? 'open' : ''}`}>▾</span>
+      </button>
+
+      {/* Dropdown panel */}
+      {open && (
+        <div className="se-char-dropdown">
+          <div className="se-char-search-row">
+            <input
+              ref={searchRef}
+              className="se-char-search"
+              type="text"
+              placeholder="Search characters…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Escape') { setOpen(false); setSearch(''); }
+                // Enter to select first match
+                if (e.key === 'Enter' && worldOrder.length > 0) {
+                  const firstGroup = grouped[worldOrder[0]];
+                  if (firstGroup?.length) {
+                    onSelect(firstGroup[0][0]);
+                    setOpen(false);
+                    setSearch('');
+                  }
+                }
+              }}
+            />
+          </div>
+          <div className="se-char-dropdown-list">
+            {worldOrder.length === 0 ? (
+              <div className="se-char-dropdown-empty">No characters match "{search}"</div>
+            ) : (
+              worldOrder.map(world => (
+                <div key={world} className="se-char-dropdown-group">
+                  <div className="se-char-dropdown-group-label">
+                    {WORLD_LABELS[world] || world}
+                    <span className="se-char-dropdown-group-count">{grouped[world].length}</span>
+                  </div>
+                  {grouped[world].map(([key, c]) => (
+                    <button
+                      key={key}
+                      className={`se-char-dropdown-item ${selectedChar === key ? 'active' : ''}`}
+                      style={{ '--char-color': c.color }}
+                      onClick={() => { onSelect(key); setOpen(false); setSearch(''); }}
+                    >
+                      {c.portrait_url ? (
+                        <img className="se-char-portrait" src={c.portrait_url} alt="" />
+                      ) : (
+                        <span className="se-char-icon">{c.icon}</span>
+                      )}
+                      <span className="se-char-dropdown-name">{c.display_name}</span>
+                      <span className="se-char-dropdown-role">{c.role_type || ''}</span>
+                      {selectedChar === key && <span className="se-char-dropdown-check">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Arc progress bar (with status dots) ──────────────────────────────────────
 function ArcProgress({ tasks, approvedStories, savedStories = [], stories = {} }) {
   const phases = ['establishment', 'pressure', 'crisis', 'integration'];
@@ -1241,50 +1376,14 @@ export default function StoryEngine() {
         />
       )}
 
-      {/* ── Character selector with portraits ─────────────────────────────── */}
+      {/* ── Character selector (searchable dropdown) ─────────────────────── */}
       {!readingMode && (
-        <div className="se-char-bar">
-          {charsLoading ? (
-            <div className="se-char-loading">Loading characters…</div>
-          ) : (
-            (() => {
-              const grouped = {};
-              for (const [key, c] of Object.entries(CHARACTERS)) {
-                const w = c.world || 'unknown';
-                if (!grouped[w]) grouped[w] = [];
-                grouped[w].push([key, c]);
-              }
-              const worldOrder = Object.keys(grouped).sort();
-              const WORLD_SHORT = { 'book-1': 'B1', lalaverse: 'LV' };
-
-              return worldOrder.map((world) => (
-                <div key={world} className="se-char-world-group">
-                  {worldOrder.length > 1 && (
-                    <span className="se-char-world-divider">
-                      {WORLD_LABELS[world] || world}
-                    </span>
-                  )}
-                  {grouped[world].map(([key, c]) => (
-                    <button
-                      key={key}
-                      className={`se-char-pill ${selectedChar === key ? 'active' : ''}`}
-                      style={{ '--char-color': c.color }}
-                      onClick={() => setSelectedChar(key)}
-                    >
-                      {c.portrait_url ? (
-                        <img className="se-char-portrait" src={c.portrait_url} alt="" />
-                      ) : (
-                        <span className="se-char-icon">{c.icon}</span>
-                      )}
-                      <span className="se-char-name">{c.display_name}</span>
-                      <span className="se-char-world">{WORLD_SHORT[c.world] || c.world?.slice(0, 3)?.toUpperCase()}</span>
-                    </button>
-                  ))}
-                </div>
-              ));
-            })()
-          )}
-        </div>
+        <CharacterSelector
+          characters={CHARACTERS}
+          selectedChar={selectedChar}
+          onSelect={setSelectedChar}
+          loading={charsLoading}
+        />
       )}
 
       {/* ── Arc progress (with status dots) ───────────────────────────────── */}
