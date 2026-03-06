@@ -41,6 +41,13 @@ const TYPES = {
   collaborator:    'Collaborator',
   one_night_stand: 'One Night Stand',
   recurring:       'Recurring',
+  spouse:          'Spouse',
+  partner:         'Partner',
+  temptation:      'Temptation',
+  ex:              'Ex',
+  confidant:       'Confidant',
+  friend:          'Friend',
+  coworker:        'Coworker',
 };
 
 const TYPE_BADGE_CLASS = {
@@ -52,6 +59,13 @@ const TYPE_BADGE_CLASS = {
   collaborator:    'ws-badge-collaborator',
   one_night_stand: 'ws-badge-one_night_stand',
   recurring:       'ws-badge-recurring',
+  spouse:          'ws-badge-spouse',
+  partner:         'ws-badge-partner',
+  temptation:      'ws-badge-temptation',
+  ex:              'ws-badge-ex',
+  confidant:       'ws-badge-confidant',
+  friend:          'ws-badge-friend',
+  coworker:        'ws-badge-coworker',
 };
 
 const ROLE_LABELS = {

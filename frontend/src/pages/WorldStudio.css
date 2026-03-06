@@ -633,6 +633,13 @@
 .ws-badge-collaborator    { color: #3A8070; background: rgba(58,128,112,0.10);  border: 1px solid rgba(58,128,112,0.20); }
 .ws-badge-one_night_stand { color: #B05A70; background: rgba(176,90,112,0.10);  border: 1px solid rgba(176,90,112,0.20); }
 .ws-badge-recurring       { color: #7060A8; background: rgba(112,96,168,0.10);  border: 1px solid rgba(112,96,168,0.20); }
+.ws-badge-spouse          { color: #8B6E4E; background: rgba(139,110,78,0.10);   border: 1px solid rgba(139,110,78,0.20); }
+.ws-badge-partner         { color: #6A7B8B; background: rgba(106,123,139,0.10);  border: 1px solid rgba(106,123,139,0.20); }
+.ws-badge-temptation      { color: #C74B6F; background: rgba(199,75,111,0.10);   border: 1px solid rgba(199,75,111,0.20); }
+.ws-badge-ex              { color: #8A7060; background: rgba(138,112,96,0.10);   border: 1px solid rgba(138,112,96,0.20); }
+.ws-badge-confidant       { color: #5A8A6A; background: rgba(90,138,106,0.10);   border: 1px solid rgba(90,138,106,0.20); }
+.ws-badge-friend          { color: #4A90B0; background: rgba(74,144,176,0.10);   border: 1px solid rgba(74,144,176,0.20); }
+.ws-badge-coworker        { color: #7A7A50; background: rgba(122,122,80,0.10);   border: 1px solid rgba(122,122,80,0.20); }
 
 /* Status / state badges */
 .ws-badge-intimate  { color: var(--ws-pink);   background: var(--ws-pink-soft);   border: 1px solid rgba(212,120,138,0.20); }
