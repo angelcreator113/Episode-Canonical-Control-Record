@@ -415,16 +415,18 @@ function StoryPanel({
   onAddToRegistry,
   registryUpdate,
   readingMode, onToggleReadingMode,
+  writeMode, onToggleWriteMode,
   onNavigateStory, hasPrev, hasNext,
   onExportStory,
 }) {
-  const [editing, setEditing] = useState(false);
+  const editing = writeMode;
+  const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
   const textareaRef = useRef(null);
 
   useEffect(() => {
     setEditText(story?.text || '');
-    setEditing(false);
+    if (onToggleWriteMode) onToggleWriteMode(false);
   }, [story]);
 
   if (!story && !task) return (
@@ -561,6 +563,7 @@ function StoryPanel({
           {editing && (
             <>
               <button className="se-btn se-btn-cancel" onClick={() => { setEditing(false); setEditText(story.text); }}>Cancel</button>
+              <span className="se-edit-wordcount">{editText.split(/\s+/).filter(Boolean).length.toLocaleString()} words</span>
               <button
                 className="se-btn se-btn-approve"
                 style={{ background: charColor }}
@@ -720,6 +723,7 @@ export default function StoryEngine() {
   // ── New redesign state ───────────────────────────────────────────────────
   const [showStats, setShowStats]             = useState(false);
   const [readingMode, setReadingMode]         = useState(false);
+  const [writeMode, setWriteMode]             = useState(false);
   const [toasts, setToasts]                   = useState([]);
   const [phaseFilter, setPhaseFilter]         = useState(null);
   const [typeFilter, setTypeFilter]           = useState(null);
@@ -1343,7 +1347,7 @@ export default function StoryEngine() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''}`}>
+    <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''}`}>
 
       {/* ── Toast notifications ──────────────────────────────────────────── */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
@@ -1400,7 +1404,7 @@ export default function StoryEngine() {
       <div className="se-workspace">
 
         {/* Left: task list */}
-        {!readingMode && (
+        {!readingMode && !writeMode && (
           <div className="se-task-list">
             {tasksLoading ? (
               <div className="se-task-loading">
@@ -1556,6 +1560,8 @@ export default function StoryEngine() {
               registryUpdate={registryUpdate}
               readingMode={readingMode}
               onToggleReadingMode={() => setReadingMode(prev => !prev)}
+              writeMode={writeMode}
+              onToggleWriteMode={(v) => setWriteMode(typeof v === 'boolean' ? v : !writeMode)}
               onNavigateStory={navigateStory}
               hasPrev={hasPrevStory}
               hasNext={hasNextStory}

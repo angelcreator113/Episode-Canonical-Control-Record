@@ -1211,6 +1211,35 @@
   flex-wrap: wrap;
 }
 
+/* ── Write mode (full-screen editor) ─────────────────────────────────────────── */
+.se-write-mode .se-topbar,
+.se-write-mode .se-arc-progress,
+.se-write-mode .se-char-selector,
+.se-write-mode .se-stats-dashboard,
+.se-write-mode .se-shortcuts-hint {
+  display: none;
+}
+.se-write-mode .se-workspace { flex: 1; }
+.se-write-mode .se-story-column { flex: 1; }
+.se-write-mode .se-story-editor {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 40px 56px;
+  font-size: 17px;
+  line-height: 1.85;
+}
+.se-write-mode .se-story-header {
+  border-bottom-color: var(--se-border);
+  background: var(--se-surface);
+}
+.se-edit-wordcount {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: var(--se-text-dim);
+  font-variant-numeric: tabular-nums;
+  padding: 0 4px;
+}
+
 /* ── 6. Toast notifications ──────────────────────────────────────────────────── */
 .se-toast-container {
   position: fixed;
