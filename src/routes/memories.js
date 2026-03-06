@@ -6783,7 +6783,21 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     };
   }
 
-  const fallback = () => res.json({
+  // Keep-alive: send whitespace every 15s to prevent ALB/nginx 504 timeout
+  // JSON.parse ignores leading whitespace so this is transparent to the client
+  res.setHeader('Content-Type', 'application/json');
+  let finished = false;
+  const keepAlive = setInterval(() => {
+    if (!finished) try { res.write(' '); } catch (_) { /* connection already closed */ }
+  }, 15000);
+
+  const finish = (data) => {
+    finished = true;
+    clearInterval(keepAlive);
+    res.end(JSON.stringify(data));
+  };
+
+  const fallback = () => finish({
     story: null,
     fallback: true,
     reason: 'Story generation failed — try again.',
@@ -6897,7 +6911,7 @@ Write the complete story now. No preamble. Begin with the title, then the story.
 
     const wordCount = storyText.split(/\s+/).length;
 
-    return res.json({
+    return finish({
       story_number: storyNumber,
       character_key: characterKey,
       title: taskBrief.title,
