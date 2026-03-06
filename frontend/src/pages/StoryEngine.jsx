@@ -1,9 +1,89 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from './StoryReviewPanel';
 import './StoryEngine.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
+
+// ─── Reading time helper ──────────────────────────────────────────────────────
+const getReadingTime = (wordCount) => {
+  if (!wordCount) return null;
+  const mins = Math.ceil(wordCount / 250);
+  return mins < 1 ? '< 1 min' : `${mins} min read`;
+};
+
+// ─── Toast notification system ────────────────────────────────────────────────
+let toastIdCounter = 0;
+
+function ToastContainer({ toasts, onDismiss }) {
+  return (
+    <div className="se-toast-container">
+      {toasts.map((t) => (
+        <div key={t.id} className={`se-toast se-toast-${t.type}`}>
+          <span className="se-toast-icon">
+            {t.type === 'success' ? '✓' : t.type === 'error' ? '✕' : t.type === 'info' ? 'ℹ' : '⚠'}
+          </span>
+          <span className="se-toast-msg">{t.message}</span>
+          <button className="se-toast-close" onClick={() => onDismiss(t.id)}>×</button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ─── Stats dashboard ──────────────────────────────────────────────────────────
+function StatsDashboard({ tasks, stories, approvedStories, savedStories }) {
+  const storyValues = Object.values(stories);
+  const totalWords = storyValues.reduce((s, st) => s + (st.word_count || st.text?.split(/\s+/).length || 0), 0);
+  const generated = storyValues.length;
+  const approved = approvedStories.length;
+  const queued = savedStories.filter(n => !approvedStories.includes(n)).length;
+  const completion = tasks.length > 0 ? Math.round((approved / tasks.length) * 100) : 0;
+
+  const wordsByPhase = {};
+  storyValues.forEach(s => {
+    const phase = s.phase || 'unknown';
+    wordsByPhase[phase] = (wordsByPhase[phase] || 0) + (s.word_count || s.text?.split(/\s+/).length || 0);
+  });
+
+  return (
+    <div className="se-stats-dashboard">
+      <div className="se-stats-grid">
+        <div className="se-stat-card">
+          <div className="se-stat-value">{totalWords.toLocaleString()}</div>
+          <div className="se-stat-label">Words Written</div>
+        </div>
+        <div className="se-stat-card">
+          <div className="se-stat-value">{generated}</div>
+          <div className="se-stat-label">Generated</div>
+        </div>
+        <div className="se-stat-card se-stat-approved">
+          <div className="se-stat-value">{approved}</div>
+          <div className="se-stat-label">Approved</div>
+        </div>
+        <div className="se-stat-card se-stat-queued">
+          <div className="se-stat-value">{queued}</div>
+          <div className="se-stat-label">In Queue</div>
+        </div>
+        <div className="se-stat-card se-stat-completion">
+          <div className="se-stat-value">{completion}%</div>
+          <div className="se-stat-label">Complete</div>
+        </div>
+      </div>
+      {Object.keys(wordsByPhase).length > 0 && (
+        <div className="se-stats-phase-row">
+          {Object.entries(wordsByPhase).map(([phase, words]) => (
+            <div key={phase} className="se-stats-phase-item">
+              <span className="se-stats-phase-dot" style={{ background: PHASE_COLORS[phase] }} />
+              <span className="se-stats-phase-name">{PHASE_LABELS[phase] || phase}</span>
+              <span className="se-stats-phase-words">{words.toLocaleString()} words</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ─── Fallback characters (used if DB fetch fails) ────────────────────────────
 const FALLBACK_CHARACTERS = {
@@ -74,8 +154,8 @@ function WorldToggle({ worlds, onToggle }) {
   );
 }
 
-// ─── Arc progress bar ─────────────────────────────────────────────────────────
-function ArcProgress({ tasks, approvedStories }) {
+// ─── Arc progress bar (with status dots) ──────────────────────────────────────
+function ArcProgress({ tasks, approvedStories, savedStories = [], stories = {} }) {
   const phases = ['establishment', 'pressure', 'crisis', 'integration'];
   const phaseRanges = { establishment: [1,10], pressure: [11,25], crisis: [26,40], integration: [41,50] };
 
@@ -97,6 +177,22 @@ function ArcProgress({ tasks, approvedStories }) {
                 style={{ width: `${pct}%`, background: PHASE_COLORS[phase] }}
               />
             </div>
+            <div className="se-arc-dots">
+              {Array.from({ length: total }, (_, i) => {
+                const num = start + i;
+                const isApproved = approvedStories.includes(num);
+                const isSaved = savedStories.includes(num) && !isApproved;
+                const isGenerated = stories[num] && !isApproved && !isSaved;
+                return (
+                  <span
+                    key={num}
+                    className={`se-arc-dot ${isApproved ? 'approved' : isSaved ? 'saved' : isGenerated ? 'generated' : ''}`}
+                    title={`Story ${num}${isApproved ? ' ✓' : isSaved ? ' (saved)' : isGenerated ? ' (draft)' : ''}`}
+                    style={isApproved ? { background: PHASE_COLORS[phase] } : undefined}
+                  />
+                );
+              })}
+            </div>
             <div className="se-arc-phase-count">{approved}/{total}</div>
           </div>
         );
@@ -106,13 +202,32 @@ function ArcProgress({ tasks, approvedStories }) {
 }
 
 // ─── Task card (story brief before writing) ───────────────────────────────────
-function TaskCard({ task, isApproved, isSaved, isActive, onGenerate, onSelect, charColor, generating }) {
+function TaskCard({ task, isApproved, isSaved, isActive, onGenerate, onSelect, charColor, generating, batchMode, batchSelected, onBatchToggle }) {
+  const cardRef = useRef(null);
+
+  // Auto-scroll into view when active
+  useEffect(() => {
+    if (isActive && cardRef.current) {
+      cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [isActive]);
+
   return (
     <div
+      ref={cardRef}
       className={`se-task-card ${isActive ? 'active' : ''} ${isApproved ? 'approved' : ''} ${isSaved ? 'saved' : ''}`}
       style={{ '--char-color': charColor }}
       onClick={() => onSelect(task)}
     >
+      {batchMode && !isApproved && (
+        <label className="se-batch-checkbox" onClick={(e) => e.stopPropagation()}>
+          <input
+            type="checkbox"
+            checked={batchSelected?.has(task.story_number) || false}
+            onChange={() => onBatchToggle?.(task.story_number)}
+          />
+        </label>
+      )}
       <div className="se-task-number">
         {isApproved
           ? <span className="se-task-check">✓</span>
@@ -164,6 +279,9 @@ function StoryPanel({
   therapyMemories, therapyLoading,
   onAddToRegistry,
   registryUpdate,
+  readingMode, onToggleReadingMode,
+  onNavigateStory, hasPrev, hasNext,
+  onExportStory,
 }) {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState(story?.text || '');
@@ -224,11 +342,30 @@ function StoryPanel({
   );
 
   return (
-    <div className="se-story-panel">
+    <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''}`}>
       {/* Header */}
       <div className="se-story-header" style={{ borderBottomColor: charColor }}>
         <div className="se-story-header-left">
-          <div className="se-story-header-num">Story {story.story_number}</div>
+          {/* Prev/Next navigation */}
+          <div className="se-story-nav-row">
+            <button
+              className="se-btn se-btn-nav"
+              onClick={() => onNavigateStory?.(-1)}
+              disabled={!hasPrev}
+              title="Previous story (←)"
+            >
+              ‹ Prev
+            </button>
+            <div className="se-story-header-num">Story {story.story_number}</div>
+            <button
+              className="se-btn se-btn-nav"
+              onClick={() => onNavigateStory?.(1)}
+              disabled={!hasNext}
+              title="Next story (→)"
+            >
+              Next ›
+            </button>
+          </div>
           <div className="se-story-header-title">{story.title}</div>
           <div className="se-story-header-meta">
             <span style={{ color: PHASE_COLORS[story.phase] }}>{PHASE_LABELS[story.phase]}</span>
@@ -236,11 +373,31 @@ function StoryPanel({
             <span>{TYPE_ICONS[story.story_type]} {story.story_type}</span>
             <span>·</span>
             <span>{story.word_count?.toLocaleString() || '—'} words</span>
+            {story.word_count > 0 && (
+              <>
+                <span>·</span>
+                <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
+              </>
+            )}
           </div>
         </div>
         <div className="se-story-header-actions">
           {!editing && (
             <>
+              <button
+                className="se-btn se-btn-reading-mode"
+                onClick={() => onToggleReadingMode?.()}
+                title={readingMode ? 'Exit reading mode (Esc)' : 'Reading mode (F)'}
+              >
+                {readingMode ? '⊟' : '⊞'}
+              </button>
+              <button
+                className="se-btn se-btn-export"
+                onClick={() => onExportStory?.(story)}
+                title="Copy or download story"
+              >
+                ↗ Export
+              </button>
               <button className="se-btn se-btn-edit" onClick={() => setEditing(true)}>Edit</button>
               <button
                 className="se-btn se-btn-consistency"
@@ -425,7 +582,97 @@ export default function StoryEngine() {
   // Save-for-later state
   const [savingForLater, setSavingForLater]   = useState(false);
 
+  // ── New redesign state ───────────────────────────────────────────────────
+  const [showStats, setShowStats]             = useState(false);
+  const [readingMode, setReadingMode]         = useState(false);
+  const [toasts, setToasts]                   = useState([]);
+  const [phaseFilter, setPhaseFilter]         = useState(null);
+  const [typeFilter, setTypeFilter]           = useState(null);
+  const [searchQuery, setSearchQuery]         = useState('');
+  const [batchMode, setBatchMode]             = useState(false);
+  const [batchSelected, setBatchSelected]     = useState(new Set());
+
   const char = CHARACTERS[selectedChar];
+
+  // ── Toast helpers ────────────────────────────────────────────────────────
+  const addToast = useCallback((message, type = 'info') => {
+    const id = ++toastIdCounter;
+    setToasts(prev => [...prev, { id, message, type }]);
+    setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 5000);
+  }, []);
+
+  const dismissToast = useCallback((id) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  // ── Filtered tasks (phase / type / search) ──────────────────────────────
+  const filteredTasks = useMemo(() => {
+    return tasks.filter(t => {
+      if (phaseFilter && t.phase !== phaseFilter) return false;
+      if (typeFilter && t.story_type !== typeFilter) return false;
+      if (searchQuery && !t.title?.toLowerCase().includes(searchQuery.toLowerCase()) && !t.task?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      return true;
+    });
+  }, [tasks, phaseFilter, typeFilter, searchQuery]);
+
+  // ── Story navigation helper ──────────────────────────────────────────────
+  const navigateStory = useCallback((direction) => {
+    if (!activeTask || !tasks.length) return;
+    const idx = tasks.findIndex(t => t.story_number === activeTask.story_number);
+    const nextIdx = idx + direction;
+    if (nextIdx >= 0 && nextIdx < tasks.length) {
+      const nextTask = tasks[nextIdx];
+      setActiveTask(nextTask);
+      setActiveStory(stories[nextTask.story_number] || null);
+      setConsistencyConflicts([]);
+      setTherapyMemories([]);
+    }
+  }, [activeTask, tasks, stories]);
+
+  const hasPrevStory = activeTask ? tasks.findIndex(t => t.story_number === activeTask.story_number) > 0 : false;
+  const hasNextStory = activeTask ? tasks.findIndex(t => t.story_number === activeTask.story_number) < tasks.length - 1 : false;
+
+  // ── Export story (copy / download) ───────────────────────────────────────
+  const handleExportStory = useCallback((story) => {
+    const text = `# ${story.title}\n\nStory ${story.story_number} · ${PHASE_LABELS[story.phase]} · ${story.story_type}\n${story.word_count?.toLocaleString() || ''} words\n\n${story.text || ''}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(text).then(() => {
+        addToast('Story copied to clipboard', 'success');
+      });
+    }
+    // Also trigger download
+    const blob = new Blob([text], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `story-${story.story_number}-${story.title?.replace(/[^a-z0-9]/gi, '-').toLowerCase()}.md`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [addToast]);
+
+  // ── Batch approve handler ────────────────────────────────────────────────
+  const handleBatchApprove = useCallback(async () => {
+    if (batchSelected.size === 0) return;
+    const nums = [...batchSelected].filter(n => stories[n] && !approvedStories.includes(n));
+    if (nums.length === 0) { addToast('No eligible stories to approve', 'warning'); return; }
+
+    addToast(`Approving ${nums.length} stories…`, 'info');
+    for (const num of nums) {
+      await handleApprove(stories[num]);
+    }
+    setBatchSelected(new Set());
+    setBatchMode(false);
+    addToast(`${nums.length} stories approved`, 'success');
+  }, [batchSelected, stories, approvedStories, addToast]);
+
+  const handleBatchToggle = useCallback((storyNum) => {
+    setBatchSelected(prev => {
+      const next = new Set(prev);
+      if (next.has(storyNum)) next.delete(storyNum);
+      else next.add(storyNum);
+      return next;
+    });
+  }, []);
 
   // ── Elapsed-time timer helper ────────────────────────────────────────────
   const startTimer = useCallback(() => {
@@ -440,6 +687,40 @@ export default function StoryEngine() {
   }, []);
 
   useEffect(() => () => stopTimer(), [stopTimer]);
+
+  // ── Keyboard shortcuts ───────────────────────────────────────────────────
+  useEffect(() => {
+    const handler = (e) => {
+      // Skip if typing in an input/textarea
+      if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+
+      // Arrow Up/Down — navigate tasks
+      if (e.key === 'ArrowUp') { e.preventDefault(); navigateStory(-1); }
+      if (e.key === 'ArrowDown') { e.preventDefault(); navigateStory(1); }
+
+      // F — toggle reading mode
+      if (e.key === 'f' || e.key === 'F') {
+        if (!e.ctrlKey && !e.metaKey) { setReadingMode(prev => !prev); }
+      }
+
+      // Escape — exit reading mode
+      if (e.key === 'Escape') { setReadingMode(false); }
+
+      // Ctrl+S — save for later
+      if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+        e.preventDefault();
+        if (activeStory) handleSaveForLater(activeStory);
+      }
+
+      // Ctrl+Enter — approve
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        if (activeStory) handleApprove(activeStory);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [navigateStory, activeStory]);
 
   // ── Load characters dynamically from DB ──────────────────────────────────
   useEffect(() => {
@@ -690,7 +971,7 @@ export default function StoryEngine() {
       const data = await res.json();
 
       if (data.fallback) {
-        alert('Story generation failed — please try again.');
+        addToast('Story generation failed — please try again.', 'error');
         return;
       }
 
@@ -700,7 +981,7 @@ export default function StoryEngine() {
       setCachedStories(selectedChar, nextStories, approvedStories);
     } catch (e) {
       console.error('handleGenerate error:', e);
-      alert('Story generation failed — please try again.');
+      addToast('Story generation failed — please try again.', 'error');
     } finally {
       setGenerating(false);
       setGeneratingNum(null);
@@ -739,12 +1020,11 @@ export default function StoryEngine() {
         const nextStories = { ...stories, [story.story_number]: { ...story, db_id: data.story?.id, db_status: 'draft' } };
         setStories(nextStories);
         setCachedStories(selectedChar, nextStories, approvedStories);
-        setRegistryUpdate('📥 Story saved — come back to review & approve anytime');
-        setTimeout(() => setRegistryUpdate(null), 5000);
+        addToast('📥 Story saved — come back to review & approve anytime', 'success');
       }
     } catch (e) {
       console.error('saveForLater error:', e);
-      alert('Failed to save story. Please try again.');
+      addToast('Failed to save story. Please try again.', 'error');
     } finally {
       setSavingForLater(false);
     }
@@ -836,9 +1116,9 @@ export default function StoryEngine() {
       if (res.ok) {
         const data = await res.json();
         if (data.already_existed) {
-          alert(`${story.new_character_name} already exists in the registry.`);
+          addToast(`${story.new_character_name} already exists in the registry.`, 'warning');
         } else {
-          alert(`${story.new_character_name} added to the registry as draft.`);
+          addToast(`${story.new_character_name} added to the registry as draft.`, 'success');
           // Refresh character list
           const charRes = await fetch(`${API_BASE}/memories/story-engine-characters`);
           if (charRes.ok) {
@@ -864,7 +1144,7 @@ export default function StoryEngine() {
       }
     } catch (e) {
       console.error('addToRegistry error:', e);
-      alert('Failed to add character to registry.');
+      addToast('Failed to add character to registry.', 'error');
     }
   }
 
@@ -928,124 +1208,223 @@ export default function StoryEngine() {
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
-    <div className="se-page">
+    <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''}`}>
+
+      {/* ── Toast notifications ──────────────────────────────────────────── */}
+      <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {/* ── Top bar ──────────────────────────────────────────────────────── */}
-      <div className="se-topbar">
-        <button className="se-btn-back" onClick={() => navigate('/')}>
-          ← Home
-        </button>
-        <div className="se-topbar-title">Story Engine</div>
-        <WorldToggle worlds={worldToggles} onToggle={handleWorldToggle} />
-      </div>
+      {!readingMode && (
+        <div className="se-topbar">
+          <button className="se-btn-back" onClick={() => navigate('/')}>
+            ← Home
+          </button>
+          <div className="se-topbar-title">Story Engine</div>
+          <button
+            className={`se-btn se-btn-stats-toggle ${showStats ? 'active' : ''}`}
+            onClick={() => setShowStats(prev => !prev)}
+            title="Toggle stats dashboard"
+          >
+            📊 Stats
+          </button>
+          <WorldToggle worlds={worldToggles} onToggle={handleWorldToggle} />
+        </div>
+      )}
 
-      {/* ── Character selector ────────────────────────────────────────────── */}
-      <div className="se-char-bar">
-        {charsLoading ? (
-          <div className="se-char-loading">Loading characters…</div>
-        ) : (
-          (() => {
-            // Group characters by world for visual separation
-            const grouped = {};
-            for (const [key, c] of Object.entries(CHARACTERS)) {
-              const w = c.world || 'unknown';
-              if (!grouped[w]) grouped[w] = [];
-              grouped[w].push([key, c]);
-            }
-            const worldOrder = Object.keys(grouped).sort();
-            const WORLD_SHORT = { 'book-1': 'B1', lalaverse: 'LV' };
+      {/* ── Stats dashboard (collapsible) ─────────────────────────────────── */}
+      {showStats && !readingMode && (
+        <StatsDashboard
+          tasks={tasks}
+          stories={stories}
+          approvedStories={approvedStories}
+          savedStories={savedStories}
+        />
+      )}
 
-            return worldOrder.map((world, wi) => (
-              <div key={world} className="se-char-world-group">
-                {worldOrder.length > 1 && (
-                  <span className="se-char-world-divider">
-                    {WORLD_LABELS[world] || world}
-                  </span>
-                )}
-                {grouped[world].map(([key, c]) => (
-                  <button
-                    key={key}
-                    className={`se-char-pill ${selectedChar === key ? 'active' : ''}`}
-                    style={{ '--char-color': c.color }}
-                    onClick={() => setSelectedChar(key)}
-                  >
-                    <span className="se-char-icon">{c.icon}</span>
-                    <span className="se-char-name">{c.display_name}</span>
-                    <span className="se-char-world">{WORLD_SHORT[c.world] || c.world?.slice(0, 3)?.toUpperCase()}</span>
-                  </button>
-                ))}
-              </div>
-            ));
-          })()
-        )}
-      </div>
+      {/* ── Character selector with portraits ─────────────────────────────── */}
+      {!readingMode && (
+        <div className="se-char-bar">
+          {charsLoading ? (
+            <div className="se-char-loading">Loading characters…</div>
+          ) : (
+            (() => {
+              const grouped = {};
+              for (const [key, c] of Object.entries(CHARACTERS)) {
+                const w = c.world || 'unknown';
+                if (!grouped[w]) grouped[w] = [];
+                grouped[w].push([key, c]);
+              }
+              const worldOrder = Object.keys(grouped).sort();
+              const WORLD_SHORT = { 'book-1': 'B1', lalaverse: 'LV' };
 
-      {/* ── Arc progress ──────────────────────────────────────────────────── */}
-      <ArcProgress tasks={tasks} approvedStories={approvedStories} />
+              return worldOrder.map((world) => (
+                <div key={world} className="se-char-world-group">
+                  {worldOrder.length > 1 && (
+                    <span className="se-char-world-divider">
+                      {WORLD_LABELS[world] || world}
+                    </span>
+                  )}
+                  {grouped[world].map(([key, c]) => (
+                    <button
+                      key={key}
+                      className={`se-char-pill ${selectedChar === key ? 'active' : ''}`}
+                      style={{ '--char-color': c.color }}
+                      onClick={() => setSelectedChar(key)}
+                    >
+                      {c.portrait_url ? (
+                        <img className="se-char-portrait" src={c.portrait_url} alt="" />
+                      ) : (
+                        <span className="se-char-icon">{c.icon}</span>
+                      )}
+                      <span className="se-char-name">{c.display_name}</span>
+                      <span className="se-char-world">{WORLD_SHORT[c.world] || c.world?.slice(0, 3)?.toUpperCase()}</span>
+                    </button>
+                  ))}
+                </div>
+              ));
+            })()
+          )}
+        </div>
+      )}
+
+      {/* ── Arc progress (with status dots) ───────────────────────────────── */}
+      {!readingMode && (
+        <ArcProgress
+          tasks={tasks}
+          approvedStories={approvedStories}
+          savedStories={savedStories}
+          stories={stories}
+        />
+      )}
 
       {/* ── Main workspace ────────────────────────────────────────────────── */}
       <div className="se-workspace">
 
         {/* Left: task list */}
-        <div className="se-task-list">
-          {tasksLoading ? (
-            <div className="se-task-loading">
-              <div className="se-spinner" style={{ borderTopColor: char?.color }} />
-              <span>Building {char?.display_name}'s 50-story arc…</span>
-              <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
-            </div>
-          ) : tasks.length === 0 ? (
-            <div className="se-task-empty">
-              <div className="se-task-empty-icon" style={{ color: char?.color }}>{char?.icon}</div>
-              <div className="se-task-empty-title">No story arc yet for {char?.display_name}</div>
-              <div className="se-task-empty-desc">
-                Generate a 50-story task arc using AI.
-                This takes 2–3 minutes on the first run,
-                then loads instantly from cache.
+        {!readingMode && (
+          <div className="se-task-list">
+            {tasksLoading ? (
+              <div className="se-task-loading">
+                <div className="se-spinner" style={{ borderTopColor: char?.color }} />
+                <span>Building {char?.display_name}'s 50-story arc…</span>
+                <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
               </div>
-              <button
-                className="se-btn se-btn-generate-arc"
-                style={{ background: char?.color }}
-                onClick={() => handleGenerateArc()}
-              >
-                Generate 50-Story Arc
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className="se-task-list-header">
-                <span className="se-task-list-count">
-                  {tasks.length} stories
-                  {(() => {
-                    const queueCount = savedStories.filter(n => !approvedStories.includes(n)).length;
-                    return queueCount > 0 ? (
-                      <span className="se-reading-queue-badge">📥 {queueCount} to review</span>
-                    ) : null;
-                  })()}
-                </span>
+            ) : tasks.length === 0 ? (
+              <div className="se-task-empty">
+                <div className="se-task-empty-icon" style={{ color: char?.color }}>{char?.icon}</div>
+                <div className="se-task-empty-title">No story arc yet for {char?.display_name}</div>
+                <div className="se-task-empty-desc">
+                  Generate a 50-story task arc using AI.
+                  This takes 2–3 minutes on the first run,
+                  then loads instantly from cache.
+                </div>
                 <button
-                  className="se-btn se-btn-regen"
-                  onClick={() => { if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) handleGenerateArc(true); }}
+                  className="se-btn se-btn-generate-arc"
+                  style={{ background: char?.color }}
+                  onClick={() => handleGenerateArc()}
                 >
-                  ↻ Regenerate
+                  Generate 50-Story Arc
                 </button>
               </div>
-              {tasks.map((task) => (
-                <TaskCard
-                  key={task.story_number}
-                  task={task}
-                  isApproved={approvedStories.includes(task.story_number)}
-                  isSaved={savedStories.includes(task.story_number) && !approvedStories.includes(task.story_number)}
-                  isActive={activeTask?.story_number === task.story_number}
-                  onGenerate={handleGenerate}
-                  onSelect={handleSelectTask}
-                  charColor={char?.color}
-                  generating={generating && generatingNum === task.story_number}
-                />
-              ))}
-            </>
-          )}
-        </div>
+            ) : (
+              <>
+                {/* Filter bar */}
+                <div className="se-filter-bar">
+                  <input
+                    className="se-filter-search"
+                    type="text"
+                    placeholder="Search stories…"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                  />
+                  <div className="se-filter-pills">
+                    {['establishment', 'pressure', 'crisis', 'integration'].map(p => (
+                      <button
+                        key={p}
+                        className={`se-filter-pill ${phaseFilter === p ? 'active' : ''}`}
+                        style={phaseFilter === p ? { background: PHASE_COLORS[p], color: '#fff', borderColor: PHASE_COLORS[p] } : undefined}
+                        onClick={() => setPhaseFilter(prev => prev === p ? null : p)}
+                      >
+                        {PHASE_LABELS[p]}
+                      </button>
+                    ))}
+                    {['internal', 'collision', 'wrong_win'].map(t => (
+                      <button
+                        key={t}
+                        className={`se-filter-pill se-filter-type ${typeFilter === t ? 'active' : ''}`}
+                        onClick={() => setTypeFilter(prev => prev === t ? null : t)}
+                      >
+                        {TYPE_ICONS[t]} {t.replace('_', ' ')}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Task list header */}
+                <div className="se-task-list-header">
+                  <span className="se-task-list-count">
+                    {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
+                    {(() => {
+                      const queueCount = savedStories.filter(n => !approvedStories.includes(n)).length;
+                      return queueCount > 0 ? (
+                        <span className="se-reading-queue-badge">📥 {queueCount} to review</span>
+                      ) : null;
+                    })()}
+                  </span>
+                  <div className="se-task-list-actions">
+                    <button
+                      className={`se-btn se-btn-batch ${batchMode ? 'active' : ''}`}
+                      onClick={() => { setBatchMode(prev => !prev); setBatchSelected(new Set()); }}
+                    >
+                      {batchMode ? '✕ Cancel' : '☐ Batch'}
+                    </button>
+                    {batchMode && batchSelected.size > 0 && (
+                      <button
+                        className="se-btn se-btn-batch-approve"
+                        style={{ background: char?.color }}
+                        onClick={handleBatchApprove}
+                      >
+                        Approve {batchSelected.size}
+                      </button>
+                    )}
+                    <button
+                      className="se-btn se-btn-regen"
+                      onClick={() => { if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) handleGenerateArc(true); }}
+                    >
+                      ↻ Regen
+                    </button>
+                  </div>
+                </div>
+
+                {/* Task cards */}
+                {filteredTasks.map((task) => (
+                  <TaskCard
+                    key={task.story_number}
+                    task={task}
+                    isApproved={approvedStories.includes(task.story_number)}
+                    isSaved={savedStories.includes(task.story_number) && !approvedStories.includes(task.story_number)}
+                    isActive={activeTask?.story_number === task.story_number}
+                    onGenerate={handleGenerate}
+                    onSelect={handleSelectTask}
+                    charColor={char?.color}
+                    generating={generating && generatingNum === task.story_number}
+                    batchMode={batchMode}
+                    batchSelected={batchSelected}
+                    onBatchToggle={handleBatchToggle}
+                  />
+                ))}
+                {filteredTasks.length === 0 && tasks.length > 0 && (
+                  <div className="se-filter-empty">
+                    No stories match current filters.
+                    <button className="se-filter-clear" onClick={() => { setPhaseFilter(null); setTypeFilter(null); setSearchQuery(''); }}>
+                      Clear filters
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* Right: story panel */}
         <div className="se-story-column">
@@ -1076,10 +1455,26 @@ export default function StoryEngine() {
               therapyLoading={therapyLoading}
               onAddToRegistry={handleAddToRegistry}
               registryUpdate={registryUpdate}
+              readingMode={readingMode}
+              onToggleReadingMode={() => setReadingMode(prev => !prev)}
+              onNavigateStory={navigateStory}
+              hasPrev={hasPrevStory}
+              hasNext={hasNextStory}
+              onExportStory={handleExportStory}
             />
           )}
         </div>
       </div>
+
+      {/* ── Keyboard shortcuts hint ──────────────────────────────────────── */}
+      {!readingMode && (
+        <div className="se-shortcuts-hint">
+          <span>↑↓ Navigate</span>
+          <span>F Reading mode</span>
+          <span>Ctrl+S Save</span>
+          <span>Ctrl+Enter Approve</span>
+        </div>
+      )}
     </div>
   );
 }
