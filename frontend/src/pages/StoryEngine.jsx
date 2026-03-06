@@ -418,6 +418,7 @@ function StoryPanel({
   writeMode, onToggleWriteMode,
   onNavigateStory, hasPrev, hasNext,
   onExportStory,
+  onEvaluate,
 }) {
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
@@ -550,6 +551,14 @@ function StoryPanel({
                 disabled={savingForLater}
               >
                 {savingForLater ? 'Saving…' : '📥 Save for Later'}
+              </button>
+              <button
+                className="se-btn"
+                style={{ background: '#3D7A9B', color: '#fff' }}
+                onClick={() => onEvaluate?.(story)}
+                title="Evaluate with multi-voice scoring"
+              >
+                📊 Evaluate
               </button>
               <button
                 className="se-btn se-btn-approve"
@@ -1566,6 +1575,13 @@ export default function StoryEngine() {
               hasPrev={hasPrevStory}
               hasNext={hasNextStory}
               onExportStory={handleExportStory}
+              onEvaluate={(story) => {
+                const params = new URLSearchParams();
+                if (story?.text) params.set('text', '1');
+                if (activeTask?.task) params.set('brief', encodeURIComponent(activeTask.task));
+                if (selectedChar) params.set('char', selectedChar);
+                navigate(`/story-evaluation?${params.toString()}`, { state: { storyText: story?.text, taskBrief: activeTask } });
+              }}
             />
           )}
         </div>
