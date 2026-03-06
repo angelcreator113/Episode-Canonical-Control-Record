@@ -27,6 +27,11 @@ import './WorldStudio.css';
 const API = '/api/v1';
 
 /* ── Constants ──────────────────────────────────────────────────────── */
+const WORLD_OPTIONS = [
+  { tag: 'lalaverse', label: 'LalaVerse', icon: '✦', protagonist: 'Lala' },
+  { tag: 'book-1',    label: 'Book 1 · Before Lala', icon: '◈', protagonist: 'JustAWoman' },
+];
+
 const TYPES = {
   love_interest:   'Love Interest',
   industry_peer:   'Industry Peer',
@@ -99,6 +104,10 @@ export default function WorldStudio() {
   /* ── Tab ─────────────────────────────────────────────────────────── */
   const [tab, setTab] = useState('characters');
 
+  /* ── World selector ──────────────────────────────────────────────── */
+  const [worldTag, setWorldTag] = useState('lalaverse');
+  const curWorld = WORLD_OPTIONS.find(w => w.tag === worldTag) || WORLD_OPTIONS[0];
+
   /* ── Characters ───────────────────────────────────────────────────── */
   const [characters,     setCharacters]     = useState([]);
   const [selectedChar,   setSelectedChar]   = useState(null);
@@ -124,7 +133,7 @@ export default function WorldStudio() {
     relationship_type: 'friendship', family_role: '',
     history_summary: '', current_status: 'active',
     tension_state: 'Stable', romantic_eligible: false,
-    knows_about_transfer: false, series_layer: 'lalaverse', notes: '',
+    knows_about_transfer: false, series_layer: worldTag, notes: '',
     is_blood_relation: false, is_romantic: false,
     conflict_summary: '', knows_about_connection: false,
   });
@@ -148,13 +157,13 @@ export default function WorldStudio() {
   }, []);
 
   /* ── Loaders ─────────────────────────────────────────────────────── */
-  const loadCharacters = useCallback(async () => {
+  const loadCharacters = useCallback(async (tag) => {
     try {
-      const r = await fetch(`${API}/world/characters`);
+      const r = await fetch(`${API}/world/characters?world_tag=${encodeURIComponent(tag || worldTag)}`);
       const d = await r.json();
       setCharacters(d.characters || []);
     } catch (e) { console.error(e); }
-  }, []);
+  }, [worldTag]);
 
   const loadCharDetail = useCallback(async (id) => {
     try {
@@ -173,11 +182,20 @@ export default function WorldStudio() {
     } catch (e) { setRegChars([]); }
   }, []);
 
-  useEffect(() => { loadCharacters(); }, []);
+  useEffect(() => {
+    loadCharacters(worldTag);
+    setSelectedChar(null);
+    setCharDetail(null);
+    setEditMode(false);
+  }, [worldTag]);
   useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
   useEffect(() => {
-    if (registries.length && !activeRegId) setActiveRegId(registries[0].id);
-  }, [registries]);
+    // Auto-select registry matching current world's book_tag
+    if (registries.length) {
+      const match = registries.find(r => (r.book_tag || r.title || '').toLowerCase().includes(worldTag === 'lalaverse' ? 'lalaverse' : 'book-1'));
+      setActiveRegId(match ? match.id : registries[0].id);
+    }
+  }, [registries, worldTag]);
   useEffect(() => { if (activeRegId) loadRegChars(activeRegId); }, [activeRegId]);
 
   /* ── Ecosystem generate / preview / confirm ───────────────────────── */
@@ -185,7 +203,8 @@ export default function WorldStudio() {
     setGenerating(true);
     try {
       const r = await fetch(`${API}/world/generate-ecosystem-preview`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ world_tag: worldTag }),
       });
       const d = await r.json();
       if (d.characters?.length) {
@@ -205,7 +224,7 @@ export default function WorldStudio() {
     try {
       const r = await fetch(`${API}/world/generate-ecosystem-confirm`, {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ characters: selected, generation_notes: previewNotes }),
+        body: JSON.stringify({ characters: selected, generation_notes: previewNotes, world_tag: worldTag }),
       });
       const d = await r.json();
       if (d.characters) {
@@ -271,7 +290,10 @@ export default function WorldStudio() {
   const seedRelationships = async () => {
     setSeeding(true);
     try {
-      const r = await fetch(`${API}/world/seed-relationships`, { method: 'POST' });
+      const r = await fetch(`${API}/world/seed-relationships`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ world_tag: worldTag }),
+      });
       const d = await r.json();
       flash(d.message || 'Done');
     } catch (e) { flash(e.message, 'error'); }
@@ -338,7 +360,7 @@ export default function WorldStudio() {
 
         <div>
           <div className="ws-header-title">Create World</div>
-          <div className="ws-header-sub">Characters · Registry</div>
+          <div className="ws-header-sub">{curWorld.icon} {curWorld.label}</div>
         </div>
 
         <div className="ws-tab-bar">
@@ -353,6 +375,20 @@ export default function WorldStudio() {
             >
               {t.label}
               <span className="ws-tab-count">{t.count}</span>
+            </button>
+          ))}
+        </div>
+
+        {/* World Picker */}
+        <div className="ws-world-picker">
+          {WORLD_OPTIONS.map(w => (
+            <button
+              key={w.tag}
+              className={`ws-world-btn ${worldTag === w.tag ? 'ws-world-btn-active' : ''}`}
+              onClick={() => setWorldTag(w.tag)}
+            >
+              <span className="ws-world-btn-icon">{w.icon}</span>
+              {w.label}
             </button>
           ))}
         </div>
@@ -464,6 +500,11 @@ export default function WorldStudio() {
                       {c.is_alive === false && <span className="ws-deceased-marker">†</span>}
                       {c.name}
                     </span>
+                    {c.world_tag && c.world_tag !== worldTag && (
+                      <span className="ws-world-badge-mini" title={c.world_tag}>
+                        {WORLD_OPTIONS.find(w => w.tag === c.world_tag)?.icon || '?'}
+                      </span>
+                    )}
                     {c.species && c.species !== 'human' && (
                       <span className="ws-species-badge">{c.species}</span>
                     )}
@@ -548,10 +589,10 @@ export default function WorldStudio() {
           {/* Characters: empty state */}
           {tab === 'characters' && characters.length === 0 && (
             <div className="ws-empty">
-              <div className="ws-empty-icon">✦</div>
-              <div className="ws-empty-title">Start your World Ecosystem</div>
+              <div className="ws-empty-icon">{curWorld.icon}</div>
+              <div className="ws-empty-title">Start your {curWorld.label} Ecosystem</div>
               <div className="ws-empty-text">
-                Generate a full cast of world characters. Preview them, select who stays, confirm.
+                Generate a full cast of world characters for <strong>{curWorld.label}</strong> with <strong>{curWorld.protagonist}</strong> as protagonist. Preview them, select who stays, confirm.
               </div>
               <div className="ws-empty-actions">
                 <button className="ws-btn ws-btn-gold ws-btn-lg" onClick={generatePreview} disabled={generating}>
@@ -564,7 +605,7 @@ export default function WorldStudio() {
           {/* Characters: dashboard (no selection) */}
           {tab === 'characters' && characters.length > 0 && !charDetail && (
             <div className="ws-dashboard">
-              <div className="ws-dashboard-title">Ecosystem Overview</div>
+              <div className="ws-dashboard-title">{curWorld.icon} {curWorld.label} — Ecosystem Overview</div>
               <div className="ws-dash-section">
                 <div className="ws-dash-section-label">Character Types</div>
                 <div className="ws-dash-type-grid">
@@ -777,9 +818,9 @@ export default function WorldStudio() {
                       <div className="ws-section-label ws-section-label-gold">Family in Franchise</div>
                       <div className="ws-inspector-card">
                         <Badge cls="ws-badge-protagonist">{charDetail.family_layer.replace(/_/g, ' ')}</Badge>
-                        {charDetail.family_layer !== 'lalaverse' && (
+                        {charDetail.family_layer !== worldTag && (
                           <div style={{ marginTop: 8, fontSize: 11, color: 'var(--ws-muted)' }}>
-                            This character's family exists in the <strong>{charDetail.family_layer.replace(/_/g, ' ')}</strong> layer.
+                            This character's family exists in the <strong>{charDetail.family_layer.replace(/_/g, ' ')}</strong> layer — different from the current {curWorld.label} world.
                           </div>
                         )}
                       </div>
@@ -828,7 +869,7 @@ export default function WorldStudio() {
                     { key: 'aesthetic',               label: 'Aesthetic',              long: true },
                     { key: 'surface_want',            label: 'Surface Want',           long: true },
                     { key: 'real_want',               label: 'Real Want',              long: true },
-                    { key: 'what_they_want_from_lala',label: 'What They Want From Lala', long: true },
+                    { key: 'what_they_want_from_lala',label: `What They Want From ${curWorld.protagonist}`, long: true },
                     { key: 'how_they_meet',           label: 'How They Meet',          long: true },
                     { key: 'dynamic',                 label: 'Dynamic',               long: true },
                     { key: 'intimate_style',          label: 'Intimate Style',         long: true },
@@ -917,10 +958,11 @@ export default function WorldStudio() {
                   <div className="ws-edit-field">
                     <label className="ws-edit-label">Family Layer</label>
                     <select className="ws-select"
-                      value={editForm.family_layer || 'lalaverse'}
+                      value={editForm.family_layer || worldTag}
                       onChange={e => setEditForm(p => ({ ...p, family_layer: e.target.value }))}>
                       <option value="real_world">Real World</option>
                       <option value="lalaverse">LalaVerse</option>
+                      <option value="book-1">Book 1 · Before Lala</option>
                       <option value="series_2">Series 2</option>
                     </select>
                   </div>
@@ -1049,7 +1091,7 @@ export default function WorldStudio() {
 
             {charDetail.what_they_want_from_lala && (
               <div className="ws-inspector-section">
-                <div className="ws-inspector-field-label ws-inspector-field-label-teal">What They Want From Lala</div>
+                <div className="ws-inspector-field-label ws-inspector-field-label-teal">What They Want From {curWorld.protagonist}</div>
                 <div className="ws-inspector-card">{charDetail.what_they_want_from_lala}</div>
               </div>
             )}
@@ -1071,7 +1113,7 @@ export default function WorldStudio() {
                 )}
                 {charDetail.what_lala_feels && (
                   <div className="ws-inspector-field">
-                    <span className="ws-inspector-field-label ws-inspector-field-label-rose">What Lala Feels</span>
+                    <span className="ws-inspector-field-label ws-inspector-field-label-rose">What {curWorld.protagonist} Feels</span>
                     <div className="ws-inspector-card">{charDetail.what_lala_feels}</div>
                   </div>
                 )}
@@ -1107,9 +1149,9 @@ export default function WorldStudio() {
       {showPreview && (
         <div className="ws-modal-overlay" onClick={() => !confirming && setShowPreview(false)}>
           <div className="ws-modal ws-modal-wide" onClick={e => e.stopPropagation()}>
-            <div className="ws-modal-title">Preview Generated Characters</div>
+            <div className="ws-modal-title">{curWorld.icon} Preview — {curWorld.label}</div>
             <div className="ws-modal-sub">
-              {previewChars.length} characters generated. Deselect any you don't want, then confirm.
+              {previewChars.length} characters generated for <strong>{curWorld.label}</strong> ({curWorld.protagonist} as protagonist). Deselect any you don't want, then confirm.
             </div>
             {previewNotes && <div className="ws-modal-notes">{previewNotes}</div>}
             <div className="ws-modal-grid">
@@ -1232,6 +1274,7 @@ export default function WorldStudio() {
                   value={relForm.series_layer}
                   onChange={e => setRelForm(p => ({ ...p, series_layer: e.target.value }))}>
                   <option value="lalaverse">LalaVerse</option>
+                  <option value="book-1">Book 1 · Before Lala</option>
                   <option value="real_world">Real World</option>
                   <option value="series_2">Series 2</option>
                 </select>
@@ -1268,7 +1311,7 @@ export default function WorldStudio() {
 
             <div className="ws-form-row" style={{ marginTop: 8 }}>
               <label className="ws-form-label">Conflict Summary</label>
-              <textarea className="ws-textarea" placeholder="The conflict between them, independent of Lala…"
+              <textarea className="ws-textarea" placeholder={`The conflict between them, independent of ${curWorld.protagonist}…`}
                 value={relForm.conflict_summary}
                 onChange={e => setRelForm(p => ({ ...p, conflict_summary: e.target.value }))} />
             </div>

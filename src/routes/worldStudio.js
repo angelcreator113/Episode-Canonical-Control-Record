@@ -158,29 +158,94 @@ function areSexuallyCompatible(a, b) {
 }
 
 /**
- * Find (or create) the LalaVerse registry so generated characters
+ * Find (or create) a registry for the given world tag so generated characters
  * can be inserted into registry_characters with a valid registry_id.
  */
-async function findOrCreateLalaVerseRegistry(req) {
+async function findOrCreateRegistryForWorld(req, worldTag = 'lalaverse') {
   const [existing] = await Q(req,
-    `SELECT id FROM character_registries WHERE book_tag = 'lalaverse' LIMIT 1`
+    `SELECT id FROM character_registries WHERE book_tag = :tag LIMIT 1`,
+    { replacements: { tag: worldTag } }
   ).catch(() => []);
   if (existing) return existing.id;
 
   const regId = uuidv4();
+  const title = WORLD_CONFIGS[worldTag]?.title || worldTag;
   await sequelize.query(
     `INSERT INTO character_registries (id, title, book_tag, description, created_at, updated_at)
-     VALUES (:id, 'LalaVerse', 'lalaverse', 'Auto-created by World Studio', NOW(), NOW())`,
-    { replacements: { id: regId }, type: sequelize.QueryTypes.INSERT }
+     VALUES (:id, :title, :tag, 'Auto-created by World Studio', NOW(), NOW())`,
+    { replacements: { id: regId, title, tag: worldTag }, type: sequelize.QueryTypes.INSERT }
   );
   return regId;
 }
+
+// Backward-compat alias
+async function findOrCreateLalaVerseRegistry(req) {
+  return findOrCreateRegistryForWorld(req, 'lalaverse');
+}
+
+// ── World configurations for multi-world generation ────────────────────────
+const WORLD_CONFIGS = {
+  'lalaverse': {
+    title: 'LalaVerse',
+    series_label: 'lalaverse_s1',
+    protagonist: 'Lala',
+    defaults: {
+      city: 'a major city',
+      industry: 'content creation and fashion',
+      career_stage: 'early career — rising but not arrived',
+      era: 'now',
+    },
+    system_prompt: `You create vivid, complex characters for LalaVerse — a fictional world where Lala, a confident AI fashion game character who became sentient, is building her life and career.
+
+Lala has JustAWoman's entire confidence playbook running invisibly underneath her. She's magnetic, styled, direct. She knows what she wants. She doesn't always know why she wants it.
+
+Create characters who feel like real people — with their own ambitions, contradictions, secrets, and desires. Not props. Not types. People who change Lala's trajectory by existing in her world.
+
+Character types needed:
+- love_interest: someone she could actually fall for. Complex. Not available in a simple way.
+- industry_peer: another creator or brand figure at a similar level. Collaborative energy that hides competitive undercurrent.
+- mentor: someone ahead of her who sees something in her. Their help comes with their own agenda.
+- antagonist: not a villain. Someone whose success or presence makes Lala's path harder without meaning to.
+- one_night_stand: someone she meets once. The encounter means something even if they don't stay.
+- rival: direct competition. They respect each other and can't stand each other.
+- collaborator: someone she creates with. Creative chemistry that bleeds into everything else.
+
+For intimate_eligible characters: write intimate_style, intimate_dynamic, and what_lala_feels with honesty and specificity. These inform how scenes between them are generated. Be real about desire, tension, and what makes physical connection between these specific people feel true to who they are.`,
+  },
+  'book-1': {
+    title: 'Book 1 · Before Lala',
+    series_label: 'book1_s1',
+    protagonist: 'JustAWoman',
+    defaults: {
+      city: 'a sprawling city that never stops moving',
+      industry: 'corporate power, nightlife, and survival',
+      career_stage: 'mid-career — established but trapped',
+      era: 'now',
+    },
+    system_prompt: `You create vivid, complex characters for Book 1 · Before Lala — the dramatic thriller world of JustAWoman's real life before Lala existed. This is a world of secrets, power dynamics, betrayal, and raw ambition.
+
+JustAWoman is a woman navigating a world that was never designed for her — corporate politics, dangerous relationships, family pressure, and the kind of loneliness that comes from being strong too long. She's sharp, guarded, magnetic, and exhausted in ways she won't admit.
+
+Create characters who are deeply entangled in her world — people she can't escape, people she shouldn't trust, people she needs despite knowing better. Every character should feel like they have their own gravity.
+
+Character types needed:
+- love_interest: someone she shouldn't want. Complex. Probably dangerous in some way — emotionally, professionally, or both.
+- industry_peer: someone in her professional orbit. The relationship is never purely professional.
+- mentor: someone older or more powerful who sees her potential. Their guidance always costs something.
+- antagonist: not a cartoon villain. Someone whose goals directly conflict with hers. They may even be right.
+- one_night_stand: an encounter that reveals something about who she is right now. Brief but meaningful.
+- rival: someone who mirrors her in uncomfortable ways. The competition is personal.
+- collaborator: someone she builds something with. Trust is earned slowly and can shatter fast.
+
+For intimate_eligible characters: write intimate_style, intimate_dynamic, and what she feels with honesty and specificity. This is a grittier, more emotionally charged world than LalaVerse. The intimacy is rawer, more complicated, often tangled up in power and vulnerability.`,
+  },
+};
 
 /**
  * Create a registry_characters entry from a world_character,
  * then cross-link both records.
  */
-async function syncToRegistry(req, worldCharId, c, registryId) {
+async function syncToRegistry(req, worldCharId, c, registryId, worldTag = 'lalaverse') {
   const rcId = uuidv4();
   const charKey = (c.name || 'char').toLowerCase().replace(/[^a-z0-9]+/g, '_').substring(0, 80) + '_' + worldCharId.substring(0, 8);
   const roleType = ROLE_MAP[c.character_type] || 'special';
@@ -246,7 +311,7 @@ async function syncToRegistry(req, worldCharId, c, registryId) {
           internal_monologue_style: null, emotional_reactivity: null,
         }),
         story_presence: JSON.stringify({
-          appears_in_books: 'lalaverse',
+          appears_in_books: worldTag,
           current_story_status: c.how_they_meet || null,
           unresolved_threads: null,
           future_potential: c.exit_reason ? 'Will exit' : 'Yes',
@@ -480,17 +545,20 @@ router.post('/world/generate-ecosystem', optionalAuth, async (req, res) => {
   try {
     const {
       show_id,
-      series_label = 'lalaverse_s1',
+      world_tag = 'lalaverse',
       world_context = {},
       character_count = 8,
     } = req.body;
 
+    const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
+    const series_label = req.body.series_label || wCfg.series_label;
+
     const {
-      city           = 'a major city',
-      industry       = 'content creation and fashion',
-      career_stage   = 'early career — rising but not arrived',
-      era            = 'now',
-      protagonist    = 'Lala',
+      city           = wCfg.defaults.city,
+      industry       = wCfg.defaults.industry,
+      career_stage   = wCfg.defaults.career_stage,
+      era            = wCfg.defaults.era,
+      protagonist    = wCfg.protagonist,
     } = world_context;
 
     // Fetch existing world characters to avoid duplication
@@ -500,24 +568,9 @@ router.post('/world/generate-ecosystem', optionalAuth, async (req, res) => {
     `);
 
     const result = await claude(
-      `You create vivid, complex characters for LalaVerse — a fictional world where Lala, a confident AI fashion game character who became sentient, is building her life and career.
+      wCfg.system_prompt,
 
-Lala has JustAWoman's entire confidence playbook running invisibly underneath her. She's magnetic, styled, direct. She knows what she wants. She doesn't always know why she wants it.
-
-Create characters who feel like real people — with their own ambitions, contradictions, secrets, and desires. Not props. Not types. People who change Lala's trajectory by existing in her world.
-
-Character types needed:
-- love_interest: someone she could actually fall for. Complex. Not available in a simple way.
-- industry_peer: another creator or brand figure at a similar level. Collaborative energy that hides competitive undercurrent.
-- mentor: someone ahead of her who sees something in her. Their help comes with their own agenda.
-- antagonist: not a villain. Someone whose success or presence makes Lala's path harder without meaning to.
-- one_night_stand: someone she meets once. The encounter means something even if they don't stay.
-- rival: direct competition. They respect each other and can't stand each other.
-- collaborator: someone she creates with. Creative chemistry that bleeds into everything else.
-
-For intimate_eligible characters: write intimate_style, intimate_dynamic, and what_lala_feels with honesty and specificity. These inform how scenes between them are generated. Be real about desire, tension, and what makes physical connection between these specific people feel true to who they are.`,
-
-      `Generate ${character_count} world characters for LalaVerse.
+      `Generate ${character_count} world characters for ${wCfg.title}.
 
 PROTAGONIST: ${protagonist}
 WORLD: ${city}, ${industry} industry
@@ -535,7 +588,7 @@ Return JSON only:
       "name": "full name",
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
-      "world_location": "where they exist in LalaVerse",
+      "world_location": "where they exist in ${wCfg.title}",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
       "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
@@ -543,21 +596,21 @@ Return JSON only:
       "signature": "the one thing about them that is unforgettable",
       "surface_want": "what they'd tell you they want",
       "real_want": "what they'd never admit",
-      "what_they_want_from_lala": "what they're actually seeking from her specifically",
+      "what_they_want_from_lala": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
-      "dynamic": "the texture of their connection with Lala",
+      "dynamic": "the texture of their connection with ${protagonist}",
       "tension_type": "romantic|professional|creative|power|unspoken",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
-      "what_lala_feels": "what Lala physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
-      "arc_role": "how this character changes Lala's trajectory",
+      "what_lala_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
+      "arc_role": "how this character changes ${protagonist}'s trajectory",
       "exit_reason": "how or why they leave her world, or null if they stay",
       "career_echo_connection": true|false,
       "attracted_to": "who they actually pursue — specific, not a label (e.g. 'men with authority she can dismantle, women who are further ahead than her')",
       "how_they_love": "their connection pattern (e.g. 'avoidant until she isn't, then fully in')",
       "desire_they_wont_admit": "the thing that complicates the above (dimmed, private)",
-      "family_layer": "real_world | lalaverse | series_2",
-      "origin_story": "where they came from before Lala's world",
+      "family_layer": "real_world | ${world_tag} | series_2",
+      "origin_story": "where they came from before ${protagonist}'s world",
       "public_persona": "how the world sees them",
       "private_reality": "what only close people know"
     }
@@ -581,7 +634,7 @@ Return JSON only:
     );
 
     // Insert each character + sync to registry
-    const lalaRegistryId = await findOrCreateLalaVerseRegistry(req);
+    const registryId = await findOrCreateRegistryForWorld(req, world_tag);
     const inserted = [];
     for (const c of parsed.characters) {
       const charId = uuidv4();
@@ -632,18 +685,19 @@ Return JSON only:
             origin_story: c.origin_story || null,
             public_persona: c.public_persona || null,
             private_reality: c.private_reality || null,
+            world_tag: world_tag,
           },
           type: sequelize.QueryTypes.INSERT,
         }
       );
 
       // Sync to canonical registry
-      const rcId = await syncToRegistry(req, charId, c, lalaRegistryId);
+      const rcId = await syncToRegistry(req, charId, c, registryId, world_tag);
       inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
     // Seed inter-character relationships (not just Lala-centric)
-    const interCount = await seedInterCharacterRelationships(inserted, lalaRegistryId);
+    const interCount = await seedInterCharacterRelationships(inserted, registryId);
     console.log(`generate-ecosystem: Seeded ${interCount} inter-character relationship(s)`);
 
     res.status(201).json({ characters: inserted, batch_id: batchId, count: inserted.length, inter_relationships: interCount, generation_notes: parsed.generation_notes });
@@ -656,9 +710,10 @@ Return JSON only:
 // GET /world/characters
 router.get('/world/characters', optionalAuth, async (req, res) => {
   try {
-    const { character_type, status, intimate_eligible } = req.query;
+    const { character_type, status, intimate_eligible, world_tag } = req.query;
     let where = 'WHERE 1=1';
     const rep = {};
+    if (world_tag)         { where += ' AND world_tag = :world_tag';          rep.world_tag = world_tag; }
     if (character_type)    { where += ' AND character_type = :type';         rep.type = character_type; }
     if (status)            { where += ' AND status = :status';                rep.status = status; }
     if (intimate_eligible) { where += ` AND intimate_eligible = ${intimate_eligible === 'true'}`; }
@@ -785,7 +840,8 @@ router.delete('/world/characters/:id', optionalAuth, async (req, res) => {
 // POST /world/seed-relationships — manually seed relationship candidates for all active world characters
 router.post('/world/seed-relationships', optionalAuth, async (req, res) => {
   try {
-    const registryId = await findOrCreateLalaVerseRegistry(req);
+    const { world_tag = 'lalaverse' } = req.body;
+    const registryId = await findOrCreateRegistryForWorld(req, world_tag);
 
     // Get all active world characters that have a registry_character_id
     const worldChars = await Q(req, `
@@ -1295,17 +1351,20 @@ router.post('/world/continuations/:contId/approve', optionalAuth, async (req, re
 router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) => {
   try {
     const {
-      series_label = 'lalaverse_s1',
+      world_tag = 'lalaverse',
       world_context = {},
       character_count = 8,
     } = req.body;
 
+    const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
+    const series_label = req.body.series_label || wCfg.series_label;
+
     const {
-      city         = 'a major city',
-      industry     = 'content creation and fashion',
-      career_stage = 'early career — rising but not arrived',
-      era          = 'now',
-      protagonist  = 'Lala',
+      city         = wCfg.defaults.city,
+      industry     = wCfg.defaults.industry,
+      career_stage = wCfg.defaults.career_stage,
+      era          = wCfg.defaults.era,
+      protagonist  = wCfg.protagonist,
     } = world_context;
 
     // Fetch existing to avoid duplication
@@ -1315,24 +1374,9 @@ router.post('/world/generate-ecosystem-preview', optionalAuth, async (req, res) 
     `);
 
     const result = await claude(
-      `You create vivid, complex characters for LalaVerse — a fictional world where Lala, a confident AI fashion game character who became sentient, is building her life and career.
+      wCfg.system_prompt,
 
-Lala has JustAWoman's entire confidence playbook running invisibly underneath her. She's magnetic, styled, direct. She knows what she wants. She doesn't always know why she wants it.
-
-Create characters who feel like real people — with their own ambitions, contradictions, secrets, and desires. Not props. Not types. People who change Lala's trajectory by existing in her world.
-
-Character types needed:
-- love_interest: someone she could actually fall for. Complex. Not available in a simple way.
-- industry_peer: another creator or brand figure at a similar level. Collaborative energy that hides competitive undercurrent.
-- mentor: someone ahead of her who sees something in her. Their help comes with their own agenda.
-- antagonist: not a villain. Someone whose success or presence makes Lala's path harder without meaning to.
-- one_night_stand: someone she meets once. The encounter means something even if they don't stay.
-- rival: direct competition. They respect each other and can't stand each other.
-- collaborator: someone she creates with. Creative chemistry that bleeds into everything else.
-
-For intimate_eligible characters: write intimate_style, intimate_dynamic, and what_lala_feels with honesty and specificity. These inform how scenes between them are generated. Be real about desire, tension, and what makes physical connection between these specific people feel true to who they are.`,
-
-      `Generate ${character_count} world characters for LalaVerse.
+      `Generate ${character_count} world characters for ${wCfg.title}.
 
 PROTAGONIST: ${protagonist}
 WORLD: ${city}, ${industry} industry
@@ -1350,7 +1394,7 @@ Return JSON only:
       "name": "full name",
       "age_range": "e.g. late 20s",
       "occupation": "specific job/role",
-      "world_location": "where they exist in LalaVerse",
+      "world_location": "where they exist in ${wCfg.title}",
       "character_type": "love_interest|industry_peer|mentor|antagonist|rival|collaborator|one_night_stand",
       "sexuality": "straight|gay|lesbian|bisexual|pansexual|queer|fluid — be intentional, this drives romantic pairing logic",
       "intimate_eligible": true|false,
@@ -1358,21 +1402,21 @@ Return JSON only:
       "signature": "the one thing about them that is unforgettable",
       "surface_want": "what they'd tell you they want",
       "real_want": "what they'd never admit",
-      "what_they_want_from_lala": "what they're actually seeking from her specifically",
+      "what_they_want_from_lala": "what they're actually seeking from ${protagonist} specifically",
       "how_they_meet": "the specific scenario — not generic",
-      "dynamic": "the texture of their connection with Lala",
+      "dynamic": "the texture of their connection with ${protagonist}",
       "tension_type": "romantic|professional|creative|power|unspoken",
       "intimate_style": "how they are in intimate moments — only for intimate_eligible characters, null otherwise",
       "intimate_dynamic": "the specific dynamic between them — only for intimate_eligible, null otherwise",
-      "what_lala_feels": "what Lala physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
-      "arc_role": "how this character changes Lala's trajectory",
+      "what_lala_feels": "what ${protagonist} physically and emotionally experiences with this person — intimate_eligible only, null otherwise",
+      "arc_role": "how this character changes ${protagonist}'s trajectory",
       "exit_reason": "how or why they leave her world, or null if they stay",
       "career_echo_connection": true|false,
       "attracted_to": "who they actually pursue — specific, not a label (e.g. 'men with authority she can dismantle, women who are further ahead than her')",
       "how_they_love": "their connection pattern (e.g. 'avoidant until she isn't, then fully in')",
       "desire_they_wont_admit": "the thing that complicates the above (dimmed, private)",
-      "family_layer": "real_world | lalaverse | series_2",
-      "origin_story": "where they came from before Lala's world",
+      "family_layer": "real_world | ${world_tag} | series_2",
+      "origin_story": "where they came from before ${protagonist}'s world",
       "public_persona": "how the world sees them",
       "private_reality": "what only close people know"
     }
@@ -1409,8 +1453,11 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
       characters = [],
       generation_notes = '',
       show_id,
-      series_label = 'lalaverse_s1',
+      world_tag = 'lalaverse',
     } = req.body;
+
+    const wCfg = WORLD_CONFIGS[world_tag] || WORLD_CONFIGS['lalaverse'];
+    const series_label = req.body.series_label || wCfg.series_label;
 
     if (!characters.length) {
       return res.status(400).json({ error: 'No characters to confirm' });
@@ -1426,7 +1473,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
           id: batchId,
           show_id: show_id || null,
           label: series_label,
-          context: JSON.stringify({ source: 'preview_confirm' }),
+          context: JSON.stringify({ source: 'preview_confirm', world_tag }),
           count: characters.length,
           notes: generation_notes,
         },
@@ -1435,7 +1482,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
     );
 
     // Insert each character + sync to registry
-    const lalaRegistryId = await findOrCreateLalaVerseRegistry(req);
+    const registryId = await findOrCreateRegistryForWorld(req, world_tag);
     const inserted = [];
     for (const c of characters) {
       const charId = uuidv4();
@@ -1450,7 +1497,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             attracted_to, how_they_love, desire_they_wont_admit,
             relationship_graph, family_layer, origin_story,
             public_persona, private_reality,
-            status, current_tension, created_at, updated_at)
+            world_tag, status, current_tension, created_at, updated_at)
          VALUES
            (:id, :batch_id, :name, :age_range, :occupation, :world_location, :char_type,
             :sexuality, :intimate_eligible, :aesthetic, :signature,
@@ -1461,7 +1508,7 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             :attracted_to, :how_they_love, :desire_they_wont_admit,
             :relationship_graph, :family_layer, :origin_story,
             :public_persona, :private_reality,
-            'draft', 'Stable', NOW(), NOW())`,
+            :world_tag, 'draft', 'Stable', NOW(), NOW())`,
         {
           replacements: {
             id: charId, batch_id: batchId,
@@ -1486,18 +1533,19 @@ router.post('/world/generate-ecosystem-confirm', optionalAuth, async (req, res) 
             origin_story: c.origin_story || null,
             public_persona: c.public_persona || null,
             private_reality: c.private_reality || null,
+            world_tag: world_tag,
           },
           type: sequelize.QueryTypes.INSERT,
         }
       );
 
       // Sync to canonical registry
-      const rcId = await syncToRegistry(req, charId, c, lalaRegistryId);
+      const rcId = await syncToRegistry(req, charId, c, registryId, world_tag);
       inserted.push({ ...c, id: charId, registry_character_id: rcId });
     }
 
     // Seed inter-character relationships (not just Lala-centric)
-    const interCount = await seedInterCharacterRelationships(inserted, lalaRegistryId);
+    const interCount = await seedInterCharacterRelationships(inserted, registryId);
     console.log(`generate-ecosystem-confirm: Seeded ${interCount} inter-character relationship(s)`);
 
     res.status(201).json({
