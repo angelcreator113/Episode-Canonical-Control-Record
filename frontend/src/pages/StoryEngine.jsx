@@ -476,6 +476,16 @@ function StoryPanel({
           <div key={i} className="se-therapy-seed">{seed}</div>
         ))}
       </div>
+      <div style={{ padding: '16px 20px', borderTop: '1px solid #e8e4d8', display: 'flex', gap: 10 }}>
+        <button
+          className="se-btn"
+          style={{ background: '#3D7A9B', color: '#fff', padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none' }}
+          onClick={() => onEvaluate?.({ task: task.task, title: task.title, story_number: task.story_number })}
+          title="Evaluate with multi-voice scoring"
+        >
+          📊 Evaluate
+        </button>
+      </div>
     </div>
   );
 

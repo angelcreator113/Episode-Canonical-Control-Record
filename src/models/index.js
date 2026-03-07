@@ -85,6 +85,7 @@ let LalaverseBrand; // LalaVerse brand registry model
 let WardrobeBrandTag; // Wardrobe brand tag model
 let TherapyPendingSession; // Therapy pending session model
 let WardrobeContentAssignment; // Wardrobe content assignment model
+let CharacterSpark; // Character Spark (3-field fast entry) model
 
 try {
   // Core models
@@ -251,6 +252,9 @@ try {
   StorytellerStory = require('./StorytellerStory')(sequelize);
   SocialMediaImport = require('./SocialMediaImport')(sequelize);
   NovelAssembly = require('./NovelAssembly')(sequelize);
+
+  // Character Spark (3-field fast entry)
+  CharacterSpark = require('./CharacterSpark')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -1271,6 +1275,7 @@ const db = {
     WardrobeBrandTag,
     TherapyPendingSession,
     WardrobeContentAssignment,
+    CharacterSpark,
   },
 
   /**
@@ -1518,3 +1523,4 @@ module.exports.WardrobeContentAssignment = WardrobeContentAssignment;
 module.exports.StorytellerStory = StorytellerStory;
 module.exports.SocialMediaImport = SocialMediaImport;
 module.exports.NovelAssembly = NovelAssembly;
+module.exports.CharacterSpark = CharacterSpark;

@@ -1,34 +1,61 @@
 /**
- * StoryEvaluationEngine.jsx
+ * StoryEvaluationEngine.jsx — v2
  *
- * Multi-model story generation + editorial evaluation engine.
- * Light theme. Routes all AI calls through the backend (no direct Anthropic calls from browser).
+ * Multi-agent blind story generation → editorial evaluation →
+ * memory proposals → registry update proposals → manuscript write-back.
  *
- * INTEGRATION WITH STORY ENGINE:
- *   Can be used standalone at /story-evaluation OR embedded inside StoryEngine
- *   as an evaluation tab. When props.storyText is provided, it skips generation
- *   and goes straight to evaluation mode on that single draft.
+ * Light theme. All AI calls routed through backend.
  *
- * Props (all optional — standalone mode if none provided):
- *   storyText     — existing draft from StoryEngine to evaluate
- *   taskBrief     — the task/brief that produced the story
- *   characterKey  — active character key from StoryEngine
- *   onApproveVersion — callback(text) when user approves a synthesized version
- *   onClose       — callback to exit back to StoryEngine
+ * Flow:
+ *   1. BRIEF     — Write scene brief, set tone dial, pick characters
+ *   2. GENERATE  — Backend spawns 3 blind voices in parallel
+ *   3. READ      — Read all 3 versions side-by-side
+ *   4. EVALUATE  — Claude Opus scores + synthesises approved version
+ *   5. MEMORY    — Propose plot memories + character revelations
+ *   6. REGISTRY  — Propose registry profile updates
+ *   7. WRITE-BACK — Commit to manuscript chapter + confirm memories
  */
 
-import { useState, useCallback } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useState, useCallback, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 
-const API_BASE = '/api/v1';
+const API = '/api/v1/memories';
 
-const MODELS = [
-  { id: 'claude',  label: 'Claude',  tag: 'Depth · Interiority', accent: '#6B4C82', bg: '#faf8fc', border: '#e8e0f0', emoji: '◆' },
-  { id: 'gpt4o',   label: 'GPT-4o',  tag: 'Tension · Momentum',  accent: '#3D7A9B', bg: '#f6fafc', border: '#d8e8f0', emoji: '◈' },
-  { id: 'gemini',  label: 'Gemini',  tag: 'Sensory · Desire',     accent: '#4A8A3D', bg: '#f6faf4', border: '#d8f0d0', emoji: '◉' },
+// ── Light theme ───────────────────────────────────────────────────────────
+const T = {
+  bg:          '#f5f5f5',
+  surface:     '#ffffff',
+  surfaceAlt:  '#f8f8f8',
+  border:      '#e0e0e0',
+  borderLight: '#d0d0d0',
+  text:        '#1a1a1a',
+  textDim:     '#666666',
+  textFaint:   '#999999',
+  accent:      '#c9a96e',
+  accentHover: '#b8944e',
+  red:         '#c96e6e',
+  green:       '#6ec9a0',
+  blue:        '#6e9ec9',
+  purple:      '#9e6ec9',
+};
+
+const VOICES = [
+  { id: 'voice_a', label: 'Voice A', tag: 'Depth · Interiority',   accent: '#6B4C82', bg: '#faf8fc', border: '#e8e0f0', emoji: '◆' },
+  { id: 'voice_b', label: 'Voice B', tag: 'Tension · Momentum',    accent: '#3D7A9B', bg: '#f6fafc', border: '#d8e8f0', emoji: '◈' },
+  { id: 'voice_c', label: 'Voice C', tag: 'Sensory · Desire',      accent: '#4A8A3D', bg: '#f6faf4', border: '#d8f0d0', emoji: '◉' },
 ];
 
-const CRITERIA = {
+const TONE_OPTIONS = [
+  { value: 'literary',  label: '📖 Literary',  desc: 'Psychological depth, subtext' },
+  { value: 'thriller',  label: '⚡ Thriller',   desc: 'Pacing, stakes, hooks' },
+  { value: 'lyrical',   label: '🌊 Lyrical',   desc: 'Sensory language, metaphor' },
+  { value: 'intimate',  label: '🌙 Intimate',  desc: 'Closeness, body, silence' },
+  { value: 'dark',      label: '🖤 Dark',      desc: 'Tension, moral ambiguity' },
+  { value: 'warm',      label: '☀️ Warm',      desc: 'Connection, earned tenderness' },
+];
+
+const CRITERIA = ['interiority', 'desire_tension', 'specificity', 'stakes', 'voice', 'body_presence'];
+const CRITERIA_LABELS = {
   interiority:    'Interiority',
   desire_tension: 'Desire & Tension',
   specificity:    'Specificity',
@@ -37,10 +64,12 @@ const CRITERIA = {
   body_presence:  'Body Presence',
 };
 
-// ── API helper — routes through our backend, never direct to Anthropic ────
+const STEPS = ['brief', 'generate', 'read', 'evaluate', 'memory', 'registry', 'writeback'];
+const STEP_LABELS = ['Brief', 'Generate', 'Read', 'Evaluate', 'Memory', 'Registry', 'Write-Back'];
 
-async function apiGenerate(endpoint, body) {
-  const res = await fetch(`${API_BASE}/memories/${endpoint}`, {
+// ── API helpers ───────────────────────────────────────────────────────────
+async function apiPost(endpoint, body) {
+  const res = await fetch(`${API}/${endpoint}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
@@ -50,381 +79,754 @@ async function apiGenerate(endpoint, body) {
   return data;
 }
 
-// ── UI Components ─────────────────────────────────────────────────────────
+async function apiGet(endpoint) {
+  const res = await fetch(`${API}/${endpoint}`);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Request failed');
+  return data;
+}
 
-function Spinner({ color }) {
+// ── Spinner ───────────────────────────────────────────────────────────────
+function Spinner({ color, label }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 300, gap: 14 }}>
-      <div style={{ width: 28, height: 28, border: '2px solid #e0e0e0', borderTop: `2px solid ${color}`, borderRadius: '50%', animation: 'see-spin 0.9s linear infinite' }} />
-      <span style={{ color: '#999', fontSize: 10, fontFamily: 'monospace', letterSpacing: 1 }}>writing...</span>
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: 200, gap: 14 }}>
+      <div style={{
+        width: 28, height: 28, border: '2px solid #e0e0e0',
+        borderTop: `2px solid ${color || T.accent}`, borderRadius: '50%',
+        animation: 'see2-spin 0.9s linear infinite',
+      }} />
+      <span style={{ color: T.textFaint, fontSize: 10, fontFamily: 'monospace', letterSpacing: 1 }}>{label || 'working...'}</span>
     </div>
   );
 }
 
-function StoryText({ text, accent }) {
+// ── Story Reader Panel ────────────────────────────────────────────────────
+function StoryReader({ text, accent, maxHeight }) {
   const paras = (text || '').split('\n').filter(p => p.trim());
   return (
-    <div style={{ overflowY: 'auto', maxHeight: 520 }}>
+    <div style={{ overflowY: 'auto', maxHeight: maxHeight || 420, paddingRight: 8 }}>
       {paras.map((p, i) => (
-        <p key={i} style={{ color: i === 0 ? '#1a1a1a' : '#555', fontSize: 13.5, lineHeight: 1.95, marginBottom: 16, fontFamily: "'Palatino Linotype',Palatino,Georgia,serif" }}>
-          {i === 0 ? <><span style={{ color: accent, fontSize: 22, fontWeight: 700, float: 'left', lineHeight: 1, marginRight: 4, marginTop: 3 }}>{p[0]}</span>{p.slice(1)}</> : p}
+        <p key={i} style={{
+          color: i === 0 ? T.text : '#555',
+          fontSize: 13.5, lineHeight: 1.95, marginBottom: 16,
+          fontFamily: "'Palatino Linotype',Palatino,Georgia,serif",
+        }}>
+          {i === 0
+            ? <><span style={{ color: accent, fontSize: 22, fontWeight: 700, float: 'left', lineHeight: 1, marginRight: 4, marginTop: 3 }}>{p[0]}</span>{p.slice(1)}</>
+            : p}
         </p>
       ))}
     </div>
   );
 }
 
-function ProofText({ issues, accent }) {
-  if (!issues?.length) return <p style={{ color: '#999', fontSize: 12, fontFamily: 'Georgia,serif', fontStyle: 'italic' }}>No significant issues found.</p>;
+// ── Score Bar ─────────────────────────────────────────────────────────────
+function ScoreBar({ value, max, color }) {
+  const pct = Math.min(100, (value / max) * 100);
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {issues.map((iss, i) => (
-        <div key={i} style={{ borderLeft: `2px solid ${accent}`, paddingLeft: 12, paddingTop: 6, paddingBottom: 6 }}>
-          <span style={{ color: '#555', fontSize: 12, fontFamily: 'Georgia,serif', lineHeight: 1.7 }}>{iss}</span>
-        </div>
-      ))}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ flex: 1, height: 6, background: T.border, borderRadius: 3, overflow: 'hidden' }}>
+        <div style={{ width: `${pct}%`, height: '100%', background: color || T.accent, borderRadius: 3, transition: 'width 0.5s' }} />
+      </div>
+      <span style={{ fontSize: 11, fontWeight: 600, color: T.text, minWidth: 20, textAlign: 'right' }}>{value}</span>
     </div>
   );
 }
 
-function ScoreArc({ value, max = 10, accent, size = 50 }) {
-  const r = size / 2 - 5;
-  const c = 2 * Math.PI * r;
-  const d = c * (value / max);
+// ── Memory Proposal Card ──────────────────────────────────────────────────
+function MemoryCard({ item, selected, onToggle, accentColor }) {
   return (
-    <svg width={size} height={size} style={{ transform: 'rotate(-90deg)' }}>
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke="#eee" strokeWidth="3" />
-      <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={accent} strokeWidth="3"
-        strokeDasharray={`${d} ${c - d}`} strokeLinecap="round"
-        style={{ transition: 'stroke-dasharray 1.2s cubic-bezier(.4,0,.2,1)' }} />
-      <text x="50%" y="50%" textAnchor="middle" dominantBaseline="middle"
-        fill={accent} fontSize="12" fontWeight="700" fontFamily="monospace"
-        style={{ transform: 'rotate(90deg)', transformOrigin: 'center' }}>{value}</text>
-    </svg>
+    <div
+      onClick={onToggle}
+      style={{
+        padding: 12, borderRadius: 8, cursor: 'pointer',
+        background: selected ? `${accentColor}10` : T.surface,
+        border: `1px solid ${selected ? accentColor : T.border}`,
+        transition: 'all 0.2s',
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ flex: 1 }}>
+          <span style={{
+            fontSize: 10, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 0.5,
+            color: accentColor, display: 'inline-block', padding: '2px 6px',
+            background: `${accentColor}15`, borderRadius: 3, marginBottom: 6,
+          }}>{item.type}</span>
+          <div style={{ fontSize: 13, color: T.text, lineHeight: 1.5 }}>{item.content}</div>
+          {item.reason && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4, fontStyle: 'italic' }}>{item.reason}</div>}
+        </div>
+        <div style={{
+          width: 20, height: 20, borderRadius: 4, flexShrink: 0, marginLeft: 10,
+          border: `2px solid ${selected ? accentColor : T.border}`,
+          background: selected ? accentColor : 'transparent',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'all 0.2s',
+        }}>
+          {selected && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
+        </div>
+      </div>
+    </div>
   );
 }
 
-function ModelCol({ model, story, gen, winner, onRegen }) {
-  const [view, setView] = useState('story');
+// ══════════════════════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ══════════════════════════════════════════════════════════════════════════
+export default function StoryEvaluationEngine() {
+  const navigate = useNavigate();
+
+  // ── State ────────────────────────────────────────────────────────────
+  const [step, setStep] = useState('brief');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
+
+  // Brief
+  const [sceneBrief, setSceneBrief] = useState('');
+  const [toneDial, setToneDial] = useState('literary');
+  const [characters, setCharacters] = useState('');
+  const [registryId, setRegistryId] = useState('');
+
+  // Generation result
+  const [storyId, setStoryId] = useState(null);
+  const [stories, setStories] = useState(null); // { voice_a, voice_b, voice_c }
+  const [activeVoice, setActiveVoice] = useState('voice_a');
+
+  // Evaluation result
+  const [evaluation, setEvaluation] = useState(null);
+
+  // Memory proposals
+  const [plotMemories, setPlotMemories] = useState([]);
+  const [revelations, setRevelations] = useState([]);
+  const [selectedPlot, setSelectedPlot] = useState(new Set());
+  const [selectedRev, setSelectedRev] = useState(new Set());
+
+  // Registry proposals
+  const [regUpdates, setRegUpdates] = useState([]);
+  const [selectedReg, setSelectedReg] = useState(new Set());
+
+  // Write-back
+  const [chapterId, setChapterId] = useState('');
+  const [writeResult, setWriteResult] = useState(null);
+
+  // Timer
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    if (!loading) return;
+    setElapsed(0);
+    const iv = setInterval(() => setElapsed(e => e + 1), 1000);
+    return () => clearInterval(iv);
+  }, [loading]);
+
+  // ── Handlers ─────────────────────────────────────────────────────────
+
+  const handleGenerate = useCallback(async () => {
+    if (!sceneBrief.trim()) { setError('Scene brief is required'); return; }
+    setError(null); setLoading(true);
+    try {
+      const chars = characters.split(',').map(c => c.trim()).filter(Boolean);
+      const data = await apiPost('generate-story-multi', {
+        scene_brief: sceneBrief,
+        tone_dial: toneDial,
+        characters_in_scene: chars,
+        registry_id: registryId || undefined,
+      });
+      setStoryId(data.story_id);
+      setStories(data.stories);
+      setStep('read');
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }, [sceneBrief, toneDial, characters, registryId]);
+
+  const handleEvaluate = useCallback(async () => {
+    if (!storyId) return;
+    setError(null); setLoading(true);
+    try {
+      const data = await apiPost('evaluate-stories', { story_id: storyId });
+      setEvaluation(data.evaluation);
+      setStep('evaluate');
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }, [storyId]);
+
+  const handleProposeMemory = useCallback(async () => {
+    if (!storyId) return;
+    setError(null); setLoading(true);
+    try {
+      const data = await apiPost('propose-memory', { story_id: storyId });
+      setPlotMemories(data.proposals?.plot_memories || []);
+      setRevelations(data.proposals?.character_revelations || []);
+      setSelectedPlot(new Set(Array.from({ length: (data.proposals?.plot_memories || []).length }, (_, i) => i)));
+      setSelectedRev(new Set(Array.from({ length: (data.proposals?.character_revelations || []).length }, (_, i) => i)));
+      setStep('memory');
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }, [storyId]);
+
+  const handleProposeRegistry = useCallback(async () => {
+    if (!storyId) return;
+    setError(null); setLoading(true);
+    try {
+      const data = await apiPost('propose-registry-update', { story_id: storyId });
+      setRegUpdates(data.proposals || []);
+      setSelectedReg(new Set(Array.from({ length: (data.proposals || []).length }, (_, i) => i)));
+      setStep('registry');
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }, [storyId]);
+
+  const handleWriteBack = useCallback(async () => {
+    if (!storyId || !chapterId.trim()) {
+      setError('Chapter ID is required for write-back');
+      return;
+    }
+    setError(null); setLoading(true);
+    try {
+      const confirmedMems = [
+        ...plotMemories.filter((_, i) => selectedPlot.has(i)),
+        ...revelations.filter((_, i) => selectedRev.has(i)),
+      ];
+      const confirmedReg = regUpdates.filter((_, i) => selectedReg.has(i));
+
+      const data = await apiPost('write-back', {
+        story_id: storyId,
+        chapter_id: chapterId.trim(),
+        confirmed_memories: confirmedMems,
+        confirmed_registry_updates: confirmedReg,
+      });
+      setWriteResult(data);
+      setStep('writeback');
+    } catch (err) { setError(err.message); }
+    finally { setLoading(false); }
+  }, [storyId, chapterId, plotMemories, revelations, regUpdates, selectedPlot, selectedRev, selectedReg]);
+
+  const toggleSet = (set, setter, idx) => {
+    const next = new Set(set);
+    next.has(idx) ? next.delete(idx) : next.add(idx);
+    setter(next);
+  };
+
+  // ── Current step index ───────────────────────────────────────────────
+  const stepIdx = STEPS.indexOf(step);
+
+  // ── Render ───────────────────────────────────────────────────────────
   return (
-    <div style={{ background: model.bg, border: `1px solid ${winner ? model.accent : model.border}`, borderRadius: 10, overflow: 'hidden', display: 'flex', flexDirection: 'column', boxShadow: winner ? `0 0 24px ${model.accent}20` : '0 1px 4px rgba(0,0,0,0.06)', transition: 'box-shadow 0.5s' }}>
-      <div style={{ padding: '14px 16px', borderBottom: `1px solid ${model.border}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div style={{
+      minHeight: '100vh', background: T.bg, color: T.text,
+      fontFamily: "'Inter','Segoe UI',system-ui,sans-serif",
+    }}>
+      {/* Header */}
+      <div style={{
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+        padding: '14px 24px', borderBottom: `1px solid ${T.border}`, background: T.surface,
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={() => navigate(-1)}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 16, color: T.textDim, padding: '4px 8px' }}
+            title="Back"
+          >←</button>
           <div>
-            <div style={{ color: model.accent, fontSize: 12, fontWeight: 700, fontFamily: 'monospace', display: 'flex', alignItems: 'center', gap: 6 }}>
-              {model.emoji} {model.label}
-              {winner && <span style={{ background: model.accent, color: '#fff', fontSize: 9, padding: '2px 7px', borderRadius: 10, letterSpacing: 0.5, fontWeight: 800 }}>BEST</span>}
+            <div style={{ fontSize: 15, fontWeight: 700, color: T.text, letterSpacing: -0.3 }}>
+              ◇ Story Evaluation Engine
             </div>
-            <div style={{ color: '#999', fontSize: 10, marginTop: 2 }}>{model.tag}</div>
+            <div style={{ fontSize: 10, color: T.textDim }}>
+              Blind generation → Editorial evaluation → Memory → Registry → Write-back
+            </div>
           </div>
-          {story && <button onClick={onRegen} style={{ background: 'none', border: `1px solid ${model.border}`, color: '#888', fontSize: 10, padding: '3px 9px', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace' }}>↺</button>}
         </div>
-        {story && (
-          <div style={{ display: 'flex', marginTop: 12, background: '#f0f0f0', borderRadius: 4, overflow: 'hidden' }}>
-            {['story', 'proof'].map(t => (
-              <button key={t} onClick={() => setView(t)} style={{ flex: 1, padding: '5px 0', border: 'none', cursor: 'pointer', background: view === t ? model.accent : 'transparent', color: view === t ? '#fff' : '#888', fontSize: 10, fontWeight: 700, fontFamily: 'monospace', letterSpacing: 0.5 }}>
-                {t === 'story' ? 'STORY' : 'PROOFREAD'}
-              </button>
-            ))}
-          </div>
+        {loading && (
+          <span style={{ fontSize: 11, color: T.accent, fontFamily: 'monospace' }}>
+            {elapsed}s elapsed
+          </span>
         )}
       </div>
-      <div style={{ flex: 1, padding: '16px', minHeight: 380 }}>
-        {gen ? <Spinner color={model.accent} /> :
-         !story ? <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: 280, color: '#ddd', fontSize: 36 }}>—</div> :
-         view === 'story' ? <StoryText text={story.prose} accent={model.accent} /> :
-         <ProofText issues={story.proof} accent={model.accent} />}
-      </div>
-      {story && !gen && (
-        <div style={{ padding: '8px 16px', borderTop: `1px solid ${model.border}`, color: '#aaa', fontSize: 10, fontFamily: 'monospace' }}>
-          {story.prose?.split(/\s+/).filter(Boolean).length || 0} words
-        </div>
-      )}
-    </div>
-  );
-}
 
-function Scores({ ev }) {
-  const { scores, winner, winner_reason, what_each_brings } = ev;
-  return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 18 }}>
-        {MODELS.map(m => {
-          const s = scores?.[m.id]; if (!s) return null;
+      {/* Step Progress */}
+      <div style={{ display: 'flex', padding: '12px 24px', gap: 4, background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+        {STEP_LABELS.map((label, i) => {
+          const done = i < stepIdx;
+          const active = i === stepIdx;
           return (
-            <div key={m.id} style={{ background: m.bg, border: `1px solid ${winner === m.id ? m.accent : m.border}`, borderRadius: 8, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
-                <span style={{ color: m.accent, fontFamily: 'monospace', fontSize: 12, fontWeight: 700 }}>{m.emoji} {m.label}</span>
-                <ScoreArc value={s.total || 0} max={60} accent={m.accent} />
-              </div>
-              {Object.entries(CRITERIA).map(([k, label]) => (
-                <div key={k} style={{ marginBottom: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 3 }}>
-                    <span style={{ color: '#888', fontSize: 10, fontFamily: 'monospace' }}>{label}</span>
-                    <span style={{ color: m.accent, fontSize: 10, fontFamily: 'monospace' }}>{s[k] || 0}</span>
-                  </div>
-                  <div style={{ height: 2, background: '#eee', borderRadius: 2, overflow: 'hidden' }}>
-                    <div style={{ height: '100%', width: `${((s[k] || 0) / 10) * 100}%`, background: m.accent, borderRadius: 2, transition: 'width 1.2s cubic-bezier(.4,0,.2,1)' }} />
-                  </div>
-                </div>
-              ))}
-              <p style={{ color: '#666', fontSize: 11, fontFamily: 'Georgia,serif', fontStyle: 'italic', marginTop: 10, lineHeight: 1.65 }}>{s.summary}</p>
-              {s.best_moment && (
-                <div style={{ marginTop: 10, borderLeft: `2px solid ${m.accent}`, paddingLeft: 10 }}>
-                  <div style={{ color: '#aaa', fontSize: 9, fontFamily: 'monospace', letterSpacing: 1, marginBottom: 4 }}>BEST MOMENT</div>
-                  <p style={{ color: '#444', fontSize: 11, fontFamily: 'Georgia,serif', fontStyle: 'italic', lineHeight: 1.65 }}>{s.best_moment}</p>
-                </div>
-              )}
+            <div key={label} style={{ flex: 1, textAlign: 'center' }}>
+              <div style={{
+                height: 3, borderRadius: 2, marginBottom: 4,
+                background: done ? T.green : active ? T.accent : T.border,
+                transition: 'background 0.3s',
+              }} />
+              <span style={{
+                fontSize: 9, letterSpacing: 0.5, textTransform: 'uppercase',
+                color: done ? T.green : active ? T.accent : T.textFaint,
+                fontWeight: active ? 700 : 400,
+              }}>{label}</span>
             </div>
           );
         })}
       </div>
-      {winner && (
-        <div style={{ background: '#fff', border: `1px solid ${MODELS.find(m => m.id === winner)?.accent || '#ddd'}`, borderRadius: 8, padding: 20, boxShadow: '0 1px 4px rgba(0,0,0,0.06)' }}>
-          <div style={{ color: MODELS.find(m => m.id === winner)?.accent, fontSize: 9, fontFamily: 'monospace', letterSpacing: 1.5, marginBottom: 10 }}>
-            {MODELS.find(m => m.id === winner)?.emoji} {MODELS.find(m => m.id === winner)?.label?.toUpperCase()} WINS
-          </div>
-          <p style={{ color: '#444', fontSize: 13, fontFamily: 'Georgia,serif', lineHeight: 1.8, marginBottom: what_each_brings ? 18 : 0 }}>{winner_reason}</p>
-          {what_each_brings && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-              {MODELS.map(m => what_each_brings[m.id] && (
-                <div key={m.id} style={{ background: m.bg, border: `1px solid ${m.border}`, borderRadius: 6, padding: '10px 12px' }}>
-                  <div style={{ color: m.accent, fontSize: 9, fontFamily: 'monospace', letterSpacing: 1, marginBottom: 6 }}>TAKEN FROM {m.label.toUpperCase()}</div>
-                  <p style={{ color: '#666', fontSize: 11, fontFamily: 'Georgia,serif', lineHeight: 1.6 }}>{what_each_brings[m.id]}</p>
-                </div>
-              ))}
-            </div>
-          )}
+
+      {/* Error banner */}
+      {error && (
+        <div style={{
+          margin: '12px 24px 0', padding: '10px 14px',
+          background: '#fdf2f2', border: `1px solid ${T.red}`,
+          borderRadius: 6, fontSize: 12, color: T.red,
+        }}>
+          {error}
+          <button onClick={() => setError(null)} style={{ float: 'right', background: 'none', border: 'none', cursor: 'pointer', color: T.red, fontWeight: 700 }}>✕</button>
         </div>
       )}
-    </div>
-  );
-}
 
-function PromptDx({ dx }) {
-  if (!dx) return null;
-  const col = dx.score >= 7 ? '#4A8A3D' : dx.score >= 4 ? '#B08A30' : '#B03030';
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ color: '#888', fontSize: 9, fontFamily: 'monospace', letterSpacing: 2 }}>PROMPT STRENGTH</span>
-        <span style={{ background: col, color: '#fff', fontSize: 11, fontWeight: 800, padding: '3px 14px', borderRadius: 20, fontFamily: 'monospace' }}>{dx.score}/10</span>
-      </div>
-      <div style={{ background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, padding: 16 }}>
-        <div style={{ color: '#aaa', fontSize: 9, fontFamily: 'monospace', letterSpacing: 1, marginBottom: 8 }}>WHAT WAS MISSING</div>
-        <p style={{ color: '#444', fontSize: 13, fontFamily: 'Georgia,serif', lineHeight: 1.85 }}>{dx.what_was_missing}</p>
-      </div>
-      <div style={{ background: '#f6faf4', border: '1px solid #d0e8c8', borderRadius: 8, padding: 16 }}>
-        <div style={{ color: '#4A8A3D', fontSize: 9, fontFamily: 'monospace', letterSpacing: 1, marginBottom: 8 }}>STRONGER PROMPT</div>
-        <p style={{ color: '#2a5a22', fontSize: 13, fontFamily: "'Courier New',monospace", lineHeight: 1.85 }}>{dx.improved_prompt}</p>
-        <button onClick={() => navigator.clipboard.writeText(dx.improved_prompt)} style={{ marginTop: 12, background: 'none', border: '1px solid #c0d8b8', color: '#4A8A3D', fontSize: 10, padding: '4px 12px', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace' }}>Copy</button>
-      </div>
-    </div>
-  );
-}
+      {/* Content area */}
+      <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
 
-function Approved({ text, onApproveVersion }) {
-  if (!text) return null;
-  const paras = text.split('\n').filter(p => p.trim());
-  return (
-    <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 18 }}>
-        <div>
-          <div style={{ color: '#6B4C82', fontSize: 9, fontFamily: 'monospace', letterSpacing: 2, marginBottom: 4 }}>APPROVED VERSION</div>
-          <div style={{ color: '#888', fontSize: 11, fontFamily: 'Georgia,serif' }}>Best elements synthesized — ready for manuscript</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <button onClick={() => navigator.clipboard.writeText(text)} style={{ background: 'none', border: '1px solid #ddd', color: '#888', fontSize: 10, padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace' }}>Copy</button>
-          {onApproveVersion && (
-            <button onClick={() => onApproveVersion(text)} style={{ background: '#6B4C82', border: 'none', color: '#fff', fontSize: 10, padding: '6px 14px', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace', fontWeight: 700 }}>Use in Story Engine</button>
-          )}
-        </div>
-      </div>
-      <div style={{ background: '#fdfcf8', border: '1px solid #e8e4d8', borderRadius: 10, padding: '36px 40px', maxHeight: 680, overflowY: 'auto' }}>
-        {paras.map((p, i) => (
-          <p key={i} style={{ color: i === 0 ? '#1a1a1a' : '#444', fontSize: 15, lineHeight: 2.05, marginBottom: 24, fontFamily: "'Palatino Linotype',Palatino,Georgia,serif" }}>
-            {i === 0 ? <><span style={{ color: '#6B4C82', fontSize: 26, fontWeight: 700, float: 'left', lineHeight: 1, marginRight: 5, marginTop: 4 }}>{p[0]}</span>{p.slice(1)}</> : p}
-          </p>
-        ))}
-      </div>
-    </div>
-  );
-}
+        {/* ══════ STEP: BRIEF ══════ */}
+        {step === 'brief' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+            <SectionCard title="Scene Brief">
+              <textarea
+                value={sceneBrief}
+                onChange={e => setSceneBrief(e.target.value)}
+                placeholder="Describe the scene — what's at stake, who's involved, what must change by the end..."
+                rows={6}
+                style={{
+                  width: '100%', padding: '12px 14px', background: T.surfaceAlt,
+                  border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+                  fontSize: 13.5, lineHeight: 1.7, fontFamily: 'Georgia,serif',
+                  resize: 'vertical', outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+            </SectionCard>
 
-// ── Main ──────────────────────────────────────────────────────────────────
-
-export default function StoryEvaluationEngine({ storyText: propStoryText, taskBrief: propTaskBrief, characterKey: propCharKey, onApproveVersion, onClose: propOnClose }) {
-  const location = useLocation();
-  const nav = useNavigate();
-
-  // Support both direct props (embedded) and router state (navigated from StoryEngine)
-  const storyText    = propStoryText || location.state?.storyText;
-  const taskBrief    = propTaskBrief || location.state?.taskBrief;
-  const characterKey = propCharKey   || location.state?.characterKey;
-  const onClose      = propOnClose   || (() => nav(-1));
-
-  const [prompt, setPrompt]     = useState(taskBrief?.task || '');
-  const [stories, setStories]   = useState({ claude: null, gpt4o: null, gemini: null });
-  const [gen, setGen]           = useState({ claude: false, gpt4o: false, gemini: false });
-  const [ev, setEv]             = useState(null);
-  const [evLoading, setEvLoad]  = useState(false);
-  const [tab, setTab]           = useState('scores');
-  const [started, setStarted]   = useState(false);
-
-  // If storyText is provided (from StoryEngine), pre-populate Claude column
-  const isEmbedded = !!storyText;
-
-  const runOne = useCallback(async (modelId) => {
-    if (!prompt.trim()) return;
-    setGen(g => ({ ...g, [modelId]: true }));
-    setStories(s => ({ ...s, [modelId]: null }));
-    setEv(null);
-    try {
-      const data = await apiGenerate('evaluate-generate-story', {
-        modelVoice: modelId,
-        prompt: prompt.trim(),
-        characterKey: characterKey || 'justawoman',
-      });
-      setStories(s => ({ ...s, [modelId]: { prose: data.text, proof: [] } }));
-    } catch (e) {
-      setStories(s => ({ ...s, [modelId]: { prose: `Error: ${e.message}`, proof: [] } }));
-    } finally {
-      setGen(g => ({ ...g, [modelId]: false }));
-    }
-  }, [prompt, characterKey]);
-
-  const runAll = useCallback(async () => {
-    if (!prompt.trim()) return;
-    setStarted(true); setEv(null);
-    await Promise.all(MODELS.map(m => runOne(m.id)));
-  }, [prompt, runOne]);
-
-  const evaluate = useCallback(async () => {
-    if (!MODELS.every(m => stories[m.id]?.prose)) return;
-    setEvLoad(true); setEv(null);
-    try {
-      const data = await apiGenerate('evaluate-stories', {
-        stories: {
-          claude: stories.claude?.prose,
-          gpt4o: stories.gpt4o?.prose,
-          gemini: stories.gemini?.prose,
-        },
-        prompt: prompt.trim(),
-      });
-      setStories(s => ({
-        claude: { ...s.claude, proof: data.proofreading?.claude || [] },
-        gpt4o:  { ...s.gpt4o,  proof: data.proofreading?.gpt4o || [] },
-        gemini: { ...s.gemini, proof: data.proofreading?.gemini || [] },
-      }));
-      setEv(data);
-      setTab('scores');
-    } catch (e) { console.error(e); }
-    finally { setEvLoad(false); }
-  }, [stories, prompt]);
-
-  const allDone = MODELS.every(m => stories[m.id]?.prose && !gen[m.id]);
-  const anyGen  = Object.values(gen).some(Boolean);
-  const winner  = ev?.winner;
-
-  return (
-    <div style={{ minHeight: '100vh', background: '#f5f5f5', color: '#1a1a1a' }}>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,600;1,400&family=Space+Mono:wght@400;700&display=swap');
-        @keyframes see-spin { to { transform: rotate(360deg); } }
-        @keyframes see-up   { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
-      `}</style>
-
-      {/* Header */}
-      <div style={{ padding: '16px 26px', borderBottom: '1px solid #e0e0e0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', position: 'sticky', top: 0, background: '#fff', zIndex: 50, boxShadow: '0 1px 3px rgba(0,0,0,0.04)' }}>
-        <div>
-          <div style={{ color: '#6B4C82', fontSize: 9, fontFamily: "'Space Mono',monospace", letterSpacing: 3, marginBottom: 3 }}>PRIME STUDIOS · BOOK 1 · BEFORE LALA</div>
-          <div style={{ color: '#1a1a1a', fontSize: 16, fontFamily: "'EB Garamond',serif", fontWeight: 400, letterSpacing: 0.3 }}>Story Evaluation Engine</div>
-        </div>
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-          <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
-            {MODELS.map(m => (
-              <div key={m.id} style={{ width: 6, height: 6, borderRadius: '50%', background: stories[m.id] ? m.accent : '#ddd', transition: 'background 0.4s' }} />
-            ))}
-            <span style={{ color: '#aaa', fontSize: 10, fontFamily: 'monospace', marginLeft: 8 }}>
-              {MODELS.filter(m => stories[m.id]).length}/3
-            </span>
-          </div>
-          {onClose && (
-            <button onClick={onClose} style={{ background: 'none', border: '1px solid #ddd', color: '#888', fontSize: 11, padding: '5px 14px', borderRadius: 4, cursor: 'pointer', fontFamily: 'monospace' }}>← Back</button>
-          )}
-        </div>
-      </div>
-
-      <div style={{ maxWidth: 1560, margin: '0 auto', padding: '26px 26px 60px' }}>
-
-        {/* Prompt bar */}
-        <div style={{ marginBottom: 26, animation: 'see-up 0.4s ease forwards' }}>
-          <div style={{ color: '#aaa', fontSize: 9, fontFamily: "'Space Mono',monospace", letterSpacing: 2, marginBottom: 9 }}>SCENE BRIEF</div>
-          <textarea value={prompt} onChange={e => setPrompt(e.target.value)}
-            placeholder="Describe the scene. What is happening. What does she want. What can't she say or have."
-            style={{ width: '100%', background: '#fff', border: '1px solid #e0e0e0', borderRadius: 8, color: '#444', fontSize: 14, fontFamily: "'EB Garamond',serif", lineHeight: 1.8, padding: '14px 16px', resize: 'none', height: 84, boxSizing: 'border-box' }}
-            onFocus={e => e.target.style.borderColor = '#6B4C82'}
-            onBlur={e => e.target.style.borderColor = '#e0e0e0'}
-          />
-          <div style={{ display: 'flex', gap: 10, marginTop: 11, alignItems: 'center' }}>
-            <button onClick={runAll} disabled={!prompt.trim() || anyGen} style={{
-              background: prompt.trim() && !anyGen ? '#6B4C82' : '#e0e0e0',
-              color: prompt.trim() && !anyGen ? '#fff' : '#aaa',
-              border: 'none', borderRadius: 6, padding: '10px 22px',
-              fontSize: 10, fontWeight: 700, cursor: prompt.trim() && !anyGen ? 'pointer' : 'not-allowed',
-              fontFamily: "'Space Mono',monospace", letterSpacing: 1, transition: 'all 0.2s',
-            }}>
-              {anyGen ? 'WRITING...' : '▶  GENERATE ALL THREE'}
-            </button>
-
-            {allDone && !evLoading && (
-              <button onClick={evaluate} style={{ background: 'transparent', color: '#4A8A3D', border: '1px solid #c0d8b8', borderRadius: 6, padding: '10px 22px', fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: "'Space Mono',monospace", letterSpacing: 1, animation: 'see-up 0.3s ease forwards' }}>
-                ◆  EVALUATE + SYNTHESIZE
-              </button>
-            )}
-
-            {evLoading && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#999', fontSize: 10, fontFamily: 'monospace' }}>
-                <div style={{ width: 14, height: 14, border: '1.5px solid #e0e0e0', borderTop: '1.5px solid #4A8A3D', borderRadius: '50%', animation: 'see-spin 0.8s linear infinite' }} />
-                evaluating...
+            <SectionCard title="Tone Dial">
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
+                {TONE_OPTIONS.map(t => (
+                  <button
+                    key={t.value}
+                    onClick={() => setToneDial(t.value)}
+                    style={{
+                      padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
+                      border: `1px solid ${toneDial === t.value ? T.accent : T.border}`,
+                      background: toneDial === t.value ? `${T.accent}12` : T.surface,
+                      textAlign: 'left', transition: 'all 0.2s',
+                    }}
+                  >
+                    <div style={{ fontSize: 13, fontWeight: 600, color: toneDial === t.value ? T.accent : T.text }}>{t.label}</div>
+                    <div style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>{t.desc}</div>
+                  </button>
+                ))}
               </div>
-            )}
-          </div>
-        </div>
+            </SectionCard>
 
-        {/* Three columns */}
-        {started && (
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14, marginBottom: 34, animation: 'see-up 0.4s ease forwards' }}>
-            {MODELS.map(m => (
-              <ModelCol key={m.id} model={m} story={stories[m.id]} gen={gen[m.id]} winner={winner === m.id} onRegen={() => runOne(m.id)} />
-            ))}
-          </div>
-        )}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+              <SectionCard title="Characters in Scene">
+                <input
+                  value={characters}
+                  onChange={e => setCharacters(e.target.value)}
+                  placeholder="character_key_1, character_key_2"
+                  style={{
+                    width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+                    border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+                    fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4 }}>Comma-separated character keys</div>
+              </SectionCard>
 
-        {/* Evaluation panel */}
-        {ev && (
-          <div style={{ animation: 'see-up 0.5s ease forwards' }}>
-            <div style={{ display: 'flex', gap: 0, marginBottom: 18, background: '#fff', border: '1px solid #e0e0e0', borderRadius: 6, overflow: 'hidden', width: 'fit-content' }}>
-              {[
-                { id: 'scores',   label: '◆ SCORES' },
-                { id: 'prompt',   label: '⟳ PROMPT' },
-                { id: 'approved', label: '✦ APPROVED' },
-              ].map(t => (
-                <button key={t.id} onClick={() => setTab(t.id)} style={{
-                  padding: '9px 20px', border: 'none', cursor: 'pointer',
-                  background: tab === t.id ? '#6B4C82' : 'transparent',
-                  color: tab === t.id ? '#fff' : '#888',
-                  fontSize: 10, fontWeight: 700, fontFamily: "'Space Mono',monospace", letterSpacing: 1,
-                }}>{t.label}</button>
-              ))}
+              <SectionCard title="Registry ID (optional)">
+                <input
+                  value={registryId}
+                  onChange={e => setRegistryId(e.target.value)}
+                  placeholder="UUID of character registry"
+                  style={{
+                    width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+                    border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+                    fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                  }}
+                />
+                <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4 }}>Loads character dossiers for context</div>
+              </SectionCard>
             </div>
 
-            {tab === 'scores'   && <Scores ev={ev} />}
-            {tab === 'prompt'   && <PromptDx dx={ev.prompt_diagnosis} />}
-            {tab === 'approved' && <Approved text={ev.approved_version} onApproveVersion={onApproveVersion} />}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+              <button
+                onClick={handleGenerate}
+                disabled={loading || !sceneBrief.trim()}
+                style={{
+                  padding: '12px 28px', background: T.accent, color: '#fff',
+                  border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer', letterSpacing: 0.3, transition: 'background 0.2s',
+                  opacity: loading || !sceneBrief.trim() ? 0.5 : 1,
+                }}
+              >
+                {loading ? `Generating 3 voices... (${elapsed}s)` : '◇ Generate 3 Blind Voices →'}
+              </button>
+            </div>
+
+            {loading && <Spinner color={T.accent} label="3 voices writing in parallel..." />}
+          </div>
+        )}
+
+        {/* ══════ STEP: READ ══════ */}
+        {(step === 'read' || step === 'generate') && stories && (
+          <div>
+            {/* Voice tabs */}
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+              {VOICES.map(v => {
+                const s = stories[v.id];
+                const active = activeVoice === v.id;
+                return (
+                  <button
+                    key={v.id}
+                    onClick={() => setActiveVoice(v.id)}
+                    style={{
+                      flex: 1, padding: '12px 14px', borderRadius: 8, cursor: 'pointer',
+                      border: `1px solid ${active ? v.accent : T.border}`,
+                      background: active ? v.bg : T.surface,
+                      textAlign: 'left', transition: 'all 0.2s',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: active ? v.accent : T.text }}>{v.emoji} {v.label}</span>
+                        <div style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>{v.tag}</div>
+                      </div>
+                      <span style={{ fontSize: 11, color: T.textFaint }}>{s?.word_count || 0} words</span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Story reader */}
+            <div style={{
+              background: T.surface, border: `1px solid ${T.border}`,
+              borderRadius: 10, padding: 24, marginBottom: 16,
+            }}>
+              <StoryReader
+                text={stories[activeVoice]?.text}
+                accent={VOICES.find(v => v.id === activeVoice)?.accent || T.accent}
+                maxHeight={500}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+              <button onClick={() => setStep('brief')} style={ghostBtn}>← Back to Brief</button>
+              <button
+                onClick={handleEvaluate}
+                disabled={loading}
+                style={primaryBtn(loading)}
+              >
+                {loading ? `Evaluating... (${elapsed}s)` : '◇ Evaluate All Three →'}
+              </button>
+            </div>
+
+            {loading && <Spinner color={T.purple} label="Claude Opus evaluating..." />}
+          </div>
+        )}
+
+        {/* ══════ STEP: EVALUATE ══════ */}
+        {step === 'evaluate' && evaluation && (
+          <div>
+            {/* Winner banner */}
+            <div style={{
+              background: `${T.green}12`, border: `1px solid ${T.green}`,
+              borderRadius: 10, padding: 16, marginBottom: 20,
+            }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: T.green, textTransform: 'uppercase', letterSpacing: 1 }}>
+                Winner: {evaluation.winner?.replace('_', ' ')}
+              </div>
+              <div style={{ fontSize: 13, color: T.text, marginTop: 4 }}>{evaluation.winner_reason}</div>
+            </div>
+
+            {/* Score cards */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+              {VOICES.map(v => {
+                const sc = evaluation.scores?.[v.id];
+                if (!sc) return null;
+                const isWinner = evaluation.winner === v.id;
+                return (
+                  <div key={v.id} style={{
+                    padding: 16, borderRadius: 10,
+                    border: `1px solid ${isWinner ? v.accent : T.border}`,
+                    background: isWinner ? v.bg : T.surface,
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: v.accent }}>{v.emoji} {v.label}</span>
+                      <span style={{ fontSize: 18, fontWeight: 700, color: v.accent }}>{sc.total}/60</span>
+                    </div>
+                    {CRITERIA.map(c => (
+                      <div key={c} style={{ marginBottom: 6 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
+                          <span style={{ fontSize: 10, color: T.textDim }}>{CRITERIA_LABELS[c]}</span>
+                        </div>
+                        <ScoreBar value={sc[c] || 0} max={10} color={v.accent} />
+                      </div>
+                    ))}
+                    <div style={{ marginTop: 10, fontSize: 12, color: T.textDim, fontStyle: 'italic' }}>{sc.summary}</div>
+                    {sc.best_moment && (
+                      <div style={{ marginTop: 8, padding: 8, background: T.bg, borderRadius: 4, fontSize: 11, color: T.text, borderLeft: `3px solid ${v.accent}` }}>
+                        "{sc.best_moment}"
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* What each brings */}
+            {evaluation.what_each_brings && (
+              <SectionCard title="What Each Voice Brings">
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                  {VOICES.map(v => (
+                    <div key={v.id} style={{ fontSize: 12, color: T.textDim }}>
+                      <span style={{ fontWeight: 600, color: v.accent }}>{v.label}:</span> {evaluation.what_each_brings[v.id]}
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
+            {/* Brief diagnosis */}
+            {evaluation.brief_diagnosis && (
+              <SectionCard title="Brief Diagnosis">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
+                  <div>
+                    <span style={{ fontSize: 11, color: T.textFaint }}>Score: </span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: T.accent }}>{evaluation.brief_diagnosis.score}/10</span>
+                  </div>
+                  {evaluation.brief_diagnosis.what_was_missing && (
+                    <div style={{ fontSize: 12, color: T.textDim }}>
+                      <strong>Missing:</strong> {evaluation.brief_diagnosis.what_was_missing}
+                    </div>
+                  )}
+                  {evaluation.brief_diagnosis.improved_brief && (
+                    <div style={{ padding: 10, background: T.surfaceAlt, borderRadius: 6, fontSize: 12, color: T.text, border: `1px solid ${T.border}` }}>
+                      <div style={{ fontSize: 10, color: T.textFaint, marginBottom: 4 }}>IMPROVED BRIEF:</div>
+                      {evaluation.brief_diagnosis.improved_brief}
+                    </div>
+                  )}
+                </div>
+              </SectionCard>
+            )}
+
+            {/* Approved synthesised version */}
+            {evaluation.approved_version && (
+              <SectionCard title="Synthesised Approved Version">
+                <StoryReader text={evaluation.approved_version} accent={T.green} maxHeight={400} />
+              </SectionCard>
+            )}
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setStep('read')} style={ghostBtn}>← Back to Read</button>
+              <button
+                onClick={handleProposeMemory}
+                disabled={loading}
+                style={primaryBtn(loading)}
+              >
+                {loading ? `Proposing memories... (${elapsed}s)` : '◇ Propose Memories →'}
+              </button>
+            </div>
+
+            {loading && <Spinner color={T.blue} label="Extracting narrative memories..." />}
+          </div>
+        )}
+
+        {/* ══════ STEP: MEMORY ══════ */}
+        {step === 'memory' && (
+          <div>
+            {plotMemories.length > 0 && (
+              <SectionCard title={`Plot Memories (${selectedPlot.size}/${plotMemories.length} selected)`}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {plotMemories.map((m, i) => (
+                    <MemoryCard
+                      key={i} item={m}
+                      selected={selectedPlot.has(i)}
+                      onToggle={() => toggleSet(selectedPlot, setSelectedPlot, i)}
+                      accentColor={T.blue}
+                    />
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
+            {revelations.length > 0 && (
+              <SectionCard title={`Character Revelations (${selectedRev.size}/${revelations.length} selected)`}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {revelations.map((m, i) => (
+                    <MemoryCard
+                      key={i} item={m}
+                      selected={selectedRev.has(i)}
+                      onToggle={() => toggleSet(selectedRev, setSelectedRev, i)}
+                      accentColor={T.purple}
+                    />
+                  ))}
+                </div>
+              </SectionCard>
+            )}
+
+            {plotMemories.length === 0 && revelations.length === 0 && (
+              <div style={{ textAlign: 'center', padding: 40, color: T.textDim }}>
+                No memory proposals generated.
+              </div>
+            )}
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setStep('evaluate')} style={ghostBtn}>← Back to Eval</button>
+              <button
+                onClick={handleProposeRegistry}
+                disabled={loading}
+                style={primaryBtn(loading)}
+              >
+                {loading ? `Proposing updates... (${elapsed}s)` : '◇ Propose Registry Updates →'}
+              </button>
+            </div>
+
+            {loading && <Spinner color={T.purple} label="Analyzing registry impacts..." />}
+          </div>
+        )}
+
+        {/* ══════ STEP: REGISTRY ══════ */}
+        {step === 'registry' && (
+          <div>
+            {regUpdates.length > 0 ? (
+              <SectionCard title={`Registry Updates (${selectedReg.size}/${regUpdates.length} selected)`}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {regUpdates.map((u, i) => (
+                    <div
+                      key={i}
+                      onClick={() => toggleSet(selectedReg, setSelectedReg, i)}
+                      style={{
+                        padding: 12, borderRadius: 8, cursor: 'pointer',
+                        background: selectedReg.has(i) ? `${T.accent}10` : T.surface,
+                        border: `1px solid ${selectedReg.has(i) ? T.accent : T.border}`,
+                        transition: 'all 0.2s',
+                      }}
+                    >
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <div style={{ flex: 1 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: T.text }}>{u.character_key} → <span style={{ color: T.accent }}>{u.field}</span></div>
+                          <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>
+                            <span style={{ color: T.red, textDecoration: 'line-through' }}>{u.current_value}</span>
+                            <span style={{ margin: '0 6px', color: T.textFaint }}>→</span>
+                            <span style={{ color: T.green }}>{u.proposed_value}</span>
+                          </div>
+                          {u.reason && <div style={{ fontSize: 11, color: T.textFaint, marginTop: 4, fontStyle: 'italic' }}>{u.reason}</div>}
+                        </div>
+                        <div style={{
+                          width: 20, height: 20, borderRadius: 4, flexShrink: 0, marginLeft: 10,
+                          border: `2px solid ${selectedReg.has(i) ? T.accent : T.border}`,
+                          background: selectedReg.has(i) ? T.accent : 'transparent',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        }}>
+                          {selectedReg.has(i) && <span style={{ color: '#fff', fontSize: 12, fontWeight: 700 }}>✓</span>}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </SectionCard>
+            ) : (
+              <div style={{ textAlign: 'center', padding: 40, color: T.textDim }}>
+                No registry updates proposed.
+              </div>
+            )}
+
+            <SectionCard title="Write-Back Target">
+              <input
+                value={chapterId}
+                onChange={e => setChapterId(e.target.value)}
+                placeholder="Chapter UUID — the manuscript chapter to write into"
+                style={{
+                  width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+                  border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+                  fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                }}
+              />
+              <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4 }}>
+                The approved story will be written as lines into this chapter
+              </div>
+            </SectionCard>
+
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+              <button onClick={() => setStep('memory')} style={ghostBtn}>← Back to Memory</button>
+              <button
+                onClick={handleWriteBack}
+                disabled={loading || !chapterId.trim()}
+                style={{
+                  ...primaryBtn(loading || !chapterId.trim()),
+                  background: (loading || !chapterId.trim()) ? T.border : T.green,
+                }}
+              >
+                {loading ? `Writing back... (${elapsed}s)` : '✓ Write Back to Manuscript'}
+              </button>
+            </div>
+
+            {loading && <Spinner color={T.green} label="Writing to manuscript..." />}
+          </div>
+        )}
+
+        {/* ══════ STEP: WRITE-BACK COMPLETE ══════ */}
+        {step === 'writeback' && writeResult && (
+          <div style={{ textAlign: 'center', padding: '40px 0' }}>
+            <div style={{ fontSize: 48, marginBottom: 16 }}>✓</div>
+            <div style={{ fontSize: 18, fontWeight: 700, color: T.green, marginBottom: 8 }}>Write-Back Complete</div>
+            <div style={{ fontSize: 13, color: T.textDim, maxWidth: 420, margin: '0 auto', lineHeight: 1.7 }}>
+              <strong>{writeResult.lines_written}</strong> lines written to chapter<br />
+              <strong>{writeResult.memories_committed}</strong> memories committed<br />
+              <strong>{writeResult.registry_updates_applied}</strong> registry updates applied
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
+              <button onClick={() => { setStep('brief'); setSceneBrief(''); setStories(null); setEvaluation(null); setStoryId(null); setWriteResult(null); }} style={ghostBtn}>
+                ◇ New Scene
+              </button>
+              <button onClick={() => navigate(-1)} style={{ ...ghostBtn, borderColor: T.accent, color: T.accent }}>
+                ← Back to Story Engine
+              </button>
+            </div>
           </div>
         )}
       </div>
+
+      {/* Keyframes */}
+      <style>{`
+        @keyframes see2-spin { to { transform: rotate(360deg) } }
+      `}</style>
     </div>
   );
+}
+
+// ── Shared UI helpers ─────────────────────────────────────────────────────
+
+function SectionCard({ title, children }) {
+  return (
+    <div style={{
+      background: T.surface, border: `1px solid ${T.border}`,
+      borderRadius: 10, padding: 18, marginBottom: 16,
+    }}>
+      {title && (
+        <div style={{
+          fontSize: 11, fontWeight: 700, color: T.accent,
+          textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12,
+        }}>{title}</div>
+      )}
+      {children}
+    </div>
+  );
+}
+
+const ghostBtn = {
+  padding: '10px 18px', background: 'transparent', color: T.textDim,
+  border: `1px solid ${T.border}`, borderRadius: 6, fontSize: 13,
+  cursor: 'pointer', transition: 'all 0.2s',
+};
+
+function primaryBtn(disabled) {
+  return {
+    padding: '12px 24px', background: disabled ? T.border : T.accent,
+    color: '#fff', border: 'none', borderRadius: 8, fontSize: 13,
+    fontWeight: 600, cursor: disabled ? 'default' : 'pointer',
+    letterSpacing: 0.3, transition: 'background 0.2s',
+    opacity: disabled ? 0.6 : 1,
+  };
 }
