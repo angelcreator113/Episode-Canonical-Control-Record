@@ -176,10 +176,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           {messages.length === 1 && (
             <div className="apa-quick-cmds">
               {[
-                'Who is justawoman?',
-                'List all characters',
-                'Approve all pending lines',
-                'Go to character registry',
+                'What are the six franchise laws?',
+                'Who is JustAWoman?',
+                "What's deployed right now?",
+                "What's next in the build queue?",
               ].map(cmd => (
                 <button key={cmd} className="apa-quick-cmd" onClick={() => send(cmd)}>
                   {cmd}

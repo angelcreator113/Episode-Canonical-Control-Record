@@ -15,7 +15,13 @@ const NAV = [
   {
     zone: 'WORLD',
     items: [
-      { icon: '◈',  label: 'Universe',             route: '/universe' },
+      { icon: '◈',  label: 'Universe',             route: '/universe',
+        children: [
+          { icon: '✦', label: 'Story Dashboard', route: '/universe?tab=story-dashboard' },
+          { icon: '⬡', label: 'Franchise Brain',  route: '/universe?tab=knowledge' },
+          { icon: '◇', label: 'Writing Rhythm',  route: '/universe?tab=writing-rhythm' },
+        ],
+      },
       { icon: '✦',  label: 'Create World',         route: '/world-studio' },
       { icon: '🌍', label: 'Learn Characters',     route: '/character-registry?view=world' },
       { icon: '🌳', label: 'Relationships',        route: '/relationships' },
@@ -28,7 +34,6 @@ const NAV = [
       { icon: '▶',  label: 'Start Session',   route: '/start' },
       { icon: '⚡', label: 'Story Engine',    route: '/story-engine' },
       { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
-      { icon: '⬡', label: 'Franchise Brain',    route: '/franchise-brain' },
       { icon: '', label: 'Assembler',        route: '/assembler' },
       { icon: '◇',  label: 'Continuity',      route: '/continuity' },
     ],
@@ -85,12 +90,20 @@ function Sidebar({ isOpen, onClose }) {
   const { user } = useAuth();
   const shows = useShows();
   const [showsOpen, setShowsOpen] = useState(false);
+  const [universeOpen, setUniverseOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
   // Auto-expand Shows sub-nav when on a /shows/* route
   useEffect(() => {
     if (location.pathname.startsWith('/shows/')) setShowsOpen(true);
   }, [location.pathname]);
+
+  // Auto-expand Universe sub-nav when on a story-side tab
+  useEffect(() => {
+    if (location.pathname === '/universe' && ['story-dashboard','knowledge','writing-rhythm'].includes(new URLSearchParams(location.search).get('tab'))) {
+      setUniverseOpen(true);
+    }
+  }, [location.pathname, location.search]);
 
   // Navigate and close mobile drawer
   const go = (path) => { navigate(path); if (onClose) onClose(); };
@@ -154,6 +167,47 @@ function Sidebar({ isOpen, onClose }) {
               {!collapsed && <div className="nav-section-label">{zone}</div>}
 
               {items.map(item => {
+                // ── Expandable item with static children (Universe) ──
+                if (item.children) {
+                  const groupActive = isActive(item.route) || location.pathname === item.route;
+                  return (
+                    <div key={item.route} className="nav-group">
+                      <div
+                        className={`nav-item ${groupActive ? 'active' : ''}`}
+                        onClick={() => {
+                          go(item.route);
+                          setUniverseOpen(o => !o);
+                        }}
+                        title={collapsed ? item.label : undefined}
+                      >
+                        <span className="nav-icon">{item.icon}</span>
+                        {!collapsed && (
+                          <>
+                            <span className="nav-label">{item.label}</span>
+                            <span className={`chevron ${universeOpen ? 'open' : ''}`}>›</span>
+                          </>
+                        )}
+                      </div>
+
+                      {universeOpen && !collapsed && (
+                        <div className="nav-subgroup">
+                          {item.children.map(child => (
+                            <NavLink
+                              key={child.route}
+                              to={child.route}
+                              className={({ isActive: a }) => `nav-subitem ${location.pathname + location.search === child.route ? 'active' : ''}`}
+                              onClick={() => { if (onClose) onClose(); }}
+                            >
+                              <span className="sub-dot" />
+                              <span className="subitem-label">{child.label}</span>
+                            </NavLink>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                }
+
                 // ── Expandable Shows item ──
                 if (item.expandable) {
                   const showsActive = isActive('/shows');
