@@ -21,6 +21,10 @@ import ProductionTab from './ProductionTab';
 import Wardrobe from './Wardrobe';
 import AssetLibrary from './AssetLibrary';
 import SocialImport from './SocialImport';
+import UniverseTabBar, { SHOW_TABS, STORY_TABS } from './UniverseTabBar';
+import StoryDashboard from './StoryDashboard';
+import FranchiseBrain from './FranchiseBrain';
+import WritingRhythm from './WritingRhythm';
 import './UniversePage.css';
 
 function useWindowWidth() {
@@ -47,9 +51,18 @@ export default function UniversePage() {
   const isMobile = width < 640;
   const isTablet = width >= 640 && width < 1024;
   const [searchParams, setSearchParams] = useSearchParams();
-  const initialTab = ['universe','social-import','series','production','wardrobe','assets'].includes(searchParams.get('tab'))
+  const ALL_TABS = [...SHOW_TABS, ...STORY_TABS].map(t => t.key);
+  const initialTab = ALL_TABS.includes(searchParams.get('tab'))
     ? searchParams.get('tab') : 'universe';
   const [activeTab, setActiveTab] = useState(initialTab);
+
+  // Sync activeTab when URL search params change (e.g. sidebar clicks)
+  useEffect(() => {
+    const tabParam = searchParams.get('tab');
+    if (ALL_TABS.includes(tabParam) && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, [searchParams]);
 
   function switchTab(tab) {
     setActiveTab(tab);
@@ -112,49 +125,47 @@ export default function UniversePage() {
   return (
     <div className="up-shell">
 
-      {/* Hero Header */}
-      <div className="up-hero" style={isMobile ? { padding: '20px 16px' } : isTablet ? { padding: '28px 28px 24px' } : undefined}>
-        <div className="up-hero-top">
-          <div>
-            <div className="up-hero-label">FRANCHISE BRAIN</div>
-            <h1 className="up-hero-title" style={isMobile ? { fontSize: 24 } : isTablet ? { fontSize: 30 } : undefined}>{universe.name}</h1>
-            <div className="up-hero-slug">/{universe.slug}</div>
-          </div>
+      {/* Hero Header — full on show-side tabs, slim on story-side tabs */}
+      {STORY_TABS.some(t => t.key === activeTab) ? (
+        <div className="up-hero-slim" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '10px 16px' : '10px 32px', background: 'rgba(20,20,30,0.6)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+          <span style={{ fontSize: 11, letterSpacing: 2, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' }}>Franchise Brain</span>
+          <span style={{ color: 'rgba(255,255,255,0.2)' }}>›</span>
+          <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{universe.name}</span>
+          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>/{universe.slug}</span>
         </div>
+      ) : (
+        <div className="up-hero" style={isMobile ? { padding: '20px 16px' } : isTablet ? { padding: '28px 28px 24px' } : undefined}>
+          <div className="up-hero-top">
+            <div>
+              <div className="up-hero-label">FRANCHISE BRAIN</div>
+              <h1 className="up-hero-title" style={isMobile ? { fontSize: 24 } : isTablet ? { fontSize: 30 } : undefined}>{universe.name}</h1>
+              <div className="up-hero-slug">/{universe.slug}</div>
+            </div>
+          </div>
 
-        <div className="up-hero-stats">
-          <div className="up-hero-stat">
-            <div className="up-stat-value">{series.length}</div>
-            <div className="up-stat-label">Series</div>
-          </div>
-          <div className="up-hero-stat">
-            <div className="up-stat-value">{shows.length}</div>
-            <div className="up-stat-label">Shows</div>
-          </div>
-          <div className="up-hero-stat">
-            <div className="up-stat-value">{shows.reduce((sum, sh) => sum + (parseInt(sh.episodeCount || sh.dataValues?.episodeCount) || 0), 0)}</div>
-            <div className="up-stat-label">Episodes</div>
-          </div>
-          <div className="up-hero-stat">
-            <div className="up-stat-value">{(universe.core_themes || []).length}</div>
-            <div className="up-stat-label">Themes</div>
+          <div className="up-hero-stats">
+            <div className="up-hero-stat">
+              <div className="up-stat-value">{series.length}</div>
+              <div className="up-stat-label">Series</div>
+            </div>
+            <div className="up-hero-stat">
+              <div className="up-stat-value">{shows.length}</div>
+              <div className="up-stat-label">Shows</div>
+            </div>
+            <div className="up-hero-stat">
+              <div className="up-stat-value">{shows.reduce((sum, sh) => sum + (parseInt(sh.episodeCount || sh.dataValues?.episodeCount) || 0), 0)}</div>
+              <div className="up-stat-label">Episodes</div>
+            </div>
+            <div className="up-hero-stat">
+              <div className="up-stat-value">{(universe.core_themes || []).length}</div>
+              <div className="up-stat-label">Themes</div>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Tab bar */}
-      <div className="up-tab-bar" style={isMobile ? { padding: '8px 16px', overflowX: 'auto' } : isTablet ? { padding: '10px 28px' } : undefined}>
-        {['universe', 'social-import', 'series', 'production', 'wardrobe', 'assets'].map(tab => (
-          <button
-            key={tab}
-            className={`up-tab-btn${activeTab === tab ? ' active' : ''}`}
-            style={isMobile ? { flexShrink: 0, textAlign: 'center', fontSize: 12, whiteSpace: 'nowrap' } : undefined}
-            onClick={() => switchTab(tab)}
-          >
-            {tabIcons[tab]} {tabLabels[tab]}
-          </button>
-        ))}
-      </div>
+      <UniverseTabBar activeTab={activeTab} onChange={switchTab} />
 
       {/* Tab content */}
       <div className="up-tab-content" style={isMobile ? { padding: '0 16px' } : isTablet ? { padding: '0 28px' } : undefined}>
@@ -199,6 +210,15 @@ export default function UniversePage() {
         )}
         {activeTab === 'assets' && (
           <AssetLibrary embedded={true} />
+        )}
+        {activeTab === 'story-dashboard' && (
+          <StoryDashboard />
+        )}
+        {activeTab === 'knowledge' && (
+          <FranchiseBrain />
+        )}
+        {activeTab === 'writing-rhythm' && (
+          <WritingRhythm />
         )}
       </div>
 

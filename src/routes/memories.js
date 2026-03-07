@@ -45,6 +45,11 @@ try {
   registrySync = require('../services/registrySync');
 } catch { registrySync = null; }
 
+let buildKnowledgeInjection, getTechContext;
+try {
+  ({ buildKnowledgeInjection, getTechContext } = require('./franchiseBrainRoutes'));
+} catch { buildKnowledgeInjection = null; getTechContext = null; }
+
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
 // Ensure dotenv is loaded before creating the client (PM2 may not pass env vars)
@@ -4710,6 +4715,15 @@ router.post('/assistant-command', optionalAuth, async (req, res) => {
 
   const contextSummary = buildAssistantContextSummary(context) + characterRoster;
 
+  // Inject franchise knowledge + tech context into Amber's awareness
+  let knowledgeBlock = '';
+  try {
+    if (buildKnowledgeInjection) knowledgeBlock += await buildKnowledgeInjection();
+    if (getTechContext) knowledgeBlock += await getTechContext();
+  } catch (e) {
+    console.error('Knowledge injection failed:', e.message);
+  }
+
   const conversationHistory = history
     .filter(m => m.role && m.text)
     .slice(-6)
@@ -4722,6 +4736,7 @@ Your name is Amber. You are warm, capable, and direct.
 
 CURRENT APP STATE:
 ${contextSummary}
+${knowledgeBlock}
 
 YOUR ROLE:
 - Interpret natural language commands and map them to specific actions

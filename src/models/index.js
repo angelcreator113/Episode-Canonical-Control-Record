@@ -88,7 +88,13 @@ let WardrobeContentAssignment; // Wardrobe content assignment model
 let CharacterSpark; // Character Spark (3-field fast entry) model
 let SceneProposal; // Scene Intelligence Engine proposals
 let CharacterGrowthLog; // Character Growth Engine logs
-let FranchiseKnowledge; // Franchise Brain knowledge base
+let FranchiseKnowledge; // Franchise story knowledge brain
+let FranchiseTechKnowledge; // Franchise tech knowledge (build assistant only)
+let SessionBrief; // Session brief generation
+let PostGenerationReview; // Post-generation franchise review
+let WritingRhythm; // Writing rhythm tracking
+let WritingGoal; // Writing goals
+let MultiProductContent; // Multi-product content generation
 
 try {
   // Core models
@@ -263,8 +269,14 @@ try {
   SceneProposal = require('./SceneProposal')(sequelize);
   CharacterGrowthLog = require('./CharacterGrowthLog')(sequelize);
 
-  // Franchise Brain knowledge base
-  FranchiseKnowledge = require('./FranchiseKnowledge')(sequelize);
+  // Upgrade tables — tech knowledge, session briefs, reviews, rhythm, goals, multi-product
+  FranchiseKnowledge = require('./FranchiseKnowledge')(sequelize, DataTypes);
+  FranchiseTechKnowledge = require('./FranchiseTechKnowledge')(sequelize, DataTypes);
+  SessionBrief = require('./SessionBrief')(sequelize, DataTypes);
+  PostGenerationReview = require('./PostGenerationReview')(sequelize, DataTypes);
+  WritingRhythm = require('./WritingRhythm')(sequelize, DataTypes);
+  WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
+  MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -349,6 +361,12 @@ const requiredModels = {
   SceneProposal,
   CharacterGrowthLog,
   FranchiseKnowledge,
+  FranchiseTechKnowledge,
+  SessionBrief,
+  PostGenerationReview,
+  WritingRhythm,
+  WritingGoal,
+  MultiProductContent,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1548,3 +1566,9 @@ module.exports.CharacterSpark = CharacterSpark;
 module.exports.SceneProposal = SceneProposal;
 module.exports.CharacterGrowthLog = CharacterGrowthLog;
 module.exports.FranchiseKnowledge = FranchiseKnowledge;
+module.exports.FranchiseTechKnowledge = FranchiseTechKnowledge;
+module.exports.SessionBrief = SessionBrief;
+module.exports.PostGenerationReview = PostGenerationReview;
+module.exports.WritingRhythm = WritingRhythm;
+module.exports.WritingGoal = WritingGoal;
+module.exports.MultiProductContent = MultiProductContent;
