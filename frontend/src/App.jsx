@@ -84,6 +84,7 @@ const PressPublisher = lazy(() => import('./pages/PressPublisher'));
 const StoryEngine = lazy(() => import('./pages/StoryEngine'));
 const StoryEvaluationEngine = lazy(() => import('./pages/StoryEvaluationEngine'));
 const StoryProposer = lazy(() => import('./pages/StoryProposer'));
+const FranchiseBrain = lazy(() => import('./pages/FranchiseBrain'));
 const NovelAssembler = lazy(() => import('./pages/NovelAssembler'));
 const CharacterGenerator = lazy(() => import('./pages/CharacterGenerator'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
@@ -223,7 +224,8 @@ function AppContent() {
   const isAssembler = location.pathname === '/assembler';
   const isSetupWizard = location.pathname === '/setup';
   const isSceneProposer = location.pathname === '/scene-proposer';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isAssembler || isSetupWizard || isSceneProposer;
+  const isFranchiseBrain = location.pathname === '/franchise-brain';
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isAssembler || isSetupWizard || isSceneProposer || isFranchiseBrain;
   const hideFooter = isFullScreen;
 
   return (
@@ -370,6 +372,9 @@ function AppContent() {
 
           {/* Scene Intelligence Engine — Propose + Character Growth */}
           <Route path="/scene-proposer" element={<StoryProposer />} />
+
+          {/* Franchise Brain — Knowledge Base + Guard + Injection */}
+          <Route path="/franchise-brain" element={<FranchiseBrain />} />
 
           {/* World Studio — LalaVerse world character + scene hub */}
           <Route path="/world-studio" element={<WorldStudio />} />
