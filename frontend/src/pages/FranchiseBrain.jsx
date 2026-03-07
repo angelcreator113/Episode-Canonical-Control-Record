@@ -146,7 +146,7 @@ export default function FranchiseBrain() {
       if (innerTab === 'laws') params.set('category', 'franchise_law');
       else if (innerTab === 'active') params.set('status', 'active');
       else if (innerTab === 'pending') params.set('status', 'pending_review');
-      const res = await fetch(`${API}/api/v1/franchise-brain/entries?${params}`);
+      const res = await fetch(`${API}/franchise-brain/entries?${params}`);
       if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setEntries(data.entries || []);
@@ -164,7 +164,7 @@ export default function FranchiseBrain() {
     if (!form.title.trim() || !form.content.trim()) return;
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/entries`, {
+      const res = await fetch(`${API}/franchise-brain/entries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(form),
@@ -183,7 +183,7 @@ export default function FranchiseBrain() {
 
   async function activateEntry(id) {
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/entries/${id}/activate`, { method: 'PATCH' });
+      const res = await fetch(`${API}/franchise-brain/entries/${id}/activate`, { method: 'PATCH' });
       if (!res.ok) throw new Error('Failed to activate');
       showToast('Entry activated');
       load();
@@ -192,7 +192,7 @@ export default function FranchiseBrain() {
 
   async function archiveEntry(id) {
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/entries/${id}/archive`, { method: 'PATCH' });
+      const res = await fetch(`${API}/franchise-brain/entries/${id}/archive`, { method: 'PATCH' });
       if (!res.ok) throw new Error('Failed to archive');
       showToast('Entry archived');
       load();
@@ -203,7 +203,7 @@ export default function FranchiseBrain() {
     if (!ingestText.trim()) return;
     setIngesting(true);
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/ingest-document`, {
+      const res = await fetch(`${API}/franchise-brain/ingest-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ document_text: ingestText }),
@@ -224,7 +224,7 @@ export default function FranchiseBrain() {
     if (!guardText.trim()) return;
     setGuarding(true);
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/guard`, {
+      const res = await fetch(`${API}/franchise-brain/guard`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ content: guardText }),
@@ -243,7 +243,7 @@ export default function FranchiseBrain() {
     if (!extractText.trim()) return;
     setExtracting(true);
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/ingest-document`, {
+      const res = await fetch(`${API}/franchise-brain/ingest-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ document_text: extractText, source: 'chat_extract' }),

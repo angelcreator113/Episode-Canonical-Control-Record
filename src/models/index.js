@@ -361,6 +361,18 @@ const requiredModels = {
   SceneProposal,
   CharacterGrowthLog,
   FranchiseKnowledge,
+  DecisionLog,
+  ShowConfig,
+  ScriptTemplate,
+  ScriptLearningProfile,
+  ScriptEditHistory,
+  ScriptSuggestion,
+  TimelineData,
+  LalaverseBrand,
+  WardrobeBrandTag,
+  TherapyPendingSession,
+  WardrobeContentAssignment,
+  CharacterSpark,
   FranchiseTechKnowledge,
   SessionBrief,
   PostGenerationReview,
@@ -1500,7 +1512,6 @@ module.exports.SceneTemplate = SceneTemplate;
 module.exports.Wardrobe = Wardrobe;
 module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.OutfitSet = OutfitSet;
-module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.WardrobeLibrary = WardrobeLibrary;
 module.exports.OutfitSetItems = OutfitSetItems;
 module.exports.SceneLibrary = SceneLibrary;
@@ -1566,6 +1577,10 @@ module.exports.CharacterSpark = CharacterSpark;
 module.exports.SceneProposal = SceneProposal;
 module.exports.CharacterGrowthLog = CharacterGrowthLog;
 module.exports.FranchiseKnowledge = FranchiseKnowledge;
+module.exports.ShowAsset = ShowAsset;
+module.exports.EditMap = EditMap;
+module.exports.CharacterProfile = CharacterProfile;
+module.exports.CharacterTherapyProfile = CharacterTherapyProfile;
 module.exports.FranchiseTechKnowledge = FranchiseTechKnowledge;
 module.exports.SessionBrief = SessionBrief;
 module.exports.PostGenerationReview = PostGenerationReview;
