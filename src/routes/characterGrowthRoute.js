@@ -265,7 +265,7 @@ router.get('/character-growth/flagged', optionalAuth, async (req, res) => {
         {
           model: db.RegistryCharacter,
           as: 'character',
-          attributes: ['id', 'name', 'selected_name', 'wound', 'psychology'],
+          attributes: ['id', 'display_name', 'selected_name', 'core_wound', 'personality'],
         },
       ],
     });
