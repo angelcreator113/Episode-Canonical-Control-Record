@@ -1,49 +1,32 @@
-// models/MultiProductContent.js
-// Multi-product content — tracks content pieces that span multiple products/platforms
-
-const { DataTypes } = require('sequelize');
-
-module.exports = (sequelize) => {
-  const MultiProductContent = sequelize.define('MultiProductContent', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    title: {
-      type: DataTypes.STRING(200),
+'use strict';
+const { Model } = require('sequelize');
+module.exports = (sequelize, DataTypes) => {
+  class MultiProductContent extends Model {
+    static associate(models) {}
+  }
+  MultiProductContent.init({
+    id:       { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    story_id: { type: DataTypes.INTEGER, allowNull: false },
+    format: {
+      type: DataTypes.ENUM(
+        'instagram_caption', 'tiktok_concept', 'howto_lesson',
+        'bestie_newsletter', 'behind_the_scenes'
+      ),
       allowNull: false,
     },
-    source_content_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
-    source_type: {
-      type: DataTypes.STRING(50),
-      allowNull: true,
-    },
-    target_products: {
-      type: DataTypes.JSONB,
-      allowNull: false,
-      defaultValue: [],
-    },
-    adaptation_notes: {
-      type: DataTypes.TEXT,
-      allowNull: true,
-    },
+    content:       { type: DataTypes.TEXT, allowNull: false },
+    headline:      { type: DataTypes.STRING(200), allowNull: true },
+    emotional_core: { type: DataTypes.TEXT, allowNull: true },
+    book2_seed:    { type: DataTypes.BOOLEAN, defaultValue: false },
     status: {
-      type: DataTypes.ENUM('draft', 'adapting', 'review', 'published', 'archived'),
+      type: DataTypes.ENUM('draft', 'approved', 'posted', 'archived'),
       defaultValue: 'draft',
     },
-    published_at: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
+    posted_at:   { type: DataTypes.DATE, allowNull: true },
+    author_note: { type: DataTypes.TEXT, allowNull: true },
   }, {
-    tableName: 'multi_product_content',
-    underscored: true,
-    timestamps: true,
+    sequelize, modelName: 'MultiProductContent',
+    tableName: 'multi_product_content', underscored: true,
   });
-
   return MultiProductContent;
 };

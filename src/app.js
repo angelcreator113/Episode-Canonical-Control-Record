@@ -884,15 +884,6 @@ try {
   console.error('✗ Failed to load Character Growth routes:', e.message);
 }
 
-// Franchise Brain — knowledge base + guard + injection
-try {
-  const franchiseBrainRoutes = require('./routes/franchiseBrainRoutes');
-  app.use('/api/v1/franchise-brain', franchiseBrainRoutes);
-  console.log('✓ Franchise Brain routes loaded at /api/v1/franchise-brain');
-} catch (e) {
-  console.error('✗ Failed to load Franchise Brain routes:', e.message);
-}
-
 // Stories — Persistence + Social Import + Novel Assembler
 try {
   const storiesRoutes = require('./routes/stories');
@@ -1009,6 +1000,33 @@ try {
   console.log('✓ Onboarding routes loaded at /api/v1/onboarding');
 } catch (e) {
   console.error('✗ Failed to load Onboarding routes:', e.message);
+}
+
+// Upgrade routes (session briefs, post-gen reviews, writing rhythm, multi-product, tech knowledge)
+try {
+  const upgradeRoutes = require('./routes/upgradeRoutes');
+  app.use('/api/v1', upgradeRoutes);
+  console.log('✓ Upgrade routes loaded at /api/v1');
+} catch (e) {
+  console.error('✗ Failed to load Upgrade routes:', e.message);
+}
+
+// Franchise Brain routes (knowledge management, ingestion, guard)
+try {
+  const franchiseBrainRoutes = require('./routes/franchiseBrainRoutes');
+  app.use('/api/v1', franchiseBrainRoutes);
+  console.log('✓ Franchise Brain routes loaded at /api/v1');
+} catch (e) {
+  console.error('✗ Failed to load Franchise Brain routes:', e.message);
+}
+
+// PDF ingestion route (multer + pdf-parse → Claude extraction)
+try {
+  const pdfIngestRoute = require('./routes/pdfIngestRoute');
+  app.use('/api/v1/franchise-brain', pdfIngestRoute);
+  console.log('✓ PDF Ingest route loaded at /api/v1/franchise-brain');
+} catch (e) {
+  console.error('✗ Failed to load PDF Ingest route:', e.message);
 }
 
 // API info endpoint

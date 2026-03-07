@@ -1,57 +1,26 @@
-// models/WritingGoal.js
-// Writing goals — tracks session and project-level writing targets
-
-const { DataTypes } = require('sequelize');
-
-module.exports = (sequelize) => {
-  const WritingGoal = sequelize.define('WritingGoal', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    show_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
+'use strict';
+const { Model } = require('sequelize');
+module.exports = (sequelize, DataTypes) => {
+  class WritingGoal extends Model {
+    static associate(models) {}
+  }
+  WritingGoal.init({
+    id:              { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
     goal_type: {
-      type: DataTypes.ENUM('session', 'daily', 'weekly', 'project'),
-      allowNull: false,
-      defaultValue: 'session',
+      type: DataTypes.ENUM('daily', 'weekly', 'arc_stage', 'book'),
+      defaultValue: 'weekly',
     },
-    target_word_count: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
+    target_scenes:   { type: DataTypes.INTEGER, allowNull: true },
+    target_words:    { type: DataTypes.INTEGER, allowNull: true },
+    target_sessions: { type: DataTypes.INTEGER, allowNull: true },
+    cadence: {
+      type: DataTypes.ENUM('daily', 'weekdays', '3_per_week', 'burst'),
+      defaultValue: 'weekdays',
     },
-    target_scene_count: {
-      type: DataTypes.INTEGER,
-      allowNull: true,
-    },
-    actual_word_count: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-    },
-    actual_scene_count: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-    },
-    status: {
-      type: DataTypes.ENUM('active', 'completed', 'missed', 'cancelled'),
-      defaultValue: 'active',
-    },
-    due_at: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
-    completed_at: {
-      type: DataTypes.DATE,
-      allowNull: true,
-    },
+    active: { type: DataTypes.BOOLEAN, defaultValue: true },
   }, {
-    tableName: 'writing_goals',
-    underscored: true,
-    timestamps: true,
+    sequelize, modelName: 'WritingGoal',
+    tableName: 'writing_goals', underscored: true,
   });
-
   return WritingGoal;
 };

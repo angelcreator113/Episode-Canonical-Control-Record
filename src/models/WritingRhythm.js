@@ -1,49 +1,21 @@
-// models/WritingRhythm.js
-// Writing rhythm tracking — captures pacing, cadence, and flow patterns per author/show
-
-const { DataTypes } = require('sequelize');
-
-module.exports = (sequelize) => {
-  const WritingRhythm = sequelize.define('WritingRhythm', {
-    id: {
-      type: DataTypes.UUID,
-      defaultValue: DataTypes.UUIDV4,
-      primaryKey: true,
-    },
-    show_id: {
-      type: DataTypes.UUID,
-      allowNull: true,
-    },
-    rhythm_name: {
-      type: DataTypes.STRING(100),
-      allowNull: false,
-    },
-    pattern_data: {
-      type: DataTypes.JSONB,
-      allowNull: false,
-      defaultValue: {},
-    },
-    avg_sentence_length: {
-      type: DataTypes.FLOAT,
-      allowNull: true,
-    },
-    pacing_score: {
-      type: DataTypes.FLOAT,
-      allowNull: true,
-    },
-    sample_count: {
-      type: DataTypes.INTEGER,
-      defaultValue: 0,
-    },
-    status: {
-      type: DataTypes.ENUM('learning', 'active', 'archived'),
-      defaultValue: 'learning',
-    },
+'use strict';
+const { Model } = require('sequelize');
+module.exports = (sequelize, DataTypes) => {
+  class WritingRhythm extends Model {
+    static associate(models) {}
+  }
+  WritingRhythm.init({
+    id:               { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+    session_date:     { type: DataTypes.DATEONLY, allowNull: false },
+    scenes_proposed:  { type: DataTypes.INTEGER, defaultValue: 0 },
+    scenes_generated: { type: DataTypes.INTEGER, defaultValue: 0 },
+    scenes_approved:  { type: DataTypes.INTEGER, defaultValue: 0 },
+    words_written:    { type: DataTypes.INTEGER, defaultValue: 0 },
+    arc_stage:        { type: DataTypes.STRING(30), allowNull: true },
+    session_note:     { type: DataTypes.TEXT, allowNull: true },
   }, {
-    tableName: 'writing_rhythms',
-    underscored: true,
-    timestamps: true,
+    sequelize, modelName: 'WritingRhythm',
+    tableName: 'writing_rhythm', underscored: true,
   });
-
   return WritingRhythm;
 };

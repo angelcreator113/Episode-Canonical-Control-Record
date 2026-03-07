@@ -1,659 +1,538 @@
 // FranchiseBrain.jsx
-// Franchise Knowledge Base — /franchise-brain
-// Every locked decision, character truth, and franchise law in one place.
-// Upload documents. Type decisions. Extract from conversations. Guard every generation.
+// Franchise Knowledge Management — the living brain of the LalaVerse
+// Tab in the Universe page, story-side cluster (knowledge tab)
+// Tabbed layout: Franchise Laws | Active Knowledge | Pending Review | Ingest Document | Extract from Chat | Franchise Guard
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import PdfIngestZone from '../components/PdfIngestZone';
 
 const API = import.meta.env.VITE_API_URL || '';
 
 const C = {
-  bg: '#f7f4ef',
+  bg: '#faf6f0',
   surface: '#ffffff',
-  surfaceAlt: '#f0ece5',
-  surfaceRaise: '#faf8f4',
-  border: '#e2ddd4',
-  borderLight: '#ebe6de',
-  text: '#1c1814',
-  textDim: '#6b6560',
-  textFaint: '#a09a92',
-  gold: '#b8863e',
-  goldSoft: '#b8863e14',
-  goldMid: '#b8863e33',
-  red: '#b5544f',
-  redSoft: '#b5544f12',
-  green: '#4a8c6e',
-  greenSoft: '#4a8c6e12',
-  blue: '#4a6e8c',
-  blueSoft: '#4a6e8c12',
-  purple: '#7a5a9e',
-  purpleSoft: '#7a5a9e12',
-  orange: '#b57a3e',
-  law: '#b8863e',
+  border: '#e8e0d4',
+  text: '#1a1714',
+  textDim: '#6b6259',
+  textFaint: '#a89f94',
+  accent: '#b8863e',
+  gold: '#c9a96e',
+  red: '#b84040',
+  green: '#3a8a60',
+  blue: '#3a6a8a',
+  purple: '#6a3a8a',
 };
 
-const CATEGORY_CONFIG = {
-  franchise_law:    { label: 'Franchise Law',    color: C.gold,   icon: '⬡' },
-  character:        { label: 'Character',         color: C.blue,   icon: '◎' },
-  narrative:        { label: 'Narrative',         color: C.purple, icon: '◇' },
-  locked_decision:  { label: 'Locked Decision',   color: C.red,    icon: '◈' },
-  brand:            { label: 'Brand',             color: C.green,  icon: '✦' },
-  world:            { label: 'World',             color: C.orange, icon: '○' },
-  technical:        { label: 'Technical',         color: C.textDim,icon: '⧖' },
-};
-
-const SEVERITY_CONFIG = {
-  critical:  { label: 'Critical',  color: C.red },
-  important: { label: 'Important', color: C.gold },
-  context:   { label: 'Context',   color: C.textDim },
-};
-
-const SOURCE_DOCS = [
-  { value: 'franchise_bible', label: 'Franchise Bible' },
-  { value: 'tdd', label: 'TDD' },
-  { value: 'roadmap', label: 'Roadmap' },
-  { value: 'deviations', label: 'Deviations Log' },
-  { value: 'conversation', label: 'Conversation' },
-  { value: 'direct', label: 'Direct Entry' },
+const CATEGORIES = [
+  { key: 'franchise_law', label: 'Franchise Law', icon: '⚖', color: C.red },
+  { key: 'character',     label: 'Character',     icon: '◎', color: C.purple },
+  { key: 'narrative',     label: 'Narrative',      icon: '◇', color: C.blue },
+  { key: 'locked_decision', label: 'Locked Decision', icon: '🔒', color: C.gold },
+  { key: 'technical',    label: 'Technical',      icon: '⚙', color: C.textDim },
+  { key: 'brand',        label: 'Brand',          icon: '★', color: C.accent },
+  { key: 'world',        label: 'World',          icon: '◈', color: C.green },
 ];
 
-const TABS = [
-  { key: 'laws',      label: '⬡ Franchise Laws' },
-  { key: 'active',    label: 'Active Knowledge' },
-  { key: 'pending',   label: 'Pending Review' },
-  { key: 'ingest',    label: 'Ingest Document' },
-  { key: 'extract',   label: 'Extract from Chat' },
-  { key: 'guard',     label: 'Franchise Guard' },
+const SEVERITIES = ['critical', 'important', 'context'];
+
+const STATUS_LABELS = {
+  pending_review: '🟡 Pending Review',
+  active:         '🟢 Active',
+  superseded:     '⚫ Superseded',
+  archived:       '📦 Archived',
+};
+
+const INNER_TABS = [
+  { key: 'laws',      label: 'Franchise Laws',   icon: '⬡' },
+  { key: 'active',    label: 'Active Knowledge',  icon: null },
+  { key: 'pending',   label: 'Pending Review',    icon: null },
+  { key: 'ingest',    label: 'Ingest Document',   icon: null },
+  { key: 'extract',   label: 'Extract from Chat', icon: null },
+  { key: 'guard',     label: 'Franchise Guard',   icon: null },
 ];
+
+const S = {
+  card: {
+    background: C.surface,
+    border: `1px solid ${C.border}`,
+    borderRadius: 10,
+    padding: 16,
+    marginBottom: 12,
+    transition: 'border-color 0.2s',
+  },
+  badge: (color) => ({
+    display: 'inline-block',
+    fontSize: 11,
+    letterSpacing: '0.03em',
+    padding: '2px 8px',
+    borderRadius: 6,
+    background: color + '14',
+    color: color,
+    fontWeight: 600,
+  }),
+  btn: {
+    padding: '6px 14px',
+    fontSize: 12,
+    fontWeight: 600,
+    borderRadius: 6,
+    border: `1px solid ${C.border}`,
+    background: C.surface,
+    color: C.text,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+  },
+  btnPrimary: {
+    padding: '8px 18px',
+    fontSize: 13,
+    fontWeight: 600,
+    borderRadius: 6,
+    border: 'none',
+    background: C.accent,
+    color: '#fff',
+    cursor: 'pointer',
+  },
+  input: {
+    width: '100%',
+    padding: '8px 10px',
+    fontSize: 13,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+    background: C.surface,
+    color: C.text,
+    outline: 'none',
+    boxSizing: 'border-box',
+  },
+  textarea: {
+    width: '100%',
+    padding: '8px 10px',
+    fontSize: 13,
+    border: `1px solid ${C.border}`,
+    borderRadius: 6,
+    background: C.surface,
+    color: C.text,
+    outline: 'none',
+    resize: 'vertical',
+    minHeight: 80,
+    fontFamily: 'inherit',
+    boxSizing: 'border-box',
+  },
+};
 
 export default function FranchiseBrain() {
-  const [activeTab, setActiveTab] = useState('laws');
   const [entries, setEntries] = useState([]);
-  const [counts, setCounts] = useState({});
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState(null);
-
-  // Filters
-  const [filterCategory, setFilterCategory] = useState('');
-  const [filterSeverity, setFilterSeverity] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // New entry form
-  const [showNewEntry, setShowNewEntry] = useState(false);
-  const [newEntry, setNewEntry] = useState({ title: '', content: '', category: 'narrative', severity: 'important', applies_to: '', source_document: 'direct' });
-  const [savingEntry, setSavingEntry] = useState(false);
-
-  // Ingest
-  const [docText, setDocText] = useState('');
-  const [docSource, setDocSource] = useState('franchise_bible');
-  const [docVersion, setDocVersion] = useState('v3.1');
+  const [loading, setLoading] = useState(true);
+  const [innerTab, setInnerTab] = useState('laws');
+  const [showForm, setShowForm] = useState(false);
+  const [form, setForm] = useState({ title: '', content: '', category: 'narrative', severity: 'important', always_inject: false });
+  const [saving, setSaving] = useState(false);
+  const [ingestText, setIngestText] = useState('');
   const [ingesting, setIngesting] = useState(false);
-  const [ingestResult, setIngestResult] = useState(null);
-
-  // Conversation extract
-  const [chatText, setChatText] = useState('');
-  const [extracting, setExtracting] = useState(false);
-  const [extractResult, setExtractResult] = useState(null);
-
-  // Guard
-  const [guardBrief, setGuardBrief] = useState('');
-  const [guardChars, setGuardChars] = useState('');
-  const [guardType, setGuardType] = useState('');
-  const [guardRunning, setGuardRunning] = useState(false);
+  const [guardText, setGuardText] = useState('');
   const [guardResult, setGuardResult] = useState(null);
+  const [guarding, setGuarding] = useState(false);
+  const [extractText, setExtractText] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [toast, setToast] = useState(null);
 
-  // Editing
-  const [editingId, setEditingId] = useState(null);
-  const [editContent, setEditContent] = useState('');
+  const showToast = useCallback((msg, type = 'success') => {
+    setToast({ msg, type });
+    setTimeout(() => setToast(null), 3000);
+  }, []);
 
-  useEffect(() => { loadEntries(); }, [activeTab, filterCategory, filterSeverity, searchQuery]);
-
-  async function loadEntries() {
-    setLoading(true);
+  // Load entries — filter based on active inner tab
+  const load = useCallback(async () => {
     try {
       const params = new URLSearchParams();
-      if (activeTab === 'laws') params.set('always_inject', 'true');
-      else if (activeTab === 'pending') params.set('status', 'pending_review');
-      else if (activeTab === 'active') params.set('status', 'active');
-      if (filterCategory) params.set('category', filterCategory);
-      if (filterSeverity) params.set('severity', filterSeverity);
-      if (searchQuery) params.set('search', searchQuery);
-
+      if (innerTab === 'laws') params.set('category', 'franchise_law');
+      else if (innerTab === 'active') params.set('status', 'active');
+      else if (innerTab === 'pending') params.set('status', 'pending_review');
       const res = await fetch(`${API}/franchise-brain/entries?${params}`);
+      if (!res.ok) throw new Error('Failed to load');
       const data = await res.json();
       setEntries(data.entries || []);
-      setCounts(data.counts || {});
-    } catch (err) {
-      setError(err.message);
+    } catch (e) {
+      showToast(e.message, 'error');
     } finally {
       setLoading(false);
     }
-  }
+  }, [innerTab, showToast]);
 
-  async function saveNewEntry() {
-    setSavingEntry(true);
+  useEffect(() => { setLoading(true); load(); }, [load]);
+
+  async function handleCreate(e) {
+    e.preventDefault();
+    if (!form.title.trim() || !form.content.trim()) return;
+    setSaving(true);
     try {
       const res = await fetch(`${API}/franchise-brain/entries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...newEntry,
-          applies_to: newEntry.applies_to.split(',').map(t => t.trim()).filter(Boolean),
-        }),
+        body: JSON.stringify(form),
       });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setShowNewEntry(false);
-      setNewEntry({ title: '', content: '', category: 'narrative', severity: 'important', applies_to: '', source_document: 'direct' });
-      loadEntries();
-    } catch (err) {
-      setError(err.message);
+      if (!res.ok) throw new Error('Failed to create');
+      showToast('Entry created');
+      setForm({ title: '', content: '', category: 'narrative', severity: 'important', always_inject: false });
+      setShowForm(false);
+      load();
+    } catch (e) {
+      showToast(e.message, 'error');
     } finally {
-      setSavingEntry(false);
+      setSaving(false);
     }
   }
 
   async function activateEntry(id) {
-    await fetch(`${API}/franchise-brain/entries/${id}/activate`, { method: 'POST' });
-    loadEntries();
+    try {
+      const res = await fetch(`${API}/franchise-brain/entries/${id}/activate`, { method: 'PATCH' });
+      if (!res.ok) throw new Error('Failed to activate');
+      showToast('Entry activated');
+      load();
+    } catch (e) { showToast(e.message, 'error'); }
   }
 
   async function archiveEntry(id) {
-    await fetch(`${API}/franchise-brain/entries/${id}/archive`, { method: 'POST' });
-    loadEntries();
-  }
-
-  async function saveEdit(id) {
-    await fetch(`${API}/franchise-brain/entries/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ content: editContent }),
-    });
-    setEditingId(null);
-    loadEntries();
+    try {
+      const res = await fetch(`${API}/franchise-brain/entries/${id}/archive`, { method: 'PATCH' });
+      if (!res.ok) throw new Error('Failed to archive');
+      showToast('Entry archived');
+      load();
+    } catch (e) { showToast(e.message, 'error'); }
   }
 
   async function handleIngest() {
-    if (!docText.trim()) return;
-    setIngesting(true); setIngestResult(null);
+    if (!ingestText.trim()) return;
+    setIngesting(true);
     try {
       const res = await fetch(`${API}/franchise-brain/ingest-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ document_text: docText, source_document: docSource, source_version: docVersion }),
+        body: JSON.stringify({ document_text: ingestText }),
       });
+      if (!res.ok) throw new Error('Ingestion failed');
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setIngestResult(data);
-      setDocText('');
-    } catch (err) {
-      setError(err.message);
+      showToast(`Ingested ${data.entries_created || 0} entries`);
+      setIngestText('');
+      setInnerTab('pending');
+    } catch (e) {
+      showToast(e.message, 'error');
     } finally {
       setIngesting(false);
     }
   }
 
-  async function handleExtract() {
-    if (!chatText.trim()) return;
-    setExtracting(true); setExtractResult(null);
+  async function handleGuard() {
+    if (!guardText.trim()) return;
+    setGuarding(true);
     try {
-      const res = await fetch(`${API}/franchise-brain/extract-conversation`, {
+      const res = await fetch(`${API}/franchise-brain/guard`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ conversation_text: chatText }),
+        body: JSON.stringify({ content: guardText }),
       });
+      if (!res.ok) throw new Error('Guard check failed');
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setExtractResult(data);
-      setChatText('');
-    } catch (err) {
-      setError(err.message);
+      setGuardResult(data);
+    } catch (e) {
+      showToast(e.message, 'error');
+    } finally {
+      setGuarding(false);
+    }
+  }
+
+  async function handleExtract() {
+    if (!extractText.trim()) return;
+    setExtracting(true);
+    try {
+      const res = await fetch(`${API}/franchise-brain/ingest-document`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ document_text: extractText, source: 'chat_extract' }),
+      });
+      if (!res.ok) throw new Error('Extraction failed');
+      const data = await res.json();
+      showToast(`Extracted ${data.entries_created || 0} entries`);
+      setExtractText('');
+      setInnerTab('pending');
+    } catch (e) {
+      showToast(e.message, 'error');
     } finally {
       setExtracting(false);
     }
   }
 
-  async function handleGuard() {
-    if (!guardBrief.trim()) return;
-    setGuardRunning(true); setGuardResult(null);
-    try {
-      const res = await fetch(`${API}/franchise-brain/guard`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          scene_brief: guardBrief,
-          character_names: guardChars.split(',').map(c => c.trim()).filter(Boolean),
-          scene_type: guardType,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
-      setGuardResult(data);
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setGuardRunning(false);
-    }
-  }
-
-  const displayEntries = activeTab === 'laws'
-    ? entries.filter(e => e.always_inject)
-    : entries;
+  const catLookup = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', fontFamily: 'system-ui, sans-serif', color: C.text }}>
-
+    <div style={{ background: C.bg, minHeight: '70vh' }}>
       {/* Header */}
-      <div style={{ borderBottom: `1px solid ${C.border}`, padding: '18px 28px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: C.surface }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div style={{ width: '3px', height: '24px', background: C.gold, borderRadius: '1px' }} />
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '28px 32px 20px' }}>
+        <div style={{ display: 'flex', gap: 14 }}>
+          <div style={{ width: 4, background: C.accent, borderRadius: 2, alignSelf: 'stretch' }} />
           <div>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: '17px', fontWeight: '600', color: C.text }}>Franchise Brain</div>
-            <div style={{ fontSize: '11px', color: C.textFaint, letterSpacing: '0.1em', textTransform: 'uppercase', marginTop: '2px' }}>
+            <h2 style={{ margin: 0, fontSize: 22, fontWeight: 700, color: C.text }}>Franchise Brain</h2>
+            <div style={{ fontSize: 12, letterSpacing: '0.12em', color: C.accent, marginTop: 4, textTransform: 'uppercase', fontWeight: 500 }}>
               Every decision. Every law. Every locked truth.
             </div>
           </div>
         </div>
-
-        <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-          {counts.laws > 0 && (
-            <div style={{ padding: '5px 12px', background: C.goldSoft, border: `1px solid ${C.goldMid}`, borderRadius: '2px', fontSize: '11px', color: C.gold }}>
-              {counts.laws} absolute laws
-            </div>
-          )}
-          {counts.pending_review > 0 && (
-            <div style={{ padding: '5px 12px', background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: '2px', fontSize: '11px', color: C.red }}>
-              {counts.pending_review} pending review
-            </div>
-          )}
-          <button onClick={() => setShowNewEntry(true)} style={{ padding: '8px 16px', background: C.gold, border: 'none', borderRadius: '2px', fontSize: '12px', color: '#ffffff', fontWeight: '700', cursor: 'pointer', letterSpacing: '0.04em' }}>
-            + Add Decision
-          </button>
-        </div>
+        <button style={S.btnPrimary} onClick={() => { setShowForm(true); setInnerTab('active'); }}>
+          + Add Decision
+        </button>
       </div>
 
-      {/* Tabs */}
-      <div style={{ borderBottom: `1px solid ${C.border}`, display: 'flex', padding: '0 28px', background: C.surface, overflowX: 'auto' }}>
-        {TABS.map(tab => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
-            background: 'none', border: 'none',
-            borderBottom: activeTab === tab.key ? `2px solid ${C.gold}` : '2px solid transparent',
-            padding: '12px 18px', marginBottom: '-1px',
-            fontSize: '12px', letterSpacing: '0.04em',
-            color: activeTab === tab.key ? C.text : C.textDim,
-            cursor: 'pointer', whiteSpace: 'nowrap',
-          }}>{tab.label}</button>
-        ))}
+      {/* Inner tabs */}
+      <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, padding: '0 32px', gap: 0 }}>
+        {INNER_TABS.map(tab => {
+          const active = innerTab === tab.key;
+          return (
+            <button
+              key={tab.key}
+              onClick={() => setInnerTab(tab.key)}
+              style={{
+                background: 'none',
+                border: 'none',
+                borderBottom: active ? `2px solid ${C.accent}` : '2px solid transparent',
+                padding: '10px 18px',
+                marginBottom: -1,
+                fontSize: 13,
+                color: active ? C.text : C.textFaint,
+                fontWeight: active ? 600 : 400,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 5,
+                transition: 'color 0.15s',
+              }}
+            >
+              {tab.icon && <span style={{ fontSize: 11, opacity: active ? 1 : 0.5 }}>{tab.icon}</span>}
+              {tab.label}
+            </button>
+          );
+        })}
       </div>
 
-      {error && (
-        <div style={{ margin: '16px 28px 0', background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: '2px', padding: '10px 14px', fontSize: '13px', color: C.red }}>
-          {error} <button onClick={() => setError(null)} style={{ background: 'none', border: 'none', color: C.red, cursor: 'pointer', marginLeft: '8px' }}>✕</button>
+      {/* Tab content */}
+      <div style={{ padding: '24px 32px' }}>
+
+        {/* Create form — shows on any tab when triggered */}
+        {showForm && (
+          <form onSubmit={handleCreate} style={{ ...S.card, marginBottom: 20, borderColor: C.accent }}>
+            <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: C.accent }}>New Knowledge Entry</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={{ fontSize: 11, color: C.textDim, marginBottom: 4, display: 'block' }}>Title</label>
+                <input style={S.input} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. JustAWoman is never small" />
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+                <div>
+                  <label style={{ fontSize: 11, color: C.textDim, marginBottom: 4, display: 'block' }}>Category</label>
+                  <select style={S.input} value={form.category} onChange={e => setForm(f => ({ ...f, category: e.target.value }))}>
+                    {CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label style={{ fontSize: 11, color: C.textDim, marginBottom: 4, display: 'block' }}>Severity</label>
+                  <select style={S.input} value={form.severity} onChange={e => setForm(f => ({ ...f, severity: e.target.value }))}>
+                    {SEVERITIES.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              </div>
+            </div>
+            <div style={{ marginBottom: 10 }}>
+              <label style={{ fontSize: 11, color: C.textDim, marginBottom: 4, display: 'block' }}>Content</label>
+              <textarea style={S.textarea} value={form.content} onChange={e => setForm(f => ({ ...f, content: e.target.value }))} placeholder="What the AI must know, always..." />
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <label style={{ fontSize: 12, color: C.textDim, display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.always_inject} onChange={e => setForm(f => ({ ...f, always_inject: e.target.checked }))} />
+                Always inject into prompts
+              </label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" style={S.btn} onClick={() => setShowForm(false)}>Cancel</button>
+                <button type="submit" style={S.btnPrimary} disabled={saving}>{saving ? 'Saving...' : 'Create Entry'}</button>
+              </div>
+            </div>
+          </form>
+        )}
+
+        {/* ── Franchise Laws tab ── */}
+        {innerTab === 'laws' && (
+          <EntriesList entries={entries} loading={loading} catLookup={catLookup} emptyMsg="No franchise laws found — run the migration to seed the six absolute laws." onActivate={activateEntry} onArchive={archiveEntry} />
+        )}
+
+        {/* ── Active Knowledge tab ── */}
+        {innerTab === 'active' && (
+          <EntriesList entries={entries} loading={loading} catLookup={catLookup} emptyMsg="No active knowledge entries yet. Add decisions or ingest documents to populate." onActivate={activateEntry} onArchive={archiveEntry} />
+        )}
+
+        {/* ── Pending Review tab ── */}
+        {innerTab === 'pending' && (
+          <EntriesList entries={entries} loading={loading} catLookup={catLookup} emptyMsg="No entries pending review." onActivate={activateEntry} onArchive={archiveEntry} />
+        )}
+
+        {/* ── Ingest Document tab ── */}
+        {innerTab === 'ingest' && (
+          <div style={{ maxWidth: 720 }}>
+            <PdfIngestZone
+              brain="story"
+              source="franchise_bible"
+              version="v3.1"
+              onResult={(result) => {
+                showToast(`Ingested ${result.entries_extracted || 0} entries from PDF`);
+                if (result.brain === 'story') setInnerTab('pending');
+                else load();
+              }}
+            />
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '16px 0' }}>
+              <div style={{ flex: 1, height: 1, background: '#e0d9ce' }} />
+              <span style={{ fontSize: 11, color: '#a89f94', letterSpacing: '0.08em' }}>OR PASTE TEXT</span>
+              <div style={{ flex: 1, height: 1, background: '#e0d9ce' }} />
+            </div>
+
+            <div style={{ ...S.card, borderColor: C.blue }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.text }}>📄 Document Ingestion</div>
+              <div style={{ fontSize: 12, color: C.textDim, marginBottom: 14 }}>
+                Paste a franchise document, character bible, or story outline. AI will extract knowledge entries for review.
+              </div>
+              <textarea
+                style={{ ...S.textarea, minHeight: 160 }}
+                value={ingestText}
+                onChange={e => setIngestText(e.target.value)}
+                placeholder="Paste franchise document text here..."
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                <button style={S.btnPrimary} onClick={handleIngest} disabled={ingesting || !ingestText.trim()}>
+                  {ingesting ? 'Ingesting...' : 'Ingest & Extract'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Extract from Chat tab ── */}
+        {innerTab === 'extract' && (
+          <div style={{ maxWidth: 720 }}>
+            <div style={{ ...S.card, borderColor: C.purple }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.text }}>💬 Extract from Chat</div>
+              <div style={{ fontSize: 12, color: C.textDim, marginBottom: 14 }}>
+                Paste a conversation, Amber session, or brainstorm. AI will identify franchise-relevant decisions and knowledge to extract.
+              </div>
+              <textarea
+                style={{ ...S.textarea, minHeight: 160 }}
+                value={extractText}
+                onChange={e => setExtractText(e.target.value)}
+                placeholder="Paste chat / conversation text here..."
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                <button style={S.btnPrimary} onClick={handleExtract} disabled={extracting || !extractText.trim()}>
+                  {extracting ? 'Extracting...' : 'Extract Knowledge'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── Franchise Guard tab ── */}
+        {innerTab === 'guard' && (
+          <div style={{ maxWidth: 720 }}>
+            <div style={{ ...S.card, borderColor: C.red }}>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 6, color: C.text }}>🛡 Franchise Guard</div>
+              <div style={{ fontSize: 12, color: C.textDim, marginBottom: 14 }}>
+                Paste any content — script, chapter, outline — and the guard will check it against all active franchise laws and knowledge.
+              </div>
+              <textarea
+                style={{ ...S.textarea, minHeight: 160 }}
+                value={guardText}
+                onChange={e => setGuardText(e.target.value)}
+                placeholder="Paste content to check against franchise rules..."
+              />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 12 }}>
+                <button style={{ ...S.btnPrimary, background: C.red }} onClick={handleGuard} disabled={guarding || !guardText.trim()}>
+                  {guarding ? 'Checking...' : 'Run Guard Check'}
+                </button>
+              </div>
+            </div>
+            {guardResult && (
+              <div style={{ ...S.card, marginTop: 16, borderColor: guardResult.violations?.length ? C.red : C.green }}>
+                <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, color: guardResult.violations?.length ? C.red : C.green }}>
+                  {guardResult.violations?.length ? `⚠ ${guardResult.violations.length} violation(s) found` : '✓ No violations detected'}
+                </div>
+                {guardResult.violations?.map((v, i) => (
+                  <div key={i} style={{ fontSize: 13, color: C.textDim, padding: '6px 0', borderTop: i > 0 ? `1px solid ${C.border}` : 'none' }}>
+                    <span style={{ fontWeight: 600, color: C.red }}>{v.rule || v.law}</span>
+                    {v.explanation && <span> — {v.explanation}</span>}
+                  </div>
+                ))}
+                {guardResult.summary && (
+                  <div style={{ fontSize: 13, color: C.textDim, marginTop: 8, lineHeight: 1.6 }}>{guardResult.summary}</div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Toast */}
+      {toast && (
+        <div style={{
+          position: 'fixed', bottom: 24, right: 24, padding: '10px 20px',
+          borderRadius: 8, fontSize: 13, fontWeight: 600, zIndex: 9999,
+          background: toast.type === 'error' ? C.red : C.green, color: '#fff',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.15)',
+        }}>
+          {toast.msg}
         </div>
       )}
-
-      <div style={{ padding: '24px 28px' }}>
-
-        {/* New Entry Modal */}
-        {showNewEntry && (
-          <div style={{ marginBottom: '24px', background: C.surface, border: `1px solid ${C.gold}44`, borderTop: `2px solid ${C.gold}`, borderRadius: '2px', padding: '20px' }}>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: '15px', fontWeight: '600', marginBottom: '16px', color: C.gold }}>Add a Decision</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-              <div>
-                <FieldLabel>Title</FieldLabel>
-                <input value={newEntry.title} onChange={e => setNewEntry(p => ({ ...p, title: e.target.value }))} placeholder="Short label for this decision" style={iS} />
-              </div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
-                <div>
-                  <FieldLabel>Category</FieldLabel>
-                  <select value={newEntry.category} onChange={e => setNewEntry(p => ({ ...p, category: e.target.value }))} style={iS}>
-                    {Object.entries(CATEGORY_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <FieldLabel>Severity</FieldLabel>
-                  <select value={newEntry.severity} onChange={e => setNewEntry(p => ({ ...p, severity: e.target.value }))} style={iS}>
-                    {Object.entries(SEVERITY_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                  </select>
-                </div>
-              </div>
-            </div>
-            <div style={{ marginBottom: '12px' }}>
-              <FieldLabel>Decision — write it as a direct active statement</FieldLabel>
-              <textarea value={newEntry.content} onChange={e => setNewEntry(p => ({ ...p, content: e.target.value }))} placeholder="JustAWoman never compares herself to other women. She watches successful women, gets inspired, and pushes herself harder. Any scene that frames her as competitive with or diminished by another woman is a franchise violation." style={{ ...iS, height: '100px', resize: 'vertical', lineHeight: '1.7' }} />
-            </div>
-            <div style={{ marginBottom: '16px' }}>
-              <FieldLabel>Applies to (comma-separated tags)</FieldLabel>
-              <input value={newEntry.applies_to} onChange={e => setNewEntry(p => ({ ...p, applies_to: e.target.value }))} placeholder="JustAWoman, all_scenes, character" style={iS} />
-            </div>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button onClick={saveNewEntry} disabled={!newEntry.title || !newEntry.content || savingEntry} style={{ padding: '10px 20px', background: newEntry.title && newEntry.content ? C.gold : C.surfaceAlt, border: 'none', borderRadius: '2px', color: newEntry.title && newEntry.content ? '#ffffff' : C.textFaint, fontSize: '13px', fontWeight: '700', cursor: newEntry.title && newEntry.content ? 'pointer' : 'default' }}>
-                {savingEntry ? 'Saving…' : 'Save & Activate →'}
-              </button>
-              <button onClick={() => setShowNewEntry(false)} style={{ padding: '10px 16px', background: 'none', border: `1px solid ${C.border}`, borderRadius: '2px', color: C.textDim, fontSize: '13px', cursor: 'pointer' }}>Cancel</button>
-            </div>
-          </div>
-        )}
-
-        {/* Laws + Active tabs */}
-        {(activeTab === 'laws' || activeTab === 'active') && (
-          <div>
-            {activeTab === 'active' && (
-              <div style={{ display: 'flex', gap: '8px', marginBottom: '16px', flexWrap: 'wrap' }}>
-                <input value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search decisions…" style={{ ...iS, flex: 1, minWidth: '200px' }} />
-                <select value={filterCategory} onChange={e => setFilterCategory(e.target.value)} style={{ ...iS, width: 'auto' }}>
-                  <option value="">All categories</option>
-                  {Object.entries(CATEGORY_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-                <select value={filterSeverity} onChange={e => setFilterSeverity(e.target.value)} style={{ ...iS, width: 'auto' }}>
-                  <option value="">All severity</option>
-                  {Object.entries(SEVERITY_CONFIG).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
-                </select>
-              </div>
-            )}
-
-            {loading ? (
-              <div style={{ padding: '40px', textAlign: 'center' }}><Spin /></div>
-            ) : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {displayEntries.length === 0 && (
-                  <div style={{ padding: '40px', textAlign: 'center', color: C.textFaint, fontSize: '14px' }}>
-                    {activeTab === 'laws' ? 'No franchise laws found — run the migration to seed the six absolute laws.' : 'No entries found.'}
-                  </div>
-                )}
-                {displayEntries.map(entry => {
-                  const catConf = CATEGORY_CONFIG[entry.category] || CATEGORY_CONFIG.narrative;
-                  const sevConf = SEVERITY_CONFIG[entry.severity] || SEVERITY_CONFIG.important;
-                  const isEditing = editingId === entry.id;
-
-                  return (
-                    <div key={entry.id} style={{
-                      background: C.surface,
-                      border: `1px solid ${entry.always_inject ? C.goldMid : C.border}`,
-                      borderLeft: `3px solid ${entry.always_inject ? C.gold : catConf.color}`,
-                      borderRadius: '2px', padding: '16px 18px',
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '16px' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '8px', flexWrap: 'wrap' }}>
-                            {entry.always_inject && (
-                              <div style={{ padding: '2px 8px', background: C.goldSoft, border: `1px solid ${C.goldMid}`, borderRadius: '2px', fontSize: '9px', color: C.gold, letterSpacing: '0.12em', fontWeight: '700', textTransform: 'uppercase' }}>
-                                ⬡ ABSOLUTE LAW
-                              </div>
-                            )}
-                            <div style={{ padding: '2px 8px', background: `${catConf.color}12`, border: `1px solid ${catConf.color}33`, borderRadius: '2px', fontSize: '10px', color: catConf.color, letterSpacing: '0.08em' }}>
-                              {catConf.icon} {catConf.label}
-                            </div>
-                            <div style={{ padding: '2px 8px', background: `${sevConf.color}10`, border: `1px solid ${sevConf.color}28`, borderRadius: '2px', fontSize: '10px', color: sevConf.color }}>
-                              {sevConf.label}
-                            </div>
-                            {entry.source_document && (
-                              <div style={{ fontSize: '10px', color: C.textFaint }}>{entry.source_document} {entry.source_version || ''}</div>
-                            )}
-                          </div>
-
-                          <div style={{ fontFamily: 'Georgia, serif', fontSize: '14px', fontWeight: '600', color: C.text, marginBottom: '8px' }}>{entry.title}</div>
-
-                          {isEditing ? (
-                            <div>
-                              <textarea value={editContent} onChange={e => setEditContent(e.target.value)} style={{ ...iS, height: '120px', resize: 'vertical', lineHeight: '1.7', marginBottom: '8px' }} />
-                              <div style={{ display: 'flex', gap: '6px' }}>
-                                <button onClick={() => saveEdit(entry.id)} style={sBtn(C.gold)}>Save</button>
-                                <button onClick={() => setEditingId(null)} style={sBtn(C.textFaint, true)}>Cancel</button>
-                              </div>
-                            </div>
-                          ) : (
-                            <p style={{ fontSize: '13px', color: C.textDim, lineHeight: '1.7', margin: 0 }}>{entry.content}</p>
-                          )}
-
-                          {entry.applies_to?.length > 0 && (
-                            <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap', marginTop: '8px' }}>
-                              {entry.applies_to.map(tag => (
-                                <div key={tag} style={{ padding: '2px 7px', background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: '2px', fontSize: '10px', color: C.textFaint }}>
-                                  {tag}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-
-                          {entry.injection_count > 0 && (
-                            <div style={{ fontSize: '10px', color: C.textFaint, marginTop: '6px' }}>
-                              Injected {entry.injection_count}× {entry.last_injected_at ? `· Last: ${new Date(entry.last_injected_at).toLocaleDateString()}` : ''}
-                            </div>
-                          )}
-                        </div>
-
-                        {!entry.always_inject && (
-                          <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', flexShrink: 0 }}>
-                            {!isEditing && (
-                              <button onClick={() => { setEditingId(entry.id); setEditContent(entry.content); }} style={sBtn(C.blue, true)}>Edit</button>
-                            )}
-                            <button onClick={() => archiveEntry(entry.id)} style={sBtn(C.textFaint, true)}>Archive</button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Pending tab */}
-        {activeTab === 'pending' && (
-          <div>
-            <p style={{ fontSize: '13px', color: C.textFaint, marginBottom: '16px', lineHeight: '1.6' }}>
-              These entries were extracted from documents or conversations. Review each one — activate what's correct, archive what isn't. Nothing in this list is injecting into generation yet.
-            </p>
-            {loading ? <div style={{ padding: '40px', textAlign: 'center' }}><Spin /></div> : (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                {entries.length === 0 && <div style={{ padding: '40px', textAlign: 'center', color: C.textFaint }}>No entries pending review.</div>}
-                {entries.map(entry => {
-                  const catConf = CATEGORY_CONFIG[entry.category] || CATEGORY_CONFIG.narrative;
-                  return (
-                    <div key={entry.id} style={{ background: C.surface, border: `1px solid ${C.border}`, borderLeft: `3px solid ${catConf.color}`, borderRadius: '2px', padding: '16px 18px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '16px', alignItems: 'flex-start' }}>
-                        <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', gap: '8px', marginBottom: '8px', flexWrap: 'wrap', alignItems: 'center' }}>
-                            <div style={{ padding: '2px 8px', background: `${catConf.color}12`, border: `1px solid ${catConf.color}33`, borderRadius: '2px', fontSize: '10px', color: catConf.color }}>{catConf.icon} {catConf.label}</div>
-                            <div style={{ fontSize: '10px', color: C.textFaint }}>{entry.source_document} {entry.source_version || ''}</div>
-                          </div>
-                          <div style={{ fontFamily: 'Georgia, serif', fontSize: '14px', fontWeight: '600', color: C.text, marginBottom: '6px' }}>{entry.title}</div>
-                          <p style={{ fontSize: '13px', color: C.textDim, lineHeight: '1.7', margin: 0 }}>{entry.content}</p>
-                        </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', flexShrink: 0 }}>
-                          <button onClick={() => activateEntry(entry.id)} style={sBtn(C.green)}>Activate →</button>
-                          <button onClick={() => archiveEntry(entry.id)} style={sBtn(C.textFaint, true)}>Discard</button>
-                        </div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Ingest tab */}
-        {activeTab === 'ingest' && (
-          <div style={{ maxWidth: '760px' }}>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: '16px', fontWeight: '600', marginBottom: '6px' }}>Ingest a Document</div>
-            <p style={{ fontSize: '13px', color: C.textFaint, lineHeight: '1.6', marginBottom: '20px' }}>
-              Paste your Franchise Bible, TDD, Roadmap, or Deviations Log. Claude extracts every decision as individual knowledge entries. You review them all before anything goes live.
-            </p>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '12px' }}>
-              <div>
-                <FieldLabel>Source Document</FieldLabel>
-                <select value={docSource} onChange={e => setDocSource(e.target.value)} style={iS}>
-                  {SOURCE_DOCS.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-                </select>
-              </div>
-              <div>
-                <FieldLabel>Version</FieldLabel>
-                <input value={docVersion} onChange={e => setDocVersion(e.target.value)} placeholder="v3.1" style={iS} />
-              </div>
-            </div>
-
-            <FieldLabel>Document Text — paste the full content here</FieldLabel>
-            <textarea value={docText} onChange={e => setDocText(e.target.value)} placeholder="Paste the full document text here…" style={{ ...iS, height: '280px', resize: 'vertical', lineHeight: '1.7', marginBottom: '14px' }} />
-
-            <button onClick={handleIngest} disabled={!docText.trim() || ingesting} style={{ padding: '12px 24px', background: docText.trim() && !ingesting ? C.gold : C.surfaceAlt, border: 'none', borderRadius: '2px', color: docText.trim() && !ingesting ? '#ffffff' : C.textFaint, fontSize: '14px', fontWeight: '700', cursor: docText.trim() && !ingesting ? 'pointer' : 'default', fontFamily: 'Georgia, serif' }}>
-              {ingesting ? 'Extracting decisions…' : 'Extract Knowledge Entries →'}
-            </button>
-
-            {ingesting && (
-              <div style={{ marginTop: '14px', padding: '14px', background: C.surfaceAlt, border: `1px solid ${C.border}`, borderRadius: '2px', display: 'flex', gap: '12px', alignItems: 'center' }}>
-                <Spin /><div><div style={{ fontSize: '13px', color: C.text }}>Reading the document…</div><div style={{ fontSize: '11px', color: C.textFaint, marginTop: '2px' }}>Extracting individual decisions</div></div>
-              </div>
-            )}
-
-            {ingestResult && (
-              <div style={{ marginTop: '16px', padding: '16px', background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: '2px' }}>
-                <div style={{ fontSize: '14px', color: C.green, fontWeight: '600', marginBottom: '4px' }}>✓ {ingestResult.entries_extracted} entries extracted</div>
-                <p style={{ fontSize: '12px', color: C.textDim, margin: '0 0 4px' }}>{ingestResult.summary}</p>
-                <p style={{ fontSize: '12px', color: C.textFaint, margin: 0 }}>{ingestResult.message}</p>
-                <button onClick={() => setActiveTab('pending')} style={{ marginTop: '10px', padding: '7px 14px', background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: '2px', fontSize: '12px', color: C.green, cursor: 'pointer' }}>
-                  Review Extracted Entries →
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Extract tab */}
-        {activeTab === 'extract' && (
-          <div style={{ maxWidth: '760px' }}>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: '16px', fontWeight: '600', marginBottom: '6px' }}>Extract from a Build Conversation</div>
-            <p style={{ fontSize: '13px', color: C.textFaint, lineHeight: '1.6', marginBottom: '20px' }}>
-              At the end of a build session, paste the conversation here. Claude pulls out every decision made and queues them for review. Nothing activates until you approve it.
-            </p>
-
-            <FieldLabel>Conversation — paste the full chat here</FieldLabel>
-            <textarea value={chatText} onChange={e => setChatText(e.target.value)} placeholder="Paste the conversation here…" style={{ ...iS, height: '280px', resize: 'vertical', lineHeight: '1.7', marginBottom: '14px' }} />
-
-            <button onClick={handleExtract} disabled={!chatText.trim() || extracting} style={{ padding: '12px 24px', background: chatText.trim() && !extracting ? C.gold : C.surfaceAlt, border: 'none', borderRadius: '2px', color: chatText.trim() && !extracting ? '#ffffff' : C.textFaint, fontSize: '14px', fontWeight: '700', cursor: chatText.trim() && !extracting ? 'pointer' : 'default', fontFamily: 'Georgia, serif' }}>
-              {extracting ? 'Extracting…' : 'Extract Decisions →'}
-            </button>
-
-            {extractResult && (
-              <div style={{ marginTop: '16px', padding: '16px', background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: '2px' }}>
-                <div style={{ fontSize: '14px', color: C.green, fontWeight: '600', marginBottom: '4px' }}>✓ {extractResult.entries_extracted} decisions extracted</div>
-                <p style={{ fontSize: '12px', color: C.textDim, margin: 0 }}>{extractResult.summary}</p>
-                <button onClick={() => setActiveTab('pending')} style={{ marginTop: '10px', padding: '7px 14px', background: C.greenSoft, border: `1px solid ${C.green}44`, borderRadius: '2px', fontSize: '12px', color: C.green, cursor: 'pointer' }}>
-                  Review Extracted Decisions →
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Guard tab */}
-        {activeTab === 'guard' && (
-          <div style={{ maxWidth: '760px' }}>
-            <div style={{ fontFamily: 'Georgia, serif', fontSize: '16px', fontWeight: '600', marginBottom: '6px' }}>Franchise Guard</div>
-            <p style={{ fontSize: '13px', color: C.textFaint, lineHeight: '1.6', marginBottom: '20px' }}>
-              Paste any scene brief before you generate. The Guard checks it against every active knowledge entry and tells you what might break — before a single word gets written.
-            </p>
-
-            <FieldLabel>Scene Brief</FieldLabel>
-            <textarea value={guardBrief} onChange={e => setGuardBrief(e.target.value)} placeholder="Paste your scene brief here…" style={{ ...iS, height: '140px', resize: 'vertical', lineHeight: '1.7', marginBottom: '12px' }} />
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-              <div>
-                <FieldLabel>Characters (comma-separated)</FieldLabel>
-                <input value={guardChars} onChange={e => setGuardChars(e.target.value)} placeholder="JustAWoman, David" style={iS} />
-              </div>
-              <div>
-                <FieldLabel>Scene Type</FieldLabel>
-                <input value={guardType} onChange={e => setGuardType(e.target.value)} placeholder="interior_reckoning, david_mirror…" style={iS} />
-              </div>
-            </div>
-
-            <button onClick={handleGuard} disabled={!guardBrief.trim() || guardRunning} style={{ padding: '12px 24px', background: guardBrief.trim() && !guardRunning ? C.gold : C.surfaceAlt, border: 'none', borderRadius: '2px', color: guardBrief.trim() && !guardRunning ? '#ffffff' : C.textFaint, fontSize: '14px', fontWeight: '700', cursor: guardBrief.trim() && !guardRunning ? 'pointer' : 'default', fontFamily: 'Georgia, serif' }}>
-              {guardRunning ? 'Checking…' : 'Run Franchise Guard →'}
-            </button>
-
-            {guardResult && (
-              <div style={{ marginTop: '20px' }}>
-                <div style={{
-                  padding: '14px 18px', marginBottom: '16px',
-                  background: guardResult.clear_to_generate ? C.greenSoft : C.redSoft,
-                  border: `1px solid ${guardResult.clear_to_generate ? C.green : C.red}44`,
-                  borderRadius: '2px',
-                  display: 'flex', alignItems: 'center', gap: '12px',
-                }}>
-                  <div style={{ fontSize: '20px' }}>{guardResult.clear_to_generate ? '✓' : '⚠'}</div>
-                  <div>
-                    <div style={{ fontSize: '13px', fontWeight: '600', color: guardResult.clear_to_generate ? C.green : C.red }}>
-                      {guardResult.clear_to_generate ? 'Clear to generate' : 'Violations detected — do not generate yet'}
-                    </div>
-                    <div style={{ fontSize: '12px', color: C.textDim, marginTop: '2px' }}>{guardResult.guard_note}</div>
-                  </div>
-                </div>
-
-                {guardResult.violations?.length > 0 && (
-                  <div style={{ marginBottom: '16px' }}>
-                    <div style={{ fontSize: '11px', color: C.red, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px', fontWeight: '600' }}>Violations</div>
-                    {guardResult.violations.map((v, i) => (
-                      <div key={i} style={{ background: C.surface, border: `1px solid ${C.red}44`, borderLeft: `3px solid ${C.red}`, borderRadius: '2px', padding: '14px', marginBottom: '8px' }}>
-                        <div style={{ fontSize: '12px', color: C.red, fontWeight: '600', marginBottom: '6px' }}>{v.knowledge_entry_title}</div>
-                        <div style={{ fontSize: '12px', color: C.textDim, marginBottom: '4px' }}><span style={{ color: C.textFaint }}>In brief:</span> {v.what_in_brief}</div>
-                        <div style={{ fontSize: '12px', color: C.textDim, marginBottom: '8px' }}><span style={{ color: C.textFaint }}>Why it matters:</span> {v.why_it_matters}</div>
-                        <div style={{ background: C.greenSoft, border: `1px solid ${C.green}33`, borderRadius: '2px', padding: '10px 12px', fontSize: '12px', color: C.green }}>
-                          <span style={{ fontWeight: '600' }}>Suggested fix:</span> {v.suggested_correction}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {guardResult.warnings?.length > 0 && (
-                  <div>
-                    <div style={{ fontSize: '11px', color: C.gold, letterSpacing: '0.1em', textTransform: 'uppercase', marginBottom: '8px', fontWeight: '600' }}>Flags to Keep in Mind</div>
-                    {guardResult.warnings.map((w, i) => (
-                      <div key={i} style={{ background: C.surface, border: `1px solid ${C.gold}33`, borderLeft: `3px solid ${C.gold}`, borderRadius: '2px', padding: '12px', marginBottom: '6px' }}>
-                        <div style={{ fontSize: '11px', color: C.gold, marginBottom: '4px' }}>{w.knowledge_entry_title}</div>
-                        <div style={{ fontSize: '12px', color: C.textDim }}>{w.note}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                <div style={{ marginTop: '12px', fontSize: '11px', color: C.textFaint }}>
-                  {guardResult.entries_checked} knowledge entries checked
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
     </div>
   );
 }
 
-// ── Sub-components ──────────────────────────────────────────────────────────
-function FieldLabel({ children }) {
-  return <div style={{ fontSize: '10px', color: '#6b6560', letterSpacing: '0.1em', textTransform: 'uppercase', fontWeight: '600', marginBottom: '6px' }}>{children}</div>;
+/* Shared entries list sub-component */
+function EntriesList({ entries, loading, catLookup, emptyMsg, onActivate, onArchive }) {
+  if (loading) {
+    return <div style={{ textAlign: 'center', padding: 60, color: C.textFaint }}>Loading...</div>;
+  }
+  if (entries.length === 0) {
+    return <div style={{ textAlign: 'center', padding: 60, color: C.textFaint, fontSize: 14 }}>{emptyMsg}</div>;
+  }
+  return entries.map(entry => {
+    const cat = catLookup[entry.category] || { icon: '?', color: C.textDim };
+    return (
+      <div key={entry.id} style={{ ...S.card, borderLeft: `3px solid ${cat.color}` }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span style={{ fontSize: 14 }}>{cat.icon}</span>
+              <span style={{ fontSize: 14, fontWeight: 600, color: C.text }}>{entry.title}</span>
+              {entry.always_inject && <span style={S.badge(C.gold)}>always inject</span>}
+            </div>
+            <div style={{ display: 'flex', gap: 8, fontSize: 11, color: C.textDim }}>
+              <span style={S.badge(cat.color)}>{entry.category}</span>
+              <span style={S.badge(entry.severity === 'critical' ? C.red : entry.severity === 'important' ? C.accent : C.textDim)}>
+                {entry.severity}
+              </span>
+              <span>{STATUS_LABELS[entry.status] || entry.status}</span>
+              {entry.injection_count > 0 && <span>· injected {entry.injection_count}×</span>}
+            </div>
+          </div>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {entry.status === 'pending_review' && (
+              <button style={{ ...S.btn, fontSize: 11, color: C.green }} onClick={() => onActivate(entry.id)}>✓ Activate</button>
+            )}
+            {entry.status !== 'archived' && (
+              <button style={{ ...S.btn, fontSize: 11, color: C.textDim }} onClick={() => onArchive(entry.id)}>📦</button>
+            )}
+          </div>
+        </div>
+        <div style={{ fontSize: 13, color: C.textDim, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{entry.content}</div>
+        {entry.source_document && (
+          <div style={{ fontSize: 11, color: C.textFaint, marginTop: 8 }}>
+            Source: {entry.source_document} {entry.source_version ? `v${entry.source_version}` : ''} · {entry.extracted_by}
+          </div>
+        )}
+      </div>
+    );
+  });
 }
-
-function Spin() {
-  return (
-    <>
-      <div style={{ width: '18px', height: '18px', border: `2px solid ${C.border}`, borderTop: `2px solid ${C.gold}`, borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
-      <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
-    </>
-  );
-}
-
-function sBtn(color, outline = false) {
-  return { padding: '6px 14px', background: outline ? 'transparent' : `${color}16`, border: `1px solid ${color}44`, borderRadius: '2px', color, fontSize: '11px', letterSpacing: '0.05em', cursor: 'pointer', fontWeight: '600' };
-}
-
-const iS = {
-  width: '100%', background: '#faf8f4', border: '1px solid #e2ddd4',
-  borderRadius: '2px', padding: '9px 12px', fontSize: '13px',
-  color: '#1c1814', fontFamily: 'system-ui', outline: 'none',
-  boxSizing: 'border-box',
-};
