@@ -848,6 +848,24 @@ try {
   console.error('✗ Failed to load Script Bridge routes:', e.message);
 }
 
+// Story Evaluation Engine v2 routes (blind generation, evaluation, memory proposals, write-back)
+try {
+  const storyEvaluationRoutes = require('./routes/storyEvaluationRoutes');
+  app.use('/api/v1/memories', storyEvaluationRoutes);
+  console.log('✓ Story Evaluation routes loaded at /api/v1/memories');
+} catch (e) {
+  console.error('✗ Failed to load Story Evaluation routes:', e.message);
+}
+
+// Character Spark routes (3-field fast entry + Claude Opus pre-fill)
+try {
+  const characterSparkRoute = require('./routes/characterSparkRoute');
+  app.use('/api/v1/character-registry', characterSparkRoute);
+  console.log('✓ Character Spark routes loaded at /api/v1/character-registry/sparks');
+} catch (e) {
+  console.error('✗ Failed to load Character Spark routes:', e.message);
+}
+
 // Stories — Persistence + Social Import + Novel Assembler
 try {
   const storiesRoutes = require('./routes/stories');

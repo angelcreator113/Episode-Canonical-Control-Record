@@ -81,6 +81,63 @@ module.exports = (sequelize) => {
       type: DataTypes.DATE,
       allowNull: true,
     },
+    // ── Multi-agent evaluation columns ──
+    tone_dial: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    characters_in_scene: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    registry_dossiers_used: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    scene_brief: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    story_a: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    story_b: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    story_c: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    evaluation_result: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    plot_memory_proposal: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    character_revelation_proposal: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    registry_update_proposals: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    memory_confirmed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    written_back_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    written_back_chapter_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+    },
   }, {
     tableName: 'storyteller_stories',
     underscored: true,

@@ -7345,57 +7345,6 @@ router.get('/story-memories/:characterId', optionalAuth, async (req, res) => {
   }
 });
 
-
-// ── Story Evaluation Engine endpoints ──────────────────────────────────────
-
-const VOICE_SYSTEM = {
-  claude: `You are a literary voice that prioritises depth and interiority. Write in close third-person, past tense, literary present. Focus on what the character cannot say aloud, the subtext beneath every gesture.`,
-  gpt4o: `You are a narrative voice that prioritises tension and momentum. Write in close third-person, past tense. Every paragraph should tighten the noose — desire vs. obstacle, silence vs. eruption.`,
-  gemini: `You are a sensory-first voice that prioritises desire and the body. Write in close third-person, past tense, lyric-literary register. Let the reader feel skin, breath, fabric, heat.`,
-};
-
-router.post('/evaluate-generate-story', optionalAuth, async (req, res) => {
-  const { modelVoice, prompt, characterKey } = req.body;
-  if (!modelVoice || !prompt) {
-    return res.status(400).json({ error: 'modelVoice and prompt are required' });
-  }
-  const system = VOICE_SYSTEM[modelVoice] || VOICE_SYSTEM.claude;
-  try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      system,
-      messages: [{ role: 'user', content: `Write a 2500–3500 word scene:\n\n${prompt}\n\nCharacter key: ${characterKey || 'protagonist'}\n\nReturn ONLY the prose — no meta commentary.` }],
-    });
-    const text = msg.content?.[0]?.text || '';
-    return res.json({ text });
-  } catch (err) {
-    console.error('[evaluate-generate-story]', err?.message);
-    return res.status(500).json({ error: err?.message || 'Generation failed' });
-  }
-});
-
-router.post('/evaluate-stories', optionalAuth, async (req, res) => {
-  const { stories, prompt } = req.body;
-  if (!stories?.claude || !stories?.gpt4o || !stories?.gemini) {
-    return res.status(400).json({ error: 'All three story variants required' });
-  }
-  try {
-    const msg = await anthropic.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 6000,
-      system: `You are a ruthlessly honest literary editor. Evaluate three versions of the same scene and return ONLY valid JSON — no markdown fences, no commentary.`,
-      messages: [{ role: 'user', content: `Original prompt:\n"${prompt}"\n\n=== CLAUDE VERSION ===\n${stories.claude}\n\n=== GPT4O VERSION ===\n${stories.gpt4o}\n\n=== GEMINI VERSION ===\n${stories.gemini}\n\nReturn JSON with this exact shape:\n{\n  "scores": {\n    "claude":  { "interiority": 0-10, "desire_tension": 0-10, "specificity": 0-10, "stakes": 0-10, "voice": 0-10, "body_presence": 0-10, "total": 0-60, "summary": "one sentence", "best_moment": "quote" },\n    "gpt4o":   { ...same },\n    "gemini":  { ...same }\n  },\n  "winner": "claude"|"gpt4o"|"gemini",\n  "winner_reason": "why",\n  "what_each_brings": { "claude": "strength", "gpt4o": "strength", "gemini": "strength" },\n  "proofreading": { "claude": ["issue1"], "gpt4o": ["issue1"], "gemini": ["issue1"] },\n  "prompt_diagnosis": { "score": 0-10, "what_was_missing": "text", "improved_prompt": "text" },\n  "approved_version": "full synthesized text taking the best from each"\n}` }],
-    });
-    let raw = msg.content?.[0]?.text || '{}';
-    // Strip markdown fences if present
-    raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
-    const data = JSON.parse(raw);
-    return res.json(data);
-  } catch (err) {
-    console.error('[evaluate-stories]', err?.message);
-    return res.status(500).json({ error: err?.message || 'Evaluation failed' });
-  }
-});
+// Story Evaluation Engine v1 endpoints removed — replaced by storyEvaluationRoutes.js (v2)
 
 module.exports = router;
