@@ -125,44 +125,19 @@ export default function UniversePage() {
   return (
     <div className="up-shell">
 
-      {/* Hero Header — full on show-side tabs, slim on story-side tabs */}
-      {STORY_TABS.some(t => t.key === activeTab) ? (
-        <div className="up-hero-slim" style={{ display: 'flex', alignItems: 'center', gap: 12, padding: isMobile ? '10px 16px' : '10px 32px', background: 'rgba(20,20,30,0.6)', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <span style={{ fontSize: 11, letterSpacing: 2, color: 'rgba(255,255,255,0.35)', textTransform: 'uppercase' }}>Franchise Brain</span>
-          <span style={{ color: 'rgba(255,255,255,0.2)' }}>›</span>
-          <span style={{ fontSize: 14, fontWeight: 600, color: 'rgba(255,255,255,0.85)' }}>{universe.name}</span>
-          <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.3)' }}>/{universe.slug}</span>
+      {/* Compact header bar */}
+      <div className="up-hero-compact" style={{ padding: isMobile ? '10px 16px' : '10px 48px' }}>
+        <div className="up-hero-compact-left">
+          <h1 className="up-hero-compact-title">{universe.name}</h1>
+          <span className="up-hero-compact-slug">/{universe.slug}</span>
         </div>
-      ) : (
-        <div className="up-hero" style={isMobile ? { padding: '20px 16px' } : isTablet ? { padding: '28px 28px 24px' } : undefined}>
-          <div className="up-hero-top">
-            <div>
-              <div className="up-hero-label">FRANCHISE BRAIN</div>
-              <h1 className="up-hero-title" style={isMobile ? { fontSize: 24 } : isTablet ? { fontSize: 30 } : undefined}>{universe.name}</h1>
-              <div className="up-hero-slug">/{universe.slug}</div>
-            </div>
-          </div>
-
-          <div className="up-hero-stats">
-            <div className="up-hero-stat">
-              <div className="up-stat-value">{series.length}</div>
-              <div className="up-stat-label">Series</div>
-            </div>
-            <div className="up-hero-stat">
-              <div className="up-stat-value">{shows.length}</div>
-              <div className="up-stat-label">Shows</div>
-            </div>
-            <div className="up-hero-stat">
-              <div className="up-stat-value">{shows.reduce((sum, sh) => sum + (parseInt(sh.episodeCount || sh.dataValues?.episodeCount) || 0), 0)}</div>
-              <div className="up-stat-label">Episodes</div>
-            </div>
-            <div className="up-hero-stat">
-              <div className="up-stat-value">{(universe.core_themes || []).length}</div>
-              <div className="up-stat-label">Themes</div>
-            </div>
-          </div>
+        <div className="up-hero-compact-stats">
+          <div className="up-compact-stat"><span className="up-compact-val">{series.length}</span> series</div>
+          <div className="up-compact-stat"><span className="up-compact-val">{shows.length}</span> shows</div>
+          <div className="up-compact-stat"><span className="up-compact-val">{shows.reduce((sum, sh) => sum + (parseInt(sh.episodeCount || sh.dataValues?.episodeCount) || 0), 0)}</span> episodes</div>
+          <div className="up-compact-stat"><span className="up-compact-val">{(universe.core_themes || []).length}</span> themes</div>
         </div>
-      )}
+      </div>
 
       {/* Tab bar */}
       <UniverseTabBar activeTab={activeTab} onChange={switchTab} />
