@@ -86,6 +86,8 @@ let WardrobeBrandTag; // Wardrobe brand tag model
 let TherapyPendingSession; // Therapy pending session model
 let WardrobeContentAssignment; // Wardrobe content assignment model
 let CharacterSpark; // Character Spark (3-field fast entry) model
+let SceneProposal; // Scene Intelligence Engine proposals
+let CharacterGrowthLog; // Character Growth Engine logs
 
 try {
   // Core models
@@ -256,6 +258,10 @@ try {
   // Character Spark (3-field fast entry)
   CharacterSpark = require('./CharacterSpark')(sequelize);
 
+  // Scene Intelligence + Character Growth
+  SceneProposal = require('./SceneProposal')(sequelize);
+  CharacterGrowthLog = require('./CharacterGrowthLog')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -336,6 +342,8 @@ const requiredModels = {
   StorytellerStory,
   SocialMediaImport,
   NovelAssembly,
+  SceneProposal,
+  CharacterGrowthLog,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -429,6 +437,14 @@ if (ContinuityCharacter && ContinuityCharacter.associate) {
 }
 if (ContinuityBeat && ContinuityBeat.associate) {
   ContinuityBeat.associate(requiredModels);
+}
+
+// Scene Intelligence + Character Growth associations
+if (SceneProposal && SceneProposal.associate) {
+  SceneProposal.associate(requiredModels);
+}
+if (CharacterGrowthLog && CharacterGrowthLog.associate) {
+  CharacterGrowthLog.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1524,3 +1540,5 @@ module.exports.StorytellerStory = StorytellerStory;
 module.exports.SocialMediaImport = SocialMediaImport;
 module.exports.NovelAssembly = NovelAssembly;
 module.exports.CharacterSpark = CharacterSpark;
+module.exports.SceneProposal = SceneProposal;
+module.exports.CharacterGrowthLog = CharacterGrowthLog;

@@ -866,6 +866,24 @@ try {
   console.error('✗ Failed to load Character Spark routes:', e.message);
 }
 
+// Scene Intelligence Engine routes (propose, adjust, accept, dismiss, arc-stage)
+try {
+  const sceneProposeRoute = require('./routes/sceneProposeRoute');
+  app.use('/api/v1/memories', sceneProposeRoute);
+  console.log('✓ Scene Propose routes loaded at /api/v1/memories');
+} catch (e) {
+  console.error('✗ Failed to load Scene Propose routes:', e.message);
+}
+
+// Character Growth Engine routes (evolve characters post-scene)
+try {
+  const characterGrowthRoute = require('./routes/characterGrowthRoute');
+  app.use('/api/v1/memories', characterGrowthRoute);
+  console.log('✓ Character Growth routes loaded at /api/v1/memories');
+} catch (e) {
+  console.error('✗ Failed to load Character Growth routes:', e.message);
+}
+
 // Stories — Persistence + Social Import + Novel Assembler
 try {
   const storiesRoutes = require('./routes/stories');
