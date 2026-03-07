@@ -89,6 +89,12 @@ let CharacterSpark; // Character Spark (3-field fast entry) model
 let SceneProposal; // Scene Intelligence Engine proposals
 let CharacterGrowthLog; // Character Growth Engine logs
 let FranchiseKnowledge; // Franchise Brain knowledge base
+let FranchiseTechKnowledge; // Franchise Brain technical knowledge
+let PostGenerationReview; // Post-generation review queue
+let WritingRhythm; // Writing rhythm tracking
+let WritingGoal; // Writing goal tracking
+let MultiProductContent; // Multi-product content tracking
+let SessionBrief; // Session brief context snapshots
 
 try {
   // Core models
@@ -265,6 +271,12 @@ try {
 
   // Franchise Brain knowledge base
   FranchiseKnowledge = require('./FranchiseKnowledge')(sequelize);
+  FranchiseTechKnowledge = require('./FranchiseTechKnowledge')(sequelize);
+  PostGenerationReview = require('./PostGenerationReview')(sequelize);
+  WritingRhythm = require('./WritingRhythm')(sequelize);
+  WritingGoal = require('./WritingGoal')(sequelize);
+  MultiProductContent = require('./MultiProductContent')(sequelize);
+  SessionBrief = require('./SessionBrief')(sequelize);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -349,6 +361,24 @@ const requiredModels = {
   SceneProposal,
   CharacterGrowthLog,
   FranchiseKnowledge,
+  DecisionLog,
+  ShowConfig,
+  ScriptTemplate,
+  ScriptLearningProfile,
+  ScriptEditHistory,
+  ScriptSuggestion,
+  TimelineData,
+  LalaverseBrand,
+  WardrobeBrandTag,
+  TherapyPendingSession,
+  WardrobeContentAssignment,
+  CharacterSpark,
+  FranchiseTechKnowledge,
+  PostGenerationReview,
+  WritingRhythm,
+  WritingGoal,
+  MultiProductContent,
+  SessionBrief,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1482,7 +1512,6 @@ module.exports.SceneTemplate = SceneTemplate;
 module.exports.Wardrobe = Wardrobe;
 module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.OutfitSet = OutfitSet;
-module.exports.EpisodeWardrobe = EpisodeWardrobe;
 module.exports.WardrobeLibrary = WardrobeLibrary;
 module.exports.OutfitSetItems = OutfitSetItems;
 module.exports.SceneLibrary = SceneLibrary;
@@ -1548,3 +1577,13 @@ module.exports.CharacterSpark = CharacterSpark;
 module.exports.SceneProposal = SceneProposal;
 module.exports.CharacterGrowthLog = CharacterGrowthLog;
 module.exports.FranchiseKnowledge = FranchiseKnowledge;
+module.exports.ShowAsset = ShowAsset;
+module.exports.EditMap = EditMap;
+module.exports.CharacterProfile = CharacterProfile;
+module.exports.CharacterTherapyProfile = CharacterTherapyProfile;
+module.exports.FranchiseTechKnowledge = FranchiseTechKnowledge;
+module.exports.PostGenerationReview = PostGenerationReview;
+module.exports.WritingRhythm = WritingRhythm;
+module.exports.WritingGoal = WritingGoal;
+module.exports.MultiProductContent = MultiProductContent;
+module.exports.SessionBrief = SessionBrief;
