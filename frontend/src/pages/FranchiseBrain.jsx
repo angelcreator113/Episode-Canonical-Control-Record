@@ -119,7 +119,7 @@ export default function FranchiseBrain() {
       if (filterSeverity) params.set('severity', filterSeverity);
       if (searchQuery) params.set('search', searchQuery);
 
-      const res = await fetch(`${API}/api/v1/franchise-brain/entries?${params}`);
+      const res = await fetch(`${API}/franchise-brain/entries?${params}`);
       const data = await res.json();
       setEntries(data.entries || []);
       setCounts(data.counts || {});
@@ -133,7 +133,7 @@ export default function FranchiseBrain() {
   async function saveNewEntry() {
     setSavingEntry(true);
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/entries`, {
+      const res = await fetch(`${API}/franchise-brain/entries`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -154,17 +154,17 @@ export default function FranchiseBrain() {
   }
 
   async function activateEntry(id) {
-    await fetch(`${API}/api/v1/franchise-brain/entries/${id}/activate`, { method: 'POST' });
+    await fetch(`${API}/franchise-brain/entries/${id}/activate`, { method: 'POST' });
     loadEntries();
   }
 
   async function archiveEntry(id) {
-    await fetch(`${API}/api/v1/franchise-brain/entries/${id}/archive`, { method: 'POST' });
+    await fetch(`${API}/franchise-brain/entries/${id}/archive`, { method: 'POST' });
     loadEntries();
   }
 
   async function saveEdit(id) {
-    await fetch(`${API}/api/v1/franchise-brain/entries/${id}`, {
+    await fetch(`${API}/franchise-brain/entries/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ content: editContent }),
@@ -177,7 +177,7 @@ export default function FranchiseBrain() {
     if (!docText.trim()) return;
     setIngesting(true); setIngestResult(null);
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/ingest-document`, {
+      const res = await fetch(`${API}/franchise-brain/ingest-document`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ document_text: docText, source_document: docSource, source_version: docVersion }),
@@ -197,7 +197,7 @@ export default function FranchiseBrain() {
     if (!chatText.trim()) return;
     setExtracting(true); setExtractResult(null);
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/extract-conversation`, {
+      const res = await fetch(`${API}/franchise-brain/extract-conversation`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ conversation_text: chatText }),
@@ -217,7 +217,7 @@ export default function FranchiseBrain() {
     if (!guardBrief.trim()) return;
     setGuardRunning(true); setGuardResult(null);
     try {
-      const res = await fetch(`${API}/api/v1/franchise-brain/guard`, {
+      const res = await fetch(`${API}/franchise-brain/guard`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

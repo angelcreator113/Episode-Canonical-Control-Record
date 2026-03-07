@@ -81,7 +81,7 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
 
   async function loadGrowthFlags() {
     try {
-      const res = await fetch(`${API}/api/v1/memories/character-growth/flagged`);
+      const res = await fetch(`${API}/memories/character-growth/flagged`);
       const data = await res.json();
       setGrowthFlags(data.flags || []);
       setFlagsLoaded(true);
@@ -99,7 +99,7 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
     setEditingChars(false);
 
     try {
-      const res = await fetch(`${API}/api/v1/memories/propose-scene`, {
+      const res = await fetch(`${API}/memories/propose-scene`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -128,7 +128,7 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
     if (!proposal) return;
     const currentChars = getActiveChars();
     try {
-      await fetch(`${API}/api/v1/memories/scene-proposals/${proposal.proposal_id}`, {
+      await fetch(`${API}/memories/scene-proposals/${proposal.proposal_id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -151,7 +151,7 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
       // Save edits first if any
       if (editingBrief || editingChars) await handleSaveEdits();
 
-      const res = await fetch(`${API}/api/v1/memories/scene-proposals/${proposal.proposal_id}/accept`, {
+      const res = await fetch(`${API}/memories/scene-proposals/${proposal.proposal_id}/accept`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tone_override: selectedTone }),
@@ -169,13 +169,13 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
 
   async function handleDismiss() {
     if (!proposal) return;
-    await fetch(`${API}/api/v1/memories/scene-proposals/${proposal.proposal_id}/dismiss`, { method: 'POST' });
+    await fetch(`${API}/memories/scene-proposals/${proposal.proposal_id}/dismiss`, { method: 'POST' });
     setProposal(null);
   }
 
   async function reviewFlag(flagId, decision) {
     try {
-      await fetch(`${API}/api/v1/memories/character-growth/${flagId}/review`, {
+      await fetch(`${API}/memories/character-growth/${flagId}/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ decision }),
