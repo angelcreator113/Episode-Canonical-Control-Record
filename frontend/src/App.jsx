@@ -83,6 +83,7 @@ const CharacterTherapy = lazy(() => import('./pages/CharacterTherapy'));
 const PressPublisher = lazy(() => import('./pages/PressPublisher'));
 const StoryEngine = lazy(() => import('./pages/StoryEngine'));
 const StoryEvaluationEngine = lazy(() => import('./pages/StoryEvaluationEngine'));
+const StoryProposer = lazy(() => import('./pages/StoryProposer'));
 const NovelAssembler = lazy(() => import('./pages/NovelAssembler'));
 const CharacterGenerator = lazy(() => import('./pages/CharacterGenerator'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
@@ -221,7 +222,8 @@ function AppContent() {
   // Social Import is now embedded in Universe page as a tab
   const isAssembler = location.pathname === '/assembler';
   const isSetupWizard = location.pathname === '/setup';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isAssembler || isSetupWizard;
+  const isSceneProposer = location.pathname === '/scene-proposer';
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isAssembler || isSetupWizard || isSceneProposer;
   const hideFooter = isFullScreen;
 
   return (
@@ -365,6 +367,9 @@ function AppContent() {
 
           {/* PNOS Story Evaluation Engine — Multi-voice generation + editorial scoring */}
           <Route path="/story-evaluation" element={<StoryEvaluationEngine />} />
+
+          {/* Scene Intelligence Engine — Propose + Character Growth */}
+          <Route path="/scene-proposer" element={<StoryProposer />} />
 
           {/* World Studio — LalaVerse world character + scene hub */}
           <Route path="/world-studio" element={<WorldStudio />} />
