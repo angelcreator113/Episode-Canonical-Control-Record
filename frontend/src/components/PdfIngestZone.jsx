@@ -48,7 +48,7 @@ export default function PdfIngestZone({ brain = 'story', source = 'franchise_bib
 
       setProgress('Sending to knowledge extraction…');
 
-      const res  = await fetch(`${API}/api/v1/franchise-brain/ingest-pdf`, {
+      const res  = await fetch(`${API}/franchise-brain/ingest-pdf`, {
         method: 'POST',
         body:   formData,
         // No Content-Type header — browser sets it with boundary automatically
