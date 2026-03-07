@@ -28,6 +28,7 @@ const NAV = [
       { icon: '▶',  label: 'Start Session',   route: '/start' },
       { icon: '⚡', label: 'Story Engine',    route: '/story-engine' },
       { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
+      { icon: '⬡', label: 'Franchise Brain',    route: '/franchise-brain' },
       { icon: '', label: 'Assembler',        route: '/assembler' },
       { icon: '◇',  label: 'Continuity',      route: '/continuity' },
     ],

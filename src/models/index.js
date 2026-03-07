@@ -88,6 +88,7 @@ let WardrobeContentAssignment; // Wardrobe content assignment model
 let CharacterSpark; // Character Spark (3-field fast entry) model
 let SceneProposal; // Scene Intelligence Engine proposals
 let CharacterGrowthLog; // Character Growth Engine logs
+let FranchiseKnowledge; // Franchise Brain knowledge base
 
 try {
   // Core models
@@ -262,6 +263,9 @@ try {
   SceneProposal = require('./SceneProposal')(sequelize);
   CharacterGrowthLog = require('./CharacterGrowthLog')(sequelize);
 
+  // Franchise Brain knowledge base
+  FranchiseKnowledge = require('./FranchiseKnowledge')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -344,6 +348,7 @@ const requiredModels = {
   NovelAssembly,
   SceneProposal,
   CharacterGrowthLog,
+  FranchiseKnowledge,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1542,3 +1547,4 @@ module.exports.NovelAssembly = NovelAssembly;
 module.exports.CharacterSpark = CharacterSpark;
 module.exports.SceneProposal = SceneProposal;
 module.exports.CharacterGrowthLog = CharacterGrowthLog;
+module.exports.FranchiseKnowledge = FranchiseKnowledge;
