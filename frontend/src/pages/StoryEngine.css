@@ -2414,7 +2414,6 @@ html, body {
 
   /* ── Story column: sits above tasks ── */
   .se-story-column,
-  .se-write-mode .se-story-column,
   .se-fullscreen-reading .se-story-column {
     display: flex;
     flex-direction: column;
@@ -2423,6 +2422,17 @@ html, body {
     overflow: visible;
     margin-top: 0;
     order: -1;
+  }
+
+  .se-write-mode .se-story-column {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    overflow: hidden;
+    margin-top: 0;
+    order: -1;
+    min-height: 0;
   }
 
   .se-story-column:has(.se-story-section) {
@@ -2455,13 +2465,20 @@ html, body {
   .se-story-skeleton { height: 40px; }
 
   /* ── Story panel when content is loaded ── */
-  .se-story-panel,
-  .se-write-mode .se-story-panel {
+  .se-story-panel {
     display: flex;
     flex-direction: column;
     flex: none;
     height: auto;
     overflow: visible;
+  }
+
+  .se-write-mode .se-story-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .se-story-panel.se-story-section--minimized,

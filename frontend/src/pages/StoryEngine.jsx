@@ -544,6 +544,8 @@ function StoryPanel({
             {story.word_count > 0 && (
               <>
                 <span>·</span>
+                <span>{Math.ceil(story.word_count / 250)} {Math.ceil(story.word_count / 250) === 1 ? 'page' : 'pages'}</span>
+                <span>·</span>
                 <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
               </>
             )}
