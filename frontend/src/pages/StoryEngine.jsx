@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from './StoryReviewPanel';
+import WriteModeAIWriter from '../components/WriteModeAIWriter';
 import './StoryEngine.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -419,6 +420,7 @@ function StoryPanel({
   onNavigateStory, hasPrev, hasNext,
   onExportStory,
   onEvaluate,
+  charObj, selectedCharKey, activeWorld, allCharacters, onSelectChar,
 }) {
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
@@ -637,13 +639,56 @@ function StoryPanel({
       {/* Story text */}
       <div className="se-story-body">
         {editing ? (
-          <textarea
-            ref={textareaRef}
-            className="se-story-editor"
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            spellCheck
-          />
+          <div className="se-edit-container">
+            <textarea
+              ref={textareaRef}
+              className="se-story-editor"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              spellCheck
+            />
+            <div className="se-ai-writer-sidebar">
+              <WriteModeAIWriter
+                chapterId={String(story?.story_number || task?.story_number || '')}
+                bookId={activeWorld || ''}
+                selectedCharacter={charObj ? {
+                  id: charObj.id || selectedCharKey,
+                  name: charObj.display_name || charName,
+                  selected_name: charObj.display_name || charName,
+                  type: charObj.role_type,
+                  role: charObj.role_type,
+                } : null}
+                currentProse={editText}
+                chapterContext={task ? {
+                  scene_goal: task.task,
+                  theme: task.title,
+                  emotional_arc_start: task.phase,
+                  emotional_arc_end: '',
+                  pov: charName || '',
+                } : {}}
+                onInsert={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = editText.slice(0, start);
+                    const after = editText.slice(end);
+                    setEditText(before + text + after);
+                    setTimeout(() => {
+                      ta.selectionStart = ta.selectionEnd = start + text.length;
+                      ta.focus();
+                    }, 0);
+                  } else {
+                    setEditText(prev => prev + '\n\n' + text);
+                  }
+                }}
+                characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
+                  ...c, id: c.id || key, character_key: key, name: c.display_name,
+                })) : []}
+                onSelectCharacter={(c) => onSelectChar?.(c?.character_key || c?.id)}
+              />
+            </div>
+          </div>
         ) : (
           <div className="se-story-text">
             {(story.text || '').split('\n').map((para, i) => (
@@ -1628,6 +1673,11 @@ export default function StoryEngine() {
                 if (selectedChar) params.set('char', selectedChar);
                 navigate(`/story-evaluation?${params.toString()}`, { state: { storyText: story?.text, taskBrief: activeTask } });
               }}
+              charObj={char}
+              selectedCharKey={selectedChar}
+              activeWorld={activeWorld}
+              allCharacters={CHARACTERS}
+              onSelectChar={setSelectedChar}
             />
           )}
         </div>
