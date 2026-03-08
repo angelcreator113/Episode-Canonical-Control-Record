@@ -668,6 +668,7 @@ html, body {
   background: var(--se-cream);
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
+  min-height: 0;
 }
 
 .se-task-list::-webkit-scrollbar {
@@ -1186,6 +1187,7 @@ html, body {
   flex-direction: column;
   background: var(--se-surface);
   min-width: 0;
+  min-height: 0;
 }
 
 .se-story-column.se-stories-collapsed {
@@ -1970,13 +1972,14 @@ html, body {
 .se-edit-container .se-story-editor {
   flex: 1;
   min-width: 0;
-  height: auto;
+  height: 100%;
 }
 
 .se-ai-writer-sidebar {
   width: 320px;
   min-width: 280px;
   max-width: 360px;
+  height: 100%;
   border-left: 1px solid var(--se-border-light);
   background: var(--se-cream);
   overflow-y: auto;
@@ -2299,11 +2302,11 @@ html, body {
   .se-task-list {
     width: 100%;
     height: auto;
-    max-height: none;
+    max-height: 40vh;
     flex: none;
     border-right: none;
-    border-bottom: none;
-    overflow: visible;
+    border-bottom: 1px solid var(--se-border-light);
+    overflow-y: auto;
     background: transparent;
   }
 

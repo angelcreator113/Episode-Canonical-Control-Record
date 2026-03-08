@@ -67,6 +67,7 @@ export default function WriteModeAIWriter({
   const [error,        setError]        = useState(null);
   const [copied,       setCopied]       = useState(false);
   const [lengthMode,   setLengthMode]   = useState('paragraph');
+  const [rewriteOptions, setRewriteOptions] = useState(null);
   const retryRef = useRef(false);
 
   const accent   = TYPE_COLORS[selectedCharacter?.type] || '#B8962E';
@@ -79,6 +80,7 @@ export default function WriteModeAIWriter({
     setActiveAction(null);
     setError(null);
     setCopied(false);
+    setRewriteOptions(null);
   }, [selectedCharacter?.id]);
 
   async function runAction(action, isRetry = false) {
@@ -149,6 +151,51 @@ export default function WriteModeAIWriter({
     setLoading(false);
   }
 
+  async function runRewrite() {
+    const selected = getSelectedText?.();
+    if (!selected) {
+      setError('Select some text in the editor first, then tap Rewrite.');
+      return;
+    }
+
+    setActiveAction('rewrite');
+    setResult(null);
+    setEditedResult(null);
+    setRewriteOptions(null);
+    setError(null);
+    setLoading(true);
+    setCopied(false);
+
+    try {
+      const res = await fetch('/api/v1/memories/rewrite-options', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          book_id:       bookId,
+          content:       selected,
+          chapter_brief: chapterContext,
+        }),
+      });
+      const data = await res.json();
+      if (data.options?.length) {
+        setRewriteOptions(data.options);
+      } else {
+        setError('No rewrite options returned — try selecting a different passage.');
+      }
+    } catch {
+      setError('Rewrite failed. Check your connection and try again.');
+    }
+
+    setLoading(false);
+  }
+
+  function handlePickRewrite(option) {
+    setResult(option.text);
+    setEditedResult(option.text);
+    setRewriteOptions(null);
+    setActiveAction('rewrite');
+  }
+
   function handleInsert() {
     const text = editedResult || result;
     if (!text) return;
@@ -162,6 +209,7 @@ export default function WriteModeAIWriter({
     setResult(null);
     setEditedResult(null);
     setActiveAction(null);
+    setRewriteOptions(null);
   }
 
   function handleCopy() {
@@ -232,7 +280,7 @@ export default function WriteModeAIWriter({
       </div>
 
       {/* AI Tools toolbar */}
-      {!result && (
+      {!result && !rewriteOptions && (
         <div style={s.toolbar}>
           <div style={s.toolRow}>
             {ACTIONS.map(action => (
@@ -258,6 +306,26 @@ export default function WriteModeAIWriter({
                 </span>
               </button>
             ))}
+            <button
+              style={{
+                ...s.toolPill,
+                background:  activeAction === 'rewrite' && loading
+                             ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                borderColor: activeAction === 'rewrite'
+                             ? accent : 'rgba(28,24,20,0.10)',
+                opacity:     loading && activeAction !== 'rewrite' ? 0.5 : 1,
+              }}
+              onClick={runRewrite}
+              disabled={loading}
+            >
+              <span style={s.toolIcon}>{'✏️'}</span>
+              <span style={s.toolLabel}>
+                Rewrite
+                {loading && activeAction === 'rewrite' && (
+                  <span style={s.spinner}> {'◌'}</span>
+                )}
+              </span>
+            </button>
           </div>
 
           {/* Length toggle */}
@@ -293,12 +361,34 @@ export default function WriteModeAIWriter({
         </div>
       )}
 
+      {/* Rewrite options */}
+      {rewriteOptions && (
+        <div style={s.rewritePanel}>
+          <div style={s.resultHeader}>
+            <div style={{ ...s.resultAction, color: accent }}>Pick a rewrite</div>
+            <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
+          </div>
+          {rewriteOptions.map((opt, i) => (
+            <button
+              key={i}
+              style={s.rewriteOption}
+              onClick={() => handlePickRewrite(opt)}
+            >
+              <div style={{ ...s.rewriteType, color: accent }}>
+                {opt.type}
+              </div>
+              <div style={s.rewriteText}>{opt.text}</div>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Result */}
       {result && (
         <div style={s.resultPanel}>
           <div style={s.resultHeader}>
             <div style={{ ...s.resultAction, color: accent }}>
-              {ACTIONS.find(a => a.id === activeAction)?.label || 'Generated'}
+              {activeAction === 'rewrite' ? 'Rewrite' : (ACTIONS.find(a => a.id === activeAction)?.label || 'Generated')}
             </div>
             <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
           </div>
@@ -645,5 +735,40 @@ const s = {
     color:      '#B85C38',
     fontStyle:  'italic',
     fontFamily: "'Lora', Georgia, serif",
+  },
+
+  // Rewrite options
+  rewritePanel: {
+    display:       'flex',
+    flexDirection: 'column',
+    padding:       '12px 14px',
+    gap:           8,
+    flex:          1,
+    overflowY:     'auto',
+  },
+  rewriteOption: {
+    display:      'flex',
+    flexDirection: 'column',
+    gap:          4,
+    padding:      '10px 12px',
+    background:   'rgba(28,24,20,0.03)',
+    border:       '1px solid rgba(28,24,20,0.08)',
+    borderRadius: 6,
+    cursor:       'pointer',
+    textAlign:    'left',
+    transition:   'border-color 0.15s, background 0.15s',
+  },
+  rewriteType: {
+    fontSize:      8,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+    fontFamily:    "'DM Mono', monospace",
+  },
+  rewriteText: {
+    fontFamily:   "'Lora', Georgia, serif",
+    fontStyle:    'italic',
+    fontSize:     12,
+    color:        INK,
+    lineHeight:   1.7,
   },
 };
