@@ -445,6 +445,34 @@ function StoryPanel({
   }, [story?.text]);
   const totalPages = pages.length;
 
+  // Paginate editText for edit-mode page navigation
+  const editPageOffsets = useMemo(() => {
+    const text = editText || '';
+    const paragraphs = text.split('\n');
+    const offsets = [0]; // char offset where each page starts
+    let wordCount = 0;
+    let charPos = 0;
+    for (let i = 0; i < paragraphs.length; i++) {
+      const para = paragraphs[i];
+      const words = para.trim().split(/\s+/).filter(Boolean).length;
+      if (wordCount > 0 && wordCount + words > WORDS_PER_PAGE) {
+        offsets.push(charPos);
+        wordCount = 0;
+      }
+      wordCount += words;
+      charPos += para.length + 1; // +1 for the \n
+    }
+    return offsets;
+  }, [editText]);
+  const editTotalPages = editPageOffsets.length;
+
+  // Clamp currentPage when edit content changes page count
+  useEffect(() => {
+    if (editing && currentPage >= editTotalPages) {
+      setCurrentPage(Math.max(0, editTotalPages - 1));
+    }
+  }, [editing, editTotalPages, currentPage]);
+
   useEffect(() => {
     setEditText(story?.text || '');
     setCurrentPage(0);
@@ -673,6 +701,7 @@ function StoryPanel({
 
       <div className="se-story-body">
         {editing ? (
+          <>
           <div className="se-edit-container">
             <textarea
               ref={textareaRef}
@@ -737,6 +766,55 @@ function StoryPanel({
               />
             </div>
           </div>
+          {editTotalPages > 1 && (
+            <div className="se-page-nav">
+              <button
+                className="se-btn se-btn-page"
+                onClick={() => {
+                  setCurrentPage(p => {
+                    const next = p - 1;
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
+                      // scroll textarea so the cursor/page start is visible
+                      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+                      const textBefore = editText.slice(0, editPageOffsets[next]);
+                      const linesAbove = textBefore.split('\n').length - 1;
+                      ta.scrollTop = linesAbove * lineHeight;
+                    }
+                    return next;
+                  });
+                }}
+                disabled={currentPage === 0}
+              >
+                ‹ Prev Page
+              </button>
+              <span className="se-page-indicator">
+                Page {currentPage + 1} of {editTotalPages}
+              </span>
+              <button
+                className="se-btn se-btn-page"
+                onClick={() => {
+                  setCurrentPage(p => {
+                    const next = p + 1;
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
+                      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+                      const textBefore = editText.slice(0, editPageOffsets[next]);
+                      const linesAbove = textBefore.split('\n').length - 1;
+                      ta.scrollTop = linesAbove * lineHeight;
+                    }
+                    return next;
+                  });
+                }}
+                disabled={currentPage >= editTotalPages - 1}
+              >
+                Next Page ›
+              </button>
+            </div>
+          )}
+          </>
         ) : (
           <>
             <div className="se-story-text" ref={storyBodyRef}>
@@ -1479,7 +1557,7 @@ export default function StoryEngine() {
   }
 
   return (
-    <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''}`}>
+    <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''} ${activeStory ? 'se-has-active-story' : ''}`}>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {!readingMode && (

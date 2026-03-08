@@ -2308,6 +2308,11 @@ html, body {
   }
 
   .se-workspace.se-stories-collapsed .se-task-list { width: 100%; }
+
+  /* Hide task list & mobile deck on mobile when viewing a story */
+  .se-has-active-story .se-task-list { display: none; }
+  .se-has-active-story .se-mobile-deck { display: none; }
+
   .se-workspace.se-stories-collapsed .se-story-column { width: 100%; }
 
   .se-task-section-intro {
