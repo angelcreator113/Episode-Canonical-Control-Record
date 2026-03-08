@@ -424,10 +424,15 @@ function StoryPanel({
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
   const textareaRef = useRef(null);
+  const prevStoryRef = useRef(story?.story_number);
 
   useEffect(() => {
     setEditText(story?.text || '');
-    if (onToggleWriteMode) onToggleWriteMode(false);
+    // Only exit edit mode when navigating to a different story, not on initial mount
+    if (prevStoryRef.current != null && prevStoryRef.current !== story?.story_number) {
+      if (onToggleWriteMode) onToggleWriteMode(false);
+    }
+    prevStoryRef.current = story?.story_number;
   }, [story]);
 
   if (!story && !task) return (
@@ -734,6 +739,11 @@ export default function StoryEngine() {
     if (activeTask?.story_number) try { localStorage.setItem('se_activeTaskNum', String(activeTask.story_number)); } catch {}
   }, [activeTask]);
 
+  // Persist writeMode to localStorage
+  useEffect(() => {
+    try { localStorage.setItem('se_writeMode', writeMode ? '1' : '0'); } catch {}
+  }, [writeMode]);
+
   // Generation state
   const [generating, setGenerating]           = useState(false);
   const [generatingNum, setGeneratingNum]     = useState(null);
@@ -759,7 +769,9 @@ export default function StoryEngine() {
   // ── New redesign state ───────────────────────────────────────────────────
   const [showStats, setShowStats]             = useState(false);
   const [readingMode, setReadingMode]         = useState(false);
-  const [writeMode, setWriteMode]             = useState(false);
+  const [writeMode, setWriteMode]             = useState(() => {
+    try { return localStorage.getItem('se_writeMode') === '1'; } catch { return false; }
+  });
   const [toasts, setToasts]                   = useState([]);
   const [phaseFilter, setPhaseFilter]         = useState(null);
   const [typeFilter, setTypeFilter]           = useState(null);
