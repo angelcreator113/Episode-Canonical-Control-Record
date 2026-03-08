@@ -61,8 +61,8 @@ const STEP_LABELS = ['Brief', 'Generate', 'Read', 'Evaluate', 'Memory', 'Registr
 
 const CONTENT_TYPES = [
   'Novel', 'Short Story', 'Screenplay', 'TV Pilot', 'TV Episode',
-  'Stage Play', 'Memoir', 'Personal Essay', 'Song Lyrics', 'Poetry Collection',
-  'Graphic Novel', 'Game Narrative', 'Podcast Script', 'Other',
+  'Stage Play', 'Memoir', 'Personal Essay', 'Newsletter', 'Song Lyrics',
+  'Poetry Collection', 'Graphic Novel', 'Game Narrative', 'Podcast Script', 'Other',
 ];
 
 const EMPTY_BRIEF = {
@@ -76,7 +76,7 @@ const BRIEF_REQUIRED = ['situation', 'content_name', 'content_type', 'emotional_
 
 // ── Extract content info from a task/situation string ─────────────────
 const CONTENT_TYPE_PATTERNS = [
-  { pattern: /\b(newsletter|email\s*blast|dispatch)\b/i, type: 'Personal Essay', nameHint: 'newsletter' },
+  { pattern: /\b(newsletter|email\s*blast|dispatch|substack)\b/i, type: 'Newsletter', nameHint: 'newsletter' },
   { pattern: /\b(novel|book|manuscript)\b/i, type: 'Novel', nameHint: 'novel' },
   { pattern: /\b(short\s*story|flash\s*fiction)\b/i, type: 'Short Story', nameHint: 'short story' },
   { pattern: /\b(screen\s*play|script|film)\b/i, type: 'Screenplay', nameHint: 'screenplay' },

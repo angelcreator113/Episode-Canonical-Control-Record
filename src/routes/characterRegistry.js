@@ -251,7 +251,7 @@ router.get('/characters/scene-context/:characterKey', async (req, res) => {
     // Find the character by key + registry
     const character = await RegistryCharacter.findOne({
       where: { character_key: characterKey, registry_id },
-      attributes: ['id', 'character_key', 'display_name', 'living_context', 'career_status', 'hidden_want', 'core_wound', 'core_desire', 'core_belief'],
+      attributes: ['id', 'character_key', 'display_name', 'living_context', 'career_status', 'hidden_want', 'core_wound', 'core_desire', 'core_belief', 'core_fear'],
     });
     if (!character) return res.status(404).json({ success: false, error: 'Character not found in registry' });
 
@@ -300,6 +300,7 @@ router.get('/characters/scene-context/:characterKey', async (req, res) => {
       core_wound: character.core_wound || null,
       core_desire: character.core_desire || null,
       core_belief: character.core_belief || null,
+      core_fear: character.core_fear || null,
       living_context: character.living_context || {},
       financial_status: character.career_status?.financial_status || null,
       relationships,

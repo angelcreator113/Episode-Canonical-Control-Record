@@ -3969,6 +3969,10 @@ Do not explain or comment. Only return the prose itself.`;
 
     const user = `CHARACTER: ${character?.name || 'Unknown'} (${character?.type || 'unknown'})
 ROLE: ${character?.role || ''}
+${character?.core_wound ? `CORE WOUND: ${character.core_wound}` : ''}
+${character?.core_desire ? `CORE DESIRE: ${character.core_desire}` : ''}
+${character?.core_fear ? `CORE FEAR: ${character.core_fear}` : ''}
+${character?.description ? `WHO THEY ARE: ${character.description}` : ''}
 BELIEF PRESSURED: ${character?.belief_pressured || 'unknown'}
 EMOTIONAL FUNCTION: ${character?.emotional_function || ''}
 WRITER NOTES: ${character?.writer_notes ? character.writer_notes.slice(0, 300) : ''}
@@ -6222,6 +6226,10 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
         portrait_url: char.portrait_url || null,
         has_dna: !!CHARACTER_DNA[char.character_key],
         registry_id: char.registry?.id || null,
+        core_desire: char.core_desire || null,
+        core_fear: char.core_fear || null,
+        core_wound: char.core_wound || null,
+        description: char.description || null,
       });
     }
 

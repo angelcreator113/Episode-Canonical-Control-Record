@@ -86,11 +86,21 @@ function buildCharacterBlock(dossier, relationships) {
   const lines = [];
   lines.push(`${d.display_name || d.character_key}`);
 
+  // Archetype & trait
+  if (d.character_archetype) lines.push(`  Archetype: ${d.character_archetype}`);
+  if (d.signature_trait) lines.push(`  Signature trait: ${d.signature_trait}`);
+
   // Identity triad
   if (d.core_wound) lines.push(`  Wound: ${d.core_wound}`);
   if (d.core_desire) lines.push(`  Desire: ${d.core_desire}`);
+  if (d.core_fear) lines.push(`  Fear: ${d.core_fear}`);
   if (d.hidden_want) lines.push(`  Hidden want: ${d.hidden_want}`);
   if (d.core_belief) lines.push(`  Belief: ${d.core_belief}`);
+
+  // Mask vs Truth
+  if (d.mask_persona) lines.push(`  Public self (mask): ${d.mask_persona}`);
+  if (d.truth_persona) lines.push(`  True self (hidden): ${d.truth_persona}`);
+  if (d.emotional_baseline) lines.push(`  Emotional baseline: ${d.emotional_baseline}`);
 
   // Living context (situational grounding)
   const lc = d.living_context || {};
@@ -126,6 +136,34 @@ function buildCharacterBlock(dossier, relationships) {
   if (dp.the_unseen?.what_they_lie_about) lines.push(`  Maintenance lies: ${dp.the_unseen.what_they_lie_about}`);
   if (dp.politics_and_justice?.the_injustice_they_cant_ignore) lines.push(`  Injustice: ${dp.politics_and_justice.the_injustice_they_cant_ignore}`);
 
+  // Voice signature (dialogue patterns)
+  const vs = d.voice_signature || {};
+  if (vs.speech_pattern) lines.push(`  Speech pattern: ${vs.speech_pattern}`);
+  if (vs.vocabulary_level) lines.push(`  Vocabulary: ${vs.vocabulary_level}`);
+  if (vs.verbal_tics) lines.push(`  Verbal tics: ${vs.verbal_tics}`);
+  if (vs.silence_pattern) lines.push(`  Silence pattern: ${vs.silence_pattern}`);
+
+  // Story presence
+  const sp = d.story_presence || {};
+  if (sp.entrance_energy) lines.push(`  Entrance energy: ${sp.entrance_energy}`);
+  if (sp.scene_role) lines.push(`  Default scene role: ${sp.scene_role}`);
+
+  // Evolution tracking
+  const et = d.evolution_tracking || {};
+  if (et.current_arc) lines.push(`  Current arc: ${et.current_arc}`);
+  if (et.arc_stage) lines.push(`  Arc stage: ${et.arc_stage}`);
+  if (et.last_shift) lines.push(`  Last shift: ${et.last_shift}`);
+
+  // Career status
+  const cs = d.career_status || {};
+  if (cs.current_role) lines.push(`  Career: ${cs.current_role}`);
+  if (cs.financial_status) lines.push(`  Financial: ${cs.financial_status}`);
+
+  // Aesthetic DNA
+  const ad = d.aesthetic_dna || {};
+  if (ad.visual_signature) lines.push(`  Visual signature: ${ad.visual_signature}`);
+  if (ad.color_palette) lines.push(`  Color palette: ${ad.color_palette}`);
+
   // Relationships to other characters in the scene
   if (relationships?.length) {
     lines.push('');
@@ -155,7 +193,10 @@ async function fetchSceneContext(characterKeys, registryId) {
     where: { registry_id: registryId, character_key: characterKeys },
     attributes: [
       'id', 'character_key', 'display_name', 'icon', 'portrait_url',
-      'core_desire', 'core_wound', 'core_belief', 'hidden_want',
+      'core_desire', 'core_wound', 'core_belief', 'core_fear', 'hidden_want',
+      'mask_persona', 'truth_persona', 'character_archetype', 'signature_trait',
+      'emotional_baseline', 'aesthetic_dna', 'voice_signature', 'story_presence',
+      'evolution_tracking', 'career_status',
       'living_context', 'personality_matrix', 'deep_profile',
     ],
   });
@@ -228,6 +269,52 @@ async function fetchSceneContext(characterKeys, registryId) {
   };
 }
 
+// ── Helper: load accumulated story memories for characters in scene ────────
+async function loadStoryMemoriesForScene(characterKeys, registryId) {
+  if (!characterKeys?.length || !registryId) return '';
+  try {
+    const chars = await db.RegistryCharacter.findAll({
+      where: { registry_id: registryId, character_key: characterKeys },
+      attributes: ['id', 'character_key', 'display_name'],
+    });
+    if (!chars.length) return '';
+
+    const charIds = chars.map(c => c.id);
+    const memories = await db.StorytellerMemory.findAll({
+      where: { character_id: charIds },
+      order: [['created_at', 'DESC']],
+      limit: 50,
+    });
+    if (!memories.length) return '';
+
+    const charMap = {};
+    chars.forEach(c => { charMap[c.id] = c.display_name || c.character_key; });
+
+    const painPoints = memories.filter(m => m.type === 'pain_point');
+    const beliefShifts = memories.filter(m => m.type === 'belief_shift');
+    const therapyOpenings = memories.filter(m => m.type === 'therapy_opening');
+
+    const sections = [];
+    if (painPoints.length) {
+      sections.push('ACCUMULATED PAIN POINTS (from previous stories — build on these, don\'t repeat):\n' +
+        painPoints.slice(0, 12).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+    if (beliefShifts.length) {
+      sections.push('BELIEF SHIFTS SO FAR (the character is evolving — track where she is now):\n' +
+        beliefShifts.slice(0, 8).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+    if (therapyOpenings.length) {
+      sections.push('THERAPEUTIC THREADS (unresolved emotional threads to weave in):\n' +
+        therapyOpenings.slice(0, 5).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+
+    return sections.length ? '\n\nSTORY MEMORY (accumulated knowledge from previous stories):\n' + sections.join('\n\n') : '';
+  } catch (err) {
+    console.error('[loadStoryMemoriesForScene] error:', err?.message);
+    return '';
+  }
+}
+
 // ── POST /generate-story-multi ────────────────────────────────────────────
 router.post('/generate-story-multi', optionalAuth, async (req, res) => {
   try {
@@ -239,17 +326,21 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
     // Fetch enriched character context (living context + relationships + knowledge asymmetry)
     const { dossiers, charBlocks } = await fetchSceneContext(characters_in_scene, registry_id);
 
+    // Load accumulated story memories (pain points, belief shifts, therapy openings)
+    const storyMemories = await loadStoryMemoriesForScene(characters_in_scene, registry_id);
+    const fullCharBlocks = charBlocks + storyMemories;
+
     const promptA = buildGenerationPrompt({
       scene_brief, voice_key: 'voice_a',
-      characters_in_scene: characters_in_scene || [], charBlocks,
+      characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks,
     });
     const promptB = buildGenerationPrompt({
       scene_brief, voice_key: 'voice_b',
-      characters_in_scene: characters_in_scene || [], charBlocks,
+      characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks,
     });
     const promptC = buildGenerationPrompt({
       scene_brief, voice_key: 'voice_c',
-      characters_in_scene: characters_in_scene || [], charBlocks,
+      characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks,
     });
 
     // Send keep-alive headers for long generation
