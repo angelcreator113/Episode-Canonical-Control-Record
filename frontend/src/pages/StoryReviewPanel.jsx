@@ -231,25 +231,17 @@ export default function StoryReviewPanel({
         </div>
       </div>
 
-      {/* Editor area */}
-      <div className="se-review-editor-wrap">
-        {editing ? (
+      {/* Editor area — only shown when editing (read-only view is in StoryPanel's paginated body) */}
+      {editing && (
+        <div className="se-review-editor-wrap">
           <textarea
             className="se-review-textarea"
             value={editText}
             onChange={(e) => handleTextChange(e.target.value)}
             spellCheck
           />
-        ) : (
-          <div className="se-review-text" onClick={() => setEditing(true)}>
-            {editText.split('\n').map((para, i) =>
-              para.trim()
-                ? <p key={i}>{para}</p>
-                : <div key={i} style={{ height: '0.8em' }} />
-            )}
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Notes toggle */}
       {showNotes && (
