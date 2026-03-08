@@ -1646,7 +1646,7 @@
 @media (max-width: 900px) {
   .se-page {
     height: auto;
-    min-height: 100dvh;
+    min-height: 0;
     overflow: auto;
   }
   .se-workspace {
@@ -1657,17 +1657,24 @@
   .se-task-list {
     width: 100%;
     height: auto;
-    max-height: 200px;
+    max-height: none;
     border-right: none;
     border-bottom: 1px solid var(--se-border-light);
-    overflow-y: auto;
+    overflow-y: visible;
   }
   .se-story-column {
     flex: none;
     overflow: visible;
   }
-  .se-story-panel { height: auto; }
+  .se-story-panel {
+    height: auto;
+    overflow: visible;
+  }
   .se-story-empty {
+    flex: none;
+    padding: 40px 20px;
+  }
+  .se-generating {
     flex: none;
     padding: 40px 20px;
   }
