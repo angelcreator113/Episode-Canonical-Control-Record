@@ -1644,22 +1644,25 @@
 }
 
 @media (max-width: 900px) {
-  /* Page: scrollable column, not viewport-locked */
-  .se-page {
+  /* Page: normal scrollable document, not viewport-locked */
+  .se-page,
+  .se-page.se-write-mode {
     height: auto;
     min-height: 100dvh;
     overflow-y: auto;
     overflow-x: hidden;
   }
 
-  /* Workspace: stack vertically, contain children */
-  .se-workspace {
+  /* Workspace: vertical stack, grows with content */
+  .se-workspace,
+  .se-write-mode .se-workspace,
+  .se-fullscreen-reading .se-workspace {
     flex-direction: column;
-    flex: none;
-    overflow: hidden;
+    flex: 1 1 auto;
+    overflow: visible;
   }
 
-  /* Task list: full width, bounded height, scrollable */
+  /* Task list: full width, bounded height, internally scrollable */
   .se-task-list {
     width: 100%;
     height: auto;
@@ -1669,21 +1672,32 @@
     overflow-y: auto;
   }
 
-  /* Story column: fill width, contain children */
-  .se-story-column {
-    flex: none;
+  /* Story column: stack below task list, grow with content */
+  .se-story-column,
+  .se-write-mode .se-story-column,
+  .se-fullscreen-reading .se-story-column {
+    flex: 1 1 auto;
     width: 100%;
-    overflow: hidden;
+    overflow: visible;
+    min-height: 0;
   }
 
-  /* Story panel: auto height, scrollable */
-  .se-story-panel {
+  /* Story panel: flow height, not viewport-locked */
+  .se-story-panel,
+  .se-write-mode .se-story-panel {
     height: auto;
-    min-height: 50vh;
-    overflow-y: auto;
+    min-height: 200px;
+    overflow: visible;
   }
 
-  /* Empty / generating states: no flex stretch */
+  /* Story body: flow with content (no inner scroll on mobile) */
+  .se-story-body,
+  .se-write-mode .se-story-body {
+    flex: none;
+    overflow: visible;
+  }
+
+  /* Empty / generating states: centered, bounded */
   .se-story-empty {
     flex: none;
     padding: 40px 20px;
