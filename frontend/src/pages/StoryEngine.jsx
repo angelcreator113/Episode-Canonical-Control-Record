@@ -682,6 +682,13 @@ function StoryPanel({
                     setEditText(prev => prev + '\n\n' + text);
                   }
                 }}
+                getSelectedText={() => {
+                  const ta = textareaRef.current;
+                  if (ta && ta.selectionStart !== ta.selectionEnd) {
+                    return editText.slice(ta.selectionStart, ta.selectionEnd);
+                  }
+                  return '';
+                }}
                 characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
                   ...c, id: c.id || key, character_key: key, name: c.display_name,
                 })) : []}

@@ -60,6 +60,15 @@ const ACTIONS = [
     action:   'lala',
     onlyFor:  ['special'], // only show for JustAWoman / Lala type characters
   },
+  {
+    id:       'rewrite',
+    icon:     '↻',
+    label:    'Rewrite',
+    sub:      'Select text → get 3 improved versions',
+    endpoint: '/api/v1/memories/rewrite-options',
+    action:   'rewrite',
+    special:  true,
+  },
 ];
 
 const TYPE_COLORS = {
@@ -79,10 +88,12 @@ export default function WriteModeAIWriter({
   onInsert,
   characters = [],
   onSelectCharacter,
+  getSelectedText,
 }) {
   const [activeAction, setActiveAction] = useState(null);
   const [result,       setResult]       = useState(null);
   const [editedResult, setEditedResult] = useState(null);
+  const [rewriteOptions, setRewriteOptions] = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
   const [copied,       setCopied]       = useState(false);
@@ -95,6 +106,7 @@ export default function WriteModeAIWriter({
   useEffect(() => {
     setResult(null);
     setEditedResult(null);
+    setRewriteOptions(null);
     setActiveAction(null);
     setError(null);
     setCopied(false);
@@ -107,11 +119,18 @@ export default function WriteModeAIWriter({
 
   async function runAction(action, isRetry = false) {
     if (!selectedCharacter) return;
+
+    // Special handling for rewrite action
+    if (action.id === 'rewrite') {
+      return runRewrite(isRetry);
+    }
+
     setActiveAction(action.id);
     // On retry, keep the old result visible while loading
     if (!isRetry) setResult(null);
     retryRef.current = isRetry;
     setEditedResult(null);
+    setRewriteOptions(null);
     setError(null);
     setLoading(true);
     setCopied(false);
@@ -172,6 +191,56 @@ export default function WriteModeAIWriter({
     setLoading(false);
   }
 
+  async function runRewrite(isRetry = false) {
+    const selected = getSelectedText?.();
+    if (!selected?.trim()) {
+      setError('Select a sentence or passage in the editor first, then click Rewrite.');
+      return;
+    }
+
+    setActiveAction('rewrite');
+    if (!isRetry) { setResult(null); setRewriteOptions(null); }
+    retryRef.current = isRetry;
+    setEditedResult(null);
+    setError(null);
+    setLoading(true);
+    setCopied(false);
+
+    try {
+      const res = await fetch('/api/v1/memories/rewrite-options', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          book_id: bookId,
+          content: selected.trim(),
+          chapter_brief: chapterContext || {},
+        }),
+      });
+
+      const data = await res.json();
+      const options = data.options || [];
+
+      if (options.length > 0) {
+        setRewriteOptions(options);
+        setResult(null);
+      } else {
+        if (!retryRef.current) setRewriteOptions(null);
+        setError('No rewrites returned — try selecting a different passage.');
+      }
+    } catch (e) {
+      if (!retryRef.current) setRewriteOptions(null);
+      setError('Rewrite failed. Check your connection and try again.');
+    }
+
+    setLoading(false);
+  }
+
+  function handlePickRewrite(option) {
+    setResult(option.text);
+    setEditedResult(option.text);
+    setRewriteOptions(null);
+  }
+
   function handleInsert() {
     const text = editedResult || result;
     if (!text) return;
@@ -184,6 +253,7 @@ export default function WriteModeAIWriter({
   function handleDiscard() {
     setResult(null);
     setEditedResult(null);
+    setRewriteOptions(null);
     setActiveAction(null);
   }
 
@@ -255,7 +325,7 @@ export default function WriteModeAIWriter({
       </div>
 
       {/* Action list */}
-      {!result && (
+      {!result && !rewriteOptions && (
         <div style={s.actions}>
           {availableActions.map(action => (
             <button
@@ -285,6 +355,46 @@ export default function WriteModeAIWriter({
               </div>
             </button>
           ))}
+        </div>
+      )}
+
+      {/* Rewrite options — pick one of three */}
+      {rewriteOptions && !result && (
+        <div style={s.resultPanel}>
+          <div style={s.resultHeader}>
+            <div style={{ ...s.resultAction, color: accent }}>Rewrite Options</div>
+            <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
+          </div>
+          {loading && <div style={s.retryLoading}>Generating new versions…</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', flex: 1 }}>
+            {rewriteOptions.map((opt, i) => (
+              <button
+                key={i}
+                style={{
+                  display: 'flex', flexDirection: 'column', gap: 4,
+                  padding: '10px 12px', background: 'rgba(28,24,20,0.03)',
+                  border: '1px solid rgba(28,24,20,0.08)', borderRadius: 4,
+                  cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s',
+                }}
+                onClick={() => handlePickRewrite(opt)}
+                title="Click to select this version"
+              >
+                <div style={{ fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace", color: accent }}>
+                  {opt.type || `Option ${i + 1}`}
+                </div>
+                <div style={{ fontFamily: "'Lora', Georgia, serif", fontStyle: 'italic', fontSize: 12, color: INK, lineHeight: 1.7 }}>
+                  {opt.text}
+                </div>
+              </button>
+            ))}
+          </div>
+          <button
+            style={{ ...s.tryAgainBtn, marginTop: 4, opacity: loading ? 0.5 : 1 }}
+            disabled={loading}
+            onClick={() => runRewrite(true)}
+          >
+            {loading ? '◌ Generating…' : '↻ Try again'}
+          </button>
         </div>
       )}
 
