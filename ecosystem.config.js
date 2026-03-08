@@ -1,3 +1,6 @@
+// Load .env so API keys are available when PM2 evaluates this config
+try { require('dotenv').config({ path: require('path').join(__dirname, '.env') }); } catch {}
+
 // Shared environment variables for both API and Worker
 const sharedEnv = {
   NODE_ENV: 'development',

@@ -697,9 +697,24 @@ export default function StoryEngine() {
   const [charsLoading, setCharsLoading] = useState(true);
   const [worldsList, setWorldsList] = useState([]);
 
-  // Character selection
-  const [selectedChar, setSelectedChar]       = useState('');
-  const [activeWorld, setActiveWorld]         = useState('book-1');
+  // Character selection — restore from localStorage on refresh
+  const [selectedChar, setSelectedChar]       = useState(() => {
+    try { return localStorage.getItem('se_selectedChar') || ''; } catch { return ''; }
+  });
+  const [activeWorld, setActiveWorld]         = useState(() => {
+    try { return localStorage.getItem('se_activeWorld') || 'book-1'; } catch { return 'book-1'; }
+  });
+
+  // Persist selectedChar + activeWorld to localStorage
+  useEffect(() => {
+    if (selectedChar) try { localStorage.setItem('se_selectedChar', selectedChar); } catch {}
+  }, [selectedChar]);
+  useEffect(() => {
+    try { localStorage.setItem('se_activeWorld', activeWorld); } catch {}
+  }, [activeWorld]);
+  useEffect(() => {
+    if (activeTask?.story_number) try { localStorage.setItem('se_activeTaskNum', String(activeTask.story_number)); } catch {}
+  }, [activeTask]);
 
   // World creation toggles
   const [worldToggles, setWorldToggles]       = useState({});
@@ -1047,7 +1062,11 @@ export default function StoryEngine() {
     const cached = getCachedTasks(selectedChar);
     if (cached?.length) {
       setTasks(cached);
-      setActiveTask(cached[0]);
+      // Restore last-viewed task, or fall back to first
+      const savedNum = (() => { try { return Number(localStorage.getItem('se_activeTaskNum')); } catch { return 0; } })();
+      const restored = savedNum && cached.find(t => t.story_number === savedNum);
+      setActiveTask(restored || cached[0]);
+      if (restored && cachedStoryData?.stories?.[savedNum]) setActiveStory(cachedStoryData.stories[savedNum]);
       return;
     }
 
@@ -1060,7 +1079,10 @@ export default function StoryEngine() {
           if (data.cached && data.tasks?.length) {
             setTasks(data.tasks);
             setCachedTasks(selectedChar, data.tasks);
-            setActiveTask(data.tasks[0]);
+            const savedNum = (() => { try { return Number(localStorage.getItem('se_activeTaskNum')); } catch { return 0; } })();
+            const restored = savedNum && data.tasks.find(t => t.story_number === savedNum);
+            setActiveTask(restored || data.tasks[0]);
+            if (restored && cachedStoryData?.stories?.[savedNum]) setActiveStory(cachedStoryData.stories[savedNum]);
             return;
           }
         }
@@ -1588,7 +1610,7 @@ export default function StoryEngine() {
               onEvaluate={(story) => {
                 const params = new URLSearchParams();
                 if (story?.text) params.set('text', '1');
-                if (activeTask?.task) params.set('brief', encodeURIComponent(activeTask.task));
+                if (activeTask?.task) params.set('brief', activeTask.task);
                 if (selectedChar) params.set('char', selectedChar);
                 navigate(`/story-evaluation?${params.toString()}`, { state: { storyText: story?.text, taskBrief: activeTask } });
               }}

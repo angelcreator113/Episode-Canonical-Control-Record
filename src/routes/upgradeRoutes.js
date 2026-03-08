@@ -382,6 +382,20 @@ router.patch('/writing-rhythm/goal', optionalAuth, async (req, res) => {
 // UPGRADE 4: MULTI-PRODUCT CONTENT
 // Every approved scene surfaces content for all three products
 // ─────────────────────────────────────────────────────────────────────────────
+
+// GET all multi-product content (must be before :storyId param route)
+router.get('/multi-product/all', optionalAuth, async (req, res) => {
+  try {
+    const content = await db.MultiProductContent.findAll({
+      order: [['created_at', 'DESC']],
+      limit: 100,
+    });
+    return res.json({ content });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 router.post('/multi-product/:storyId/generate', optionalAuth, async (req, res) => {
   const { storyId } = req.params;
 
