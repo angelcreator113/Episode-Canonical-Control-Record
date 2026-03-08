@@ -1,4 +1,4 @@
-/**
+﻿/**
  * WriteModeAIWriter.jsx
  * frontend/src/components/WriteModeAIWriter.jsx
  *
@@ -21,56 +21,26 @@ import { useState, useRef, useEffect } from 'react';
 const ACTIONS = [
   {
     id:       'continue',
-    icon:     '→',
+    icon:     '✨',
     label:    'Continue',
-    sub:      'Write what happens next in their voice',
     endpoint: '/api/v1/memories/ai-writer-action',
     action:   'continue',
   },
   {
-    id:       'dialogue',
-    icon:     '“',
-    label:    'Their next line',
-    sub:      'What would they say right now',
+    id:       'deepen',
+    icon:     '🔍',
+    label:    'Deepen',
     endpoint: '/api/v1/memories/ai-writer-action',
-    action:   'dialogue',
+    action:   'deepen',
   },
   {
-    id:       'interior',
-    icon:     '◌',
-    label:    'Interior monologue',
-    sub:      'What they are thinking but not saying',
+    id:       'nudge',
+    icon:     '💡',
+    label:    'Nudge',
     endpoint: '/api/v1/memories/ai-writer-action',
-    action:   'interior',
-  },
-  {
-    id:       'reaction',
-    icon:     '↯',
-    label:    'Their reaction',
-    sub:      'How they respond to what just happened',
-    endpoint: '/api/v1/memories/ai-writer-action',
-    action:   'reaction',
-  },
-  {
-    id:       'lala',
-    icon:     '✦',
-    label:    'Lala moment',
-    sub:      'The intrusive thought she would never post',
-    endpoint: '/api/v1/memories/ai-writer-action',
-    action:   'lala',
-    onlyFor:  ['special'], // only show for JustAWoman / Lala type characters
-  },
-  {
-    id:       'rewrite',
-    icon:     '↻',
-    label:    'Rewrite',
-    sub:      'Select text → get 3 improved versions',
-    endpoint: '/api/v1/memories/rewrite-options',
-    action:   'rewrite',
-    special:  true,
+    action:   'nudge',
   },
 ];
-
 const TYPE_COLORS = {
   pressure: '#B85C38',
   mirror:   '#9B7FD4',
@@ -93,10 +63,11 @@ export default function WriteModeAIWriter({
   const [activeAction, setActiveAction] = useState(null);
   const [result,       setResult]       = useState(null);
   const [editedResult, setEditedResult] = useState(null);
-  const [rewriteOptions, setRewriteOptions] = useState(null);
   const [loading,      setLoading]      = useState(false);
   const [error,        setError]        = useState(null);
   const [copied,       setCopied]       = useState(false);
+  const [lengthMode,   setLengthMode]   = useState('paragraph');
+  const [rewriteOptions, setRewriteOptions] = useState(null);
   const retryRef = useRef(false);
 
   const accent   = TYPE_COLORS[selectedCharacter?.type] || '#B8962E';
@@ -106,31 +77,20 @@ export default function WriteModeAIWriter({
   useEffect(() => {
     setResult(null);
     setEditedResult(null);
-    setRewriteOptions(null);
     setActiveAction(null);
     setError(null);
     setCopied(false);
+    setRewriteOptions(null);
   }, [selectedCharacter?.id]);
-
-  // Filter actions — Lala moment only for special type
-  const availableActions = ACTIONS.filter(a =>
-    !a.onlyFor || a.onlyFor.includes(selectedCharacter?.type)
-  );
 
   async function runAction(action, isRetry = false) {
     if (!selectedCharacter) return;
-
-    // Special handling for rewrite action
-    if (action.id === 'rewrite') {
-      return runRewrite(isRetry);
-    }
 
     setActiveAction(action.id);
     // On retry, keep the old result visible while loading
     if (!isRetry) setResult(null);
     retryRef.current = isRetry;
     setEditedResult(null);
-    setRewriteOptions(null);
     setError(null);
     setLoading(true);
     setCopied(false);
@@ -151,11 +111,15 @@ export default function WriteModeAIWriter({
         belief_pressured:   selectedCharacter.belief_pressured,
         emotional_function: selectedCharacter.emotional_function,
         writer_notes:       selectedCharacter.writer_notes,
+        core_desire:        selectedCharacter.core_desire,
+        core_fear:          selectedCharacter.core_fear,
+        core_wound:         selectedCharacter.core_wound,
+        description:        selectedCharacter.description,
       },
       recent_prose:  recentProse,
       chapter_context: chapterContext,
       action:        action.action || action.id,
-      length:        'paragraph',
+      length:        lengthMode,
       // On retry, send a random hint so the API produces a different result
       ...(isRetry && { retry_hint: `v${Date.now()}-${Math.random().toString(36).slice(2, 8)}` }),
     };
@@ -191,17 +155,17 @@ export default function WriteModeAIWriter({
     setLoading(false);
   }
 
-  async function runRewrite(isRetry = false) {
+  async function runRewrite() {
     const selected = getSelectedText?.();
-    if (!selected?.trim()) {
-      setError('Select a sentence or passage in the editor first, then click Rewrite.');
+    if (!selected) {
+      setError('Select some text in the editor first, then tap Rewrite.');
       return;
     }
 
     setActiveAction('rewrite');
-    if (!isRetry) { setResult(null); setRewriteOptions(null); }
-    retryRef.current = isRetry;
+    setResult(null);
     setEditedResult(null);
+    setRewriteOptions(null);
     setError(null);
     setLoading(true);
     setCopied(false);
@@ -211,24 +175,18 @@ export default function WriteModeAIWriter({
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
         body:    JSON.stringify({
-          book_id: bookId,
-          content: selected.trim(),
-          chapter_brief: chapterContext || {},
+          book_id:       bookId,
+          content:       selected,
+          chapter_brief: chapterContext,
         }),
       });
-
       const data = await res.json();
-      const options = data.options || [];
-
-      if (options.length > 0) {
-        setRewriteOptions(options);
-        setResult(null);
+      if (data.options?.length) {
+        setRewriteOptions(data.options);
       } else {
-        if (!retryRef.current) setRewriteOptions(null);
-        setError('No rewrites returned — try selecting a different passage.');
+        setError('No rewrite options returned — try selecting a different passage.');
       }
-    } catch (e) {
-      if (!retryRef.current) setRewriteOptions(null);
+    } catch {
       setError('Rewrite failed. Check your connection and try again.');
     }
 
@@ -239,6 +197,7 @@ export default function WriteModeAIWriter({
     setResult(option.text);
     setEditedResult(option.text);
     setRewriteOptions(null);
+    setActiveAction('rewrite');
   }
 
   function handleInsert() {
@@ -253,8 +212,8 @@ export default function WriteModeAIWriter({
   function handleDiscard() {
     setResult(null);
     setEditedResult(null);
-    setRewriteOptions(null);
     setActiveAction(null);
+    setRewriteOptions(null);
   }
 
   function handleCopy() {
@@ -324,77 +283,107 @@ export default function WriteModeAIWriter({
         )}
       </div>
 
-      {/* Action list */}
+      {/* AI Tools toolbar */}
       {!result && !rewriteOptions && (
-        <div style={s.actions}>
-          {availableActions.map(action => (
-            <button
-              key={action.id}
-              style={{
-                ...s.actionBtn,
-                background:  activeAction === action.id && loading
-                             ? `${accent}10` : 'transparent',
-                borderColor: activeAction === action.id
-                             ? accent : 'rgba(28,24,20,0.1)',
-                opacity:     loading && activeAction !== action.id ? 0.4 : 1,
-              }}
-              onClick={() => runAction(action)}
-              disabled={loading}
-            >
-              <span style={{ ...s.actionIcon, color: accent }}>
-                {action.icon}
-              </span>
-              <div style={s.actionText}>
-                <div style={s.actionLabel}>
+        <div style={s.toolbar}>
+          <div style={s.toolRow}>
+            {ACTIONS.map(action => (
+              <button
+                key={action.id}
+                style={{
+                  ...s.toolPill,
+                  background:  activeAction === action.id && loading
+                               ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                  borderColor: activeAction === action.id
+                               ? accent : 'rgba(28,24,20,0.10)',
+                  opacity:     loading && activeAction !== action.id ? 0.5 : 1,
+                }}
+                onClick={() => runAction(action)}
+                disabled={loading}
+              >
+                <span style={s.toolIcon}>{action.icon}</span>
+                <span style={s.toolLabel}>
                   {action.label}
                   {loading && activeAction === action.id && (
                     <span style={s.spinner}> {'◌'}</span>
                   )}
-                </div>
-                <div style={s.actionSub}>{action.sub}</div>
-              </div>
+                </span>
+              </button>
+            ))}
+            <button
+              style={{
+                ...s.toolPill,
+                background:  activeAction === 'rewrite' && loading
+                             ? `${accent}18` : 'rgba(28,24,20,0.04)',
+                borderColor: activeAction === 'rewrite'
+                             ? accent : 'rgba(28,24,20,0.10)',
+                opacity:     loading && activeAction !== 'rewrite' ? 0.5 : 1,
+              }}
+              onClick={runRewrite}
+              disabled={loading}
+            >
+              <span style={s.toolIcon}>{'✏️'}</span>
+              <span style={s.toolLabel}>
+                Rewrite
+                {loading && activeAction === 'rewrite' && (
+                  <span style={s.spinner}> {'◌'}</span>
+                )}
+              </span>
             </button>
-          ))}
+          </div>
+
+          {/* Length toggle */}
+          <div style={s.lengthRow}>
+            <button
+              style={{
+                ...s.lengthPill,
+                background: lengthMode === 'full' ? `${accent}14` : 'transparent',
+                color: lengthMode === 'full' ? accent : INK_MID,
+                borderColor: lengthMode === 'full' ? accent : 'rgba(28,24,20,0.10)',
+              }}
+              onClick={() => setLengthMode('full')}
+            >
+              ¶ full
+            </button>
+            <button
+              style={{
+                ...s.lengthPill,
+                background: lengthMode === 'paragraph' ? `${accent}14` : 'transparent',
+                color: lengthMode === 'paragraph' ? accent : INK_MID,
+                borderColor: lengthMode === 'paragraph' ? accent : 'rgba(28,24,20,0.10)',
+              }}
+              onClick={() => setLengthMode('paragraph')}
+            >
+              ¶ Paragraphs
+            </button>
+          </div>
+
+          {/* Mic hint */}
+          <div style={s.micHint}>
+            Tap mic to speak — or use AI tools above
+          </div>
         </div>
       )}
 
-      {/* Rewrite options — pick one of three */}
-      {rewriteOptions && !result && (
-        <div style={s.resultPanel}>
+      {/* Rewrite options */}
+      {rewriteOptions && (
+        <div style={s.rewritePanel}>
           <div style={s.resultHeader}>
-            <div style={{ ...s.resultAction, color: accent }}>Rewrite Options</div>
+            <div style={{ ...s.resultAction, color: accent }}>Pick a rewrite</div>
             <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
           </div>
-          {loading && <div style={s.retryLoading}>Generating new versions…</div>}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, overflowY: 'auto', flex: 1 }}>
-            {rewriteOptions.map((opt, i) => (
-              <button
-                key={i}
-                style={{
-                  display: 'flex', flexDirection: 'column', gap: 4,
-                  padding: '10px 12px', background: 'rgba(28,24,20,0.03)',
-                  border: '1px solid rgba(28,24,20,0.08)', borderRadius: 4,
-                  cursor: 'pointer', textAlign: 'left', transition: 'border-color 0.15s',
-                }}
-                onClick={() => handlePickRewrite(opt)}
-                title="Click to select this version"
-              >
-                <div style={{ fontSize: 8, letterSpacing: '0.12em', textTransform: 'uppercase', fontFamily: "'DM Mono', monospace", color: accent }}>
-                  {opt.type || `Option ${i + 1}`}
-                </div>
-                <div style={{ fontFamily: "'Lora', Georgia, serif", fontStyle: 'italic', fontSize: 12, color: INK, lineHeight: 1.7 }}>
-                  {opt.text}
-                </div>
-              </button>
-            ))}
-          </div>
-          <button
-            style={{ ...s.tryAgainBtn, marginTop: 4, opacity: loading ? 0.5 : 1 }}
-            disabled={loading}
-            onClick={() => runRewrite(true)}
-          >
-            {loading ? '◌ Generating…' : '↻ Try again'}
-          </button>
+          {rewriteOptions.map((opt, i) => (
+            <button
+              key={i}
+              style={s.rewriteOption}
+              onClick={() => handlePickRewrite(opt)}
+            >
+              <div style={{ ...s.rewriteType, color: accent }}>
+                {opt.type}
+              </div>
+              <div style={s.rewriteText}>{opt.text}</div>
+            </button>
+          ))}
         </div>
       )}
 
@@ -403,7 +392,7 @@ export default function WriteModeAIWriter({
         <div style={s.resultPanel}>
           <div style={s.resultHeader}>
             <div style={{ ...s.resultAction, color: accent }}>
-              {availableActions.find(a => a.id === activeAction)?.label || 'Generated'}
+              {activeAction === 'rewrite' ? 'Rewrite' : (ACTIONS.find(a => a.id === activeAction)?.label || 'Generated')}
             </div>
             <button style={s.discardBtn} onClick={handleDiscard}>{'✕'}</button>
           </div>
@@ -429,7 +418,7 @@ export default function WriteModeAIWriter({
             </button>
             <div style={s.resultRow}>
               <button style={{ ...s.tryAgainBtn, opacity: loading ? 0.5 : 1 }} disabled={loading} onClick={() => {
-                const action = availableActions.find(a => a.id === activeAction);
+                const action = ACTIONS.find(a => a.id === activeAction);
                 if (action) runAction(action, true);
               }}>
                 {loading ? '◌ Generating…' : '↻ Try again'}
@@ -586,50 +575,62 @@ const s = {
     lineHeight: 1.5,
   },
 
-  // Actions
-  actions: {
+  // AI Tools toolbar
+  toolbar: {
     display:       'flex',
     flexDirection: 'column',
-    padding:       '8px 0',
-    overflowY:     'auto',
-    flex:          1,
+    padding:       '12px 14px',
+    gap:           10,
   },
-  actionBtn: {
-    display:     'flex',
-    gap:         10,
-    padding:     '10px 14px',
-    border:      'none',
-    borderLeft:  '2px solid',
-    cursor:      'pointer',
-    textAlign:   'left',
-    transition:  'all 0.12s ease',
-    marginBottom: 1,
+  toolRow: {
+    display:        'flex',
+    gap:            8,
+    flexWrap:       'wrap',
   },
-  actionIcon: {
-    fontSize:   16,
+  toolPill: {
+    display:      'flex',
+    alignItems:   'center',
+    gap:          6,
+    padding:      '8px 14px',
+    border:       '1px solid',
+    borderRadius: 20,
+    cursor:       'pointer',
+    transition:   'all 0.15s ease',
+    whiteSpace:   'nowrap',
+  },
+  toolIcon: {
+    fontSize:   15,
     lineHeight: 1,
     flexShrink: 0,
-    marginTop:  2,
-    fontFamily: "'Cormorant Garamond', Georgia, serif",
-    width:      18,
-    textAlign:  'center',
   },
-  actionText: {
-    flex: 1,
-  },
-  actionLabel: {
-    fontSize:      11,
+  toolLabel: {
+    fontSize:      12,
     color:         INK,
-    letterSpacing: '0.02em',
-    marginBottom:  2,
     fontFamily:    "'DM Mono', monospace",
+    letterSpacing: '0.02em',
   },
-  actionSub: {
-    fontSize:   9,
-    color:      INK_MID,
-    lineHeight: 1.4,
-    fontFamily: "'Lora', Georgia, serif",
-    fontStyle:  'italic',
+  lengthRow: {
+    display:  'flex',
+    gap:      8,
+  },
+  lengthPill: {
+    padding:       '5px 12px',
+    border:        '1px solid',
+    borderRadius:  14,
+    cursor:        'pointer',
+    fontSize:      11,
+    fontFamily:    "'DM Mono', monospace",
+    letterSpacing: '0.02em',
+    background:    'transparent',
+    transition:    'all 0.15s ease',
+  },
+  micHint: {
+    fontFamily:    "'Lora', Georgia, serif",
+    fontStyle:     'italic',
+    fontSize:      11,
+    color:         INK_LIGHT,
+    textAlign:     'center',
+    padding:       '6px 0',
   },
   spinner: {
     opacity: 0.5,
@@ -738,5 +739,40 @@ const s = {
     color:      '#B85C38',
     fontStyle:  'italic',
     fontFamily: "'Lora', Georgia, serif",
+  },
+
+  // Rewrite options
+  rewritePanel: {
+    display:       'flex',
+    flexDirection: 'column',
+    padding:       '12px 14px',
+    gap:           8,
+    flex:          1,
+    overflowY:     'auto',
+  },
+  rewriteOption: {
+    display:      'flex',
+    flexDirection: 'column',
+    gap:          4,
+    padding:      '10px 12px',
+    background:   'rgba(28,24,20,0.03)',
+    border:       '1px solid rgba(28,24,20,0.08)',
+    borderRadius: 6,
+    cursor:       'pointer',
+    textAlign:    'left',
+    transition:   'border-color 0.15s, background 0.15s',
+  },
+  rewriteType: {
+    fontSize:      8,
+    letterSpacing: '0.12em',
+    textTransform: 'uppercase',
+    fontFamily:    "'DM Mono', monospace",
+  },
+  rewriteText: {
+    fontFamily:   "'Lora', Georgia, serif",
+    fontStyle:    'italic',
+    fontSize:     12,
+    color:        INK,
+    lineHeight:   1.7,
   },
 };

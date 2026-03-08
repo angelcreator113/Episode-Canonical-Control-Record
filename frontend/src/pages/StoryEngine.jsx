@@ -727,6 +727,10 @@ function StoryPanel({
                   selected_name: charObj.display_name || charName,
                   type: charObj.role_type,
                   role: charObj.role_type,
+                  core_desire: charObj.core_desire,
+                  core_fear: charObj.core_fear,
+                  core_wound: charObj.core_wound,
+                  description: charObj.description,
                 } : null}
                 currentProse={editText}
                 chapterContext={task ? {
@@ -1089,6 +1093,10 @@ export default function StoryEngine() {
               portrait_url: c.portrait_url,
               has_dna: c.has_dna,
               registry_id: c.registry_id,
+              core_desire: c.core_desire,
+              core_fear: c.core_fear,
+              core_wound: c.core_wound,
+              description: c.description,
             };
           }
         }

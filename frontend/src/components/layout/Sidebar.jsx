@@ -22,9 +22,12 @@ const NAV = [
           { icon: '◇', label: 'Writing Rhythm',  route: '/universe?tab=writing-rhythm' },
         ],
       },
-      { icon: '✦',  label: 'Create World',         route: '/world-studio' },
-      { icon: '🌍', label: 'Learn Characters',     route: '/character-registry?view=world' },
-      { icon: '🌳', label: 'Relationships',        route: '/relationships' },
+      { icon: '✦',  label: 'Create World',         route: '/world-studio',
+        children: [
+          { icon: '🌍', label: 'Character Registry', route: '/character-registry?view=world' },
+          { icon: '🌳', label: 'Relationships',      route: '/relationships' },
+        ],
+      },
       { icon: '️', label: 'Therapy',              route: '/therapy/default' },
     ],
   },
@@ -91,6 +94,7 @@ function Sidebar({ isOpen, onClose }) {
   const shows = useShows();
   const [showsOpen, setShowsOpen] = useState(false);
   const [universeOpen, setUniverseOpen] = useState(false);
+  const [worldOpen, setWorldOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
   // Auto-expand Shows sub-nav when on a /shows/* route
@@ -104,6 +108,13 @@ function Sidebar({ isOpen, onClose }) {
       setUniverseOpen(true);
     }
   }, [location.pathname, location.search]);
+
+  // Auto-expand Create World sub-nav when on character-registry or relationships
+  useEffect(() => {
+    if (['/world-studio', '/character-registry', '/relationships'].some(p => location.pathname.startsWith(p))) {
+      setWorldOpen(true);
+    }
+  }, [location.pathname]);
 
   // Navigate and close mobile drawer
   const go = (path) => { navigate(path); if (onClose) onClose(); };
@@ -169,6 +180,10 @@ function Sidebar({ isOpen, onClose }) {
               {items.map(item => {
                 // ── Expandable item with static children (Universe) ──
                 if (item.children) {
+                  const isUniverse = item.route === '/universe';
+                  const isWorld = item.route === '/world-studio';
+                  const groupOpen = isUniverse ? universeOpen : isWorld ? worldOpen : false;
+                  const setGroupOpen = isUniverse ? setUniverseOpen : isWorld ? setWorldOpen : () => {};
                   const groupActive = isActive(item.route) || location.pathname === item.route;
                   return (
                     <div key={item.route} className="nav-group">
@@ -176,7 +191,7 @@ function Sidebar({ isOpen, onClose }) {
                         className={`nav-item ${groupActive ? 'active' : ''}`}
                         onClick={() => {
                           go(item.route);
-                          setUniverseOpen(o => !o);
+                          setGroupOpen(o => !o);
                         }}
                         title={collapsed ? item.label : undefined}
                       >
@@ -184,12 +199,12 @@ function Sidebar({ isOpen, onClose }) {
                         {!collapsed && (
                           <>
                             <span className="nav-label">{item.label}</span>
-                            <span className={`chevron ${universeOpen ? 'open' : ''}`}>›</span>
+                            <span className={`chevron ${groupOpen ? 'open' : ''}`}>›</span>
                           </>
                         )}
                       </div>
 
-                      {universeOpen && !collapsed && (
+                      {groupOpen && !collapsed && (
                         <div className="nav-subgroup">
                           {item.children.map(child => (
                             <NavLink

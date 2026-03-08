@@ -3947,6 +3947,18 @@ router.post('/ai-writer-action', optionalAuth, async (req, res) => {
         the one she would never post. The one that sounds exactly like
         who she wishes she could be. Confident, styled, brief.
         One sentence. Italicized in asterisks. This is Lala's proto-voice.`,
+
+      deepen: `Take what was just written and go beneath the surface.
+        Add emotional texture, sensory detail, or subtext that the character
+        would feel but the narrator barely names. Don't rewrite — deepen.
+        Add one to three sentences that sit inside or right after the last beat.
+        Same voice, same rhythm, more weight.`,
+
+      nudge: `Suggest a creative direction for the next beat of writing.
+        Not prose — a brief writer's note: what could happen next, what tension
+        could surface, what the character might do or avoid.
+        One to two sentences, written as a suggestion to the author.
+        Be specific to the character and the scene.`,
     };
 
     const system = `You are writing for a literary memoir called "Before Lala."
@@ -3957,6 +3969,10 @@ Do not explain or comment. Only return the prose itself.`;
 
     const user = `CHARACTER: ${character?.name || 'Unknown'} (${character?.type || 'unknown'})
 ROLE: ${character?.role || ''}
+${character?.core_wound ? `CORE WOUND: ${character.core_wound}` : ''}
+${character?.core_desire ? `CORE DESIRE: ${character.core_desire}` : ''}
+${character?.core_fear ? `CORE FEAR: ${character.core_fear}` : ''}
+${character?.description ? `WHO THEY ARE: ${character.description}` : ''}
 BELIEF PRESSURED: ${character?.belief_pressured || 'unknown'}
 EMOTIONAL FUNCTION: ${character?.emotional_function || ''}
 WRITER NOTES: ${character?.writer_notes ? character.writer_notes.slice(0, 300) : ''}
@@ -3973,7 +3989,8 @@ ACTION: ${ACTION_PROMPTS[action] || ACTION_PROMPTS.dialogue}${retry_hint ? `\n\n
 
     // Use higher temperature for creative writing; bump further on retries
     const temp = retry_hint ? 1.0 : 0.85;
-    const result = await safeAIWithTemp(system, user, length === 'sentence' ? 150 : 350, temp);
+    const maxTokens = length === 'full' ? 800 : length === 'sentence' ? 150 : 350;
+    const result = await safeAIWithTemp(system, user, maxTokens, temp);
 
     res.json({ ok: true, content: result, action });
 
@@ -6209,6 +6226,10 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
         portrait_url: char.portrait_url || null,
         has_dna: !!CHARACTER_DNA[char.character_key],
         registry_id: char.registry?.id || null,
+        core_desire: char.core_desire || null,
+        core_fear: char.core_fear || null,
+        core_wound: char.core_wound || null,
+        description: char.description || null,
       });
     }
 
