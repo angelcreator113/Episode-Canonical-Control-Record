@@ -1389,12 +1389,23 @@
 }
 .se-write-mode .se-workspace { flex: 1; }
 .se-write-mode .se-story-column { flex: 1; }
+.se-write-mode .se-story-body {
+  overflow: hidden;
+}
 .se-write-mode .se-story-editor {
   max-width: 720px;
   margin: 0 auto;
   padding: 44px 56px;
   font-size: 17px;
   line-height: 1.9;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--se-border) transparent;
+}
+.se-write-mode .se-therapy-panel,
+.se-write-mode .se-registry-update,
+.se-write-mode .se-review-panel {
+  display: none;
 }
 .se-write-mode .se-story-header {
   border-bottom-color: var(--se-border-light);
