@@ -738,34 +738,36 @@ function StoryPanel({
             </div>
           </div>
         ) : (
-          <div className="se-story-text" ref={storyBodyRef}>
-            {(pages[currentPage] || []).map((para, i) => (
-              para.trim()
-                ? <p key={i} className="se-story-para">{para}</p>
-                : <div key={i} className="se-story-spacer" />
-            ))}
-          </div>
-          {totalPages > 1 && (
-            <div className="se-page-nav">
-              <button
-                className="se-btn se-btn-page"
-                onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }}
-                disabled={currentPage === 0}
-              >
-                ‹ Prev Page
-              </button>
-              <span className="se-page-indicator">
-                Page {currentPage + 1} of {totalPages}
-              </span>
-              <button
-                className="se-btn se-btn-page"
-                onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }}
-                disabled={currentPage >= totalPages - 1}
-              >
-                Next Page ›
-              </button>
+          <>
+            <div className="se-story-text" ref={storyBodyRef}>
+              {(pages[currentPage] || []).map((para, i) => (
+                para.trim()
+                  ? <p key={i} className="se-story-para">{para}</p>
+                  : <div key={i} className="se-story-spacer" />
+              ))}
             </div>
-          )}
+            {totalPages > 1 && (
+              <div className="se-page-nav">
+                <button
+                  className="se-btn se-btn-page"
+                  onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }}
+                  disabled={currentPage === 0}
+                >
+                  ‹ Prev Page
+                </button>
+                <span className="se-page-indicator">
+                  Page {currentPage + 1} of {totalPages}
+                </span>
+                <button
+                  className="se-btn se-btn-page"
+                  onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }}
+                  disabled={currentPage >= totalPages - 1}
+                >
+                  Next Page ›
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
