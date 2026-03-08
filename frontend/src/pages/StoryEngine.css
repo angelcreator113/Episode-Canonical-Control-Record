@@ -1393,6 +1393,7 @@
 .se-write-mode .se-story-body {
   overflow: hidden;
   background: var(--se-cream);
+  display: flex;
 }
 .se-edit-container {
   display: flex;
@@ -1403,6 +1404,7 @@
 .se-edit-container .se-story-editor {
   flex: 1;
   min-width: 0;
+  height: auto;
 }
 .se-ai-writer-sidebar {
   width: 320px;
