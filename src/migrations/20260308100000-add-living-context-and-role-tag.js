@@ -14,20 +14,25 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // 1. living_context JSONB on registry_characters
-    await queryInterface.addColumn('registry_characters', 'living_context', {
-      type: Sequelize.JSONB,
-      allowNull: true,
-      defaultValue: null,
-    });
+    const regCols = await queryInterface.describeTable('registry_characters');
+    const relCols = await queryInterface.describeTable('character_relationships');
 
-    // 2. role_tag on character_relationships
-    await queryInterface.addColumn('character_relationships', 'role_tag', {
-      type: Sequelize.STRING(50),
-      allowNull: true,
-      defaultValue: null,
-      comment: 'ally | detractor | mentor | dependency | rival | partner | family | neutral',
-    });
+    if (!regCols.living_context) {
+      await queryInterface.addColumn('registry_characters', 'living_context', {
+        type: Sequelize.JSONB,
+        allowNull: true,
+        defaultValue: null,
+      });
+    }
+
+    if (!relCols.role_tag) {
+      await queryInterface.addColumn('character_relationships', 'role_tag', {
+        type: Sequelize.STRING(50),
+        allowNull: true,
+        defaultValue: null,
+        comment: 'ally | detractor | mentor | dependency | rival | partner | family | neutral',
+      });
+    }
   },
 
   async down(queryInterface) {

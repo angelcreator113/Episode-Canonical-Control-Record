@@ -2,25 +2,34 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    // 1. Add hidden_want to registry_characters (top-level, alongside wound/desire/belief)
-    await queryInterface.addColumn('registry_characters', 'hidden_want', {
-      type: Sequelize.TEXT,
-      allowNull: true,
-    });
+    const regCols = await queryInterface.describeTable('registry_characters');
+    const relCols = await queryInterface.describeTable('character_relationships');
 
-    // 2. Add knowledge asymmetry columns to character_relationships
-    await queryInterface.addColumn('character_relationships', 'source_knows', {
-      type: Sequelize.TEXT,
-      allowNull: true,
-    });
-    await queryInterface.addColumn('character_relationships', 'target_knows', {
-      type: Sequelize.TEXT,
-      allowNull: true,
-    });
-    await queryInterface.addColumn('character_relationships', 'reader_knows', {
-      type: Sequelize.TEXT,
-      allowNull: true,
-    });
+    if (!regCols.hidden_want) {
+      await queryInterface.addColumn('registry_characters', 'hidden_want', {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      });
+    }
+
+    if (!relCols.source_knows) {
+      await queryInterface.addColumn('character_relationships', 'source_knows', {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      });
+    }
+    if (!relCols.target_knows) {
+      await queryInterface.addColumn('character_relationships', 'target_knows', {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      });
+    }
+    if (!relCols.reader_knows) {
+      await queryInterface.addColumn('character_relationships', 'reader_knows', {
+        type: Sequelize.TEXT,
+        allowNull: true,
+      });
+    }
   },
 
   async down(queryInterface) {
