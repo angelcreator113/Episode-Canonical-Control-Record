@@ -439,9 +439,20 @@ function StoryPanel({
   }, [story]);
 
   if (!story && !task) return (
-    <div className="se-story-panel se-story-empty">
-      <div className="se-story-empty-icon">◎</div>
-      <div className="se-story-empty-text">Select a story to read or generate one.</div>
+    <div className="se-story-panel se-story-section">
+      <div className="se-story-section-header">
+        <div className="se-story-section-title">Stories</div>
+        <div className="se-story-section-sub">0 stories</div>
+      </div>
+      <div className="se-story-section-empty">
+        <div className="se-story-empty-icon">◎</div>
+        <div className="se-story-empty-text">Once the arc is generated, individual story tasks will appear here.</div>
+        <div className="se-story-skeletons">
+          <div className="se-story-skeleton" />
+          <div className="se-story-skeleton" />
+          <div className="se-story-skeleton" />
+        </div>
+      </div>
     </div>
   );
 
@@ -1564,21 +1575,22 @@ export default function StoryEngine() {
                 <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
               </div>
             ) : tasks.length === 0 ? (
-              <div className="se-task-empty">
-                <div className="se-task-empty-icon" style={{ color: char?.color }}>{char?.icon}</div>
-                <div className="se-task-empty-title">No story arc yet for {char?.display_name}</div>
-                <div className="se-task-empty-desc">
-                  Generate a 50-story task arc using AI.
-                  This takes 2–3 minutes on the first run,
-                  then loads instantly from cache.
+              <div className="se-task-empty se-hero-card">
+                <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
+                <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
+                <div className="se-hero-text">
+                  Generate a 50-story progression that moves from establishment
+                  through pressure, crisis, and integration. The first run takes
+                  a few minutes — after that, it loads instantly.
                 </div>
                 <button
-                  className="se-btn se-btn-generate-arc"
+                  className="se-btn se-btn-generate-arc se-primary-btn"
                   style={{ background: char?.color }}
                   onClick={() => handleGenerateArc()}
                 >
-                  Generate 50-Story Arc
+                  Generate Story Arc
                 </button>
+                <div className="se-hero-sub">Typically 2–3 minutes</div>
               </div>
             ) : (
               <>
