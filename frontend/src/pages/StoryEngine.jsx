@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import StoryReviewPanel from './StoryReviewPanel';
+import WriteModeAIWriter from '../components/WriteModeAIWriter';
 import './StoryEngine.css';
 
 const API_BASE = import.meta.env.VITE_API_URL || '/api/v1';
@@ -419,15 +420,21 @@ function StoryPanel({
   onNavigateStory, hasPrev, hasNext,
   onExportStory,
   onEvaluate,
+  charObj, selectedCharKey, activeWorld, allCharacters, onSelectChar,
 }) {
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
   const textareaRef = useRef(null);
+  const prevStoryRef = useRef(story?.story_number);
 
   useEffect(() => {
     setEditText(story?.text || '');
-    if (onToggleWriteMode) onToggleWriteMode(false);
+    // Only exit edit mode when navigating to a different story, not on initial mount
+    if (prevStoryRef.current != null && prevStoryRef.current !== story?.story_number) {
+      if (onToggleWriteMode) onToggleWriteMode(false);
+    }
+    prevStoryRef.current = story?.story_number;
   }, [story]);
 
   if (!story && !task) return (
@@ -632,13 +639,56 @@ function StoryPanel({
       {/* Story text */}
       <div className="se-story-body">
         {editing ? (
-          <textarea
-            ref={textareaRef}
-            className="se-story-editor"
-            value={editText}
-            onChange={(e) => setEditText(e.target.value)}
-            spellCheck
-          />
+          <div className="se-edit-container">
+            <textarea
+              ref={textareaRef}
+              className="se-story-editor"
+              value={editText}
+              onChange={(e) => setEditText(e.target.value)}
+              spellCheck
+            />
+            <div className="se-ai-writer-sidebar">
+              <WriteModeAIWriter
+                chapterId={String(story?.story_number || task?.story_number || '')}
+                bookId={activeWorld || ''}
+                selectedCharacter={charObj ? {
+                  id: charObj.id || selectedCharKey,
+                  name: charObj.display_name || charName,
+                  selected_name: charObj.display_name || charName,
+                  type: charObj.role_type,
+                  role: charObj.role_type,
+                } : null}
+                currentProse={editText}
+                chapterContext={task ? {
+                  scene_goal: task.task,
+                  theme: task.title,
+                  emotional_arc_start: task.phase,
+                  emotional_arc_end: '',
+                  pov: charName || '',
+                } : {}}
+                onInsert={(text) => {
+                  const ta = textareaRef.current;
+                  if (ta) {
+                    const start = ta.selectionStart;
+                    const end = ta.selectionEnd;
+                    const before = editText.slice(0, start);
+                    const after = editText.slice(end);
+                    setEditText(before + text + after);
+                    setTimeout(() => {
+                      ta.selectionStart = ta.selectionEnd = start + text.length;
+                      ta.focus();
+                    }, 0);
+                  } else {
+                    setEditText(prev => prev + '\n\n' + text);
+                  }
+                }}
+                characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
+                  ...c, id: c.id || key, character_key: key, name: c.display_name,
+                })) : []}
+                onSelectCharacter={(c) => onSelectChar?.(c?.character_key || c?.id)}
+              />
+            </div>
+          </div>
         ) : (
           <div className="se-story-text">
             {(story.text || '').split('\n').map((para, i) => (
@@ -650,8 +700,8 @@ function StoryPanel({
         )}
       </div>
 
-      {/* Therapy panel */}
-      {therapyMemories?.length > 0 && (
+      {/* Therapy panel (hidden during editing) */}
+      {!editing && therapyMemories?.length > 0 && (
         <div className="se-therapy-panel">
           <div className="se-therapy-title">Therapy Room Feeds</div>
           {therapyMemories.map((m, i) => (
@@ -664,16 +714,16 @@ function StoryPanel({
         </div>
       )}
 
-      {/* Registry feedback notification */}
-      {registryUpdate && (
+      {/* Registry feedback notification (hidden during editing) */}
+      {!editing && registryUpdate && (
         <div className="se-registry-update">
           <span className="se-registry-icon">🔄</span>
           <span className="se-registry-text">{registryUpdate}</span>
         </div>
       )}
 
-      {/* Persistence bridge — save / approve / reject to DB */}
-      {story && (
+      {/* Persistence bridge — save / approve / reject to DB (hidden during editing) */}
+      {story && !editing && (
         <StoryReviewPanel
           story={story}
           characterKey={story.character_key}
@@ -712,9 +762,6 @@ export default function StoryEngine() {
   useEffect(() => {
     try { localStorage.setItem('se_activeWorld', activeWorld); } catch {}
   }, [activeWorld]);
-  useEffect(() => {
-    if (activeTask?.story_number) try { localStorage.setItem('se_activeTaskNum', String(activeTask.story_number)); } catch {}
-  }, [activeTask]);
 
   // World creation toggles
   const [worldToggles, setWorldToggles]       = useState({});
@@ -731,6 +778,16 @@ export default function StoryEngine() {
   // Active story/task in right panel
   const [activeTask, setActiveTask]           = useState(null);
   const [activeStory, setActiveStory]         = useState(null);
+
+  // Persist activeTask number to localStorage
+  useEffect(() => {
+    if (activeTask?.story_number) try { localStorage.setItem('se_activeTaskNum', String(activeTask.story_number)); } catch {}
+  }, [activeTask]);
+
+  // Persist writeMode to localStorage
+  useEffect(() => {
+    try { localStorage.setItem('se_writeMode', writeMode ? '1' : '0'); } catch {}
+  }, [writeMode]);
 
   // Generation state
   const [generating, setGenerating]           = useState(false);
@@ -757,7 +814,9 @@ export default function StoryEngine() {
   // ── New redesign state ───────────────────────────────────────────────────
   const [showStats, setShowStats]             = useState(false);
   const [readingMode, setReadingMode]         = useState(false);
-  const [writeMode, setWriteMode]             = useState(false);
+  const [writeMode, setWriteMode]             = useState(() => {
+    try { return localStorage.getItem('se_writeMode') === '1'; } catch { return false; }
+  });
   const [toasts, setToasts]                   = useState([]);
   const [phaseFilter, setPhaseFilter]         = useState(null);
   const [typeFilter, setTypeFilter]           = useState(null);
@@ -1614,6 +1673,11 @@ export default function StoryEngine() {
                 if (selectedChar) params.set('char', selectedChar);
                 navigate(`/story-evaluation?${params.toString()}`, { state: { storyText: story?.text, taskBrief: activeTask } });
               }}
+              charObj={char}
+              selectedCharKey={selectedChar}
+              activeWorld={activeWorld}
+              allCharacters={CHARACTERS}
+              onSelectChar={setSelectedChar}
             />
           )}
         </div>
