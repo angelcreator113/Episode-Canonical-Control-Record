@@ -784,11 +784,6 @@ export default function StoryEngine() {
     if (activeTask?.story_number) try { localStorage.setItem('se_activeTaskNum', String(activeTask.story_number)); } catch {}
   }, [activeTask]);
 
-  // Persist writeMode to localStorage
-  useEffect(() => {
-    try { localStorage.setItem('se_writeMode', writeMode ? '1' : '0'); } catch {}
-  }, [writeMode]);
-
   // Generation state
   const [generating, setGenerating]           = useState(false);
   const [generatingNum, setGeneratingNum]     = useState(null);
@@ -817,6 +812,12 @@ export default function StoryEngine() {
   const [writeMode, setWriteMode]             = useState(() => {
     try { return localStorage.getItem('se_writeMode') === '1'; } catch { return false; }
   });
+
+  // Persist writeMode to localStorage
+  useEffect(() => {
+    try { localStorage.setItem('se_writeMode', writeMode ? '1' : '0'); } catch {}
+  }, [writeMode]);
+
   const [toasts, setToasts]                   = useState([]);
   const [phaseFilter, setPhaseFilter]         = useState(null);
   const [typeFilter, setTypeFilter]           = useState(null);
