@@ -650,8 +650,8 @@ function StoryPanel({
         )}
       </div>
 
-      {/* Therapy panel */}
-      {therapyMemories?.length > 0 && (
+      {/* Therapy panel (hidden during editing) */}
+      {!editing && therapyMemories?.length > 0 && (
         <div className="se-therapy-panel">
           <div className="se-therapy-title">Therapy Room Feeds</div>
           {therapyMemories.map((m, i) => (
@@ -664,16 +664,16 @@ function StoryPanel({
         </div>
       )}
 
-      {/* Registry feedback notification */}
-      {registryUpdate && (
+      {/* Registry feedback notification (hidden during editing) */}
+      {!editing && registryUpdate && (
         <div className="se-registry-update">
           <span className="se-registry-icon">🔄</span>
           <span className="se-registry-text">{registryUpdate}</span>
         </div>
       )}
 
-      {/* Persistence bridge — save / approve / reject to DB */}
-      {story && (
+      {/* Persistence bridge — save / approve / reject to DB (hidden during editing) */}
+      {story && !editing && (
         <StoryReviewPanel
           story={story}
           characterKey={story.character_key}
