@@ -1388,21 +1388,22 @@
   display: none;
 }
 .se-write-mode .se-workspace { flex: 1; }
-.se-write-mode .se-story-column { flex: 1; }
+.se-write-mode .se-story-column { flex: 1; background: var(--se-cream); }
+.se-write-mode .se-story-panel { background: var(--se-cream); }
 .se-write-mode .se-story-body {
   overflow: hidden;
   background: var(--se-cream);
 }
 .se-write-mode .se-story-editor {
-  max-width: 720px;
-  margin: 0 auto;
+  width: 100%;
+  height: 100%;
   padding: 44px 56px;
   font-size: 17px;
   line-height: 1.9;
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
-  background: transparent;
+  background: var(--se-cream);
 }
 .se-write-mode .se-therapy-panel,
 .se-write-mode .se-registry-update,
@@ -1412,9 +1413,6 @@
 .se-write-mode .se-story-header {
   border-bottom-color: var(--se-border-light);
   background: var(--se-surface);
-}
-.se-write-mode .se-story-column {
-  background: var(--se-cream);
 }
 .se-edit-wordcount {
   font-family: 'DM Sans', sans-serif;
