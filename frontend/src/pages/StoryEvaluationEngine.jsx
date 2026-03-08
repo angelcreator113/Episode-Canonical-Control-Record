@@ -74,6 +74,55 @@ const EMPTY_BRIEF = {
 
 const BRIEF_REQUIRED = ['situation', 'content_name', 'content_type', 'emotional_stakes', 'characters'];
 
+// ── Extract content info from a task/situation string ─────────────────
+const CONTENT_TYPE_PATTERNS = [
+  { pattern: /\b(newsletter|email\s*blast|dispatch)\b/i, type: 'Personal Essay', nameHint: 'newsletter' },
+  { pattern: /\b(novel|book|manuscript)\b/i, type: 'Novel', nameHint: 'novel' },
+  { pattern: /\b(short\s*story|flash\s*fiction)\b/i, type: 'Short Story', nameHint: 'short story' },
+  { pattern: /\b(screen\s*play|script|film)\b/i, type: 'Screenplay', nameHint: 'screenplay' },
+  { pattern: /\b(pilot|tv\s*episode|episode)\b/i, type: 'TV Episode', nameHint: 'episode' },
+  { pattern: /\b(play|monologue|stage)\b/i, type: 'Stage Play', nameHint: 'play' },
+  { pattern: /\b(memoir|autobiography)\b/i, type: 'Memoir', nameHint: 'memoir' },
+  { pattern: /\b(essay|op[\s-]?ed|column|article|blog\s*post|post)\b/i, type: 'Personal Essay', nameHint: 'essay' },
+  { pattern: /\b(song|lyrics|track|single|album)\b/i, type: 'Song Lyrics', nameHint: 'song' },
+  { pattern: /\b(poem|poetry|chapbook|verse)\b/i, type: 'Poetry Collection', nameHint: 'poem' },
+  { pattern: /\b(graphic\s*novel|comic|manga)\b/i, type: 'Graphic Novel', nameHint: 'graphic novel' },
+  { pattern: /\b(game|interactive|visual\s*novel)\b/i, type: 'Game Narrative', nameHint: 'game narrative' },
+  { pattern: /\b(podcast|audio)\b/i, type: 'Podcast Script', nameHint: 'podcast' },
+  { pattern: /\b(reel|video|vlog|youtube|tiktok|content|thumbnail)\b/i, type: 'Other', nameHint: 'content' },
+  { pattern: /\b(course|workshop|class|lesson)\b/i, type: 'Other', nameHint: 'course' },
+  { pattern: /\b(pitch|proposal|presentation)\b/i, type: 'Other', nameHint: 'pitch' },
+  { pattern: /\b(chapter|section|draft)\b/i, type: 'Novel', nameHint: 'chapter' },
+];
+
+function extractContentFromTask(taskText) {
+  if (!taskText) return {};
+  const result = {};
+
+  // Try to find the creative output being described
+  // Look for patterns like "her weekly newsletter", "a new reel", "the final chapter"
+  const possessiveMatch = taskText.match(/\b(?:her|his|their|the|a|an)\s+([\w\s]+?)(?:\s+(?:by|before|while|for|in|on|at|about|during|after|from|to|into|that)\b|[,.]|$)/i);
+  if (possessiveMatch) {
+    // Clean up the extracted name
+    let name = possessiveMatch[0].replace(/\s+(by|before|while|for|in|on|at|about|during|after|from|to|into|that)\b.*$/i, '').trim();
+    // Remove trailing punctuation
+    name = name.replace(/[,.]$/, '').trim();
+    if (name.length > 3 && name.length < 80) {
+      result.content_name = name;
+    }
+  }
+
+  // Try to match a content type
+  for (const { pattern, type } of CONTENT_TYPE_PATTERNS) {
+    if (pattern.test(taskText)) {
+      result.content_type = type;
+      break;
+    }
+  }
+
+  return result;
+}
+
 function briefCompleteness(b) {
   const filled = BRIEF_REQUIRED.filter(k => k === 'characters' ? b.characters.length > 0 : (b[k] || '').trim());
   return Math.round((filled.length / BRIEF_REQUIRED.length) * 100);
@@ -318,6 +367,14 @@ export default function StoryEvaluationEngine() {
       if (ctxParts.length) patch.world_context = ctxParts.join('. ') + '.';
     }
 
+    // Auto-extract content info from the situation/task text
+    const situationText = patch.situation || task?.task || '';
+    if (situationText) {
+      const extracted = extractContentFromTask(situationText);
+      if (extracted.content_name && !patch.content_name) patch.content_name = extracted.content_name;
+      if (extracted.content_type && !patch.content_type) patch.content_type = extracted.content_type;
+    }
+
     if (Object.keys(patch).length) setBrief(prev => ({ ...prev, ...patch }));
   }, []);
 
@@ -405,6 +462,34 @@ export default function StoryEvaluationEngine() {
     });
     if (deadlineParts.length && !brief.deadline_context) {
       patches.deadline_context = deadlineParts.join('. ');
+    }
+
+    // Why It Matters: build from core desire + hidden want
+    const mattersParts = [];
+    allCtx.forEach(ctx => {
+      const name = ctx.display_name || ctx.character_key;
+      const parts = [];
+      if (ctx.core_desire) parts.push(ctx.core_desire);
+      if (ctx.hidden_want) parts.push(ctx.hidden_want);
+      if (parts.length) mattersParts.push(`${name}: ${parts.join('. ')}`);
+    });
+    if (mattersParts.length && !brief.why_it_matters) {
+      patches.why_it_matters = mattersParts.join('\n');
+    }
+
+    // Content History: build from living context career/creative info
+    const historyParts = [];
+    allCtx.forEach(ctx => {
+      const lc = ctx.living_context || {};
+      const name = ctx.display_name || ctx.character_key;
+      const parts = [];
+      if (lc.creative_history) parts.push(lc.creative_history);
+      if (lc.career_trajectory) parts.push(lc.career_trajectory);
+      if (lc.past_projects) parts.push(lc.past_projects);
+      if (parts.length) historyParts.push(`${name}: ${parts.join('. ')}`);
+    });
+    if (historyParts.length && !brief.content_history) {
+      patches.content_history = historyParts.join('\n');
     }
 
     if (Object.keys(patches).length) setBrief(prev => ({ ...prev, ...patches }));

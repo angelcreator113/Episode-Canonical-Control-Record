@@ -166,6 +166,13 @@ body.page-story-engine .app-main-wrapper.full-screen .app-content {
   -webkit-overflow-scrolling: touch;
 }
 
+/* StoryEvaluationEngine needs scrolling in full-screen mode */
+.full-screen .app-content:has(> .see-page) {
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* WriteMode needs scrolling on mobile in full-screen mode */
 .full-screen .app-content:has(> .wm-root) {
   overflow-y: auto;
