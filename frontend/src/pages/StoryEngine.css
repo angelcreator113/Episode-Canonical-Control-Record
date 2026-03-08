@@ -1647,10 +1647,19 @@
   .se-workspace { flex-direction: column; }
   .se-task-list {
     width: 100%;
-    height: 220px;
+    height: auto;
+    max-height: 200px;
     border-right: none;
     border-bottom: 1px solid var(--se-border-light);
+    overflow-y: auto;
   }
+  .se-story-column { flex: 1; min-height: 0; }
+  .se-story-panel { height: auto; min-height: 0; }
+  .se-story-empty {
+    flex: none;
+    padding: 40px 20px;
+  }
+  .se-task-empty { padding: 24px 20px; }
   .se-story-brief-grid { grid-template-columns: 1fr; }
   .se-story-text { padding: 24px; }
   .se-world-toggles { display: none; }
