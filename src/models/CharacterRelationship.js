@@ -42,6 +42,16 @@ module.exports = (sequelize) => {
     conflict_summary:       { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
     // knows_about_connection: Does character B know about character A's connection to Lala / JustAWoman?
     knows_about_connection: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+
+    /* ── Knowledge Asymmetry ── */
+    // What each person knows about the other — relationship-level defaults
+    source_knows:           { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
+    target_knows:           { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
+    reader_knows:           { type: DataTypes.TEXT, allowNull: true, defaultValue: null },
+
+    /* ── Scene Brief Classification ── */
+    // role_tag: ally | detractor | mentor | dependency | rival | partner | family | neutral
+    role_tag:               { type: DataTypes.STRING(50), allowNull: true, defaultValue: null },
   }, {
     tableName: 'character_relationships',
     timestamps: true,

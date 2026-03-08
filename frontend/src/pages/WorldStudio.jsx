@@ -22,6 +22,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import useRegistries from '../hooks/useRegistries';
+import SocialProfileGenerator from './SocialProfileGenerator';
 import './WorldStudio.css';
 
 const API = '/api/v1';
@@ -383,6 +384,7 @@ export default function WorldStudio() {
           {[
             { key: 'characters', label: 'Characters', count: characters.length },
             { key: 'registry',   label: 'Registry',   count: regChars.length },
+            { key: 'feed',       label: 'The Feed',    count: null },
           ].map(t => (
             <button
               key={t.key}
@@ -476,7 +478,7 @@ export default function WorldStudio() {
         {/* ═══ SIDEBAR ════════════════════════════════════════════════ */}
         <aside className="ws-sidebar">
           <div className="ws-sidebar-title">
-            {tab === 'characters' ? 'Characters' : 'Registry'}
+            {tab === 'characters' ? 'Characters' : tab === 'registry' ? 'Registry' : 'The Feed'}
           </div>
 
           {/* Characters sidebar */}
@@ -985,6 +987,11 @@ export default function WorldStudio() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Feed tab */}
+          {tab === 'feed' && (
+            <SocialProfileGenerator embedded worldTag={worldTag} />
           )}
 
           {/* Registry tab: read-only */}

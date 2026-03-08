@@ -662,7 +662,7 @@ function StoryPanel({
               onClick={() => setShowAiSidebar(v => !v)}
               title={showAiSidebar ? 'Hide AI tools' : 'Show AI tools'}
             >
-              {showAiSidebar ? '✕' : '✦'}
+              {showAiSidebar ? '✕ Close' : '✦ AI Tools'}
             </button>
             <div className={`se-ai-writer-sidebar${showAiSidebar ? ' se-ai-sidebar-open' : ''}`}>
               <WriteModeAIWriter
@@ -963,6 +963,7 @@ export default function StoryEngine() {
               color: ROLE_COLORS[c.role_type] || '#546678',
               portrait_url: c.portrait_url,
               has_dna: c.has_dna,
+              registry_id: c.registry_id,
             };
           }
         }
@@ -1150,6 +1151,11 @@ export default function StoryEngine() {
     setConsistencyConflicts([]);
     setTherapyMemories([]);
     startTimer();
+
+    // On mobile, scroll to top so the generating indicator is visible
+    if (window.innerWidth <= 900) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
 
     try {
       const previousStories = approvedStories
@@ -1648,8 +1654,25 @@ export default function StoryEngine() {
                 const params = new URLSearchParams();
                 if (story?.text) params.set('text', '1');
                 if (activeTask?.task) params.set('brief', activeTask.task);
-                if (selectedChar) params.set('char', selectedChar);
-                navigate(`/story-evaluation?${params.toString()}`, { state: { storyText: story?.text, taskBrief: activeTask } });
+                // Collect all characters in the same world as the POV character
+                const charData = selectedChar && CHARACTERS[selectedChar];
+                const world = charData?.world;
+                const sceneChars = world
+                  ? Object.keys(CHARACTERS).filter(k => CHARACTERS[k].world === world)
+                  : selectedChar ? [selectedChar] : [];
+                if (sceneChars.length) params.set('chars', sceneChars.join(','));
+                if (charData?.registry_id) params.set('registry_id', charData.registry_id);
+                const charNames = {};
+                sceneChars.forEach(k => { charNames[k] = CHARACTERS[k]?.display_name || k; });
+                navigate(`/story-evaluation?${params.toString()}`, {
+                  state: {
+                    storyText: story?.text,
+                    taskBrief: activeTask,
+                    activeWorld: activeWorld || world,
+                    charNames,
+                    povChar: selectedChar,
+                  },
+                });
               }}
               charObj={char}
               selectedCharKey={selectedChar}

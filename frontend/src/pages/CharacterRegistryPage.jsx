@@ -14,6 +14,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import SocialProfileGenerator from './SocialProfileGenerator';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import './CharacterRegistryPage.css';
 import CharacterDilemmaEngine from '../components/CharacterDilemmaEngine';
@@ -46,6 +47,26 @@ const jGet = (obj, key) => (obj && typeof obj === 'object' ? obj[key] || '' : ''
 
 /* Check if a JSON object has any non-empty value */
 const hasJsonData = (obj) => obj && typeof obj === 'object' && Object.values(obj).some(v => v && String(v).trim());
+
+/* Normalize relationships_map: array format → flat format for dossier display */
+const normalizeRelMap = (rm) => {
+  if (!rm || typeof rm !== 'object') return null;
+  // Already flat format
+  if (!Array.isArray(rm)) return rm;
+  // Convert array [{type, target, feels, note}] → {allies, rivals, mentors, love_interests, business_partners, dynamic_notes}
+  const flat = { allies: '', rivals: '', mentors: '', love_interests: '', business_partners: '', dynamic_notes: '' };
+  const typeMap = { support: 'allies', familial: 'allies', pressure: 'rivals', shadow: 'rivals', mirror: 'mentors', romantic: 'love_interests', transactional: 'business_partners', creation: 'allies' };
+  const notes = [];
+  rm.forEach(r => {
+    const cat = typeMap[r.type] || 'allies';
+    const label = r.target || 'Unknown';
+    const detail = r.feels ? `${label} (${r.feels})` : label;
+    flat[cat] = flat[cat] ? `${flat[cat]}, ${detail}` : detail;
+    if (r.note) notes.push(`${label}: ${r.note}`);
+  });
+  if (notes.length) flat.dynamic_notes = notes.join('. ');
+  return flat;
+};
 
 /* ── Writer Notes smart renderer ── */
 function WriterNotesDisplay({ notes }) {
@@ -208,6 +229,9 @@ export default function CharacterRegistryPage() {
   const [showNewThread, setShowNewThread] = useState(false);
   const [threadForm, setThreadForm]       = useState({ title: '', description: '', status: 'open', source: '' });
   const [editingThreadId, setEditingThreadId] = useState(null);
+
+  // Feed mode — The Feed (parasocial creator profiles)
+  const [feedMode, setFeedMode]             = useState(false);
 
   // World mode — flat view of ALL characters across registries
   const [worldMode, setWorldMode]           = useState(false);
@@ -920,7 +944,7 @@ export default function CharacterRegistryPage() {
 
   /* ── Relationship count helper ── */
   const getRelCount = useCallback((char) => {
-    const rm = char.relationships_map;
+    const rm = normalizeRelMap(char.relationships_map);
     if (!rm || typeof rm !== 'object') return 0;
     let count = 0;
     ['allies', 'rivals', 'mentors', 'love_interests', 'business_partners'].forEach(key => {
@@ -1273,6 +1297,7 @@ export default function CharacterRegistryPage() {
 
   // Enter world mode
   const enterWorldMode = useCallback(() => {
+    setFeedMode(false);
     setWorldMode(true);
     loadAllCharacters();
   }, [loadAllCharacters]);
@@ -1282,6 +1307,15 @@ export default function CharacterRegistryPage() {
     setWorldMode(false);
     setWorldType('all');
     setWorldExpanded({});
+  }, []);
+
+  // Enter/exit feed mode
+  const enterFeedMode = useCallback(() => {
+    setWorldMode(false);
+    setFeedMode(true);
+  }, []);
+  const exitFeedMode = useCallback(() => {
+    setFeedMode(false);
   }, []);
 
 
@@ -1516,39 +1550,42 @@ export default function CharacterRegistryPage() {
                 </div>
 
                 {/* Relationship Quick View */}
-                {c.relationships_map && (
-                  <div>
-                    <span className="cr-dossier-meta-label" style={{ marginBottom: 8, display: 'block' }}>
-                      Relationships
-                    </span>
-                    <div className="cr-dossier-rel-quick">
-                      {jGet(c.relationships_map, 'allies') && (
-                        <span className="cr-dossier-rel-chip">
-                          <span className="cr-dossier-rel-chip-icon">🤝</span>
-                          {jGet(c.relationships_map, 'allies').split(',')[0]?.trim()}
-                        </span>
-                      )}
-                      {jGet(c.relationships_map, 'rivals') && (
-                        <span className="cr-dossier-rel-chip">
-                          <span className="cr-dossier-rel-chip-icon">⚔</span>
-                          {jGet(c.relationships_map, 'rivals').split(',')[0]?.trim()}
-                        </span>
-                      )}
-                      {jGet(c.relationships_map, 'mentors') && (
-                        <span className="cr-dossier-rel-chip">
-                          <span className="cr-dossier-rel-chip-icon">🏛</span>
-                          {jGet(c.relationships_map, 'mentors').split(',')[0]?.trim()}
-                        </span>
-                      )}
-                      {jGet(c.relationships_map, 'love_interests') && (
-                        <span className="cr-dossier-rel-chip">
-                          <span className="cr-dossier-rel-chip-icon">♡</span>
-                          {jGet(c.relationships_map, 'love_interests').split(',')[0]?.trim()}
-                        </span>
-                      )}
+                {c.relationships_map && (() => {
+                  const nrm = normalizeRelMap(c.relationships_map) || {};
+                  const hasRels = Object.values(nrm).some(v => v && String(v).trim());
+                  if (!hasRels) return null;
+                  return (
+                    <div>
+                      <span className="cr-dossier-meta-label" style={{ marginBottom: 8, display: 'block' }}>Relationships</span>
+                      <div className="cr-dossier-rel-quick">
+                        {jGet(nrm, 'allies') && (
+                          <span className="cr-dossier-rel-chip">
+                            <span className="cr-dossier-rel-chip-icon">🤝</span>
+                            {jGet(nrm, 'allies').split(',')[0]?.trim()}
+                          </span>
+                        )}
+                        {jGet(nrm, 'rivals') && (
+                          <span className="cr-dossier-rel-chip">
+                            <span className="cr-dossier-rel-chip-icon">⚔</span>
+                            {jGet(nrm, 'rivals').split(',')[0]?.trim()}
+                          </span>
+                        )}
+                        {jGet(nrm, 'mentors') && (
+                          <span className="cr-dossier-rel-chip">
+                            <span className="cr-dossier-rel-chip-icon">🏛</span>
+                            {jGet(nrm, 'mentors').split(',')[0]?.trim()}
+                          </span>
+                        )}
+                        {jGet(nrm, 'love_interests') && (
+                          <span className="cr-dossier-rel-chip">
+                            <span className="cr-dossier-rel-chip-icon">♡</span>
+                            {jGet(nrm, 'love_interests').split(',')[0]?.trim()}
+                          </span>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
 
                 {/* Actions */}
                 <div className="cr-dossier-actions">
@@ -1589,6 +1626,7 @@ export default function CharacterRegistryPage() {
             <div className="cr-dossier-right">
               {/* Tabs + Edit toggle */}
               <div className="cr-dossier-tabs-row">
+                <button className="cr-tabs-scroll-btn left" onClick={() => { if (tabsRef.current) tabsRef.current.scrollBy({ left: -200, behavior: 'smooth' }); }} aria-label="Scroll tabs left">‹</button>
                 <div className="cr-dossier-tabs" ref={tabsRef}>
                   {DOSSIER_TABS.map(t => (
                     <button
@@ -1600,6 +1638,7 @@ export default function CharacterRegistryPage() {
                     </button>
                   ))}
                 </div>
+                <button className="cr-tabs-scroll-btn right" onClick={() => { if (tabsRef.current) tabsRef.current.scrollBy({ left: 200, behavior: 'smooth' }); }} aria-label="Scroll tabs right">›</button>
               </div>
 
               {/* Tab Content */}
@@ -1943,12 +1982,12 @@ export default function CharacterRegistryPage() {
             {registries.map(r => (
               <button
                 key={r.id}
-                className={`cr-registry-pill${!worldMode && activeRegistry?.id === r.id ? ' active' : ''}`}
-                onClick={() => { exitWorldMode(); fetchRegistry(r.id); }}
+                className={`cr-registry-pill${!worldMode && !feedMode && activeRegistry?.id === r.id ? ' active' : ''}`}
+                onClick={() => { exitWorldMode(); exitFeedMode(); fetchRegistry(r.id); }}
               >
                 <span className="cr-pill-title">{r.title || 'Untitled'}</span>
                 {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
-                {!worldMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
+                {!worldMode && !feedMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
               </button>
             ))}
             <button
@@ -1958,14 +1997,23 @@ export default function CharacterRegistryPage() {
             >
               <span className="cr-pill-title">🌍 All Characters</span>
             </button>
+            <button
+              className={`cr-registry-pill${feedMode ? ' active' : ''}`}
+              onClick={enterFeedMode}
+              title="The Feed — parasocial creator profiles"
+            >
+              <span className="cr-pill-title">📱 The Feed</span>
+            </button>
             <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
               +
             </button>
           </div>
         )}
 
-        {/* ── WORLD MODE ── */}
-        {worldMode ? (
+        {/* ── FEED MODE ── */}
+        {feedMode ? (
+          <SocialProfileGenerator embedded />
+        ) : worldMode ? (
           <>
             {/* World header */}
             <div className="cr-world-header">
@@ -2203,6 +2251,11 @@ export default function CharacterRegistryPage() {
               )}
             </div>
             <div className="cr-registry-context-actions">
+              <BulkBackfillButton
+                registryId={activeRegistry.id}
+                characterCount={(activeRegistry.characters || []).length}
+                onDone={() => fetchRegistry(activeRegistry.id)}
+              />
               <button className="cr-ctx-btn" onClick={() => openEditRegistry(activeRegistry)}>
                 ✎ Edit
               </button>
@@ -2971,6 +3024,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               {jGet(c.story_presence, 'unresolved_threads') && (
                 <DRow label="Unresolved Threads" value={jGet(c.story_presence, 'unresolved_threads')} />
               )}
+              <BackfillBanner character={c} />
             </>
           )}
         </div>
@@ -3160,21 +3214,24 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
               <EArea label="Dynamic Notes" value={form.dynamic_notes} onChange={v => F('dynamic_notes', v)} rows={3}
                 placeholder="Tension? Loyal? Competitive?" />
             </>
-          ) : hasJsonData(c.relationships_map) ? (
-            <div className="cr-dossier-rel-grid">
-              <RelCard type="Allies" icon="🤝" value={jGet(c.relationships_map, 'allies')} />
-              <RelCard type="Rivals" icon="⚔" value={jGet(c.relationships_map, 'rivals')} />
-              <RelCard type="Mentors" icon="🏛" value={jGet(c.relationships_map, 'mentors')} />
-              <RelCard type="Love Interests" icon="♡" value={jGet(c.relationships_map, 'love_interests')} />
-              <RelCard type="Business" icon="💼" value={jGet(c.relationships_map, 'business_partners')} />
-              {jGet(c.relationships_map, 'dynamic_notes') && (
-                <div className="cr-dossier-rel-card" style={{ gridColumn: '1 / -1' }}>
-                  <div className="cr-dossier-rel-type">Dynamic Notes</div>
-                  <div className="cr-dossier-rel-names">{jGet(c.relationships_map, 'dynamic_notes')}</div>
-                </div>
-              )}
-            </div>
-          ) : (
+          ) : (() => {
+            const nrm = normalizeRelMap(c.relationships_map);
+            return hasJsonData(nrm) ? (
+              <div className="cr-dossier-rel-grid">
+                <RelCard type="Allies" icon="🤝" value={jGet(nrm, 'allies')} />
+                <RelCard type="Rivals" icon="⚔" value={jGet(nrm, 'rivals')} />
+                <RelCard type="Mentors" icon="🏛" value={jGet(nrm, 'mentors')} />
+                <RelCard type="Love Interests" icon="♡" value={jGet(nrm, 'love_interests')} />
+                <RelCard type="Business" icon="💼" value={jGet(nrm, 'business_partners')} />
+                {jGet(nrm, 'dynamic_notes') && (
+                  <div className="cr-dossier-rel-card" style={{ gridColumn: '1 / -1' }}>
+                    <div className="cr-dossier-rel-type">Dynamic Notes</div>
+                    <div className="cr-dossier-rel-names">{jGet(nrm, 'dynamic_notes')}</div>
+                  </div>
+                )}
+              </div>
+            ) : null;
+          })() || (
             <EmptyState label="Relationships" onEdit={() => startEdit(tab)} />
           )}
         </div>
@@ -3255,6 +3312,10 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
         </div>
       );
 
+    /* ── DEEP PROFILE ── */
+    case 'deep':
+      return <DeepProfileTab character={c} />;
+
     /* ── AI WRITER ── */
     case 'ai':
       return <AIWriterTab character={c} ai={ai} onSaveToProfile={ai.onSaveToProfile} />;
@@ -3262,6 +3323,365 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     default:
       return null;
   }
+}
+
+
+/* ================================================================
+   BACKFILL BANNER — fills empty JSONB sections from existing data
+   ================================================================ */
+function BackfillBanner({ character }) {
+  const [filling, setFilling] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState(null);
+
+  const hasData = (val) => val && typeof val === 'object' && Object.values(val).some(v => v && v !== '');
+  const emptySections = [];
+  if (!hasData(character.career_status))     emptySections.push('Career');
+  if (!hasData(character.aesthetic_dna))      emptySections.push('Aesthetic DNA');
+  if (!hasData(character.voice_signature))    emptySections.push('Voice');
+  if (!hasData(character.story_presence))     emptySections.push('Story Presence');
+  if (!hasData(character.evolution_tracking)) emptySections.push('Evolution');
+  if (!hasData(character.living_context))     emptySections.push('Living Context');
+
+  if (emptySections.length === 0) return null;
+
+  return (
+    <div style={{ marginTop: 20, padding: 14, background: 'rgba(100,80,200,0.04)', border: '1px dashed rgba(100,80,200,0.25)', borderRadius: 8 }}>
+      <div style={{ fontSize: 13, color: '#6850c8', marginBottom: 6, fontWeight: 600 }}>
+        {emptySections.length} empty section{emptySections.length > 1 ? 's' : ''} detected
+      </div>
+      <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
+        {emptySections.join(' · ')}
+      </div>
+      {result ? (
+        <div style={{ fontSize: 12, color: '#4a9a6a', fontWeight: 600 }}>
+          ✓ Filled {result.filled.length} section{result.filled.length !== 1 ? 's' : ''} — refresh to see updates
+        </div>
+      ) : (
+        <>
+          <button
+            disabled={filling}
+            onClick={async () => {
+              setFilling(true);
+              setError(null);
+              try {
+                const resp = await fetch(`/api/v1/character-registry/characters/${character.id}/backfill-sections`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                });
+                const data = await resp.json();
+                if (data.success) {
+                  setResult(data);
+                } else {
+                  setError(data.error || 'Backfill failed');
+                }
+              } catch (err) {
+                console.error('Backfill error:', err);
+                setError(err.message || 'Network error');
+              } finally {
+                setFilling(false);
+              }
+            }}
+            style={{
+              padding: '8px 20px', background: filling ? '#ddd' : '#6850c8', color: '#fff',
+              border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              opacity: filling ? 0.6 : 1,
+            }}
+          >
+            {filling ? '⟳ Filling sections…' : '✦ Auto-fill Empty Sections from Dossier'}
+          </button>
+          {error && (
+            <div style={{ fontSize: 12, color: '#c43a2a', marginTop: 8 }}>
+              Error: {error}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+
+/* ================================================================
+   BULK BACKFILL BUTTON
+   ================================================================ */
+function BulkBackfillButton({ registryId, characterCount, onDone }) {
+  const [running, setRunning] = useState(false);
+  const [progress, setProgress] = useState(null);
+  const [error, setError] = useState(null);
+
+  if (!registryId) return null;
+
+  return (
+    <>
+      {progress ? (
+        <div style={{ padding: '10px 14px', background: 'rgba(100,80,200,0.04)', border: '1px solid rgba(100,80,200,0.15)', borderRadius: 8, marginTop: 10 }}>
+          <div style={{ fontSize: 13, color: '#4a9a6a', fontWeight: 600, marginBottom: 4 }}>
+            ✓ Bulk backfill complete
+          </div>
+          <div style={{ fontSize: 12, color: '#666' }}>
+            {progress.total_sections_filled} sections filled across {progress.total_characters} characters
+          </div>
+          <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+            {progress.results.map(r => (
+              <div key={r.id} style={{ marginBottom: 2 }}>
+                {r.name}: {r.skipped ? 'already complete' : r.error ? `error — ${r.error}` : `${r.filled.length} sections filled`}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <button
+          className="cr-ctx-btn"
+          disabled={running}
+          onClick={async () => {
+            setRunning(true);
+            setError(null);
+            try {
+              const resp = await fetch(`/api/v1/character-registry/registries/${registryId}/backfill-all`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+              });
+              const data = await resp.json();
+              if (data.success) {
+                setProgress(data);
+                if (onDone) onDone();
+              } else {
+                setError(data.error || 'Bulk backfill failed');
+              }
+            } catch (err) {
+              console.error('Bulk backfill error:', err);
+              setError(err.message || 'Network error');
+            } finally {
+              setRunning(false);
+            }
+          }}
+          style={{ borderColor: '#6850c8', color: running ? '#999' : '#6850c8' }}
+        >
+          {running ? `⟳ Filling ${characterCount} characters…` : `✦ Bulk Backfill All (${characterCount})`}
+        </button>
+      )}
+      {error && (
+        <div style={{ fontSize: 12, color: '#c43a2a', marginTop: 4 }}>
+          {error}
+        </div>
+      )}
+    </>
+  );
+}
+
+
+/* ================================================================
+   DEEP PROFILE TAB
+   ================================================================ */
+const DEEP_DIMS = [
+  { key: 'life_stage',            icon: '⏳', label: 'Life Stage' },
+  { key: 'the_body',              icon: '🦴', label: 'The Body' },
+  { key: 'class_and_money',       icon: '💰', label: 'Class & Money' },
+  { key: 'religion_and_meaning',  icon: '🕯', label: 'Religion & Meaning' },
+  { key: 'race_and_culture',      icon: '🌍', label: 'Race & Culture' },
+  { key: 'sexuality_and_desire',  icon: '🔥', label: 'Sexuality & Desire' },
+  { key: 'family_architecture',   icon: '🏠', label: 'Family Architecture' },
+  { key: 'friendship_and_loyalty',icon: '🤝', label: 'Friendship & Loyalty' },
+  { key: 'ambition_and_identity', icon: '🎯', label: 'Ambition & Identity' },
+  { key: 'habits_and_rituals',    icon: '☕', label: 'Habits & Rituals' },
+  { key: 'speech_and_silence',    icon: '💬', label: 'Speech & Silence' },
+  { key: 'grief_and_loss',        icon: '🖤', label: 'Grief & Loss' },
+  { key: 'politics_and_justice',  icon: '⚖', label: 'Politics & Justice' },
+  { key: 'the_unseen',            icon: '👁', label: 'The Unseen' },
+];
+
+function DeepProfileTab({ character }) {
+  const [generating, setGenerating] = useState(false);
+  const [expandedDims, setExpandedDims] = useState(new Set());
+  const [writerInput, setWriterInput] = useState('');
+  const [writerParsing, setWriterParsing] = useState(false);
+  const [proposedAdditions, setProposedAdditions] = useState(null);
+  const [localProfile, setLocalProfile] = useState(null);
+
+  const dp = localProfile || character.deep_profile || {};
+  const API = import.meta.env.VITE_API_URL || '/api/v1';
+
+  const filledCount = DEEP_DIMS.filter(d => {
+    const dim = dp[d.key];
+    return dim && typeof dim === 'object' && Object.values(dim).some(v => v !== null && v !== undefined && v !== '');
+  }).length;
+
+  const toggleDim = (key) => setExpandedDims(prev => {
+    const next = new Set(prev);
+    next.has(key) ? next.delete(key) : next.add(key);
+    return next;
+  });
+
+  const handleGenerate = async () => {
+    setGenerating(true);
+    try {
+      const resp = await fetch(`${API}/character-registry/characters/${character.id}/deep-profile/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await resp.json();
+      if (data.success) setLocalProfile(data.deep_profile);
+    } catch (err) { console.error('Deep profile generation error:', err); }
+    finally { setGenerating(false); }
+  };
+
+  const handleParse = async () => {
+    if (!writerInput.trim() || writerInput.trim().length < 10) return;
+    setWriterParsing(true);
+    setProposedAdditions(null);
+    try {
+      const resp = await fetch(`${API}/character-registry/characters/${character.id}/deep-profile/writer-input`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: writerInput }),
+      });
+      const data = await resp.json();
+      if (data.proposed_additions) setProposedAdditions(data.proposed_additions);
+    } catch (err) { console.error('Writer input parse error:', err); }
+    finally { setWriterParsing(false); }
+  };
+
+  const handleAccept = async () => {
+    try {
+      const resp = await fetch(`${API}/character-registry/characters/${character.id}/deep-profile/accept`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ additions: proposedAdditions }),
+      });
+      const data = await resp.json();
+      if (data.deep_profile) setLocalProfile(data.deep_profile);
+      setProposedAdditions(null);
+      setWriterInput('');
+    } catch (err) { console.error('Accept error:', err); }
+  };
+
+  return (
+    <div className="cr-dossier-section">
+      <div className="cr-dossier-section-header">
+        <span className="cr-dossier-section-title">🧬 Deep Profile</span>
+        <span style={{ fontSize: 12, color: '#888' }}>{filledCount}/{DEEP_DIMS.length} dimensions</span>
+      </div>
+
+      {/* Dimension accordion */}
+      {DEEP_DIMS.map(dim => {
+        const data = dp[dim.key];
+        const hasDimData = data && typeof data === 'object' && Object.values(data).some(v => v !== null && v !== undefined && v !== '');
+        const isOpen = expandedDims.has(dim.key);
+        return (
+          <div key={dim.key} style={{ borderBottom: '1px solid rgba(0,0,0,0.06)', marginBottom: 2 }}>
+            <div
+              onClick={() => toggleDim(dim.key)}
+              style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '10px 4px', cursor: 'pointer', userSelect: 'none',
+              }}
+            >
+              <span style={{ fontSize: 14 }}>
+                <span style={{ marginRight: 8 }}>{dim.icon}</span>
+                <span style={{ fontWeight: 600, color: hasDimData ? 'var(--ink)' : '#aaa' }}>{dim.label}</span>
+              </span>
+              <span style={{ fontSize: 11, color: '#999' }}>{isOpen ? '▾' : '▸'}</span>
+            </div>
+            {isOpen && (
+              <div style={{ padding: '4px 12px 12px 32px' }}>
+                {hasDimData ? Object.entries(data).map(([field, val]) => {
+                  if (val === null || val === undefined || val === '') return null;
+                  return (
+                    <div key={field} style={{ marginBottom: 8 }}>
+                      <div style={{ fontSize: 11, color: '#999', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 2 }}>
+                        {field.replace(/_/g, ' ')}
+                      </div>
+                      <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.5 }}>{val}</div>
+                    </div>
+                  );
+                }) : (
+                  <div style={{ fontSize: 13, color: '#aaa', fontStyle: 'italic' }}>Not yet known</div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
+
+      {/* Generate button for empty/sparse profiles */}
+      {filledCount < 5 && (
+        <div style={{ marginTop: 16, padding: 14, background: 'rgba(201,168,76,0.06)', border: '1px dashed rgba(201,168,76,0.3)', borderRadius: 8 }}>
+          <div style={{ fontSize: 13, color: '#b8942f', marginBottom: 10 }}>
+            {filledCount === 0
+              ? 'Deep profile is empty — generate from existing character data?'
+              : `Only ${filledCount}/14 dimensions populated. Generate the rest?`}
+          </div>
+          <button
+            disabled={generating}
+            onClick={handleGenerate}
+            style={{
+              padding: '8px 20px', background: generating ? '#ddd' : '#c9a84c', color: generating ? '#888' : '#000',
+              border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+            }}
+          >
+            {generating ? '🧬 Generating…' : '🧬 Generate Deep Profile from Dossier'}
+          </button>
+        </div>
+      )}
+
+      {/* Writer input */}
+      <div style={{ marginTop: 20, borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 14 }}>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Writer Input</div>
+        <textarea
+          value={writerInput}
+          onChange={e => setWriterInput(e.target.value)}
+          placeholder="Tell me about this character — anything. Their mother's kitchen, what they do when they can't sleep, the compliment they still think about. I'll file it into the right dimensions."
+          style={{
+            width: '100%', minHeight: 80, background: 'rgba(0,0,0,0.02)', border: '1px solid rgba(0,0,0,0.12)',
+            borderRadius: 6, color: 'var(--ink)', padding: 10, fontSize: 13, fontFamily: 'inherit', resize: 'vertical',
+          }}
+        />
+        <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+          <button
+            onClick={handleParse}
+            disabled={writerParsing || writerInput.trim().length < 10}
+            style={{
+              padding: '6px 16px', background: writerParsing ? '#ddd' : '#c9a84c', color: '#000',
+              border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+              opacity: (writerParsing || writerInput.trim().length < 10) ? 0.5 : 1,
+            }}
+          >
+            {writerParsing ? 'Parsing…' : '✦ Parse into Profile'}
+          </button>
+        </div>
+      </div>
+
+      {/* Proposed additions */}
+      {proposedAdditions && (
+        <div style={{ marginTop: 12, background: 'rgba(201,168,76,0.06)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 8, padding: 14 }}>
+          <div style={{ fontSize: 11, color: '#b8942f', marginBottom: 10, textTransform: 'uppercase', letterSpacing: 1 }}>Proposed Additions</div>
+          {Object.entries(proposedAdditions).map(([dim, fields]) => (
+            <div key={dim} style={{ marginBottom: 10 }}>
+              <div style={{ fontSize: 13, color: '#8a7230', fontWeight: 600, marginBottom: 4 }}>{dim.replace(/_/g, ' ')}</div>
+              {Object.entries(fields || {}).map(([field, val]) => {
+                if (!val) return null;
+                return (
+                  <div key={field} style={{ fontSize: 12, color: '#555', marginLeft: 12, marginBottom: 2 }}>
+                    <span style={{ color: '#888' }}>{field.replace(/_/g, ' ')}:</span> {val}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+            <button
+              onClick={handleAccept}
+              style={{ padding: '6px 14px', background: '#4a9a6a', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+            >
+              ✓ Accept All
+            </button>
+            <button
+              onClick={() => setProposedAdditions(null)}
+              style={{ padding: '6px 14px', background: '#ddd', color: '#666', border: 'none', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+            >
+              Discard
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
 }
 
 
@@ -3753,15 +4173,17 @@ function buildFormForTab(tabKey, c) {
         public_recognition:  jGet(c.career_status, 'public_recognition'),
         ongoing_arc:         jGet(c.career_status, 'ongoing_arc'),
       };
-    case 'relationships':
+    case 'relationships': {
+      const nrm = normalizeRelMap(c.relationships_map) || {};
       return {
-        allies:            jGet(c.relationships_map, 'allies'),
-        rivals:            jGet(c.relationships_map, 'rivals'),
-        mentors:           jGet(c.relationships_map, 'mentors'),
-        love_interests:    jGet(c.relationships_map, 'love_interests'),
-        business_partners: jGet(c.relationships_map, 'business_partners'),
-        dynamic_notes:     jGet(c.relationships_map, 'dynamic_notes'),
+        allies:            jGet(nrm, 'allies'),
+        rivals:            jGet(nrm, 'rivals'),
+        mentors:           jGet(nrm, 'mentors'),
+        love_interests:    jGet(nrm, 'love_interests'),
+        business_partners: jGet(nrm, 'business_partners'),
+        dynamic_notes:     jGet(nrm, 'dynamic_notes'),
       };
+    }
     case 'story':
       return {
         appears_in_books:     jGet(c.story_presence, 'appears_in_books'),

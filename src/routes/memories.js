@@ -6208,6 +6208,7 @@ router.get('/story-engine-characters', optionalAuth, async (req, res) => {
         world,
         portrait_url: char.portrait_url || null,
         has_dna: !!CHARACTER_DNA[char.character_key],
+        registry_id: char.registry?.id || null,
       });
     }
 

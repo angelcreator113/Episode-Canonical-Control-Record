@@ -1,0 +1,662 @@
+/* ============================================================
+   SocialProfileGenerator — The Feed
+   Light-theme pastel-luxe design matching Character Registry
+   ============================================================ */
+
+.spg-page {
+  /* ── Main Palette (inherited from CR design system) ──────── */
+  --bg:          #fdf5f9;
+  --surface:     #ffffff;
+  --surface2:    #faf0f5;
+  --surface3:    #f0e4ef;
+  --border:      #e8d5e0;
+  --border2:     #d4b4d8;
+  --gold:        #c9a84c;
+  --gold-dim:    #a08530;
+  --gold-bg:     rgba(201, 168, 76, 0.10);
+  --gold-border: rgba(201, 168, 76, 0.35);
+  --ink:         #2d2232;
+  --ink-dim:     #6b5c6e;
+  --ink-faint:   #9a8c9e;
+  --red:         #c43a2a;
+  --green:       #3d8e42;
+  --blue:        #7b8de0;
+  --purple:      #c4a0e0;
+  --purple-deep: #9b4dca;
+  --cyan:        #5ec0b8;
+  --pink:        #f4b8cb;
+  --orange:      #d08840;
+  --gradient-main: linear-gradient(135deg, #f8c8dc 0%, #d4b4e8 50%, #c9a84c 100%);
+  --gradient-soft: linear-gradient(135deg, #fce4ef 0%, #ece0f5 100%);
+
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  padding: 0;
+}
+
+/* ── Embedded mode (inside WorldStudio) ────────────────────── */
+.spg-page.spg-embedded {
+  min-height: unset;
+  padding: 0;
+  background: transparent;
+}
+
+/* ── Header ────────────────────────────────────────────────── */
+.spg-header {
+  background: var(--gradient-soft);
+  border-bottom: 1px solid var(--border);
+  padding: 28px 32px 24px;
+}
+.spg-embedded .spg-header {
+  padding: 16px 0 12px;
+  background: transparent;
+  border-bottom: none;
+}
+.spg-header-title {
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--ink);
+  letter-spacing: -0.01em;
+}
+.spg-header-sub {
+  color: var(--ink-dim);
+  font-size: 0.85rem;
+  margin-top: 4px;
+}
+.spg-header-stats {
+  display: flex;
+  gap: 20px;
+  margin-top: 12px;
+}
+.spg-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+}
+.spg-stat-value {
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: var(--gold);
+}
+.spg-stat-label {
+  font-size: 0.75rem;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ── Spark Form ────────────────────────────────────────────── */
+.spg-spark-form {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  margin: 20px 32px;
+  box-shadow: 0 2px 8px rgba(45, 34, 50, 0.05);
+}
+.spg-embedded .spg-spark-form {
+  margin: 16px 0;
+}
+.spg-spark-title {
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--ink);
+}
+.spg-spark-row {
+  display: grid;
+  grid-template-columns: 200px 180px 1fr auto;
+  gap: 12px;
+  align-items: end;
+}
+@media (max-width: 768px) {
+  .spg-spark-row {
+    grid-template-columns: 1fr;
+  }
+}
+.spg-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.spg-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.spg-input {
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface2);
+  color: var(--ink);
+  font-size: 0.9rem;
+  font-family: inherit;
+  transition: border-color 0.15s;
+}
+.spg-input:focus {
+  outline: none;
+  border-color: var(--gold);
+  background: var(--surface);
+}
+.spg-input::placeholder {
+  color: var(--ink-faint);
+}
+select.spg-input {
+  cursor: pointer;
+}
+
+/* ── Buttons ───────────────────────────────────────────────── */
+.spg-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-family: inherit;
+}
+.spg-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.spg-btn-gold {
+  background: var(--gold);
+  color: #fff;
+}
+.spg-btn-gold:hover:not(:disabled) {
+  background: var(--gold-dim);
+}
+.spg-btn-green {
+  background: var(--green);
+  color: #fff;
+}
+.spg-btn-green:hover:not(:disabled) {
+  background: #2d7a32;
+}
+.spg-btn-purple {
+  background: var(--purple-deep);
+  color: #fff;
+}
+.spg-btn-purple:hover:not(:disabled) {
+  background: #7c3daa;
+}
+.spg-btn-outline {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--ink-dim);
+}
+.spg-btn-outline:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.spg-btn-sm {
+  padding: 6px 12px;
+  font-size: 0.78rem;
+}
+.spg-btn-danger {
+  background: transparent;
+  border: 1px solid var(--red);
+  color: var(--red);
+}
+.spg-btn-danger:hover:not(:disabled) {
+  background: var(--red);
+  color: #fff;
+}
+
+/* ── Content Area ──────────────────────────────────────────── */
+.spg-content {
+  padding: 0 32px 32px;
+}
+.spg-embedded .spg-content {
+  padding: 0;
+}
+
+/* ── Card Grid ─────────────────────────────────────────────── */
+.spg-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+/* ── Profile Card ──────────────────────────────────────────── */
+.spg-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.15s;
+  box-shadow: 0 2px 8px rgba(45, 34, 50, 0.05);
+  position: relative;
+}
+.spg-card:hover {
+  border-color: var(--gold);
+  box-shadow: 0 4px 16px rgba(201, 168, 76, 0.12);
+  transform: translateY(-1px);
+}
+.spg-card-active {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold-bg), 0 4px 16px rgba(201, 168, 76, 0.15);
+}
+.spg-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.spg-card-header-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+.spg-card-handle {
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.spg-card-platform {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: var(--surface3);
+  color: var(--ink-dim);
+}
+.spg-card-display-name {
+  color: var(--ink-dim);
+  font-size: 0.82rem;
+  margin-bottom: 6px;
+}
+.spg-card-archetype {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 20px;
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-border);
+  color: var(--gold-dim);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 10px;
+}
+.spg-card-persona {
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.spg-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+.spg-card-followers {
+  font-size: 0.78rem;
+  color: var(--ink-faint);
+}
+.spg-card-lala-score {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.spg-lala-high {
+  color: var(--gold);
+}
+.spg-lala-mid {
+  color: var(--orange);
+}
+.spg-lala-low {
+  color: var(--ink-faint);
+}
+
+/* Status badges */
+.spg-status {
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 2px 8px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.spg-status-generated { background: var(--surface3); color: var(--purple-deep); }
+.spg-status-finalized { background: rgba(61, 142, 66, 0.1); color: var(--green); }
+.spg-status-crossed   { background: var(--gold-bg); color: var(--gold); }
+.spg-status-archived  { background: var(--surface3); color: var(--ink-faint); }
+
+/* ── Detail Panel ──────────────────────────────────────────── */
+.spg-detail {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  margin-top: 20px;
+  overflow: hidden;
+  box-shadow: 0 2px 12px rgba(45, 34, 50, 0.06);
+}
+.spg-detail-header {
+  background: var(--gradient-soft);
+  padding: 24px;
+  border-bottom: 1px solid var(--border);
+}
+.spg-detail-handle {
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.spg-detail-meta {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.spg-detail-meta-item {
+  font-size: 0.8rem;
+  color: var(--ink-dim);
+}
+.spg-detail-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+.spg-detail-body {
+  padding: 24px;
+}
+.spg-detail-close {
+  float: right;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  cursor: pointer;
+  color: var(--ink-dim);
+  font-size: 0.8rem;
+}
+.spg-detail-close:hover {
+  border-color: var(--red);
+  color: var(--red);
+}
+
+/* ── Sections ──────────────────────────────────────────────── */
+.spg-section {
+  margin-bottom: 24px;
+}
+.spg-section:last-child {
+  margin-bottom: 0;
+}
+.spg-section-title {
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--gold);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 8px;
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+}
+.spg-section-text {
+  font-size: 0.88rem;
+  line-height: 1.65;
+  color: var(--ink);
+}
+.spg-section-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--ink-faint);
+  margin-top: 12px;
+  margin-bottom: 2px;
+}
+
+/* Two-column layout for detail */
+.spg-detail-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+@media (max-width: 900px) {
+  .spg-detail-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Moment Log ────────────────────────────────────────────── */
+.spg-moments {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.spg-moment {
+  background: var(--surface2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+}
+.spg-moment-type {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--purple-deep);
+  margin-bottom: 4px;
+}
+.spg-moment-text {
+  font-size: 0.85rem;
+  color: var(--ink);
+  line-height: 1.5;
+}
+.spg-moment-reaction {
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+  font-style: italic;
+  margin-top: 6px;
+}
+.spg-moment-seed {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--gold-bg);
+  color: var(--gold);
+}
+
+/* ── Sample Content ────────────────────────────────────────── */
+.spg-samples {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.spg-sample {
+  background: var(--surface2);
+  border-left: 3px solid var(--gold);
+  padding: 10px 14px;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.85rem;
+  color: var(--ink);
+  line-height: 1.5;
+  font-style: italic;
+}
+
+/* ── Lala Score Bar ────────────────────────────────────────── */
+.spg-lala-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.spg-lala-track {
+  flex: 1;
+  height: 6px;
+  background: var(--surface3);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.spg-lala-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.3s;
+}
+.spg-lala-fill-high { background: var(--gold); }
+.spg-lala-fill-mid  { background: var(--orange); }
+.spg-lala-fill-low  { background: var(--ink-faint); }
+.spg-lala-number {
+  font-size: 1rem;
+  font-weight: 700;
+  min-width: 28px;
+  text-align: right;
+}
+
+/* ── World Crossing Block ──────────────────────────────────── */
+.spg-crossing {
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.spg-crossing-title {
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--gold);
+  margin-bottom: 8px;
+}
+
+/* ── Adult content indicator ───────────────────────────────── */
+.spg-adult-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(196, 58, 42, 0.08);
+  color: var(--red);
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* ── Empty state ───────────────────────────────────────────── */
+.spg-empty {
+  text-align: center;
+  padding: 60px 20px;
+  color: var(--ink-faint);
+}
+.spg-empty-icon {
+  font-size: 3rem;
+  margin-bottom: 12px;
+  opacity: 0.4;
+}
+.spg-empty-text {
+  font-family: 'Lora', 'Georgia', serif;
+  font-size: 1.1rem;
+  margin-bottom: 6px;
+  color: var(--ink-dim);
+}
+.spg-empty-sub {
+  font-size: 0.82rem;
+}
+
+/* ── Loading ───────────────────────────────────────────────── */
+.spg-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 24px;
+  color: var(--ink-dim);
+  font-size: 0.9rem;
+}
+.spg-spinner {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--border);
+  border-top-color: var(--gold);
+  border-radius: 50%;
+  animation: spg-spin 0.6s linear infinite;
+}
+@keyframes spg-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── Filter Row ────────────────────────────────────────────── */
+.spg-filters {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.spg-filter-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: transparent;
+  color: var(--ink-dim);
+  font-size: 0.78rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.spg-filter-btn:hover {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.spg-filter-btn-active {
+  background: var(--gold);
+  border-color: var(--gold);
+  color: #fff;
+}
+
+/* ── Pinned post block ─────────────────────────────────────── */
+.spg-pinned {
+  background: var(--surface2);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
+}
+.spg-pinned-label {
+  position: absolute;
+  top: -8px;
+  left: 12px;
+  background: var(--surface);
+  padding: 0 6px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--gold);
+}
+.spg-pinned-text {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: var(--ink);
+  white-space: pre-wrap;
+}

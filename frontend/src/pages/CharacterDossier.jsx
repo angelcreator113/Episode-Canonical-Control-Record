@@ -30,6 +30,8 @@ const SECTIONS = [
   { key: 'voice',       icon: '🧠', label: 'VOICE & DIALOGUE',      number: '07' },
   { key: 'consciousness', icon: '◈', label: 'CONSCIOUSNESS',        number: '08' },
   { key: 'evolution',   icon: '💎', label: 'EVOLUTION TRACKING',     number: '09' },
+  { key: 'living',      icon: '🏠', label: 'LIVING CONTEXT',          number: '10' },
+  { key: 'deep',        icon: '🧬', label: 'DEEP PROFILE',             number: '11' },
 ];
 
 /* ─── Role labels ── */
@@ -64,6 +66,11 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
   const [editSection, setEditSection] = useState(null);
   const [form, setForm] = useState({});
   const [saving, setSaving] = useState(false);
+  const [writerInput, setWriterInput] = useState('');
+  const [writerParsing, setWriterParsing] = useState(false);
+  const [proposedAdditions, setProposedAdditions] = useState(null);
+  const [expandedDims, setExpandedDims] = useState(new Set());
+  const [generating, setGenerating] = useState(false);
 
   /* anchor scroll */
   const sectionRefs = useRef({});
@@ -210,13 +217,14 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
           onCancel={cancelEdit}
           onSave={saveSection}
           saving={saving}
-          isEmpty={!c.core_desire && !c.core_fear && !c.core_belief && !c.personality}
+          isEmpty={!c.core_desire && !c.core_fear && !c.core_belief && !c.hidden_want && !c.personality}
         >
           {editSection === 'essence' ? (
             <div className="dossier-fields">
               <DArea label="Core Desire — What they want most" value={form.core_desire} onChange={v => F('core_desire', v)} rows={2} />
               <DArea label="Core Fear — What threatens them most" value={form.core_fear} onChange={v => F('core_fear', v)} rows={2} />
               <DArea label="Core Wound — Backstory scar" value={form.core_wound} onChange={v => F('core_wound', v)} rows={2} />
+              <DArea label="Hidden Want — What they actually want but won't admit" value={form.hidden_want} onChange={v => F('hidden_want', v)} rows={2} />
               <DArea label="Mask — How they appear publicly" value={form.mask_persona} onChange={v => F('mask_persona', v)} rows={2} />
               <DArea label="Truth — Who they actually are" value={form.truth_persona} onChange={v => F('truth_persona', v)} rows={2} />
               <DSelect label="Character Archetype" value={form.character_archetype} onChange={v => F('character_archetype', v)}
@@ -231,11 +239,12 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
             </div>
           ) : (
             <div className="dossier-essence">
-              {(c.core_desire || c.core_fear || c.core_wound) && (
+              {(c.core_desire || c.core_fear || c.core_wound || c.hidden_want) && (
                 <div className="dossier-triad">
-                  {c.core_desire && <div className="dossier-triad-item desire"><span className="triad-label">DESIRE</span><p>{c.core_desire}</p></div>}
-                  {c.core_fear   && <div className="dossier-triad-item fear"><span className="triad-label">FEAR</span><p>{c.core_fear}</p></div>}
-                  {c.core_wound  && <div className="dossier-triad-item wound"><span className="triad-label">WOUND</span><p>{c.core_wound}</p></div>}
+                  {c.core_desire  && <div className="dossier-triad-item desire"><span className="triad-label">DESIRE</span><p>{c.core_desire}</p></div>}
+                  {c.core_fear    && <div className="dossier-triad-item fear"><span className="triad-label">FEAR</span><p>{c.core_fear}</p></div>}
+                  {c.core_wound   && <div className="dossier-triad-item wound"><span className="triad-label">WOUND</span><p>{c.core_wound}</p></div>}
+                  {c.hidden_want  && <div className="dossier-triad-item" style={{borderLeftColor: '#9b59b6'}}><span className="triad-label">HIDDEN WANT</span><p>{c.hidden_want}</p></div>}
                 </div>
               )}
               {(c.mask_persona || c.truth_persona) && (
@@ -501,6 +510,191 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
             </div>
           )}
         </DossierSection>
+
+        {/* ═══ SECTION 10: LIVING CONTEXT ═══ */}
+        <DossierSection
+          def={SECTIONS[9]}
+          ref={el => sectionRefs.current.living = el}
+          collapsed={collapsed.has('living')}
+          onToggle={() => toggleCollapse('living')}
+          editing={editSection === 'living'}
+          onEdit={() => startEdit('living')}
+          onCancel={cancelEdit}
+          onSave={saveSection}
+          saving={saving}
+          isEmpty={!hasContent(c.living_context)}
+        >
+          {editSection === 'living' ? (
+            <div className="dossier-fields">
+              <DArea label="Active Pressures" value={form.active_pressures} onChange={v => F('active_pressures', v)} rows={3} placeholder="What is bearing down on this person right now? (financial, family, health, career, relationships)" />
+              <DArea label="Support Network" value={form.support_network} onChange={v => F('support_network', v)} rows={3} placeholder="Who is in their corner? Who undermines them? Who do they refuse to call?" />
+              <DArea label="Home Environment" value={form.home_environment} onChange={v => F('home_environment', v)} rows={3} placeholder="What does their daily physical reality look like? Who else is in that space?" />
+              <DArea label="Relationship to Deadlines" value={form.relationship_to_deadlines} onChange={v => F('relationship_to_deadlines', v)} rows={2} placeholder="How do they behave under time pressure? Power through, freeze, cut scope, overcommunicate?" />
+              <DArea label="Financial Reality" value={form.financial_reality} onChange={v => F('financial_reality', v)} rows={2} placeholder="Stable, stretched, or surviving? Does money anxiety factor into their decisions?" />
+              <DArea label="Current Season of Life" value={form.current_season} onChange={v => F('current_season', v)} rows={2} placeholder="New mother, rebuilding after failure, first real success, caregiving, navigating a transition?" />
+            </div>
+          ) : (
+            <div className="dossier-grid">
+              <DossierRow label="Active Pressures" value={jGet(c.living_context, 'active_pressures')} />
+              <DossierRow label="Support Network" value={jGet(c.living_context, 'support_network')} />
+              <DossierRow label="Home Environment" value={jGet(c.living_context, 'home_environment')} />
+              <DossierRow label="Relationship to Deadlines" value={jGet(c.living_context, 'relationship_to_deadlines')} />
+              <DossierRow label="Financial Reality" value={jGet(c.living_context, 'financial_reality')} />
+              <DossierRow label="Current Season" value={jGet(c.living_context, 'current_season')} />
+            </div>
+          )}
+        </DossierSection>
+
+        {/* ═══ SECTION 11: DEEP PROFILE ═══ */}
+        <DossierSection
+          def={SECTIONS[10]}
+          ref={el => sectionRefs.current.deep = el}
+          collapsed={collapsed.has('deep')}
+          onToggle={() => toggleCollapse('deep')}
+          editing={false}
+          onEdit={() => {}}
+          isEmpty={!hasContent(c.deep_profile)}
+        >
+          <DeepProfileViewer
+            deepProfile={c.deep_profile || {}}
+            expandedDims={expandedDims}
+            onToggleDim={(dim) => setExpandedDims(prev => {
+              const next = new Set(prev);
+              next.has(dim) ? next.delete(dim) : next.add(dim);
+              return next;
+            })}
+          />
+          {/* Backfill button for characters with empty/sparse deep_profile */}
+          {(() => {
+            const dp = c.deep_profile || {};
+            const filled = Object.keys(dp).filter(k => {
+              const v = dp[k];
+              return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
+            }).length;
+            if (filled < 5) return (
+              <div style={{ marginTop: 12, padding: 12, background: 'rgba(201,168,76,0.06)', border: '1px dashed rgba(201,168,76,0.3)', borderRadius: 6 }}>
+                <div style={{ fontSize: 12, color: '#c9a84c', marginBottom: 8 }}>
+                  {filled === 0 ? 'Deep profile is empty.' : `Only ${filled}/14 dimensions populated.`} Generate from existing character data?
+                </div>
+                <button
+                  disabled={generating}
+                  onClick={async () => {
+                    setGenerating(true);
+                    try {
+                      const API = import.meta.env.VITE_API_URL || '/api/v1';
+                      const resp = await fetch(`${API}/character-registry/characters/${c.id}/deep-profile/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                      });
+                      const data = await resp.json();
+                      if (data.success && onRefresh) onRefresh();
+                    } catch (err) {
+                      console.error('Deep profile generation error:', err);
+                    } finally {
+                      setGenerating(false);
+                    }
+                  }}
+                  style={{
+                    padding: '6px 16px', background: generating ? '#333' : '#c9a84c', color: '#000',
+                    border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                    opacity: generating ? 0.5 : 1,
+                  }}
+                >
+                  {generating ? '🧬 Generating...' : '🧬 Generate Deep Profile from Dossier'}
+                </button>
+              </div>
+            );
+            return null;
+          })()}
+          {/* Writer Input */}
+          <div style={{ marginTop: 16, borderTop: '1px solid rgba(255,255,255,0.08)', paddingTop: 12 }}>
+            <div style={{ fontSize: 11, color: '#888', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Writer Input</div>
+            <textarea
+              value={writerInput}
+              onChange={e => setWriterInput(e.target.value)}
+              placeholder="Tell me about this character — anything. Their mother's kitchen, what they do when they can't sleep, the compliment they still think about. I'll file it into the right dimensions."
+              style={{
+                width: '100%', minHeight: 80, background: 'rgba(255,255,255,0.04)', border: '1px solid rgba(255,255,255,0.1)',
+                borderRadius: 6, color: '#ccc', padding: 10, fontSize: 13, fontFamily: 'inherit', resize: 'vertical',
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+              <button
+                onClick={async () => {
+                  if (!writerInput.trim() || writerInput.trim().length < 10) return;
+                  setWriterParsing(true);
+                  setProposedAdditions(null);
+                  try {
+                    const API = import.meta.env.VITE_API_URL || '/api/v1';
+                    const resp = await fetch(`${API}/character-registry/characters/${c.id}/deep-profile/writer-input`, {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ text: writerInput }),
+                    });
+                    const data = await resp.json();
+                    if (data.proposed_additions) {
+                      setProposedAdditions(data.proposed_additions);
+                    }
+                  } catch (err) {
+                    console.error('Writer input parse error:', err);
+                  } finally {
+                    setWriterParsing(false);
+                  }
+                }}
+                disabled={writerParsing || writerInput.trim().length < 10}
+                style={{
+                  padding: '6px 16px', background: writerParsing ? '#333' : '#c9a84c', color: '#000',
+                  border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer', opacity: writerParsing ? 0.5 : 1,
+                }}
+              >
+                {writerParsing ? 'Parsing...' : '✦ Parse into Profile'}
+              </button>
+            </div>
+            {proposedAdditions && (
+              <div style={{ marginTop: 12, background: 'rgba(201,168,76,0.08)', border: '1px solid rgba(201,168,76,0.25)', borderRadius: 6, padding: 12 }}>
+                <div style={{ fontSize: 11, color: '#c9a84c', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 }}>Proposed Additions</div>
+                {Object.entries(proposedAdditions).map(([dim, fields]) => (
+                  <div key={dim} style={{ marginBottom: 8 }}>
+                    <div style={{ fontSize: 12, color: '#e8d5a0', fontWeight: 600, marginBottom: 4 }}>{dim.replace(/_/g, ' ')}</div>
+                    {Object.entries(fields || {}).map(([field, val]) => val && (
+                      <div key={field} style={{ fontSize: 12, color: '#aaa', marginLeft: 12, marginBottom: 2 }}>
+                        <span style={{ color: '#888' }}>{field.replace(/_/g, ' ')}:</span> {val}
+                      </div>
+                    ))}
+                  </div>
+                ))}
+                <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                  <button
+                    onClick={async () => {
+                      try {
+                        const API = import.meta.env.VITE_API_URL || '/api/v1';
+                        await fetch(`${API}/character-registry/characters/${c.id}/deep-profile/accept`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ additions: proposedAdditions }),
+                        });
+                        setProposedAdditions(null);
+                        setWriterInput('');
+                        if (onRefresh) onRefresh();
+                      } catch (err) {
+                        console.error('Accept error:', err);
+                      }
+                    }}
+                    style={{ padding: '5px 14px', background: '#4a9', color: '#000', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                  >
+                    ✓ Accept All
+                  </button>
+                  <button
+                    onClick={() => setProposedAdditions(null)}
+                    style={{ padding: '5px 14px', background: '#444', color: '#aaa', border: 'none', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+                  >
+                    Discard
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </DossierSection>
       </div>
 
       {/* ── STATUS ACTIONS (bottom bar) ── */}
@@ -620,6 +814,90 @@ function DSelect({ label, value, onChange, options, allowEmpty }) {
 
 
 /* ================================================================== */
+/*  Deep Profile Viewer                                                */
+/* ================================================================== */
+
+const DEEP_DIMS = [
+  { key: 'life_stage',          icon: '⏳', label: 'Life Stage' },
+  { key: 'the_body',            icon: '🫀', label: 'The Body' },
+  { key: 'class_and_money',     icon: '💰', label: 'Class & Money' },
+  { key: 'religion_and_meaning',icon: '✦',  label: 'Religion & Meaning' },
+  { key: 'race_and_culture',    icon: '🌍', label: 'Race & Culture' },
+  { key: 'sexuality_and_desire',icon: '🔥', label: 'Sexuality & Desire' },
+  { key: 'family_architecture', icon: '🏠', label: 'Family Architecture' },
+  { key: 'friendship_and_loyalty',icon: '🤝', label: 'Friendship & Loyalty' },
+  { key: 'ambition_and_identity',icon: '⚡', label: 'Ambition & Identity' },
+  { key: 'habits_and_rituals',  icon: '☕', label: 'Habits & Rituals' },
+  { key: 'speech_and_silence',  icon: '💬', label: 'Speech & Silence' },
+  { key: 'grief_and_loss',      icon: '🕯',  label: 'Grief & Loss' },
+  { key: 'politics_and_justice',icon: '⚖',  label: 'Politics & Justice' },
+  { key: 'the_unseen',          icon: '👁',  label: 'The Unseen' },
+];
+
+function DeepProfileViewer({ deepProfile, expandedDims, onToggleDim }) {
+  const dp = deepProfile || {};
+  const filledCount = DEEP_DIMS.filter(d => {
+    const dim = dp[d.key];
+    return dim && Object.values(dim).some(v => v);
+  }).length;
+
+  return (
+    <div>
+      <div style={{ fontSize: 11, color: '#888', marginBottom: 10 }}>
+        {filledCount}/{DEEP_DIMS.length} dimensions known
+      </div>
+      {DEEP_DIMS.map(dim => {
+        const data = dp[dim.key] || {};
+        const fields = Object.entries(data).filter(([, v]) => v);
+        const isEmpty = fields.length === 0;
+        const isOpen = expandedDims.has(dim.key);
+
+        return (
+          <div key={dim.key} style={{
+            marginBottom: 4,
+            border: '1px solid rgba(255,255,255,0.06)',
+            borderRadius: 4,
+            background: isEmpty ? 'transparent' : 'rgba(255,255,255,0.02)',
+          }}>
+            <button
+              onClick={() => onToggleDim(dim.key)}
+              style={{
+                width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+                padding: '8px 10px', background: 'none', border: 'none', cursor: 'pointer',
+                color: isEmpty ? '#555' : '#ccc', fontSize: 13, textAlign: 'left',
+              }}
+            >
+              <span>{dim.icon}</span>
+              <span style={{ flex: 1, fontWeight: isEmpty ? 400 : 600 }}>{dim.label}</span>
+              {isEmpty
+                ? <span style={{ fontSize: 10, color: '#555', fontStyle: 'italic' }}>Not yet known</span>
+                : <span style={{ fontSize: 10, color: '#c9a84c' }}>{fields.length} fields</span>
+              }
+              <span style={{ fontSize: 10, color: '#666' }}>{isOpen ? '▼' : '▶'}</span>
+            </button>
+            {isOpen && !isEmpty && (
+              <div style={{ padding: '0 10px 10px 28px' }}>
+                {fields.map(([field, val]) => (
+                  <div key={field} style={{ marginBottom: 4 }}>
+                    <span style={{ fontSize: 11, color: '#888' }}>{field.replace(/_/g, ' ')}: </span>
+                    <span style={{ fontSize: 12, color: '#bbb' }}>{val}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            {isOpen && isEmpty && (
+              <div style={{ padding: '4px 10px 10px 28px', fontSize: 12, color: '#555', fontStyle: 'italic' }}>
+                This dimension will be populated through generation, scene revelation, or writer input.
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ================================================================== */
 /*  Form ↔ Data helpers                                                */
 /* ================================================================== */
 
@@ -641,6 +919,7 @@ function buildFormForSection(sectionKey, c) {
         core_desire:        c.core_desire || '',
         core_fear:          c.core_fear || '',
         core_wound:         c.core_wound || '',
+        hidden_want:        c.hidden_want || '',
         mask_persona:       c.mask_persona || '',
         truth_persona:      c.truth_persona || '',
         character_archetype:c.character_archetype || '',
@@ -703,6 +982,15 @@ function buildFormForSection(sectionKey, c) {
         reputation_milestones:  jGet(c.evolution_tracking, 'reputation_milestones'),
         visual_transformations: jGet(c.evolution_tracking, 'visual_transformations'),
       };
+    case 'living':
+      return {
+        active_pressures:          jGet(c.living_context, 'active_pressures'),
+        support_network:           jGet(c.living_context, 'support_network'),
+        home_environment:          jGet(c.living_context, 'home_environment'),
+        relationship_to_deadlines: jGet(c.living_context, 'relationship_to_deadlines'),
+        financial_reality:         jGet(c.living_context, 'financial_reality'),
+        current_season:            jGet(c.living_context, 'current_season'),
+      };
     default:
       return {};
   }
@@ -726,6 +1014,7 @@ function buildPayloadForSection(sectionKey, form) {
         core_desire:         form.core_desire,
         core_fear:           form.core_fear,
         core_wound:          form.core_wound,
+        hidden_want:         form.hidden_want,
         mask_persona:        form.mask_persona,
         truth_persona:       form.truth_persona,
         character_archetype: form.character_archetype,
@@ -798,6 +1087,17 @@ function buildPayloadForSection(sectionKey, form) {
           personality_shifts:     form.personality_shifts,
           reputation_milestones:  form.reputation_milestones,
           visual_transformations: form.visual_transformations,
+        },
+      };
+    case 'living':
+      return {
+        living_context: {
+          active_pressures:          form.active_pressures,
+          support_network:           form.support_network,
+          home_environment:          form.home_environment,
+          relationship_to_deadlines: form.relationship_to_deadlines,
+          financial_reality:         form.financial_reality,
+          current_season:            form.current_season,
         },
       };
     default:
