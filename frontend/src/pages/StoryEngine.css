@@ -1644,40 +1644,57 @@
 }
 
 @media (max-width: 900px) {
+  /* Page: scrollable column, not viewport-locked */
   .se-page {
     height: auto;
-    min-height: 0;
-    overflow: auto;
+    min-height: 100dvh;
+    overflow-y: auto;
+    overflow-x: hidden;
   }
+
+  /* Workspace: stack vertically, contain children */
   .se-workspace {
     flex-direction: column;
     flex: none;
-    overflow: visible;
+    overflow: hidden;
   }
+
+  /* Task list: full width, bounded height, scrollable */
   .se-task-list {
     width: 100%;
     height: auto;
-    max-height: none;
+    max-height: 45vh;
     border-right: none;
     border-bottom: 1px solid var(--se-border-light);
-    overflow-y: visible;
+    overflow-y: auto;
   }
+
+  /* Story column: fill width, contain children */
   .se-story-column {
     flex: none;
-    overflow: visible;
+    width: 100%;
+    overflow: hidden;
   }
+
+  /* Story panel: auto height, scrollable */
   .se-story-panel {
     height: auto;
-    overflow: visible;
+    min-height: 50vh;
+    overflow-y: auto;
   }
+
+  /* Empty / generating states: no flex stretch */
   .se-story-empty {
     flex: none;
     padding: 40px 20px;
+    min-height: 200px;
   }
   .se-generating {
     flex: none;
     padding: 40px 20px;
+    min-height: 200px;
   }
+
   .se-task-empty { padding: 24px 20px; }
   .se-story-brief-grid { grid-template-columns: 1fr; }
   .se-story-text { padding: 24px; }
@@ -1754,7 +1771,7 @@
   .se-story-editor { padding: 16px; }
   .se-filter-pills { gap: 3px; }
   .se-arc-dots { display: none; }
-  .se-task-list { width: 100%; height: 180px; }
+  .se-task-list { width: 100%; max-height: 35vh; }
   .se-write-mode .se-story-editor {
     padding: 16px 12px;
     font-size: 14px;
