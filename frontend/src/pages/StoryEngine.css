@@ -1653,12 +1653,12 @@
     overflow-x: hidden;
   }
 
-  /* Workspace: vertical stack, grows with content */
+  /* Workspace: vertical stack, content-sized (don't stretch to fill viewport) */
   .se-workspace,
   .se-write-mode .se-workspace,
   .se-fullscreen-reading .se-workspace {
     flex-direction: column;
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     overflow: visible;
   }
 
@@ -1672,11 +1672,11 @@
     overflow-y: auto;
   }
 
-  /* Story column: stack below task list, grow with content */
+  /* Story column: content-sized, don't stretch */
   .se-story-column,
   .se-write-mode .se-story-column,
   .se-fullscreen-reading .se-story-column {
-    flex: 1 1 auto;
+    flex: 0 0 auto;
     width: 100%;
     overflow: visible;
     min-height: 0;
@@ -1686,7 +1686,7 @@
   .se-story-panel,
   .se-write-mode .se-story-panel {
     height: auto;
-    min-height: 200px;
+    min-height: 0;
     overflow: visible;
   }
 
@@ -1697,16 +1697,16 @@
     overflow: visible;
   }
 
-  /* Empty / generating states: centered, bounded */
+  /* Empty / generating states: compact, not stretched */
   .se-story-empty {
     flex: none;
     padding: 40px 20px;
-    min-height: 200px;
+    min-height: 0;
   }
   .se-generating {
     flex: none;
     padding: 40px 20px;
-    min-height: 200px;
+    min-height: 0;
   }
 
   .se-task-empty { padding: 24px 20px; }
