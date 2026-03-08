@@ -1644,7 +1644,16 @@
 }
 
 @media (max-width: 900px) {
-  .se-workspace { flex-direction: column; }
+  .se-page {
+    height: auto;
+    min-height: 100dvh;
+    overflow: auto;
+  }
+  .se-workspace {
+    flex-direction: column;
+    flex: none;
+    overflow: visible;
+  }
   .se-task-list {
     width: 100%;
     height: auto;
@@ -1653,8 +1662,11 @@
     border-bottom: 1px solid var(--se-border-light);
     overflow-y: auto;
   }
-  .se-story-column { flex: 1; min-height: 0; }
-  .se-story-panel { height: auto; min-height: 0; }
+  .se-story-column {
+    flex: none;
+    overflow: visible;
+  }
+  .se-story-panel { height: auto; }
   .se-story-empty {
     flex: none;
     padding: 40px 20px;
