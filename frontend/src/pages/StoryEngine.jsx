@@ -834,6 +834,12 @@ export default function StoryEngine() {
     try { localStorage.setItem('se_writeMode', writeMode ? '1' : '0'); } catch {}
   }, [writeMode]);
 
+  // Tag body so global overlays (Amber) can hide on this page at mobile widths
+  useEffect(() => {
+    document.body.classList.add('page-story-engine');
+    return () => document.body.classList.remove('page-story-engine');
+  }, []);
+
   const [toasts, setToasts]                   = useState([]);
   const [phaseFilter, setPhaseFilter]         = useState(null);
   const [typeFilter, setTypeFilter]           = useState(null);
