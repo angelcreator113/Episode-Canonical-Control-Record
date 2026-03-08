@@ -426,6 +426,7 @@ function StoryPanel({
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
   const [showAiSidebar, setShowAiSidebar] = useState(false);
+  const [storiesMinimized, setStoriesMinimized] = useState(false);
   const textareaRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
 
@@ -439,20 +440,25 @@ function StoryPanel({
   }, [story]);
 
   if (!story && !task) return (
-    <div className="se-story-panel se-story-section">
-      <div className="se-story-section-header">
+    <div className={`se-story-panel se-story-section${storiesMinimized ? ' se-story-section--minimized' : ''}`}>
+      <div className="se-story-section-header" onClick={() => setStoriesMinimized(m => !m)} role="button" tabIndex={0}>
         <div className="se-story-section-title">Stories</div>
-        <div className="se-story-section-sub">0 stories</div>
-      </div>
-      <div className="se-story-section-empty">
-        <div className="se-story-empty-icon">◎</div>
-        <div className="se-story-empty-text">Once the arc is generated, individual story tasks will appear here.</div>
-        <div className="se-story-skeletons">
-          <div className="se-story-skeleton" />
-          <div className="se-story-skeleton" />
-          <div className="se-story-skeleton" />
+        <div className="se-story-section-right">
+          <div className="se-story-section-sub">0 stories</div>
+          <span className={`se-story-section-chevron${storiesMinimized ? ' se-chevron-collapsed' : ''}`}>▾</span>
         </div>
       </div>
+      {!storiesMinimized && (
+        <div className="se-story-section-empty">
+          <div className="se-story-empty-icon">◎</div>
+          <div className="se-story-empty-text">Once the arc is generated, individual story tasks will appear here.</div>
+          <div className="se-story-skeletons">
+            <div className="se-story-skeleton" />
+            <div className="se-story-skeleton" />
+            <div className="se-story-skeleton" />
+          </div>
+        </div>
+      )}
     </div>
   );
 

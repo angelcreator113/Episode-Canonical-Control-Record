@@ -552,6 +552,29 @@
   justify-content: space-between;
   padding: 14px 20px;
   border-bottom: 1px solid var(--se-border-light);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.se-story-section-header:hover {
+  background: var(--se-surface2);
+}
+.se-story-section--minimized .se-story-section-header {
+  border-bottom: none;
+}
+.se-story-section-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.se-story-section-chevron {
+  font-size: 14px;
+  color: var(--se-text-dim);
+  transition: transform 0.2s ease;
+  line-height: 1;
+}
+.se-chevron-collapsed {
+  transform: rotate(-90deg);
 }
 .se-story-section-title {
   font-family: 'Playfair Display', Georgia, serif;
