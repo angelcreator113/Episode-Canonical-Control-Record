@@ -95,6 +95,10 @@ let PostGenerationReview; // Post-generation franchise review
 let WritingRhythm; // Writing rhythm tracking
 let WritingGoal; // Writing goals
 let MultiProductContent; // Multi-product content generation
+let VoiceSignal; // Novel Intelligence: voice pattern signals
+let VoiceRule; // Novel Intelligence: confirmed voice rules
+let ManuscriptMetadata; // Novel Intelligence: book metadata cascade
+let BrainFingerprint; // Novel Intelligence: brain dedup fingerprints
 
 try {
   // Core models
@@ -278,6 +282,12 @@ try {
   WritingGoal = require('./WritingGoal')(sequelize, DataTypes);
   MultiProductContent = require('./MultiProductContent')(sequelize, DataTypes);
 
+  // Novel Intelligence Engine models
+  VoiceSignal = require('./VoiceSignal')(sequelize, DataTypes);
+  VoiceRule = require('./VoiceRule')(sequelize, DataTypes);
+  ManuscriptMetadata = require('./ManuscriptMetadata')(sequelize, DataTypes);
+  BrainFingerprint = require('./BrainFingerprint')(sequelize, DataTypes);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -367,6 +377,10 @@ const requiredModels = {
   WritingRhythm,
   WritingGoal,
   MultiProductContent,
+  VoiceSignal,
+  VoiceRule,
+  ManuscriptMetadata,
+  BrainFingerprint,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -468,6 +482,12 @@ if (SceneProposal && SceneProposal.associate) {
 }
 if (CharacterGrowthLog && CharacterGrowthLog.associate) {
   CharacterGrowthLog.associate(requiredModels);
+}
+if (VoiceSignal && VoiceSignal.associate) {
+  VoiceSignal.associate(requiredModels);
+}
+if (VoiceRule && VoiceRule.associate) {
+  VoiceRule.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1572,3 +1592,7 @@ module.exports.PostGenerationReview = PostGenerationReview;
 module.exports.WritingRhythm = WritingRhythm;
 module.exports.WritingGoal = WritingGoal;
 module.exports.MultiProductContent = MultiProductContent;
+module.exports.VoiceSignal = VoiceSignal;
+module.exports.VoiceRule = VoiceRule;
+module.exports.ManuscriptMetadata = ManuscriptMetadata;
+module.exports.BrainFingerprint = BrainFingerprint;

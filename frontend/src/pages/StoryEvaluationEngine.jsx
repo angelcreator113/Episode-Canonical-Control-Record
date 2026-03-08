@@ -210,6 +210,17 @@ export default function StoryEvaluationEngine() {
 
   // Timer
   const [elapsed, setElapsed] = useState(0);
+
+  // ── Read brief from URL query param on mount ─────────────────────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const briefParam = params.get('brief');
+    if (briefParam) {
+      try { setSceneBrief(decodeURIComponent(briefParam)); }
+      catch { setSceneBrief(briefParam); }
+    }
+  }, []);
+
   useEffect(() => {
     if (!loading) return;
     setElapsed(0);

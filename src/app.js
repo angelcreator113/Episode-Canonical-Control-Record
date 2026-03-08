@@ -1029,6 +1029,15 @@ try {
   console.error('✗ Failed to load PDF Ingest route:', e.message);
 }
 
+// Novel Intelligence Engine (voice rules, manuscript cascade, brain dedup)
+try {
+  const novelIntelligenceRoutes = require('./routes/novelIntelligenceRoutes');
+  app.use('/api/v1/novel', novelIntelligenceRoutes);
+  console.log('✓ Novel Intelligence routes loaded at /api/v1/novel');
+} catch (e) {
+  console.error('✗ Failed to load Novel Intelligence routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({

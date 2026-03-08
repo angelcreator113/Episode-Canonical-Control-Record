@@ -52,8 +52,8 @@ try {
 
 // ── Anthropic client ───────────────────────────────────────────────────────
 // Requires ANTHROPIC_API_KEY in your environment / .env
-// Ensure dotenv is loaded before creating the client (PM2 may not pass env vars)
-require('dotenv').config({ override: false });
+// Ensure dotenv is loaded before creating the client (PM2 may pass empty string)
+require('dotenv').config({ override: !process.env.ANTHROPIC_API_KEY });
 const anthropic = new Anthropic();
 
 // ── Memory extraction prompt ───────────────────────────────────────────────
@@ -4713,7 +4713,41 @@ router.post('/assistant-command', optionalAuth, async (req, res) => {
     console.error('Failed to load character roster for assistant:', e.message);
   }
 
-  const contextSummary = buildAssistantContextSummary(context) + characterRoster;
+  // Enrich with ecosystem health when on Character Generator page
+  let ecosystemBlock = '';
+  if (context.currentView === '/character-generator') {
+    try {
+      const ecoChars = await db.sequelize.query(
+        `SELECT rc.role_type, rc.status, cr.book_tag
+         FROM registry_characters rc
+         JOIN character_registries cr ON cr.id = rc.registry_id
+         WHERE rc.deleted_at IS NULL`,
+        { type: db.sequelize.QueryTypes.SELECT }
+      );
+      const worlds = { book1: {}, lalaverse: {} };
+      for (const c of ecoChars) {
+        const bucket = c.book_tag === 'lalaverse' ? 'lalaverse' : 'book1';
+        worlds[bucket][c.role_type] = (worlds[bucket][c.role_type] || 0) + 1;
+      }
+      const fmtWorld = (name, roles) => {
+        const parts = Object.entries(roles).map(([r, n]) => `${r}: ${n}`).join(', ');
+        const total = Object.values(roles).reduce((a, b) => a + b, 0);
+        const empty = ['pressure', 'mirror', 'support', 'shadow'].filter(r => !roles[r]);
+        const saturated = Object.entries(roles).filter(([, n]) => n > 4).map(([r]) => r);
+        return `${name} (${total} chars): ${parts || 'empty'}` +
+          (empty.length ? ` | gaps: ${empty.join(', ')}` : '') +
+          (saturated.length ? ` | saturated: ${saturated.join(', ')}` : '');
+      };
+      ecosystemBlock = '\nCHARACTER GENERATOR ECOSYSTEM:\n' +
+        `  ${fmtWorld('Book 1', worlds.book1)}\n` +
+        `  ${fmtWorld('LalaVerse', worlds.lalaverse)}\n` +
+        `  Total across worlds: ${ecoChars.length}`;
+    } catch (e) {
+      console.error('Failed to load ecosystem for assistant:', e.message);
+    }
+  }
+
+  const contextSummary = buildAssistantContextSummary(context) + characterRoster + ecosystemBlock;
 
   // Inject franchise knowledge + tech context into Amber's awareness
   let knowledgeBlock = '';
@@ -4778,6 +4812,14 @@ Character Registry — Write:
 Character Registry — Destructive:
   - delete_character: soft-delete a character { character_id }
 
+Character Generator — Read:
+  - get_ecosystem: get world health report — role distribution, saturation, gaps for Book 1 and LalaVerse
+  - get_generator_status: summarize the character generator state (how many seeds, staged, committed)
+
+Character Generator — Write:
+  - propose_seeds: propose character seeds { world: "book1"|"lalaverse"|"both", count: 1-5, role_type_focus: "pressure"|"mirror"|"support"|"shadow"|null }
+    Returns seed concepts (name, tension, role) for the user to review — they must go to /character-generator to generate full profiles and commit
+
 RESPONSE FORMAT — valid JSON only, no markdown:
 {
   "reply": "What you did or what you need to clarify (1-2 sentences, plain language)",
@@ -4796,6 +4838,8 @@ IMPORTANT RULES:
 - If you don't have an ID you need (like a specific chapter_id), say so and offer to navigate there
 - Keep replies warm and brief — you are Amber, a creative partner, not a terminal
 - "Delete" always means soft-delete — it goes to the Recycle Bin, never permanent
+- When on /character-generator, you have the ECOSYSTEM data above — use it to give informed suggestions about which world or role type needs characters
+- For propose_seeds, describe each seed briefly (name, role, tension) so the user can decide — then suggest navigating to /character-generator to build full profiles
 - Sign off with personality — you're helpful, smart, and have a touch of charm`;
 
   try {
@@ -5093,6 +5137,151 @@ async function executeAssistantAction(action, params = {}, context = {}) {
         if (chars.length === 0) return { replyAppend: 'No characters matched that search.' };
         const summary = chars.map(c => `"${c.display_name}" (${c.role_type || 'unknown'}, ${c.status}) id: ${c.id} — ${c.short_desc || c.core_belief || 'no description'}`).join('\n');
         return { replyAppend: `\n${summary}` };
+      }
+
+      // ── Character Generator — Read ────────────────────────────────────
+
+      case 'get_ecosystem': {
+        const ecoChars = await sequelize.query(
+          `SELECT rc.display_name, rc.role_type, rc.status, cr.book_tag
+           FROM registry_characters rc
+           JOIN character_registries cr ON cr.id = rc.registry_id
+           WHERE rc.deleted_at IS NULL
+           ORDER BY cr.book_tag, rc.role_type`,
+          { type: sequelize.QueryTypes.SELECT }
+        );
+
+        const worlds = { book1: [], lalaverse: [] };
+        for (const c of ecoChars) {
+          const bucket = c.book_tag === 'lalaverse' ? 'lalaverse' : 'book1';
+          worlds[bucket].push(c);
+        }
+
+        const fmtWorld = (name, chars) => {
+          const roleCount = {};
+          chars.forEach(c => { roleCount[c.role_type] = (roleCount[c.role_type] || 0) + 1; });
+          const roles = Object.entries(roleCount).map(([r, n]) => `${r}: ${n}`).join(', ');
+          const empty = ['pressure', 'mirror', 'support', 'shadow'].filter(r => !roleCount[r]);
+          const saturated = Object.entries(roleCount).filter(([, n]) => n > 4).map(([r]) => r);
+          const names = chars.map(c => c.display_name).join(', ');
+          return `${name} (${chars.length} characters): ${roles || 'no roles yet'}` +
+            (empty.length ? `\n    Gaps: ${empty.join(', ')}` : '') +
+            (saturated.length ? `\n    Saturated: ${saturated.join(', ')}` : '') +
+            `\n    Characters: ${names || 'none'}`;
+        };
+
+        const report = `World Health Report:\n` +
+          `${fmtWorld('Book 1', worlds.book1)}\n` +
+          `${fmtWorld('LalaVerse', worlds.lalaverse)}\n` +
+          `Total: ${ecoChars.length} characters across both worlds`;
+        return { replyAppend: `\n${report}` };
+      }
+
+      case 'get_generator_status': {
+        const statusCounts = await sequelize.query(
+          `SELECT status, COUNT(*) as count
+           FROM registry_characters
+           WHERE deleted_at IS NULL
+           GROUP BY status`,
+          { type: sequelize.QueryTypes.SELECT }
+        );
+        const counts = {};
+        statusCounts.forEach(r => { counts[r.status] = parseInt(r.count); });
+        const total = Object.values(counts).reduce((a, b) => a + b, 0);
+        const parts = Object.entries(counts).map(([s, n]) => `${s}: ${n}`).join(', ');
+        return { replyAppend: `\nGenerator Status: ${total} characters total (${parts || 'none yet'})` };
+      }
+
+      // ── Character Generator — Write ───────────────────────────────────
+
+      case 'propose_seeds': {
+        const world = params.world || 'book1';
+        const count = Math.min(Math.max(parseInt(params.count) || 3, 1), 5);
+        const roleFocus = params.role_type_focus || null;
+
+        // Get existing character names to avoid collision
+        const existing = await sequelize.query(
+          `SELECT display_name FROM registry_characters WHERE deleted_at IS NULL`,
+          { type: sequelize.QueryTypes.SELECT }
+        );
+        const existingNames = existing.map(c => c.display_name);
+
+        // Get ecosystem stats for smart generation
+        const ecoChars = await sequelize.query(
+          `SELECT rc.role_type, cr.book_tag
+           FROM registry_characters rc
+           JOIN character_registries cr ON cr.id = rc.registry_id
+           WHERE rc.deleted_at IS NULL`,
+          { type: sequelize.QueryTypes.SELECT }
+        );
+        const roleCount = {};
+        ecoChars.filter(c => (world === 'both') || (c.book_tag === 'lalaverse' ? 'lalaverse' : 'book1') === world)
+          .forEach(c => { roleCount[c.role_type] = (roleCount[c.role_type] || 0) + 1; });
+        const saturated = Object.entries(roleCount).filter(([, n]) => n > 4).map(([r]) => r);
+        const empty = ['pressure', 'mirror', 'support', 'shadow'].filter(r => !roleCount[r]);
+
+        // Build the worlds to generate for
+        const worldTargets = world === 'both' ? ['book1', 'lalaverse'] : [world];
+        const allSeeds = [];
+
+        const WORLD_CONFIGS = {
+          book1: {
+            label: 'Book 1 World', age_range: [28, 45],
+            setting: 'Real world — suburban/urban America. Content creators, professionals, mothers, wives, friends.',
+            tone: 'Grounded, specific, adult. The texture of real life: dinner tables, commutes, DMs, mortgages.',
+          },
+          lalaverse: {
+            label: 'LalaVerse', age_range: [22, 35],
+            setting: 'Fashion game universe on the internet. Content creators, brand figures, game-world entities.',
+            tone: 'Elevated, stylized, aspirational but real. The stakes are careers, aesthetics, and identity.',
+          },
+        };
+
+        const Anthropic = require('@anthropic-ai/sdk');
+        const seedAnthro = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+        for (const w of worldTargets) {
+          const cfg = WORLD_CONFIGS[w];
+          const seedsPerWorld = world === 'both' ? Math.ceil(count / 2) : count;
+
+          const seedPrompt = `You are proposing ${seedsPerWorld} character seeds for the ${cfg.label}.
+
+WORLD: ${cfg.setting}
+Tone: ${cfg.tone}
+Age range: ${cfg.age_range[0]}–${cfg.age_range[1]}
+
+EXISTING CHARACTERS (avoid collision): ${existingNames.join(', ') || 'none'}
+${roleFocus ? `ROLE FOCUS: prioritize "${roleFocus}" role type` : ''}
+${saturated.length ? `SATURATED roles (avoid): ${saturated.join(', ')}` : ''}
+${empty.length ? `EMPTY roles (prioritize): ${empty.join(', ')}` : ''}
+
+Return ONLY valid JSON:
+{ "seeds": [{ "name": "string", "age": number, "gender": "woman|man|nonbinary", "world": "${w}", "role_type": "pressure|mirror|support|shadow|special", "career": "one sentence", "tension": "one sentence — the live wire" }] }`;
+
+          const resp = await seedAnthro.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 2000,
+            system: seedPrompt,
+            messages: [{ role: 'user', content: `Propose ${seedsPerWorld} seeds.` }],
+          });
+
+          const raw = resp.content?.[0]?.text || '';
+          try {
+            const parsed = JSON.parse(raw.replace(/```json|```/g, '').trim());
+            allSeeds.push(...(parsed.seeds || []));
+          } catch {
+            // If parse fails, skip this world
+          }
+        }
+
+        if (allSeeds.length === 0) {
+          return { error: 'Failed to generate character seeds — try again' };
+        }
+
+        const seedSummary = allSeeds.map((s, i) =>
+          `${i + 1}. "${s.name}" — ${s.role_type} (${s.gender}, ${s.age}, ${s.world})\n   Career: ${s.career}\n   Tension: ${s.tension}`
+        ).join('\n');
+        return { replyAppend: `\nProposed Seeds:\n${seedSummary}\n\nTo build full profiles from these seeds, head to the Character Generator page.` };
       }
 
       default:
