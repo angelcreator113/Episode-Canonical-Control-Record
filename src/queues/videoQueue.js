@@ -8,26 +8,45 @@ const Bull = require('bull');
 const { redisConfig } = require('../config/redis');
 
 let queueErrorLogged = false;
+let queueConnErrorLogged = false;
+
+// Shared Redis options for Bull's internal connections (client, subscriber, bclient)
+const sharedRedisOpts = {
+  host: redisConfig.host,
+  port: redisConfig.port,
+  password: redisConfig.password,
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false,
+  lazyConnect: true,
+  retryStrategy(times) {
+    if (times > 5) {
+      if (!queueErrorLogged) {
+        console.warn('⚠️  Bull queue: Redis unavailable — stopping reconnection attempts');
+        queueErrorLogged = true;
+      }
+      return null; // Stop retrying
+    }
+    return Math.min(times * 500, 3000);
+  },
+};
 
 // Bull uses ioredis-style config (host/port), not the redis URL format
 const videoQueue = new Bull('video-export', {
-  redis: {
-    host: redisConfig.host,
-    port: redisConfig.port,
-    password: redisConfig.password,
-    maxRetriesPerRequest: null,
-    enableReadyCheck: false,
-    lazyConnect: false,  // Must eagerly connect so Bull's subscriber picks up jobs
-    retryStrategy(times) {
-      if (times > 5) {
-        if (!queueErrorLogged) {
-          console.warn('⚠️  Bull queue: Redis unavailable — stopping reconnection attempts');
-          queueErrorLogged = true;
+  createClient(type) {
+    const IORedis = require('ioredis');
+    const client = new IORedis(sharedRedisOpts);
+    // Attach error handler immediately to prevent unhandled rejections
+    client.on('error', (err) => {
+      if (err.message.includes('ECONNREFUSED')) {
+        if (!queueConnErrorLogged) {
+          console.error('\u274c Queue error:', err.message);
+          queueConnErrorLogged = true;
         }
-        return null; // Stop retrying
+      } else {
+        console.error('❌ Queue error:', err.message);
       }
-      return Math.min(times * 500, 3000);
-    },
+    });
+    return client;
   },
   defaultJobOptions: {
     attempts: 3,
@@ -84,10 +103,11 @@ videoQueue.on('progress', (job, progress) => {
 });
 
 videoQueue.on('error', (error) => {
-  // Only log non-connection errors once (connection errors handled by retry strategy)
+  // Only log non-connection errors once (connection errors handled by createClient error handler)
   if (error.message.includes('ECONNREFUSED')) {
-    if (!queueErrorLogged) {
+    if (!queueConnErrorLogged) {
       console.error('❌ Queue error:', error.message);
+      queueConnErrorLogged = true;
     }
   } else {
     console.error('❌ Queue error:', error.message);

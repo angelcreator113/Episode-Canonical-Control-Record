@@ -456,3 +456,10 @@
     max-height: 70vh;
   }
 }
+
+/* Hide Amber on Story Engine page at mobile widths — the page has its own AI tools */
+@media (max-width: 900px) {
+  body.page-story-engine .apa-root {
+    display: none;
+  }
+}

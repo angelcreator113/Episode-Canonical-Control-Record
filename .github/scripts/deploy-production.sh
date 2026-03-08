@@ -7,6 +7,29 @@ set -x
 
 echo "🚀 Starting production deployment..."
 
+# ── Pre-deploy: validate .env has required keys ──────────────────────────────
+ENV_FILE="/home/ubuntu/episode-metadata/.env"
+REQUIRED_KEYS="DB_HOST DB_NAME DB_USER DB_PASSWORD COGNITO_USER_POOL_ID COGNITO_CLIENT_ID JWT_SECRET"
+MISSING=""
+if [ -f "$ENV_FILE" ]; then
+  for key in $REQUIRED_KEYS; do
+    val=$(grep "^${key}=" "$ENV_FILE" | cut -d'=' -f2-)
+    if [ -z "$val" ] || echo "$val" | grep -qE '^REPLACE_WITH'; then
+      MISSING="$MISSING $key"
+    fi
+  done
+  if [ -n "$MISSING" ]; then
+    echo "❌ DEPLOYMENT BLOCKED: .env is missing required values:$MISSING"
+    echo "   Edit $ENV_FILE and fill in production values."
+    echo "   See .env.production.template for reference."
+    exit 1
+  fi
+  echo "✓ .env validated — all required keys present"
+else
+  echo "⚠️  No .env file found at $ENV_FILE — ecosystem.config.js will use empty defaults"
+  echo "   Copy .env.production.template to $ENV_FILE and fill in production values"
+fi
+
 # Load NVM and Node.js environment
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"

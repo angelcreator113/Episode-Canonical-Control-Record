@@ -164,7 +164,6 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
   const dropdownRef = useRef(null);
   const searchRef = useRef(null);
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     const handler = (e) => {
@@ -174,14 +173,12 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
     return () => document.removeEventListener('mousedown', handler);
   }, [open]);
 
-  // Auto-focus search when opened
   useEffect(() => {
     if (open && searchRef.current) searchRef.current.focus();
   }, [open]);
 
   const selected = characters[selectedChar];
 
-  // Group and filter characters
   const grouped = useMemo(() => {
     const groups = {};
     for (const [key, c] of Object.entries(characters)) {
@@ -189,7 +186,6 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
       if (!groups[w]) groups[w] = [];
       groups[w].push([key, c]);
     }
-    // Filter by search
     if (search.trim()) {
       const q = search.toLowerCase();
       const filtered = {};
@@ -211,7 +207,6 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
 
   return (
     <div className="se-char-selector" ref={dropdownRef}>
-      {/* Trigger button — shows selected character */}
       <button
         className="se-char-trigger"
         onClick={() => setOpen(prev => !prev)}
@@ -223,12 +218,13 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
           <span className="se-char-icon">{selected?.icon || '◇'}</span>
         )}
         <span className="se-char-trigger-name">{selected?.display_name || 'Select character'}</span>
-        <span className="se-char-trigger-world">{WORLD_SHORT[selected?.world] || selected?.world?.slice(0, 3)?.toUpperCase()}</span>
+        <span className="se-char-trigger-world">
+          {WORLD_SHORT[selected?.world] || selected?.world?.slice(0, 3)?.toUpperCase()}
+        </span>
         <span className="se-char-trigger-count">{totalCount} characters</span>
         <span className={`se-char-trigger-arrow ${open ? 'open' : ''}`}>▾</span>
       </button>
 
-      {/* Dropdown panel */}
       {open && (
         <div className="se-char-dropdown">
           <div className="se-char-search-row">
@@ -241,7 +237,6 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
               onChange={(e) => setSearch(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Escape') { setOpen(false); setSearch(''); }
-                // Enter to select first match
                 if (e.key === 'Enter' && worldOrder.length > 0) {
                   const firstGroup = grouped[worldOrder[0]];
                   if (firstGroup?.length) {
@@ -290,8 +285,8 @@ function CharacterSelector({ characters, selectedChar, onSelect, loading }) {
   );
 }
 
-// ─── Arc progress bar (with status dots) ──────────────────────────────────────
-function ArcProgress({ tasks, approvedStories, savedStories = [], stories = {} }) {
+// ─── Arc progress bar ────────────────────────────────────────────────────────
+function ArcProgress({ approvedStories, savedStories = [], stories = {} }) {
   const phases = ['establishment', 'pressure', 'crisis', 'integration'];
   const phaseRanges = { establishment: [1,10], pressure: [11,25], crisis: [26,40], integration: [41,50] };
 
@@ -337,11 +332,13 @@ function ArcProgress({ tasks, approvedStories, savedStories = [], stories = {} }
   );
 }
 
-// ─── Task card (story brief before writing) ───────────────────────────────────
-function TaskCard({ task, isApproved, isSaved, isActive, onGenerate, onSelect, charColor, generating, batchMode, batchSelected, onBatchToggle }) {
+// ─── Task card ────────────────────────────────────────────────────────────────
+function TaskCard({
+  task, isApproved, isSaved, isActive, onGenerate, onSelect,
+  charColor, generating, batchMode, batchSelected, onBatchToggle
+}) {
   const cardRef = useRef(null);
 
-  // Auto-scroll into view when active
   useEffect(() => {
     if (isActive && cardRef.current) {
       cardRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
@@ -378,10 +375,7 @@ function TaskCard({ task, isApproved, isSaved, isActive, onGenerate, onSelect, c
           <span className="se-task-type" title={task.story_type}>
             {TYPE_ICONS[task.story_type]}
           </span>
-          <span
-            className="se-task-phase"
-            style={{ color: PHASE_COLORS[task.phase] }}
-          >
+          <span className="se-task-phase" style={{ color: PHASE_COLORS[task.phase] }}>
             {PHASE_LABELS[task.phase]}
           </span>
           {isSaved && !isApproved && (
@@ -421,26 +415,47 @@ function StoryPanel({
   onExportStory,
   onEvaluate,
   charObj, selectedCharKey, activeWorld, allCharacters, onSelectChar,
+  storiesMinimized, onToggleStoriesMinimized,
 }) {
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
+  const [showAiSidebar, setShowAiSidebar] = useState(false);
   const textareaRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
 
   useEffect(() => {
     setEditText(story?.text || '');
-    // Only exit edit mode when navigating to a different story, not on initial mount
     if (prevStoryRef.current != null && prevStoryRef.current !== story?.story_number) {
       if (onToggleWriteMode) onToggleWriteMode(false);
     }
     prevStoryRef.current = story?.story_number;
-  }, [story]);
+  }, [story, onToggleWriteMode]);
 
   if (!story && !task) return (
-    <div className="se-story-panel se-story-empty">
-      <div className="se-story-empty-icon">◎</div>
-      <div className="se-story-empty-text">Select a story to read or generate one.</div>
+    <div
+      className={`se-story-panel se-story-section${storiesMinimized ? ' se-story-section--minimized' : ''}`}
+    >
+      <div className="se-story-section-header" onClick={() => onToggleStoriesMinimized()} role="button" tabIndex={0}>
+        <div className="se-story-section-title">Upcoming Stories</div>
+        <div className="se-story-section-right">
+          <div className="se-story-section-sub">Generated tasks appear here</div>
+          <span className={`se-story-section-chevron${storiesMinimized ? ' se-chevron-collapsed' : ''}`}>▾</span>
+        </div>
+      </div>
+      {!storiesMinimized && (
+        <div className="se-story-section-empty">
+          <div className="se-story-empty-icon">◎</div>
+          <div className="se-story-empty-text">
+            Once the arc is generated, individual story tasks will appear here.
+          </div>
+          <div className="se-story-skeletons">
+            <div className="se-story-skeleton" />
+            <div className="se-story-skeleton" />
+            <div className="se-story-skeleton" />
+          </div>
+        </div>
+      )}
     </div>
   );
 
@@ -486,7 +501,7 @@ function StoryPanel({
       <div style={{ padding: '16px 20px', borderTop: '1px solid #e8e4d8', display: 'flex', gap: 10 }}>
         <button
           className="se-btn"
-          style={{ background: '#3D7A9B', color: '#fff', padding: '8px 18px', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none' }}
+          style={{ background: '#3D7A9B', color: '#fff', padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 600, cursor: 'pointer', border: 'none' }}
           onClick={() => onEvaluate?.({ task: task.task, title: task.title, story_number: task.story_number })}
           title="Evaluate with multi-voice scoring"
         >
@@ -498,10 +513,8 @@ function StoryPanel({
 
   return (
     <div className={`se-story-panel ${readingMode ? 'se-reading-mode' : ''}`}>
-      {/* Header */}
       <div className="se-story-header" style={{ borderBottomColor: charColor }}>
         <div className="se-story-header-left">
-          {/* Prev/Next navigation */}
           <div className="se-story-nav-row">
             <button
               className="se-btn se-btn-nav"
@@ -602,7 +615,6 @@ function StoryPanel({
         </div>
       </div>
 
-      {/* New character alert */}
       {story.new_character && story.new_character_name && (
         <div className="se-new-char-alert">
           <span className="se-new-char-icon">+</span>
@@ -615,14 +627,13 @@ function StoryPanel({
           </button>
           <button
             className="se-new-char-reject"
-            onClick={() => {/* Story Only — dismiss alert */}}
+            onClick={() => {}}
           >
             Story Only
           </button>
         </div>
       )}
 
-      {/* Consistency conflicts */}
       {consistencyConflicts?.length > 0 && (
         <div className="se-conflicts">
           <div className="se-conflicts-title">⚠ Downstream Conflicts</div>
@@ -636,7 +647,6 @@ function StoryPanel({
         </div>
       )}
 
-      {/* Story text */}
       <div className="se-story-body">
         {editing ? (
           <div className="se-edit-container">
@@ -647,7 +657,14 @@ function StoryPanel({
               onChange={(e) => setEditText(e.target.value)}
               spellCheck
             />
-            <div className="se-ai-writer-sidebar">
+            <button
+              className="se-ai-sidebar-toggle"
+              onClick={() => setShowAiSidebar(v => !v)}
+              title={showAiSidebar ? 'Hide AI tools' : 'Show AI tools'}
+            >
+              {showAiSidebar ? '✕' : '✦'}
+            </button>
+            <div className={`se-ai-writer-sidebar${showAiSidebar ? ' se-ai-sidebar-open' : ''}`}>
               <WriteModeAIWriter
                 chapterId={String(story?.story_number || task?.story_number || '')}
                 bookId={activeWorld || ''}
@@ -682,6 +699,13 @@ function StoryPanel({
                     setEditText(prev => prev + '\n\n' + text);
                   }
                 }}
+                getSelectedText={() => {
+                  const ta = textareaRef.current;
+                  if (ta && ta.selectionStart !== ta.selectionEnd) {
+                    return editText.slice(ta.selectionStart, ta.selectionEnd);
+                  }
+                  return '';
+                }}
                 characters={allCharacters ? Object.entries(allCharacters).map(([key, c]) => ({
                   ...c, id: c.id || key, character_key: key, name: c.display_name,
                 })) : []}
@@ -700,7 +724,6 @@ function StoryPanel({
         )}
       </div>
 
-      {/* Therapy panel (hidden during editing) */}
       {!editing && therapyMemories?.length > 0 && (
         <div className="se-therapy-panel">
           <div className="se-therapy-title">Therapy Room Feeds</div>
@@ -714,7 +737,6 @@ function StoryPanel({
         </div>
       )}
 
-      {/* Registry feedback notification (hidden during editing) */}
       {!editing && registryUpdate && (
         <div className="se-registry-update">
           <span className="se-registry-icon">🔄</span>
@@ -722,7 +744,6 @@ function StoryPanel({
         </div>
       )}
 
-      {/* Persistence bridge — save / approve / reject to DB (hidden during editing) */}
       {story && !editing && (
         <StoryReviewPanel
           story={story}
@@ -742,91 +763,69 @@ function StoryPanel({
 export default function StoryEngine() {
   const navigate = useNavigate();
 
-  // Dynamic characters from DB
   const [CHARACTERS, setCHARACTERS] = useState(FALLBACK_CHARACTERS);
   const [charsLoading, setCharsLoading] = useState(true);
   const [worldsList, setWorldsList] = useState([]);
 
-  // Character selection — restore from localStorage on refresh
-  const [selectedChar, setSelectedChar]       = useState(() => {
+  const [selectedChar, setSelectedChar] = useState(() => {
     try { return localStorage.getItem('se_selectedChar') || ''; } catch { return ''; }
   });
-  const [activeWorld, setActiveWorld]         = useState(() => {
+  const [activeWorld, setActiveWorld] = useState(() => {
     try { return localStorage.getItem('se_activeWorld') || 'book-1'; } catch { return 'book-1'; }
   });
 
-  // Persist selectedChar + activeWorld to localStorage
   useEffect(() => {
     if (selectedChar) try { localStorage.setItem('se_selectedChar', selectedChar); } catch {}
   }, [selectedChar]);
+
   useEffect(() => {
     try { localStorage.setItem('se_activeWorld', activeWorld); } catch {}
   }, [activeWorld]);
 
-  // World creation toggles
-  const [worldToggles, setWorldToggles]       = useState({});
+  const [worldToggles, setWorldToggles] = useState({});
+  const [tasks, setTasks] = useState([]);
+  const [tasksLoading, setTasksLoading] = useState(false);
+  const [stories, setStories] = useState({});
+  const [approvedStories, setApprovedStories] = useState([]);
+  const [savedStories, setSavedStories] = useState([]);
+  const [activeTask, setActiveTask] = useState(null);
+  const [activeStory, setActiveStory] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [generatingNum, setGeneratingNum] = useState(null);
+  const [elapsed, setElapsed] = useState(0);
+  const elapsedRef = useRef(null);
+  const [consistencyConflicts, setConsistencyConflicts] = useState([]);
+  const [consistencyLoading, setConsistencyLoading] = useState(false);
+  const [therapyMemories, setTherapyMemories] = useState([]);
+  const [therapyLoading, setTherapyLoading] = useState(false);
+  const [registryUpdate, setRegistryUpdate] = useState(null);
+  const [savingForLater, setSavingForLater] = useState(false);
 
-  // Task arc (50 story briefs)
-  const [tasks, setTasks]                     = useState([]);
-  const [tasksLoading, setTasksLoading]       = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [readingMode, setReadingMode] = useState(false);
+  const [writeMode, setWriteMode] = useState(() => {
+    try { return localStorage.getItem('se_writeMode') === '1'; } catch { return false; }
+  });
+  const [storiesMinimized, setStoriesMinimized] = useState(false);
 
-  // Generated stories (storyNumber → story object)
-  const [stories, setStories]                 = useState({});
-  const [approvedStories, setApprovedStories] = useState([]); // story numbers
-  const [savedStories, setSavedStories]       = useState([]); // story numbers saved as draft in DB
-
-  // Active story/task in right panel
-  const [activeTask, setActiveTask]           = useState(null);
-  const [activeStory, setActiveStory]         = useState(null);
-
-  // Persist activeTask number to localStorage
-  useEffect(() => {
-    if (activeTask?.story_number) try { localStorage.setItem('se_activeTaskNum', String(activeTask.story_number)); } catch {}
-  }, [activeTask]);
-
-  // Persist writeMode to localStorage
   useEffect(() => {
     try { localStorage.setItem('se_writeMode', writeMode ? '1' : '0'); } catch {}
   }, [writeMode]);
 
-  // Generation state
-  const [generating, setGenerating]           = useState(false);
-  const [generatingNum, setGeneratingNum]     = useState(null);
+  useEffect(() => {
+    document.body.classList.add('page-story-engine');
+    return () => document.body.classList.remove('page-story-engine');
+  }, []);
 
-  // Elapsed time counter
-  const [elapsed, setElapsed]                 = useState(0);
-  const elapsedRef                            = useRef(null);
-
-  // Consistency
-  const [consistencyConflicts, setConsistencyConflicts] = useState([]);
-  const [consistencyLoading, setConsistencyLoading]     = useState(false);
-
-  // Therapy memories
-  const [therapyMemories, setTherapyMemories] = useState([]);
-  const [therapyLoading, setTherapyLoading]   = useState(false);
-
-  // Registry feedback notification
-  const [registryUpdate, setRegistryUpdate]   = useState(null);
-
-  // Save-for-later state
-  const [savingForLater, setSavingForLater]   = useState(false);
-
-  // ── New redesign state ───────────────────────────────────────────────────
-  const [showStats, setShowStats]             = useState(false);
-  const [readingMode, setReadingMode]         = useState(false);
-  const [writeMode, setWriteMode]             = useState(() => {
-    try { return localStorage.getItem('se_writeMode') === '1'; } catch { return false; }
-  });
-  const [toasts, setToasts]                   = useState([]);
-  const [phaseFilter, setPhaseFilter]         = useState(null);
-  const [typeFilter, setTypeFilter]           = useState(null);
-  const [searchQuery, setSearchQuery]         = useState('');
-  const [batchMode, setBatchMode]             = useState(false);
-  const [batchSelected, setBatchSelected]     = useState(new Set());
+  const [toasts, setToasts] = useState([]);
+  const [phaseFilter, setPhaseFilter] = useState(null);
+  const [typeFilter, setTypeFilter] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [batchMode, setBatchMode] = useState(false);
+  const [batchSelected, setBatchSelected] = useState(new Set());
 
   const char = CHARACTERS[selectedChar];
 
-  // ── Toast helpers ────────────────────────────────────────────────────────
   const addToast = useCallback((message, type = 'info') => {
     const id = ++toastIdCounter;
     setToasts(prev => [...prev, { id, message, type }]);
@@ -837,17 +836,19 @@ export default function StoryEngine() {
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  // ── Filtered tasks (phase / type / search) ──────────────────────────────
   const filteredTasks = useMemo(() => {
     return tasks.filter(t => {
       if (phaseFilter && t.phase !== phaseFilter) return false;
       if (typeFilter && t.story_type !== typeFilter) return false;
-      if (searchQuery && !t.title?.toLowerCase().includes(searchQuery.toLowerCase()) && !t.task?.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (
+        searchQuery &&
+        !t.title?.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        !t.task?.toLowerCase().includes(searchQuery.toLowerCase())
+      ) return false;
       return true;
     });
   }, [tasks, phaseFilter, typeFilter, searchQuery]);
 
-  // ── Story navigation helper ──────────────────────────────────────────────
   const navigateStory = useCallback((direction) => {
     if (!activeTask || !tasks.length) return;
     const idx = tasks.findIndex(t => t.story_number === activeTask.story_number);
@@ -864,7 +865,6 @@ export default function StoryEngine() {
   const hasPrevStory = activeTask ? tasks.findIndex(t => t.story_number === activeTask.story_number) > 0 : false;
   const hasNextStory = activeTask ? tasks.findIndex(t => t.story_number === activeTask.story_number) < tasks.length - 1 : false;
 
-  // ── Export story (copy / download) ───────────────────────────────────────
   const handleExportStory = useCallback((story) => {
     const text = `# ${story.title}\n\nStory ${story.story_number} · ${PHASE_LABELS[story.phase]} · ${story.story_type}\n${story.word_count?.toLocaleString() || ''} words\n\n${story.text || ''}`;
     if (navigator.clipboard) {
@@ -872,7 +872,6 @@ export default function StoryEngine() {
         addToast('Story copied to clipboard', 'success');
       });
     }
-    // Also trigger download
     const blob = new Blob([text], { type: 'text/markdown' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -882,7 +881,6 @@ export default function StoryEngine() {
     URL.revokeObjectURL(url);
   }, [addToast]);
 
-  // ── Batch approve handler ────────────────────────────────────────────────
   const handleBatchApprove = useCallback(async () => {
     if (batchSelected.size === 0) return;
     const nums = [...batchSelected].filter(n => stories[n] && !approvedStories.includes(n));
@@ -906,7 +904,6 @@ export default function StoryEngine() {
     });
   }, []);
 
-  // ── Elapsed-time timer helper ────────────────────────────────────────────
   const startTimer = useCallback(() => {
     setElapsed(0);
     if (elapsedRef.current) clearInterval(elapsedRef.current);
@@ -920,31 +917,19 @@ export default function StoryEngine() {
 
   useEffect(() => () => stopTimer(), [stopTimer]);
 
-  // ── Keyboard shortcuts ───────────────────────────────────────────────────
   useEffect(() => {
     const handler = (e) => {
-      // Skip if typing in an input/textarea
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
-
-      // Arrow Up/Down — navigate tasks
       if (e.key === 'ArrowUp') { e.preventDefault(); navigateStory(-1); }
       if (e.key === 'ArrowDown') { e.preventDefault(); navigateStory(1); }
-
-      // F — toggle reading mode
       if (e.key === 'f' || e.key === 'F') {
         if (!e.ctrlKey && !e.metaKey) { setReadingMode(prev => !prev); }
       }
-
-      // Escape — exit reading mode
       if (e.key === 'Escape') { setReadingMode(false); }
-
-      // Ctrl+S — save for later
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         if (activeStory) handleSaveForLater(activeStory);
       }
-
-      // Ctrl+Enter — approve
       if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
         e.preventDefault();
         if (activeStory) handleApprove(activeStory);
@@ -954,7 +939,6 @@ export default function StoryEngine() {
     return () => window.removeEventListener('keydown', handler);
   }, [navigateStory, activeStory]);
 
-  // ── Load characters dynamically from DB ──────────────────────────────────
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -965,7 +949,6 @@ export default function StoryEngine() {
 
         if (cancelled) return;
 
-        // Build CHARACTERS dict from the API response
         const chars = {};
         const worlds = Object.keys(data.worlds || {});
 
@@ -987,17 +970,14 @@ export default function StoryEngine() {
         if (Object.keys(chars).length > 0) {
           setCHARACTERS(chars);
           setWorldsList(worlds);
-          // Build world toggles
           const toggles = {};
           for (const w of worlds) toggles[w] = true;
           setWorldToggles(toggles);
-          // Select first character if none selected
           if (!selectedChar) {
             const firstKey = Object.keys(chars)[0];
             setSelectedChar(firstKey);
           }
         } else {
-          // Fallback if no characters in DB
           setCHARACTERS(FALLBACK_CHARACTERS);
           setWorldToggles({ 'book-1': true, lalaverse: true });
           if (!selectedChar) setSelectedChar('justawoman');
@@ -1014,8 +994,7 @@ export default function StoryEngine() {
     return () => { cancelled = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── localStorage helpers for caching ─────────────────────────────────────
-  const cacheKey     = (charKey) => `se_tasks_${charKey}`;
+  const cacheKey = (charKey) => `se_tasks_${charKey}`;
   const storyCacheKey = (charKey) => `se_stories_${charKey}`;
 
   function getCachedTasks(charKey) {
@@ -1023,7 +1002,6 @@ export default function StoryEngine() {
       const raw = localStorage.getItem(cacheKey(charKey));
       if (!raw) return null;
       const data = JSON.parse(raw);
-      // Expire after 24 hours
       if (Date.now() - data.ts > 86400000) { localStorage.removeItem(cacheKey(charKey)); return null; }
       return data.tasks;
     } catch { return null; }
@@ -1032,7 +1010,7 @@ export default function StoryEngine() {
   function setCachedTasks(charKey, taskList) {
     try {
       localStorage.setItem(cacheKey(charKey), JSON.stringify({ ts: Date.now(), tasks: taskList }));
-    } catch { /* quota exceeded */ }
+    } catch {}
   }
 
   function getCachedStories(charKey) {
@@ -1040,7 +1018,6 @@ export default function StoryEngine() {
       const raw = localStorage.getItem(storyCacheKey(charKey));
       if (!raw) return null;
       const data = JSON.parse(raw);
-      // Expire after 7 days
       if (Date.now() - data.ts > 604800000) { localStorage.removeItem(storyCacheKey(charKey)); return null; }
       return { stories: data.stories || {}, approved: data.approved || [] };
     } catch { return null; }
@@ -1053,10 +1030,9 @@ export default function StoryEngine() {
         stories: storiesObj,
         approved: approvedArr,
       }));
-    } catch { /* quota exceeded */ }
+    } catch {}
   }
 
-  // ── Load tasks + stories: try localStorage → DB → server cache → empty state ──
   useEffect(() => {
     if (!selectedChar) return;
     setActiveTask(null);
@@ -1065,7 +1041,6 @@ export default function StoryEngine() {
     setTherapyMemories([]);
     setSavedStories([]);
 
-    // Restore any previously-written stories for this character from localStorage
     const cachedStoryData = getCachedStories(selectedChar);
     if (cachedStoryData) {
       setStories(cachedStoryData.stories);
@@ -1075,7 +1050,6 @@ export default function StoryEngine() {
       setApprovedStories([]);
     }
 
-    // Also load DB-persisted stories (saved for later / approved) — merges with cache
     (async () => {
       try {
         const dbRes = await fetch(`${API_BASE}/stories/character/${selectedChar}`);
@@ -1104,24 +1078,21 @@ export default function StoryEngine() {
               if (s.status === 'approved') dbApproved.push(s.story_number);
               if (s.status === 'draft' || s.status === 'approved') dbSaved.push(s.story_number);
             }
-            // Merge: DB data takes precedence (it's the persisted truth)
             setStories(prev => ({ ...prev, ...dbStories }));
             setApprovedStories(prev => [...new Set([...prev, ...dbApproved])]);
             setSavedStories(dbSaved);
-            // Update localStorage cache with DB data
             setCachedStories(selectedChar,
               { ...(cachedStoryData?.stories || {}), ...dbStories },
               [...new Set([...(cachedStoryData?.approved || []), ...dbApproved])]);
           }
         }
-      } catch { /* network error — localStorage fallback still active */ }
+      } catch {}
+
     })();
 
-    // 1. Check localStorage for task arc
     const cached = getCachedTasks(selectedChar);
     if (cached?.length) {
       setTasks(cached);
-      // Restore last-viewed task, or fall back to first
       const savedNum = (() => { try { return Number(localStorage.getItem('se_activeTaskNum')); } catch { return 0; } })();
       const restored = savedNum && cached.find(t => t.story_number === savedNum);
       setActiveTask(restored || cached[0]);
@@ -1129,7 +1100,6 @@ export default function StoryEngine() {
       return;
     }
 
-    // 2. Check server-side cache (instant GET, no Claude call)
     (async () => {
       try {
         const res = await fetch(`${API_BASE}/memories/story-engine-tasks/${selectedChar}`);
@@ -1145,13 +1115,11 @@ export default function StoryEngine() {
             return;
           }
         }
-      } catch { /* network error — ignore */ }
-      // 3. No cache anywhere → show empty state with "Generate Arc" button
+      } catch {}
       setTasks([]);
     })();
   }, [selectedChar]);
 
-  // ── Generate task arc (user-initiated, not automatic) ────────────────────
   async function handleGenerateArc(forceRegenerate = false) {
     setTasksLoading(true);
     startTimer();
@@ -1174,7 +1142,6 @@ export default function StoryEngine() {
     }
   }
 
-  // ── Generate a story ──────────────────────────────────────────────────────
   async function handleGenerate(task) {
     setGenerating(true);
     setGeneratingNum(task.story_number);
@@ -1185,7 +1152,6 @@ export default function StoryEngine() {
     startTimer();
 
     try {
-      // Build previous stories context — send ALL approved for richer continuity
       const previousStories = approvedStories
         .filter((n) => n < task.story_number)
         .sort((a, b) => a - b)
@@ -1228,7 +1194,6 @@ export default function StoryEngine() {
     }
   }
 
-  // ── Save a story for later (persist to DB as draft, don't approve) ────────
   async function handleSaveForLater(story) {
     setSavingForLater(true);
     try {
@@ -1255,7 +1220,6 @@ export default function StoryEngine() {
         const data = await res.json();
         const nextSaved = [...new Set([...savedStories, story.story_number])];
         setSavedStories(nextSaved);
-        // Update the story object with DB info
         const nextStories = { ...stories, [story.story_number]: { ...story, db_id: data.story?.id, db_status: 'draft' } };
         setStories(nextStories);
         setCachedStories(selectedChar, nextStories, approvedStories);
@@ -1268,15 +1232,13 @@ export default function StoryEngine() {
       setSavingForLater(false);
     }
   }
-  // ── Approve a story ───────────────────────────────────────────────────────
+
   async function handleApprove(story) {
     const nextApproved = [...new Set([...approvedStories, story.story_number])];
     setApprovedStories(nextApproved);
-    // Track as saved too (approved implies saved)
     setSavedStories(prev => [...new Set([...prev, story.story_number])]);
     setCachedStories(selectedChar, stories, nextApproved);
 
-    // Extract memories for therapy room
     setTherapyLoading(true);
     let extractedMemories = null;
     try {
@@ -1302,7 +1264,6 @@ export default function StoryEngine() {
       setTherapyLoading(false);
     }
 
-    // Registry feedback loop — update character profile based on story events
     try {
       const regRes = await fetch(`${API_BASE}/memories/story-engine-update-registry`, {
         method: 'POST',
@@ -1327,7 +1288,6 @@ export default function StoryEngine() {
     }
   }
 
-  // ── Reject a story ────────────────────────────────────────────────────────
   function handleReject(story) {
     const nextStories = { ...stories };
     delete nextStories[story.story_number];
@@ -1337,7 +1297,6 @@ export default function StoryEngine() {
     setCachedStories(selectedChar, nextStories, approvedStories);
   }
 
-  // ── Add new character from a story to the registry ────────────────────────
   async function handleAddToRegistry(story) {
     if (!story.new_character_name) return;
     try {
@@ -1358,7 +1317,6 @@ export default function StoryEngine() {
           addToast(`${story.new_character_name} already exists in the registry.`, 'warning');
         } else {
           addToast(`${story.new_character_name} added to the registry as draft.`, 'success');
-          // Refresh character list
           const charRes = await fetch(`${API_BASE}/memories/story-engine-characters`);
           if (charRes.ok) {
             const charData = await charRes.json();
@@ -1387,7 +1345,6 @@ export default function StoryEngine() {
     }
   }
 
-  // ── Edit a story — triggers cascade check ────────────────────────────────
   async function handleEdit(story, newText) {
     const updated = { ...story, text: newText, word_count: newText.split(/\s+/).length };
     const nextStories = { ...stories, [story.story_number]: updated };
@@ -1395,11 +1352,36 @@ export default function StoryEngine() {
     setActiveStory(updated);
     setCachedStories(selectedChar, nextStories, approvedStories);
 
-    // Cascade consistency check
+    try {
+      const task = tasks.find(t => t.story_number === story.story_number);
+      await fetch(`${API_BASE}/stories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_key: selectedChar,
+          story_number: story.story_number,
+          title: story.title,
+          text: newText,
+          phase: story.phase,
+          story_type: story.story_type,
+          word_count: newText.split(/\s+/).length,
+          status: story.db_status || 'draft',
+          task_brief: task,
+          new_character: story.new_character,
+          new_character_name: story.new_character_name,
+          new_character_role: story.new_character_role,
+          opening_line: story.opening_line,
+        }),
+      });
+      addToast('Story saved', 'success');
+    } catch (e) {
+      console.error('Story save error:', e);
+      addToast('Failed to save story to database', 'error');
+    }
+
     await handleCheckConsistency(updated);
   }
 
-  // ── Check story consistency ───────────────────────────────────────────────
   async function handleCheckConsistency(story) {
     setConsistencyLoading(true);
     setConsistencyConflicts([]);
@@ -1432,12 +1414,10 @@ export default function StoryEngine() {
     }
   }
 
-  // ── World toggle ──────────────────────────────────────────────────────────
   function handleWorldToggle(worldId) {
     setWorldToggles((prev) => ({ ...prev, [worldId]: !prev[worldId] }));
   }
 
-  // ── Select task/story ─────────────────────────────────────────────────────
   function handleSelectTask(task) {
     setActiveTask(task);
     setActiveStory(stories[task.story_number] || null);
@@ -1445,14 +1425,10 @@ export default function StoryEngine() {
     setTherapyMemories([]);
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''}`}>
-
-      {/* ── Toast notifications ──────────────────────────────────────────── */}
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
-      {/* ── Top bar ──────────────────────────────────────────────────────── */}
       {!readingMode && (
         <div className="se-topbar">
           <button className="se-btn-back" onClick={() => navigate('/')}>
@@ -1470,7 +1446,6 @@ export default function StoryEngine() {
         </div>
       )}
 
-      {/* ── Stats dashboard (collapsible) ─────────────────────────────────── */}
       {showStats && !readingMode && (
         <StatsDashboard
           tasks={tasks}
@@ -1480,30 +1455,24 @@ export default function StoryEngine() {
         />
       )}
 
-      {/* ── Character selector (searchable dropdown) ─────────────────────── */}
       {!readingMode && (
-        <CharacterSelector
-          characters={CHARACTERS}
-          selectedChar={selectedChar}
-          onSelect={setSelectedChar}
-          loading={charsLoading}
-        />
+        <div className="se-mobile-deck">
+          <CharacterSelector
+            characters={CHARACTERS}
+            selectedChar={selectedChar}
+            onSelect={setSelectedChar}
+            loading={charsLoading}
+          />
+
+          <ArcProgress
+            approvedStories={approvedStories}
+            savedStories={savedStories}
+            stories={stories}
+          />
+        </div>
       )}
 
-      {/* ── Arc progress (with status dots) ───────────────────────────────── */}
-      {!readingMode && (
-        <ArcProgress
-          tasks={tasks}
-          approvedStories={approvedStories}
-          savedStories={savedStories}
-          stories={stories}
-        />
-      )}
-
-      {/* ── Main workspace ────────────────────────────────────────────────── */}
-      <div className="se-workspace">
-
-        {/* Left: task list */}
+      <div className={`se-workspace${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
         {!readingMode && !writeMode && (
           <div className="se-task-list">
             {tasksLoading ? (
@@ -1513,25 +1482,32 @@ export default function StoryEngine() {
                 <span className="se-task-loading-elapsed">{elapsed}s elapsed · typically 2–3 minutes</span>
               </div>
             ) : tasks.length === 0 ? (
-              <div className="se-task-empty">
-                <div className="se-task-empty-icon" style={{ color: char?.color }}>{char?.icon}</div>
-                <div className="se-task-empty-title">No story arc yet for {char?.display_name}</div>
-                <div className="se-task-empty-desc">
-                  Generate a 50-story task arc using AI.
-                  This takes 2–3 minutes on the first run,
-                  then loads instantly from cache.
+              <div className="se-task-empty se-hero-card">
+                <div className="se-hero-icon" style={{ color: char?.color }}>{char?.icon || '◇'}</div>
+                <div className="se-hero-title">Build {char?.display_name}'s story engine</div>
+                <div className="se-hero-text">
+                  Generate a 50-story progression that moves from establishment
+                  through pressure, crisis, and integration. The first run takes
+                  a few minutes — after that, it loads instantly.
                 </div>
                 <button
-                  className="se-btn se-btn-generate-arc"
+                  className="se-btn se-btn-generate-arc se-primary-btn"
                   style={{ background: char?.color }}
                   onClick={() => handleGenerateArc()}
                 >
-                  Generate 50-Story Arc
+                  Generate Story Arc
                 </button>
+                <div className="se-hero-sub">Typically 2–3 minutes</div>
               </div>
             ) : (
               <>
-                {/* Filter bar */}
+                <div className="se-task-section-intro">
+                  <div className="se-task-section-title">Story Arc</div>
+                  <div className="se-task-section-sub">
+                    {char?.display_name}'s 50-story progression
+                  </div>
+                </div>
+
                 <div className="se-filter-bar">
                   <input
                     className="se-filter-search"
@@ -1563,7 +1539,6 @@ export default function StoryEngine() {
                   </div>
                 </div>
 
-                {/* Task list header */}
                 <div className="se-task-list-header">
                   <span className="se-task-list-count">
                     {filteredTasks.length}{filteredTasks.length !== tasks.length ? `/${tasks.length}` : ''} stories
@@ -1592,14 +1567,17 @@ export default function StoryEngine() {
                     )}
                     <button
                       className="se-btn se-btn-regen"
-                      onClick={() => { if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) handleGenerateArc(true); }}
+                      onClick={() => {
+                        if (window.confirm('Regenerate the entire arc? This replaces all 50 task briefs.')) {
+                          handleGenerateArc(true);
+                        }
+                      }}
                     >
                       ↻ Regen
                     </button>
                   </div>
                 </div>
 
-                {/* Task cards */}
                 {filteredTasks.map((task) => (
                   <TaskCard
                     key={task.story_number}
@@ -1616,6 +1594,7 @@ export default function StoryEngine() {
                     onBatchToggle={handleBatchToggle}
                   />
                 ))}
+
                 {filteredTasks.length === 0 && tasks.length > 0 && (
                   <div className="se-filter-empty">
                     No stories match current filters.
@@ -1629,8 +1608,7 @@ export default function StoryEngine() {
           </div>
         )}
 
-        {/* Right: story panel */}
-        <div className="se-story-column">
+        <div className={`se-story-column${storiesMinimized ? ' se-stories-collapsed' : ''}`}>
           {generating && generatingNum === activeTask?.story_number ? (
             <div className="se-generating">
               <div className="se-generating-ring" style={{ borderTopColor: char?.color }} />
@@ -1678,12 +1656,13 @@ export default function StoryEngine() {
               activeWorld={activeWorld}
               allCharacters={CHARACTERS}
               onSelectChar={setSelectedChar}
+              storiesMinimized={storiesMinimized}
+              onToggleStoriesMinimized={() => setStoriesMinimized(m => !m)}
             />
           )}
         </div>
       </div>
 
-      {/* ── Keyboard shortcuts hint ──────────────────────────────────────── */}
       {!readingMode && (
         <div className="se-shortcuts-hint">
           <span>↑↓ Navigate</span>

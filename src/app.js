@@ -82,6 +82,10 @@ if (process.env.NODE_ENV !== 'test') {
 // PROCESS ERROR HANDLERS (Set up early)
 // ============================================================================
 process.on('unhandledRejection', (reason, _promise) => {
+  // Suppress Redis ECONNREFUSED rejections — expected when Redis is unavailable
+  const msg = reason?.message || String(reason);
+  if (msg.includes('ECONNREFUSED') && msg.includes('6379')) return;
+  if (msg.includes('stopped reconnecting')) return;
   console.error('❌ Unhandled Rejection:', reason);
 });
 
@@ -156,12 +160,14 @@ app.use(
 // Handle preflight requests for all routes
 app.options(/(.*)/, cors());
 
-// 🚨 ULTRA-EARLY DEBUG MIDDLEWARE - Log EVERY request
-app.use((req, res, next) => {
-  console.log(`\n🌍 INCOMING REQUEST: ${req.method} ${req.path}`);
-  console.log(`   Original URL: ${req.originalUrl}`);
-  next();
-});
+// Debug request logging — development only
+if (process.env.NODE_ENV !== 'production') {
+  app.use((req, res, next) => {
+    console.log(`\n🌍 INCOMING REQUEST: ${req.method} ${req.path}`);
+    console.log(`   Original URL: ${req.originalUrl}`);
+    next();
+  });
+}
 
 app.use(
   helmet({
@@ -245,18 +251,20 @@ app.get('/health', async (req, res) => {
 // Alias so /api/v1/health also works (nginx only proxies /api to backend)
 app.get('/api/v1/health', (req, res) => res.redirect('/health'));
 
-// Debug endpoint to check environment (should be removed in production)
-app.get('/api/v1/debug/env', (req, res) => {
-  res.json({
-    NODE_ENV: process.env.NODE_ENV,
-    PORT: process.env.PORT,
-    DATABASE_URL: process.env.DATABASE_URL ? '***SET***' : 'NOT SET',
-    DB_SSL: process.env.DB_SSL,
-    AWS_REGION: process.env.AWS_REGION,
-    cwd: process.cwd(),
-    __dirname,
+// Debug endpoints — development only
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/v1/debug/env', (req, res) => {
+    res.json({
+      NODE_ENV: process.env.NODE_ENV,
+      PORT: process.env.PORT,
+      DATABASE_URL: process.env.DATABASE_URL ? '***SET***' : 'NOT SET',
+      DB_SSL: process.env.DB_SSL,
+      AWS_REGION: process.env.AWS_REGION,
+      cwd: process.cwd(),
+      __dirname,
+    });
   });
-});
+}
 
 // Route load diagnostics tracker
 const routeLoadResults = {};
@@ -273,15 +281,17 @@ function trackRouteLoad(name, loadFn) {
   }
 }
 
-app.get('/api/v1/debug/routes', (req, res) => {
-  const failed = Object.entries(routeLoadResults).filter(([,v]) => v.status === 'error');
-  res.json({
-    total: Object.keys(routeLoadResults).length,
-    loaded: Object.keys(routeLoadResults).length - failed.length,
-    failed: failed.length,
-    details: routeLoadResults,
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/api/v1/debug/routes', (req, res) => {
+    const failed = Object.entries(routeLoadResults).filter(([,v]) => v.status === 'error');
+    res.json({
+      total: Object.keys(routeLoadResults).length,
+      loaded: Object.keys(routeLoadResults).length - failed.length,
+      failed: failed.length,
+      details: routeLoadResults,
+    });
   });
-});
+}
 
 // ============================================================================
 // AUTHENTICATION ROUTES

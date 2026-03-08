@@ -29,6 +29,16 @@
     min-width: 44px;
   }
 
+  /* Story Engine manages its own touch targets — don't override */
+  .se-page button,
+  .se-page [role="button"],
+  .se-page a,
+  .se-page select,
+  .se-page input[type="checkbox"] {
+    min-height: unset;
+    min-width: unset;
+  }
+
   input[type="text"],
   input[type="email"],
   input[type="password"],
@@ -40,6 +50,14 @@
   select {
     font-size: 16px !important; /* Prevents iOS zoom on focus */
     min-height: 44px;
+  }
+
+  /* Let Story Engine control its own input/textarea sizing */
+  .se-page textarea,
+  .se-page input,
+  .se-page select {
+    font-size: unset !important;
+    min-height: unset;
   }
 
   /* Larger tap targets for small interactive elements */
