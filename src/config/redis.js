@@ -42,7 +42,8 @@ let redisClient = null;
  */
 function getRedisClient() {
   if (!redisClient) {
-    let redisErrorLogged = false;
+    let redisConnErrorLogged = false;
+    let redisGaveUp = false;
     let redisReconnectCount = 0;
 
     redisClient = Redis.createClient({
@@ -53,9 +54,9 @@ function getRedisClient() {
         reconnectStrategy(retries) {
           redisReconnectCount = retries;
           if (retries > 5) {
-            if (!redisErrorLogged) {
+            if (!redisGaveUp) {
               console.warn('⚠️  Redis client: giving up after 5 reconnect attempts');
-              redisErrorLogged = true;
+              redisGaveUp = true;
             }
             // Return Error to stop reconnecting (not false, which can cause unhandled rejection)
             return new Error('Redis unavailable — stopped reconnecting');
@@ -68,26 +69,25 @@ function getRedisClient() {
 
     redisClient.on('connect', () => {
       console.log('✅ Redis client connected');
-      redisErrorLogged = false;
+      redisConnErrorLogged = false;
+      redisGaveUp = false;
       redisReconnectCount = 0;
     });
 
     redisClient.on('error', (err) => {
       // Only log the first ECONNREFUSED, suppress subsequent
       if (err.message.includes('ECONNREFUSED')) {
-        if (!redisErrorLogged) {
+        if (!redisConnErrorLogged) {
           console.error('❌ Redis client error:', err.message);
+          redisConnErrorLogged = true;
         }
       } else if (!err.message.includes('stopped reconnecting')) {
         console.error('❌ Redis client error:', err.message);
       }
     });
 
-    redisClient.on('reconnecting', () => {
-      if (redisReconnectCount <= 5) {
-        console.log('🔄 Redis client reconnecting...');
-      }
-    });
+    // Suppress reconnecting messages — error + give-up messages are sufficient
+    redisClient.on('reconnecting', () => {});
   }
 
   return redisClient;

@@ -3,46 +3,46 @@ try { require('dotenv').config({ path: require('path').join(__dirname, '.env') }
 
 // Shared environment variables for both API and Worker
 const sharedEnv = {
-  NODE_ENV: 'development',
+  NODE_ENV: process.env.NODE_ENV || 'development',
   // Prepend Node 20 bin to PATH to ensure it's used
   PATH: '/home/ubuntu/.nvm/versions/node/v20.20.0/bin:' + process.env.PATH,
   NODE_VERSION: '20.20.0',
 
-  // Database Config - AWS RDS Development (use individual vars, not DATABASE_URL)
-  DB_HOST: 'episode-control-dev.csnow208wqtv.us-east-1.rds.amazonaws.com',
-  DB_PORT: '5432',
-  DB_NAME: 'episode_metadata',
-  DB_USER: 'postgres',
-  DB_PASSWORD: 'Ayanna123!!',
-  DATABASE_POOL_MIN: '2',
-  DATABASE_POOL_MAX: '10',
-  DATABASE_TIMEOUT: '30000',
-  DB_SSL: 'true',
+  // Database Config — all values from environment or .env file
+  DB_HOST: process.env.DB_HOST || '',
+  DB_PORT: process.env.DB_PORT || '5432',
+  DB_NAME: process.env.DB_NAME || '',
+  DB_USER: process.env.DB_USER || '',
+  DB_PASSWORD: process.env.DB_PASSWORD || '',
+  DATABASE_POOL_MIN: process.env.DATABASE_POOL_MIN || '2',
+  DATABASE_POOL_MAX: process.env.DATABASE_POOL_MAX || '10',
+  DATABASE_TIMEOUT: process.env.DATABASE_TIMEOUT || '30000',
+  DB_SSL: process.env.DB_SSL || 'true',
 
   // AWS Config — credentials come from ~/.aws/credentials or env vars
-  AWS_REGION: 'us-east-1',
-  AWS_ACCOUNT_ID: '637423256673',
+  AWS_REGION: process.env.AWS_REGION || 'us-east-1',
+  AWS_ACCOUNT_ID: process.env.AWS_ACCOUNT_ID || '',
 
-  // S3 Buckets - Development
-  AWS_S3_BUCKET: 'episode-metadata-storage-dev',
-  S3_PRIMARY_BUCKET: 'episode-metadata-storage-dev',
-  S3_THUMBNAIL_BUCKET: 'episode-metadata-thumbnails-dev',
-  MAX_FILE_UPLOAD_SIZE_MB: '500',
+  // S3 Buckets
+  AWS_S3_BUCKET: process.env.AWS_S3_BUCKET || '',
+  S3_PRIMARY_BUCKET: process.env.S3_PRIMARY_BUCKET || '',
+  S3_THUMBNAIL_BUCKET: process.env.S3_THUMBNAIL_BUCKET || '',
+  MAX_FILE_UPLOAD_SIZE_MB: process.env.MAX_FILE_UPLOAD_SIZE_MB || '500',
 
-  // Cognito Auth - Development Pool
-  COGNITO_USER_POOL_ID: 'us-east-1_mFVU52978',
-  COGNITO_CLIENT_ID: 'lgtf3odnar8c456iehqfck1au',
-  COGNITO_REGION: 'us-east-1',
+  // Cognito Auth
+  COGNITO_USER_POOL_ID: process.env.COGNITO_USER_POOL_ID || '',
+  COGNITO_CLIENT_ID: process.env.COGNITO_CLIENT_ID || '',
+  COGNITO_REGION: process.env.COGNITO_REGION || 'us-east-1',
 
   // JWT Tokens
-  JWT_SECRET: 'dev-secret-minimum-32-characters-long-for-security',
-  JWT_EXPIRATION: '24h',
+  JWT_SECRET: process.env.JWT_SECRET || '',
+  JWT_EXPIRATION: process.env.JWT_EXPIRATION || '24h',
 
   // Redis
-  REDIS_HOST: '127.0.0.1',
-  REDIS_PORT: '6379',
+  REDIS_HOST: process.env.REDIS_HOST || '127.0.0.1',
+  REDIS_PORT: process.env.REDIS_PORT || '6379',
 
-  // Claude AI — Anthropic API (set via GitHub Secret → deploy workflow)
+  // Claude AI — Anthropic API
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
 };
 

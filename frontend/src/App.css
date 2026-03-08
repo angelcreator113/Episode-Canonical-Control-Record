@@ -149,6 +149,16 @@ html, body {
   background: var(--st-bg, #F6F1EB);
 }
 
+/* StoryEngine: unlock vertical scrolling on the .app-content scroll container.
+   body.page-story-engine is set by StoryEngine.jsx on mount.
+   Keep the fixed viewport-height chain intact — only change overflow. */
+body.page-story-engine .app-main-wrapper.full-screen .app-content {
+  background: #f5f3f0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* StorytellerPage needs scrolling even in full-screen mode */
 .full-screen .app-content:has(> .storyteller-page) {
   overflow-y: auto;
@@ -311,6 +321,10 @@ html, body {
   /* Larger touch targets for touch devices */
   button, a, input, select, textarea {
     min-height: 44px; /* iOS Human Interface Guidelines */
+  }
+  /* SE manages its own touch targets */
+  .se-page button, .se-page a, .se-page input, .se-page select, .se-page textarea {
+    min-height: unset;
   }
 }
 
