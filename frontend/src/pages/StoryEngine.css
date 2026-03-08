@@ -1644,21 +1644,21 @@
 }
 
 @media (max-width: 900px) {
-  /* Page: normal scrollable document, not viewport-locked */
+  /* Page: switch to normal block flow — no flex stretching at all */
   .se-page,
   .se-page.se-write-mode {
+    display: block;
     height: auto;
-    min-height: 100dvh;
+    min-height: 0;
     overflow-y: auto;
     overflow-x: hidden;
   }
 
-  /* Workspace: vertical stack, content-sized (don't stretch to fill viewport) */
+  /* Workspace: block flow so children stack naturally */
   .se-workspace,
   .se-write-mode .se-workspace,
   .se-fullscreen-reading .se-workspace {
-    flex-direction: column;
-    flex: 0 0 auto;
+    display: block;
     overflow: visible;
   }
 
@@ -1672,41 +1672,44 @@
     overflow-y: auto;
   }
 
-  /* Story column: content-sized, don't stretch */
+  /* Story column: normal block, no flex stretching */
   .se-story-column,
   .se-write-mode .se-story-column,
   .se-fullscreen-reading .se-story-column {
-    flex: 0 0 auto;
+    display: block;
     width: 100%;
     overflow: visible;
-    min-height: 0;
   }
 
-  /* Story panel: flow height, not viewport-locked */
+  /* Story panel: block flow */
   .se-story-panel,
   .se-write-mode .se-story-panel {
+    display: block;
     height: auto;
-    min-height: 0;
     overflow: visible;
   }
 
-  /* Story body: flow with content (no inner scroll on mobile) */
-  .se-story-body,
-  .se-write-mode .se-story-body {
-    flex: none;
-    overflow: visible;
-  }
-
-  /* Empty / generating states: compact, not stretched */
+  /* Empty state: centered flex column for its own content */
   .se-story-empty {
-    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     padding: 40px 20px;
-    min-height: 0;
   }
   .se-generating {
-    flex: none;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
     padding: 40px 20px;
-    min-height: 0;
+  }
+
+  /* Story body: block flow */
+  .se-story-body,
+  .se-write-mode .se-story-body {
+    display: block;
+    overflow: visible;
   }
 
   .se-task-empty { padding: 24px 20px; }
