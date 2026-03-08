@@ -1388,13 +1388,41 @@ export default function StoryEngine() {
     }
   }
 
-  // ── Edit a story — triggers cascade check ────────────────────────────────
+  // ── Edit a story — persist to DB + triggers cascade check ─────────────────
   async function handleEdit(story, newText) {
     const updated = { ...story, text: newText, word_count: newText.split(/\s+/).length };
     const nextStories = { ...stories, [story.story_number]: updated };
     setStories(nextStories);
     setActiveStory(updated);
     setCachedStories(selectedChar, nextStories, approvedStories);
+
+    // Persist to database
+    try {
+      const task = tasks.find(t => t.story_number === story.story_number);
+      await fetch(`${API_BASE}/stories`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          character_key: selectedChar,
+          story_number: story.story_number,
+          title: story.title,
+          text: newText,
+          phase: story.phase,
+          story_type: story.story_type,
+          word_count: newText.split(/\s+/).length,
+          status: story.db_status || 'draft',
+          task_brief: task,
+          new_character: story.new_character,
+          new_character_name: story.new_character_name,
+          new_character_role: story.new_character_role,
+          opening_line: story.opening_line,
+        }),
+      });
+      addToast('Story saved', 'success');
+    } catch (e) {
+      console.error('Story save error:', e);
+      addToast('Failed to save story to database', 'error');
+    }
 
     // Cascade consistency check
     await handleCheckConsistency(updated);
