@@ -1391,6 +1391,7 @@
 .se-write-mode .se-story-column { flex: 1; }
 .se-write-mode .se-story-body {
   overflow: hidden;
+  background: var(--se-cream);
 }
 .se-write-mode .se-story-editor {
   max-width: 720px;
@@ -1401,6 +1402,7 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: var(--se-border) transparent;
+  background: transparent;
 }
 .se-write-mode .se-therapy-panel,
 .se-write-mode .se-registry-update,
@@ -1410,6 +1412,9 @@
 .se-write-mode .se-story-header {
   border-bottom-color: var(--se-border-light);
   background: var(--se-surface);
+}
+.se-write-mode .se-story-column {
+  background: var(--se-cream);
 }
 .se-edit-wordcount {
   font-family: 'DM Sans', sans-serif;
