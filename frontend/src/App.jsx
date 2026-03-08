@@ -95,6 +95,7 @@ const ChapterStructureEditor = lazy(() => import('./pages/ChapterStructureEditor
 const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'));
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
 const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPage'));
+const SocialProfileGenerator = lazy(() => import('./pages/SocialProfileGenerator'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -373,6 +374,9 @@ function AppContent() {
 
           {/* World Studio — LalaVerse world character + scene hub */}
           <Route path="/world-studio" element={<WorldStudio />} />
+
+          {/* The Feed — Parasocial Creator Profile Generator */}
+          <Route path="/feed" element={<SocialProfileGenerator />} />
           
           {/* PNOS Social Import Pipeline — redirects to Universe tab */}
           <Route path="/social-import" element={<Navigate to="/universe?tab=social-import" replace />} />

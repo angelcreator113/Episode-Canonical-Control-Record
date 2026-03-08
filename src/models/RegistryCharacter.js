@@ -154,6 +154,13 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
+    /* ── Character DNA Triad: wound + desire + hidden_want ── */
+    hidden_want: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+      comment: 'What they actually want but will not admit — structural, stable as the wound',
+    },
+
     /* ── Section 2: Essence Profile ── */
     core_desire: {
       type: DataTypes.TEXT,
@@ -224,7 +231,21 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
 
-    /* ── Section 9: Registry Sync fields ── */
+    /* ── Section 9: Living Context (current life architecture) ── */
+    living_context: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+
+    /* ── Section 10: Deep Profile (14-dimension character anthropology) ── */
+    deep_profile: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+      defaultValue: {},
+      comment: 'Accumulative character anthropology — grows through generation, scene revelation, and writer input',
+    },
+
+    /* ── Section 11: Registry Sync fields ── */
     wound_depth: {
       type: DataTypes.FLOAT,
       defaultValue: 0,

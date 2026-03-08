@@ -325,7 +325,17 @@ ${protagonistConsciousness ? `${protagonistConsciousness}\nNew characters should
 REGISTER: Adult fiction. Explicit — real wounds, real sexuality, real conflict. No softening.
 The profile should read like a file on a real person, not a character description.
 
-Generate a complete profile. Return ONLY valid JSON:
+LIFE STAGE CONTEXT (infer from age ${seed.age}):
+- Early Adulthood (18-28): identity formation, first real failures, belief that exceptions apply to them
+- Establishment (29-39): building, proving, the gap between the life imagined and the life happening
+- Midlife (40-54): reckoning, reinvention, the arithmetic of time becoming real
+- Later Life (55-70): legacy, loss, the relief of caring less about the wrong things, new freedoms
+- Elder (71+): witness consciousness, long perspective, the tenderness of finitude
+Use the appropriate life stage to calibrate everything: how they relate to love, ambition, the body, mortality, time, regret, hope, other people's opinions.
+
+Generate a complete profile. The "deep_profile" section is a 14-dimension character anthropology. Generate what you can reasonably infer from the seed info. Use null for fields you genuinely cannot infer — do NOT fabricate generic placeholder text. Every non-null field should be specific to THIS person.
+
+Return ONLY valid JSON:
 {
   "identity": {
     "name": "${seed.name}",
@@ -351,9 +361,18 @@ Generate a complete profile. Return ONLY valid JSON:
     "what_is_approaching": "the next thing they can feel coming",
     "what_they_are_avoiding": "the thing they know they need to face"
   },
+  "living_context": {
+    "active_pressures": "what is pressing on them right now — specific, practical",
+    "support_network": "who holds them up and what that costs",
+    "home_environment": "what their daily domestic life looks and feels like",
+    "relationship_to_deadlines": "how they relate to time pressure and urgency",
+    "financial_reality": "their actual financial situation — specific, not abstract",
+    "current_season": "the emotional season they are in — not calendar, life-season"
+  },
   "psychology": {
     "core_wound": "the original injury — specific, adult",
     "desire_line": "what they are moving toward",
+    "hidden_want": "what they actually want but will not admit — the desire beneath the desire",
     "fear_line": "what they are moving away from and pretending not to",
     "coping_mechanism": "how they manage the gap between desire and fear",
     "self_deception": "the story they tell themselves that is not quite true",
@@ -395,11 +414,12 @@ Generate a complete profile. Return ONLY valid JSON:
     "proposed_connections": [
       {
         "to_character": "name of existing character",
-        "direction": "one_way|two_way",
-        "from_knows": "what this character knows about them",
-        "to_knows": "what they know about this character (null if one_way unaware)",
-        "from_feels": "emotional position",
-        "relationship_type": "pressure|mirror|support|shadow|romantic|familial|transactional"
+        "relationship_type": "pressure|mirror|support|shadow|romantic|familial|transactional",
+        "role_tag": "ally|detractor|mentor|dependency|rival|partner|family|neutral",
+        "from_feels": "emotional position toward them",
+        "source_knows": "what this character knows about them — specific, not generic",
+        "target_knows": "what they know about this character — specific, not generic",
+        "reader_knows": "what the reader should know that neither character knows yet"
       }
     ]
   },
@@ -428,24 +448,130 @@ Generate a complete profile. Return ONLY valid JSON:
       "thread": "specific unresolved situation",
       "status": "open",
       "activation_condition": "what would bring this thread into a story"
-    },
-    {
-      "thread": "specific unresolved situation",
-      "status": "open",
-      "activation_condition": "what would bring this thread into a story"
-    },
-    {
-      "thread": "specific unresolved situation",
-      "status": "open",
-      "activation_condition": "what would bring this thread into a story"
     }
-  ]
+  ],
+  "deep_profile": {
+    "life_stage": {
+      "stage": "early_adulthood|establishment|midlife|later_life|elder",
+      "relationship_to_time": "how they experience time passing — abundance, urgency, arithmetic, legacy",
+      "relationship_to_love": "how their age shapes what they want and tolerate in love",
+      "relationship_to_ambition": "how their age shapes what they're still willing to chase",
+      "relationship_to_body": "how their age shapes their experience of their physical self",
+      "relationship_to_mortality": "how close death feels and what that does to their choices"
+    },
+    "the_body": {
+      "body_image": "how they see themselves vs. how they actually look vs. how others see them",
+      "physical_health": "chronic conditions, fatigue patterns, what the body costs them",
+      "relationship_to_body": "do they live in their body or manage it from a distance? Does pleasure feel safe?",
+      "physical_presence": "how much space do they take up? Do they shrink or command? Does it depend on the room?",
+      "body_history": "violence, pregnancy, addiction, surgery, starvation, abuse — the body remembers",
+      "sensory_signature": "what do they notice first? What sensory detail takes them back somewhere?"
+    },
+    "class_and_money": {
+      "class_of_origin": "what did money mean in the house they grew up in?",
+      "current_class": "where are they now vs. where they started?",
+      "class_mobility_cost": "the psychological cost of moving up or down",
+      "money_wound": "a specific financial trauma that still drives behavior",
+      "spending_pattern": "spender, hoarder, avoider, performer — what does spending feel like emotionally?",
+      "what_money_means": "safety? Freedom? Love? Proof of worth?"
+    },
+    "religion_and_meaning": {
+      "religious_background": "what they were raised with — this lives in the body even when the mind rejects it",
+      "current_belief": "practicing, lapsed, searching, atheist, spiritual, privately devout",
+      "relationship_to_god": "do they pray? Argue? Have they abandoned it? Does it abandon them?",
+      "what_they_believe_about_suffering": "about fairness, about whether good things happen to good people",
+      "personal_ritual": "what do they do that is sacred to them even if they wouldn't call it that?",
+      "meaning_making_style": "when something bad happens, what is their first move toward making sense of it?"
+    },
+    "race_and_culture": {
+      "ethnic_identity": "what do they claim? What claims them?",
+      "cultural_inheritance": "food, language, ritual, expectation, shame, pride — what got passed down?",
+      "relationship_to_culture": "fully claimed, complicated, distant, actively reclaimed, or grieving a disconnection?",
+      "what_culture_taught_them": "about women, about ambition, about marriage, about bodies, about loyalty",
+      "racial_experience": "what has their race cost them? Given them? What rooms were they the only one?",
+      "code_switching": "do they do it? When? What does it cost?"
+    },
+    "sexuality_and_desire": {
+      "orientation": "who they're drawn to, including the complexity of understanding it",
+      "relationship_to_desire": "is desire something they trust? Fear? Perform? Suppress? Have lost touch with?",
+      "formative_experience": "the earliest experience that shaped how love and want got wired together",
+      "what_intimacy_means": "safety, performance, surrender, power, proof of worth, connection, transaction?",
+      "what_they_need_to_feel_desire": "safety, permission, darkness, humor, slowness, intensity? What turns it off?",
+      "the_pattern": "who do they keep choosing and why? What does the pattern reveal about the wound?",
+      "what_theyve_never_said": "the thing they want that they've never asked for — Voice C's domain"
+    },
+    "family_architecture": {
+      "birth_order": "and what it gave them — responsibility, invisibility, freedom, resentment",
+      "family_role": "the responsible one, the funny one, the invisible one, the problem, the golden child",
+      "parent_wounds": "what did each parent carry that they unknowingly handed to this character?",
+      "sibling_dynamics": "the specific texture — old grudges, old loyalties, who they call when things go wrong",
+      "what_family_taught_about_love": "is it conditional? Is home a place that holds you or one you escape from?",
+      "the_family_secret": "what is it? Who knows? What does carrying it cost?"
+    },
+    "friendship_and_loyalty": {
+      "how_they_make_friends": "easily? With difficulty? Let people in quickly then panic and pull back?",
+      "how_they_keep_friends": "initiator or waiter? Do they disappear when things get hard?",
+      "the_oldest_friend": "who knew them before — what does that person know that no one else does?",
+      "who_they_actually_call": "at 2 AM. Not who they should call. Who they actually call.",
+      "betrayal_history": "who hurt them in a way they still carry — not just romantic",
+      "what_loyalty_means": "to them specifically — loyal to a fault or learned it's a liability?"
+    },
+    "ambition_and_identity": {
+      "how_they_define_themselves": "through work? Relationships? Who they are to other people?",
+      "origin_story_of_ambition": "the story they tell about how they got here — usually a wound in disguise",
+      "what_they_gave_up": "for the career, the relationship, the dream — the cost they don't calculate",
+      "relationship_to_success": "afraid of it? Self-sabotage at the edge? Is success ever allowed to feel good?",
+      "relationship_to_others_success": "especially people they love, especially people they started with",
+      "what_they_would_do_differently": "if no one was watching and there were no consequences"
+    },
+    "habits_and_rituals": {
+      "morning": "the first thing they do — phone, pray, lie still, make coffee with precision?",
+      "comfort_ritual": "what they do when hurting that they'd never tell anyone about",
+      "avoidance_tell": "what they clean, reorganize, or obsess over when avoiding something important",
+      "food": "what they eat when no one is watching, what their mother cooked that they still make",
+      "physical_tell": "how stress lives in their body — jaw, shoulders, stomach, throat — where first?",
+      "what_they_consume": "what they read, watch, listen to when they need to feel less alone",
+      "what_their_space_looks_like": "does their home look like who they are or who they're trying to become?"
+    },
+    "speech_and_silence": {
+      "how_they_argue": "cold or loud? The precise devastating thing? Shut down? Apologize mid-point?",
+      "what_they_never_say_directly": "what always comes out sideways",
+      "how_they_receive_compliments": "deflect? Accept too eagerly? Go still and quiet?",
+      "what_silence_means": "comfortable intimacy or abandonment?",
+      "verbal_tells": "the specific patterns — 'I'm fine' when not, 'no worries' when many worries",
+      "speech_rhythm": "trail off? Finish others' sentences? Long pauses? Talk fast when nervous?"
+    },
+    "grief_and_loss": {
+      "what_they_have_lost": "people, versions of themselves, futures they believed in",
+      "how_they_grieve": "toward people or away? Function or stop? Does it come out as anger, work, control?",
+      "the_unprocessed_loss": "the one still running in the background as behavior rather than feeling",
+      "relationship_to_death": "have they lost someone close? How old were they? Does death frighten or clarify?"
+    },
+    "politics_and_justice": {
+      "what_they_believe_about_fairness": "is the world basically good or basically indifferent?",
+      "the_injustice_they_cant_ignore": "what makes them actually angry, not performatively concerned?",
+      "where_their_hypocrisy_lives": "the gap between what they believe and how they live",
+      "what_they_gave_up_on": "the thing they used to believe could be fixed"
+    },
+    "the_unseen": {
+      "the_embarrassing_memory": "years ago, still thinks about in the shower — unwitnessed, unresolved, alive",
+      "the_irrational_fear": "not a phobia — something specific and slightly absurd they've never explained",
+      "what_they_lie_about": "casually, regularly — the maintenance lies",
+      "private_opinions": "opinions they hold that they'd never say in the current social climate",
+      "what_makes_them_laugh": "not a big laugh — the specific small thing they can't resist",
+      "jealousy_object": "the specific person or type of life that activates envy — what it reveals",
+      "who_they_were_at_14": "the interests, obsessions, embarrassments that got buried — some still in there",
+      "the_compliment_they_remember": "who said it, when, why it landed",
+      "the_criticism_they_cant_let_go": "the one they're still trying to disprove or secretly believe is true",
+      "what_they_do_with_ten_free_minutes": "the specific way they handle unexpected unscheduled time"
+    }
+  }
 }`;
 
     try {
       const response = await anthropic.messages.create({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4000,
+        max_tokens: 8000,
         system: systemPrompt,
         messages: [{ role: 'user', content: `Generate full profile for ${seed.name}.` }],
       });
@@ -699,6 +825,7 @@ router.post('/commit', optionalAuth, async (req, res) => {
       core_desire:        psych.desire_line || '',
       core_fear:          psych.fear_line || '',
       core_wound:         psych.core_wound || '',
+      hidden_want:        psych.hidden_want || '',
       mask_persona:       psych.self_deception || '',
       truth_persona:      psych.at_their_worst || '',
       character_archetype: identity.role_type || seed?.role_type || '',
@@ -709,6 +836,12 @@ router.post('/commit', optionalAuth, async (req, res) => {
       description:        seed?.career
         ? `${seed.career}. ${living.current_emotional_state || ''}`
         : (living.current_emotional_state || ''),
+
+      // ── living_context JSONB ──
+      living_context: JSON.stringify(profile.living_context || {}),
+
+      // ── deep_profile JSONB — 14-dimension character anthropology ──
+      deep_profile: JSON.stringify(profile.deep_profile || {}),
 
       // ── personality_matrix JSONB ──
       personality_matrix: JSON.stringify({
@@ -775,15 +908,79 @@ router.post('/commit', optionalAuth, async (req, res) => {
       writer_notes: writerNoteLines || '',
 
       name_options: JSON.stringify([seed?.name || identity.name]),
+
+      // ── Save plot threads to extra_fields ──
+      extra_fields: threads.length > 0 ? JSON.stringify({ plot_threads: threads.map((t, i) => ({
+        id: `pt-${Date.now()}-${i}`,
+        title: t.thread || t.title || '',
+        description: t.activation_condition || t.description || '',
+        status: t.status || 'open',
+        source: t.source || '',
+      })) }) : null,
     };
 
     const newChar = await db.RegistryCharacter.create(characterData);
+
+    // ── Create relationship edges from proposed_connections ──
+    const connections = rels.proposed_connections || [];
+    const createdRels = [];
+    for (const conn of connections) {
+      try {
+        const targetName = conn.to_character;
+        if (!targetName) continue;
+
+        // Look up target character in same registry
+        let target = await db.RegistryCharacter.findOne({
+          where: {
+            registry_id: registryId,
+            [Op.or]: [
+              { display_name: targetName },
+              { selected_name: targetName },
+            ],
+            deleted_at: null,
+          },
+        });
+
+        // If target doesn't exist, create a stub
+        if (!target) {
+          const stubKey = targetName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + '-stub-' + Date.now().toString(36);
+          target = await db.RegistryCharacter.create({
+            registry_id: registryId,
+            character_key: stubKey,
+            display_name: targetName,
+            selected_name: targetName,
+            role_type: 'support',
+            status: 'stub',
+            appearance_mode: 'on_page',
+          });
+          console.log(`[commit] Created stub character: "${targetName}" (${target.id})`);
+        }
+
+        await db.CharacterRelationship.create({
+          character_id_a: newChar.id,
+          character_id_b: target.id,
+          relationship_type: conn.relationship_type || 'support',
+          role_tag: conn.role_tag || null,
+          source_knows: conn.source_knows || conn.from_knows || null,
+          target_knows: conn.target_knows || conn.to_knows || null,
+          reader_knows: conn.reader_knows || null,
+          notes: conn.from_feels || null,
+          status: 'Active',
+          confirmed: false,
+        });
+        createdRels.push(`${rawName} → ${targetName}`);
+        console.log(`[commit] Created relationship: ${rawName} → ${targetName} (${conn.relationship_type})`);
+      } catch (relErr) {
+        console.error(`[commit] Failed to create relationship to "${conn.to_character}":`, relErr.message);
+      }
+    }
 
     return res.json({
       success: true,
       character_id: newChar.id,
       name: newChar.display_name || newChar.selected_name,
       message: `${newChar.display_name || newChar.selected_name} added to registry as draft.`,
+      relationships_created: createdRels,
     });
 
   } catch (err) {

@@ -99,6 +99,7 @@ let VoiceSignal; // Novel Intelligence: voice pattern signals
 let VoiceRule; // Novel Intelligence: confirmed voice rules
 let ManuscriptMetadata; // Novel Intelligence: book metadata cascade
 let BrainFingerprint; // Novel Intelligence: brain dedup fingerprints
+let SocialProfile; // The Feed: social media creator profiles
 
 try {
   // Core models
@@ -288,6 +289,9 @@ try {
   ManuscriptMetadata = require('./ManuscriptMetadata')(sequelize, DataTypes);
   BrainFingerprint = require('./BrainFingerprint')(sequelize, DataTypes);
 
+  // The Feed: Social Profile Generator
+  SocialProfile = require('./SocialProfile')(sequelize, DataTypes);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -381,6 +385,7 @@ const requiredModels = {
   VoiceRule,
   ManuscriptMetadata,
   BrainFingerprint,
+  SocialProfile,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1596,3 +1601,4 @@ module.exports.VoiceSignal = VoiceSignal;
 module.exports.VoiceRule = VoiceRule;
 module.exports.ManuscriptMetadata = ManuscriptMetadata;
 module.exports.BrainFingerprint = BrainFingerprint;
+module.exports.SocialProfile = SocialProfile;

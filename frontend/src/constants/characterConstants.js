@@ -86,6 +86,7 @@ export const DOSSIER_TABS = [
   { key: 'story',         label: 'Story Presence' },
   { key: 'voice',         label: 'Voice' },
   { key: 'dilemma',       label: 'Dilemma' },
+  { key: 'deep',          label: '🧬 Deep Profile' },
   { key: 'ai',            label: '✦ AI Writer' },
 ];
 

@@ -7,7 +7,7 @@
  * Light theme. All AI calls routed through backend.
  *
  * Flow:
- *   1. BRIEF     — Write scene brief, set tone dial, pick characters
+ *   1. BRIEF     — Write scene brief, pick characters
  *   2. GENERATE  — Backend spawns 3 blind voices in parallel
  *   3. READ      — Read all 3 versions side-by-side
  *   4. EVALUATE  — Claude Opus scores + synthesises approved version
@@ -17,7 +17,8 @@
  */
 
 import { useState, useCallback, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
+import './StoryEvaluationEngine.css';
 
 const API = '/api/v1/memories';
 
@@ -45,15 +46,6 @@ const VOICES = [
   { id: 'voice_c', label: 'Voice C', tag: 'Sensory · Desire',      accent: '#4A8A3D', bg: '#f6faf4', border: '#d8f0d0', emoji: '◉' },
 ];
 
-const TONE_OPTIONS = [
-  { value: 'literary',  label: '📖 Literary',  desc: 'Psychological depth, subtext' },
-  { value: 'thriller',  label: '⚡ Thriller',   desc: 'Pacing, stakes, hooks' },
-  { value: 'lyrical',   label: '🌊 Lyrical',   desc: 'Sensory language, metaphor' },
-  { value: 'intimate',  label: '🌙 Intimate',  desc: 'Closeness, body, silence' },
-  { value: 'dark',      label: '🖤 Dark',      desc: 'Tension, moral ambiguity' },
-  { value: 'warm',      label: '☀️ Warm',      desc: 'Connection, earned tenderness' },
-];
-
 const CRITERIA = ['interiority', 'desire_tension', 'specificity', 'stakes', 'voice', 'body_presence'];
 const CRITERIA_LABELS = {
   interiority:    'Interiority',
@@ -66,6 +58,54 @@ const CRITERIA_LABELS = {
 
 const STEPS = ['brief', 'generate', 'read', 'evaluate', 'memory', 'registry', 'writeback'];
 const STEP_LABELS = ['Brief', 'Generate', 'Read', 'Evaluate', 'Memory', 'Registry', 'Write-Back'];
+
+const CONTENT_TYPES = [
+  'Novel', 'Short Story', 'Screenplay', 'TV Pilot', 'TV Episode',
+  'Stage Play', 'Memoir', 'Personal Essay', 'Song Lyrics', 'Poetry Collection',
+  'Graphic Novel', 'Game Narrative', 'Podcast Script', 'Other',
+];
+
+const EMPTY_BRIEF = {
+  scene_title: '', situation: '', content_name: '', content_type: '', content_type_other: '',
+  content_history: '', why_it_matters: '', life_constraints: '', support_system: '',
+  emotional_stakes: '', what_failure_means: '', deadline_context: '', deadline_pressure: '',
+  characters: [], registry_id: '', internal_conflict: '', world_context: '',
+};
+
+const BRIEF_REQUIRED = ['situation', 'content_name', 'content_type', 'emotional_stakes', 'characters'];
+
+function briefCompleteness(b) {
+  const filled = BRIEF_REQUIRED.filter(k => k === 'characters' ? b.characters.length > 0 : (b[k] || '').trim());
+  return Math.round((filled.length / BRIEF_REQUIRED.length) * 100);
+}
+
+function composeBrief(b) {
+  const cType = b.content_type === 'Other' ? b.content_type_other : b.content_type;
+  return [
+    b.situation,
+    b.content_name ? `The piece, "${b.content_name}"${cType ? ` (${cType})` : ''},` : '',
+    b.content_history,
+    b.why_it_matters,
+    b.life_constraints ? `Life context: ${b.life_constraints}.` : '',
+    b.support_system,
+    b.deadline_context,
+    b.emotional_stakes ? `The emotional stakes: ${b.emotional_stakes}.` : '',
+    b.what_failure_means,
+    b.internal_conflict,
+    b.world_context,
+  ].filter(Boolean).join(' ');
+}
+
+const briefInputStyle = {
+  width: '100%', padding: '10px 12px', background: T.surfaceAlt,
+  border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
+  fontSize: 13, outline: 'none', boxSizing: 'border-box',
+};
+
+const briefTextareaStyle = {
+  ...briefInputStyle, padding: '12px 14px', fontSize: 13.5,
+  lineHeight: 1.7, fontFamily: 'Georgia,serif', resize: 'vertical',
+};
 
 // ── API helpers ───────────────────────────────────────────────────────────
 async function apiPost(endpoint, body) {
@@ -169,22 +209,52 @@ function MemoryCard({ item, selected, onToggle, accentColor }) {
   );
 }
 
+// ── Brief form helpers ────────────────────────────────────────────────────
+function BriefField({ label, hint, children }) {
+  return (
+    <div style={{ marginBottom: 14 }}>
+      <label style={{ display: 'block', fontSize: 11, fontWeight: 600, color: T.text, marginBottom: 4, letterSpacing: 0.3 }}>
+        {label}
+      </label>
+      {children}
+      {hint && <div style={{ fontSize: 10, color: T.textFaint, marginTop: 3 }}>{hint}</div>}
+    </div>
+  );
+}
+
+function CharTag({ name, onRemove }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 4,
+      padding: '3px 10px', background: `${T.accent}18`, border: `1px solid ${T.accent}40`,
+      borderRadius: 20, fontSize: 12, color: T.accent, fontWeight: 500,
+    }}>
+      {name}
+      <button
+        onClick={onRemove}
+        style={{ background: 'none', border: 'none', cursor: 'pointer', color: T.textDim, fontSize: 14, padding: 0, lineHeight: 1 }}
+      >×</button>
+    </span>
+  );
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // MAIN COMPONENT
 // ══════════════════════════════════════════════════════════════════════════
 export default function StoryEvaluationEngine() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // ── State ────────────────────────────────────────────────────────────
   const [step, setStep] = useState('brief');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  // Brief
-  const [sceneBrief, setSceneBrief] = useState('');
-  const [toneDial, setToneDial] = useState('literary');
-  const [characters, setCharacters] = useState('');
-  const [registryId, setRegistryId] = useState('');
+  // Brief (structured)
+  const [brief, setBrief] = useState(EMPTY_BRIEF);
+  const [charInput, setCharInput] = useState('');
+  const [charContext, setCharContext] = useState({}); // { character_key: { living_context, relationships, display_name } }
+  const updateBrief = (key, val) => setBrief(prev => ({ ...prev, [key]: val }));
 
   // Generation result
   const [storyId, setStoryId] = useState(null);
@@ -211,14 +281,44 @@ export default function StoryEvaluationEngine() {
   // Timer
   const [elapsed, setElapsed] = useState(0);
 
-  // ── Read brief from URL query param on mount ─────────────────────────
+  // ── Auto-fill from URL params + router state on mount ──────────────
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
+    const st = location.state || {};
+    const task = st.taskBrief;
+    const patch = {};
+
+    // URL params
     const briefParam = params.get('brief');
     if (briefParam) {
-      try { setSceneBrief(decodeURIComponent(briefParam)); }
-      catch { setSceneBrief(briefParam); }
+      try { patch.situation = decodeURIComponent(briefParam); }
+      catch { patch.situation = briefParam; }
     }
+    const charParam = params.get('chars') || params.get('char');
+    if (charParam) patch.characters = charParam.split(',').map(c => c.trim()).filter(Boolean);
+    const regParam = params.get('registry_id');
+    if (regParam) patch.registry_id = regParam;
+
+    // Router state — rich task data
+    if (task) {
+      if (task.title) patch.scene_title = task.title;
+      if (task.obstacle) patch.internal_conflict = task.obstacle;
+      if (task.strength_weaponized) patch.what_failure_means = task.strength_weaponized;
+      if (task.therapy_seeds?.length) patch.emotional_stakes = task.therapy_seeds.join('. ');
+      if (task.phase) {
+        const phaseMap = { establishment: 'low', pressure: 'medium', crisis: 'high', integration: 'medium' };
+        patch.deadline_pressure = phaseMap[task.phase] || '';
+      }
+      // Build world context from available signals
+      const ctxParts = [];
+      if (st.activeWorld) ctxParts.push(`World: ${st.activeWorld}`);
+      if (task.story_type) ctxParts.push(`Story type: ${task.story_type}`);
+      if (task.domains_active?.length) ctxParts.push(`Active domains: ${task.domains_active.join(', ')}`);
+      if (task.new_character_name) ctxParts.push(`New character: ${task.new_character_name} (${task.new_character_role || 'role TBD'})`);
+      if (ctxParts.length) patch.world_context = ctxParts.join('. ') + '.';
+    }
+
+    if (Object.keys(patch).length) setBrief(prev => ({ ...prev, ...patch }));
   }, []);
 
   useEffect(() => {
@@ -228,25 +328,107 @@ export default function StoryEvaluationEngine() {
     return () => clearInterval(iv);
   }, [loading]);
 
+  // ── Fetch living context + relationship edges for a character ─────
+  const fetchCharacterContext = useCallback(async (charKey, registryId) => {
+    if (!registryId || !charKey) return;
+    try {
+      const res = await fetch(`/api/v1/character-registry/characters/scene-context/${encodeURIComponent(charKey)}?registry_id=${encodeURIComponent(registryId)}`);
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data.success) return;
+      setCharContext(prev => ({ ...prev, [charKey]: data }));
+    } catch { /* silent — context is optional enrichment */ }
+  }, []);
+
+  // When characters or registry_id change, fetch context for any new characters
+  useEffect(() => {
+    if (!brief.registry_id) return;
+    brief.characters.forEach(key => {
+      if (!charContext[key]) fetchCharacterContext(key, brief.registry_id);
+    });
+  }, [brief.characters, brief.registry_id, charContext, fetchCharacterContext]);
+
+  // Auto-populate life_constraints + support_system from fetched context
+  useEffect(() => {
+    if (brief.characters.length === 0) return;
+    const allCtx = brief.characters.map(k => charContext[k]).filter(Boolean);
+    if (allCtx.length === 0) return;
+
+    const patches = {};
+
+    // Life Constraints: merge active pressures + home environment + financial + season
+    const constraintParts = [];
+    allCtx.forEach(ctx => {
+      const lc = ctx.living_context || {};
+      const name = ctx.display_name || ctx.character_key;
+      const parts = [];
+      if (lc.active_pressures) parts.push(lc.active_pressures);
+      if (lc.home_environment) parts.push(lc.home_environment);
+      if (lc.financial_reality || ctx.financial_status) parts.push(lc.financial_reality || ctx.financial_status);
+      if (lc.current_season) parts.push(`Current season: ${lc.current_season}`);
+      if (parts.length) constraintParts.push(`${name}: ${parts.join('. ')}`);
+    });
+    if (constraintParts.length && !brief.life_constraints) {
+      patches.life_constraints = constraintParts.join('\n\n');
+    }
+
+    // Support System: build from relationship edges
+    const supportParts = [];
+    allCtx.forEach(ctx => {
+      const name = ctx.display_name || ctx.character_key;
+      const rels = (ctx.relationships || []).filter(r =>
+        r.role_tag && ['ally', 'detractor', 'mentor', 'dependency', 'rival', 'partner', 'family'].includes(r.role_tag)
+      );
+      if (rels.length) {
+        const lines = rels.map(r => {
+          const parts = [r.person];
+          if (r.role_tag) parts[0] += ` (${r.role_tag}`;
+          if (r.family_role) parts[0] += `, ${r.family_role}`;
+          parts[0] += ')';
+          if (r.situation) parts.push(r.situation);
+          else if (r.tension) parts.push(r.tension);
+          return parts.join(' — ');
+        });
+        supportParts.push(`${name}'s network:\n${lines.join('\n')}`);
+      }
+    });
+    if (supportParts.length && !brief.support_system) {
+      patches.support_system = supportParts.join('\n\n');
+    }
+
+    // Deadline behavior from living context
+    const deadlineParts = [];
+    allCtx.forEach(ctx => {
+      if (ctx.living_context?.relationship_to_deadlines) {
+        deadlineParts.push(ctx.living_context.relationship_to_deadlines);
+      }
+    });
+    if (deadlineParts.length && !brief.deadline_context) {
+      patches.deadline_context = deadlineParts.join('. ');
+    }
+
+    if (Object.keys(patches).length) setBrief(prev => ({ ...prev, ...patches }));
+  }, [charContext, brief.characters]);
+
   // ── Handlers ─────────────────────────────────────────────────────────
 
   const handleGenerate = useCallback(async () => {
-    if (!sceneBrief.trim()) { setError('Scene brief is required'); return; }
+    const composed = composeBrief(brief);
+    if (!composed.trim()) { setError('Scene brief is too sparse \u2014 fill in the situation at minimum'); return; }
+    if (brief.characters.length === 0) { setError('Add at least one character'); return; }
     setError(null); setLoading(true);
     try {
-      const chars = characters.split(',').map(c => c.trim()).filter(Boolean);
       const data = await apiPost('generate-story-multi', {
-        scene_brief: sceneBrief,
-        tone_dial: toneDial,
-        characters_in_scene: chars,
-        registry_id: registryId || undefined,
+        scene_brief: composed,
+        characters_in_scene: brief.characters,
+        registry_id: brief.registry_id || undefined,
       });
       setStoryId(data.story_id);
       setStories(data.stories);
       setStep('read');
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
-  }, [sceneBrief, toneDial, characters, registryId]);
+  }, [brief]);
 
   const handleEvaluate = useCallback(async () => {
     if (!storyId) return;
@@ -321,12 +503,13 @@ export default function StoryEvaluationEngine() {
 
   // ── Render ───────────────────────────────────────────────────────────
   return (
-    <div style={{
-      minHeight: '100vh', background: T.bg, color: T.text,
+    <div className="see-page" style={{
+      height: '100vh', background: T.bg, color: T.text,
       fontFamily: "'Inter','Segoe UI',system-ui,sans-serif",
+      overflowY: 'auto', WebkitOverflowScrolling: 'touch',
     }}>
       {/* Header */}
-      <div style={{
+      <div className="see-header" style={{
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         padding: '14px 24px', borderBottom: `1px solid ${T.border}`, background: T.surface,
       }}>
@@ -340,7 +523,7 @@ export default function StoryEvaluationEngine() {
             <div style={{ fontSize: 15, fontWeight: 700, color: T.text, letterSpacing: -0.3 }}>
               ◇ Story Evaluation Engine
             </div>
-            <div style={{ fontSize: 10, color: T.textDim }}>
+            <div className="see-header-subtitle" style={{ fontSize: 10, color: T.textDim }}>
               Blind generation → Editorial evaluation → Memory → Registry → Write-back
             </div>
           </div>
@@ -353,7 +536,7 @@ export default function StoryEvaluationEngine() {
       </div>
 
       {/* Step Progress */}
-      <div style={{ display: 'flex', padding: '12px 24px', gap: 4, background: T.surface, borderBottom: `1px solid ${T.border}` }}>
+      <div className="see-step-bar" style={{ display: 'flex', padding: '12px 24px', gap: 4, background: T.surface, borderBottom: `1px solid ${T.border}` }}>
         {STEP_LABELS.map((label, i) => {
           const done = i < stepIdx;
           const active = i === stepIdx;
@@ -387,85 +570,214 @@ export default function StoryEvaluationEngine() {
       )}
 
       {/* Content area */}
-      <div style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
+      <div className="see-content" style={{ padding: 24, maxWidth: 1100, margin: '0 auto' }}>
 
         {/* ══════ STEP: BRIEF ══════ */}
         {step === 'brief' && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-            <SectionCard title="Scene Brief">
-              <textarea
-                value={sceneBrief}
-                onChange={e => setSceneBrief(e.target.value)}
-                placeholder="Describe the scene — what's at stake, who's involved, what must change by the end..."
-                rows={6}
-                style={{
-                  width: '100%', padding: '12px 14px', background: T.surfaceAlt,
-                  border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
-                  fontSize: 13.5, lineHeight: 1.7, fontFamily: 'Georgia,serif',
-                  resize: 'vertical', outline: 'none', boxSizing: 'border-box',
-                }}
-              />
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            {/* Completeness header */}
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: T.text }}>Build your scene brief</div>
+              <span style={{
+                padding: '3px 10px', borderRadius: 12, fontSize: 11, fontWeight: 600,
+                background: briefCompleteness(brief) >= 60 ? `${T.green}20` : `${T.accent}20`,
+                color: briefCompleteness(brief) >= 60 ? T.green : T.accent,
+              }}>
+                {briefCompleteness(brief)}% complete
+              </span>
+            </div>
+
+            {/* ① The Scene */}
+            <SectionCard title="① The Scene">
+              <BriefField label="Scene Title" hint="Working title for this scene">
+                <input value={brief.scene_title} onChange={e => updateBrief('scene_title', e.target.value)}
+                  placeholder="e.g. The Confession at Dawn" style={briefInputStyle} />
+              </BriefField>
+              <BriefField label="Situation *" hint="What's happening? What must change by the end?">
+                <textarea value={brief.situation} onChange={e => updateBrief('situation', e.target.value)}
+                  rows={3} placeholder="Describe the core situation — stakes, conflict, pivot point..."
+                  style={briefTextareaStyle} />
+              </BriefField>
             </SectionCard>
 
-            <SectionCard title="Tone Dial">
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 8 }}>
-                {TONE_OPTIONS.map(t => (
-                  <button
-                    key={t.value}
-                    onClick={() => setToneDial(t.value)}
-                    style={{
-                      padding: '10px 12px', borderRadius: 6, cursor: 'pointer',
-                      border: `1px solid ${toneDial === t.value ? T.accent : T.border}`,
-                      background: toneDial === t.value ? `${T.accent}12` : T.surface,
-                      textAlign: 'left', transition: 'all 0.2s',
-                    }}
-                  >
-                    <div style={{ fontSize: 13, fontWeight: 600, color: toneDial === t.value ? T.accent : T.text }}>{t.label}</div>
-                    <div style={{ fontSize: 10, color: T.textDim, marginTop: 2 }}>{t.desc}</div>
-                  </button>
-                ))}
+            {/* ② The Content */}
+            <SectionCard title="② The Content">
+              <div className="see-brief-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <BriefField label="Content Name *" hint="What is the character creating?">
+                  <input value={brief.content_name} onChange={e => updateBrief('content_name', e.target.value)}
+                    placeholder="e.g. her debut album" style={briefInputStyle} />
+                </BriefField>
+                <BriefField label="Content Type *">
+                  <select value={brief.content_type} onChange={e => updateBrief('content_type', e.target.value)}
+                    style={{ ...briefInputStyle, cursor: 'pointer' }}>
+                    <option value="">Select type...</option>
+                    {CONTENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                  {brief.content_type === 'Other' && (
+                    <input value={brief.content_type_other} onChange={e => updateBrief('content_type_other', e.target.value)}
+                      placeholder="Describe the content type..." style={{ ...briefInputStyle, marginTop: 6 }} />
+                  )}
+                </BriefField>
+              </div>
+              <BriefField label="Content History" hint="What has the character already tried or created?">
+                <textarea value={brief.content_history} onChange={e => updateBrief('content_history', e.target.value)}
+                  rows={2} placeholder="Previous attempts, false starts, scrapped drafts..."
+                  style={briefTextareaStyle} />
+              </BriefField>
+              <BriefField label="Why It Matters" hint="Why does this piece matter to the character?">
+                <textarea value={brief.why_it_matters} onChange={e => updateBrief('why_it_matters', e.target.value)}
+                  rows={2} placeholder="The personal significance — what it proves or changes..."
+                  style={briefTextareaStyle} />
+              </BriefField>
+            </SectionCard>
+
+            {/* ③ The Life Context */}
+            <SectionCard title="③ The Life Context">
+              <div className="see-brief-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <BriefField label="Life Constraints" hint="Real-world pressures?">
+                  <textarea value={brief.life_constraints} onChange={e => updateBrief('life_constraints', e.target.value)}
+                    rows={2} placeholder="Financial pressure, family obligations, health..."
+                    style={briefTextareaStyle} />
+                </BriefField>
+                <BriefField label="Support System" hint="Who supports or undermines them?">
+                  <textarea value={brief.support_system} onChange={e => updateBrief('support_system', e.target.value)}
+                    rows={2} placeholder="Allies, mentors, rivals, detractors..."
+                    style={briefTextareaStyle} />
+                </BriefField>
+              </div>
+              <div className="see-brief-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <BriefField label="Deadline Context">
+                  <input value={brief.deadline_context} onChange={e => updateBrief('deadline_context', e.target.value)}
+                    placeholder="e.g. Album due to label in 3 weeks" style={briefInputStyle} />
+                </BriefField>
+                <BriefField label="Deadline Pressure">
+                  <select value={brief.deadline_pressure} onChange={e => updateBrief('deadline_pressure', e.target.value)}
+                    style={{ ...briefInputStyle, cursor: 'pointer' }}>
+                    <option value="">Select pressure level...</option>
+                    <option value="low">Low — plenty of time</option>
+                    <option value="medium">Medium — some time pressure</option>
+                    <option value="high">High — deadline looming</option>
+                    <option value="critical">Critical — now or never</option>
+                  </select>
+                </BriefField>
               </div>
             </SectionCard>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-              <SectionCard title="Characters in Scene">
-                <input
-                  value={characters}
-                  onChange={e => setCharacters(e.target.value)}
-                  placeholder="character_key_1, character_key_2"
-                  style={{
-                    width: '100%', padding: '10px 12px', background: T.surfaceAlt,
-                    border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
-                    fontSize: 13, outline: 'none', boxSizing: 'border-box',
-                  }}
-                />
-                <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4 }}>Comma-separated character keys</div>
-              </SectionCard>
+            {/* ④ Emotional Architecture */}
+            <SectionCard title="④ Emotional Architecture">
+              <BriefField label="Emotional Stakes *" hint="What does the character stand to gain or lose emotionally?">
+                <textarea value={brief.emotional_stakes} onChange={e => updateBrief('emotional_stakes', e.target.value)}
+                  rows={2} placeholder="Identity, self-worth, a relationship, creative integrity..."
+                  style={briefTextareaStyle} />
+              </BriefField>
+              <div className="see-brief-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <BriefField label="What Failure Means">
+                  <textarea value={brief.what_failure_means} onChange={e => updateBrief('what_failure_means', e.target.value)}
+                    rows={2} placeholder="The concrete cost if this doesn't work..."
+                    style={briefTextareaStyle} />
+                </BriefField>
+                <BriefField label="Internal Conflict">
+                  <textarea value={brief.internal_conflict} onChange={e => updateBrief('internal_conflict', e.target.value)}
+                    rows={2} placeholder="The war inside the character..."
+                    style={briefTextareaStyle} />
+                </BriefField>
+              </div>
+              <BriefField label="World Context" hint="Relevant world-building or setting details">
+                <textarea value={brief.world_context} onChange={e => updateBrief('world_context', e.target.value)}
+                  rows={2} placeholder="Time period, location, cultural norms, industry rules..."
+                  style={briefTextareaStyle} />
+              </BriefField>
+            </SectionCard>
 
-              <SectionCard title="Registry ID (optional)">
+            {/* ⑤ Characters In Scene */}
+            <SectionCard title="⑤ Characters In Scene">
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: brief.characters.length ? 10 : 0 }}>
+                {brief.characters.map((c, i) => (
+                  <CharTag key={i} name={c} onRemove={() => {
+                    updateBrief('characters', brief.characters.filter((_, j) => j !== i));
+                    setCharContext(prev => { const n = { ...prev }; delete n[c]; return n; });
+                  }} />
+                ))}
+              </div>
+              {/* Living-context indicators */}
+              {brief.characters.some(c => charContext[c]) && (
+                <div style={{ fontSize: 11, color: T.textDim, marginBottom: 8, lineHeight: 1.5 }}>
+                  {brief.characters.map(c => {
+                    const ctx = charContext[c];
+                    if (!ctx) return null;
+                    const relCount = (ctx.relationships || []).length;
+                    const hasLC = ctx.living_context && Object.values(ctx.living_context).some(Boolean);
+                    return (
+                      <div key={c} style={{ display: 'flex', gap: 6, alignItems: 'center', marginTop: 3 }}>
+                        <span style={{ color: T.accent }}>✦</span>
+                        <span><strong>{ctx.display_name || c}</strong>
+                          {hasLC ? ' — context loaded' : ''}
+                          {relCount > 0 ? ` · ${relCount} relationship${relCount > 1 ? 's' : ''}` : ''}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8 }}>
                 <input
-                  value={registryId}
-                  onChange={e => setRegistryId(e.target.value)}
-                  placeholder="UUID of character registry"
-                  style={{
-                    width: '100%', padding: '10px 12px', background: T.surfaceAlt,
-                    border: `1px solid ${T.border}`, borderRadius: 6, color: T.text,
-                    fontSize: 13, outline: 'none', boxSizing: 'border-box',
+                  value={charInput}
+                  onChange={e => setCharInput(e.target.value)}
+                  placeholder="character_key"
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && charInput.trim()) {
+                      e.preventDefault();
+                      if (!brief.characters.includes(charInput.trim())) {
+                        updateBrief('characters', [...brief.characters, charInput.trim()]);
+                      }
+                      setCharInput('');
+                    }
                   }}
+                  style={{ ...briefInputStyle, flex: 1 }}
                 />
-                <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4 }}>Loads character dossiers for context</div>
-              </SectionCard>
-            </div>
+                <button
+                  onClick={() => {
+                    if (charInput.trim() && !brief.characters.includes(charInput.trim())) {
+                      updateBrief('characters', [...brief.characters, charInput.trim()]);
+                    }
+                    setCharInput('');
+                  }}
+                  style={{
+                    padding: '10px 16px', background: T.accent, color: '#fff',
+                    border: 'none', borderRadius: 6, fontSize: 12, fontWeight: 600,
+                    cursor: 'pointer', whiteSpace: 'nowrap',
+                  }}
+                >Add</button>
+              </div>
+              <div style={{ fontSize: 10, color: T.textFaint, marginTop: 4 }}>Press Enter or click Add. At least one character required.</div>
+              <div style={{ marginTop: 14 }}>
+                <BriefField label="Registry ID (optional)" hint="Loads character dossiers for richer context">
+                  <input value={brief.registry_id} onChange={e => updateBrief('registry_id', e.target.value)}
+                    placeholder="UUID of character registry" style={briefInputStyle} />
+                </BriefField>
+              </div>
+            </SectionCard>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+            {/* Brief Preview */}
+            {composeBrief(brief).trim() && (
+              <SectionCard title="Brief Preview">
+                <div style={{ fontSize: 13, lineHeight: 1.7, color: T.textDim, fontFamily: 'Georgia,serif' }}>
+                  {composeBrief(brief)}
+                </div>
+              </SectionCard>
+            )}
+
+            {/* Generate */}
+            <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
               <button
+                className="see-generate-btn"
                 onClick={handleGenerate}
-                disabled={loading || !sceneBrief.trim()}
+                disabled={loading || briefCompleteness(brief) < 60 || brief.characters.length === 0}
                 style={{
                   padding: '12px 28px', background: T.accent, color: '#fff',
                   border: 'none', borderRadius: 8, fontSize: 14, fontWeight: 600,
                   cursor: 'pointer', letterSpacing: 0.3, transition: 'background 0.2s',
-                  opacity: loading || !sceneBrief.trim() ? 0.5 : 1,
+                  opacity: (loading || briefCompleteness(brief) < 60 || brief.characters.length === 0) ? 0.5 : 1,
                 }}
               >
                 {loading ? `Generating 3 voices... (${elapsed}s)` : '◇ Generate 3 Blind Voices →'}
@@ -480,7 +792,7 @@ export default function StoryEvaluationEngine() {
         {(step === 'read' || step === 'generate') && stories && (
           <div>
             {/* Voice tabs */}
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <div className="see-voice-tabs" style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
               {VOICES.map(v => {
                 const s = stories[v.id];
                 const active = activeVoice === v.id;
@@ -508,7 +820,7 @@ export default function StoryEvaluationEngine() {
             </div>
 
             {/* Story reader */}
-            <div style={{
+            <div className="see-story-reader" style={{
               background: T.surface, border: `1px solid ${T.border}`,
               borderRadius: 10, padding: 24, marginBottom: 16,
             }}>
@@ -520,7 +832,7 @@ export default function StoryEvaluationEngine() {
             </div>
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
+            <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10 }}>
               <button onClick={() => setStep('brief')} style={ghostBtn}>← Back to Brief</button>
               <button
                 onClick={handleEvaluate}
@@ -539,7 +851,7 @@ export default function StoryEvaluationEngine() {
         {step === 'evaluate' && evaluation && (
           <div>
             {/* Winner banner */}
-            <div style={{
+            <div className="see-winner" style={{
               background: `${T.green}12`, border: `1px solid ${T.green}`,
               borderRadius: 10, padding: 16, marginBottom: 20,
             }}>
@@ -550,7 +862,7 @@ export default function StoryEvaluationEngine() {
             </div>
 
             {/* Score cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
+            <div className="see-score-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 20 }}>
               {VOICES.map(v => {
                 const sc = evaluation.scores?.[v.id];
                 if (!sc) return null;
@@ -566,16 +878,16 @@ export default function StoryEvaluationEngine() {
                       <span style={{ fontSize: 18, fontWeight: 700, color: v.accent }}>{sc.total}/60</span>
                     </div>
                     {CRITERIA.map(c => (
-                      <div key={c} style={{ marginBottom: 6 }}>
+                      <div key={c} className="see-criteria-row" style={{ marginBottom: 6 }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
                           <span style={{ fontSize: 10, color: T.textDim }}>{CRITERIA_LABELS[c]}</span>
                         </div>
                         <ScoreBar value={sc[c] || 0} max={10} color={v.accent} />
                       </div>
                     ))}
-                    <div style={{ marginTop: 10, fontSize: 12, color: T.textDim, fontStyle: 'italic' }}>{sc.summary}</div>
+                    <div className="see-card-summary" style={{ marginTop: 10, fontSize: 12, color: T.textDim, fontStyle: 'italic' }}>{sc.summary}</div>
                     {sc.best_moment && (
-                      <div style={{ marginTop: 8, padding: 8, background: T.bg, borderRadius: 4, fontSize: 11, color: T.text, borderLeft: `3px solid ${v.accent}` }}>
+                      <div className="see-card-quote" style={{ marginTop: 8, padding: 8, background: T.bg, borderRadius: 4, fontSize: 11, color: T.text, borderLeft: `3px solid ${v.accent}` }}>
                         "{sc.best_moment}"
                       </div>
                     )}
@@ -586,8 +898,9 @@ export default function StoryEvaluationEngine() {
 
             {/* What each brings */}
             {evaluation.what_each_brings && (
+              <div className="see-secondary-section">
               <SectionCard title="What Each Voice Brings">
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
+                <div className="see-each-brings" style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
                   {VOICES.map(v => (
                     <div key={v.id} style={{ fontSize: 12, color: T.textDim }}>
                       <span style={{ fontWeight: 600, color: v.accent }}>{v.label}:</span> {evaluation.what_each_brings[v.id]}
@@ -595,10 +908,12 @@ export default function StoryEvaluationEngine() {
                   ))}
                 </div>
               </SectionCard>
+              </div>
             )}
 
             {/* Brief diagnosis */}
             {evaluation.brief_diagnosis && (
+              <div className="see-secondary-section">
               <SectionCard title="Brief Diagnosis">
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 8 }}>
                   <div>
@@ -618,6 +933,7 @@ export default function StoryEvaluationEngine() {
                   )}
                 </div>
               </SectionCard>
+              </div>
             )}
 
             {/* Approved synthesised version */}
@@ -628,7 +944,7 @@ export default function StoryEvaluationEngine() {
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+            <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button onClick={() => setStep('read')} style={ghostBtn}>← Back to Read</button>
               <button
                 onClick={handleProposeMemory}
@@ -682,7 +998,7 @@ export default function StoryEvaluationEngine() {
               </div>
             )}
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+            <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button onClick={() => setStep('evaluate')} style={ghostBtn}>← Back to Eval</button>
               <button
                 onClick={handleProposeRegistry}
@@ -759,7 +1075,7 @@ export default function StoryEvaluationEngine() {
               </div>
             </SectionCard>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
+            <div className="see-actions" style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 16 }}>
               <button onClick={() => setStep('memory')} style={ghostBtn}>← Back to Memory</button>
               <button
                 onClick={handleWriteBack}
@@ -788,7 +1104,7 @@ export default function StoryEvaluationEngine() {
               <strong>{writeResult.registry_updates_applied}</strong> registry updates applied
             </div>
             <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 24 }}>
-              <button onClick={() => { setStep('brief'); setSceneBrief(''); setStories(null); setEvaluation(null); setStoryId(null); setWriteResult(null); }} style={ghostBtn}>
+              <button onClick={() => { setStep('brief'); setBrief(EMPTY_BRIEF); setCharInput(''); setStories(null); setEvaluation(null); setStoryId(null); setWriteResult(null); }} style={ghostBtn}>
                 ◇ New Scene
               </button>
               <button onClick={() => navigate(-1)} style={{ ...ghostBtn, borderColor: T.accent, color: T.accent }}>

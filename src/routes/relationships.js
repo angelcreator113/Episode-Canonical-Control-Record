@@ -52,7 +52,11 @@ const REL_SELECT = `
   cr.relationship_type, cr.connection_mode, cr.lala_connection,
   cr.status, cr.notes, cr.situation, cr.tension_state,
   cr.pain_point_category, cr.lala_mirror, cr.career_echo_potential,
-  cr.confirmed, cr.created_at, cr.updated_at`;
+  cr.confirmed, cr.role_tag,
+  cr.family_role, cr.is_blood_relation, cr.is_romantic,
+  cr.conflict_summary, cr.knows_about_connection,
+  cr.source_knows, cr.target_knows, cr.reader_knows,
+  cr.created_at, cr.updated_at`;
 
 const CHAR_JOIN = `
   JOIN registry_characters ca ON ca.id = cr.character_id_a AND ca.deleted_at IS NULL

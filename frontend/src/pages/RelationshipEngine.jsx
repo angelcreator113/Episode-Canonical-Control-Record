@@ -1520,6 +1520,12 @@ function InspectorPanel({ rel, onClose, onUpdate, onDelete }) {
     lala_mirror: rel.lala_mirror || '',
     career_echo_potential: rel.career_echo_potential || '',
     notes: rel.notes || '',
+    role_tag: rel.role_tag || '',
+    family_role: rel.family_role || '',
+    conflict_summary: rel.conflict_summary || '',
+    source_knows: rel.source_knows || '',
+    target_knows: rel.target_knows || '',
+    reader_knows: rel.reader_knows || '',
   });
 
   const handleSave = () => { onUpdate(form); setEditing(false); };
@@ -1582,6 +1588,28 @@ function InspectorPanel({ rel, onClose, onUpdate, onDelete }) {
             <label className="cg-formLabel">Situation</label>
             <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.situation}
               onChange={e => setForm(f => ({ ...f, situation: e.target.value }))} />
+            <label className="cg-formLabel">Conflict Summary</label>
+            <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.conflict_summary}
+              onChange={e => setForm(f => ({ ...f, conflict_summary: e.target.value }))} placeholder="The conflict between A and B" />
+            <label className="cg-formLabel">Role Tag</label>
+            <select className="cg-formSelect" value={form.role_tag}
+              onChange={e => setForm(f => ({ ...f, role_tag: e.target.value }))}>
+              <option value="">None</option>
+              {['ally','detractor','mentor','dependency','rival','partner','family','neutral'].map(t => <option key={t} value={t}>{t}</option>)}
+            </select>
+            <label className="cg-formLabel">Family Role</label>
+            <input className="cg-formInput" value={form.family_role}
+              onChange={e => setForm(f => ({ ...f, family_role: e.target.value }))} placeholder="mother, brother, cousin…" />
+            <div className="cg-formLabel" style={{ marginTop: 12, fontWeight: 700, fontSize: 11, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.7 }}>Knowledge Asymmetry</div>
+            <label className="cg-formLabel">{rel.character_a_name || 'A'} knows</label>
+            <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.source_knows}
+              onChange={e => setForm(f => ({ ...f, source_knows: e.target.value }))} placeholder="What this person knows about the other…" />
+            <label className="cg-formLabel">{rel.character_b_name || 'B'} knows</label>
+            <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.target_knows}
+              onChange={e => setForm(f => ({ ...f, target_knows: e.target.value }))} placeholder="What this person knows about the other…" />
+            <label className="cg-formLabel">Reader knows</label>
+            <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.reader_knows}
+              onChange={e => setForm(f => ({ ...f, reader_knows: e.target.value }))} placeholder="What the reader knows that neither character does…" />
             <label className="cg-formLabel">Lala Mirror</label>
             <textarea className="cg-formInput" style={{ minHeight: 60 }} value={form.lala_mirror}
               onChange={e => setForm(f => ({ ...f, lala_mirror: e.target.value }))} />
@@ -1609,6 +1637,15 @@ function InspectorPanel({ rel, onClose, onUpdate, onDelete }) {
             <Field label="Tension" value={rel.tension_state} />
             <Field label="Pain Point" value={rel.pain_point_category} />
             <Field label="Situation" value={rel.situation} />
+            <Field label="Conflict" value={rel.conflict_summary} />
+            <Field label="Role Tag" value={rel.role_tag} />
+            <Field label="Family Role" value={rel.family_role} />
+            {(rel.source_knows || rel.target_knows || rel.reader_knows) && (
+              <div style={{ margin: '12px 0 4px', fontWeight: 700, fontSize: 10, textTransform: 'uppercase', letterSpacing: 0.5, opacity: 0.6 }}>Knowledge Asymmetry</div>
+            )}
+            <Field label={`${rel.character_a_name || 'A'} knows`} value={rel.source_knows} />
+            <Field label={`${rel.character_b_name || 'B'} knows`} value={rel.target_knows} />
+            <Field label="Reader knows" value={rel.reader_knows} />
             <Field label="Lala Mirror" value={rel.lala_mirror} />
             <Field label="Career Echo" value={rel.career_echo_potential} />
             <Field label="Lala Connection"

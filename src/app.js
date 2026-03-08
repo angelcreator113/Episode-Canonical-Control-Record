@@ -1048,6 +1048,15 @@ try {
   console.error('✗ Failed to load Novel Intelligence routes:', e.message);
 }
 
+// The Feed — Social Media Creator Profile Generator
+try {
+  const socialProfileRoutes = require('./routes/socialProfileRoutes');
+  app.use('/api/v1/social-profiles', socialProfileRoutes);
+  console.log('✓ Social Profile routes loaded at /api/v1/social-profiles');
+} catch (e) {
+  console.error('✗ Failed to load Social Profile routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
