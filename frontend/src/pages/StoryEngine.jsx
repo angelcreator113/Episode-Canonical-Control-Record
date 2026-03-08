@@ -425,6 +425,7 @@ function StoryPanel({
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
+  const [showAiSidebar, setShowAiSidebar] = useState(false);
   const textareaRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
 
@@ -647,7 +648,15 @@ function StoryPanel({
               onChange={(e) => setEditText(e.target.value)}
               spellCheck
             />
-            <div className="se-ai-writer-sidebar">
+            {/* Mobile toggle for AI sidebar */}
+            <button
+              className="se-ai-sidebar-toggle"
+              onClick={() => setShowAiSidebar(v => !v)}
+              title={showAiSidebar ? 'Hide AI tools' : 'Show AI tools'}
+            >
+              {showAiSidebar ? '✕' : '✦'}
+            </button>
+            <div className={`se-ai-writer-sidebar${showAiSidebar ? ' se-ai-sidebar-open' : ''}`}>
               <WriteModeAIWriter
                 chapterId={String(story?.story_number || task?.story_number || '')}
                 bookId={activeWorld || ''}
