@@ -712,9 +712,6 @@ export default function StoryEngine() {
   useEffect(() => {
     try { localStorage.setItem('se_activeWorld', activeWorld); } catch {}
   }, [activeWorld]);
-  useEffect(() => {
-    if (activeTask?.story_number) try { localStorage.setItem('se_activeTaskNum', String(activeTask.story_number)); } catch {}
-  }, [activeTask]);
 
   // World creation toggles
   const [worldToggles, setWorldToggles]       = useState({});
@@ -731,6 +728,11 @@ export default function StoryEngine() {
   // Active story/task in right panel
   const [activeTask, setActiveTask]           = useState(null);
   const [activeStory, setActiveStory]         = useState(null);
+
+  // Persist activeTask number to localStorage
+  useEffect(() => {
+    if (activeTask?.story_number) try { localStorage.setItem('se_activeTaskNum', String(activeTask.story_number)); } catch {}
+  }, [activeTask]);
 
   // Generation state
   const [generating, setGenerating]           = useState(false);
