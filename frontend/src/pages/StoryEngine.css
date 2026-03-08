@@ -1794,6 +1794,49 @@ html, body {
   height: 14px;
 }
 
+/* page navigation */
+.se-page-nav {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--se-border-light);
+  background: var(--se-surface);
+}
+
+.se-page-indicator {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  color: var(--se-text-muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 100px;
+  text-align: center;
+}
+
+.se-btn-page {
+  font-size: 13px;
+  padding: 6px 14px;
+  min-height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--se-border);
+  background: var(--se-surface);
+  color: var(--se-text);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.se-btn-page:hover:not(:disabled) {
+  background: var(--se-cream);
+  border-color: var(--se-gold);
+}
+
+.se-btn-page:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
 .se-story-editor {
   width: 100%;
   height: 100%;
@@ -2265,6 +2308,11 @@ html, body {
   }
 
   .se-workspace.se-stories-collapsed .se-task-list { width: 100%; }
+
+  /* Hide task list & mobile deck on mobile when viewing a story */
+  .se-has-active-story .se-task-list { display: none; }
+  .se-has-active-story .se-mobile-deck { display: none; }
+
   .se-workspace.se-stories-collapsed .se-story-column { width: 100%; }
 
   .se-task-section-intro {
@@ -2414,7 +2462,6 @@ html, body {
 
   /* ── Story column: sits above tasks ── */
   .se-story-column,
-  .se-write-mode .se-story-column,
   .se-fullscreen-reading .se-story-column {
     display: flex;
     flex-direction: column;
@@ -2423,6 +2470,17 @@ html, body {
     overflow: visible;
     margin-top: 0;
     order: -1;
+  }
+
+  .se-write-mode .se-story-column {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    width: 100%;
+    overflow: hidden;
+    margin-top: 0;
+    order: -1;
+    min-height: 0;
   }
 
   .se-story-column:has(.se-story-section) {
@@ -2455,8 +2513,7 @@ html, body {
   .se-story-skeleton { height: 40px; }
 
   /* ── Story panel when content is loaded ── */
-  .se-story-panel,
-  .se-write-mode .se-story-panel {
+  .se-story-panel {
     display: flex;
     flex-direction: column;
     flex: none;
@@ -2464,15 +2521,30 @@ html, body {
     overflow: visible;
   }
 
+  .se-write-mode .se-story-panel {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+
   .se-story-panel.se-story-section--minimized,
   .se-write-mode .se-story-panel.se-story-section--minimized {
     flex: 0 0 auto;
   }
 
-  .se-story-body,
-  .se-write-mode .se-story-body {
+  .se-story-body {
     display: block;
     overflow: visible;
+  }
+
+  .se-write-mode .se-story-body {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    flex: 1;
+    min-height: 0;
   }
 
   /* ── Generating indicator ── */
@@ -2602,19 +2674,32 @@ html, body {
     font-size: 15px;
   }
 
+  .se-edit-container {
+    flex-direction: column;
+    position: relative;
+    overflow: visible;
+    min-height: auto;
+    height: 100%;
+  }
+
+  .se-edit-container .se-story-editor {
+    flex: 1;
+    width: 100%;
+    min-height: 40vh;
+    overflow-y: auto;
+  }
+
   .se-ai-writer-sidebar {
     display: none;
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 85vw;
-    max-width: 360px;
+    position: relative;
+    width: 100%;
+    max-width: none;
     min-width: 0;
-    z-index: 900;
-    border-left: 1px solid var(--se-border-light);
+    max-height: 50vh;
+    border-left: none;
+    border-top: 2px solid var(--se-gold);
     background: var(--se-cream);
-    box-shadow: -4px 0 24px rgba(0,0,0,0.12);
+    box-shadow: 0 -4px 24px rgba(0,0,0,0.08);
     overflow-y: auto;
   }
 
@@ -2627,21 +2712,22 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    position: fixed;
-    bottom: 24px;
-    right: 16px;
-    z-index: 901;
+    position: sticky;
+    bottom: 0;
+    z-index: 10;
+    width: 100%;
     height: 44px;
     padding: 0 16px;
-    border-radius: 22px;
-    border: 1px solid var(--se-border-light);
+    border-radius: 0;
+    border: none;
+    border-top: 1px solid var(--se-border-light);
     background: var(--se-gold);
     color: #fff;
     font-size: 14px;
     font-weight: 600;
     font-family: 'DM Sans', sans-serif;
     cursor: pointer;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+    box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
   }
 
   .se-story-brief { padding: 20px 16px; }
@@ -2711,5 +2797,5 @@ html, body {
 
   .se-story-editor { padding: 14px 12px; }
   .se-write-mode .se-story-editor { padding: 14px 12px; font-size: 15px; }
-  .se-ai-writer-sidebar { width: 92vw; }
+  .se-ai-writer-sidebar { width: 100%; max-width: none; max-height: 45vh; }
 }

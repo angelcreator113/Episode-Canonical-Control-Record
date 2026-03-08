@@ -7,7 +7,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import './SessionStart.css';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 function SessionStart() {
   const navigate = useNavigate();
@@ -24,6 +24,8 @@ function SessionStart() {
       setLoading(true);
       const res = await fetch(`${API}/session/brief`);
       if (!res.ok) throw new Error('Failed to load briefing');
+      const ct = res.headers.get('content-type') || '';
+      if (!ct.includes('application/json')) throw new Error('Server returned non-JSON response');
       const data = await res.json();
       setBrief(data);
     } catch (err) {

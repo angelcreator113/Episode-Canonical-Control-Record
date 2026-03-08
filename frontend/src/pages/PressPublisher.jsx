@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 /* ── colour tokens ────────────────────── */
 const PINK   = '#e8b4b8';

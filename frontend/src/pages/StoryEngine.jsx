@@ -421,11 +421,61 @@ function StoryPanel({
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
   const [showAiSidebar, setShowAiSidebar] = useState(false);
+  const [currentPage, setCurrentPage] = useState(0);
   const textareaRef = useRef(null);
+  const storyBodyRef = useRef(null);
   const prevStoryRef = useRef(story?.story_number);
+
+  const WORDS_PER_PAGE = 250;
+  const pages = useMemo(() => {
+    const text = story?.text || '';
+    const paragraphs = text.split('\n');
+    const result = [[]];
+    let wordCount = 0;
+    for (const para of paragraphs) {
+      const words = para.trim().split(/\s+/).filter(Boolean).length;
+      if (wordCount > 0 && wordCount + words > WORDS_PER_PAGE) {
+        result.push([]);
+        wordCount = 0;
+      }
+      result[result.length - 1].push(para);
+      wordCount += words;
+    }
+    return result.filter(p => p.some(line => line.trim()));
+  }, [story?.text]);
+  const totalPages = pages.length;
+
+  // Paginate editText for edit-mode page navigation
+  const editPageOffsets = useMemo(() => {
+    const text = editText || '';
+    const paragraphs = text.split('\n');
+    const offsets = [0]; // char offset where each page starts
+    let wordCount = 0;
+    let charPos = 0;
+    for (let i = 0; i < paragraphs.length; i++) {
+      const para = paragraphs[i];
+      const words = para.trim().split(/\s+/).filter(Boolean).length;
+      if (wordCount > 0 && wordCount + words > WORDS_PER_PAGE) {
+        offsets.push(charPos);
+        wordCount = 0;
+      }
+      wordCount += words;
+      charPos += para.length + 1; // +1 for the \n
+    }
+    return offsets;
+  }, [editText]);
+  const editTotalPages = editPageOffsets.length;
+
+  // Clamp currentPage when edit content changes page count
+  useEffect(() => {
+    if (editing && currentPage >= editTotalPages) {
+      setCurrentPage(Math.max(0, editTotalPages - 1));
+    }
+  }, [editing, editTotalPages, currentPage]);
 
   useEffect(() => {
     setEditText(story?.text || '');
+    setCurrentPage(0);
     if (prevStoryRef.current != null && prevStoryRef.current !== story?.story_number) {
       if (onToggleWriteMode) onToggleWriteMode(false);
     }
@@ -544,6 +594,8 @@ function StoryPanel({
             {story.word_count > 0 && (
               <>
                 <span>·</span>
+                <span>{Math.ceil(story.word_count / 250)} {Math.ceil(story.word_count / 250) === 1 ? 'page' : 'pages'}</span>
+                <span>·</span>
                 <span className="se-reading-time">{getReadingTime(story.word_count)}</span>
               </>
             )}
@@ -649,6 +701,7 @@ function StoryPanel({
 
       <div className="se-story-body">
         {editing ? (
+          <>
           <div className="se-edit-container">
             <textarea
               ref={textareaRef}
@@ -713,14 +766,86 @@ function StoryPanel({
               />
             </div>
           </div>
+          {editTotalPages > 1 && (
+            <div className="se-page-nav">
+              <button
+                className="se-btn se-btn-page"
+                onClick={() => {
+                  setCurrentPage(p => {
+                    const next = p - 1;
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
+                      // scroll textarea so the cursor/page start is visible
+                      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+                      const textBefore = editText.slice(0, editPageOffsets[next]);
+                      const linesAbove = textBefore.split('\n').length - 1;
+                      ta.scrollTop = linesAbove * lineHeight;
+                    }
+                    return next;
+                  });
+                }}
+                disabled={currentPage === 0}
+              >
+                ‹ Prev Page
+              </button>
+              <span className="se-page-indicator">
+                Page {currentPage + 1} of {editTotalPages}
+              </span>
+              <button
+                className="se-btn se-btn-page"
+                onClick={() => {
+                  setCurrentPage(p => {
+                    const next = p + 1;
+                    const ta = textareaRef.current;
+                    if (ta) {
+                      ta.setSelectionRange(editPageOffsets[next], editPageOffsets[next]);
+                      const lineHeight = parseInt(getComputedStyle(ta).lineHeight) || 20;
+                      const textBefore = editText.slice(0, editPageOffsets[next]);
+                      const linesAbove = textBefore.split('\n').length - 1;
+                      ta.scrollTop = linesAbove * lineHeight;
+                    }
+                    return next;
+                  });
+                }}
+                disabled={currentPage >= editTotalPages - 1}
+              >
+                Next Page ›
+              </button>
+            </div>
+          )}
+          </>
         ) : (
-          <div className="se-story-text">
-            {(story.text || '').split('\n').map((para, i) => (
-              para.trim()
-                ? <p key={i} className="se-story-para">{para}</p>
-                : <div key={i} className="se-story-spacer" />
-            ))}
-          </div>
+          <>
+            <div className="se-story-text" ref={storyBodyRef}>
+              {(pages[currentPage] || []).map((para, i) => (
+                para.trim()
+                  ? <p key={i} className="se-story-para">{para}</p>
+                  : <div key={i} className="se-story-spacer" />
+              ))}
+            </div>
+            {totalPages > 1 && (
+              <div className="se-page-nav">
+                <button
+                  className="se-btn se-btn-page"
+                  onClick={() => { setCurrentPage(p => p - 1); storyBodyRef.current?.scrollTo(0, 0); }}
+                  disabled={currentPage === 0}
+                >
+                  ‹ Prev Page
+                </button>
+                <span className="se-page-indicator">
+                  Page {currentPage + 1} of {totalPages}
+                </span>
+                <button
+                  className="se-btn se-btn-page"
+                  onClick={() => { setCurrentPage(p => p + 1); storyBodyRef.current?.scrollTo(0, 0); }}
+                  disabled={currentPage >= totalPages - 1}
+                >
+                  Next Page ›
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
 
@@ -1432,7 +1557,7 @@ export default function StoryEngine() {
   }
 
   return (
-    <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''}`}>
+    <div className={`se-page ${readingMode ? 'se-fullscreen-reading' : ''} ${writeMode ? 'se-write-mode' : ''} ${activeStory ? 'se-has-active-story' : ''}`}>
       <ToastContainer toasts={toasts} onDismiss={dismissToast} />
 
       {!readingMode && (
