@@ -347,130 +347,166 @@ export default function NovelAssembler() {
       </div>
 
       <div className="na-workspace">
-        {/* Left: Assemblies list + Create */}
-        <div className="na-list-column">
-          <div className="na-list-header">
-            <span>Assemblies</span>
-            <button
-              className="na-btn na-btn-new"
-              style={{ background: char?.color }}
-              onClick={() => setShowCreate(!showCreate)}
-            >
-              {showCreate ? 'Cancel' : '+ New Assembly'}
-            </button>
-          </div>
-
-          {showCreate && (
-            <div className="na-create-form">
-              <input
-                className="na-create-input"
-                placeholder="Assembly title…"
-                value={newTitle}
-                onChange={e => setNewTitle(e.target.value)}
-              />
-              <div className="na-create-label">
-                Select stories to include ({selectedStoryIds.length} selected · {totalSelectedWords.toLocaleString()} words)
+        {/* ── No assemblies: full-width onboarding ── */}
+        {!loading && assemblies.length === 0 && !showCreate && !activeAssembly && (
+          <div className="na-onboarding">
+            <div className="na-onboarding-icon" style={{ color: char?.color }}>{char?.icon}</div>
+            <div className="na-onboarding-title">
+              Assemble {char?.display_name}'s novel
+            </div>
+            <div className="na-onboarding-text">
+              Pick approved stories, arrange them into chapters, visualize the emotional
+              arc, and compile into a single manuscript. Each assembly becomes a
+              version of the novel you can refine.
+            </div>
+            <div className="na-onboarding-stats">
+              <div className="na-onboarding-stat">
+                <div className="na-onboarding-stat-value">{approvedStories.length}</div>
+                <div className="na-onboarding-stat-label">Approved Stories</div>
               </div>
-              <StoryChecklist
-                stories={approvedStories}
-                selectedIds={selectedStoryIds}
-                onToggle={toggleStoryId}
-                charColor={char?.color}
-              />
-              <button
-                className="na-btn na-btn-create"
-                style={{ background: char?.color }}
-                onClick={handleCreate}
-                disabled={creating || !newTitle.trim() || selectedStoryIds.length === 0}
-              >
-                {creating ? 'Creating…' : 'Create Assembly'}
-              </button>
-            </div>
-          )}
-
-          {loading ? (
-            <div className="na-loading">Loading…</div>
-          ) : assemblies.length === 0 && !showCreate ? (
-            <div className="na-empty">
-              <div className="na-empty-icon" style={{ color: char?.color }}>{char?.icon}</div>
-              <div>No assemblies yet</div>
-              <div className="na-empty-hint">Create one to start assembling {char?.display_name}'s novel.</div>
-            </div>
-          ) : (
-            <div className="na-assembly-list">
-              {assemblies.map(a => (
-                <AssemblyCard
-                  key={a.id}
-                  assembly={a}
-                  charColor={char?.color}
-                  onSelect={setActiveAssembly}
-                  onDelete={handleDelete}
-                  onCompile={handleCompile}
-                />
-              ))}
-            </div>
-          )}
-        </div>
-
-        {/* Right: Active assembly detail */}
-        <div className="na-detail-column">
-          {compiling ? (
-            <div className="na-compiling">
-              <div className="na-compiling-spinner" style={{ borderTopColor: char?.color }} />
-              <div>Compiling {char?.display_name}'s novel…</div>
-            </div>
-          ) : activeAssembly ? (
-            <div className="na-detail">
-              <div className="na-detail-header" style={{ borderColor: char?.color }}>
-                <div className="na-detail-title">{activeAssembly.title}</div>
-                <div className="na-detail-meta">
-                  <span>{(activeAssembly.total_word_count || 0).toLocaleString()} words</span>
-                  <span>{(activeAssembly.chapter_breaks || []).length} chapters</span>
-                  <span className={`na-status-${activeAssembly.status}`}>{activeAssembly.status}</span>
+              <div className="na-onboarding-stat">
+                <div className="na-onboarding-stat-value">
+                  {approvedStories.reduce((s, st) => s + (st.word_count || 0), 0).toLocaleString()}
                 </div>
+                <div className="na-onboarding-stat-label">Total Words</div>
+              </div>
+            </div>
+            {approvedStories.length > 0 ? (
+              <button
+                className="na-btn na-btn-new na-btn-onboarding"
+                style={{ background: char?.color }}
+                onClick={() => setShowCreate(true)}
+              >
+                Create First Assembly
+              </button>
+            ) : (
+              <div className="na-onboarding-hint">
+                Approve stories in the Story Engine first, then come back here to assemble.
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Has assemblies or creating: show split layout ── */}
+        {(assemblies.length > 0 || showCreate || loading) && (
+          <>
+            {/* Left: Assemblies list + Create */}
+            <div className="na-list-column">
+              <div className="na-list-header">
+                <span>Assemblies</span>
+                <button
+                  className="na-btn na-btn-new"
+                  style={{ background: char?.color }}
+                  onClick={() => setShowCreate(!showCreate)}
+                >
+                  {showCreate ? 'Cancel' : '+ New Assembly'}
+                </button>
               </div>
 
-              {/* Emotional curve */}
-              {activeAssembly.emotional_curve?.length > 0 && (
-                <EmotionalCurve
-                  data={activeAssembly.emotional_curve}
-                  charColor={char?.color}
-                />
+              {showCreate && (
+                <div className="na-create-form">
+                  <input
+                    className="na-create-input"
+                    placeholder="Assembly title…"
+                    value={newTitle}
+                    onChange={e => setNewTitle(e.target.value)}
+                  />
+                  <div className="na-create-label">
+                    Select stories to include ({selectedStoryIds.length} selected · {totalSelectedWords.toLocaleString()} words)
+                  </div>
+                  <StoryChecklist
+                    stories={approvedStories}
+                    selectedIds={selectedStoryIds}
+                    onToggle={toggleStoryId}
+                    charColor={char?.color}
+                  />
+                  <button
+                    className="na-btn na-btn-create"
+                    style={{ background: char?.color }}
+                    onClick={handleCreate}
+                    disabled={creating || !newTitle.trim() || selectedStoryIds.length === 0}
+                  >
+                    {creating ? 'Creating…' : 'Create Assembly'}
+                  </button>
+                </div>
               )}
 
-              {/* Chapter breaks */}
-              {activeAssembly.chapter_breaks?.length > 0 && (
-                <div className="na-chapters">
-                  <div className="na-chapters-title">Chapter Structure</div>
-                  {activeAssembly.chapter_breaks.map((ch, i) => (
-                    <div key={i} className="na-chapter-item">
-                      <span className="na-chapter-num">Ch. {i + 1}</span>
-                      <span className="na-chapter-title">{ch.title}</span>
-                      <span className="na-chapter-pos">@ {ch.position.toLocaleString()} words</span>
-                    </div>
+              {loading ? (
+                <div className="na-loading">Loading…</div>
+              ) : (
+                <div className="na-assembly-list">
+                  {assemblies.map(a => (
+                    <AssemblyCard
+                      key={a.id}
+                      assembly={a}
+                      charColor={char?.color}
+                      onSelect={setActiveAssembly}
+                      onDelete={handleDelete}
+                      onCompile={handleCompile}
+                    />
                   ))}
                 </div>
               )}
+            </div>
 
-              {/* Compiled text preview */}
-              {activeAssembly.compiled_text && (
-                <div className="na-preview">
-                  <div className="na-preview-title">Preview (first 2000 chars)</div>
-                  <div className="na-preview-text">
-                    {activeAssembly.compiled_text.slice(0, 2000)}
-                    {activeAssembly.compiled_text.length > 2000 && '…'}
+            {/* Right: Active assembly detail */}
+            <div className="na-detail-column">
+              {compiling ? (
+                <div className="na-compiling">
+                  <div className="na-compiling-spinner" style={{ borderTopColor: char?.color }} />
+                  <div>Compiling {char?.display_name}'s novel…</div>
+                </div>
+              ) : activeAssembly ? (
+                <div className="na-detail">
+                  <div className="na-detail-header" style={{ borderColor: char?.color }}>
+                    <div className="na-detail-title">{activeAssembly.title}</div>
+                    <div className="na-detail-meta">
+                      <span>{(activeAssembly.total_word_count || 0).toLocaleString()} words</span>
+                      <span>{(activeAssembly.chapter_breaks || []).length} chapters</span>
+                      <span className={`na-status-${activeAssembly.status}`}>{activeAssembly.status}</span>
+                    </div>
                   </div>
+
+                  {activeAssembly.emotional_curve?.length > 0 && (
+                    <EmotionalCurve
+                      data={activeAssembly.emotional_curve}
+                      charColor={char?.color}
+                    />
+                  )}
+
+                  {activeAssembly.chapter_breaks?.length > 0 && (
+                    <div className="na-chapters">
+                      <div className="na-chapters-title">Chapter Structure</div>
+                      {activeAssembly.chapter_breaks.map((ch, i) => (
+                        <div key={i} className="na-chapter-item">
+                          <span className="na-chapter-num">Ch. {i + 1}</span>
+                          <span className="na-chapter-title">{ch.title}</span>
+                          <span className="na-chapter-pos">@ {ch.position.toLocaleString()} words</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {activeAssembly.compiled_text && (
+                    <div className="na-preview">
+                      <div className="na-preview-title">Preview (first 2000 chars)</div>
+                      <div className="na-preview-text">
+                        {activeAssembly.compiled_text.slice(0, 2000)}
+                        {activeAssembly.compiled_text.length > 2000 && '…'}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="na-detail-empty">
+                  <div className="na-detail-empty-icon" style={{ color: char?.color }}>{char?.icon}</div>
+                  <div>Select an assembly to view details</div>
+                  <div className="na-detail-empty-hint">Or create a new one from approved stories.</div>
                 </div>
               )}
             </div>
-          ) : (
-            <div className="na-detail-empty">
-              <div className="na-detail-empty-icon" style={{ color: char?.color }}>{char?.icon}</div>
-              <div>Select an assembly to view details</div>
-              <div className="na-detail-empty-hint">Or create a new one from approved stories.</div>
-            </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
     </div>
   );
