@@ -4,7 +4,7 @@
 
 import { useState, useEffect } from 'react';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 const C = {
   bg: '#f7f4ef',
