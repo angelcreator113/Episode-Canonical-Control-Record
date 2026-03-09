@@ -1202,8 +1202,11 @@
   .ws-stats-bar { gap: 16px; padding: 8px 16px; flex-wrap: wrap; }
 }
 
-/* ── Mobile back button (hidden on desktop) ───────────────────────────────── */
+/* ── Mobile-only elements (hidden on desktop) ─────────────────────────────── */
 .ws-mobile-back-btn {
+  display: none;
+}
+.ws-mobile-overflow-wrap {
   display: none;
 }
 
@@ -1261,6 +1264,54 @@
   .ws-header-title { font-size: 16px; flex: 1; min-width: 0; }
   .ws-header-sub   { display: none; }
 
+  /* Hide desktop controls on mobile — replaced by overflow menu */
+  .ws-header-controls { display: none; }
+
+  /* Mobile overflow menu */
+  .ws-mobile-overflow-wrap { display: block; position: relative; }
+  .ws-mobile-overflow-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    border: 1px solid var(--ws-border);
+    background: var(--ws-card);
+    color: var(--ws-gold);
+    font-size: 20px;
+    font-weight: 700;
+    cursor: pointer;
+    line-height: 1;
+  }
+  .ws-mobile-overflow-menu {
+    position: absolute;
+    right: 0;
+    top: 40px;
+    z-index: 100;
+    background: var(--ws-card);
+    border: 1px solid var(--ws-border);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    min-width: 200px;
+    padding: 6px 0;
+  }
+  .ws-mobile-overflow-menu button {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 10px 16px;
+    font-family: var(--ws-font);
+    font-size: 13px;
+    color: var(--ws-text);
+    background: none;
+    border: none;
+    cursor: pointer;
+  }
+  .ws-mobile-overflow-menu button:hover {
+    background: rgba(255,255,255,0.05);
+  }
+
   /* ── World picker — pill tabs, no overflow ──────────────────────────────── */
   .ws-world-picker {
     width: 100%;
@@ -1278,25 +1329,6 @@
   }
   .ws-world-btn-icon { font-size: 11px; }
 
-  /* ── Action buttons — inline row, small pills ──────────────────────────── */
-  .ws-header-controls {
-    margin-left: 0;
-    display: flex;
-    gap: 5px;
-    width: 100%;
-    order: 11;
-    flex-wrap: wrap;
-  }
-  .ws-header-controls .ws-btn {
-    padding: 5px 10px;
-    font-size: 10px;
-    white-space: nowrap;
-    flex: 1 1 auto;
-    min-width: 0;
-    text-align: center;
-    border-radius: 6px;
-  }
-
   /* ── Tab bar — compact ──────────────────────────────────────────────────── */
   .ws-tab-bar {
     width: 100%;
@@ -1304,17 +1336,18 @@
   }
   .ws-tab { flex: 1; justify-content: center; padding: 6px 8px; font-size: 11px; }
 
-  /* ── Stats bar — single compact row ─────────────────────────────────────── */
+  /* ── Stats bar — only Characters + Active on mobile ─────────────────────── */
   .ws-stats-bar {
     display: flex;
     gap: 0;
     padding: 6px 10px;
-    justify-content: space-around;
+    justify-content: center;
   }
   .ws-stat { flex-direction: row; gap: 4px; justify-content: center; align-items: baseline; }
   .ws-stat-value { font-size: 13px; }
   .ws-stat-label { font-size: 8px; }
   .ws-stat-divider { display: none; }
+  .ws-stat-mobile-hide { display: none; }
 
   /* ── Body — single column, full height ──────────────────────────────────── */
   .ws-body { flex-direction: column; }
@@ -1329,7 +1362,7 @@
     overflow-y: auto;
   }
   .ws-sidebar::after { display: none; }
-  .ws-sidebar-title { font-size: 15px; margin-bottom: 6px; }
+  .ws-sidebar-title { display: none; }
 
   /* ── Filter pills — wrap into rows, visible without scrolling ─────────────── */
   .ws-filter-row {
@@ -1349,11 +1382,11 @@
   /* ── Sidebar search ─────────────────────────────────────────────────────── */
   .ws-sidebar-search { font-size: 13px; padding: 8px 10px; }
 
-  /* ── Character cards — tighter on mobile ────────────────────────────────── */
-  .ws-char-card { padding: 10px 12px; margin-bottom: 6px; }
+  /* ── Character cards — compact: name + badge only ──────────────────────── */
+  .ws-char-card { padding: 8px 12px; margin-bottom: 6px; }
   .ws-char-card-name { font-size: 14px; }
-  .ws-char-card-occupation { font-size: 11px; margin-bottom: 3px; }
-  .ws-char-card-signature { font-size: 10px; margin-top: 3px; }
+  .ws-char-card-occupation { display: none; }
+  .ws-char-card-signature { display: none; }
   .ws-char-card-badges { margin-top: 2px; }
   .ws-char-card-top { gap: 4px; }
 
@@ -1391,8 +1424,8 @@
   /* Forms */
   .ws-form-grid { grid-template-columns: 1fr; gap: 10px; }
 
-  /* Toast */
-  .ws-toast { right: 12px; left: 12px; bottom: 16px; text-align: center; font-size: 13px; padding: 10px 16px; }
+  /* Toast — positioned at top on mobile to avoid overlap */
+  .ws-toast { right: 12px; left: 12px; bottom: auto; top: 12px; text-align: center; font-size: 13px; padding: 10px 16px; }
 
   /* Edit form */
   .ws-edit-form { gap: 10px; }

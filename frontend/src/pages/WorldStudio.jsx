@@ -172,6 +172,7 @@ export default function WorldStudio() {
   /* ── Mobile panel state ─────────────────────────────────────────── */
   // 'list' = character sidebar, 'detail' = main content area
   const [mobilePanel, setMobilePanel] = useState('list');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const flash = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
@@ -423,8 +424,29 @@ export default function WorldStudio() {
               </button>
             </>
           )}
-
         </div>
+
+        {/* Mobile overflow menu */}
+        {tab === 'characters' && (
+          <div className="ws-mobile-overflow-wrap">
+            <button className="ws-mobile-overflow-btn" onClick={() => setMobileMenuOpen(v => !v)}>⋯</button>
+            {mobileMenuOpen && (
+              <div className="ws-mobile-overflow-menu">
+                {draftCount > 0 && (
+                  <button onClick={() => { bulkActivate(); setMobileMenuOpen(false); }} disabled={bulkActivating}>
+                    {bulkActivating ? '…' : `✓ Activate ${draftCount} Drafts`}
+                  </button>
+                )}
+                <button onClick={() => { seedRelationships(); setMobileMenuOpen(false); }} disabled={seeding}>
+                  {seeding ? '…' : '🔗 Seed Relationships'}
+                </button>
+                <button onClick={() => { generatePreview(); setMobileMenuOpen(false); }} disabled={generating}>
+                  {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* ── STATS BAR ───────────────────────────────────────────────── */}
@@ -439,20 +461,20 @@ export default function WorldStudio() {
           </span>
           <span className="ws-stat-label">Active</span>
         </div>
-        <div className="ws-stat">
+        <div className="ws-stat ws-stat-mobile-hide">
           <span className="ws-stat-value ws-stat-value-muted">
             {characters.filter(c => c.status === 'draft').length}
           </span>
           <span className="ws-stat-label">Draft</span>
         </div>
         <div className="ws-stat-divider" />
-        <div className="ws-stat">
+        <div className="ws-stat ws-stat-mobile-hide">
           <span className="ws-stat-value ws-stat-value-rose">
             {characters.filter(c => c.intimate_eligible).length}
           </span>
           <span className="ws-stat-label">Intimate</span>
         </div>
-        <div className="ws-stat">
+        <div className="ws-stat ws-stat-mobile-hide">
           <span className="ws-stat-value ws-stat-value-deceased">
             {characters.filter(c => c.is_alive === false).length}
           </span>
