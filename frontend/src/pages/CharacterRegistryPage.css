@@ -5885,3 +5885,85 @@
     font-size: 11px;
   }
 }
+
+/* ================================================================
+   COMPACT MOBILE — Tighter sizing for ≤480px
+   Placed last to override touch-device min-height inflation.
+   ================================================================ */
+@media (max-width: 480px) {
+  /* Header — reduce vertical bulk */
+  .cr-header {
+    padding: 8px 10px;
+    gap: 4px;
+  }
+  .cr-header-title { font-size: 15px; }
+  .cr-header-brand { font-size: 13px; }
+
+  /* Buttons — smaller touch targets */
+  .cr-header-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 32px !important;
+    min-width: unset;
+    gap: 4px;
+  }
+  .cr-header-btn.primary {
+    min-width: 32px;
+    min-height: 32px !important;
+    padding: 6px;
+  }
+  .cr-view-toggle button {
+    min-height: 32px !important;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  /* Search — stop iOS zoom, but keep compact */
+  .cr-search-input {
+    font-size: 14px;
+    padding: 8px 10px 8px 28px;
+    min-height: 34px;
+  }
+
+  /* Registry tabs — compact pills */
+  .cr-registry-tabs { gap: 4px; margin-bottom: 14px; }
+  .cr-registry-pill {
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 16px;
+    min-height: unset !important;
+  }
+  .cr-pill-add { width: 28px; height: 28px; font-size: 16px; }
+
+  /* World "All Characters" title */
+  .cr-world-title { font-size: 20px; margin-bottom: 2px; }
+  .cr-world-subtitle { font-size: 11px; }
+  .cr-world-header { margin-bottom: 14px; padding-bottom: 10px; }
+
+  /* Generate-all banner */
+  .cr-world-gen-all {
+    padding: 10px 14px;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .cr-world-gen-all-text { font-size: 12px; }
+
+  /* Export / outline buttons */
+  .cr-btn-outline { padding: 5px 12px; font-size: 12px; }
+
+  /* Type filter pills */
+  .cr-world-filter-btn { padding: 4px 10px; font-size: 10px; }
+  .cr-world-filter-count { font-size: 9px; padding: 1px 5px; }
+  .cr-world-filters { gap: 5px; margin-bottom: 14px; }
+
+  /* Stats strip */
+  .cr-stats-strip { padding: 8px 10px; gap: 6px 12px; margin-bottom: 14px; }
+  .cr-stat-count { font-size: 18px; }
+  .cr-stat-label { font-size: 9px; }
+
+  /* Content area tighter */
+  .cr-content { padding: 12px 10px 40px; }
+
+  /* Filter pills */
+  .cr-filter-pill { padding: 6px 10px; font-size: 11px; min-height: 30px; }
+}
