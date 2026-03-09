@@ -1545,3 +1545,46 @@
   height: 16px;
   accent-color: var(--ws-accent-gold, #c5a55a);
 }
+
+/* ── Sidebar Pagination ─────────────────────────────────────────── */
+.ws-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 12px 0 4px;
+  flex-wrap: wrap;
+}
+.ws-page-btn {
+  min-width: 28px;
+  height: 28px;
+  border: 1px solid var(--ws-border);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ws-text);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background .15s, color .15s;
+}
+.ws-page-btn:hover:not(:disabled) {
+  background: var(--ws-accent-gold, #c5a55a);
+  color: #fff;
+}
+.ws-page-btn:disabled {
+  opacity: .35;
+  cursor: default;
+}
+.ws-page-btn-active {
+  background: var(--ws-accent-gold, #c5a55a);
+  color: #fff;
+  border-color: var(--ws-accent-gold, #c5a55a);
+  font-weight: 700;
+}
+.ws-page-info {
+  font-size: 11px;
+  color: var(--ws-muted);
+  margin-left: 6px;
+}

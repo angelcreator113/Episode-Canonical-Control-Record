@@ -28,6 +28,8 @@ import './WorldStudio.css';
 const API = '/api/v1';
 
 /* ── Constants ──────────────────────────────────────────────────────── */
+const PAGE_SIZE = 20;
+
 const WORLD_OPTIONS = [
   { tag: 'lalaverse', label: 'LalaVerse', icon: '✦', protagonist: 'Lala' },
   { tag: 'book-1',    label: 'Book 1 · Before Lala', icon: '◈', protagonist: 'JustAWoman' },
@@ -139,6 +141,7 @@ export default function WorldStudio() {
   const [previewNotes,   setPreviewNotes]   = useState('');
   const [showPreview,    setShowPreview]    = useState(false);
   const [bulkActivating, setBulkActivating] = useState(false);
+  const [currentPage,     setCurrentPage]     = useState(1);
 
   /* ── Relationship graph ─────────────────────────────────────────── */
   const [showAddRel, setShowAddRel] = useState(false);
@@ -206,7 +209,9 @@ export default function WorldStudio() {
     setSelectedChar(null);
     setCharDetail(null);
     setEditMode(false);
+    setCurrentPage(1);
   }, [worldTag]);
+  useEffect(() => { setCurrentPage(1); }, [charSearch, charFilter]);
   useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
   useEffect(() => {
     // Auto-select registry matching current world's book_tag
@@ -353,6 +358,8 @@ export default function WorldStudio() {
     return true;
   });
   const uniqueTypes = [...new Set(characters.map(c => c.character_type))];
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const filteredReg = regChars.filter(ch => {
     const name = (ch.selected_name || ch.display_name || '').toLowerCase();
@@ -487,7 +494,7 @@ export default function WorldStudio() {
                   <div className="ws-empty-icon">✦</div>
                   <div className="ws-empty-text">No characters yet</div>
                 </div>
-              ) : filtered.map(c => (
+              ) : paged.map(c => (
                 <div
                   key={c.id}
                   className={`ws-char-card ${selectedChar === c.id ? 'ws-char-card-selected' : ''} ${c.is_alive === false ? 'ws-char-card-deceased' : ''}`}
@@ -520,6 +527,30 @@ export default function WorldStudio() {
                   )}
                 </div>
               ))}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="ws-pagination">
+                  <button
+                    className="ws-page-btn"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                  >‹</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(pg => (
+                    <button
+                      key={pg}
+                      className={`ws-page-btn ${pg === currentPage ? 'ws-page-btn-active' : ''}`}
+                      onClick={() => setCurrentPage(pg)}
+                    >{pg}</button>
+                  ))}
+                  <button
+                    className="ws-page-btn"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                  >›</button>
+                  <span className="ws-page-info">{filtered.length} chars</span>
+                </div>
+              )}
             </>
           )}
 
