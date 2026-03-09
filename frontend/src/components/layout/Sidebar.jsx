@@ -39,6 +39,7 @@ const NAV = [
       { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
       { icon: '', label: 'Assembler',        route: '/assembler' },
       { icon: '◇',  label: 'Continuity',      route: '/continuity' },
+      { icon: '🧠', label: 'Narrative Control', route: '/narrative-control' },
     ],
   },
   {

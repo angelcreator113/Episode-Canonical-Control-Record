@@ -138,6 +138,19 @@ module.exports = (sequelize) => {
       type: DataTypes.UUID,
       allowNull: true,
     },
+    // ── Tier feature columns ──
+    pipeline_step: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    franchise_guard_result: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    continuity_check_result: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
   }, {
     tableName: 'storyteller_stories',
     underscored: true,

@@ -100,6 +100,13 @@ let VoiceRule; // Novel Intelligence: confirmed voice rules
 let ManuscriptMetadata; // Novel Intelligence: book metadata cascade
 let BrainFingerprint; // Novel Intelligence: brain dedup fingerprints
 let SocialProfile; // The Feed: social media creator profiles
+let RelationshipEvent; // Relationship timeline turning points
+let StoryRevision; // Revision history for edited stories
+let WorldTimelineEvent; // World calendar/timeline events
+let WorldLocation; // Location/geography database
+let WorldStateSnapshot; // World-state snapshots per chapter
+let PipelineTracking; // End-to-end pipeline status tracking
+let StoryThread; // Story thread / subplot tracking
 
 try {
   // Core models
@@ -292,6 +299,15 @@ try {
   // The Feed: Social Profile Generator
   SocialProfile = require('./SocialProfile')(sequelize, DataTypes);
 
+  // Tier feature models
+  RelationshipEvent = require('./RelationshipEvent')(sequelize);
+  StoryRevision = require('./StoryRevision')(sequelize);
+  WorldTimelineEvent = require('./WorldTimelineEvent')(sequelize);
+  WorldLocation = require('./WorldLocation')(sequelize);
+  WorldStateSnapshot = require('./WorldStateSnapshot')(sequelize);
+  PipelineTracking = require('./PipelineTracking')(sequelize);
+  StoryThread = require('./StoryThread')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -398,6 +414,13 @@ const requiredModels = {
   ManuscriptMetadata,
   BrainFingerprint,
   SocialProfile,
+  RelationshipEvent,
+  StoryRevision,
+  WorldTimelineEvent,
+  WorldLocation,
+  WorldStateSnapshot,
+  PipelineTracking,
+  StoryThread,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -506,6 +529,23 @@ if (VoiceSignal && VoiceSignal.associate) {
 if (VoiceRule && VoiceRule.associate) {
   VoiceRule.associate(requiredModels);
 }
+
+// Tier feature associations
+if (RelationshipEvent && RelationshipEvent.associate) {
+  RelationshipEvent.associate(requiredModels);
+}
+if (WorldTimelineEvent && WorldTimelineEvent.associate) {
+  WorldTimelineEvent.associate(requiredModels);
+}
+if (WorldLocation && WorldLocation.associate) {
+  WorldLocation.associate(requiredModels);
+}
+
+// CharacterRelationship → RelationshipEvent (1:N)
+CharacterRelationship.hasMany(RelationshipEvent, {
+  foreignKey: 'relationship_id',
+  as: 'events',
+});
 
 console.log('✅ Model associations defined');
 
@@ -1617,3 +1657,10 @@ module.exports.VoiceRule = VoiceRule;
 module.exports.ManuscriptMetadata = ManuscriptMetadata;
 module.exports.BrainFingerprint = BrainFingerprint;
 module.exports.SocialProfile = SocialProfile;
+module.exports.RelationshipEvent = RelationshipEvent;
+module.exports.StoryRevision = StoryRevision;
+module.exports.WorldTimelineEvent = WorldTimelineEvent;
+module.exports.WorldLocation = WorldLocation;
+module.exports.WorldStateSnapshot = WorldStateSnapshot;
+module.exports.PipelineTracking = PipelineTracking;
+module.exports.StoryThread = StoryThread;

@@ -1066,6 +1066,15 @@ try {
   console.error('✗ Failed to load Social Profile routes:', e.message);
 }
 
+// Tier Features — Continuity, Arcs, Timeline, Locations, Snapshots, Pipeline, Threads
+try {
+  const tierFeaturesRoutes = require('./routes/tierFeatures');
+  app.use('/api/v1/tier', tierFeaturesRoutes);
+  console.log('✓ Tier feature routes loaded at /api/v1/tier');
+} catch (e) {
+  console.error('✗ Failed to load Tier feature routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({

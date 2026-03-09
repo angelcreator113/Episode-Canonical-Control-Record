@@ -270,6 +270,7 @@ async function fetchSceneContext(characterKeys, registryId) {
 }
 
 // ── Helper: load accumulated story memories for characters in scene ────────
+// Enhanced: loads ALL memory types + relationship events for deep continuity
 async function loadStoryMemoriesForScene(characterKeys, registryId) {
   if (!characterKeys?.length || !registryId) return '';
   try {
@@ -280,35 +281,96 @@ async function loadStoryMemoriesForScene(characterKeys, registryId) {
     if (!chars.length) return '';
 
     const charIds = chars.map(c => c.id);
-    const memories = await db.StorytellerMemory.findAll({
-      where: { character_id: charIds },
-      order: [['created_at', 'DESC']],
-      limit: 50,
-    });
-    if (!memories.length) return '';
-
     const charMap = {};
     chars.forEach(c => { charMap[c.id] = c.display_name || c.character_key; });
 
-    const painPoints = memories.filter(m => m.type === 'pain_point');
-    const beliefShifts = memories.filter(m => m.type === 'belief_shift');
-    const therapyOpenings = memories.filter(m => m.type === 'therapy_opening');
+    // Load ALL confirmed memories (expanded from 50 → 80, all types)
+    const memories = await db.StorytellerMemory.findAll({
+      where: { character_id: charIds, confirmed: true },
+      order: [['created_at', 'DESC']],
+      limit: 80,
+    });
+
+    // Group by type for structured injection
+    const byType = {};
+    memories.forEach(m => {
+      if (!byType[m.type]) byType[m.type] = [];
+      byType[m.type].push(m);
+    });
 
     const sections = [];
-    if (painPoints.length) {
-      sections.push('ACCUMULATED PAIN POINTS (from previous stories — build on these, don\'t repeat):\n' +
-        painPoints.slice(0, 12).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+
+    // Events — what has HAPPENED (critical for continuity)
+    if (byType.event?.length) {
+      sections.push('ESTABLISHED EVENTS (facts — do NOT contradict these):\n' +
+        byType.event.slice(0, 15).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
     }
-    if (beliefShifts.length) {
-      sections.push('BELIEF SHIFTS SO FAR (the character is evolving — track where she is now):\n' +
-        beliefShifts.slice(0, 8).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    // Relationships
+    if (byType.relationship?.length) {
+      sections.push('RELATIONSHIP STATE:\n' +
+        byType.relationship.slice(0, 10).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
     }
-    if (therapyOpenings.length) {
+    // Character dynamics
+    if (byType.character_dynamic?.length) {
+      sections.push('CHARACTER DYNAMICS:\n' +
+        byType.character_dynamic.slice(0, 8).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+    // Pain points
+    if (byType.pain_point?.length) {
+      sections.push('ACCUMULATED PAIN POINTS (build on these, don\'t repeat):\n' +
+        byType.pain_point.slice(0, 12).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+    // Belief shifts
+    if (byType.belief_shift?.length) {
+      sections.push('BELIEF SHIFTS (track where the character is NOW):\n' +
+        byType.belief_shift.slice(0, 8).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+    // Transformations
+    if (byType.transformation?.length) {
+      sections.push('TRANSFORMATIONS (permanent changes):\n' +
+        byType.transformation.slice(0, 6).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+    // Constraints
+    if (byType.constraint?.length) {
+      sections.push('ACTIVE CONSTRAINTS:\n' +
+        byType.constraint.slice(0, 6).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+    // Therapy openings
+    if (byType.therapy_opening?.length) {
       sections.push('THERAPEUTIC THREADS (unresolved emotional threads to weave in):\n' +
-        therapyOpenings.slice(0, 5).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+        byType.therapy_opening.slice(0, 5).map(m => `  • [${charMap[m.character_id] || '?'}] ${m.statement}`).join('\n'));
+    }
+    // Beliefs & goals
+    const beliefsAndGoals = [...(byType.belief || []), ...(byType.goal || [])];
+    if (beliefsAndGoals.length) {
+      sections.push('CURRENT BELIEFS & GOALS:\n' +
+        beliefsAndGoals.slice(0, 8).map(m => `  • [${charMap[m.character_id] || '?'}] [${m.type}] ${m.statement}`).join('\n'));
     }
 
-    return sections.length ? '\n\nSTORY MEMORY (accumulated knowledge from previous stories):\n' + sections.join('\n\n') : '';
+    // Load relationship turning points (recent events)
+    let relEventSection = '';
+    try {
+      const relEvents = await db.sequelize.query(
+        `SELECT re.title, re.event_type, re.tension_after, re.relationship_stage,
+                ca.display_name AS char_a_name, cb.display_name AS char_b_name
+         FROM relationship_events re
+         JOIN character_relationships cr ON cr.id = re.relationship_id
+         JOIN registry_characters ca ON ca.id = cr.character_id_a
+         JOIN registry_characters cb ON cb.id = cr.character_id_b
+         WHERE (cr.character_id_a IN (:charIds) OR cr.character_id_b IN (:charIds))
+         ORDER BY re.created_at DESC
+         LIMIT 10`,
+        { replacements: { charIds }, type: db.sequelize.QueryTypes.SELECT }
+      );
+      if (relEvents.length) {
+        relEventSection = '\nRELATIONSHIP TURNING POINTS (recent — inform emotional tone):\n' +
+          relEvents.map(e => `  • ${e.char_a_name} ↔ ${e.char_b_name}: ${e.title} [${e.event_type}] → ${e.relationship_stage || '?'}, tension: ${e.tension_after ?? '?'}/10`).join('\n');
+      }
+    } catch { /* relationship_events table may not exist yet */ }
+
+    return sections.length || relEventSection
+      ? '\n\nSTORY MEMORY (accumulated knowledge — the AI MUST respect these established facts):\n' + sections.join('\n\n') + relEventSection
+      : '';
   } catch (err) {
     console.error('[loadStoryMemoriesForScene] error:', err?.message);
     return '';
@@ -445,7 +507,33 @@ router.post('/evaluate-stories', optionalAuth, async (req, res) => {
     story.text = evaluation.approved_version || '';
     story.word_count = (story.text || '').split(/\s+/).filter(Boolean).length;
     story.status = 'evaluated';
+    story.pipeline_step = 'evaluate';
     await story.save();
+
+    // Auto-save revision history (synthesis = revision 1)
+    try {
+      await db.StoryRevision.create({
+        story_id,
+        revision_number: 1,
+        text: story.text,
+        word_count: story.word_count,
+        revision_type: 'synthesis',
+        revision_source: 'evaluation_engine',
+        change_summary: `Synthesised from 3 voices. Winner: ${evaluation.winner}. ${evaluation.synthesis_notes?.substring(0, 200) || ''}`,
+      });
+    } catch { /* StoryRevision table may not exist yet */ }
+
+    // Auto-update pipeline tracking
+    try {
+      const [pipeline] = await db.PipelineTracking.findOrCreate({
+        where: { story_id },
+        defaults: { story_id, current_step: 'evaluate', started_at: new Date() },
+      });
+      await pipeline.update({
+        current_step: 'evaluate',
+        step_evaluate: { completed_at: new Date(), winner: evaluation.winner, score: evaluation.scores },
+      });
+    } catch { /* PipelineTracking table may not exist yet */ }
 
     return res.json({ success: true, evaluation, story_id });
   } catch (err) {
