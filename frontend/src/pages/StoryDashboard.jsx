@@ -67,7 +67,7 @@ export default function StoryDashboard({ bookId, registryId }) {
   async function loadArc() {
     if (!bookId) return;
     try {
-      const res = await fetch(`${API}/api/v1/memories/arc-stage`, {
+      const res = await fetch(`${API}/memories/arc-stage`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ book_id: bookId }),
@@ -80,7 +80,7 @@ export default function StoryDashboard({ bookId, registryId }) {
   async function loadCharacters() {
     if (!registryId) return;
     try {
-      const res = await fetch(`${API}/api/v1/character-registry/${registryId}/characters`);
+      const res = await fetch(`${API}/character-registry/${registryId}/characters`);
       const data = await res.json();
       setCharacters((data.characters || []).filter(c => c.status !== 'declined'));
     } catch {}
@@ -89,7 +89,7 @@ export default function StoryDashboard({ bookId, registryId }) {
   async function loadRecentScenes() {
     if (!bookId) return;
     try {
-      const res = await fetch(`${API}/api/v1/memories/scene-proposals?book_id=${bookId}&limit=8`);
+      const res = await fetch(`${API}/memories/scene-proposals?book_id=${bookId}&limit=8`);
       const data = await res.json();
       setRecentScenes(data.proposals || []);
     } catch {}
@@ -97,7 +97,7 @@ export default function StoryDashboard({ bookId, registryId }) {
 
   async function loadReviews() {
     try {
-      const res = await fetch(`${API}/api/v1/reviews/unacknowledged`);
+      const res = await fetch(`${API}/reviews/unacknowledged`);
       const data = await res.json();
       setPendingReviews((data.reviews || []).filter(r => !r.passed));
     } catch {}
@@ -105,14 +105,14 @@ export default function StoryDashboard({ bookId, registryId }) {
 
   async function loadGrowthFlags() {
     try {
-      const res = await fetch(`${API}/api/v1/memories/character-growth/flagged`);
+      const res = await fetch(`${API}/memories/character-growth/flagged`);
       const data = await res.json();
       setGrowthFlags(data.flags || []);
     } catch {}
   }
 
   async function acknowledgeReview(id) {
-    await fetch(`${API}/api/v1/reviews/${id}/acknowledge`, { method: 'POST' });
+    await fetch(`${API}/reviews/${id}/acknowledge`, { method: 'POST' });
     setPendingReviews(p => p.filter(r => r.id !== id));
   }
 
