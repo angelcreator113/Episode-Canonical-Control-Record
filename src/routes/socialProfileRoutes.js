@@ -221,25 +221,70 @@ router.post('/:id/finalize', optionalAuth, async (req, res) => {
 });
 
 // ── POST /:id/cross ─────────────────────────────────────────────────────────
-// Promotes a social profile into a world character (crossing event)
+// Promotes a social profile into a world character — auto-creates RegistryCharacter
 router.post('/:id/cross', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
-  const { crossing_note } = req.body;
+  const { crossing_note, registry_id } = req.body;
   try {
     const profile = await db.SocialProfile.findByPk(req.params.id);
     if (!profile) return res.status(404).json({ error: 'Not found' });
     if (profile.status === 'crossed') return res.status(409).json({ error: 'Already crossed into world.' });
 
+    // Auto-create registry character from social profile
+    let registryCharacter = null;
+    if (registry_id || profile.registry_character_id) {
+      const targetRegistry = registry_id || (await db.CharacterRegistry.findOne({ order: [['created_at', 'DESC']] }))?.id;
+
+      if (targetRegistry) {
+        const charKey = profile.handle.replace(/^@/, '').toLowerCase().replace(/[^a-z0-9_]/g, '_');
+        registryCharacter = await db.RegistryCharacter.create({
+          registry_id: targetRegistry,
+          character_key: charKey,
+          display_name: profile.display_name || profile.handle,
+          icon: '\uD83D\uDCF1',
+          role_type: 'pressure',
+          status: 'accepted',
+          core_desire: profile.parasocial_function || null,
+          core_wound: profile.what_it_costs_her || null,
+          description: `Social media creator (${profile.platform}). ${profile.content_persona || ''}`.trim(),
+          personality: profile.real_signal || null,
+          metadata: {
+            source: 'social_profile_crossing',
+            social_profile_id: profile.id,
+            platform: profile.platform,
+            archetype: profile.archetype,
+            follower_tier: profile.follower_tier,
+          },
+        });
+
+        await profile.update({
+          registry_character_id: registryCharacter.id,
+        });
+      }
+    }
+
     await profile.update({
-      status:     'crossed',
+      status: 'crossed',
       world_exists: true,
       crossed_at: new Date(),
       crossing_trigger: crossing_note || profile.crossing_trigger,
     });
 
+    // Log the crossing as a world timeline event
+    try {
+      await db.WorldTimelineEvent.create({
+        event_name: `${profile.display_name || profile.handle} crosses into JustAWoman's world`,
+        event_description: `Social media creator ${profile.handle} (${profile.platform}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${crossing_note || profile.crossing_trigger || 'story need'}`,
+        event_type: 'character',
+        impact_level: profile.lala_relevance_score >= 7 ? 'major' : 'moderate',
+        characters_involved: registryCharacter ? [registryCharacter.id] : [],
+      });
+    } catch { /* WorldTimelineEvent table may not exist yet */ }
+
     return res.json({
       profile,
-      next_step: 'Create a registry character for this profile via POST /character-registry/characters with social_profile_id reference',
+      registry_character: registryCharacter,
+      crossed: true,
     });
   } catch (err) {
     return res.status(500).json({ error: err.message });

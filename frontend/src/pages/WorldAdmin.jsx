@@ -18,6 +18,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
+import './WorldAdmin.css';
 
 const STAT_ICONS = { coins: '🪙', reputation: '⭐', brand_trust: '🤝', influence: '📣', stress: '😰' };
 const TIER_COLORS = { slay: '#FFD700', pass: '#22c55e', safe: '#eab308', fail: '#dc2626' };
@@ -265,7 +266,7 @@ function WorldAdmin() {
   if (loading) return <div style={S.page}><div style={S.center}>Loading world data...</div></div>;
 
   return (
-    <div style={S.page}>
+    <div className="wa-page" style={S.page}>
       {/* Inject keyframes for toast animation */}
       <style>{`
         @keyframes toastPop {
@@ -282,7 +283,7 @@ function WorldAdmin() {
         }
       `}</style>
       {/* ─── HEADER ─── */}
-      <div style={S.header}>
+      <div className="wa-header" style={S.header}>
         <div>
           <h1 style={S.title}>🌍 Producer Mode</h1>
           <p style={S.subtitle}>{show?.title || 'Show'} — World Rules &amp; Canon</p>
@@ -329,7 +330,7 @@ function WorldAdmin() {
             ) : <p style={S.muted}>No state yet. Evaluate an episode to initialize.</p>}
           </div>
 
-          <div style={S.qGrid}>
+          <div className="wa-grid-4" style={S.qGrid}>
             {[{ v: episodes.length, l: 'Episodes' }, { v: acceptedEpisodes.length, l: 'Evaluated' }, { v: overrideCount, l: 'Overrides' }, { v: worldEvents.length, l: 'Events' }].map((s, i) => (
               <div key={i} style={S.qBox}><div style={S.qVal}>{s.v}</div><div style={S.qLbl}>{s.l}</div></div>
             ))}
@@ -425,7 +426,7 @@ function WorldAdmin() {
                     {deltas && (
                       <div style={{ marginTop: 14 }}>
                         <div style={{ fontSize: 12, fontWeight: 600, color: '#64748b', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>📊 Stat Impact</div>
-                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
+                        <div className="wa-grid wa-grid-5col" style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: 8 }}>
                           {Object.entries(deltas).map(([k, v]) => {
                             const afterVal = stateAfter ? stateAfter[k] : null;
                             const beforeVal = afterVal !== null ? afterVal - v : null;
@@ -559,7 +560,7 @@ function WorldAdmin() {
           {editingEvent && (
             <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingEvent === 'new' ? '✨ New Event' : '✏️ Edit Event'}</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
                 <FG label="Event Name *" value={eventForm.name} onChange={v => setEventForm(p => ({ ...p, name: v }))} placeholder="Velour Society Garden Soirée" />
                 <div>
                   <label style={S.fLabel}>Type</label>
@@ -758,7 +759,7 @@ function WorldAdmin() {
           {editingGoal && (
             <div style={{ background: '#fff', border: '2px solid #6366f1', borderRadius: 12, padding: 20, marginBottom: 16 }}>
               <h3 style={{ fontSize: 16, fontWeight: 700, margin: '0 0 16px' }}>{editingGoal === 'new' ? '✨ New Goal' : '✏️ Edit Goal'}</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }}>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 12 }} className="wa-grid wa-grid-3col">
                 <FG label="Goal Title *" value={goalForm.title} onChange={v => setGoalForm(p => ({ ...p, title: v }))} placeholder="Break Into Luxury Fashion" />
                 <div>
                   <label style={S.fLabel}>Type</label>
@@ -1010,7 +1011,7 @@ function WorldAdmin() {
             </div>
 
             {/* Tier Summary Cards */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
+            <div className="wa-grid wa-grid-4col" style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 16 }}>
               {['basic', 'mid', 'luxury', 'elite'].map(tier => {
                 const items = tierGroups[tier] || [];
                 const owned = items.filter(i => i.is_owned).length;
@@ -1076,7 +1077,7 @@ function WorldAdmin() {
                 </div>
 
                 {/* Row 1: Name, Category, Color, Season */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }} className="wa-grid wa-grid-4col">
                   <div>
                     <label style={S.fLabel}>Name</label>
                     <input value={wf.name} onChange={e => setWf('name', e.target.value)} style={S.inp} />
@@ -1104,7 +1105,7 @@ function WorldAdmin() {
                 </div>
 
                 {/* Row 2: Tier, Lock Type, Era, Brand */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 12, marginBottom: 14 }} className="wa-grid wa-grid-4col">
                   <div>
                     <label style={S.fLabel}>Tier</label>
                     <select value={wf.tier} onChange={e => setWf('tier', e.target.value)} style={S.sel}>
@@ -1136,7 +1137,7 @@ function WorldAdmin() {
                 </div>
 
                 {/* Row 3: Ownership toggles + numeric costs */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 14 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: 12, marginBottom: 14 }} className="wa-grid wa-grid-6col">
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <label style={S.fLabel}>Owned</label>
                     <button onClick={() => setWf('is_owned', !wf.is_owned)}
@@ -1182,7 +1183,7 @@ function WorldAdmin() {
                 </div>
 
                 {/* Row 5: Lala Reactions */}
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12, marginBottom: 16 }} className="wa-grid wa-grid-3col">
                   <div>
                     <label style={S.fLabel}>💬 Lala Reaction (Owned)</label>
                     <textarea value={wf.lala_reaction_own} onChange={e => setWf('lala_reaction_own', e.target.value)} style={{ ...S.tArea, minHeight: 50 }} placeholder="Love this piece!" />

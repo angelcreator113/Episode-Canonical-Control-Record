@@ -13,8 +13,10 @@
  *   7. Snapshots      — World-state snapshots
  *   8. Threads        — Story thread tracker + dead thread detection
  *   9. Plot Holes     — Plot hole & revision history
+ *  10. Beats          — Chapter beat generation & book outline
  */
 import { useState, useEffect, useCallback } from 'react';
+import './NarrativeControlCenter.css';
 
 const API = '/api/v1';
 
@@ -872,6 +874,157 @@ function PlotHolesTab() {
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
+// TAB: Beats — Chapter beat generation & book outline
+// ═══════════════════════════════════════════════════════════════════════════
+function BeatsTab() {
+  const [storyId, setStoryId] = useState('');
+  const [chapterId, setChapterId] = useState('');
+  const [arcPosition, setArcPosition] = useState('rising_action');
+  const [beats, setBeats] = useState(null);
+  const [outline, setOutline] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState('chapter'); // chapter | book
+
+  const generateChapterBeats = useCallback(async () => {
+    if (!storyId) return;
+    setLoading(true);
+    setBeats(null);
+    try {
+      const data = await fetchJSON(`${API}/tier/generate-chapter-beats`, {
+        method: 'POST',
+        body: JSON.stringify({ story_id: storyId, chapter_id: chapterId || undefined, arc_position: arcPosition }),
+      });
+      setBeats(data);
+    } catch { setBeats({ error: 'Failed to generate beats' }); }
+    setLoading(false);
+  }, [storyId, chapterId, arcPosition]);
+
+  const generateBookOutline = useCallback(async () => {
+    if (!storyId) return;
+    setLoading(true);
+    setOutline(null);
+    try {
+      const data = await fetchJSON(`${API}/tier/generate-book-outline`, {
+        method: 'POST',
+        body: JSON.stringify({ story_id: storyId }),
+      });
+      setOutline(data);
+    } catch { setOutline({ error: 'Failed to generate outline' }); }
+    setLoading(false);
+  }, [storyId]);
+
+  const ARC_POSITIONS = ['opening', 'rising_action', 'midpoint', 'escalation', 'climax', 'falling_action', 'resolution'];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* Mode toggle */}
+      <div className="ncc-beats-mode" style={{ display: 'flex', gap: 8 }}>
+        <button onClick={() => setMode('chapter')} style={{ ...btnStyle, background: mode === 'chapter' ? T.gold : '#e8e4dd', color: mode === 'chapter' ? '#fff' : T.ink }}>Chapter Beats</button>
+        <button onClick={() => setMode('book')} style={{ ...btnStyle, background: mode === 'book' ? T.lavender : '#e8e4dd', color: mode === 'book' ? '#fff' : T.ink }}>Book Outline</button>
+      </div>
+
+      {/* Inputs */}
+      <div className="ncc-beats-inputs" style={{ ...cardStyle, display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+        <div style={{ flex: '1 1 200px' }}>
+          <label style={labelStyle}>Story ID</label>
+          <input style={inputStyle} value={storyId} onChange={e => setStoryId(e.target.value)} placeholder="UUID of the story" />
+        </div>
+        {mode === 'chapter' && (
+          <>
+            <div style={{ flex: '1 1 200px' }}>
+              <label style={labelStyle}>Chapter ID (optional)</label>
+              <input style={inputStyle} value={chapterId} onChange={e => setChapterId(e.target.value)} placeholder="UUID of chapter" />
+            </div>
+            <div style={{ flex: '1 1 160px' }}>
+              <label style={labelStyle}>Arc Position</label>
+              <select style={inputStyle} value={arcPosition} onChange={e => setArcPosition(e.target.value)}>
+                {ARC_POSITIONS.map(p => <option key={p} value={p}>{p.replace(/_/g, ' ')}</option>)}
+              </select>
+            </div>
+          </>
+        )}
+        <button
+          style={{ ...btnStyle, background: mode === 'chapter' ? T.gold : T.lavender, height: 38 }}
+          onClick={mode === 'chapter' ? generateChapterBeats : generateBookOutline}
+          disabled={loading || !storyId}
+        >
+          {loading ? 'Generating...' : mode === 'chapter' ? 'Generate Beats' : 'Generate Outline'}
+        </button>
+      </div>
+
+      {/* Chapter Beats result */}
+      {beats && (
+        <div style={cardStyle}>
+          <h3 style={{ fontFamily: T.fontSerif, fontSize: 18, margin: '0 0 12px', color: T.ink }}>Generated Chapter Beats</h3>
+          {beats.error ? (
+            <div style={{ color: '#ef4444', fontSize: 14 }}>{beats.error}</div>
+          ) : beats.beats ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {beats.beats.map((beat, i) => (
+                <div key={i} className="ncc-beat-card" style={{ padding: 12, background: '#fafaf7', borderRadius: 8, borderLeft: `3px solid ${T.gold}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 4 }}>
+                    <span style={{ fontWeight: 600, fontSize: 14, color: T.ink }}>Beat {beat.beat_number || i + 1}: {beat.title || beat.type || ''}</span>
+                    {beat.emotional_target && <Badge color={T.lavender}>{beat.emotional_target}</Badge>}
+                  </div>
+                  {beat.description && <div style={{ fontSize: 13, color: T.inkLight, marginTop: 6 }}>{beat.description}</div>}
+                  {beat.characters && <div style={{ fontSize: 12, color: T.slate, marginTop: 4 }}>Characters: {Array.isArray(beat.characters) ? beat.characters.join(', ') : beat.characters}</div>}
+                  {beat.purpose && <div style={{ fontSize: 12, color: T.slate, marginTop: 2 }}>Purpose: {beat.purpose}</div>}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', background: '#f9fafb', padding: 12, borderRadius: 6 }}>{JSON.stringify(beats, null, 2)}</pre>
+          )}
+        </div>
+      )}
+
+      {/* Book Outline result */}
+      {outline && (
+        <div style={cardStyle}>
+          <h3 style={{ fontFamily: T.fontSerif, fontSize: 18, margin: '0 0 12px', color: T.ink }}>Book Outline</h3>
+          {outline.error ? (
+            <div style={{ color: '#ef4444', fontSize: 14 }}>{outline.error}</div>
+          ) : outline.outline ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {(Array.isArray(outline.outline) ? outline.outline : [outline.outline]).map((act, i) => (
+                <div key={i} style={{ padding: 14, background: '#fafaf7', borderRadius: 8, borderLeft: `3px solid ${T.lavender}` }}>
+                  <div style={{ fontWeight: 700, fontSize: 15, color: T.ink, marginBottom: 6 }}>{act.act || act.title || `Act ${i + 1}`}</div>
+                  {act.description && <div style={{ fontSize: 13, color: T.inkLight, marginBottom: 8 }}>{act.description}</div>}
+                  {act.chapters && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {act.chapters.map((ch, j) => (
+                        <div key={j} style={{ padding: 8, background: '#fff', borderRadius: 6, fontSize: 13 }}>
+                          <span style={{ fontWeight: 600 }}>{ch.title || `Chapter ${j + 1}`}</span>
+                          {ch.summary && <span style={{ color: T.inkLight }}> — {ch.summary}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {act.beats && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {act.beats.map((b, j) => (
+                        <div key={j} style={{ padding: 8, background: '#fff', borderRadius: 6, fontSize: 13 }}>
+                          <span style={{ fontWeight: 600 }}>{b.title || b.type || `Beat ${j + 1}`}</span>
+                          {b.description && <span style={{ color: T.inkLight }}> — {b.description}</span>}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <pre style={{ fontSize: 12, whiteSpace: 'pre-wrap', background: '#f9fafb', padding: 12, borderRadius: 6 }}>{JSON.stringify(outline, null, 2)}</pre>
+          )}
+        </div>
+      )}
+
+      {!beats && !outline && <EmptyState text={mode === 'chapter' ? 'Enter a story ID and generate chapter beats to see narrative structure suggestions.' : 'Enter a story ID to generate a full book outline with macro structural beats.'} />}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
 // SHARED COMPONENTS
 // ═══════════════════════════════════════════════════════════════════════════
 function StatCard({ label, value, color, small }) {
@@ -908,22 +1061,23 @@ const TABS = [
   { key: 'snapshots', label: 'Snapshots', icon: '\uD83D\uDCF7' },
   { key: 'threads', label: 'Threads', icon: '\uD83E\uDDF5' },
   { key: 'plot-holes', label: 'Plot Holes', icon: '\uD83D\uDD73' },
+  { key: 'beats', label: 'Beats', icon: '\uD83C\uDFB5' },
 ];
 
 export default function NarrativeControlCenter() {
   const [activeTab, setActiveTab] = useState('pipeline');
 
   return (
-    <div style={{ fontFamily: T.font, background: T.parchment, minHeight: '100vh', padding: '24px 20px' }}>
-      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
+    <div className="ncc-page" style={{ fontFamily: T.font, background: T.parchment, minHeight: '100vh', padding: '24px 20px' }}>
+      <div className="ncc-container" style={{ maxWidth: 1100, margin: '0 auto' }}>
         {/* Header */}
-        <div style={{ marginBottom: 24 }}>
+        <div className="ncc-header" style={{ marginBottom: 24 }}>
           <h1 style={{ fontFamily: T.fontSerif, fontSize: 28, fontWeight: 600, color: T.ink, margin: 0 }}>Narrative Control Center</h1>
           <p style={{ fontSize: 14, color: T.slate, margin: '4px 0 0' }}>Continuity, arcs, world state, pipeline tracking, plot analysis</p>
         </div>
 
         {/* Tab bar */}
-        <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 24, padding: '4px', background: '#f5f3ee', borderRadius: 12 }}>
+        <div className="ncc-tab-bar" style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 24, padding: '4px', background: '#f5f3ee', borderRadius: 12 }}>
           {TABS.map(tab => (
             <button
               key={tab.key}
@@ -952,6 +1106,7 @@ export default function NarrativeControlCenter() {
         {activeTab === 'snapshots' && <SnapshotsTab />}
         {activeTab === 'threads' && <ThreadsTab />}
         {activeTab === 'plot-holes' && <PlotHolesTab />}
+        {activeTab === 'beats' && <BeatsTab />}
       </div>
     </div>
   );

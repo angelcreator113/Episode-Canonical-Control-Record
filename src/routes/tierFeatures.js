@@ -929,4 +929,203 @@ router.post('/dead-thread-detection', optionalAuth, async (req, res) => {
   }
 });
 
+// ═══════════════════════════════════════════════════════════════════════════
+// FEATURE 24 — NARRATIVE BEAT GENERATION FOR BOOKS/CHAPTERS
+// Story-level beats (not animation): inciting incident, rising action,
+// turning point, climax, resolution, etc.
+// ═══════════════════════════════════════════════════════════════════════════
+
+router.post('/generate-chapter-beats', optionalAuth, async (req, res) => {
+  try {
+    const { chapter_id, book_id, registry_id, chapter_number, chapter_title, scene_context } = req.body;
+    if (!book_id) return res.status(400).json({ error: 'book_id required' });
+
+    // Load book context
+    const book = await db.StorytellerBook.findByPk(book_id);
+    if (!book) return res.status(404).json({ error: 'Book not found' });
+
+    // Load existing chapters for arc awareness
+    const chapters = await db.StorytellerChapter.findAll({
+      where: { book_id },
+      order: [['chapter_number', 'ASC']],
+      attributes: ['id', 'title', 'chapter_number', 'scene_goal', 'emotional_state_start', 'emotional_state_end', 'theme', 'conflict'],
+    });
+
+    const chapterCtx = chapters.map(c =>
+      `Ch ${c.chapter_number}: "${c.title || 'Untitled'}" — goal: ${c.scene_goal || '?'}, emotion: ${c.emotional_state_start || '?'} → ${c.emotional_state_end || '?'}, conflict: ${c.conflict || '?'}`
+    ).join('\n');
+
+    // Load character context if available
+    let charCtx = '';
+    if (registry_id) {
+      const chars = await db.RegistryCharacter.findAll({
+        where: { registry_id },
+        attributes: ['display_name', 'character_key', 'core_desire', 'core_wound', 'role_type'],
+        limit: 10,
+      });
+      charCtx = chars.map(c => `${c.display_name || c.character_key} (${c.role_type}): desire="${c.core_desire || '?'}", wound="${c.core_wound || '?'}"`).join('\n');
+    }
+
+    // Load active threads for this book
+    let threadCtx = '';
+    try {
+      const threads = await db.StoryThread.findAll({
+        where: { book_id, status: 'active' },
+        attributes: ['thread_name', 'thread_type', 'tension_level'],
+      });
+      threadCtx = threads.map(t => `[${t.thread_type}] "${t.thread_name}" — tension: ${t.tension_level || '?'}/10`).join('\n');
+    } catch { /* table may not exist */ }
+
+    const totalChapters = chapters.length;
+    const currentPosition = chapter_number || (totalChapters + 1);
+    const arcPosition = totalChapters > 0 ? Math.round((currentPosition / Math.max(totalChapters, 1)) * 100) : 50;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4000,
+      system: `You are a narrative structure architect for literary fiction. Generate a beat sheet for a single chapter that serves the larger story arc. Return ONLY valid JSON.`,
+      messages: [{
+        role: 'user',
+        content: `BOOK: "${book.title || 'Untitled'}" by ${book.author_name || 'unknown'}
+Theme: ${book.theme || '?'} · Tone: ${book.tone || '?'} · POV: ${book.primary_pov || '?'}
+
+ARC POSITION: Chapter ${currentPosition} of ~${Math.max(totalChapters, currentPosition)} (${arcPosition}% through the story)
+
+EXISTING CHAPTERS:
+${chapterCtx || '(none yet — this is the first chapter)'}
+
+CHARACTERS:
+${charCtx || '(none loaded)'}
+
+ACTIVE THREADS:
+${threadCtx || '(none tracked)'}
+
+${scene_context ? `SCENE CONTEXT:\n${scene_context}` : ''}
+${chapter_title ? `CHAPTER TITLE: "${chapter_title}"` : ''}
+
+Generate 5-8 narrative beats for this chapter. Each beat is a story unit within the chapter — NOT an animation beat. Consider the arc position: early chapters need setup/promise; middle chapters need complication/reversal; late chapters need convergence/payoff.
+
+Return JSON:
+{
+  "chapter_arc_type": "setup|complication|reversal|escalation|convergence|climax|resolution|aftermath",
+  "beats": [
+    {
+      "beat_number": 1,
+      "beat_type": "opening_image|inciting_incident|rising_action|complication|turning_point|midpoint_shift|dark_moment|climax|falling_action|resolution|closing_image|cliffhanger",
+      "beat_name": "short descriptive name",
+      "description": "what happens in this beat (2-3 sentences)",
+      "emotional_arc": "what the POV character feels",
+      "characters_present": ["character_key"],
+      "tension_level": 0-10,
+      "threads_advanced": ["thread name if applicable"],
+      "scene_brief_seed": "1-2 sentence scene brief that could feed the 3-voice generator"
+    }
+  ],
+  "chapter_summary": "1 sentence summary of what this chapter accomplishes in the larger arc",
+  "emotional_trajectory": "start emotion → end emotion",
+  "recommended_word_count": "2000-4000 range estimate",
+  "pacing_note": "brief pacing guidance for this chapter"
+}`,
+      }],
+    });
+
+    let raw = response.content?.[0]?.text || '{}';
+    raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+    const result = JSON.parse(raw);
+
+    // Optionally save beats to chapter
+    if (chapter_id) {
+      await db.StorytellerChapter.update(
+        {
+          scene_goal: result.chapter_summary || null,
+          emotional_state_start: result.emotional_trajectory?.split('→')[0]?.trim() || null,
+          emotional_state_end: result.emotional_trajectory?.split('→')[1]?.trim() || null,
+          metadata: db.sequelize.literal(`COALESCE(metadata, '{}')::jsonb || '${JSON.stringify({ beat_sheet: result.beats, arc_type: result.chapter_arc_type })}'::jsonb`),
+        },
+        { where: { id: chapter_id } }
+      ).catch(() => {});
+    }
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[generate-chapter-beats]', err?.message);
+    return res.status(500).json({ error: err?.message || 'Beat generation failed' });
+  }
+});
+
+// Generate full book beat outline (macro arc)
+router.post('/generate-book-outline', optionalAuth, async (req, res) => {
+  try {
+    const { book_id, registry_id, target_chapters } = req.body;
+    if (!book_id) return res.status(400).json({ error: 'book_id required' });
+
+    const book = await db.StorytellerBook.findByPk(book_id);
+    if (!book) return res.status(404).json({ error: 'Book not found' });
+
+    let charCtx = '';
+    if (registry_id) {
+      const chars = await db.RegistryCharacter.findAll({
+        where: { registry_id },
+        attributes: ['display_name', 'character_key', 'core_desire', 'core_wound', 'role_type'],
+      });
+      charCtx = chars.map(c => `${c.display_name || c.character_key} (${c.role_type}): desire="${c.core_desire || '?'}", wound="${c.core_wound || '?'}"`).join('\n');
+    }
+
+    const numChapters = target_chapters || 20;
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 6000,
+      system: `You are a literary fiction story architect. Design a complete macro beat outline for a novel. Return ONLY valid JSON.`,
+      messages: [{
+        role: 'user',
+        content: `BOOK: "${book.title || 'Untitled'}"
+Theme: ${book.theme || '?'} · Tone: ${book.tone || '?'} · POV: ${book.primary_pov || '?'}
+Setting: ${book.setting || '?'} · Stakes: ${book.stakes || '?'}
+
+CHARACTERS:
+${charCtx || '(define characters first)'}
+
+TARGET: ${numChapters} chapters
+
+Generate a full macro beat outline. Use a 4-act structure (Setup, Confrontation, Complication, Resolution) with key structural beats.
+
+Return JSON:
+{
+  "acts": [
+    {
+      "act_number": 1,
+      "act_name": "Setup",
+      "chapters": [
+        {
+          "chapter_number": 1,
+          "suggested_title": "title",
+          "arc_type": "setup|complication|reversal|escalation|convergence|climax|resolution|aftermath",
+          "structural_beat": "opening_image|theme_stated|catalyst|debate|break_into_two|b_story|fun_and_games|midpoint|bad_guys_close_in|all_is_lost|dark_night|break_into_three|finale|final_image",
+          "summary": "what happens (2 sentences)",
+          "key_characters": ["character_key"],
+          "emotional_note": "the emotional register",
+          "threads_introduced": ["new thread"] or "threads_advanced": ["existing thread"]
+        }
+      ]
+    }
+  ],
+  "premise": "1-sentence premise",
+  "central_question": "the question the book answers",
+  "thematic_argument": "what the book argues about its theme"
+}`,
+      }],
+    });
+
+    let raw = response.content?.[0]?.text || '{}';
+    raw = raw.replace(/```json\s*/gi, '').replace(/```\s*/gi, '').trim();
+    const result = JSON.parse(raw);
+
+    return res.json({ success: true, ...result });
+  } catch (err) {
+    console.error('[generate-book-outline]', err?.message);
+    return res.status(500).json({ error: err?.message || 'Book outline generation failed' });
+  }
+});
+
 module.exports = router;

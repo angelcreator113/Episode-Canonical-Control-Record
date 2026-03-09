@@ -368,8 +368,22 @@ async function loadStoryMemoriesForScene(characterKeys, registryId) {
       }
     } catch { /* relationship_events table may not exist yet */ }
 
-    return sections.length || relEventSection
-      ? '\n\nSTORY MEMORY (accumulated knowledge — the AI MUST respect these established facts):\n' + sections.join('\n\n') + relEventSection
+    // Load social profiles linked to characters in scene (parasocial context)
+    let socialSection = '';
+    try {
+      const socialProfiles = await db.SocialProfile.findAll({
+        where: { registry_character_id: charIds, status: ['crossed', 'finalized'] },
+        attributes: ['handle', 'platform', 'parasocial_function', 'emotional_activation', 'current_trajectory', 'registry_character_id'],
+        limit: 5,
+      });
+      if (socialProfiles.length) {
+        socialSection = '\nSOCIAL MEDIA PRESENCE (parasocial dynamics in play):\n' +
+          socialProfiles.map(sp => `  • ${sp.handle} (${sp.platform}): ${sp.parasocial_function || ''} — activation: ${sp.emotional_activation || '?'}, trajectory: ${sp.current_trajectory || '?'}`).join('\n');
+      }
+    } catch { /* social_profiles table may not exist yet */ }
+
+    return sections.length || relEventSection || socialSection
+      ? '\n\nSTORY MEMORY (accumulated knowledge — the AI MUST respect these established facts):\n' + sections.join('\n\n') + relEventSection + socialSection
       : '';
   } catch (err) {
     console.error('[loadStoryMemoriesForScene] error:', err?.message);

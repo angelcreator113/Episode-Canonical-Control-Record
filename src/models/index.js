@@ -547,6 +547,15 @@ CharacterRelationship.hasMany(RelationshipEvent, {
   as: 'events',
 });
 
+// SocialProfile → RegistryCharacter association
+if (SocialProfile && SocialProfile.associate) {
+  SocialProfile.associate(requiredModels);
+}
+RegistryCharacter.hasMany(SocialProfile, {
+  foreignKey: 'registry_character_id',
+  as: 'socialProfiles',
+});
+
 console.log('✅ Model associations defined');
 
 /**

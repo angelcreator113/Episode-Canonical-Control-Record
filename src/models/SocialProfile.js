@@ -3,7 +3,14 @@ const { Model } = require('sequelize');
 
 module.exports = (sequelize, DataTypes) => {
   class SocialProfile extends Model {
-    static associate(models) {}
+    static associate(models) {
+      if (models.RegistryCharacter) {
+        SocialProfile.belongsTo(models.RegistryCharacter, {
+          foreignKey: 'registry_character_id',
+          as: 'registryCharacter',
+        });
+      }
+    }
   }
 
   SocialProfile.init({

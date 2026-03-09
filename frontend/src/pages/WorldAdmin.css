@@ -1,0 +1,83 @@
+/* WorldAdmin — Mobile-Responsive Breakpoints */
+
+/* ── Tablet: 768px ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .wa-page {
+    padding: 16px 12px !important;
+  }
+
+  .wa-header {
+    flex-direction: column !important;
+    gap: 8px;
+  }
+
+  .wa-header h1 {
+    font-size: 22px !important;
+  }
+
+  .wa-tab-bar {
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .wa-tab-bar button {
+    padding: 8px 12px !important;
+    font-size: 12px !important;
+  }
+
+  /* Collapse 4+ column grids to 2 columns */
+  .wa-grid-4col,
+  .wa-grid-5col {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+
+  /* Collapse 6-column grids to 3 columns */
+  .wa-grid-6col {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+
+  /* 3-column grids stay at 2 */
+  .wa-grid-3col {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+/* ── Small phone: 480px ─────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .wa-page {
+    padding: 12px 8px !important;
+  }
+
+  .wa-header h1 {
+    font-size: 20px !important;
+  }
+
+  .wa-tab-bar button {
+    padding: 6px 10px !important;
+    font-size: 11px !important;
+  }
+
+  /* Collapse all multi-column grids to single column */
+  .wa-grid-3col,
+  .wa-grid-4col,
+  .wa-grid-5col,
+  .wa-grid-6col {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* ── Tiny phone: 360px ──────────────────────────────────────────────── */
+@media (max-width: 360px) {
+  .wa-page {
+    padding: 8px 4px !important;
+  }
+
+  .wa-header h1 {
+    font-size: 18px !important;
+  }
+
+  .wa-tab-bar button {
+    padding: 5px 8px !important;
+    font-size: 10px !important;
+  }
+}
