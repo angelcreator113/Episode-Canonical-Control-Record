@@ -1048,6 +1048,15 @@ try {
   console.error('✗ Failed to load Novel Intelligence routes:', e.message);
 }
 
+// The Feed — Social Media Creator Profile Generator (Bulk)
+try {
+  const socialBulkRoutes = require('./routes/socialProfileBulkRoutes');
+  app.use('/api/v1/social-profiles/bulk', socialBulkRoutes);
+  console.log('✓ Social Profile Bulk routes loaded at /api/v1/social-profiles/bulk');
+} catch (e) {
+  console.error('✗ Failed to load Social Profile Bulk routes:', e.message);
+}
+
 // The Feed — Social Media Creator Profile Generator
 try {
   const socialProfileRoutes = require('./routes/socialProfileRoutes');

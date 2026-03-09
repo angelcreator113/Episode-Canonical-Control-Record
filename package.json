@@ -86,6 +86,7 @@
     "joi": "^18.0.2",
     "jsonwebtoken": "^9.0.2",
     "jwks-rsa": "^3.2.2",
+    "mammoth": "^1.11.0",
     "multer": "^2.1.1",
     "node-pg-migrate": "^8.0.4",
     "nodemailer": "^8.0.1",

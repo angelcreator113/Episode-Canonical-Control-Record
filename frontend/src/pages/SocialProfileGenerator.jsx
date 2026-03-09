@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import FeedBulkImport from '../components/FeedBulkImport';
 import './SocialProfileGenerator.css';
 
 const API = '/api/v1/social-profiles';
@@ -72,6 +73,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const [generating, setGenerating] = useState(false);
   const [error, setError]         = useState(null);
   const [filterStatus, setFilterStatus] = useState(null);
+  const [view, setView]           = useState('feed'); // 'feed' | 'bulk'
 
   // Spark form
   const [handle, setHandle]       = useState('');
@@ -155,6 +157,38 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     }
   };
 
+  // ── Edit ─────────────────────────────────────────────────────────────────
+  const editProfile = async (id, updates) => {
+    try {
+      const res = await fetch(`${API}/${id}`, {
+        method: 'PUT', headers: authHeaders(),
+        body: JSON.stringify(updates),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setProfiles(prev => prev.map(p => p.id === id ? data.profile : p));
+      if (selected?.id === id) setSelected(data.profile);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
+  // ── Delete ───────────────────────────────────────────────────────────────
+  const deleteProfile = async (id) => {
+    if (!window.confirm('Delete this profile permanently?')) return;
+    try {
+      const res = await fetch(`${API}/${id}`, {
+        method: 'DELETE', headers: authHeaders(),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setProfiles(prev => prev.filter(p => p.id !== id));
+      if (selected?.id === id) setSelected(null);
+    } catch (err) {
+      setError(err.message);
+    }
+  };
+
   // ── Computed ─────────────────────────────────────────────────────────────
   const stats = {
     total: profiles.length,
@@ -171,9 +205,20 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     <div className={`spg-page ${embedded ? 'spg-embedded' : ''}`}>
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="spg-header">
-        <div className="spg-header-title">📱 The Feed</div>
-        <div className="spg-header-sub">
-          Parasocial Creator Profiles — The online world JustAWoman moves through
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div className="spg-header-title">📱 The Feed</div>
+            <div className="spg-header-sub">
+              Parasocial Creator Profiles — The online world JustAWoman moves through
+            </div>
+          </div>
+          <button
+            className="spg-btn"
+            style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+            onClick={() => setView(view === 'feed' ? 'bulk' : 'feed')}
+          >
+            {view === 'feed' ? '⊞ Bulk Import' : '← Back to Feed'}
+          </button>
         </div>
         <div className="spg-header-stats">
           <div className="spg-stat">
@@ -191,8 +236,13 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
         </div>
       </div>
 
+      {/* ── Bulk Import View ─────────────────────────────────── */}
+      {view === 'bulk' && (
+        <FeedBulkImport onDone={() => { setView('feed'); loadProfiles(); }} />
+      )}
+
       {/* ── Spark Form ──────────────────────────────────────────── */}
-      <div className="spg-spark-form">
+      {view === 'feed' && <div className="spg-spark-form">
         <div className="spg-spark-title">✦ New Creator Spark</div>
         <div className="spg-spark-row">
           <div className="spg-field">
@@ -238,10 +288,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           </button>
         </div>
         {error && <div style={{ color: 'var(--red)', marginTop: 8, fontSize: '0.82rem' }}>{error}</div>}
-      </div>
+      </div>}
 
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div className="spg-content">
+      {view === 'feed' && <div className="spg-content">
         {/* Filters */}
         <div className="spg-filters" style={{ marginBottom: 4 }}>
           {[null, 'generated', 'finalized', 'crossed', 'archived'].map(s => (
@@ -328,8 +378,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           onClose={() => setSelected(null)}
           onFinalize={finalizeProfile}
           onCross={crossProfile}
+          onEdit={editProfile}
+          onDelete={deleteProfile}
         />}
-      </div>
+      </div>}
     </div>
   );
 }
@@ -337,11 +389,54 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 /* ════════════════════════════════════════════════════════════════════════════ */
 /* Detail Panel Sub-component                                                 */
 /* ════════════════════════════════════════════════════════════════════════════ */
-function DetailPanel({ profile, fp, onClose, onFinalize, onCross }) {
+function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDelete }) {
   const p = profile;
   const d = fp;
   const score = p.lala_relevance_score ?? d.lala_relevance_score ?? 0;
   const cls = lalaClass(score);
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState({});
+
+  const startEdit = () => {
+    setDraft({
+      handle: p.handle || '',
+      display_name: p.display_name || d.display_name || '',
+      platform: p.platform || '',
+      vibe_sentence: p.vibe_sentence || '',
+      content_persona: p.content_persona || d.content_persona || '',
+      real_signal: p.real_signal || d.real_signal || '',
+      posting_voice: p.posting_voice || d.posting_voice || '',
+      comment_energy: p.comment_energy || d.comment_energy || '',
+      parasocial_function: p.parasocial_function || d.parasocial_function || '',
+      emotional_activation: d.emotional_activation || p.emotional_activation || '',
+      watch_reason: d.watch_reason || p.watch_reason || '',
+      what_it_costs_her: d.what_it_costs_her || p.what_it_costs_her || '',
+      current_trajectory: p.current_trajectory || d.current_trajectory || '',
+      trajectory_detail: p.trajectory_detail || d.trajectory_detail || '',
+      pinned_post: p.pinned_post || d.pinned_post || '',
+    });
+    setEditing(true);
+  };
+
+  const saveEdit = async () => {
+    await onEdit(p.id, draft);
+    setEditing(false);
+  };
+
+  const field = (label, key, textarea) => {
+    if (!editing) return null;
+    return (
+      <div style={{ marginBottom: 10 }}>
+        <div className="spg-section-label">{label}</div>
+        {textarea ? (
+          <textarea className="spg-input" rows={3} value={draft[key] || ''} onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))} style={{ width: '100%', resize: 'vertical' }} />
+        ) : (
+          <input className="spg-input" value={draft[key] || ''} onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))} style={{ width: '100%' }} />
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="spg-detail">
@@ -356,26 +451,61 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross }) {
           {p.adult_content_present && <span className="spg-adult-badge">18+ Content</span>}
         </div>
         <div className="spg-detail-actions">
-          {p.status === 'generated' && (
-            <button className="spg-btn spg-btn-sm spg-btn-green" onClick={() => onFinalize(p.id)}>
-              ✓ Finalize
-            </button>
-          )}
-          {(p.status === 'finalized') && (
-            <button className="spg-btn spg-btn-sm spg-btn-purple" onClick={() => onCross(p.id)}>
-              ⚡ Cross Into World
-            </button>
-          )}
-          {p.status === 'crossed' && (
-            <span className="spg-btn spg-btn-sm spg-btn-outline" style={{ cursor: 'default' }}>
-              ✦ Crossed {p.crossed_at ? `on ${new Date(p.crossed_at).toLocaleDateString()}` : ''}
-            </span>
+          {editing ? (
+            <>
+              <button className="spg-btn spg-btn-sm spg-btn-green" onClick={saveEdit}>✓ Save</button>
+              <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={() => setEditing(false)}>Cancel</button>
+            </>
+          ) : (
+            <>
+              {p.status === 'generated' && (
+                <button className="spg-btn spg-btn-sm spg-btn-green" onClick={() => onFinalize(p.id)}>
+                  ✓ Finalize
+                </button>
+              )}
+              {(p.status === 'finalized') && (
+                <button className="spg-btn spg-btn-sm spg-btn-purple" onClick={() => onCross(p.id)}>
+                  ⚡ Cross Into World
+                </button>
+              )}
+              {p.status === 'crossed' && (
+                <span className="spg-btn spg-btn-sm spg-btn-outline" style={{ cursor: 'default' }}>
+                  ✦ Crossed {p.crossed_at ? `on ${new Date(p.crossed_at).toLocaleDateString()}` : ''}
+                </span>
+              )}
+              <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={startEdit}>✎ Edit</button>
+              <button className="spg-btn spg-btn-sm" onClick={() => onDelete(p.id)} style={{ color: 'var(--red, #c45858)' }}>✕ Delete</button>
+            </>
           )}
         </div>
       </div>
 
       <div className="spg-detail-body">
-        <div className="spg-detail-grid">
+        {/* Edit form for core fields */}
+        {editing && (
+          <div className="spg-section" style={{ marginBottom: 20, padding: 16, background: 'var(--surface-alt, #f4f3f7)', borderRadius: 10 }}>
+            <div className="spg-section-title" style={{ marginBottom: 12 }}>Edit Profile</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 16px' }}>
+              {field('Handle', 'handle')}
+              {field('Display Name', 'display_name')}
+              {field('Platform', 'platform')}
+              {field('Vibe Sentence', 'vibe_sentence')}
+            </div>
+            {field('Content Persona', 'content_persona', true)}
+            {field('Real Signal', 'real_signal', true)}
+            {field('Posting Voice', 'posting_voice', true)}
+            {field('Comment Energy', 'comment_energy', true)}
+            {field('Parasocial Function', 'parasocial_function', true)}
+            {field('Emotional Activation', 'emotional_activation', true)}
+            {field('Why She Watches', 'watch_reason', true)}
+            {field('What It Costs Her', 'what_it_costs_her', true)}
+            {field('Trajectory', 'current_trajectory')}
+            {field('Trajectory Detail', 'trajectory_detail', true)}
+            {field('Pinned Post', 'pinned_post', true)}
+          </div>
+        )}
+
+        {!editing && <div className="spg-detail-grid">
           {/* Left column */}
           <div>
             <div className="spg-section">
@@ -449,7 +579,7 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross }) {
               </div>
             </div>
           </div>
-        </div>
+        </div>}
 
         {/* Pinned Post */}
         {(p.pinned_post || d.pinned_post) && (

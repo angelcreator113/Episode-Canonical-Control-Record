@@ -380,22 +380,7 @@ export default function WorldStudio() {
           <div className="ws-header-sub">{curWorld.icon} {curWorld.label}</div>
         </div>
 
-        <div className="ws-tab-bar">
-          {[
-            { key: 'characters', label: 'Characters', count: characters.length },
-            { key: 'registry',   label: 'Registry',   count: regChars.length },
-            { key: 'feed',       label: 'The Feed',    count: null },
-          ].map(t => (
-            <button
-              key={t.key}
-              className={`ws-tab ${tab === t.key ? 'ws-tab-active' : ''}`}
-              onClick={() => setTab(t.key)}
-            >
-              {t.label}
-              <span className="ws-tab-count">{t.count}</span>
-            </button>
-          ))}
-        </div>
+
 
         {/* World Picker */}
         <div className="ws-world-picker">
@@ -427,11 +412,7 @@ export default function WorldStudio() {
               </button>
             </>
           )}
-          {tab === 'registry' && (
-            <button className="ws-btn ws-btn-outline" onClick={() => navigate('/character-registry')}>
-              Open Full Registry →
-            </button>
-          )}
+
         </div>
       </header>
 
@@ -466,10 +447,7 @@ export default function WorldStudio() {
           </span>
           <span className="ws-stat-label">† Deceased</span>
         </div>
-        <div className="ws-stat">
-          <span className="ws-stat-value ws-stat-value-teal">{regChars.length}</span>
-          <span className="ws-stat-label">PNOS Registry</span>
-        </div>
+
       </div>
 
       {/* ── BODY ────────────────────────────────────────────────────── */}
@@ -477,9 +455,7 @@ export default function WorldStudio() {
 
         {/* ═══ SIDEBAR ════════════════════════════════════════════════ */}
         <aside className="ws-sidebar">
-          <div className="ws-sidebar-title">
-            {tab === 'characters' ? 'Characters' : tab === 'registry' ? 'Registry' : 'The Feed'}
-          </div>
+          <div className="ws-sidebar-title">Characters</div>
 
           {/* Characters sidebar */}
           {tab === 'characters' && (
@@ -543,62 +519,7 @@ export default function WorldStudio() {
             </>
           )}
 
-          {/* Registry sidebar */}
-          {tab === 'registry' && (
-            <>
-              <input
-                className="ws-sidebar-search"
-                placeholder="Search registry…"
-                value={regSearch}
-                onChange={e => setRegSearch(e.target.value)}
-              />
-              <div className="ws-filter-row">
-                {['all', 'protagonist', 'pressure', 'mirror', 'support', 'shadow', 'special'].map(r => (
-                  <button
-                    key={r}
-                    className={`ws-filter-pill ${regRoleFilter === r ? 'ws-filter-pill-active' : ''}`}
-                    onClick={() => setRegRoleFilter(r)}
-                  >
-                    {r === 'all' ? 'All' : (ROLE_LABELS[r] || r)}
-                  </button>
-                ))}
-              </div>
 
-              {registries.length > 1 && (
-                <select
-                  className="ws-select"
-                  value={activeRegId || ''}
-                  onChange={e => setActiveRegId(e.target.value)}
-                  style={{ width: '100%', marginBottom: 10 }}
-                >
-                  {registries.map(r => (
-                    <option key={r.id} value={r.id}>{r.name || r.title || r.book_tag}</option>
-                  ))}
-                </select>
-              )}
-
-              {filteredReg.map(ch => (
-                <div
-                  key={ch.id}
-                  className={`ws-char-card ${selectedRegChar?.id === ch.id ? 'ws-char-card-selected' : ''}`}
-                  onClick={() => setSelectedRegChar(ch)}
-                >
-                  <div className="ws-char-card-top">
-                    <span className="ws-char-card-intimate">{ROLE_ICONS[ch.role_type] || '✦'}</span>
-                    <span className="ws-char-card-name">{ch.selected_name || ch.display_name}</span>
-                    {ch.status === 'finalized' && ch.world_exists && (
-                      <Badge cls="ws-badge-protagonist">Canon</Badge>
-                    )}
-                  </div>
-                  <div className="ws-char-card-badges">
-                    <Badge cls={ROLE_BADGE_CLASS[ch.role_type] || ''}>{ROLE_LABELS[ch.role_type] || ch.role_type}</Badge>
-                    <Badge cls={ch.status === 'finalized' ? 'ws-badge-approved' : 'ws-badge-draft'}>{ch.status}</Badge>
-                    {ch.appearance_mode && <Badge cls="">{ch.appearance_mode}</Badge>}
-                  </div>
-                </div>
-              ))}
-            </>
-          )}
         </aside>
 
         {/* ═══ MAIN CANVAS ════════════════════════════════════════════ */}
@@ -989,13 +910,8 @@ export default function WorldStudio() {
             </div>
           )}
 
-          {/* Feed tab */}
-          {tab === 'feed' && (
-            <SocialProfileGenerator embedded worldTag={worldTag} />
-          )}
-
-          {/* Registry tab: read-only */}
-          {tab === 'registry' && (
+          {/* Registry tab removed — now at /character-registry */}
+          {false && (
             <div>
               <div className="ws-registry-header">
                 <div>
