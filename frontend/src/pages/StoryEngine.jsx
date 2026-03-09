@@ -1297,7 +1297,7 @@ export default function StoryEngine() {
         .map((n) => ({
           number: n,
           title: stories[n]?.title || `Story ${n}`,
-          summary: stories[n]?.text?.slice(0, 200) || '',
+          summary: stories[n]?.text?.slice(0, 800) || '',
         }));
 
       const res = await fetch(`${API_BASE}/memories/generate-story`, {
