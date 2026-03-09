@@ -98,10 +98,10 @@ ${text.slice(0, 20000)}`,
           }],
         });
 
-        const content = aiExtraction.content[0].text;
+        const content = aiExtraction.content[0].text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
         const match = content.match(/\[[\s\S]*\]/);
         if (match) {
-          const aiCreators = JSON.parse(match[0]);
+          const aiCreators = JSON.parse(match[0].replace(/,\s*([\]}])/g, '$1'));
           creators.push(...aiCreators.map(c => ({
             ...c,
             platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
@@ -189,10 +189,10 @@ ${chunks[i]}`,
           }],
         });
 
-        const content = extraction.content[0].text;
+        const content = extraction.content[0].text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
         const match = content.match(/\[[\s\S]*\]/);
         if (match) {
-          let chunkCreators = JSON.parse(match[0]);
+          let chunkCreators = JSON.parse(match[0].replace(/,\s*([\]}])/g, '$1'));
           chunkCreators = chunkCreators.map(c => ({
             ...c,
             platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
@@ -245,7 +245,10 @@ router.post('/generate', optionalAuth, async (req, res) => {
     const db = getModels();
     const results = [];
 
-    for (const c of creators) {
+    for (let idx = 0; idx < creators.length; idx++) {
+      const c = creators[idx];
+      // Small delay between AI calls to avoid rate limiting
+      if (idx > 0) await new Promise(r => setTimeout(r, 1000));
       try {
         const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence);
         const aiRes = await client.messages.create({
@@ -255,47 +258,73 @@ router.post('/generate', optionalAuth, async (req, res) => {
         });
 
         const text = aiRes.content[0].text;
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        // Strip markdown fences, then extract the JSON object
+        const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('AI did not return valid JSON');
 
-        const profile = JSON.parse(jsonMatch[0]);
+        // Fix common AI JSON quirks: trailing commas before } or ]
+        const fixedJson = jsonMatch[0]
+          .replace(/,\s*([\]}])/g, '$1');
 
-        // Save to DB if available
+        let profile;
+        try {
+          profile = JSON.parse(fixedJson);
+        } catch (parseErr) {
+          console.error(`JSON parse failed for @${c.handle}:`, parseErr.message, '\nRaw excerpt:', fixedJson.slice(0, 300));
+          throw new Error(`Profile JSON parse failed: ${parseErr.message}`);
+        }
+
+        // Save to DB — use findOrCreate to prevent duplicates on retry
         let saved = null;
         if (db && db.SocialProfile) {
-          saved = await db.SocialProfile.create({
-            handle: c.handle,
-            platform: c.platform,
-            vibe_sentence: c.vibe_sentence,
-            display_name: profile.display_name,
-            archetype: profile.archetype,
-            content_persona: profile.content_persona,
-            real_signal: profile.real_signal,
-            posting_voice: profile.posting_voice,
-            comment_energy: profile.comment_energy,
-            follower_count_approx: profile.follower_count_approx,
-            parasocial_function: profile.parasocial_function,
-            emotional_activation: profile.emotional_activation,
-            watch_reason: profile.watch_reason,
-            what_it_costs_her: profile.what_it_costs_her,
-            current_trajectory: profile.current_trajectory,
-            trajectory_detail: profile.trajectory_detail,
-            lala_relevance_score: profile.lala_relevance_score,
-            lala_relevance_reason: profile.lala_relevance_reason,
-            pinned_post: profile.pinned_post,
-            sample_captions: profile.sample_captions,
-            sample_comments: profile.sample_comments,
-            adult_content_present: profile.adult_content_present || false,
-            adult_content_type: profile.adult_content_type,
-            adult_content_framing: profile.adult_content_framing,
-            crossing_trigger: profile.crossing_trigger,
-            crossing_mechanism: profile.crossing_mechanism,
-            book_relevance: profile.book_relevance,
-            moment_log: profile.moment_log || [],
-            full_profile: profile,
-            status: 'generated',
-            series_id: series_id || null,
+          const [record, created] = await db.SocialProfile.findOrCreate({
+            where: { handle: c.handle, platform: c.platform },
+            defaults: {
+              vibe_sentence: c.vibe_sentence,
+              display_name: profile.display_name,
+              archetype: profile.archetype,
+              content_persona: profile.content_persona,
+              real_signal: profile.real_signal,
+              posting_voice: profile.posting_voice,
+              comment_energy: profile.comment_energy,
+              follower_count_approx: profile.follower_count_approx,
+              parasocial_function: profile.parasocial_function,
+              emotional_activation: profile.emotional_activation,
+              watch_reason: profile.watch_reason,
+              what_it_costs_her: profile.what_it_costs_her,
+              current_trajectory: profile.current_trajectory,
+              trajectory_detail: profile.trajectory_detail,
+              lala_relevance_score: profile.lala_relevance_score,
+              lala_relevance_reason: profile.lala_relevance_reason,
+              pinned_post: profile.pinned_post,
+              sample_captions: profile.sample_captions,
+              sample_comments: profile.sample_comments,
+              adult_content_present: profile.adult_content_present || false,
+              adult_content_type: profile.adult_content_type,
+              adult_content_framing: profile.adult_content_framing,
+              crossing_trigger: profile.crossing_trigger,
+              crossing_mechanism: profile.crossing_mechanism,
+              book_relevance: profile.book_relevance,
+              moment_log: profile.moment_log || [],
+              full_profile: profile,
+              status: 'generated',
+              series_id: series_id || null,
+            },
           });
+          saved = record;
+          if (!created) {
+            // Already exists — update with fresh AI data
+            await record.update({
+              vibe_sentence: c.vibe_sentence,
+              display_name: profile.display_name,
+              archetype: profile.archetype,
+              content_persona: profile.content_persona,
+              full_profile: profile,
+              lala_relevance_score: profile.lala_relevance_score,
+              status: 'generated',
+            });
+          }
         }
 
         results.push({

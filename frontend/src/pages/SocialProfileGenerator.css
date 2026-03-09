@@ -243,11 +243,21 @@ select.spg-input {
   transition: all 0.15s;
   box-shadow: 0 2px 8px rgba(45, 34, 50, 0.05);
   position: relative;
+  -webkit-tap-highlight-color: rgba(201, 168, 76, 0.15);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-user-select: none;
 }
-.spg-card:hover {
+@media (hover: hover) {
+  .spg-card:hover {
+    border-color: var(--gold);
+    box-shadow: 0 4px 16px rgba(201, 168, 76, 0.12);
+    transform: translateY(-1px);
+  }
+}
+.spg-card:active {
   border-color: var(--gold);
   box-shadow: 0 4px 16px rgba(201, 168, 76, 0.12);
-  transform: translateY(-1px);
 }
 .spg-card-active {
   border-color: var(--gold);
