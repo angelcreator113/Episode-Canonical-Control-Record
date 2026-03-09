@@ -30,6 +30,39 @@ else
   echo "   Copy .env.production.template to $ENV_FILE and fill in production values"
 fi
 
+# ── Disk cleanup: free space before anything else ─────────────────────────────
+echo "🧹 Checking disk space..."
+df -h / | tail -1
+AVAIL_KB=$(df / | tail -1 | awk '{print $4}')
+if [ "$AVAIL_KB" -lt 1048576 ] 2>/dev/null; then
+  echo "⚠️  Low disk space detected — cleaning up..."
+  # Remove old nvm node versions (keep only 20)
+  if [ -d "$HOME/.nvm/versions/node" ]; then
+    for dir in $HOME/.nvm/versions/node/v*; do
+      case "$dir" in *v20*) continue ;; esac
+      echo "  Removing old node: $(basename $dir)"
+      rm -rf "$dir"
+    done
+  fi
+  # Clear npm cache
+  npm cache clean --force 2>/dev/null || true
+  # Clear nvm source cache
+  rm -rf "$HOME/.nvm/.cache" 2>/dev/null || true
+  # Remove old PM2 logs
+  rm -rf "$HOME/.pm2/logs/"*.log 2>/dev/null || true
+  # Remove old deploy staging artifacts
+  rm -rf /home/ubuntu/episode-metadata-deploy/* 2>/dev/null || true
+  # Clear apt cache
+  sudo apt-get clean 2>/dev/null || true
+  sudo rm -rf /var/lib/apt/lists/* 2>/dev/null || true
+  # Remove old journal logs (keep 50MB)
+  sudo journalctl --vacuum-size=50M 2>/dev/null || true
+  # Remove tmp files older than 2 days
+  sudo find /tmp -type f -mtime +2 -delete 2>/dev/null || true
+  echo "✓ Cleanup complete"
+  df -h / | tail -1
+fi
+
 # Load NVM and Node.js environment
 export NVM_DIR="$HOME/.nvm"
 [ -s "$NVM_DIR/nvm.sh" ] && \. "$NVM_DIR/nvm.sh"
@@ -90,8 +123,8 @@ npm ci
 echo "🎨 Building frontend..."
 cd frontend
 echo "Removing old build artifacts and clearing all caches..."
-rm -rf dist node_modules .vite .env.local .env.production.local .env.development.local
-rm -rf ~/.pm2/logs/* ~/.pm2/.pm2 2>/dev/null || true
+rm -rf dist .vite .env.local .env.production.local .env.development.local
+rm -rf ~/.pm2/logs/* 2>/dev/null || true
 echo "Installing frontend dependencies..."
 npm ci 2>&1 | tail -20
 echo "Running Vite build with production config..."
