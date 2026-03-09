@@ -435,7 +435,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
               </div>
             )}
           </div>
-        )
+        )}
 
         {error && (
           <div style={{ padding: '12px 14px', background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: '2px', fontSize: '13px', color: C.red, fontFamily: 'system-ui', marginBottom: '20px' }}>
