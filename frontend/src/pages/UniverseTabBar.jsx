@@ -36,7 +36,7 @@ export default function UniverseTabBar({ activeTab, onChange }) {
   const isStoryTab = STORY_TABS.some(t => t.key === activeTab);
 
   return (
-    <div style={{
+    <div className="utb-bar" style={{
       display: 'flex',
       alignItems: 'center',
       borderBottom: '1px solid #e0d9ce',
@@ -45,14 +45,14 @@ export default function UniverseTabBar({ activeTab, onChange }) {
       gap: '0',
     }}>
       {/* Show cluster */}
-      <div style={{ display: 'flex' }}>
+      <div className="utb-cluster" style={{ display: 'flex' }}>
         {SHOW_TABS.map(tab => (
           <Tab key={tab.key} tab={tab} active={activeTab === tab.key} onClick={() => onChange(tab.key)} />
         ))}
       </div>
 
       {/* Divider */}
-      <div style={{
+      <div className="utb-divider" style={{
         width: '1px',
         height: '20px',
         background: '#e0d9ce',
@@ -61,7 +61,7 @@ export default function UniverseTabBar({ activeTab, onChange }) {
       }} />
 
       {/* Story cluster */}
-      <div style={{ display: 'flex' }}>
+      <div className="utb-cluster" style={{ display: 'flex' }}>
         {STORY_TABS.map(tab => (
           <Tab key={tab.key} tab={tab} active={activeTab === tab.key} onClick={() => onChange(tab.key)} isStory />
         ))}
@@ -74,6 +74,7 @@ function Tab({ tab, active, onClick, isStory }) {
   const activeColor = isStory ? '#b8863e' : '#1a1714';
   return (
     <button
+      className="utb-tab"
       onClick={onClick}
       style={{
         background: 'none',
@@ -93,8 +94,8 @@ function Tab({ tab, active, onClick, isStory }) {
         fontWeight: active ? '600' : '400',
       }}
     >
-      <span style={{ fontSize: '10px', opacity: active ? 1 : 0.6 }}>{tab.icon}</span>
-      {tab.label}
+      <span className="utb-tab-icon" style={{ fontSize: '10px', opacity: active ? 1 : 0.6 }}>{tab.icon}</span>
+      <span className="utb-tab-label">{tab.label}</span>
     </button>
   );
 }
