@@ -142,11 +142,12 @@ export default function FeedBulkImport({ onDone, seriesId }) {
     setProgress({ done: 0, total, results: [] });
 
     try {
+      const totalBatches = Math.ceil(total / BATCH_SIZE);
       for (let i = 0; i < total; i += BATCH_SIZE) {
         const batch = candidates.slice(i, i + BATCH_SIZE);
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
-        const totalBatches = Math.ceil(total / BATCH_SIZE);
 
+        setProgress({ done: allResults.length, total, batchNum, totalBatches, results: [...allResults] });
         try {
           const res = await fetch(`${API}/bulk/generate`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -248,8 +249,8 @@ export default function FeedBulkImport({ onDone, seriesId }) {
               </div>
               <div style={{ fontSize: '12px', color: C.textDim, marginTop: '10px' }}>
                 {progress.done} of {progress.total} done
-                {progress.total > 25 && (
-                  <span> — batch {Math.min(Math.floor(progress.done / 25) + 1, Math.ceil(progress.total / 25))} of {Math.ceil(progress.total / 25)}</span>
+                {progress.batchNum && progress.totalBatches > 1 && (
+                  <span> — batch {progress.batchNum} of {progress.totalBatches}</span>
                 )}
               </div>
             </div>
