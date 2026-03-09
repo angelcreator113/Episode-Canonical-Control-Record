@@ -117,6 +117,9 @@
   .spg-spark-row {
     grid-template-columns: 1fr;
   }
+  .spg-grid {
+    grid-template-columns: 1fr;
+  }
 }
 .spg-field {
   display: flex;

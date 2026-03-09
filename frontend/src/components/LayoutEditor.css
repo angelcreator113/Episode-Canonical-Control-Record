@@ -360,9 +360,14 @@
 }
 
 @media (max-width: 768px) {
+  .layout-editor {
+    min-height: auto;
+  }
+
   .layout-editor__toolbar {
     flex-direction: column;
     align-items: stretch;
+    padding: 1rem;
   }
 
   .layout-editor__toolbar-actions {
