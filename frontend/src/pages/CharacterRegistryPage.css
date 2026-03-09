@@ -2240,16 +2240,55 @@
 }
 
 
-/* ── Stats strip: 2×2 grid on small mobile ── */
+/* ── Stats strip: wrap on small mobile ── */
 @media (max-width: 480px) {
   .cr-stats-strip {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    padding: 10px 12px;
   }
 
   .cr-stat-item {
+    padding: 2px 0;
+  }
+
+  .cr-stat-count {
+    font-size: 18px;
+  }
+
+  .cr-stat-label {
+    font-size: 10px;
+  }
+
+  .cr-stat-sort {
+    margin-left: 0;
+    width: 100%;
+    order: 10;
+  }
+
+  .cr-sort-select {
+    width: 100%;
+    padding: 8px 10px;
+  }
+
+  .cr-card-size-toggle {
+    order: 11;
+  }
+
+  .cr-stat-actions {
+    order: 12;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .cr-stat-actions .cr-btn-outline {
+    flex: 1 1 auto;
+    padding: 7px 10px;
+    font-size: 12px;
+    text-align: center;
     justify-content: center;
-    padding: 4px 0;
   }
 }
 
