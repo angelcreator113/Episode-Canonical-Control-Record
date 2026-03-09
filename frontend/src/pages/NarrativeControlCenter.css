@@ -1,0 +1,89 @@
+/* NarrativeControlCenter — Mobile-Responsive Breakpoints */
+
+/* ── Tablet: 768px ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .ncc-page {
+    padding: 16px 12px !important;
+  }
+
+  .ncc-header h1 {
+    font-size: 22px !important;
+  }
+
+  .ncc-tab-bar {
+    overflow-x: auto;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 2px !important;
+    padding: 3px !important;
+  }
+
+  .ncc-tab-bar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .ncc-tab-bar button {
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding: 6px 10px !important;
+    font-size: 12px !important;
+  }
+
+  .ncc-beats-inputs {
+    flex-direction: column !important;
+  }
+
+  .ncc-beats-inputs > div {
+    flex: 1 1 100% !important;
+  }
+}
+
+/* ── Small phone: 480px ─────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .ncc-page {
+    padding: 12px 8px !important;
+  }
+
+  .ncc-header h1 {
+    font-size: 20px !important;
+  }
+
+  .ncc-header p {
+    font-size: 12px !important;
+  }
+
+  .ncc-tab-bar button {
+    padding: 5px 8px !important;
+    font-size: 11px !important;
+  }
+
+  .ncc-beats-mode {
+    flex-direction: column !important;
+  }
+
+  .ncc-beats-mode button {
+    width: 100%;
+  }
+
+  .ncc-beat-card > div:first-child {
+    flex-direction: column !important;
+    align-items: flex-start !important;
+  }
+}
+
+/* ── Tiny phone: 360px ──────────────────────────────────────────────── */
+@media (max-width: 360px) {
+  .ncc-page {
+    padding: 8px 4px !important;
+  }
+
+  .ncc-header h1 {
+    font-size: 18px !important;
+  }
+
+  .ncc-tab-bar button {
+    padding: 4px 6px !important;
+    font-size: 10px !important;
+  }
+}

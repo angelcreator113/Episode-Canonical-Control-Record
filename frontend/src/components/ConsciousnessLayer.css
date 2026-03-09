@@ -521,6 +521,12 @@
   gap: 14px;
 }
 
+@media (max-width: 768px) {
+  .cl-triggers-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .cl-trigger-card {
   background: var(--cl-surface);
   border: 1px solid var(--cl-border);
@@ -579,6 +585,13 @@
   border: 1px solid var(--cl-border);
   border-radius: 6px;
   overflow: hidden;
+}
+
+@media (max-width: 768px) {
+  .cl-interview {
+    height: auto;
+    max-height: 70vh;
+  }
 }
 
 .cl-interview-header {
