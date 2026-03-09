@@ -429,9 +429,11 @@ export default function CharacterRegistryPage() {
       } else {
         newState = generateFallbackState(character);
       }
-      const updated = { ...livingStates, [charId]: newState };
-      setLivingStates(updated);
-      localStorage.setItem('wv_living_states', JSON.stringify(updated));
+      setLivingStates(prev => {
+        const updated = { ...prev, [charId]: newState };
+        localStorage.setItem('wv_living_states', JSON.stringify(updated));
+        return updated;
+      });
       // Persist to DB via evolution_tracking
       try {
         await fetch(`${API}/characters/${charId}`, {
@@ -442,9 +444,11 @@ export default function CharacterRegistryPage() {
       } catch { /* non-critical */ }
     } catch {
       const newState = generateFallbackState(character);
-      const updated = { ...livingStates, [charId]: newState };
-      setLivingStates(updated);
-      localStorage.setItem('wv_living_states', JSON.stringify(updated));
+      setLivingStates(prev => {
+        const updated = { ...prev, [charId]: newState };
+        localStorage.setItem('wv_living_states', JSON.stringify(updated));
+        return updated;
+      });
       // Persist fallback to DB too
       try {
         await fetch(`${API}/characters/${charId}`, {
@@ -456,7 +460,7 @@ export default function CharacterRegistryPage() {
     } finally {
       setGeneratingId(null);
     }
-  }, [allCharacters, activeRegistry, livingStates]);
+  }, [allCharacters, activeRegistry]);
 
   const confirmState = useCallback((charId) => {
     setLivingStates(prev => {
