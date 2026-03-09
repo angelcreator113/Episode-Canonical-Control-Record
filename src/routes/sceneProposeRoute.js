@@ -188,7 +188,16 @@ async function readCharacterContext(registryId) {
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/propose-scene', optionalAuth, async (req, res) => {
   const { chapter_id, registry_id, force_scene_type, author_note } = req.body;
-  const book_id = req.body.book_id || (registry_id ? undefined : 'book-1');
+
+  // Resolve book_id — must be a valid UUID or null
+  let book_id = req.body.book_id || null;
+  if (book_id && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(book_id)) {
+    // Not a valid UUID — look up the first book instead
+    try {
+      const firstBook = await db.StorytellerBook.findOne({ order: [['created_at', 'ASC']] });
+      book_id = firstBook ? firstBook.id : null;
+    } catch { book_id = null; }
+  }
 
   try {
     // ── 1. Calculate arc stage ──────────────────────────────────────────────
@@ -198,9 +207,9 @@ router.post('/propose-scene', optionalAuth, async (req, res) => {
     const context = await readCharacterContext(registry_id);
 
     // ── 3. Check for lala_seed — only once ─────────────────────────────────
-    const existingLalaSeed = await db.SceneProposal.findOne({
-      where: { book_id, scene_type: 'lala_seed', status: { [Op.in]: ['accepted', 'generated'] } },
-    });
+    const lalaSeedWhere = { scene_type: 'lala_seed', status: { [Op.in]: ['accepted', 'generated'] } };
+    if (book_id) lalaSeedWhere.book_id = book_id;
+    const existingLalaSeed = await db.SceneProposal.findOne({ where: lalaSeedWhere });
     const lalaAlreadyBorn = !!existingLalaSeed;
 
     // ── 4. Build the proposal prompt ────────────────────────────────────────
