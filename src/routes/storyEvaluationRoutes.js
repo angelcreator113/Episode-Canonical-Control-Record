@@ -419,15 +419,9 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
       characters_in_scene: characters_in_scene || [], charBlocks: fullCharBlocks,
     });
 
-    // Send keep-alive headers for long generation
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-cache');
-    const keepAlive = setInterval(() => {
-      try { res.write(' '); } catch (_) { /* ignore */ }
-    }, 15000);
-
     // Generate all 3 voices in parallel (blind — each voice doesn't see the others)
     // Each voice gets its own 2 tones from the full palette of 6
+    req.setTimeout(300000); // 5 min for long AI generation
     const [resultA, resultB, resultC] = await Promise.all([
       anthropic.messages.create({
         model: 'claude-3-haiku-20240307',
@@ -448,8 +442,6 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
         messages: [{ role: 'user', content: promptC }],
       }),
     ]);
-
-    clearInterval(keepAlive);
 
     const storyA = resultA.content?.[0]?.text || '';
     const storyB = resultB.content?.[0]?.text || '';
@@ -475,7 +467,7 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
 
     const wordCount = (t) => (t || '').split(/\s+/).filter(Boolean).length;
 
-    return res.end(JSON.stringify({
+    return res.json({
       success: true,
       story_id: story.id,
       stories: {
@@ -483,9 +475,10 @@ router.post('/generate-story-multi', optionalAuth, async (req, res) => {
         voice_b: { text: storyB, word_count: wordCount(storyB) },
         voice_c: { text: storyC, word_count: wordCount(storyC) },
       },
-    }));
+    });
   } catch (err) {
     console.error('[generate-story-multi]', err?.message);
+    if (res.headersSent) return res.end();
     return res.status(500).json({ error: err?.message || 'Multi-generation failed' });
   }
 });
