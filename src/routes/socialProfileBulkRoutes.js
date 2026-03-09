@@ -275,42 +275,56 @@ router.post('/generate', optionalAuth, async (req, res) => {
           throw new Error(`Profile JSON parse failed: ${parseErr.message}`);
         }
 
-        // Save to DB if available
+        // Save to DB — use findOrCreate to prevent duplicates on retry
         let saved = null;
         if (db && db.SocialProfile) {
-          saved = await db.SocialProfile.create({
-            handle: c.handle,
-            platform: c.platform,
-            vibe_sentence: c.vibe_sentence,
-            display_name: profile.display_name,
-            archetype: profile.archetype,
-            content_persona: profile.content_persona,
-            real_signal: profile.real_signal,
-            posting_voice: profile.posting_voice,
-            comment_energy: profile.comment_energy,
-            follower_count_approx: profile.follower_count_approx,
-            parasocial_function: profile.parasocial_function,
-            emotional_activation: profile.emotional_activation,
-            watch_reason: profile.watch_reason,
-            what_it_costs_her: profile.what_it_costs_her,
-            current_trajectory: profile.current_trajectory,
-            trajectory_detail: profile.trajectory_detail,
-            lala_relevance_score: profile.lala_relevance_score,
-            lala_relevance_reason: profile.lala_relevance_reason,
-            pinned_post: profile.pinned_post,
-            sample_captions: profile.sample_captions,
-            sample_comments: profile.sample_comments,
-            adult_content_present: profile.adult_content_present || false,
-            adult_content_type: profile.adult_content_type,
-            adult_content_framing: profile.adult_content_framing,
-            crossing_trigger: profile.crossing_trigger,
-            crossing_mechanism: profile.crossing_mechanism,
-            book_relevance: profile.book_relevance,
-            moment_log: profile.moment_log || [],
-            full_profile: profile,
-            status: 'generated',
-            series_id: series_id || null,
+          const [record, created] = await db.SocialProfile.findOrCreate({
+            where: { handle: c.handle, platform: c.platform },
+            defaults: {
+              vibe_sentence: c.vibe_sentence,
+              display_name: profile.display_name,
+              archetype: profile.archetype,
+              content_persona: profile.content_persona,
+              real_signal: profile.real_signal,
+              posting_voice: profile.posting_voice,
+              comment_energy: profile.comment_energy,
+              follower_count_approx: profile.follower_count_approx,
+              parasocial_function: profile.parasocial_function,
+              emotional_activation: profile.emotional_activation,
+              watch_reason: profile.watch_reason,
+              what_it_costs_her: profile.what_it_costs_her,
+              current_trajectory: profile.current_trajectory,
+              trajectory_detail: profile.trajectory_detail,
+              lala_relevance_score: profile.lala_relevance_score,
+              lala_relevance_reason: profile.lala_relevance_reason,
+              pinned_post: profile.pinned_post,
+              sample_captions: profile.sample_captions,
+              sample_comments: profile.sample_comments,
+              adult_content_present: profile.adult_content_present || false,
+              adult_content_type: profile.adult_content_type,
+              adult_content_framing: profile.adult_content_framing,
+              crossing_trigger: profile.crossing_trigger,
+              crossing_mechanism: profile.crossing_mechanism,
+              book_relevance: profile.book_relevance,
+              moment_log: profile.moment_log || [],
+              full_profile: profile,
+              status: 'generated',
+              series_id: series_id || null,
+            },
           });
+          saved = record;
+          if (!created) {
+            // Already exists — update with fresh AI data
+            await record.update({
+              vibe_sentence: c.vibe_sentence,
+              display_name: profile.display_name,
+              archetype: profile.archetype,
+              content_persona: profile.content_persona,
+              full_profile: profile,
+              lala_relevance_score: profile.lala_relevance_score,
+              status: 'generated',
+            });
+          }
         }
 
         results.push({

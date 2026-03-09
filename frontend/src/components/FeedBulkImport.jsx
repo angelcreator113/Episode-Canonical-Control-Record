@@ -147,28 +147,24 @@ export default function FeedBulkImport({ onDone, seriesId }) {
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         const totalBatches = Math.ceil(total / BATCH_SIZE);
 
-        let data;
-        for (let attempt = 0; attempt < 2; attempt++) {
-          try {
-            const controller = new AbortController();
-            const timer = setTimeout(() => controller.abort(), 180000); // 3 min
-            const res = await fetch(`${API}/bulk/generate`, {
-              method: 'POST', headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ creators: batch, series_id: seriesId }),
-              signal: controller.signal,
-            });
-            clearTimeout(timer);
-            data = await res.json();
-            if (!res.ok) throw new Error(`Batch ${batchNum}/${totalBatches}: ${data.error}`);
-            break;
-          } catch (fetchErr) {
-            if (attempt === 1) throw fetchErr;
-            // Wait 3 seconds before retry
-            await new Promise(r => setTimeout(r, 3000));
+        try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), 180000); // 3 min
+          const res = await fetch(`${API}/bulk/generate`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creators: batch, series_id: seriesId }),
+            signal: controller.signal,
+          });
+          clearTimeout(timer);
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          allResults.push(...data.results);
+        } catch (batchErr) {
+          // Mark every creator in this batch as failed, but keep going
+          for (const c of batch) {
+            allResults.push({ handle: c.handle, platform: c.platform, status: 'failed', error: batchErr.message });
           }
         }
-
-        allResults.push(...data.results);
         setProgress({ done: allResults.length, total, results: [...allResults] });
       }
 
