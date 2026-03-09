@@ -7354,14 +7354,21 @@ ${taskBrief.new_character ? `New character to introduce: ${taskBrief.new_charact
 
 ${previousContext}
 
+TONE & CONTENT RATING:
+This is ADULT LITERARY FICTION for an adult readership. The author writes books for grown-ups.
+- Characters swear naturally — "fuck", "shit", "damn" — the way real adults do when stressed, angry, aroused, or exhausted. Don't substitute softened versions.
+- Sex scenes are explicit and embodied. Show what bodies do, what skin feels like, what gets said and not said during intimacy. Sex reveals character — write it like you'd write a fight scene: specific, physical, emotionally loaded.
+- Marital tension, infidelity temptation, financial fear, parenting guilt, career jealousy, body image, racial dynamics, class friction — none of these are off-limits. Write them honestly.
+- Violence is psychological more than physical in this world, but when it appears, it lands.
+- Do NOT fade to black, cut away, or use euphemisms. If a scene matters enough to be in the story, it matters enough to be shown.
+- This is not erotica — sex serves character and plot. But it IS explicit adult fiction where nothing is sanitized.
+
 CRAFT RULES:
 - Length: 3300-4800 words. No shorter. No longer.
-- Adult fiction: explicit adult language, sexuality, raw conflict — do not soften.
 - All four life domains must be active in every story — career, romantic, family, friends.
 - The TASK creates the clock. The obstacle hits inside the task.
 - The recurring object (${dna.recurring_object}) appears at least once.
 - Write in close third person — deep in her interior, but not first person.
-- Sex and intimacy reveal character — what they do and don\'t reach for tells the truth.
 - End on a shift, not a resolution. The ground moves a quarter inch.
 - Do not summarize. Show every scene. Trust the reader.
 - The character\'s desire line and fear line must both be active throughout.
