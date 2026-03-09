@@ -2442,20 +2442,20 @@ html, body {
     color: var(--char-color);
   }
 
-  /* ── Hero / empty state ── */
+  /* ── Hero / empty state: compact on mobile ── */
   .se-task-empty.se-hero-card {
-    margin: 24px 16px;
-    padding: 32px 20px 24px;
+    margin: 20px 16px;
+    padding: 24px 18px 20px;
     background: var(--se-surface);
     border: 1px solid var(--se-border-light);
-    border-radius: 16px;
+    border-radius: 14px;
     box-shadow: var(--se-shadow-sm);
-    gap: 12px;
+    gap: 10px;
   }
 
-  .se-hero-icon { font-size: 28px; }
-  .se-hero-title { font-size: 18px; }
-  .se-hero-text { font-size: 12px; max-width: 280px; }
+  .se-hero-icon { font-size: 24px; }
+  .se-hero-title { font-size: 16px; }
+  .se-hero-text { font-size: 12px; max-width: 280px; line-height: 1.5; }
 
   .se-task-loading {
     height: auto;
@@ -2490,30 +2490,13 @@ html, body {
     margin-bottom: 0;
   }
 
-  /* ── Upcoming Stories section: minimal on mobile ── */
+  /* ── Upcoming Stories section: hide empty state on mobile ── */
   .se-story-panel.se-story-section {
-    margin: 0;
-    background: var(--se-surface);
-    border: none;
-    border-bottom: 1px solid var(--se-border-light);
-    border-radius: 0;
-    box-shadow: none;
-    overflow: hidden;
-    height: auto;
+    display: none;
   }
 
   .se-story-section-header { padding: 10px 14px; }
   .se-story-section-title { font-size: 14px; }
-
-  .se-story-section-empty {
-    padding: 20px 16px;
-  }
-
-  .se-story-empty-icon { font-size: 26px; }
-  .se-story-empty-text { font-size: 12px; max-width: 280px; }
-
-  .se-story-skeletons { max-width: 100%; padding: 0 4px; }
-  .se-story-skeleton { height: 40px; }
 
   /* ── Story panel when content is loaded ── */
   .se-story-panel {
@@ -2582,42 +2565,54 @@ html, body {
   .se-story-nav-row { margin-bottom: 4px; }
   .se-btn-nav { min-height: 34px; padding: 5px 12px; font-size: 11px; }
 
-  /* ── Story actions: primary top, secondary grouped ── */
+  /* ── Story actions: compact inline row, approve stands out ── */
   .se-story-header-actions {
     display: flex;
     flex-wrap: wrap;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
+    align-items: center;
   }
 
   .se-story-header-actions .se-btn {
     justify-content: center;
     text-align: center;
-    font-size: 11px;
-    padding: 8px 10px;
-    min-height: 40px;
-    flex: 1 1 calc(33% - 6px);
-    border-radius: 10px;
+    font-size: 10px;
+    padding: 6px 8px;
+    min-height: 32px;
+    flex: 0 1 auto;
+    border-radius: 8px;
+    border-color: var(--se-border-light);
+    color: var(--se-text-dim);
+    font-weight: 600;
   }
 
   .se-story-header-actions .se-btn-approve {
     flex: 1 0 100%;
     order: -2;
-    font-size: 14px;
+    font-size: 13px;
     font-weight: 700;
-    padding: 14px 16px;
-    min-height: 50px;
-    border-radius: 12px;
+    padding: 11px 14px;
+    min-height: 42px;
+    border-radius: 10px;
     letter-spacing: 0.01em;
+    color: #fff;
   }
 
   .se-story-header-actions .se-btn-save-later {
-    flex: 1 0 100%;
+    flex: 1 1 auto;
     order: -1;
-    min-height: 44px;
+    min-height: 32px;
+    font-size: 10px !important;
+    padding: 6px 10px !important;
   }
 
-  .se-story-header-actions .se-btn-reject { order: 10; }
+  .se-story-header-actions .se-btn-reject {
+    order: 10;
+    font-size: 10px;
+    color: var(--se-text-dim);
+    border-color: var(--se-border-light);
+  }
 
   /* ── Story brief (task detail before writing) ── */
   .se-story-brief-grid { grid-template-columns: 1fr; }
@@ -2659,55 +2654,57 @@ html, body {
 
 /* ─── 768px: Write mode / editor ────── */
 @media (max-width: 768px) {
-  .se-edit-container {
+  /* Write mode: contained split layout, not a long page */
+  .se-write-mode .se-story-body {
+    display: flex;
     flex-direction: column;
-    position: relative;
-    overflow: visible;
-    min-height: auto;
-  }
-
-  .se-edit-container .se-story-editor {
-    width: 100%;
-    min-height: 60vh;
-    overflow-y: auto;
-  }
-
-  .se-write-mode .se-story-editor {
-    padding: 20px 16px;
-    font-size: 15px;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
   }
 
   .se-edit-container {
     flex-direction: column;
     position: relative;
-    overflow: visible;
-    min-height: auto;
+    overflow: hidden;
     height: 100%;
+    min-height: 0;
+    flex: 1;
+    display: flex;
   }
 
   .se-edit-container .se-story-editor {
     flex: 1;
     width: 100%;
-    min-height: 40vh;
+    min-height: 0;
     overflow-y: auto;
   }
 
+  .se-write-mode .se-story-editor {
+    padding: 16px 14px;
+    font-size: 15px;
+  }
+
+  /* AI sidebar: always visible below editor in write mode */
   .se-ai-writer-sidebar {
-    display: none;
+    display: block;
     position: relative;
     width: 100%;
     max-width: none;
     min-width: 0;
-    max-height: 50vh;
+    flex: 0 0 auto;
+    max-height: 40vh;
     border-left: none;
-    border-top: 2px solid var(--se-gold);
+    border-top: 1px solid var(--se-border-light);
     background: var(--se-cream);
-    box-shadow: 0 -4px 24px rgba(0,0,0,0.08);
     overflow-y: auto;
   }
 
-  .se-ai-writer-sidebar.se-ai-sidebar-open {
-    display: block;
+  /* Toggle still works to collapse if user wants more editor space */
+  .se-ai-writer-sidebar:not(.se-ai-sidebar-open) {
+    max-height: 0;
+    overflow: hidden;
+    border-top: none;
   }
 
   .se-ai-sidebar-toggle {
@@ -2715,22 +2712,20 @@ html, body {
     align-items: center;
     justify-content: center;
     gap: 6px;
-    position: sticky;
-    bottom: 0;
     z-index: 10;
     width: 100%;
-    height: 44px;
+    height: 36px;
     padding: 0 16px;
     border-radius: 0;
     border: none;
     border-top: 1px solid var(--se-border-light);
-    background: var(--se-gold);
-    color: #fff;
-    font-size: 14px;
+    background: var(--se-surface);
+    color: var(--se-text-muted);
+    font-size: 12px;
     font-weight: 600;
     font-family: 'DM Sans', sans-serif;
     cursor: pointer;
-    box-shadow: 0 -2px 8px rgba(0,0,0,0.08);
+    flex-shrink: 0;
   }
 
   .se-story-brief { padding: 20px 16px; }
@@ -2777,7 +2772,6 @@ html, body {
   .se-hero-title { font-size: 16px; }
   .se-hero-text { font-size: 11px; max-width: 240px; }
 
-  .se-story-panel.se-story-section .se-story-section-header { padding: 8px 12px; }
   .se-story-section-title { font-size: 13px; }
 
   .se-generating { padding: 28px 16px; }
@@ -2788,8 +2782,8 @@ html, body {
   .se-story-header-title { font-size: 17px; }
   .se-btn-nav { min-height: 30px; padding: 4px 10px; font-size: 10px; }
 
-  .se-story-header-actions .se-btn { font-size: 10px; padding: 7px 8px; min-height: 36px; }
-  .se-story-header-actions .se-btn-approve { font-size: 13px; padding: 12px 14px; min-height: 46px; }
+  .se-story-header-actions .se-btn { font-size: 9px; padding: 5px 6px; min-height: 28px; }
+  .se-story-header-actions .se-btn-approve { font-size: 12px; padding: 10px 12px; min-height: 38px; }
 
   .se-story-text { padding: 18px 14px 36px; }
   .se-story-para { font-size: 15px; line-height: 1.8; margin-bottom: 18px; text-indent: 1.6em; }
@@ -2800,5 +2794,5 @@ html, body {
 
   .se-story-editor { padding: 14px 12px; }
   .se-write-mode .se-story-editor { padding: 14px 12px; font-size: 15px; }
-  .se-ai-writer-sidebar { width: 100%; max-width: none; max-height: 45vh; }
+  .se-ai-writer-sidebar { width: 100%; max-width: none; max-height: 35vh; }
 }
