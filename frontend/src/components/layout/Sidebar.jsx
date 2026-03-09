@@ -34,7 +34,6 @@ const NAV = [
   {
     zone: 'WRITE',
     items: [
-      { icon: '▶',  label: 'Novel Session',   route: '/start' },
       { icon: '⚡', label: 'Short Stories',    route: '/story-engine',
         children: [
           { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
@@ -43,6 +42,7 @@ const NAV = [
           { icon: '🧠', label: 'Narrative Control',   route: '/narrative-control' },
         ],
       },
+      { icon: '▶',  label: 'Novel Session',   route: '/start' },
     ],
   },
   {
