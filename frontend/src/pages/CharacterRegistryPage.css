@@ -2240,16 +2240,56 @@
 }
 
 
-/* ── Stats strip: 2×2 grid on small mobile ── */
+/* ── Stats strip: wrap on small mobile ── */
 @media (max-width: 480px) {
   .cr-stats-strip {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 14px;
+    padding: 10px 12px;
   }
 
   .cr-stat-item {
+    padding: 2px 0;
+  }
+
+  .cr-stat-count {
+    font-size: 18px;
+  }
+
+  .cr-stat-label {
+    font-size: 10px;
+  }
+
+  .cr-stat-sort {
+    margin-left: auto;
+    width: auto;
+    order: 10;
+  }
+
+  .cr-sort-select {
+    width: auto;
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+
+  .cr-card-size-toggle {
+    order: 11;
+  }
+
+  .cr-stat-actions {
+    order: 12;
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .cr-stat-actions .cr-btn-outline {
+    flex: 1 1 auto;
+    padding: 7px 10px;
+    font-size: 12px;
+    text-align: center;
     justify-content: center;
-    padding: 4px 0;
   }
 }
 
@@ -2266,6 +2306,14 @@
 
   .cr-filters::-webkit-scrollbar {
     display: none;
+  }
+
+  .cr-filter-pill {
+    flex-shrink: 0;
+  }
+
+  .cr-filter-label {
+    flex-shrink: 0;
   }
 
   .cr-filter-sep {
@@ -5788,4 +5836,134 @@
   .cr-dossier-portrait {
     border: 1px solid #ccc;
   }
+}
+
+/* ── Pagination ── */
+.cr-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 18px 0 8px;
+  margin-top: 8px;
+}
+.cr-page-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 16px;
+  font-size: 13px;
+  color: var(--ink-dim);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.cr-page-btn:hover:not(:disabled) {
+  background: var(--surface2);
+  border-color: var(--border2);
+  color: var(--ink);
+}
+.cr-page-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.cr-page-info {
+  font-size: 12px;
+  color: var(--ink-dim);
+  letter-spacing: 0.03em;
+}
+
+@media (max-width: 600px) {
+  .cr-pagination {
+    gap: 8px;
+    padding: 14px 0 6px;
+  }
+  .cr-page-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+  .cr-page-info {
+    font-size: 11px;
+  }
+}
+
+/* ================================================================
+   COMPACT MOBILE — Tighter sizing for ≤480px
+   Placed last to override touch-device min-height inflation.
+   ================================================================ */
+@media (max-width: 480px) {
+  /* Header — reduce vertical bulk */
+  .cr-header {
+    padding: 8px 10px;
+    gap: 4px;
+  }
+  .cr-header-title { font-size: 15px; }
+  .cr-header-brand { font-size: 13px; }
+
+  /* Buttons — smaller touch targets */
+  .cr-header-btn {
+    padding: 6px 10px;
+    font-size: 12px;
+    min-height: 32px !important;
+    min-width: unset;
+    gap: 4px;
+  }
+  .cr-header-btn.primary {
+    min-width: 32px;
+    min-height: 32px !important;
+    padding: 6px;
+  }
+  .cr-view-toggle button {
+    min-height: 32px !important;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+
+  /* Search — stop iOS zoom, but keep compact */
+  .cr-search-input {
+    font-size: 14px;
+    padding: 8px 10px 8px 28px;
+    min-height: 34px;
+  }
+
+  /* Registry tabs — compact pills */
+  .cr-registry-tabs { gap: 4px; margin-bottom: 14px; }
+  .cr-registry-pill {
+    padding: 5px 10px;
+    font-size: 11px;
+    border-radius: 16px;
+    min-height: unset !important;
+  }
+  .cr-pill-add { width: 28px; height: 28px; font-size: 16px; }
+
+  /* World "All Characters" title */
+  .cr-world-title { font-size: 20px; margin-bottom: 2px; }
+  .cr-world-subtitle { font-size: 11px; }
+  .cr-world-header { margin-bottom: 14px; padding-bottom: 10px; }
+
+  /* Generate-all banner */
+  .cr-world-gen-all {
+    padding: 10px 14px;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+  .cr-world-gen-all-text { font-size: 12px; }
+
+  /* Export / outline buttons */
+  .cr-btn-outline { padding: 5px 12px; font-size: 12px; }
+
+  /* Type filter pills */
+  .cr-world-filter-btn { padding: 4px 10px; font-size: 10px; }
+  .cr-world-filter-count { font-size: 9px; padding: 1px 5px; }
+  .cr-world-filters { gap: 5px; margin-bottom: 14px; }
+
+  /* Stats strip */
+  .cr-stats-strip { padding: 8px 10px; gap: 6px 12px; margin-bottom: 14px; }
+  .cr-stat-count { font-size: 18px; }
+  .cr-stat-label { font-size: 9px; }
+
+  /* Content area tighter */
+  .cr-content { padding: 12px 10px 40px; }
+
+  /* Filter pills */
+  .cr-filter-pill { padding: 6px 10px; font-size: 11px; min-height: 30px; }
 }

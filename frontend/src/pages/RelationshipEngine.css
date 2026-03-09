@@ -473,6 +473,7 @@
 .cg-badge.is-simmering { color: #713f12; background: #fef9c3; }
 .cg-badge.is-volatile  { color: #7f1d1d; background: #fee2e2; }
 .cg-badge.is-fractured { color: #831843; background: #fce7f3; }
+.cg-badge-layer { background: rgba(255, 255, 255, 0.85); font-size: 9px; }
 .cg-badge.is-healing   { color: #1e3a8a; background: #dbeafe; }
 
 /* ═══ Center — Main Canvas ═══════════════════════════════════════════════════ */
@@ -1185,6 +1186,279 @@
   flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 8px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   MOBILE RESPONSIVE — Tablets & Phones
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Tablet (≤768px): 2 columns → stacked ─────────────────────────────────── */
+@media (max-width: 768px) {
+  .cg-shell {
+    overflow: auto;
+    height: auto;
+    min-height: 100%;
+  }
+
+  .cg-topbar {
+    padding: 10px 14px;
+    gap: 8px;
+  }
+
+  .cg-topbar-left {
+    gap: 10px;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .cg-pageTitle {
+    font-size: 18px;
+  }
+
+  .cg-registrySelect {
+    font-size: 12px;
+    padding: 5px 8px;
+    max-width: 160px;
+  }
+
+  .cg-stepper {
+    order: 10;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    flex-shrink: 0;
+  }
+
+  .cg-stepper::-webkit-scrollbar {
+    display: none;
+  }
+
+  .cg-stepBtn {
+    padding: 6px 12px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+
+  .cg-topbar-actions {
+    gap: 6px;
+  }
+
+  .cg-btnPrimary,
+  .cg-btnSecondary {
+    padding: 7px 12px;
+    font-size: 12px;
+  }
+
+  /* Stack the 3-column body to single column */
+  .cg-shell .cg-body {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    padding: 12px;
+    overflow: visible;
+    min-height: auto;
+  }
+
+  .cg-shell .cg-left {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    padding-right: 0;
+    order: 2;
+  }
+
+  .cg-shell .cg-right {
+    position: static;
+    max-height: none;
+    overflow: visible;
+    order: 3;
+  }
+
+  .cg-main {
+    order: 1;
+  }
+
+  /* World list: horizontal scroll instead of tall vertical list */
+  .cg-worldList {
+    max-height: 260px;
+  }
+
+  .cg-mainHeader {
+    padding: 12px 14px;
+    flex-wrap: wrap;
+  }
+
+  .cg-mainTitle {
+    font-size: 16px;
+  }
+
+  .cg-mainContent {
+    min-height: 300px;
+  }
+
+  /* Modals: full-width on tablets */
+  .cg-modalOverlay .cg-modal {
+    width: calc(100vw - 32px);
+    max-width: none;
+  }
+}
+
+/* ── Phones (≤480px): tighter spacing ──────────────────────────────────────── */
+@media (max-width: 480px) {
+  .cg-topbar {
+    padding: 8px 10px;
+    gap: 6px;
+  }
+
+  .cg-pageTitle {
+    font-size: 16px;
+  }
+
+  .cg-registrySelect {
+    font-size: 11px;
+    padding: 4px 6px;
+    max-width: 130px;
+  }
+
+  .cg-stepBtn {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+
+  .cg-btnPrimary,
+  .cg-btnSecondary {
+    padding: 6px 10px;
+    font-size: 11px;
+  }
+
+  .cg-shell .cg-body {
+    padding: 8px;
+    gap: 10px;
+  }
+
+  /* Panel styling */
+  .cg-panel {
+    border-radius: 12px;
+  }
+
+  .cg-panelHeader {
+    padding: 10px 12px;
+  }
+
+  .cg-panelTitle {
+    font-size: 15px;
+  }
+
+  .cg-layerFilters {
+    padding: 6px 10px;
+    gap: 4px;
+  }
+
+  .cg-filterPill {
+    padding: 4px 10px;
+    font-size: 11px;
+  }
+
+  .cg-worldList {
+    max-height: 200px;
+    padding: 6px;
+  }
+
+  .cg-worldCard {
+    padding: 6px 8px;
+    gap: 6px;
+  }
+
+  .cg-worldCard-name {
+    font-size: 13px;
+  }
+
+  .cg-worldCard-role {
+    font-size: 10px;
+  }
+
+  .cg-badge {
+    font-size: 9px;
+    padding: 2px 6px;
+  }
+
+  /* Main area */
+  .cg-mainHeader {
+    padding: 10px 12px;
+  }
+
+  .cg-mainTitle {
+    font-size: 15px;
+  }
+
+  .cg-mainSub {
+    font-size: 10px;
+  }
+
+  .cg-toolbar {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+  .cg-toolBtn {
+    font-size: 11px;
+    padding: 5px 10px;
+  }
+
+  .cg-mainContent {
+    min-height: 250px;
+    border-radius: 12px;
+  }
+
+  /* Inspector compact */
+  .cg-inspector {
+    border-radius: 12px;
+  }
+
+  .cg-inspectorHeader {
+    padding: 10px 12px;
+  }
+
+  .cg-inspectorTitle {
+    font-size: 15px;
+  }
+
+  .cg-inspectorEmpty {
+    padding: 24px 12px;
+  }
+
+  /* Tree / Candidate views */
+  .cg-seedGrid {
+    grid-template-columns: 1fr;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  /* Modals */
+  .cg-modalOverlay .cg-modal {
+    width: calc(100vw - 16px);
+    border-radius: 12px;
+  }
+
+  .cg-modalTitle {
+    font-size: 16px;
+  }
+
+  .cg-modalBody {
+    padding: 12px 14px;
+  }
+
+  /* Touch targets */
+  .cg-stepBtn,
+  .cg-filterPill,
+  .cg-worldCard,
+  .cg-btnPrimary,
+  .cg-btnSecondary,
+  .cg-toolBtn {
+    min-height: 36px;
+    touch-action: manipulation;
+  }
 }
 
 .cg-presetBtn {

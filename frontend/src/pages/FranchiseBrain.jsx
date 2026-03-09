@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import PdfIngestZone from '../components/PdfIngestZone';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 const C = {
   bg: '#faf6f0',
@@ -263,9 +263,9 @@ export default function FranchiseBrain() {
   const catLookup = Object.fromEntries(CATEGORIES.map(c => [c.key, c]));
 
   return (
-    <div style={{ background: C.bg, minHeight: '70vh' }}>
+    <div className="fb-root" style={{ background: C.bg, minHeight: '70vh' }}>
       {/* Header */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '28px 32px 20px' }}>
+      <div className="fb-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', padding: '28px 32px 20px' }}>
         <div style={{ display: 'flex', gap: 14 }}>
           <div style={{ width: 4, background: C.accent, borderRadius: 2, alignSelf: 'stretch' }} />
           <div>
@@ -281,11 +281,12 @@ export default function FranchiseBrain() {
       </div>
 
       {/* Inner tabs */}
-      <div style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, padding: '0 32px', gap: 0 }}>
+      <div className="fb-inner-tabs" style={{ display: 'flex', borderBottom: `1px solid ${C.border}`, padding: '0 32px', gap: 0 }}>
         {INNER_TABS.map(tab => {
           const active = innerTab === tab.key;
           return (
             <button
+              className="fb-inner-tab"
               key={tab.key}
               onClick={() => setInnerTab(tab.key)}
               style={{
@@ -305,21 +306,21 @@ export default function FranchiseBrain() {
                 transition: 'color 0.15s',
               }}
             >
-              {tab.icon && <span style={{ fontSize: 11, opacity: active ? 1 : 0.5 }}>{tab.icon}</span>}
-              {tab.label}
+              {tab.icon && <span className="fb-tab-icon" style={{ fontSize: 11, opacity: active ? 1 : 0.5 }}>{tab.icon}</span>}
+              <span className="fb-tab-label">{tab.label}</span>
             </button>
           );
         })}
       </div>
 
       {/* Tab content */}
-      <div style={{ padding: '24px 32px' }}>
+      <div className="fb-content" style={{ padding: '24px 32px' }}>
 
         {/* Create form — shows on any tab when triggered */}
         {showForm && (
-          <form onSubmit={handleCreate} style={{ ...S.card, marginBottom: 20, borderColor: C.accent }}>
+          <form onSubmit={handleCreate} className="fb-form" style={{ ...S.card, marginBottom: 20, borderColor: C.accent }}>
             <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 12, color: C.accent }}>New Knowledge Entry</div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+            <div className="fb-form-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
               <div>
                 <label style={{ fontSize: 11, color: C.textDim, marginBottom: 4, display: 'block' }}>Title</label>
                 <input style={S.input} value={form.title} onChange={e => setForm(f => ({ ...f, title: e.target.value }))} placeholder="e.g. JustAWoman is never small" />
@@ -500,8 +501,8 @@ function EntriesList({ entries, loading, catLookup, emptyMsg, onActivate, onArch
   return entries.map(entry => {
     const cat = catLookup[entry.category] || { icon: '?', color: C.textDim };
     return (
-      <div key={entry.id} style={{ ...S.card, borderLeft: `3px solid ${cat.color}` }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
+      <div key={entry.id} className="fb-entry-card" style={{ ...S.card, borderLeft: `3px solid ${cat.color}` }}>
+        <div className="fb-entry-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 8 }}>
           <div style={{ flex: 1 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
               <span style={{ fontSize: 14 }}>{cat.icon}</span>

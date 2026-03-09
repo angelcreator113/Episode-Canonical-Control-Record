@@ -222,10 +222,8 @@ function AppContent() {
   const isStoryEngine = location.pathname === '/story-engine';
   const isStoryEval = location.pathname === '/story-evaluation';
   // Social Import is now embedded in Universe page as a tab
-  const isAssembler = location.pathname === '/assembler';
   const isSetupWizard = location.pathname === '/setup';
-  const isSceneProposer = location.pathname === '/scene-proposer';
-  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isAssembler || isSetupWizard || isSceneProposer;
+  const isFullScreen = isTimelineEditor || isSceneComposer || isExportPage || isReadingMode || isWriteMode || isChapterJourney || isStorytellerPage || isStoryEngine || isStoryEval || isSetupWizard;
   const hideFooter = isFullScreen;
 
   return (
