@@ -2262,14 +2262,15 @@
   }
 
   .cr-stat-sort {
-    margin-left: 0;
-    width: 100%;
+    margin-left: auto;
+    width: auto;
     order: 10;
   }
 
   .cr-sort-select {
-    width: 100%;
-    padding: 8px 10px;
+    width: auto;
+    padding: 5px 8px;
+    font-size: 11px;
   }
 
   .cr-card-size-toggle {
