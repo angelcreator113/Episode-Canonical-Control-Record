@@ -246,6 +246,51 @@ router.post('/:id/cross', optionalAuth, async (req, res) => {
   }
 });
 
+// ── PUT /:id ─────────────────────────────────────────────────────────────────
+// Update editable fields on a profile
+router.put('/:id', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+
+    const allowed = [
+      'handle', 'platform', 'vibe_sentence', 'display_name',
+      'content_persona', 'real_signal', 'posting_voice', 'comment_energy',
+      'parasocial_function', 'emotional_activation', 'watch_reason',
+      'what_it_costs_her', 'current_trajectory', 'trajectory_detail',
+      'pinned_post', 'lala_relevance_score', 'lala_relevance_reason',
+      'adult_content_present', 'adult_content_type', 'adult_content_framing',
+      'crossing_trigger', 'crossing_mechanism', 'archetype',
+      'follower_count_approx', 'sample_captions', 'sample_comments',
+      'book_relevance', 'status',
+    ];
+    const updates = {};
+    for (const key of allowed) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
+
+    await profile.update(updates);
+    return res.json({ profile });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /:id ──────────────────────────────────────────────────────────────
+// Permanently delete a profile
+router.delete('/:id', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Not found' });
+    await profile.destroy();
+    return res.json({ deleted: true, id: req.params.id });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── POST /:id/add-moment ─────────────────────────────────────────────────────
 // Add a new encounter moment to the moment log
 router.post('/:id/add-moment', optionalAuth, async (req, res) => {
