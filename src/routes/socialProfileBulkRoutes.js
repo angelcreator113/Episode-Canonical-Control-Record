@@ -98,10 +98,10 @@ ${text.slice(0, 20000)}`,
           }],
         });
 
-        const content = aiExtraction.content[0].text;
+        const content = aiExtraction.content[0].text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
         const match = content.match(/\[[\s\S]*\]/);
         if (match) {
-          const aiCreators = JSON.parse(match[0]);
+          const aiCreators = JSON.parse(match[0].replace(/,\s*([\]}])/g, '$1'));
           creators.push(...aiCreators.map(c => ({
             ...c,
             platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
@@ -189,10 +189,10 @@ ${chunks[i]}`,
           }],
         });
 
-        const content = extraction.content[0].text;
+        const content = extraction.content[0].text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
         const match = content.match(/\[[\s\S]*\]/);
         if (match) {
-          let chunkCreators = JSON.parse(match[0]);
+          let chunkCreators = JSON.parse(match[0].replace(/,\s*([\]}])/g, '$1'));
           chunkCreators = chunkCreators.map(c => ({
             ...c,
             platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
@@ -255,10 +255,22 @@ router.post('/generate', optionalAuth, async (req, res) => {
         });
 
         const text = aiRes.content[0].text;
-        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        // Strip markdown fences, then extract the JSON object
+        const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('AI did not return valid JSON');
 
-        const profile = JSON.parse(jsonMatch[0]);
+        // Fix common AI JSON quirks: trailing commas before } or ]
+        const fixedJson = jsonMatch[0]
+          .replace(/,\s*([\]}])/g, '$1');
+
+        let profile;
+        try {
+          profile = JSON.parse(fixedJson);
+        } catch (parseErr) {
+          console.error(`JSON parse failed for @${c.handle}:`, parseErr.message, '\nRaw excerpt:', fixedJson.slice(0, 300));
+          throw new Error(`Profile JSON parse failed: ${parseErr.message}`);
+        }
 
         // Save to DB if available
         let saved = null;
