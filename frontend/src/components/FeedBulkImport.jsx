@@ -114,22 +114,36 @@ export default function FeedBulkImport({ onDone, seriesId }) {
     setCandidates(c => c.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
   }
 
-  // ── Generate all candidates ────────────────────────────────────────────────
+  // ── Generate all candidates (batched in chunks of 25) ───────────────────────
   async function generateAll() {
     if (!candidates?.length) return;
     setGenerating(true); setErr(null);
-    setProgress({ done: 0, total: candidates.length, results: [] });
+
+    const BATCH_SIZE = 25;
+    const total = candidates.length;
+    const allResults = [];
+    setProgress({ done: 0, total, results: [] });
 
     try {
-      const res  = await fetch(`${API}/bulk/generate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creators: candidates, series_id: seriesId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      for (let i = 0; i < total; i += BATCH_SIZE) {
+        const batch = candidates.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
+        const totalBatches = Math.ceil(total / BATCH_SIZE);
 
-      setProgress({ done: data.summary.total, total: data.summary.total, results: data.results });
-      setSummary(data.summary);
+        const res = await fetch(`${API}/bulk/generate`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ creators: batch, series_id: seriesId }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(`Batch ${batchNum}/${totalBatches}: ${data.error}`);
+
+        allResults.push(...data.results);
+        setProgress({ done: allResults.length, total, results: [...allResults] });
+      }
+
+      const succeeded = allResults.filter(r => r.status === 'success').length;
+      const failed    = allResults.filter(r => r.status === 'failed').length;
+      setSummary({ total, succeeded, failed });
     } catch (e) { setErr(e.message); }
     finally { setGenerating(false); }
   }
@@ -208,6 +222,12 @@ export default function FeedBulkImport({ onDone, seriesId }) {
             <div style={{ marginTop: '20px' }}>
               <div style={{ height: '4px', background: C.border, borderRadius: '2px', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${(progress.done / progress.total) * 100}%`, background: C.pink, borderRadius: '2px', transition: 'width 0.4s ease' }} />
+              </div>
+              <div style={{ fontSize: '12px', color: C.textDim, marginTop: '10px' }}>
+                {progress.done} of {progress.total} done
+                {progress.total > 25 && (
+                  <span> — batch {Math.min(Math.floor(progress.done / 25) + 1, Math.ceil(progress.total / 25))} of {Math.ceil(progress.total / 25)}</span>
+                )}
               </div>
             </div>
           )}
