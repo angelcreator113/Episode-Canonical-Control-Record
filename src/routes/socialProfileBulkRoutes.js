@@ -245,7 +245,10 @@ router.post('/generate', optionalAuth, async (req, res) => {
     const db = getModels();
     const results = [];
 
-    for (const c of creators) {
+    for (let idx = 0; idx < creators.length; idx++) {
+      const c = creators[idx];
+      // Small delay between AI calls to avoid rate limiting
+      if (idx > 0) await new Promise(r => setTimeout(r, 1000));
       try {
         const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence);
         const aiRes = await client.messages.create({

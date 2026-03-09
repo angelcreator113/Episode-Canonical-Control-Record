@@ -131,12 +131,12 @@ export default function FeedBulkImport({ onDone, seriesId }) {
     setCandidates(c => c.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
   }
 
-  // ── Generate all candidates (batched in chunks of 25) ───────────────────────
+  // ── Generate all candidates (batched in small chunks) ───────────────────────
   async function generateAll() {
     if (!candidates?.length) return;
     setGenerating(true); setErr(null);
 
-    const BATCH_SIZE = 25;
+    const BATCH_SIZE = 5;
     const total = candidates.length;
     const allResults = [];
     setProgress({ done: 0, total, results: [] });
@@ -147,12 +147,26 @@ export default function FeedBulkImport({ onDone, seriesId }) {
         const batchNum = Math.floor(i / BATCH_SIZE) + 1;
         const totalBatches = Math.ceil(total / BATCH_SIZE);
 
-        const res = await fetch(`${API}/bulk/generate`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ creators: batch, series_id: seriesId }),
-        });
-        const data = await res.json();
-        if (!res.ok) throw new Error(`Batch ${batchNum}/${totalBatches}: ${data.error}`);
+        let data;
+        for (let attempt = 0; attempt < 2; attempt++) {
+          try {
+            const controller = new AbortController();
+            const timer = setTimeout(() => controller.abort(), 180000); // 3 min
+            const res = await fetch(`${API}/bulk/generate`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ creators: batch, series_id: seriesId }),
+              signal: controller.signal,
+            });
+            clearTimeout(timer);
+            data = await res.json();
+            if (!res.ok) throw new Error(`Batch ${batchNum}/${totalBatches}: ${data.error}`);
+            break;
+          } catch (fetchErr) {
+            if (attempt === 1) throw fetchErr;
+            // Wait 3 seconds before retry
+            await new Promise(r => setTimeout(r, 3000));
+          }
+        }
 
         allResults.push(...data.results);
         setProgress({ done: allResults.length, total, results: [...allResults] });
