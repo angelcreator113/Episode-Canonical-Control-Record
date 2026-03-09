@@ -6985,6 +6985,134 @@ async function loadCanonEvents(characterKey) {
   }
 }
 
+// ─── Prose style anchor cache ────────────────────────────────────────────────
+// Stores author's prose sample per world/universe for voice matching
+const seProseStyleCache = new Map();
+
+async function loadProseStyleAnchor(characterKey) {
+  const cacheKey = `prose_${characterKey}`;
+  if (seProseStyleCache.has(cacheKey)) return seProseStyleCache.get(cacheKey);
+
+  try {
+    const { StorytellerMemory } = require('../models');
+    const anchor = await StorytellerMemory.findOne({
+      where: { type: 'prose_style_anchor', source_ref: characterKey },
+      order: [['updated_at', 'DESC']],
+    });
+    if (anchor?.statement) {
+      seProseStyleCache.set(cacheKey, anchor.statement);
+      return anchor.statement;
+    }
+  } catch (e) {
+    console.error('[loadProseStyleAnchor] error:', e?.message);
+  }
+  return null;
+}
+
+// ─── Load dialogue voice cards for characters in a story ─────────────────────
+async function loadDialogueVoiceCards(characterKey) {
+  try {
+    const { RegistryCharacter, CharacterRelationship } = require('../models');
+    if (!RegistryCharacter) return null;
+
+    // Get the main character's relationships to find who appears in stories
+    const { Op } = require('sequelize');
+    const chars = await RegistryCharacter.findAll({
+      where: { status: { [Op.in]: ['accepted', 'finalized'] } },
+      attributes: ['character_key', 'display_name', 'voice_signature', 'personality', 'description'],
+      order: [['updated_at', 'DESC']],
+      limit: 15,
+    });
+
+    if (!chars.length) return null;
+
+    const cards = chars
+      .filter(c => c.voice_signature && Object.keys(c.voice_signature).length > 0)
+      .map(c => {
+        const vs = c.voice_signature;
+        const parts = [`${c.display_name}:`];
+        if (vs.tone) parts.push(`  Tone: ${vs.tone}`);
+        if (vs.rhythm) parts.push(`  Rhythm: ${vs.rhythm}`);
+        if (vs.vocabulary) parts.push(`  Vocabulary: ${vs.vocabulary}`);
+        if (vs.speech_pattern) parts.push(`  Speech pattern: ${vs.speech_pattern}`);
+        if (vs.verbal_tics) parts.push(`  Verbal tics: ${vs.verbal_tics}`);
+        if (vs.avoids) parts.push(`  Avoids saying: ${vs.avoids}`);
+        if (vs.catchphrases?.length) parts.push(`  Catchphrases: "${vs.catchphrases.join('", "')}"`);
+        if (vs.sentence_length) parts.push(`  Sentence length: ${vs.sentence_length}`);
+        if (vs.formality) parts.push(`  Formality: ${vs.formality}`);
+        return parts.join('\n');
+      });
+
+    if (!cards.length) return null;
+    return `DIALOGUE VOICE CARDS (each character must sound distinct — match their speech patterns):\n${cards.join('\n\n')}`;
+  } catch (err) {
+    console.error('[loadDialogueVoiceCards] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load dramatic irony / open mysteries ────────────────────────────────────
+async function loadDramaticIrony(characterKey) {
+  try {
+    const { StorytellerMemory } = require('../models');
+
+    // Load dramatic irony entries (what reader knows that characters don't)
+    const ironies = await StorytellerMemory.findAll({
+      where: {
+        type: 'dramatic_irony',
+        source_ref: characterKey,
+        confirmed: true,
+      },
+      order: [['created_at', 'DESC']],
+      limit: 10,
+    });
+
+    // Load open mysteries (planted questions the reader is tracking)
+    const mysteries = await StorytellerMemory.findAll({
+      where: {
+        type: 'open_mystery',
+        source_ref: characterKey,
+        confirmed: true,
+      },
+      order: [['created_at', 'DESC']],
+      limit: 8,
+    });
+
+    // Load foreshadowing seeds (things planted that haven't paid off yet)
+    const seeds = await StorytellerMemory.findAll({
+      where: {
+        type: 'foreshadow_seed',
+        source_ref: characterKey,
+        confirmed: true,
+      },
+      order: [['created_at', 'DESC']],
+      limit: 8,
+    });
+
+    const sections = [];
+
+    if (ironies.length) {
+      sections.push('DRAMATIC IRONY (the reader knows these things — the characters do NOT):\n' +
+        ironies.map(i => `  • ${i.statement}${i.category ? ` [${i.category}]` : ''}`).join('\n'));
+    }
+
+    if (mysteries.length) {
+      sections.push('OPEN MYSTERIES (questions the reader is tracking — DO NOT resolve yet unless this is the right story):\n' +
+        mysteries.map(m => `  • ${m.statement}${m.category ? ` [planted: story ${m.category}]` : ''}`).join('\n'));
+    }
+
+    if (seeds.length) {
+      sections.push('FORESHADOWING SEEDS (planted earlier — let these echo or advance, don\'t ignore them):\n' +
+        seeds.map(s => `  • ${s.statement}${s.category ? ` [from story ${s.category}]` : ''}`).join('\n'));
+    }
+
+    return sections.length ? sections.join('\n\n') : null;
+  } catch (err) {
+    console.error('[loadDramaticIrony] error:', err?.message);
+    return null;
+  }
+}
+
 // ─── 50-story arc phases ──────────────────────────────────────────────────────
 const SE_ARC_PHASES = {
   establishment: { range: [1, 10],  label: 'Establishment', description: 'Who she is. Her rhythms. What she reaches for and what she\'s afraid of. The reader learns her world.' },
@@ -7136,6 +7264,8 @@ RULES:
 - If WORLD STATE is provided, use other characters for collision stories — don't invent strangers when the world already has people
 - If ACCUMULATED PAIN POINTS or BELIEF SHIFTS are provided, the arc should build on those — not repeat them, but deepen them
 - Multiple plotlines should interweave across the 50 stories — career subplot, romantic subplot, family subplot, friendship subplot — each with its own mini-arc within the 50-story structure
+- Every story needs an EMOTIONAL ARC — where the character starts emotionally and where she ends. These should feel like a real emotional journey, not flat.
+- Every story should be grounded in a SPECIFIC SETTING — a real place with weather, time of day, atmosphere. Use established locations when possible.
 
 Return ONLY valid JSON — no preamble, no markdown.
 Format:
@@ -7150,6 +7280,11 @@ Format:
       "obstacle": "what hits her inside that task",
       "domains_active": ["career", "romantic", "family", "friends"],
       "strength_weaponized": "which strength gets used against her and how",
+      "emotional_start": "where the character is emotionally at the opening — specific feeling, not generic",
+      "emotional_end": "where she lands — the quarter-inch shift. Must differ from start",
+      "primary_location": "the main setting for this story — specific place name or type",
+      "time_of_day": "morning|afternoon|evening|night|spans_full_day",
+      "season_weather": "what the weather/season feels like — grounds the sensory world",
       "new_character": false,
       "new_character_name": null,
       "new_character_role": null,
@@ -7301,7 +7436,7 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     }
 
     // Load all context in parallel for speed
-    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents] = await Promise.all([
+    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents, proseStyle, voiceCards, dramaticIrony] = await Promise.all([
       loadCharacterProfile(characterKey),
       loadStoryMemories(characterKey),
       loadWorldState(characterKey, dna.world),
@@ -7309,6 +7444,9 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
       loadActiveThreads(characterKey, dna.world),
       loadLocations(characterKey),
       loadCanonEvents(characterKey),
+      loadProseStyleAnchor(characterKey),
+      loadDialogueVoiceCards(characterKey),
+      loadDramaticIrony(characterKey),
     ]);
 
     const profileSection = dbProfile
@@ -7320,6 +7458,11 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     const threadsSection = activeThreads ? `\n\n${activeThreads}` : '';
     const locationsSection = locations ? `\n\n${locations}` : '';
     const canonSection = canonEvents ? `\n\n${canonEvents}` : '';
+    const proseSection = proseStyle
+      ? `\n\nAUTHOR'S PROSE STYLE (match this voice — this is what the author's writing actually sounds like):\n"""${proseStyle}"""\nWrite in this register. Match the sentence rhythms, the level of interiority, the way observations land. Don't imitate word-for-word — absorb the voice.`
+      : '';
+    const voiceCardsSection = voiceCards ? `\n\n${voiceCards}` : '';
+    const ironySection = dramaticIrony ? `\n\n${dramaticIrony}` : '';
 
     const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
@@ -7334,7 +7477,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}
+Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}${proseSection}${voiceCardsSection}${ironySection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -7350,6 +7493,11 @@ Task: ${taskBrief.task}
 Obstacle: ${taskBrief.obstacle}
 Strength being weaponized: ${taskBrief.strength_weaponized}
 Opening line suggested: ${taskBrief.opening_line}
+${taskBrief.emotional_start ? `Emotional arc START: ${taskBrief.emotional_start}` : ''}
+${taskBrief.emotional_end ? `Emotional arc END: ${taskBrief.emotional_end}` : ''}
+${taskBrief.primary_location ? `Primary setting: ${taskBrief.primary_location}` : ''}
+${taskBrief.time_of_day ? `Time of day: ${taskBrief.time_of_day}` : ''}
+${taskBrief.season_weather ? `Season/weather: ${taskBrief.season_weather}` : ''}
 ${taskBrief.new_character ? `New character to introduce: ${taskBrief.new_character_name} — ${taskBrief.new_character_role}` : ''}
 
 ${previousContext}
@@ -7374,6 +7522,16 @@ CRAFT RULES:
 - The character\'s desire line and fear line must both be active throughout.
 - New character introductions: one paragraph only in the story — name, one physical detail, one line of dialogue that reveals their entire persona.
 
+SCENE STRUCTURE (a 3300-4800 word story needs 3-5 distinct scenes):
+- Scene 1 — GROUNDING: Open in the character\'s body, in a specific place. Establish the emotional starting point. The task should be visible within the first 300 words.
+- Scene 2 — COMPLICATION: The obstacle arrives or intensifies. At least one domain collides with another (e.g., career pressure bleeds into romantic tension). This is where the story earns its complexity.
+- Scene 3 — PRESSURE PEAK: The character is forced to act, choose, or reveal something she\'d rather keep hidden. This is where strengths get weaponized. Dialogue should carry emotional weight here.
+- Scene 4 (optional) — AFTERMATH/PIVOT: A quieter beat where the character processes what just happened. Interiority deepens. The recurring object may appear here.
+- Final scene — SHIFT: Not resolution. Something has moved — an understanding, a loss, a micro-betrayal, a tenderness she didn\'t expect. The reader feels the ground shift under them.
+- Between scenes: use SENSORY TRANSITIONS — don\'t just jump-cut. Ground each scene change in a physical detail (light changing, a sound, a smell, a body sensation).
+- Pacing rule: alternate TENSION and BREATH. After a high-pressure scene, give the reader (and character) a moment. After a quiet moment, tighten the screws.
+- Dialogue ratio: aim for 30-40% dialogue in collision stories, 15-25% in internal stories. Every line of dialogue must do double duty — reveal character AND advance plot.
+
 MULTI-PLOT & CONTINUITY RULES:
 - If WORLD STATE is provided, naturally reference or intersect with other characters' storylines where organic. Don't force crossovers — let shared spaces (the same city, industry, social circle) create natural collisions.
 - If ACCUMULATED PAIN POINTS are provided, build on them — the character carries these forward. Don't re-explain the pain, let it surface in behavior, avoidance, or unexpected tenderness.
@@ -7384,6 +7542,22 @@ MULTI-PLOT & CONTINUITY RULES:
 - If ACTIVE STORY THREADS are provided, advance at least one thread in this story. Higher-tension threads are more urgent. Don't resolve threads prematurely — move them forward one beat.
 - If ESTABLISHED LOCATIONS are provided, set scenes in these places. Use their sensory details and narrative roles. Don't invent new locations when existing ones serve the scene.
 - If CANON EVENTS are provided, they are immutable history. Reference them naturally when relevant. Never contradict a canon event. Consequences of past events should ripple forward into character behavior.
+
+EMOTIONAL ARC RULES:
+- If emotional_start and emotional_end are provided, the character MUST begin the story in the start state and land in the end state. The shift should feel earned, not sudden.
+- The emotional arc is the SPINE of the story. Every scene either moves toward the shift or creates resistance against it.
+- The emotional end state should surprise the character (even if the reader saw it coming). She didn't plan to feel this way.
+
+DRAMATIC IRONY & READER ENGAGEMENT:
+- If DRAMATIC IRONY entries are provided, USE them — let the reader feel the gap between what they know and what the character knows. This is where page-turning tension lives.
+- If OPEN MYSTERIES are listed, reference or deepen at least one. Don't resolve unless this is explicitly the right story for resolution.
+- If FORESHADOWING SEEDS are listed, let one echo naturally in this story. A callback the reader will catch but the character won't.
+- Plant at least ONE new mystery or question in every story — something the reader will carry forward. It can be small (an unexplained reaction, an overheard fragment, a detail that doesn't add up).
+
+DIALOGUE VOICE RULES:
+- If DIALOGUE VOICE CARDS are provided, every character who speaks must sound like THEMSELVES, not like the narrator. Different vocabulary, different rhythms, different sentence lengths.
+- Characters from different class backgrounds sound different. Characters under stress sound different than characters at ease. Match the voice to the moment.
+- Silence is dialogue too — track what characters DON'T say. The unsaid is often more powerful than the said.
 
 Write the complete story now. No preamble. Begin with the title, then the story.`;
 
@@ -7402,6 +7576,123 @@ Write the complete story now. No preamble. Begin with the title, then the story.
 
     const wordCount = storyText.split(/\s+/).length;
 
+    // ── Auto-extract story changes (runs in background, doesn't block response) ──
+    const autoExtract = async () => {
+      try {
+        const extractPrompt = `You are extracting continuity changes from a newly generated story.
+
+Character: ${characterKey} (${dna.display_name})
+Story ${storyNumber}: "${taskBrief.title}"
+
+Extract ALL of the following from the story text:
+
+1. PAIN POINTS — moments of genuine emotional pain
+2. BELIEF SHIFTS — moments where something the character believes changes
+3. RELATIONSHIP CHANGES — any shift in relationship dynamics (deepening, straining, new connections, betrayals)
+4. DRAMATIC IRONY — things the READER now knows that one or more characters do NOT know
+5. OPEN MYSTERIES — new questions planted that the reader will want answered
+6. FORESHADOWING SEEDS — details, images, or moments that feel like they could pay off later
+7. SETTING DETAILS — any new sensory details about locations that should be remembered
+
+Return ONLY valid JSON:
+{
+  "pain_points": [{ "category": "string", "statement": "specific moment", "coaching_angle": "therapeutic perspective" }],
+  "belief_shifts": [{ "before": "old belief", "after": "new belief", "trigger": "what caused it" }],
+  "relationship_changes": [{ "characters": ["char_a", "char_b"], "change": "what shifted", "new_state": "current dynamic" }],
+  "dramatic_irony": [{ "statement": "what the reader knows that characters don't", "characters_unaware": ["who doesn't know"] }],
+  "open_mysteries": [{ "question": "what the reader is now wondering", "planted_in": "brief description of the moment" }],
+  "foreshadow_seeds": [{ "detail": "the image/moment/detail", "potential_payoff": "what it could connect to later" }],
+  "therapy_opening": "one sentence a therapist could use to open the next session"
+}`;
+
+        const extractResponse = await anthropic.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 3000,
+          system: extractPrompt,
+          messages: [{ role: 'user', content: `Story text:\n\n${storyText.slice(0, 5000)}` }],
+        });
+
+        const extractRaw = extractResponse.content?.[0]?.text || '';
+        let extracted;
+        try { extracted = JSON.parse(extractRaw.replace(/\`\`\`json|\`\`\`/g, '').trim()); } catch { return; }
+
+        const { RegistryCharacter } = require('../models');
+        const { Op } = require('sequelize');
+        const charRow = await RegistryCharacter.findOne({
+          where: { character_key: characterKey, status: { [Op.in]: ['accepted', 'finalized'] } },
+        });
+        const charId = charRow?.id;
+        if (!charId) return;
+
+        // Save pain points
+        for (const pp of (extracted.pain_points || [])) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'pain_point', statement: pp.statement,
+            confidence: 0.85, confirmed: false, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify([pp.category]), category: pp.category, coaching_angle: pp.coaching_angle,
+          }).catch(() => {});
+        }
+
+        // Save belief shifts
+        for (const bs of (extracted.belief_shifts || [])) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'belief_shift',
+            statement: `${bs.before} → ${bs.after} (triggered by: ${bs.trigger})`,
+            confidence: 0.80, confirmed: false, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(['belief_shift']), category: 'belief_shift',
+          }).catch(() => {});
+        }
+
+        // Save dramatic irony entries
+        for (const di of (extracted.dramatic_irony || [])) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'dramatic_irony', statement: di.statement,
+            confidence: 0.85, confirmed: true, source_ref: characterKey,
+            tags: JSON.stringify(di.characters_unaware || []), category: `story_${storyNumber}`,
+          }).catch(() => {});
+        }
+
+        // Save open mysteries
+        for (const om of (extracted.open_mysteries || [])) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'open_mystery', statement: om.question,
+            confidence: 0.80, confirmed: true, source_ref: characterKey,
+            tags: JSON.stringify(['mystery']), category: `${storyNumber}`,
+          }).catch(() => {});
+        }
+
+        // Save foreshadowing seeds
+        for (const fs of (extracted.foreshadow_seeds || [])) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'foreshadow_seed',
+            statement: `${fs.detail} — potential: ${fs.potential_payoff}`,
+            confidence: 0.75, confirmed: true, source_ref: characterKey,
+            tags: JSON.stringify(['foreshadow']), category: `${storyNumber}`,
+          }).catch(() => {});
+        }
+
+        // Save therapy opening
+        if (extracted.therapy_opening) {
+          await StorytellerMemory.create({
+            character_id: charId, type: 'therapy_opening', statement: extracted.therapy_opening,
+            confidence: 0.90, confirmed: false, source_ref: `story_${storyNumber}`,
+            tags: JSON.stringify(['therapy_opening']), category: 'therapy_opening',
+          }).catch(() => {});
+        }
+
+        console.log(`[auto-extract] Story ${storyNumber} for ${characterKey}: extracted ${
+          (extracted.pain_points?.length || 0) + (extracted.belief_shifts?.length || 0) +
+          (extracted.dramatic_irony?.length || 0) + (extracted.open_mysteries?.length || 0) +
+          (extracted.foreshadow_seeds?.length || 0)
+        } continuity items`);
+      } catch (err) {
+        console.error('[auto-extract] error:', err?.message);
+      }
+    };
+
+    // Fire and forget — don't block the story response
+    autoExtract();
+
     return finish({
       story_number: storyNumber,
       character_key: characterKey,
@@ -7414,6 +7705,7 @@ Write the complete story now. No preamble. Begin with the title, then the story.
       new_character: taskBrief.new_character || false,
       new_character_name: taskBrief.new_character_name || null,
       new_character_role: taskBrief.new_character_role || null,
+      auto_extraction: 'in_progress',
     });
 
   } catch (err) {
@@ -7833,6 +8125,114 @@ router.get('/story-memories/:characterId', optionalAuth, async (req, res) => {
   } catch (err) {
     console.error('[story-memories] error:', err?.message);
     return res.json({ success: false, total: 0, pain_points: [], belief_shifts: [], therapy_openings: [] });
+  }
+});
+
+// ─── POST /prose-style-anchor ────────────────────────────────────────────────
+// Save a prose style sample for a character/world to guide story voice matching.
+router.post('/prose-style-anchor', optionalAuth, async (req, res) => {
+  const { characterKey, proseSample } = req.body;
+
+  if (!characterKey || !proseSample?.trim()) {
+    return res.status(400).json({ error: 'characterKey and proseSample required' });
+  }
+
+  try {
+    // Upsert — find existing or create new
+    const existing = await StorytellerMemory.findOne({
+      where: { type: 'prose_style_anchor', source_ref: characterKey },
+    });
+
+    if (existing) {
+      existing.statement = proseSample.trim();
+      await existing.save();
+    } else {
+      await StorytellerMemory.create({
+        type: 'prose_style_anchor',
+        statement: proseSample.trim(),
+        confidence: 1.0,
+        confirmed: true,
+        protected: true,
+        source_ref: characterKey,
+        source_type: 'manual',
+        tags: JSON.stringify(['prose_style']),
+      });
+    }
+
+    // Clear cache so next story uses the new sample
+    seProseStyleCache.delete(`prose_${characterKey}`);
+
+    return res.json({ success: true, message: 'Prose style anchor saved.' });
+  } catch (err) {
+    console.error('[prose-style-anchor] error:', err?.message);
+    return res.status(500).json({ error: 'Failed to save prose style anchor.' });
+  }
+});
+
+// ─── GET /prose-style-anchor/:characterKey ───────────────────────────────────
+router.get('/prose-style-anchor/:characterKey', optionalAuth, async (req, res) => {
+  try {
+    const anchor = await StorytellerMemory.findOne({
+      where: { type: 'prose_style_anchor', source_ref: req.params.characterKey },
+    });
+    return res.json({ success: true, prose_sample: anchor?.statement || null });
+  } catch (err) {
+    return res.json({ success: false, prose_sample: null });
+  }
+});
+
+// ─── GET /dramatic-irony/:characterKey ───────────────────────────────────────
+// Get all dramatic irony, open mysteries, and foreshadowing seeds for a character.
+router.get('/dramatic-irony/:characterKey', optionalAuth, async (req, res) => {
+  try {
+    const { characterKey } = req.params;
+    const items = await StorytellerMemory.findAll({
+      where: {
+        source_ref: characterKey,
+        type: ['dramatic_irony', 'open_mystery', 'foreshadow_seed'],
+      },
+      order: [['created_at', 'DESC']],
+      limit: 50,
+    });
+
+    const irony = items.filter(i => i.type === 'dramatic_irony');
+    const mysteries = items.filter(i => i.type === 'open_mystery');
+    const seeds = items.filter(i => i.type === 'foreshadow_seed');
+
+    return res.json({
+      success: true,
+      dramatic_irony: irony.map(i => ({ id: i.id, statement: i.statement, from_story: i.category, confirmed: i.confirmed })),
+      open_mysteries: mysteries.map(m => ({ id: m.id, question: m.statement, planted_story: m.category, confirmed: m.confirmed })),
+      foreshadow_seeds: seeds.map(s => ({ id: s.id, detail: s.statement, from_story: s.category, confirmed: s.confirmed })),
+    });
+  } catch (err) {
+    console.error('[dramatic-irony] error:', err?.message);
+    return res.json({ success: false, dramatic_irony: [], open_mysteries: [], foreshadow_seeds: [] });
+  }
+});
+
+// ─── POST /dramatic-irony/resolve ────────────────────────────────────────────
+// Mark a mystery as resolved or a foreshadowing seed as paid off.
+router.post('/dramatic-irony/resolve', optionalAuth, async (req, res) => {
+  const { memoryId, resolvedInStory, resolutionNote } = req.body;
+
+  if (!memoryId) {
+    return res.status(400).json({ error: 'memoryId required' });
+  }
+
+  try {
+    const item = await StorytellerMemory.findByPk(memoryId);
+    if (!item) return res.status(404).json({ error: 'Not found' });
+
+    // Mark as resolved by updating the statement and unconfirming so it drops out of active feed
+    item.confirmed = false;
+    item.statement = `[RESOLVED in story ${resolvedInStory || '?'}] ${item.statement}${resolutionNote ? ` — ${resolutionNote}` : ''}`;
+    await item.save();
+
+    return res.json({ success: true, message: 'Marked as resolved.' });
+  } catch (err) {
+    console.error('[dramatic-irony/resolve] error:', err?.message);
+    return res.status(500).json({ error: 'Failed to resolve.' });
   }
 });
 
