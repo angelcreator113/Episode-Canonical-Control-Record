@@ -1331,17 +1331,20 @@
   .ws-sidebar::after { display: none; }
   .ws-sidebar-title { font-size: 15px; margin-bottom: 6px; }
 
-  /* ── Filter pills — horizontal scroll ───────────────────────────────────── */
+  /* ── Filter pills — wrap into rows, visible without scrolling ─────────────── */
   .ws-filter-row {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    margin-bottom: 6px;
-    padding-bottom: 4px;
-    scrollbar-width: none;
+    flex-wrap: wrap;
+    overflow-x: visible;
+    margin-bottom: 8px;
+    padding-bottom: 0;
+    gap: 4px;
   }
-  .ws-filter-row::-webkit-scrollbar { display: none; }
-  .ws-filter-pill { flex-shrink: 0; font-size: 10px; padding: 3px 10px; }
+  .ws-filter-pill {
+    flex-shrink: 0;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 14px;
+  }
 
   /* ── Sidebar search ─────────────────────────────────────────────────────── */
   .ws-sidebar-search { font-size: 13px; padding: 8px 10px; }
