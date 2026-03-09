@@ -187,11 +187,8 @@ async function readCharacterContext(registryId) {
 // The system reads everything and proposes the next scene
 // ─────────────────────────────────────────────────────────────────────────────
 router.post('/propose-scene', optionalAuth, async (req, res) => {
-  const { book_id, chapter_id, registry_id, force_scene_type, author_note } = req.body;
-
-  if (!book_id && !registry_id) {
-    return res.status(400).json({ error: 'book_id or registry_id required' });
-  }
+  const { chapter_id, registry_id, force_scene_type, author_note } = req.body;
+  const book_id = req.body.book_id || (registry_id ? undefined : 'book-1');
 
   try {
     // ── 1. Calculate arc stage ──────────────────────────────────────────────
