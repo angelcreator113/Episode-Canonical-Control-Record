@@ -405,14 +405,14 @@ export default function WorldStudio() {
             <>
               {draftCount > 0 && (
                 <button className="ws-btn ws-btn-green" onClick={bulkActivate} disabled={bulkActivating}>
-                  {bulkActivating ? '…' : `✓ Activate ${draftCount} Drafts`}
+                  {bulkActivating ? '…' : <><span className="ws-hide-mobile">✓ Activate {draftCount} Drafts</span><span className="ws-show-mobile">✓ {draftCount} Drafts</span></>}
                 </button>
               )}
               <button className="ws-btn ws-btn-ghost" onClick={seedRelationships} disabled={seeding}>
-                {seeding ? '…' : '🔗 Seed Relationships'}
+                {seeding ? '…' : <><span className="ws-hide-mobile">🔗 Seed Relationships</span><span className="ws-show-mobile">🔗 Seed</span></>}
               </button>
               <button className="ws-btn ws-btn-gold" onClick={generatePreview} disabled={generating}>
-                {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
+                {generating ? '⏳ …' : <><span className="ws-hide-mobile">✦ Generate Ecosystem</span><span className="ws-show-mobile">✦ Generate</span></>}
               </button>
             </>
           )}
