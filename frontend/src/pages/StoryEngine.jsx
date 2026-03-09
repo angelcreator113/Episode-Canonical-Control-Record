@@ -420,7 +420,7 @@ function StoryPanel({
   const editing = writeMode;
   const setEditing = onToggleWriteMode;
   const [editText, setEditText] = useState(story?.text || '');
-  const [showAiSidebar, setShowAiSidebar] = useState(false);
+  const [showAiSidebar, setShowAiSidebar] = useState(() => window.innerWidth <= 768);
   const [currentPage, setCurrentPage] = useState(0);
   const textareaRef = useRef(null);
   const storyBodyRef = useRef(null);
