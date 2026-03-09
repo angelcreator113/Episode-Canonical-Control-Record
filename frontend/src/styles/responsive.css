@@ -1408,3 +1408,190 @@
   h2 { font-size: 1.15rem !important; }
   h3 { font-size: 1rem !important; }
 }
+
+
+/* ============================================================
+   20. GRID OVERFLOW PROTECTION — ≤768px
+   ============================================================
+   Many pages use minmax(280-450px, 1fr) grid columns that overflow
+   on mobile viewports. Force single-column layout at ≤768px.
+   ============================================================ */
+
+@media (max-width: 768px) {
+  /* ── EpisodeWorkspace ── */
+  .ew-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── SceneLibrary ── */
+  .scenes-grid {
+    grid-template-columns: 1fr !important;
+    gap: 0.75rem;
+  }
+
+  /* ── StorytellerPage ── */
+  .st-templates-grid,
+  .st-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── ContinuityEnginePage ── */
+  .ce-grid,
+  .ce-issues-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── CompositionLibrary ── */
+  .comp-grid,
+  .compositions-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── SocialProfileGenerator ── */
+  .sp-profiles-grid,
+  .spg-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── ShowDetail episodes grid ── */
+  .episodes-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── ThumbnailGallery ── */
+  .thumbnails-grid,
+  .thumbnail-gallery-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── CharacterGenerator ── */
+  .cg-traits-grid,
+  .cg-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── WardrobeAnalytics ── */
+  .charts-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .wa-metrics-grid,
+  .wa-usage-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Home page grids ── */
+  .hp-ep-grid,
+  .hp-actions {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── WorldStudio modals ── */
+  .ws-modal-grid,
+  .ws-registry-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── CharacterRegistryPage ── */
+  .crp-grid,
+  .crp-cards-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── EpisodeDetail ── */
+  .ed-scenes-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* ── Generic: catch any auto-fill grids with large minmax ── */
+  .se-review-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+}
+
+
+/* ============================================================
+   21. SCENE COMPOSER — Additional mobile fixes (≤768px)
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .episode-selector-dropdown {
+    min-width: min(320px, 90vw);
+  }
+
+  .mode-toggle {
+    padding: 12px 16px;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .episode-info h1 {
+    font-size: 16px;
+  }
+}
+
+
+/* ============================================================
+   22. EPISODE WARDROBE TAB — Mobile fixes (≤768px)
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .episode-wardrobe-tab {
+    padding: 14px;
+  }
+
+  .ewt-header {
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .ewt-stats {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .ewt-grid,
+  .ewt-char-items {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 12px;
+  }
+
+  .ewt-filters {
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .ewt-drawer {
+    width: 100vw !important;
+    max-width: 100vw !important;
+  }
+}
+
+
+/* ============================================================
+   23. STORY REVIEW PANEL — Mobile fixes (≤768px)
+   ============================================================ */
+
+@media (max-width: 768px) {
+  .se-review-status-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 8px 12px;
+  }
+
+  .se-review-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  .se-review-textarea {
+    padding: 14px;
+  }
+
+  .se-review-text {
+    padding: 14px;
+  }
+}

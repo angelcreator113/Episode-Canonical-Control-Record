@@ -89,3 +89,14 @@
   justify-content: flex-end;
   margin-top: 1rem;
 }
+
+@media (max-width: 768px) {
+  .filters-panel {
+    grid-template-columns: 1fr;
+    padding: 1rem;
+  }
+
+  .date-range {
+    flex-wrap: wrap;
+  }
+}

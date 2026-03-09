@@ -249,4 +249,14 @@
   .audit-logs-table th {
     font-size: 0.75rem;
   }
+
+  .audit-footer {
+    flex-direction: column;
+    gap: 0.75rem;
+    align-items: flex-start;
+  }
+
+  .description {
+    max-width: none;
+  }
 }

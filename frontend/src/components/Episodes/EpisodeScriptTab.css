@@ -520,9 +520,19 @@
     width: 100%;
   }
 
+  .character-field {
+    min-width: 0;
+    max-width: none;
+  }
+
+  .dialogue-field {
+    min-width: 0;
+  }
+
   .character-input,
   .dialogue-textarea {
     width: 100%;
+    min-width: 0;
     box-sizing: border-box;
   }
   
