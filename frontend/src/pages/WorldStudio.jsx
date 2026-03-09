@@ -166,6 +166,10 @@ export default function WorldStudio() {
   const [toast,   setToast]   = useState(null);
   const [seeding, setSeeding] = useState(false);
 
+  /* ── Mobile panel state ─────────────────────────────────────────── */
+  // 'list' = character sidebar, 'detail' = main content area
+  const [mobilePanel, setMobilePanel] = useState('list');
+
   const flash = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
     setTimeout(() => setToast(null), 3200);
@@ -451,7 +455,7 @@ export default function WorldStudio() {
       </div>
 
       {/* ── BODY ────────────────────────────────────────────────────── */}
-      <div className="ws-body">
+      <div className={`ws-body ws-mobile-panel-${mobilePanel}`}>
 
         {/* ═══ SIDEBAR ════════════════════════════════════════════════ */}
         <aside className="ws-sidebar">
@@ -487,7 +491,7 @@ export default function WorldStudio() {
                 <div
                   key={c.id}
                   className={`ws-char-card ${selectedChar === c.id ? 'ws-char-card-selected' : ''} ${c.is_alive === false ? 'ws-char-card-deceased' : ''}`}
-                  onClick={() => setSelectedChar(c.id)}
+                  onClick={() => { setSelectedChar(c.id); setMobilePanel('detail'); }}
                 >
                   <div className="ws-char-card-top">
                     <span className="ws-char-card-name">
@@ -524,6 +528,16 @@ export default function WorldStudio() {
 
         {/* ═══ MAIN CANVAS ════════════════════════════════════════════ */}
         <main className="ws-main">
+
+          {/* Mobile back-to-list button */}
+          {charDetail && (
+            <button
+              className="ws-mobile-back-btn"
+              onClick={() => { setSelectedChar(null); setCharDetail(null); setEditMode(false); setMobilePanel('list'); }}
+            >
+              ← Back to Characters
+            </button>
+          )}
 
           {/* Characters: empty state */}
           {tab === 'characters' && characters.length === 0 && (
