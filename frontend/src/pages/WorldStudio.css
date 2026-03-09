@@ -104,6 +104,14 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* ── Mobile show/hide helpers ──────────────────────────────────────────────── */
+.ws-show-mobile { display: none; }
+.ws-hide-mobile { display: inline; }
+@media (max-width: 600px) {
+  .ws-show-mobile { display: inline; }
+  .ws-hide-mobile { display: none; }
+}
+
 /* ── Header ────────────────────────────────────────────────────────────────── */
 .ws-header {
   display:          flex;
@@ -1237,37 +1245,56 @@
     display: none !important;
   }
 
-  /* ── Header — compact single row ───────────────────────────────────────── */
+  /* ── Header — tight compact layout ─────────────────────────────────────── */
   .ws-header {
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    gap: 8px;
-    padding: 10px 14px;
+    gap: 6px;
+    padding: 8px 12px;
   }
   .ws-header > button.ws-btn-back {
-    padding: 5px 10px;
-    font-size: 12px;
+    padding: 4px 8px;
+    font-size: 11px;
+    border-radius: 6px;
   }
-  .ws-header-title { font-size: 18px; flex: 1; }
+  .ws-header-title { font-size: 16px; flex: 1; min-width: 0; }
   .ws-header-sub   { display: none; }
 
-  /* Controls row below title */
+  /* ── World picker — pill tabs, no overflow ──────────────────────────────── */
+  .ws-world-picker {
+    width: 100%;
+    order: 10;
+    justify-content: stretch;
+    padding: 2px 3px;
+    gap: 3px;
+  }
+  .ws-world-btn {
+    flex: 1;
+    justify-content: center;
+    font-size: 11px;
+    padding: 5px 6px;
+    gap: 3px;
+  }
+  .ws-world-btn-icon { font-size: 11px; }
+
+  /* ── Action buttons — inline row, small pills ──────────────────────────── */
   .ws-header-controls {
     margin-left: 0;
     display: flex;
-    gap: 6px;
+    gap: 5px;
     width: 100%;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
+    order: 11;
+    flex-wrap: wrap;
   }
-  .ws-header-controls::-webkit-scrollbar { display: none; }
   .ws-header-controls .ws-btn {
-    padding: 7px 12px;
-    font-size: 11px;
+    padding: 5px 10px;
+    font-size: 10px;
     white-space: nowrap;
-    flex-shrink: 0;
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: center;
+    border-radius: 6px;
   }
 
   /* ── Tab bar — compact ──────────────────────────────────────────────────── */
@@ -1275,25 +1302,18 @@
     width: 100%;
     justify-content: center;
   }
-  .ws-tab { flex: 1; justify-content: center; padding: 7px 10px; font-size: 12px; }
+  .ws-tab { flex: 1; justify-content: center; padding: 6px 8px; font-size: 11px; }
 
-  /* ── World picker — compact row ─────────────────────────────────────────── */
-  .ws-world-picker {
-    width: 100%;
-    justify-content: center;
-  }
-  .ws-world-btn { flex: 1; justify-content: center; font-size: 11px; padding: 5px 8px; }
-
-  /* ── Stats bar — compact 3-col with key stats only ──────────────────────── */
+  /* ── Stats bar — single compact row ─────────────────────────────────────── */
   .ws-stats-bar {
     display: flex;
     gap: 0;
-    padding: 8px 14px;
+    padding: 6px 10px;
     justify-content: space-around;
   }
-  .ws-stat { flex-direction: row; gap: 5px; justify-content: center; }
-  .ws-stat-value { font-size: 14px; }
-  .ws-stat-label { font-size: 9px; }
+  .ws-stat { flex-direction: row; gap: 4px; justify-content: center; align-items: baseline; }
+  .ws-stat-value { font-size: 13px; }
+  .ws-stat-label { font-size: 8px; }
   .ws-stat-divider { display: none; }
 
   /* ── Body — single column, full height ──────────────────────────────────── */
@@ -1305,53 +1325,59 @@
     border-right: none;
     border-left: none;
     border-bottom: none;
-    padding: 12px 10px;
+    padding: 10px 10px;
     overflow-y: auto;
   }
   .ws-sidebar::after { display: none; }
-  .ws-sidebar-title { font-size: 16px; margin-bottom: 8px; }
+  .ws-sidebar-title { font-size: 15px; margin-bottom: 6px; }
 
-  /* ── Filter pills — horizontal scroll ───────────────────────────────────── */
+  /* ── Filter pills — wrap into rows, visible without scrolling ─────────────── */
   .ws-filter-row {
-    flex-wrap: nowrap;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+    flex-wrap: wrap;
+    overflow-x: visible;
     margin-bottom: 8px;
-    padding-bottom: 4px;
-    scrollbar-width: none;
+    padding-bottom: 0;
+    gap: 4px;
   }
-  .ws-filter-row::-webkit-scrollbar { display: none; }
-  .ws-filter-pill { flex-shrink: 0; font-size: 10px; padding: 3px 10px; }
+  .ws-filter-pill {
+    flex-shrink: 0;
+    font-size: 10px;
+    padding: 4px 10px;
+    border-radius: 14px;
+  }
 
   /* ── Sidebar search ─────────────────────────────────────────────────────── */
   .ws-sidebar-search { font-size: 13px; padding: 8px 10px; }
 
-  /* ── Character cards — compact ──────────────────────────────────────────── */
-  .ws-char-card { padding: 10px 12px; }
+  /* ── Character cards — tighter on mobile ────────────────────────────────── */
+  .ws-char-card { padding: 10px 12px; margin-bottom: 6px; }
   .ws-char-card-name { font-size: 14px; }
-  .ws-char-card-occupation { font-size: 11px; margin-bottom: 4px; }
-  .ws-char-card-signature { font-size: 10px; margin-top: 4px; }
+  .ws-char-card-occupation { font-size: 11px; margin-bottom: 3px; }
+  .ws-char-card-signature { font-size: 10px; margin-top: 3px; }
+  .ws-char-card-badges { margin-top: 2px; }
+  .ws-char-card-top { gap: 4px; }
 
   /* ── Main content — full width detail ───────────────────────────────────── */
-  .ws-main { padding: 16px 14px; }
-  .ws-detail-name { font-size: 22px; }
+  .ws-main { padding: 14px 12px; }
+  .ws-detail-name { font-size: 20px; }
   .ws-detail-meta { font-size: 12px; }
   .ws-detail-grid { grid-template-columns: 1fr; gap: 8px; }
   .ws-detail-blockquote { font-size: 14px; padding-left: 12px; }
-  .ws-detail-toolbar { flex-direction: column; gap: 8px; }
-  .ws-detail-actions { flex-wrap: wrap; gap: 6px; }
+  .ws-detail-toolbar { flex-direction: column; gap: 6px; }
+  .ws-detail-actions { flex-wrap: wrap; gap: 5px; }
+  .ws-detail-actions .ws-btn { font-size: 11px; padding: 5px 10px; }
 
   /* ── Dashboard ──────────────────────────────────────────────────────────── */
-  .ws-dashboard { padding: 16px 12px; }
-  .ws-dashboard-title { font-size: 18px; margin-bottom: 16px; }
+  .ws-dashboard { padding: 14px 12px; }
+  .ws-dashboard-title { font-size: 18px; margin-bottom: 14px; }
   .ws-dash-type-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
   .ws-dash-recent-grid { grid-template-columns: repeat(2, 1fr); gap: 8px; }
 
   /* ── Modal — nearly fullscreen ──────────────────────────────────────────── */
-  .ws-modal { width: 95vw; padding: 16px; max-height: 90vh; }
-  .ws-modal-title { font-size: 18px; }
+  .ws-modal { width: 95vw; padding: 14px; max-height: 90vh; }
+  .ws-modal-title { font-size: 17px; }
   .ws-modal-grid { grid-template-columns: 1fr; gap: 10px; }
-  .ws-modal-footer { flex-direction: column; gap: 10px; }
+  .ws-modal-footer { flex-direction: column; gap: 8px; }
   .ws-modal-footer-actions { width: 100%; justify-content: stretch; }
   .ws-modal-footer-actions .ws-btn { flex: 1; text-align: center; }
 
@@ -1371,6 +1397,25 @@
   /* Edit form */
   .ws-edit-form { gap: 10px; }
   .ws-edit-textarea { min-height: 50px; }
+
+  /* ── Empty state — compact on mobile ────────────────────────────────────── */
+  .ws-empty { padding: 24px 16px; }
+  .ws-empty-title { font-size: 18px; }
+  .ws-empty-text { font-size: 13px; }
+  .ws-empty-icon { font-size: 32px; }
+  .ws-empty-actions .ws-btn { font-size: 13px; padding: 10px 18px; }
+
+  /* ── Relationship graph — stack on mobile ───────────────────────────────── */
+  .ws-rel-item { padding: 8px 10px; }
+
+  /* ── Identity chips — tighter ───────────────────────────────────────────── */
+  .ws-identity-row { gap: 5px; margin: 6px 0 8px; }
+  .ws-identity-chip { font-size: 10px; padding: 2px 8px; }
+
+  /* ── Death notice — compact ─────────────────────────────────────────────── */
+  .ws-death-notice { padding: 10px 14px; margin: 8px 0 12px; }
+  .ws-death-notice-header { font-size: 12px; }
+  .ws-death-notice-field { font-size: 11px; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════════

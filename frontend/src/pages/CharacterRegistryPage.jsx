@@ -711,6 +711,15 @@ export default function CharacterRegistryPage() {
     return true;
   });
 
+  /* ── Pagination ── */
+  const PAGE_SIZE = 12;
+  const [currentPage, setCurrentPage] = useState(1);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  // Reset to page 1 when filters/search change
+  useEffect(() => { setCurrentPage(1); }, [search, filters, worldType, activeRegistry?.id]);
+
   const hasActiveFilters = filters.canon || filters.role || filters.era || filters.status;
 
   const clearFilters = () => setFilters({ canon: null, role: null, era: null, status: null });
@@ -2111,7 +2120,7 @@ export default function CharacterRegistryPage() {
               </div>
             ) : (
               <div className="cr-world-grid">
-                {filtered.map((char, i) => {
+                {paged.map((char, i) => {
                   const ls = livingStates[char.id] || null;
                   const meta = { color: ROLE_COLORS[char.role_type] || '#9a8c9e' };
                   const statusM = { draft: '#9a8c9e', accepted: '#3d8e42', declined: '#c43a2a', finalized: '#c9a84c' };
@@ -2236,6 +2245,15 @@ export default function CharacterRegistryPage() {
                     </div>
                   );
                 })}
+              </div>
+            )}
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="cr-pagination">
+                <button className="cr-page-btn" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>← Prev</button>
+                <span className="cr-page-info">Page {currentPage} of {totalPages} · {filtered.length} characters</span>
+                <button className="cr-page-btn" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Next →</button>
               </div>
             )}
           </>
@@ -2398,7 +2416,7 @@ export default function CharacterRegistryPage() {
         ) : (viewMode === 'grid' || isMobile) ? (
           /* ── GRID VIEW ── */
           <div className={`cr-grid ${cardSize !== 'normal' ? `cr-grid-${cardSize}` : ''}`}>
-            {filtered.map(c => (
+            {paged.map(c => (
               <CharacterCard key={c.id} c={c} onClick={() => openDossier(c)}
                 isCompareSelected={compareMode && compareSelection.includes(c.id)}
                 selectMode={selectMode} isSelected={selectedIds.has(c.id)}
@@ -2422,10 +2440,19 @@ export default function CharacterRegistryPage() {
               <span>Status</span>
               <span></span>
             </div>
-            {filtered.map(c => (
+            {paged.map(c => (
               <CharacterRow key={c.id} c={c} onClick={() => openDossier(c)}
                 selectMode={selectMode} isSelected={selectedIds.has(c.id)} />
             ))}
+          </div>
+        )}
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="cr-pagination">
+            <button className="cr-page-btn" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>← Prev</button>
+            <span className="cr-page-info">Page {currentPage} of {totalPages} · {filtered.length} characters</span>
+            <button className="cr-page-btn" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>Next →</button>
           </div>
         )}
       </>

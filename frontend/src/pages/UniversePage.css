@@ -882,3 +882,96 @@
     text-align: center;
   }
 }
+
+/* ══════════════════════════════════════════════
+   Universe Tab Bar — Mobile
+   ══════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .utb-bar {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .utb-bar::-webkit-scrollbar { display: none; }
+
+  .utb-cluster {
+    flex-shrink: 0 !important;
+  }
+
+  .utb-tab {
+    padding: 8px 8px !important;
+    font-size: 10px !important;
+    gap: 3px !important;
+    letter-spacing: 0 !important;
+  }
+
+  .utb-tab-icon {
+    font-size: 9px !important;
+  }
+
+  .utb-tab-label {
+    font-size: 10px !important;
+  }
+
+  .utb-divider {
+    margin: 0 4px !important;
+  }
+}
+
+/* ══════════════════════════════════════════════
+   Franchise Brain — Mobile
+   ══════════════════════════════════════════════ */
+@media (max-width: 600px) {
+  .fb-header {
+    padding: 14px 12px 10px !important;
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .fb-header h2 {
+    font-size: 17px !important;
+  }
+
+  .fb-header button {
+    font-size: 12px !important;
+    padding: 6px 12px !important;
+  }
+
+  .fb-inner-tabs {
+    padding: 0 8px !important;
+    overflow-x: auto !important;
+    flex-wrap: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .fb-inner-tabs::-webkit-scrollbar { display: none; }
+
+  .fb-inner-tab {
+    padding: 8px 10px !important;
+    font-size: 11px !important;
+    flex-shrink: 0 !important;
+    gap: 3px !important;
+  }
+
+  .fb-tab-icon {
+    font-size: 9px !important;
+  }
+
+  .fb-content {
+    padding: 12px 10px !important;
+  }
+
+  .fb-form-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .fb-entry-card {
+    padding: 10px 10px !important;
+  }
+
+  .fb-entry-header {
+    flex-direction: column !important;
+    gap: 6px !important;
+  }
+}

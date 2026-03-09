@@ -117,8 +117,8 @@ export default function WritingRhythm() {
   const loadAll = useCallback(async () => {
     try {
       const [statsRes, contentRes] = await Promise.all([
-        fetch(`${API}/api/v1/writing-rhythm/stats`),
-        fetch(`${API}/api/v1/multi-product/all`),
+        fetch(`${API}/writing-rhythm/stats`),
+        fetch(`${API}/multi-product/all`),
       ]);
       if (statsRes.ok) {
         const data = await statsRes.json();
@@ -149,7 +149,7 @@ export default function WritingRhythm() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/v1/writing-rhythm/log`, {
+      const res = await fetch(`${API}/writing-rhythm/log`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(logForm),
@@ -170,7 +170,7 @@ export default function WritingRhythm() {
     e.preventDefault();
     setSaving(true);
     try {
-      const res = await fetch(`${API}/api/v1/writing-rhythm/goal`, {
+      const res = await fetch(`${API}/writing-rhythm/goal`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(goalForm),
@@ -188,7 +188,7 @@ export default function WritingRhythm() {
 
   async function updateContentStatus(id, status) {
     try {
-      const res = await fetch(`${API}/api/v1/multi-product/${id}/status`, {
+      const res = await fetch(`${API}/multi-product/${id}/status`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status }),

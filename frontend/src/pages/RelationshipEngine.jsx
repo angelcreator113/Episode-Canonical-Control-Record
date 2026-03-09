@@ -547,6 +547,15 @@ export default function RelationshipEngine() {
     } catch { showToast('Failed to update', 'error'); }
   };
 
+  // ── Character → layer lookup ──────────────────────────────────────────
+  const charLayerMap = useMemo(() => {
+    const map = {};
+    for (const [layerKey, chars] of Object.entries(layers)) {
+      for (const c of chars) map[c.id] = layerKey;
+    }
+    return map;
+  }, [layers]);
+
   // ── Filter helpers ───────────────────────────────────────────────────
   const filteredCharacters = useMemo(() => {
     if (layerFilter === 'all') return characters;
@@ -678,9 +687,14 @@ export default function RelationshipEngine() {
                       <div className="cg-worldCard-name">{charName(c)}</div>
                       <div className="cg-worldCard-role">{c.role_type || 'unknown'}</div>
                     </div>
-                    <span className={`cg-badge is-${c.role_type === 'protagonist' || c.role_type === 'special' ? 'balanced' : 'oversat'}`}>
-                      {c.role_type || '?'}
-                    </span>
+                    {charLayerMap[c.id] && LAYER_CONFIG[charLayerMap[c.id]] && (
+                      <span
+                        className="cg-badge cg-badge-layer"
+                        style={{ color: LAYER_CONFIG[charLayerMap[c.id]].color, borderColor: LAYER_CONFIG[charLayerMap[c.id]].color }}
+                      >
+                        {LAYER_CONFIG[charLayerMap[c.id]].label.split('·')[0].trim()}
+                      </span>
+                    )}
                   </button>
                 ))}
               </div>
