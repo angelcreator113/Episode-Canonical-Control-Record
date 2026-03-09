@@ -104,9 +104,9 @@
     display: none !important;
   }
 
-  /* Hide secondary info sections (What Each Brings, Brief Diagnosis) */
+  /* Show secondary info sections on mobile (stacked layout) */
   .see-secondary-section {
-    display: none !important;
+    display: block !important;
   }
 
   /* What each voice brings — single column */

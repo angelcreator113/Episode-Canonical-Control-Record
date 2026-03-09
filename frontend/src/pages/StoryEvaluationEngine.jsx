@@ -1021,6 +1021,15 @@ export default function StoryEvaluationEngine() {
               </div>
             )}
 
+            {/* Synthesis notes — how voices were combined */}
+            {evaluation.synthesis_notes && (
+              <SectionCard title="How Voices Were Combined">
+                <div style={{ fontSize: 13, color: T.text, lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>
+                  {evaluation.synthesis_notes}
+                </div>
+              </SectionCard>
+            )}
+
             {/* Approved synthesised version */}
             {evaluation.approved_version && (
               <SectionCard title="Synthesised Approved Version">
