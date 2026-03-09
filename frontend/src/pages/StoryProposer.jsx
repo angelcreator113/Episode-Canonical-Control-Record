@@ -93,7 +93,7 @@ export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterId
     if (registryIdProp) return;
     (async () => {
       try {
-        const res = await fetch(`${API}/registries`);
+        const res = await fetch(`${API}/character-registry/registries`);
         if (res.ok) {
           const data = await res.json();
           const list = data.registries || data || [];
