@@ -6741,6 +6741,250 @@ async function loadWorldState(characterKey, worldBookTag) {
   }
 }
 
+// ─── Load character relationships (family, romantic, rivals, allies) ──────────
+async function loadCharacterRelationships(characterKey) {
+  try {
+    const { Op } = require('sequelize');
+    const { RegistryCharacter, CharacterRelationship } = require('../models');
+    if (!CharacterRelationship) return null;
+
+    // Find all DB IDs for this character
+    let dbKeys = SE_DB_KEY_MAP[characterKey] || [characterKey];
+    const charRows = await RegistryCharacter.findAll({
+      where: { character_key: dbKeys },
+      attributes: ['id', 'display_name'],
+    });
+    if (!charRows.length) return null;
+
+    const charIds = charRows.map(r => r.id);
+    const charName = charRows[0].display_name;
+
+    // Fetch all relationships where this character is either side
+    const rels = await CharacterRelationship.findAll({
+      where: {
+        [Op.or]: [
+          { character_id_a: charIds },
+          { character_id_b: charIds },
+        ],
+        status: 'Active',
+      },
+      include: [
+        { model: RegistryCharacter, as: 'characterA', attributes: ['display_name', 'character_key'] },
+        { model: RegistryCharacter, as: 'characterB', attributes: ['display_name', 'character_key'] },
+      ],
+      limit: 30,
+    });
+
+    if (!rels.length) return null;
+
+    const lines = [];
+
+    // Group by type for clearer prompt
+    const family = rels.filter(r => r.family_role || r.is_blood_relation);
+    const romantic = rels.filter(r => r.is_romantic);
+    const others = rels.filter(r => !r.family_role && !r.is_blood_relation && !r.is_romantic);
+
+    if (family.length) {
+      lines.push('FAMILY:');
+      for (const r of family) {
+        const other = charIds.includes(r.character_id_a) ? r.characterB : r.characterA;
+        const role = r.family_role || 'family';
+        const blood = r.is_blood_relation ? ' (blood)' : ' (chosen/step)';
+        const conflict = r.conflict_summary ? ` — Conflict: ${r.conflict_summary}` : '';
+        lines.push(`  ${other?.display_name || '?'} — ${role}${blood}${conflict}`);
+      }
+    }
+
+    if (romantic.length) {
+      lines.push('ROMANTIC:');
+      for (const r of romantic) {
+        const other = charIds.includes(r.character_id_a) ? r.characterB : r.characterA;
+        const conflict = r.conflict_summary ? ` — ${r.conflict_summary}` : '';
+        const notes = r.notes ? ` (${r.notes})` : '';
+        lines.push(`  ${other?.display_name || '?'} — ${r.relationship_type}${notes}${conflict}`);
+      }
+    }
+
+    if (others.length) {
+      lines.push('OTHER RELATIONSHIPS:');
+      for (const r of others) {
+        const other = charIds.includes(r.character_id_a) ? r.characterB : r.characterA;
+        const tag = r.role_tag ? ` [${r.role_tag}]` : '';
+        const tension = r.tension_state ? ` — tension: ${r.tension_state}` : '';
+        const conflict = r.conflict_summary ? ` — ${r.conflict_summary}` : '';
+        lines.push(`  ${other?.display_name || '?'} — ${r.relationship_type}${tag}${tension}${conflict}`);
+      }
+    }
+
+    // Knowledge asymmetry (dramatic irony fuel)
+    const asymmetric = rels.filter(r => r.source_knows || r.target_knows || r.reader_knows);
+    if (asymmetric.length) {
+      lines.push('KNOWLEDGE ASYMMETRY (who knows what — use for dramatic tension):');
+      for (const r of asymmetric) {
+        const a = r.characterA?.display_name || '?';
+        const b = r.characterB?.display_name || '?';
+        if (r.source_knows) lines.push(`  ${a} knows: ${r.source_knows}`);
+        if (r.target_knows) lines.push(`  ${b} knows: ${r.target_knows}`);
+        if (r.reader_knows) lines.push(`  Reader knows: ${r.reader_knows}`);
+      }
+    }
+
+    return lines.length
+      ? `RELATIONSHIP WEB (use these established dynamics — don't invent new relationships):\n${lines.join('\n')}`
+      : null;
+  } catch (err) {
+    console.error('[loadCharacterRelationships] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load active story threads ───────────────────────────────────────────────
+async function loadActiveThreads(characterKey, worldBookTag) {
+  try {
+    const { StoryThread } = require('../models');
+    if (!StoryThread) return null;
+
+    const where = { status: 'active' };
+    // Try to scope to book if we have a universe/book context
+    // StoryThread uses characters_involved JSONB which may contain character keys
+
+    const threads = await StoryThread.findAll({
+      where,
+      order: [['tension_level', 'DESC'], ['updated_at', 'DESC']],
+      limit: 15,
+    });
+
+    if (!threads.length) return null;
+
+    // Filter to threads involving this character (check JSONB array)
+    const charThreads = threads.filter(t => {
+      const involved = t.characters_involved || [];
+      return involved.some(c =>
+        (typeof c === 'string' && c === characterKey) ||
+        (typeof c === 'object' && (c.key === characterKey || c.character_key === characterKey))
+      );
+    });
+
+    // Also include high-tension threads from the same world
+    const worldThreads = threads.filter(t =>
+      !charThreads.includes(t) && (t.tension_level || 0) >= 7
+    );
+
+    const relevantThreads = [...charThreads, ...worldThreads.slice(0, 3)];
+    if (!relevantThreads.length) return null;
+
+    const lines = relevantThreads.map(t => {
+      const tension = t.tension_level ? ` [tension: ${t.tension_level}/10]` : '';
+      const type = t.thread_type !== 'subplot' ? ` (${t.thread_type})` : '';
+      const events = (t.key_events || []).slice(-2);
+      const eventStr = events.length ? `\n    Recent: ${events.map(e => typeof e === 'string' ? e : e.description || e.event).join('; ')}` : '';
+      return `  • ${t.thread_name}${type}${tension}: ${t.description || ''}${eventStr}`;
+    });
+
+    return `ACTIVE STORY THREADS (advance or reference these — don't let them go dormant):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.error('[loadActiveThreads] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load established locations ──────────────────────────────────────────────
+async function loadLocations(characterKey) {
+  try {
+    const { WorldLocation } = require('../models');
+    if (!WorldLocation) return null;
+
+    // Get locations associated with this character + general important ones
+    const locations = await WorldLocation.findAll({
+      order: [['updated_at', 'DESC']],
+      limit: 20,
+    });
+
+    if (!locations.length) return null;
+
+    // Filter to locations associated with this character or high-importance
+    const charLocations = locations.filter(loc => {
+      const assoc = loc.associated_characters || [];
+      return assoc.some(c =>
+        (typeof c === 'string' && c === characterKey) ||
+        (typeof c === 'object' && (c.key === characterKey || c.character_key === characterKey))
+      );
+    });
+
+    // Add general locations (no specific character)
+    const generalLocations = locations.filter(loc =>
+      !charLocations.includes(loc) && (!loc.associated_characters || loc.associated_characters.length === 0)
+    ).slice(0, 5);
+
+    const relevant = [...charLocations, ...generalLocations];
+    if (!relevant.length) return null;
+
+    const lines = relevant.map(loc => {
+      const sensory = loc.sensory_details || {};
+      const details = Object.entries(sensory)
+        .filter(([, v]) => v)
+        .map(([k, v]) => `${k}: ${v}`)
+        .join(', ');
+      const role = loc.narrative_role ? ` [${loc.narrative_role}]` : '';
+      const detailStr = details ? `\n    Sensory: ${details}` : '';
+      return `  • ${loc.name} (${loc.location_type})${role}: ${loc.description || ''}${detailStr}`;
+    });
+
+    return `ESTABLISHED LOCATIONS (use these instead of inventing new places):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.error('[loadLocations] error:', err?.message);
+    return null;
+  }
+}
+
+// ─── Load canon timeline events ──────────────────────────────────────────────
+async function loadCanonEvents(characterKey) {
+  try {
+    const { WorldTimelineEvent } = require('../models');
+    if (!WorldTimelineEvent) return null;
+
+    const events = await WorldTimelineEvent.findAll({
+      where: { is_canon: true },
+      order: [['sort_order', 'ASC'], ['created_at', 'ASC']],
+      limit: 30,
+    });
+
+    if (!events.length) return null;
+
+    // Filter to events involving this character or major world events
+    const charEvents = events.filter(e => {
+      const involved = e.characters_involved || [];
+      return involved.some(c =>
+        (typeof c === 'string' && c === characterKey) ||
+        (typeof c === 'object' && (c.key === characterKey || c.character_key === characterKey || c.name === characterKey))
+      );
+    });
+
+    const majorWorldEvents = events.filter(e =>
+      !charEvents.includes(e) &&
+      (e.impact_level === 'major' || e.impact_level === 'catastrophic')
+    );
+
+    const relevant = [...charEvents, ...majorWorldEvents.slice(0, 5)];
+    if (!relevant.length) return null;
+
+    const lines = relevant.map(e => {
+      const impact = e.impact_level && e.impact_level !== 'minor' ? ` [${e.impact_level}]` : '';
+      const date = e.story_date ? ` (${e.story_date})` : '';
+      const consequences = (e.consequences || []).slice(0, 2);
+      const consStr = consequences.length
+        ? `\n    Consequences: ${consequences.map(c => typeof c === 'string' ? c : c.description || c.text).join('; ')}`
+        : '';
+      return `  • ${e.event_name}${date}${impact}: ${e.event_description || ''}${consStr}`;
+    });
+
+    return `CANON EVENTS (these have already happened — do NOT contradict them):\n${lines.join('\n')}`;
+  } catch (err) {
+    console.error('[loadCanonEvents] error:', err?.message);
+    return null;
+  }
+}
+
 // ─── 50-story arc phases ──────────────────────────────────────────────────────
 const SE_ARC_PHASES = {
   establishment: { range: [1, 10],  label: 'Establishment', description: 'Who she is. Her rhythms. What she reaches for and what she\'s afraid of. The reader learns her world.' },
@@ -7033,39 +7277,49 @@ router.post('/generate-story', optionalAuth, async (req, res) => {
     // Build previous stories context — use ALL approved, not just last 3
     let previousContext;
     if (previousStories?.length) {
-      // Separate recent (detailed) from older (summarized) for token efficiency
-      const recent = previousStories.slice(-5);
-      const older = previousStories.slice(0, -5);
+      // Last 3: full summary (up to 800 chars each for deep continuity)
+      // Previous 7: title + short summary
+      // Older: titles only
+      const last3 = previousStories.slice(-3);
+      const middle = previousStories.slice(-10, -3);
+      const older = previousStories.slice(0, -10);
 
       let contextParts = [];
       if (older.length) {
-        contextParts.push('EARLIER ARC STORIES (condensed):\n' +
+        contextParts.push('EARLIER ARC STORIES (titles only — these established the foundation):\n' +
           older.map(s => `- Story ${s.number}: "${s.title}"`).join('\n'));
       }
-      contextParts.push('RECENT STORIES (for direct continuity):\n' +
-        recent.map(s => `- Story ${s.number}: "${s.title}" — ${s.summary}`).join('\n'));
+      if (middle.length) {
+        contextParts.push('RECENT ARC STORIES (for continuity — the character\'s recent journey):\n' +
+          middle.map(s => `- Story ${s.number}: "${s.title}" — ${(s.summary || '').slice(0, 300)}`).join('\n'));
+      }
+      contextParts.push('MOST RECENT STORIES (direct continuity — the story you write follows these):\n' +
+        last3.map(s => `- Story ${s.number}: "${s.title}" — ${s.summary || ''}`).join('\n'));
       previousContext = contextParts.join('\n\n');
     } else {
       previousContext = 'This is the first story in the arc.';
     }
 
-    // Load rich profile from DB
-    const dbProfile = await loadCharacterProfile(characterKey);
+    // Load all context in parallel for speed
+    const [dbProfile, storyMemories, worldState, relationships, activeThreads, locations, canonEvents] = await Promise.all([
+      loadCharacterProfile(characterKey),
+      loadStoryMemories(characterKey),
+      loadWorldState(characterKey, dna.world),
+      loadCharacterRelationships(characterKey),
+      loadActiveThreads(characterKey, dna.world),
+      loadLocations(characterKey),
+      loadCanonEvents(characterKey),
+    ]);
+
     const profileSection = dbProfile
       ? `\n\nCHARACTER PROFILE FROM REGISTRY (ground the story in these details — this is who they really are):\n${dbProfile}`
       : '';
-
-    // Load accumulated story memories (pain points, belief shifts, therapy threads)
-    const storyMemories = await loadStoryMemories(characterKey);
-    const memoriesSection = storyMemories
-      ? `\n\n${storyMemories}`
-      : '';
-
-    // Load cross-character world state
-    const worldState = await loadWorldState(characterKey, dna.world);
-    const worldSection = worldState
-      ? `\n\n${worldState}`
-      : '';
+    const memoriesSection = storyMemories ? `\n\n${storyMemories}` : '';
+    const worldSection = worldState ? `\n\n${worldState}` : '';
+    const relationshipsSection = relationships ? `\n\n${relationships}` : '';
+    const threadsSection = activeThreads ? `\n\n${activeThreads}` : '';
+    const locationsSection = locations ? `\n\n${locations}` : '';
+    const canonSection = canonEvents ? `\n\n${canonEvents}` : '';
 
     const strengthsList = Array.isArray(dna.strengths) ? dna.strengths.join(', ') : (dna.strengths || 'Resilience');
 
@@ -7080,7 +7334,7 @@ Wound: ${dna.wound}
 Strengths: ${strengthsList}
 Job antagonist: ${dna.job_antagonist}
 Personal antagonist: ${dna.personal_antagonist}
-Recurring object: ${dna.recurring_object}${profileSection}${memoriesSection}${worldSection}
+Recurring object: ${dna.recurring_object}${profileSection}${relationshipsSection}${memoriesSection}${worldSection}${threadsSection}${locationsSection}${canonSection}
 
 DOMAINS TO WEAVE (all four must be present):
 Career: ${dna.domains.career}
@@ -7119,12 +7373,16 @@ MULTI-PLOT & CONTINUITY RULES:
 - If BELIEF SHIFTS are provided, they represent where the character IS NOW psychologically. Write from the post-shift place, not the pre-shift one.
 - If THERAPEUTIC THREADS are provided, let one unresolved thread echo in this story — not as the main plot, but as emotional texture.
 - Collision stories should ideally involve a character from the WORLD STATE if available.
+- If RELATIONSHIP WEB is provided, use these established dynamics. Family roles, romantic status, rivalries, and alliances are CANON — write characters as they relate to each other, not as strangers. Knowledge asymmetry creates dramatic tension — use what the reader knows but characters don't.
+- If ACTIVE STORY THREADS are provided, advance at least one thread in this story. Higher-tension threads are more urgent. Don't resolve threads prematurely — move them forward one beat.
+- If ESTABLISHED LOCATIONS are provided, set scenes in these places. Use their sensory details and narrative roles. Don't invent new locations when existing ones serve the scene.
+- If CANON EVENTS are provided, they are immutable history. Reference them naturally when relevant. Never contradict a canon event. Consequences of past events should ripple forward into character behavior.
 
 Write the complete story now. No preamble. Begin with the title, then the story.`;
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
-      max_tokens: 6000,
+      max_tokens: 8000,
       system: systemPrompt,
       messages: [{ role: 'user', content: `Write Story ${storyNumber}: "${taskBrief.title}"` }],
     });

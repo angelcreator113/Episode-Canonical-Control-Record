@@ -22,7 +22,12 @@ function Home() {
   const [episodes, setEpisodes] = useState([]);
   const [characters, setCharacters] = useState([]);
 
-  useEffect(() => { loadAll(); }, []);
+  const loadingRef = React.useRef(false);
+  useEffect(() => {
+    if (loadingRef.current) return;
+    loadingRef.current = true;
+    loadAll().finally(() => { loadingRef.current = false; });
+  }, []);
 
   const loadAll = async () => {
     setLoading(true);

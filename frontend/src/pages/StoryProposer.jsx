@@ -260,60 +260,127 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
           </div>
         )}
 
-        {/* ── Propose Controls ── */}
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+        {/* ── Empty state / Propose Controls ── */}
+        {!proposal && !proposing && (
+          <div style={{
+            background: C.surface, border: `1px solid ${C.border}`,
+            borderRadius: '2px', padding: '40px 32px', textAlign: 'center',
+            marginBottom: '24px',
+          }}>
+            <div style={{ fontSize: '32px', marginBottom: '16px', opacity: 0.25 }}>◈</div>
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: '20px', fontWeight: '600', color: C.text, marginBottom: '8px' }}>
+              What scene should happen next?
+            </div>
+            <div style={{ fontSize: '13px', color: C.textDim, fontFamily: 'system-ui', lineHeight: '1.65', maxWidth: '480px', margin: '0 auto 24px' }}>
+              Scene Intelligence reads your arc progress, character wounds, unresolved tensions, and recent revelations — then proposes the next scene with cast, tone, and emotional stakes. You adjust anything before accepting.
+            </div>
             <button
               onClick={handlePropose}
-              disabled={proposing}
               style={{
-                padding: '13px 28px',
-                background: proposing ? C.bgDeep : C.text,
-                border: 'none', borderRadius: '2px',
-                color: proposing ? C.textFaint : C.bg,
-                fontSize: '14px', fontFamily: 'Georgia, serif',
-                fontWeight: '600', cursor: proposing ? 'default' : 'pointer',
-                letterSpacing: '0.02em',
+                padding: '14px 32px',
+                background: C.text, border: 'none', borderRadius: '2px',
+                color: C.bg, fontSize: '15px', fontFamily: 'Georgia, serif',
+                fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em',
+                marginBottom: '12px',
               }}
             >
-              {proposing ? 'Reading the story\u2026' : proposal ? 'Propose a Different Scene' : 'Propose Next Scene'}
+              Propose Next Scene
             </button>
-
-            <button
-              onClick={() => setShowForcePanel(!showForcePanel)}
-              style={{ padding: '12px 16px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', fontSize: '12px', color: C.textDim, fontFamily: 'system-ui', cursor: 'pointer' }}
-            >
-              {showForcePanel ? 'Hide options' : 'Options'}
-            </button>
-          </div>
-
-          {showForcePanel && (
-            <div style={{ marginTop: '12px', padding: '16px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px' }}>
-              <div style={{ fontSize: '11px', color: C.textFaint, fontFamily: 'system-ui', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Force scene type</div>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
-                {Object.entries(SCENE_TYPE_CONFIG).map(([key, conf]) => (
-                  <button key={key} onClick={() => setForceType(forceType === key ? '' : key)} style={{
-                    padding: '6px 12px',
-                    background: forceType === key ? `${conf.color}18` : 'transparent',
-                    border: `1px solid ${forceType === key ? conf.color + '66' : C.border}`,
-                    borderRadius: '2px', fontSize: '11px',
-                    color: forceType === key ? conf.color : C.textDim,
-                    fontFamily: 'system-ui', cursor: 'pointer',
-                  }}>
-                    {conf.icon} {conf.label}
-                  </button>
-                ))}
-              </div>
-              <div style={{ fontSize: '11px', color: C.textFaint, fontFamily: 'system-ui', marginBottom: '6px' }}>Note to system</div>
-              <input
-                value={authorNote}
-                onChange={e => setAuthorNote(e.target.value)}
-                placeholder="e.g. 'I want this to involve the editing breakdown' or 'focus on the TikTok creator tonight'"
-                style={{ width: '100%', padding: '8px 10px', background: C.bgDeep, border: `1px solid ${C.border}`, borderRadius: '2px', fontSize: '13px', color: C.text, fontFamily: 'Georgia, serif', outline: 'none', boxSizing: 'border-box' }}
-              />
+            <div style={{ fontSize: '11px', color: C.textFaint, fontFamily: 'system-ui' }}>
+              Typically takes a few seconds
             </div>
-          )}
-        </div>
+
+            {/* Inline options toggle */}
+            <div style={{ marginTop: '20px', borderTop: `1px solid ${C.border}`, paddingTop: '16px' }}>
+              <button
+                onClick={() => setShowForcePanel(!showForcePanel)}
+                style={{ background: 'none', border: 'none', fontSize: '12px', color: C.textDim, fontFamily: 'system-ui', cursor: 'pointer', padding: 0 }}
+              >
+                {showForcePanel ? 'Hide options \u25B4' : 'Advanced options \u25BE'}
+              </button>
+            </div>
+
+            {showForcePanel && (
+              <div style={{ marginTop: '12px', padding: '16px', background: C.bgDeep, border: `1px solid ${C.border}`, borderRadius: '2px', textAlign: 'left' }}>
+                <div style={{ fontSize: '11px', color: C.textFaint, fontFamily: 'system-ui', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Force scene type</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
+                  {Object.entries(SCENE_TYPE_CONFIG).map(([key, conf]) => (
+                    <button key={key} onClick={() => setForceType(forceType === key ? '' : key)} style={{
+                      padding: '6px 12px',
+                      background: forceType === key ? `${conf.color}18` : 'transparent',
+                      border: `1px solid ${forceType === key ? conf.color + '66' : C.border}`,
+                      borderRadius: '2px', fontSize: '11px',
+                      color: forceType === key ? conf.color : C.textDim,
+                      fontFamily: 'system-ui', cursor: 'pointer',
+                    }}>
+                      {conf.icon} {conf.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: '11px', color: C.textFaint, fontFamily: 'system-ui', marginBottom: '6px' }}>Note to system</div>
+                <input
+                  value={authorNote}
+                  onChange={e => setAuthorNote(e.target.value)}
+                  placeholder="e.g. 'focus on the editing breakdown' or 'tonight should be interior reckoning'"
+                  style={{ width: '100%', padding: '8px 10px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', fontSize: '13px', color: C.text, fontFamily: 'Georgia, serif', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ── Propose again controls (after proposal exists) ── */}
+        {proposal && !proposing && (
+          <div style={{ marginBottom: '24px' }}>
+            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap', alignItems: 'center' }}>
+              <button
+                onClick={handlePropose}
+                style={{
+                  padding: '13px 28px',
+                  background: C.text, border: 'none', borderRadius: '2px',
+                  color: C.bg, fontSize: '14px', fontFamily: 'Georgia, serif',
+                  fontWeight: '600', cursor: 'pointer', letterSpacing: '0.02em',
+                }}
+              >
+                Propose a Different Scene
+              </button>
+
+              <button
+                onClick={() => setShowForcePanel(!showForcePanel)}
+                style={{ padding: '12px 16px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px', fontSize: '12px', color: C.textDim, fontFamily: 'system-ui', cursor: 'pointer' }}
+              >
+                {showForcePanel ? 'Hide options' : 'Options'}
+              </button>
+            </div>
+
+            {showForcePanel && (
+              <div style={{ marginTop: '12px', padding: '16px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '2px' }}>
+                <div style={{ fontSize: '11px', color: C.textFaint, fontFamily: 'system-ui', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Force scene type</div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '14px' }}>
+                  {Object.entries(SCENE_TYPE_CONFIG).map(([key, conf]) => (
+                    <button key={key} onClick={() => setForceType(forceType === key ? '' : key)} style={{
+                      padding: '6px 12px',
+                      background: forceType === key ? `${conf.color}18` : 'transparent',
+                      border: `1px solid ${forceType === key ? conf.color + '66' : C.border}`,
+                      borderRadius: '2px', fontSize: '11px',
+                      color: forceType === key ? conf.color : C.textDim,
+                      fontFamily: 'system-ui', cursor: 'pointer',
+                    }}>
+                      {conf.icon} {conf.label}
+                    </button>
+                  ))}
+                </div>
+                <div style={{ fontSize: '11px', color: C.textFaint, fontFamily: 'system-ui', marginBottom: '6px' }}>Note to system</div>
+                <input
+                  value={authorNote}
+                  onChange={e => setAuthorNote(e.target.value)}
+                  placeholder="e.g. 'I want this to involve the editing breakdown' or 'focus on the TikTok creator tonight'"
+                  style={{ width: '100%', padding: '8px 10px', background: C.bgDeep, border: `1px solid ${C.border}`, borderRadius: '2px', fontSize: '13px', color: C.text, fontFamily: 'Georgia, serif', outline: 'none', boxSizing: 'border-box' }}
+                />
+              </div>
+            )}
+          </div>
+        )
 
         {error && (
           <div style={{ padding: '12px 14px', background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: '2px', fontSize: '13px', color: C.red, fontFamily: 'system-ui', marginBottom: '20px' }}>
