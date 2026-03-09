@@ -148,14 +148,10 @@ export default function FeedBulkImport({ onDone, seriesId }) {
         const totalBatches = Math.ceil(total / BATCH_SIZE);
 
         try {
-          const controller = new AbortController();
-          const timer = setTimeout(() => controller.abort(), 180000); // 3 min
           const res = await fetch(`${API}/bulk/generate`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ creators: batch, series_id: seriesId }),
-            signal: controller.signal,
           });
-          clearTimeout(timer);
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
           allResults.push(...data.results);
