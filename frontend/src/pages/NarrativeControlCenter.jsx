@@ -56,16 +56,31 @@ function PipelineTab() {
   const [pipelines, setPipelines] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchJSON(`${API}/tier/pipeline`).then(data => {
-      setPipelines(data.pipelines || []);
-      setStats(data.stats || null);
-      setLoading(false);
-    });
+    let cancelled = false;
+    fetch(`${API}/tier/pipeline`)
+      .then(res => {
+        if (!res.ok) throw new Error(`Server returned ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        if (cancelled) return;
+        setPipelines(data.pipelines || []);
+        setStats(data.stats || null);
+      })
+      .catch(err => {
+        if (cancelled) return;
+        console.warn('Pipeline fetch failed:', err.message);
+        setError(err.message);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, []);
 
   if (loading) return <div style={{ padding: 40, textAlign: 'center', color: T.slate }}>Loading pipeline...</div>;
+  if (error) return <EmptyState text="Pipeline data unavailable. The pipeline tracking table may need to be initialized." />;
 
   return (
     <div>
