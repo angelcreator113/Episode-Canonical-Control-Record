@@ -2308,6 +2308,14 @@
     display: none;
   }
 
+  .cr-filter-pill {
+    flex-shrink: 0;
+  }
+
+  .cr-filter-label {
+    flex-shrink: 0;
+  }
+
   .cr-filter-sep {
     flex-shrink: 0;
   }
