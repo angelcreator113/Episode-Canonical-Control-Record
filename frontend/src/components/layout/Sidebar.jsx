@@ -34,12 +34,15 @@ const NAV = [
   {
     zone: 'WRITE',
     items: [
-      { icon: '▶',  label: 'Start Session',   route: '/start' },
-      { icon: '⚡', label: 'Story Engine',    route: '/story-engine' },
-      { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
-      { icon: '', label: 'Assembler',        route: '/assembler' },
-      { icon: '◇',  label: 'Continuity',      route: '/continuity' },
-      { icon: '🧠', label: 'Narrative Control', route: '/narrative-control' },
+      { icon: '▶',  label: 'Novel Session',   route: '/start' },
+      { icon: '⚡', label: 'Short Stories',    route: '/story-engine',
+        children: [
+          { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
+          { icon: '⬡', label: 'Assembler',           route: '/assembler' },
+          { icon: '◇', label: 'Continuity',           route: '/continuity' },
+          { icon: '🧠', label: 'Narrative Control',   route: '/narrative-control' },
+        ],
+      },
     ],
   },
   {
@@ -96,6 +99,7 @@ function Sidebar({ isOpen, onClose }) {
   const [showsOpen, setShowsOpen] = useState(false);
   const [universeOpen, setUniverseOpen] = useState(false);
   const [worldOpen, setWorldOpen] = useState(false);
+  const [storiesOpen, setStoriesOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
 
   // Auto-expand Shows sub-nav when on a /shows/* route
@@ -114,6 +118,13 @@ function Sidebar({ isOpen, onClose }) {
   useEffect(() => {
     if (['/world-studio', '/character-registry', '/relationships'].some(p => location.pathname.startsWith(p))) {
       setWorldOpen(true);
+    }
+  }, [location.pathname]);
+
+  // Auto-expand Short Stories sub-nav
+  useEffect(() => {
+    if (['/story-engine', '/scene-proposer', '/assembler', '/continuity', '/narrative-control'].some(p => location.pathname.startsWith(p))) {
+      setStoriesOpen(true);
     }
   }, [location.pathname]);
 
@@ -183,8 +194,9 @@ function Sidebar({ isOpen, onClose }) {
                 if (item.children) {
                   const isUniverse = item.route === '/universe';
                   const isWorld = item.route === '/world-studio';
-                  const groupOpen = isUniverse ? universeOpen : isWorld ? worldOpen : false;
-                  const setGroupOpen = isUniverse ? setUniverseOpen : isWorld ? setWorldOpen : () => {};
+                  const isStories = item.route === '/story-engine';
+                  const groupOpen = isUniverse ? universeOpen : isWorld ? worldOpen : isStories ? storiesOpen : false;
+                  const setGroupOpen = isUniverse ? setUniverseOpen : isWorld ? setWorldOpen : isStories ? setStoriesOpen : () => {};
                   const groupActive = isActive(item.route) || location.pathname === item.route;
                   return (
                     <div key={item.route} className="nav-group">
