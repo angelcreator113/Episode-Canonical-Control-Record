@@ -24,7 +24,7 @@ module.exports = (sequelize) => {
         allowNull: true,
       },
 
-      // goal | preference | relationship | belief | event | constraint | transformation | pain_point | character_dynamic
+      // goal | preference | relationship | belief | event | constraint | transformation | pain_point | character_dynamic | dramatic_irony | open_mystery | foreshadow_seed | prose_style_anchor
       type: {
         type: DataTypes.STRING(100),
         allowNull: false,
@@ -42,8 +42,12 @@ module.exports = (sequelize) => {
               'character_dynamic',
               'belief_shift',
               'therapy_opening',
+              'dramatic_irony',
+              'open_mystery',
+              'foreshadow_seed',
+              'prose_style_anchor',
             ]],
-            msg: 'type must be one of: goal, preference, relationship, belief, event, constraint, transformation, pain_point, character_dynamic',
+            msg: 'type must be one of: goal, preference, relationship, belief, event, constraint, transformation, pain_point, character_dynamic, belief_shift, therapy_opening, dramatic_irony, open_mystery, foreshadow_seed, prose_style_anchor',
           },
         },
       },

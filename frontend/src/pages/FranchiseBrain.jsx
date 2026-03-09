@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import PdfIngestZone from '../components/PdfIngestZone';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 const C = {
   bg: '#faf6f0',
