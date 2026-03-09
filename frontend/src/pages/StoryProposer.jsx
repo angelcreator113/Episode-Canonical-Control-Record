@@ -51,12 +51,25 @@ const TONE_CONFIG = {
 
 const ARC_STAGES = ['establishment', 'pressure', 'crisis', 'integration'];
 
-export default function StoryProposer({ bookId, chapterId, registryId, onProposalAccepted }) {
+export default function StoryProposer({ bookId: bookIdProp, chapterId: chapterIdProp, registryId: registryIdProp, onProposalAccepted }) {
+  // Use props if provided, otherwise fall back to localStorage / defaults
+  const [localBookId, setLocalBookId] = useState(() => {
+    if (bookIdProp) return bookIdProp;
+    try { return localStorage.getItem('se_activeWorld') || 'book-1'; } catch { return 'book-1'; }
+  });
+  const bookId = bookIdProp || localBookId;
+  const chapterId = chapterIdProp || undefined;
+  const registryId = registryIdProp || undefined;
+
   const [proposal, setProposal] = useState(null);
   const [arcState, setArcState] = useState(null);
   const [proposing, setProposing] = useState(false);
   const [accepting, setAccepting] = useState(false);
   const [error, setError] = useState(null);
+
+  // Available registries for standalone mode
+  const [registries, setRegistries] = useState([]);
+  const [selectedRegistry, setSelectedRegistry] = useState(registryIdProp || '');
 
   // Editing state
   const [editingBrief, setEditingBrief] = useState(false);
@@ -74,6 +87,22 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
   // Growth flags
   const [growthFlags, setGrowthFlags] = useState([]);
   const [flagsLoaded, setFlagsLoaded] = useState(false);
+
+  // Load registries when in standalone mode (no registryId prop)
+  useEffect(() => {
+    if (registryIdProp) return;
+    (async () => {
+      try {
+        const res = await fetch(`${API}/registries`);
+        if (res.ok) {
+          const data = await res.json();
+          const list = data.registries || data || [];
+          setRegistries(list);
+          if (list.length && !selectedRegistry) setSelectedRegistry(String(list[0].id));
+        }
+      } catch { /* non-fatal */ }
+    })();
+  }, [registryIdProp]);
 
   useEffect(() => {
     loadGrowthFlags();
@@ -105,7 +134,7 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
         body: JSON.stringify({
           book_id: bookId,
           chapter_id: chapterId,
-          registry_id: registryId,
+          registry_id: registryId || selectedRegistry || undefined,
           force_scene_type: forceType || undefined,
           author_note: authorNote || undefined,
         }),
@@ -274,6 +303,32 @@ export default function StoryProposer({ bookId, chapterId, registryId, onProposa
             <div style={{ fontSize: '13px', color: C.textDim, fontFamily: 'system-ui', lineHeight: '1.65', maxWidth: '480px', margin: '0 auto 24px' }}>
               Scene Intelligence reads your arc progress, character wounds, unresolved tensions, and recent revelations — then proposes the next scene with cast, tone, and emotional stakes. You adjust anything before accepting.
             </div>
+
+            {/* Book / Registry selectors in standalone mode */}
+            {!bookIdProp && (
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', marginBottom: '20px', flexWrap: 'wrap' }}>
+                <select
+                  value={localBookId}
+                  onChange={e => setLocalBookId(e.target.value)}
+                  style={{ padding: '8px 12px', fontFamily: 'system-ui', fontSize: '13px', border: `1px solid ${C.border}`, borderRadius: '2px', background: C.surface, color: C.text }}
+                >
+                  <option value="book-1">Book 1 World</option>
+                  <option value="lalaverse">LalaVerse</option>
+                </select>
+                {registries.length > 0 && (
+                  <select
+                    value={selectedRegistry}
+                    onChange={e => setSelectedRegistry(e.target.value)}
+                    style={{ padding: '8px 12px', fontFamily: 'system-ui', fontSize: '13px', border: `1px solid ${C.border}`, borderRadius: '2px', background: C.surface, color: C.text }}
+                  >
+                    {registries.map(r => (
+                      <option key={r.id} value={r.id}>{r.name || `Registry ${r.id}`}</option>
+                    ))}
+                  </select>
+                )}
+              </div>
+            )}
+
             <button
               onClick={handlePropose}
               style={{
