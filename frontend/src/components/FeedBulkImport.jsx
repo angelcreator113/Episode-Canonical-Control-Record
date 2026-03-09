@@ -1,6 +1,6 @@
 // FeedBulkImport.jsx — Bulk import panel for SocialProfileGenerator (The Feed)
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 const API = '/api/v1/social-profiles';
 
@@ -25,25 +25,42 @@ const PASTE_PLACEHOLDER = `@mollymeannn | tiktok | does makeup but something is 
 @theexplicitmess | onlyfans | went fully transparent, audience grew 3x
 @justlikeher_ | instagram | same niche same size, now pulling ahead`;
 
+const STORAGE_KEY = 'feed_bulk_import_draft';
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
 export default function FeedBulkImport({ onDone, seriesId }) {
-  const [mode, setMode]           = useState('paste'); // 'paste' | 'file'
-  const [pasteText, setPasteText] = useState('');
+  const draft = useRef(loadDraft());
+
+  const [mode, setMode]           = useState(draft.current?.mode || 'paste');
+  const [pasteText, setPasteText] = useState(draft.current?.pasteText || '');
   const [files, setFiles]         = useState([]);
   const [dragging, setDragging]   = useState(false);
 
   // Parsed candidates before generation
-  const [candidates, setCandidates] = useState(null); // null = not parsed yet
-  const [parseErrors, setParseErrors] = useState([]);
-  const [extractNotes, setExtractNotes] = useState('');
+  const [candidates, setCandidates] = useState(draft.current?.candidates ?? null);
+  const [parseErrors, setParseErrors] = useState(draft.current?.parseErrors || []);
+  const [extractNotes, setExtractNotes] = useState(draft.current?.extractNotes || '');
 
   // Generation state
   const [generating, setGenerating] = useState(false);
-  const [progress, setProgress]     = useState(null); // { done, total, results }
-  const [summary, setSummary]       = useState(null);
+  const [progress, setProgress]     = useState(draft.current?.progress ?? null);
+  const [summary, setSummary]       = useState(draft.current?.summary ?? null);
 
   const [parsing, setParsing]   = useState(false);
   const [err, setErr]           = useState(null);
   const fileRef = useRef();
+
+  // ── Persist draft to localStorage ──────────────────────────────────────────
+  useEffect(() => {
+    const data = { mode, pasteText, candidates, parseErrors, extractNotes, progress, summary };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+  }, [mode, pasteText, candidates, parseErrors, extractNotes, progress, summary]);
 
   // ── Mobile paste fallback (some mobile browsers don't fire onChange for paste) ──
   const handlePaste = useCallback(e => {
@@ -202,7 +219,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
             ))}
           </div>
 
-          <button onClick={onDone} style={{ width: '100%', padding: '12px', background: C.text, border: 'none', borderRadius: '10px', color: C.bg, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
+          <button onClick={() => { localStorage.removeItem(STORAGE_KEY); onDone(); }} style={{ width: '100%', padding: '12px', background: C.text, border: 'none', borderRadius: '10px', color: C.bg, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
             Back to The Feed →
           </button>
         </div>
@@ -241,7 +258,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
             <div style={{ fontSize: '11px', color: C.pink, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               {candidates.length} creator{candidates.length !== 1 ? 's' : ''} ready to generate
             </div>
-            <button onClick={() => { setCandidates(null); setSummary(null); }} style={{ background: 'none', border: 'none', color: C.textFaint, fontSize: '12px', cursor: 'pointer' }}>
+            <button onClick={() => { setCandidates(null); setSummary(null); setPasteText(''); setParseErrors([]); setExtractNotes(''); setProgress(null); localStorage.removeItem(STORAGE_KEY); }} style={{ background: 'none', border: 'none', color: C.textFaint, fontSize: '12px', cursor: 'pointer' }}>
               Start over
             </button>
           </div>
