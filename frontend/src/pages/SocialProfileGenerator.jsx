@@ -55,7 +55,7 @@ function lalaClass(score) {
 }
 
 function getToken() {
-  return localStorage.getItem('token') || sessionStorage.getItem('token');
+  return localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
 }
 
 function authHeaders() {
@@ -332,7 +332,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
                 <div
                   key={p.id}
                   className={`spg-card ${selected?.id === p.id ? 'spg-card-active' : ''}`}
+                  role="button"
+                  tabIndex={0}
                   onClick={() => setSelected(selected?.id === p.id ? null : p)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelected(selected?.id === p.id ? null : p); }}
                 >
                   <div className="spg-card-header">
                     <span className="spg-card-handle">{p.handle}</span>

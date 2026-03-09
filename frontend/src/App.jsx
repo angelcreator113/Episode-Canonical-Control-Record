@@ -171,9 +171,10 @@ function AppContent() {
   }, [isAuthenticated, loading, location.pathname, navigate]);
 
   // Only redirect to login if not authenticated AND not currently loading auth state
-  // This preserves deep links on page refresh
+  // Also check localStorage directly to survive React state races on refresh
   React.useEffect(() => {
-    if (!loading && !isAuthenticated && location.pathname !== '/login' && location.pathname !== '/' && !isNavigatingRef.current) {
+    const hasToken = !!localStorage.getItem('authToken');
+    if (!loading && !isAuthenticated && !hasToken && location.pathname !== '/login' && location.pathname !== '/' && !isNavigatingRef.current) {
       console.log('[AppContent] User not authenticated, redirecting to landing...');
       isNavigatingRef.current = true;
       navigate('/', { replace: true });
