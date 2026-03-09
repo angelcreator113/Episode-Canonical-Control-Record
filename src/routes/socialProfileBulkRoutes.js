@@ -74,6 +74,47 @@ router.post('/parse-paste', optionalAuth, async (req, res) => {
       }
     }
 
+    // If structured parsing found nothing, fall back to AI extraction
+    if (creators.length === 0 && lines.length > 0) {
+      try {
+        const aiExtraction = await client.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: `Extract every social media creator or person mention from the following pasted text.
+For each creator/person found, extract:
+- handle (username, @handle, or invent a plausible one from their name)
+- platform (best guess from: ${PLATFORMS.join(', ')}) — default to "instagram" if unclear
+- vibe_sentence (one-line description of who they are / what they do based on the text)
+
+Return ONLY a valid JSON array:
+[{"handle":"username","platform":"instagram","vibe_sentence":"..."}]
+
+If no creators can be found, return an empty array: []
+
+TEXT:
+${text.slice(0, 20000)}`,
+          }],
+        });
+
+        const content = aiExtraction.content[0].text;
+        const match = content.match(/\[[\s\S]*\]/);
+        if (match) {
+          const aiCreators = JSON.parse(match[0]);
+          creators.push(...aiCreators.map(c => ({
+            ...c,
+            platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
+          })));
+        }
+        // Clear structured parse errors since we fell back to AI
+        errors.length = 0;
+      } catch (aiErr) {
+        console.error('AI paste fallback failed:', aiErr.message);
+        // Keep original structured parse errors
+      }
+    }
+
     return res.json({ creators, errors, total_lines: lines.length });
   } catch (err) {
     return res.status(500).json({ error: err.message });
@@ -104,49 +145,85 @@ router.post('/parse-file', optionalAuth, upload.single('file'), async (req, res)
       return res.status(400).json({ error: 'File appears empty or unreadable' });
     }
 
-    // Use Claude to extract creator signals from freeform text
-    const extraction = await client.messages.create({
-      model: 'claude-sonnet-4-20250514',
-      max_tokens: 4000,
-      messages: [{
-        role: 'user',
-        content: `Extract every social media creator mention from the following text.
-For each creator, extract:
-- handle (username or name used)
-- platform (best guess from: ${PLATFORMS.join(', ')})
+    // Chunk the document so we scan ALL content, not just the first 12K chars
+    const CHUNK_SIZE    = 12000;
+    const CHUNK_OVERLAP = 500;
+    const chunks = [];
+
+    if (rawText.length <= CHUNK_SIZE) {
+      chunks.push(rawText);
+    } else {
+      let pos = 0;
+      while (pos < rawText.length) {
+        chunks.push(rawText.slice(pos, pos + CHUNK_SIZE));
+        pos += CHUNK_SIZE - CHUNK_OVERLAP;
+      }
+    }
+
+    let allCreators = [];
+    let extractionNotes = '';
+    let chunkFailures = 0;
+
+    for (let i = 0; i < chunks.length; i++) {
+      try {
+        const extraction = await client.messages.create({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 4000,
+          messages: [{
+            role: 'user',
+            content: `Extract every social media creator, person, or character mention from the following text.
+For each one found, extract:
+- handle (username or name used — if no handle given, invent a plausible one from name/description)
+- platform (best guess from: ${PLATFORMS.join(', ')}) — default to "instagram" if unclear
 - vibe_sentence (one-line description of who they are / what they do)
+- source_text (the text that informed your extraction)
 
-If a handle is not explicitly given, invent a plausible one based on the name/description.
-For any extracted text that informed your extraction, include it as source_text.
-
-Return ONLY valid JSON array:
+Be thorough — extract EVERY person or creator mentioned, even brief mentions.
+Return ONLY a valid JSON array:
 [{"handle":"username","platform":"instagram","vibe_sentence":"...","source_text":"..."}]
 
-TEXT:
-${rawText.slice(0, 12000)}`,
-      }],
+If none found, return: []
+
+TEXT (chunk ${i + 1} of ${chunks.length}):
+${chunks[i]}`,
+          }],
+        });
+
+        const content = extraction.content[0].text;
+        const match = content.match(/\[[\s\S]*\]/);
+        if (match) {
+          let chunkCreators = JSON.parse(match[0]);
+          chunkCreators = chunkCreators.map(c => ({
+            ...c,
+            platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
+          }));
+          allCreators.push(...chunkCreators);
+        }
+      } catch (chunkErr) {
+        console.warn(`File parse: chunk ${i + 1}/${chunks.length} failed:`, chunkErr.message);
+        chunkFailures++;
+      }
+    }
+
+    // Deduplicate by handle (case-insensitive)
+    const seen = new Set();
+    allCreators = allCreators.filter(c => {
+      const key = c.handle.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
     });
 
-    let creators = [];
-    let extractionNotes = '';
-    try {
-      const content = extraction.content[0].text;
-      const match = content.match(/\[[\s\S]*\]/);
-      if (match) {
-        creators = JSON.parse(match[0]);
-        // Validate platforms
-        creators = creators.map(c => ({
-          ...c,
-          platform: PLATFORMS.includes(c.platform) ? c.platform : 'instagram',
-        }));
-      }
-    } catch (parseErr) {
-      extractionNotes = 'AI extraction returned unparseable results. Try paste mode instead.';
+    if (chunkFailures > 0) {
+      extractionNotes = `Extracted ${allCreators.length} creator(s) from ${req.file.originalname} (${chunkFailures} of ${chunks.length} sections had extraction issues)`;
+    } else {
+      extractionNotes = `Extracted ${allCreators.length} creator(s) from ${req.file.originalname}` +
+        (chunks.length > 1 ? ` (scanned ${chunks.length} sections)` : '');
     }
 
     return res.json({
-      creators,
-      extraction_notes: extractionNotes || `Extracted ${creators.length} creator(s) from ${req.file.originalname}`,
+      creators: allCreators,
+      extraction_notes: extractionNotes,
       file_name: req.file.originalname,
     });
   } catch (err) {

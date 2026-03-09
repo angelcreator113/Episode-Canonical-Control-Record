@@ -45,6 +45,20 @@ export default function FeedBulkImport({ onDone, seriesId }) {
   const [err, setErr]           = useState(null);
   const fileRef = useRef();
 
+  // ── Mobile paste fallback (some mobile browsers don't fire onChange for paste) ──
+  const handlePaste = useCallback(e => {
+    const pasted = e.clipboardData?.getData('text');
+    if (pasted) {
+      e.preventDefault();
+      setPasteText(prev => {
+        const el = e.target;
+        const start = el.selectionStart ?? prev.length;
+        const end   = el.selectionEnd   ?? prev.length;
+        return prev.slice(0, start) + pasted + prev.slice(end);
+      });
+    }
+  }, []);
+
   // ── Drag and drop ──────────────────────────────────────────────────────────
   const onDrop = useCallback(e => {
     e.preventDefault(); setDragging(false);
@@ -124,7 +138,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
   const isDone        = summary !== null;
 
   return (
-    <div style={{ padding: '32px', maxWidth: '720px', margin: '0 auto' }}>
+    <div style={{ padding: 'clamp(16px, 4vw, 32px)', maxWidth: '720px', margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ marginBottom: '28px' }}>
@@ -252,7 +266,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
             ))}
           </div>
 
-          <button onClick={generateAll} style={{ width: '100%', padding: '13px', background: C.pink, border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <button onClick={generateAll} style={{ width: '100%', padding: '14px', minHeight: '48px', background: C.pink, border: 'none', borderRadius: '10px', color: '#fff', fontSize: '15px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', WebkitAppearance: 'none' }}>
             Generate {candidates.length} Profile{candidates.length !== 1 ? 's' : ''} →
           </button>
         </div>
@@ -267,7 +281,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
               { key: 'paste', label: '✎ Paste List' },
               { key: 'file',  label: '⊞ Upload Files' },
             ].map(m => (
-              <button key={m.key} onClick={() => setMode(m.key)} style={{ flex: 1, padding: '9px', background: mode === m.key ? C.surfaceHigh : 'transparent', border: `1px solid ${mode === m.key ? C.border : 'transparent'}`, borderRadius: '8px', color: mode === m.key ? C.text : C.textFaint, fontSize: '13px', fontWeight: mode === m.key ? '600' : '400', cursor: 'pointer', transition: 'all 0.15s' }}>
+              <button key={m.key} onClick={() => setMode(m.key)} style={{ flex: 1, padding: '12px 9px', minHeight: '44px', background: mode === m.key ? C.surfaceHigh : 'transparent', border: `1px solid ${mode === m.key ? C.border : 'transparent'}`, borderRadius: '8px', color: mode === m.key ? C.text : C.textFaint, fontSize: '14px', fontWeight: mode === m.key ? '600' : '400', cursor: 'pointer', transition: 'all 0.15s', WebkitAppearance: 'none' }}>
                 {m.label}
               </button>
             ))}
@@ -277,19 +291,41 @@ export default function FeedBulkImport({ onDone, seriesId }) {
           {mode === 'paste' && (
             <div>
               <div style={{ fontSize: '11px', color: C.textFaint, marginBottom: '8px', lineHeight: '1.6' }}>
-                One creator per line: <span style={{ color: C.pink, fontFamily: 'monospace' }}>@handle | platform | vibe sentence</span>
+                Paste anything — creator lists, notes, freeform text. Use <span style={{ color: C.pink, fontFamily: 'monospace' }}>@handle | platform | vibe</span> for instant parsing, or paste freeform text and AI will extract creators.
               </div>
               <textarea
                 value={pasteText}
                 onChange={e => setPasteText(e.target.value)}
+                onPaste={handlePaste}
                 placeholder={PASTE_PLACEHOLDER}
-                rows={10}
-                style={{ width: '100%', padding: '14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '10px', color: C.text, fontSize: '12px', fontFamily: 'monospace', lineHeight: '1.8', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+                rows={8}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{ width: '100%', padding: '14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '10px', color: C.text, fontSize: '16px', fontFamily: 'monospace', lineHeight: '1.6', outline: 'none', resize: 'vertical', boxSizing: 'border-box', WebkitAppearance: 'none', WebkitTextSizeAdjust: '100%' }}
               />
+
+              {/* Show parse errors inline when no candidates found */}
+              {parseErrors.length > 0 && candidates !== null && candidates.length === 0 && (
+                <div style={{ marginTop: '12px', padding: '10px 14px', background: C.redSoft, border: `1px solid ${C.red}33`, borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: C.red, fontWeight: '700', marginBottom: '6px' }}>
+                    {parseErrors.length} line{parseErrors.length !== 1 ? 's' : ''} could not be parsed:
+                  </div>
+                  {parseErrors.slice(0, 5).map((e, i) => (
+                    <div key={i} style={{ fontSize: '11px', color: C.textDim, marginBottom: '2px' }}>
+                      <span style={{ color: C.red }}>✕</span> &ldquo;{e.line}&rdquo; — {e.reason}
+                    </div>
+                  ))}
+                  {parseErrors.length > 5 && (
+                    <div style={{ fontSize: '11px', color: C.textFaint, marginTop: '4px' }}>…and {parseErrors.length - 5} more</div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={parsePaste}
                 disabled={parsing || !pasteText.trim()}
-                style={{ marginTop: '12px', width: '100%', padding: '12px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '13px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                style={{ marginTop: '12px', width: '100%', padding: '14px', minHeight: '48px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '15px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', WebkitAppearance: 'none' }}>
                 {parsing && <Spin />}
                 {parsing ? 'Parsing…' : 'Parse List →'}
               </button>
@@ -330,7 +366,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
               <button
                 onClick={parseFiles}
                 disabled={parsing || !files.length}
-                style={{ width: '100%', padding: '12px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '13px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                style={{ width: '100%', padding: '14px', minHeight: '48px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '15px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', WebkitAppearance: 'none' }}>
                 {parsing && <Spin />}
                 {parsing ? 'Extracting creators…' : `Extract from ${files.length} file${files.length !== 1 ? 's' : ''} →`}
               </button>

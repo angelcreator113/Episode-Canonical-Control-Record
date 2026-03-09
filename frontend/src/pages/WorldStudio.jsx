@@ -28,6 +28,8 @@ import './WorldStudio.css';
 const API = '/api/v1';
 
 /* ── Constants ──────────────────────────────────────────────────────── */
+const PAGE_SIZE = 20;
+
 const WORLD_OPTIONS = [
   { tag: 'lalaverse', label: 'LalaVerse', icon: '✦', protagonist: 'Lala' },
   { tag: 'book-1',    label: 'Book 1 · Before Lala', icon: '◈', protagonist: 'JustAWoman' },
@@ -139,6 +141,7 @@ export default function WorldStudio() {
   const [previewNotes,   setPreviewNotes]   = useState('');
   const [showPreview,    setShowPreview]    = useState(false);
   const [bulkActivating, setBulkActivating] = useState(false);
+  const [currentPage,     setCurrentPage]     = useState(1);
 
   /* ── Relationship graph ─────────────────────────────────────────── */
   const [showAddRel, setShowAddRel] = useState(false);
@@ -169,6 +172,7 @@ export default function WorldStudio() {
   /* ── Mobile panel state ─────────────────────────────────────────── */
   // 'list' = character sidebar, 'detail' = main content area
   const [mobilePanel, setMobilePanel] = useState('list');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const flash = useCallback((msg, type = 'success') => {
     setToast({ msg, type });
@@ -206,7 +210,9 @@ export default function WorldStudio() {
     setSelectedChar(null);
     setCharDetail(null);
     setEditMode(false);
+    setCurrentPage(1);
   }, [worldTag]);
+  useEffect(() => { setCurrentPage(1); }, [charSearch, charFilter]);
   useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
   useEffect(() => {
     // Auto-select registry matching current world's book_tag
@@ -353,6 +359,8 @@ export default function WorldStudio() {
     return true;
   });
   const uniqueTypes = [...new Set(characters.map(c => c.character_type))];
+  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const paged = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
 
   const filteredReg = regChars.filter(ch => {
     const name = (ch.selected_name || ch.display_name || '').toLowerCase();
@@ -416,8 +424,29 @@ export default function WorldStudio() {
               </button>
             </>
           )}
-
         </div>
+
+        {/* Mobile overflow menu */}
+        {tab === 'characters' && (
+          <div className="ws-mobile-overflow-wrap">
+            <button className="ws-mobile-overflow-btn" onClick={() => setMobileMenuOpen(v => !v)}>⋯</button>
+            {mobileMenuOpen && (
+              <div className="ws-mobile-overflow-menu">
+                {draftCount > 0 && (
+                  <button onClick={() => { bulkActivate(); setMobileMenuOpen(false); }} disabled={bulkActivating}>
+                    {bulkActivating ? '…' : `✓ Activate ${draftCount} Drafts`}
+                  </button>
+                )}
+                <button onClick={() => { seedRelationships(); setMobileMenuOpen(false); }} disabled={seeding}>
+                  {seeding ? '…' : '🔗 Seed Relationships'}
+                </button>
+                <button onClick={() => { generatePreview(); setMobileMenuOpen(false); }} disabled={generating}>
+                  {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       {/* ── STATS BAR ───────────────────────────────────────────────── */}
@@ -432,20 +461,20 @@ export default function WorldStudio() {
           </span>
           <span className="ws-stat-label">Active</span>
         </div>
-        <div className="ws-stat">
+        <div className="ws-stat ws-stat-mobile-hide">
           <span className="ws-stat-value ws-stat-value-muted">
             {characters.filter(c => c.status === 'draft').length}
           </span>
           <span className="ws-stat-label">Draft</span>
         </div>
         <div className="ws-stat-divider" />
-        <div className="ws-stat">
+        <div className="ws-stat ws-stat-mobile-hide">
           <span className="ws-stat-value ws-stat-value-rose">
             {characters.filter(c => c.intimate_eligible).length}
           </span>
           <span className="ws-stat-label">Intimate</span>
         </div>
-        <div className="ws-stat">
+        <div className="ws-stat ws-stat-mobile-hide">
           <span className="ws-stat-value ws-stat-value-deceased">
             {characters.filter(c => c.is_alive === false).length}
           </span>
@@ -487,7 +516,7 @@ export default function WorldStudio() {
                   <div className="ws-empty-icon">✦</div>
                   <div className="ws-empty-text">No characters yet</div>
                 </div>
-              ) : filtered.map(c => (
+              ) : paged.map(c => (
                 <div
                   key={c.id}
                   className={`ws-char-card ${selectedChar === c.id ? 'ws-char-card-selected' : ''} ${c.is_alive === false ? 'ws-char-card-deceased' : ''}`}
@@ -520,6 +549,30 @@ export default function WorldStudio() {
                   )}
                 </div>
               ))}
+
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div className="ws-pagination">
+                  <button
+                    className="ws-page-btn"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage(p => p - 1)}
+                  >‹</button>
+                  {Array.from({ length: totalPages }, (_, i) => i + 1).map(pg => (
+                    <button
+                      key={pg}
+                      className={`ws-page-btn ${pg === currentPage ? 'ws-page-btn-active' : ''}`}
+                      onClick={() => setCurrentPage(pg)}
+                    >{pg}</button>
+                  ))}
+                  <button
+                    className="ws-page-btn"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage(p => p + 1)}
+                  >›</button>
+                  <span className="ws-page-info">{filtered.length} chars</span>
+                </div>
+              )}
             </>
           )}
 
