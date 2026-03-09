@@ -96,6 +96,7 @@ const QuickEpisodeCreator = lazy(() => import('./components/QuickEpisodeCreator'
 const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
 const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPage'));
 const SocialProfileGenerator = lazy(() => import('./pages/SocialProfileGenerator'));
+const NarrativeControlCenter = lazy(() => import('./pages/NarrativeControlCenter'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -363,6 +364,9 @@ function AppContent() {
           {/* PNOS Relationships — Unified Tree + Web + Candidates + List */}
           <Route path="/relationships" element={<RelationshipEngine />} />
           
+          {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
+          <Route path="/narrative-control" element={<NarrativeControlCenter />} />
+
           {/* PNOS Story Engine — 50-Story Arc System */}
           <Route path="/story-engine" element={<StoryEngine />} />
 
