@@ -5,15 +5,15 @@ import { useState, useRef, useCallback } from 'react';
 const API = '/api/v1/social-profiles';
 
 const C = {
-  bg: '#0d0d0f', surface: '#141416', surfaceHigh: '#1c1c20',
-  border: '#2a2a2f', borderLight: '#3a3a42',
-  text: '#f0eef4', textDim: '#9a94a8', textFaint: '#5a5468',
-  pink: '#d4789a', pinkSoft: '#d4789a18', pinkMid: '#d4789a35',
-  blue: '#7ab3d4', blueSoft: '#7ab3d415',
-  lavender: '#a889c8', lavSoft: '#a889c815',
-  gold: '#c9a96e', goldSoft: '#c9a96e18',
-  red: '#d47878', redSoft: '#d4787815',
-  green: '#78b89a', greenSoft: '#78b89a15',
+  bg: '#ffffff', surface: '#f7f6f9', surfaceHigh: '#eeedf2',
+  border: '#ddd9e3', borderLight: '#ccc7d4',
+  text: '#1a1424', textDim: '#5a5068', textFaint: '#8a8498',
+  pink: '#c4588a', pinkSoft: '#c4588a14', pinkMid: '#c4588a28',
+  blue: '#4a8cb8', blueSoft: '#4a8cb812',
+  lavender: '#8a6aac', lavSoft: '#8a6aac12',
+  gold: '#a8873e', goldSoft: '#a8873e14',
+  red: '#c45858', redSoft: '#c4585812',
+  green: '#4a9870', greenSoft: '#4a987012',
 };
 
 const PLATFORMS = ['tiktok','instagram','youtube','twitter','onlyfans','twitch','substack','multi'];
@@ -350,6 +350,6 @@ export default function FeedBulkImport({ onDone, seriesId }) {
 
 function Spin({ size = 14 }) {
   return (
-    <div style={{ width: `${size}px`, height: `${size}px`, border: `2px solid #d4789a44`, borderTop: '2px solid #d4789a', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
+    <div style={{ width: `${size}px`, height: `${size}px`, border: `2px solid #c4588a33`, borderTop: '2px solid #c4588a', borderRadius: '50%', animation: 'spin 0.7s linear infinite', flexShrink: 0 }} />
   );
 }
