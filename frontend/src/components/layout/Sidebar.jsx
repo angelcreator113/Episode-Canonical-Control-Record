@@ -36,6 +36,7 @@ const NAV = [
     items: [
       { icon: '⚡', label: 'Short Stories',    route: '/story-engine',
         children: [
+          { icon: '📖', label: 'Story Engine',        route: '/story-engine' },
           { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
           { icon: '⬡', label: 'Assembler',           route: '/assembler' },
           { icon: '◇', label: 'Continuity',           route: '/continuity' },
