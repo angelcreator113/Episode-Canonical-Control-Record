@@ -28,7 +28,7 @@ const NAV = [
           { icon: '🌳', label: 'Relationships',      route: '/relationships' },
         ],
       },
-      { icon: '️', label: 'Therapy',              route: '/therapy/default' },
+      { icon: '💭', label: 'Therapy',              route: '/therapy/default' },
     ],
   },
   {

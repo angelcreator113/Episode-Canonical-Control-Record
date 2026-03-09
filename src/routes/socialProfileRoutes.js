@@ -300,3 +300,4 @@ ${(p.sample_captions || []).map((c, i) => `${i + 1}. ${c}`).join('\n')}
 });
 
 module.exports = router;
+module.exports.buildGenerationPrompt = buildGenerationPrompt;

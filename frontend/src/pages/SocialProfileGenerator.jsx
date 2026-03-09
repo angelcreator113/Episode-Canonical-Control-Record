@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import FeedBulkImport from '../components/FeedBulkImport';
 import './SocialProfileGenerator.css';
 
 const API = '/api/v1/social-profiles';
@@ -72,6 +73,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const [generating, setGenerating] = useState(false);
   const [error, setError]         = useState(null);
   const [filterStatus, setFilterStatus] = useState(null);
+  const [view, setView]           = useState('feed'); // 'feed' | 'bulk'
 
   // Spark form
   const [handle, setHandle]       = useState('');
@@ -171,9 +173,20 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     <div className={`spg-page ${embedded ? 'spg-embedded' : ''}`}>
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="spg-header">
-        <div className="spg-header-title">📱 The Feed</div>
-        <div className="spg-header-sub">
-          Parasocial Creator Profiles — The online world JustAWoman moves through
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+          <div>
+            <div className="spg-header-title">📱 The Feed</div>
+            <div className="spg-header-sub">
+              Parasocial Creator Profiles — The online world JustAWoman moves through
+            </div>
+          </div>
+          <button
+            className="spg-btn"
+            style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+            onClick={() => setView(view === 'feed' ? 'bulk' : 'feed')}
+          >
+            {view === 'feed' ? '⊞ Bulk Import' : '← Back to Feed'}
+          </button>
         </div>
         <div className="spg-header-stats">
           <div className="spg-stat">
@@ -191,8 +204,13 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
         </div>
       </div>
 
+      {/* ── Bulk Import View ─────────────────────────────────── */}
+      {view === 'bulk' && (
+        <FeedBulkImport onDone={() => { setView('feed'); loadProfiles(); }} />
+      )}
+
       {/* ── Spark Form ──────────────────────────────────────────── */}
-      <div className="spg-spark-form">
+      {view === 'feed' && <div className="spg-spark-form">
         <div className="spg-spark-title">✦ New Creator Spark</div>
         <div className="spg-spark-row">
           <div className="spg-field">
@@ -238,10 +256,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           </button>
         </div>
         {error && <div style={{ color: 'var(--red)', marginTop: 8, fontSize: '0.82rem' }}>{error}</div>}
-      </div>
+      </div>}
 
       {/* ── Content ─────────────────────────────────────────────── */}
-      <div className="spg-content">
+      {view === 'feed' && <div className="spg-content">
         {/* Filters */}
         <div className="spg-filters" style={{ marginBottom: 4 }}>
           {[null, 'generated', 'finalized', 'crossed', 'archived'].map(s => (
@@ -329,7 +347,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           onFinalize={finalizeProfile}
           onCross={crossProfile}
         />}
-      </div>
+      </div>}
     </div>
   );
 }
