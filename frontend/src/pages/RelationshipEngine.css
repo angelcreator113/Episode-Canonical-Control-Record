@@ -473,6 +473,7 @@
 .cg-badge.is-simmering { color: #713f12; background: #fef9c3; }
 .cg-badge.is-volatile  { color: #7f1d1d; background: #fee2e2; }
 .cg-badge.is-fractured { color: #831843; background: #fce7f3; }
+.cg-badge-layer { background: rgba(255, 255, 255, 0.85); font-size: 9px; }
 .cg-badge.is-healing   { color: #1e3a8a; background: #dbeafe; }
 
 /* ═══ Center — Main Canvas ═══════════════════════════════════════════════════ */
