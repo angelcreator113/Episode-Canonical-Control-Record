@@ -368,6 +368,8 @@ export default function RelationshipEngine() {
   const [addModalOpen, setAddModalOpen]   = useState(false);
   const [genModalOpen, setGenModalOpen]   = useState(false);
   const [generating, setGenerating]       = useState(false);
+  const [generatingFamily, setGeneratingFamily] = useState(false);
+  const [familyData, setFamilyData]     = useState(null);
 
   // Toast
   const { toasts, show: showToast } = useToast();
@@ -408,7 +410,10 @@ export default function RelationshipEngine() {
   }, []);
 
   useEffect(() => {
-    if (activeRegistry) fetchTree(activeRegistry);
+    if (activeRegistry) {
+      fetchTree(activeRegistry);
+      setFamilyData(null); // reset so family tab reloads for new registry
+    }
   }, [activeRegistry, fetchTree]);
 
   // ── Actions ──────────────────────────────────────────────────────────
@@ -479,6 +484,56 @@ export default function RelationshipEngine() {
     } catch { showToast('Failed to create relationship', 'error'); }
   };
 
+  const fetchFamilyTree = useCallback(async (regId) => {
+    try {
+      const res = await fetch(`${API}/relationships/family-tree/${regId}`);
+      const data = await res.json();
+      setFamilyData(data);
+    } catch { showToast('Failed to load family tree', 'error'); }
+  }, []);
+
+  const generateFamily = async () => {
+    if (!activeRegistry) return;
+    setGeneratingFamily(true);
+    try {
+      const res = await fetch(`${API}/relationships/generate-family`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ registry_id: activeRegistry }),
+      });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error (${res.status})`);
+      }
+      const data = await res.json();
+      showToast(`Generated ${data.count} family bond(s)`, 'success');
+      fetchFamilyTree(activeRegistry);
+      fetchTree(activeRegistry);
+    } catch (err) { showToast(err.message || 'Family generation failed', 'error'); }
+    finally { setGeneratingFamily(false); }
+  };
+
+  const updateFamilyRole = async (relId, updates) => {
+    try {
+      const res = await fetch(`${API}/relationships/${relId}/family`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
+      });
+      if (!res.ok) throw new Error();
+      showToast('Family role updated', 'success');
+      fetchFamilyTree(activeRegistry);
+      fetchTree(activeRegistry);
+    } catch { showToast('Failed to update', 'error'); }
+  };
+
+  // Load family tree when switching to family view
+  useEffect(() => {
+    if (view === 'family' && activeRegistry && !familyData) {
+      fetchFamilyTree(activeRegistry);
+    }
+  }, [view, activeRegistry, familyData, fetchFamilyTree]);
+
   const updateRelationship = async (id, updates) => {
     try {
       const res = await fetch(`${API}/relationships/${id}`, {
@@ -508,6 +563,7 @@ export default function RelationshipEngine() {
   // ── View tabs config ─────────────────────────────────────────────────
   const TABS = [
     { key: 'tree',       label: '🌳 Tree' },
+    { key: 'family',     label: '👨‍👩‍👧‍👦 Family' },
     { key: 'web',        label: '🕸️ Web' },
     { key: 'candidates', label: '✨ Candidates', count: candidates.length },
     { key: 'list',       label: '📋 List' },
@@ -519,7 +575,8 @@ export default function RelationshipEngine() {
 
   // View-specific title + subtitle for center header
   const viewLabels = {
-    tree:       { title: 'Family Tree',        sub: `${filteredCharacters.length} characters · ${filteredRelationships.length} relationships` },
+    tree:       { title: 'Relationship Tree',  sub: `${filteredCharacters.length} characters · ${filteredRelationships.length} relationships` },
+    family:     { title: 'Family Tree',        sub: `${familyData?.total_family || 0} family · ${familyData?.total_romantic || 0} romantic bonds` },
     web:        { title: 'Relationship Web',   sub: 'D3 force-directed graph' },
     candidates: { title: 'Proposed Seeds',     sub: `${candidates.length} candidate${candidates.length !== 1 ? 's' : ''} pending review` },
     list:       { title: 'Relationship List',  sub: `${filteredRelationships.length} confirmed` },
@@ -645,6 +702,11 @@ export default function RelationshipEngine() {
                   ✨ Regenerate
                 </button>
               )}
+              {view === 'family' && (
+                <button className="cg-toolBtn" onClick={generateFamily} disabled={generatingFamily}>
+                  {generatingFamily ? 'Generating...' : '✨ Auto-Generate Family'}
+                </button>
+              )}
               {view === 'list' && (
                 <button className="cg-toolBtn" onClick={() => setView('candidates')}>
                   View Seeds →
@@ -672,6 +734,14 @@ export default function RelationshipEngine() {
                   selectedChar={selectedChar}
                   onSelectRel={rel => { setSelectedRel(rel); setDrawerOpen(true); }}
                   onSelectChar={setSelectedChar}
+                />
+              ) : view === 'family' ? (
+                <FamilyTreeView
+                  data={familyData}
+                  generating={generatingFamily}
+                  onGenerate={generateFamily}
+                  onUpdateRole={updateFamilyRole}
+                  onSelectRel={rel => { setSelectedRel(rel); setDrawerOpen(true); }}
                 />
               ) : view === 'candidates' ? (
                 <CandidateView candidates={candidates} onConfirm={confirmCandidate} onDismiss={dismissCandidate} />
@@ -995,6 +1065,204 @@ function WebLegend() {
 // ════════════════════════════════════════════════════════════════════════
 // TREE VIEW — Improved layered visualization with zoom, hover, focus
 // ════════════════════════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════
+// FAMILY TREE VIEW
+// ════════════════════════════════════════════════════════════════════════
+const FAMILY_COLORS = {
+  blood:    '#c0392b',
+  step:     '#8e44ad',
+  romantic: '#e74c8b',
+  married:  '#d4a017',
+};
+
+function FamilyTreeView({ data, generating, onGenerate, onUpdateRole, onSelectRel }) {
+  const [editingId, setEditingId] = useState(null);
+  const [editRole, setEditRole] = useState('');
+
+  if (!data) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 40, textAlign: 'center' }}>
+        <div style={{ fontSize: 36, opacity: 0.3 }}>👨‍👩‍👧‍👦</div>
+        <div style={{ fontSize: 16, fontWeight: 500 }}>Loading family tree...</div>
+      </div>
+    );
+  }
+
+  const { characters = [], family_bonds = [], romantic_bonds = [] } = data;
+  const allBonds = [...family_bonds, ...romantic_bonds];
+
+  // Deduplicate bonds (same ID may appear in both)
+  const seen = new Set();
+  const uniqueBonds = allBonds.filter(b => {
+    if (seen.has(b.id)) return false;
+    seen.add(b.id);
+    return true;
+  });
+
+  // Build adjacency for characters that have bonds
+  const connectedIds = new Set();
+  uniqueBonds.forEach(b => {
+    connectedIds.add(b.character_id_a);
+    connectedIds.add(b.character_id_b);
+  });
+  const connectedChars = characters.filter(c => connectedIds.has(c.id));
+  const unconnectedChars = characters.filter(c => !connectedIds.has(c.id));
+
+  if (uniqueBonds.length === 0) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', height: '100%', gap: 16, padding: 40, textAlign: 'center' }}>
+        <div style={{ fontSize: 36, opacity: 0.3 }}>👨‍👩‍👧‍👦</div>
+        <div style={{ fontSize: 18, fontWeight: 500 }}>No family bonds yet</div>
+        <div style={{ fontSize: 13, color: '#6b6560', maxWidth: 320, lineHeight: 1.6 }}>
+          Click "Auto-Generate Family" to let AI analyze your characters and create
+          family relationships — parents, siblings, spouses, and extended family.
+        </div>
+        <button
+          onClick={onGenerate}
+          disabled={generating}
+          style={{
+            marginTop: 8, padding: '12px 24px', borderRadius: 8, border: 'none',
+            background: '#C9A84C', color: '#fff', fontWeight: 600, fontSize: 14,
+            cursor: generating ? 'not-allowed' : 'pointer', opacity: generating ? 0.6 : 1,
+          }}
+        >
+          {generating ? 'Generating...' : 'Auto-Generate Family Tree'}
+        </button>
+      </div>
+    );
+  }
+
+  const saveRole = (relId) => {
+    if (editRole.trim()) {
+      onUpdateRole(relId, { family_role: editRole.trim() });
+    }
+    setEditingId(null);
+    setEditRole('');
+  };
+
+  return (
+    <div style={{ padding: 20, overflowY: 'auto', height: '100%' }}>
+      {/* Legend */}
+      <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap', fontSize: 11, color: '#6b6560' }}>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: FAMILY_COLORS.blood, marginRight: 4 }}></span> Blood</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: FAMILY_COLORS.step, marginRight: 4 }}></span> Step/Chosen</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: FAMILY_COLORS.romantic, marginRight: 4 }}></span> Romantic</span>
+        <span><span style={{ display: 'inline-block', width: 10, height: 10, borderRadius: '50%', background: FAMILY_COLORS.married, marginRight: 4 }}></span> Married</span>
+      </div>
+
+      {/* Connected characters with their bonds */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {uniqueBonds.map(bond => {
+          const isBlood = bond.is_blood_relation;
+          const isRomantic = bond.is_romantic;
+          const role = bond.family_role;
+          const isMarried = role && (role.includes('wife') || role.includes('husband') || role.includes('spouse'));
+
+          const color = isMarried ? FAMILY_COLORS.married
+            : isRomantic ? FAMILY_COLORS.romantic
+            : isBlood ? FAMILY_COLORS.blood
+            : FAMILY_COLORS.step;
+
+          const charA = bond.character_a_name || bond.character_a_selected || '?';
+          const charB = bond.character_b_name || bond.character_b_selected || '?';
+
+          return (
+            <div
+              key={bond.id}
+              onClick={() => onSelectRel(bond)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '12px 16px', borderRadius: 10,
+                background: '#fff', border: `1px solid #e8e4dd`,
+                cursor: 'pointer', transition: 'border-color 0.15s',
+              }}
+              onMouseEnter={e => e.currentTarget.style.borderColor = color}
+              onMouseLeave={e => e.currentTarget.style.borderColor = '#e8e4dd'}
+            >
+              {/* Color indicator */}
+              <div style={{ width: 4, height: 36, borderRadius: 2, background: color, flexShrink: 0 }}></div>
+
+              {/* Characters */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: '#1C1814' }}>
+                    {bond.character_a_icon || ''} {charA}
+                  </span>
+                  <span style={{ fontSize: 11, color: '#a09a92' }}>→</span>
+                  <span style={{ fontWeight: 600, fontSize: 13, color: '#1C1814' }}>
+                    {bond.character_b_icon || ''} {charB}
+                  </span>
+                </div>
+
+                {/* Role */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
+                  {editingId === bond.id ? (
+                    <div style={{ display: 'flex', gap: 4 }} onClick={e => e.stopPropagation()}>
+                      <input
+                        value={editRole}
+                        onChange={e => setEditRole(e.target.value)}
+                        placeholder="mother, brother, cousin..."
+                        style={{ padding: '3px 8px', fontSize: 12, border: '1px solid #e8e4dd', borderRadius: 4, width: 150 }}
+                        autoFocus
+                        onKeyDown={e => { if (e.key === 'Enter') saveRole(bond.id); if (e.key === 'Escape') setEditingId(null); }}
+                      />
+                      <button onClick={() => saveRole(bond.id)} style={{ padding: '2px 8px', fontSize: 11, border: '1px solid #C9A84C', borderRadius: 4, background: 'transparent', cursor: 'pointer' }}>Save</button>
+                    </div>
+                  ) : (
+                    <>
+                      <span style={{
+                        fontSize: 11, fontWeight: 600, color, textTransform: 'uppercase',
+                        letterSpacing: '0.04em',
+                      }}>
+                        {role || bond.relationship_type || 'unspecified'}
+                      </span>
+                      <button
+                        onClick={e => { e.stopPropagation(); setEditingId(bond.id); setEditRole(role || ''); }}
+                        style={{ fontSize: 10, color: '#a09a92', background: 'none', border: 'none', cursor: 'pointer', padding: '0 4px' }}
+                        title="Edit family role"
+                      >
+                        edit
+                      </button>
+                    </>
+                  )}
+                  {isBlood && <span style={{ fontSize: 10, color: '#a09a92' }}>(blood)</span>}
+                  {isRomantic && !isMarried && <span style={{ fontSize: 10, color: '#a09a92' }}>(romantic)</span>}
+                </div>
+
+                {/* Conflict */}
+                {bond.conflict_summary && (
+                  <div style={{ fontSize: 11, color: '#6b6560', marginTop: 3, lineHeight: 1.4 }}>
+                    {bond.conflict_summary}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Unconnected characters */}
+      {unconnectedChars.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div style={{ fontSize: 12, fontWeight: 600, color: '#a09a92', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
+            Not in family tree ({unconnectedChars.length})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {unconnectedChars.map(c => (
+              <span key={c.id} style={{
+                padding: '4px 10px', borderRadius: 12, background: '#f0ede6',
+                fontSize: 11, color: '#6b6560',
+              }}>
+                {c.icon || ''} {c.display_name || c.selected_name}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function TreeView({ characters, relationships, layers, layerFilter, selectedChar, onSelectRel, onSelectChar }) {
   const containerRef = useRef(null);
   const [dims, setDims] = useState({ w: 1200, h: 700 });

@@ -671,4 +671,278 @@ router.delete('/:relId', optionalAuth, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════
+// GET /api/v1/relationships/family-tree/:registryId
+// Family tree — returns only family + romantic relationships with
+// character nodes laid out for a tree visualization
+// ════════════════════════════════════════════════════════════════════════
+router.get('/family-tree/:registryId', optionalAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { registryId } = req.params;
+
+    // All characters in this registry
+    const characters = await db.sequelize.query(
+      `SELECT id, display_name, selected_name, character_key, icon,
+              role_type, role_label, appearance_mode, status,
+              portrait_url, sort_order
+       FROM registry_characters
+       WHERE registry_id = :registry_id AND deleted_at IS NULL
+       ORDER BY sort_order ASC, display_name ASC`,
+      { replacements: { registry_id: registryId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+
+    const charIds = characters.map(c => c.id);
+    if (charIds.length === 0) {
+      return res.json({ characters: [], family_bonds: [], romantic_bonds: [] });
+    }
+
+    // Family relationships (family_role set OR is_blood_relation)
+    const familyBonds = await db.sequelize.query(
+      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+       FROM character_relationships cr ${CHAR_JOIN}
+       WHERE (cr.character_id_a IN (:ids) OR cr.character_id_b IN (:ids))
+         AND (cr.family_role IS NOT NULL OR cr.is_blood_relation = true)
+         AND cr.confirmed = true
+       ORDER BY cr.created_at ASC`,
+      { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
+    );
+
+    // Romantic relationships
+    const romanticBonds = await db.sequelize.query(
+      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+       FROM character_relationships cr ${CHAR_JOIN}
+       WHERE (cr.character_id_a IN (:ids) OR cr.character_id_b IN (:ids))
+         AND cr.is_romantic = true
+         AND cr.confirmed = true
+       ORDER BY cr.created_at ASC`,
+      { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
+    );
+
+    res.json({
+      characters,
+      family_bonds: familyBonds,
+      romantic_bonds: romanticBonds,
+      total_family: familyBonds.length,
+      total_romantic: romanticBonds.length,
+    });
+  } catch (err) {
+    console.error('GET /relationships/family-tree/:registryId error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// PUT /api/v1/relationships/:relId/family
+// Set family role + blood relation flag on an existing relationship
+// ════════════════════════════════════════════════════════════════════════
+router.put('/:relId/family', optionalAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { relId } = req.params;
+    const { family_role, is_blood_relation, is_romantic, conflict_summary } = req.body;
+
+    await db.sequelize.query(
+      `UPDATE character_relationships
+       SET family_role       = COALESCE(:family_role, family_role),
+           is_blood_relation = COALESCE(:is_blood, is_blood_relation),
+           is_romantic       = COALESCE(:is_romantic, is_romantic),
+           conflict_summary  = COALESCE(:conflict, conflict_summary),
+           updated_at        = NOW()
+       WHERE id = :id`,
+      {
+        replacements: {
+          id: relId,
+          family_role: family_role || null,
+          is_blood: is_blood_relation != null ? is_blood_relation : null,
+          is_romantic: is_romantic != null ? is_romantic : null,
+          conflict: conflict_summary || null,
+        },
+        type: db.sequelize.QueryTypes.UPDATE,
+      }
+    );
+
+    const [updated] = await db.sequelize.query(
+      `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+       FROM character_relationships cr ${CHAR_JOIN}
+       WHERE cr.id = :id`,
+      { replacements: { id: relId }, type: db.sequelize.QueryTypes.SELECT }
+    );
+
+    if (!updated) return res.status(404).json({ error: 'Relationship not found' });
+    res.json({ relationship: updated });
+  } catch (err) {
+    console.error('PUT /relationships/:relId/family error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// POST /api/v1/relationships/generate-family
+// Use AI to auto-generate family relationships for a registry
+// ════════════════════════════════════════════════════════════════════════
+router.post('/generate-family', optionalAuth, async (req, res) => {
+  try {
+    const db = getDb();
+    const { registry_id } = req.body;
+
+    if (!registry_id) {
+      return res.status(400).json({ error: 'registry_id is required' });
+    }
+
+    const characters = await db.sequelize.query(
+      `SELECT id, display_name, selected_name, role_type, role_label,
+              core_belief, personality, description, character_key
+       FROM registry_characters
+       WHERE registry_id = :registry_id AND deleted_at IS NULL
+       ORDER BY sort_order ASC`,
+      { replacements: { registry_id }, type: db.sequelize.QueryTypes.SELECT }
+    );
+
+    if (characters.length < 2) {
+      return res.status(400).json({ error: 'Need at least 2 characters to generate family tree' });
+    }
+
+    // Get existing family/romantic relationships to avoid duplicates
+    const charIds = characters.map(c => c.id);
+    const existing = await db.sequelize.query(
+      `SELECT character_id_a, character_id_b, family_role, is_romantic, relationship_type
+       FROM character_relationships
+       WHERE (character_id_a IN (:ids) OR character_id_b IN (:ids))
+         AND (family_role IS NOT NULL OR is_blood_relation = true OR is_romantic = true)`,
+      { replacements: { ids: charIds }, type: db.sequelize.QueryTypes.SELECT }
+    );
+
+    const existingPairs = new Set(
+      existing.map(r => `${r.character_id_a}|${r.character_id_b}`)
+    );
+
+    const charContext = characters.map(c => (
+      `- ${c.display_name} [id=${c.id}] (${c.role_type}): ${c.description?.slice(0, 150) || c.personality?.slice(0, 150) || 'no description'}`
+    )).join('\n');
+
+    const existingContext = existing.length > 0
+      ? `\nExisting family/romantic bonds (do NOT duplicate):\n${existing.map(r => {
+          const a = characters.find(c => c.id === r.character_id_a);
+          const b = characters.find(c => c.id === r.character_id_b);
+          return `- ${a?.display_name || '?'} → ${b?.display_name || '?'}: ${r.family_role || r.relationship_type} ${r.is_romantic ? '(romantic)' : ''}`;
+        }).join('\n')}\n`
+      : '';
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const claude = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const message = await claude.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      messages: [{
+        role: 'user',
+        content: `You are building a family tree for a fiction universe. Analyze the characters below and generate family and romantic relationships that make narrative sense.
+
+Characters:
+${charContext}
+${existingContext}
+
+For each relationship, provide:
+- character_a_id: UUID of character A (from the list above)
+- character_b_id: UUID of character B (from the list above)
+- family_role: The role A plays relative to B. Use standard roles: mother, father, sister, brother, daughter, son, aunt, uncle, cousin, grandmother, grandfather, stepmother, stepfather, stepsister, stepbrother, niece, nephew, wife, husband, partner, ex-wife, ex-husband
+- is_blood_relation: true if biological family, false if step/chosen/married-into
+- is_romantic: true for spouse/partner/ex relationships
+- relationship_type: A descriptive label like "married couple", "estranged siblings", "protective mother", "rival sisters"
+- conflict_summary: 1-2 sentences on the core tension between them
+- notes: Brief context for why this family bond makes sense for the narrative
+
+Rules:
+- Family bonds must be consistent (if A is B's mother, don't also make B's parent someone else unless it's a step-parent)
+- Generate 3-8 relationships
+- Think about what family structures create the most dramatic tension for the story
+- A married couple raising children should both be connected to their children
+- Consider generational depth — parents, children, siblings, extended family
+
+Return ONLY valid JSON: { "family_bonds": [ ... ] }
+No markdown fences, no explanation.`,
+      }],
+    });
+
+    let familyBonds = [];
+    try {
+      const raw = message.content[0].text.trim();
+      const parsed = JSON.parse(raw);
+      familyBonds = parsed.family_bonds || [];
+    } catch (parseErr) {
+      console.error('Family tree JSON parse error:', parseErr);
+      return res.status(500).json({ error: 'Failed to parse AI response' });
+    }
+
+    // Insert as confirmed relationships
+    const inserted = [];
+    for (const bond of familyBonds) {
+      const aExists = characters.find(ch => ch.id === bond.character_a_id);
+      const bExists = characters.find(ch => ch.id === bond.character_b_id);
+      if (!aExists || !bExists) continue;
+      if (bond.character_a_id === bond.character_b_id) continue;
+
+      const pairKey = `${bond.character_a_id}|${bond.character_b_id}`;
+      const pairKeyRev = `${bond.character_b_id}|${bond.character_a_id}`;
+      if (existingPairs.has(pairKey) || existingPairs.has(pairKeyRev)) continue;
+
+      const id = uuidv4();
+      const now = new Date();
+
+      await db.sequelize.query(
+        `INSERT INTO character_relationships
+           (id, character_id_a, character_id_b, relationship_type,
+            family_role, is_blood_relation, is_romantic,
+            conflict_summary, notes, connection_mode,
+            lala_connection, status, confirmed,
+            created_at, updated_at)
+         VALUES
+           (:id, :char_a, :char_b, :rel_type,
+            :family_role, :is_blood, :is_romantic,
+            :conflict, :notes, 'IRL',
+            'none', 'Active', true,
+            :now, :now)`,
+        {
+          replacements: {
+            id, char_a: bond.character_a_id, char_b: bond.character_b_id,
+            rel_type: bond.relationship_type || 'family',
+            family_role: bond.family_role || null,
+            is_blood: bond.is_blood_relation || false,
+            is_romantic: bond.is_romantic || false,
+            conflict: bond.conflict_summary || null,
+            notes: bond.notes || null,
+            now,
+          },
+          type: db.sequelize.QueryTypes.INSERT,
+        }
+      );
+
+      existingPairs.add(pairKey);
+      inserted.push({ id, ...bond });
+    }
+
+    // Return full rows
+    const insertedIds = inserted.map(i => i.id);
+    let results = [];
+    if (insertedIds.length > 0) {
+      results = await db.sequelize.query(
+        `SELECT ${REL_SELECT}, ${CHAR_SELECT_A}, ${CHAR_SELECT_B}
+         FROM character_relationships cr ${CHAR_JOIN}
+         WHERE cr.id IN (:ids)`,
+        { replacements: { ids: insertedIds }, type: db.sequelize.QueryTypes.SELECT }
+      );
+    }
+
+    res.status(201).json({
+      family_bonds: results,
+      count: results.length,
+      message: `Generated ${results.length} family relationship(s)`,
+    });
+  } catch (err) {
+    console.error('POST /relationships/generate-family error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;
