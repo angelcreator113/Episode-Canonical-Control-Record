@@ -2442,20 +2442,20 @@ html, body {
     color: var(--char-color);
   }
 
-  /* ── Hero / empty state ── */
+  /* ── Hero / empty state: compact on mobile ── */
   .se-task-empty.se-hero-card {
-    margin: 24px 16px;
-    padding: 32px 20px 24px;
+    margin: 20px 16px;
+    padding: 24px 18px 20px;
     background: var(--se-surface);
     border: 1px solid var(--se-border-light);
-    border-radius: 16px;
+    border-radius: 14px;
     box-shadow: var(--se-shadow-sm);
-    gap: 12px;
+    gap: 10px;
   }
 
-  .se-hero-icon { font-size: 28px; }
-  .se-hero-title { font-size: 18px; }
-  .se-hero-text { font-size: 12px; max-width: 280px; }
+  .se-hero-icon { font-size: 24px; }
+  .se-hero-title { font-size: 16px; }
+  .se-hero-text { font-size: 12px; max-width: 280px; line-height: 1.5; }
 
   .se-task-loading {
     height: auto;
@@ -2490,30 +2490,13 @@ html, body {
     margin-bottom: 0;
   }
 
-  /* ── Upcoming Stories section: minimal on mobile ── */
+  /* ── Upcoming Stories section: hide empty state on mobile ── */
   .se-story-panel.se-story-section {
-    margin: 0;
-    background: var(--se-surface);
-    border: none;
-    border-bottom: 1px solid var(--se-border-light);
-    border-radius: 0;
-    box-shadow: none;
-    overflow: hidden;
-    height: auto;
+    display: none;
   }
 
   .se-story-section-header { padding: 10px 14px; }
   .se-story-section-title { font-size: 14px; }
-
-  .se-story-section-empty {
-    padding: 20px 16px;
-  }
-
-  .se-story-empty-icon { font-size: 26px; }
-  .se-story-empty-text { font-size: 12px; max-width: 280px; }
-
-  .se-story-skeletons { max-width: 100%; padding: 0 4px; }
-  .se-story-skeleton { height: 40px; }
 
   /* ── Story panel when content is loaded ── */
   .se-story-panel {
@@ -2777,7 +2760,6 @@ html, body {
   .se-hero-title { font-size: 16px; }
   .se-hero-text { font-size: 11px; max-width: 240px; }
 
-  .se-story-panel.se-story-section .se-story-section-header { padding: 8px 12px; }
   .se-story-section-title { font-size: 13px; }
 
   .se-generating { padding: 28px 16px; }
