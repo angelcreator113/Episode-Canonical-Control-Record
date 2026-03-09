@@ -34,15 +34,16 @@ const NAV = [
   {
     zone: 'WRITE',
     items: [
-      { icon: '▶',  label: 'Novel Session',   route: '/start' },
       { icon: '⚡', label: 'Short Stories',    route: '/story-engine',
         children: [
+          { icon: '📖', label: 'Story Engine',        route: '/story-engine' },
           { icon: '◈', label: 'Scene Intelligence', route: '/scene-proposer' },
           { icon: '⬡', label: 'Assembler',           route: '/assembler' },
           { icon: '◇', label: 'Continuity',           route: '/continuity' },
           { icon: '🧠', label: 'Narrative Control',   route: '/narrative-control' },
         ],
       },
+      { icon: '▶',  label: 'Novel Session',   route: '/start' },
     ],
   },
   {
@@ -197,13 +198,15 @@ function Sidebar({ isOpen, onClose }) {
                   const isStories = item.route === '/story-engine';
                   const groupOpen = isUniverse ? universeOpen : isWorld ? worldOpen : isStories ? storiesOpen : false;
                   const setGroupOpen = isUniverse ? setUniverseOpen : isWorld ? setWorldOpen : isStories ? setStoriesOpen : () => {};
-                  const groupActive = isActive(item.route) || location.pathname === item.route;
+                  const childRoutes = item.children.map(c => c.route);
+                  const groupActive = isActive(item.route) || childRoutes.some(r => isActive(r));
+                  const toggleOnly = isStories; // Short Stories: toggle only, no navigate
                   return (
                     <div key={item.route} className="nav-group">
                       <div
                         className={`nav-item ${groupActive ? 'active' : ''}`}
                         onClick={() => {
-                          go(item.route);
+                          if (!toggleOnly) go(item.route);
                           setGroupOpen(o => !o);
                         }}
                         title={collapsed ? item.label : undefined}
