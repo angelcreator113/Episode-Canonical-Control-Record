@@ -112,6 +112,8 @@ let StoryThread; // Story thread / subplot tracking
 let AmberFinding; // Amber Diagnostic Engine — findings
 let AmberScanRun; // Amber Diagnostic Engine — scan runs
 let AmberTaskQueue; // Amber Diagnostic Engine — task queue
+let HairLibrary; // Hair style asset library
+let MakeupLibrary; // Makeup look asset library
 
 try {
   // Core models
@@ -320,6 +322,10 @@ try {
   AmberScanRun = require('./AmberScanRun')(sequelize, DataTypes);
   AmberTaskQueue = require('./AmberTaskQueue')(sequelize, DataTypes);
 
+  // Hair & Makeup asset libraries
+  HairLibrary = require('./HairLibrary')(sequelize);
+  MakeupLibrary = require('./MakeupLibrary')(sequelize);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -438,6 +444,8 @@ const requiredModels = {
   AmberFinding,
   AmberScanRun,
   AmberTaskQueue,
+  HairLibrary,
+  MakeupLibrary,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -579,6 +587,14 @@ if (AmberFinding && AmberFinding.associate) {
 }
 if (AmberScanRun && AmberScanRun.associate) {
   AmberScanRun.associate(requiredModels);
+}
+
+// Hair & Makeup Library associations
+if (HairLibrary && HairLibrary.associate) {
+  HairLibrary.associate(requiredModels);
+}
+if (MakeupLibrary && MakeupLibrary.associate) {
+  MakeupLibrary.associate(requiredModels);
 }
 
 // SocialProfile ↔ SocialProfileFollower (1:N) — characters following a profile
@@ -1435,6 +1451,8 @@ const db = {
     TherapyPendingSession,
     WardrobeContentAssignment,
     CharacterSpark,
+    HairLibrary,
+    MakeupLibrary,
   },
 
   /**
@@ -1712,3 +1730,5 @@ module.exports.StoryThread = StoryThread;
 module.exports.AmberFinding = AmberFinding;
 module.exports.AmberScanRun = AmberScanRun;
 module.exports.AmberTaskQueue = AmberTaskQueue;
+module.exports.HairLibrary = HairLibrary;
+module.exports.MakeupLibrary = MakeupLibrary;

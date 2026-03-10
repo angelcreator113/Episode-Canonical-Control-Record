@@ -253,6 +253,23 @@ router.get('/', optionalAuth, async (req, res) => {
       }] : [],
     });
 
+    // Count totals by status (unfiltered) for header stats
+    const baseWhere = {};
+    if (series_id) baseWhere.series_id = series_id;
+    const statusCounts = await db.SocialProfile.findAll({
+      where: baseWhere,
+      attributes: [
+        'status',
+        [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count'],
+      ],
+      group: ['status'],
+      raw: true,
+    });
+    const counts = {};
+    for (const row of statusCounts) {
+      counts[row.status] = parseInt(row.count, 10);
+    }
+
     return res.json({
       profiles: rows,
       pagination: {
@@ -260,6 +277,13 @@ router.get('/', optionalAuth, async (req, res) => {
         limit: pageSize,
         total: count,
         totalPages: Math.ceil(count / pageSize),
+      },
+      statusCounts: {
+        total: Object.values(counts).reduce((a, b) => a + b, 0),
+        generated: counts.generated || 0,
+        finalized: counts.finalized || 0,
+        crossed: counts.crossed || 0,
+        archived: counts.archived || 0,
       },
     });
   } catch (err) {
@@ -280,11 +304,60 @@ router.post('/bulk/finalize', optionalAuth, async (req, res) => {
   }
   try {
     const { Op } = require('sequelize');
-    const [count] = await db.SocialProfile.update(
+    const [changed] = await db.SocialProfile.update(
       { status: 'finalized' },
       { where: { id: { [Op.in]: ids }, status: 'generated' } }
     );
-    return res.json({ finalized: count });
+    const skipped = ids.length - changed;
+    return res.json({ finalized: changed, skipped, total: ids.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /bulk/cross ─────────────────────────────────────────────────────────
+// Cross (promote) multiple finalized profiles at once
+router.post('/bulk/cross', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  if (ids.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 profiles per bulk cross' });
+  }
+  try {
+    const { Op } = require('sequelize');
+    const [changed] = await db.SocialProfile.update(
+      { status: 'crossed', world_exists: true, crossed_at: new Date() },
+      { where: { id: { [Op.in]: ids }, status: 'finalized' } }
+    );
+    const skipped = ids.length - changed;
+    return res.json({ crossed: changed, skipped, total: ids.length });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /bulk/archive ───────────────────────────────────────────────────────
+// Archive multiple profiles at once
+router.post('/bulk/archive', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  if (ids.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 profiles per bulk archive' });
+  }
+  try {
+    const { Op } = require('sequelize');
+    const [changed] = await db.SocialProfile.update(
+      { status: 'archived' },
+      { where: { id: { [Op.in]: ids }, status: { [Op.ne]: 'archived' } } }
+    );
+    const skipped = ids.length - changed;
+    return res.json({ archived: changed, skipped, total: ids.length });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }

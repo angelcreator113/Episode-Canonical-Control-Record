@@ -4693,6 +4693,13 @@ function buildStoryPlanSummary(plan) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
+// AI ASSISTANT — ElevenLabs TTS Proxy
+// POST /api/v1/memories/assistant-speak
+// ─────────────────────────────────────────────────────────────────────────────
+const assistantSpeak = require('./assistant-speak-route');
+router.post('/assistant-speak', assistantSpeak);
+
+// ─────────────────────────────────────────────────────────────────────────────
 // AI ASSISTANT — Command Interpreter
 // POST /api/v1/memories/assistant-command
 // ─────────────────────────────────────────────────────────────────────────────
