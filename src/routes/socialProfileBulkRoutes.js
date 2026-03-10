@@ -249,11 +249,14 @@ router.post('/generate', optionalAuth, async (req, res) => {
     for (const c of creators) {
       try {
         const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence);
-        const aiRes = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
-          messages: [{ role: 'user', content: prompt }],
-        });
+        const aiRes = await Promise.race([
+          client.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 3000,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000)),
+        ]);
 
         const text = aiRes.content[0].text;
         const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
