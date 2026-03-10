@@ -419,6 +419,81 @@
   cursor: default;
 }
 
+/* ── Mic button (voice input) ────────────────────────────────────── */
+
+.apa-mic {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #f3f4f6;
+  border: 1px solid #e5e7eb;
+  color: #6b7280;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all 0.15s;
+}
+
+.apa-mic:hover:not(:disabled) {
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #6366f1;
+}
+
+.apa-mic:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.apa-mic--active {
+  background: #ef4444 !important;
+  border-color: #ef4444 !important;
+  color: white !important;
+  animation: apa-mic-pulse 1s ease infinite;
+}
+
+@keyframes apa-mic-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+  50%      { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+}
+
+/* ── Listening badge in header ───────────────────────────────────── */
+
+.apa-listening-badge {
+  font-size: 10px;
+  color: #ef4444;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  animation: apa-badge-blink 1.2s ease infinite;
+  margin-left: 4px;
+}
+
+@keyframes apa-badge-blink {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+
+/* ── Live transcript bubble ──────────────────────────────────────── */
+
+.apa-msg--live .apa-msg-text {
+  background: #818cf8 !important;
+  opacity: 0.7;
+  font-style: italic;
+}
+
+/* ── Voice hint ──────────────────────────────────────────────────── */
+
+.apa-voice-hint {
+  margin: 0;
+  padding: 0 16px 10px;
+  font-size: 10px;
+  color: #9ca3af;
+  text-align: center;
+  letter-spacing: 0.02em;
+}
+
 /* ── Backdrop (mobile only, tap to close) ───────────────────────── */
 
 .apa-backdrop {

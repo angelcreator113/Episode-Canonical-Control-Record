@@ -3,6 +3,10 @@
  * Global AI assistant — bottom-right corner, always visible.
  * Sends every message with current app context so Claude knows
  * where you are and what's active.
+ *
+ * v2 — Voice input (STT) added via Web Speech API.
+ * Push-to-talk: hold mic button → speak → release → Amber responds in voice.
+ * Falls back gracefully if browser doesn't support SpeechRecognition.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -15,14 +19,45 @@ const GREETING = {
   text: "Hey, I'm Amber. Ask me anything — about your characters, your book, navigation, or whatever you need.",
 };
 
+// ─── Speech Recognition singleton ────────────────────────────────────────────
+const SpeechRecognition =
+  typeof window !== 'undefined' &&
+  (window.SpeechRecognition || window.webkitSpeechRecognition);
+
+function createRecognizer() {
+  if (!SpeechRecognition) return null;
+  const r = new SpeechRecognition();
+  r.continuous      = false;   // stop after first pause
+  r.interimResults  = true;    // show live transcript while speaking
+  r.lang            = 'en-US';
+  return r;
+}
+
+// ─── TTS helper ──────────────────────────────────────────────────────────────
+function speak(text) {
+  if (!window.speechSynthesis || !text) return;
+  window.speechSynthesis.cancel();
+  const utt = new SpeechSynthesisUtterance(text);
+  utt.rate   = 1.0;
+  utt.pitch  = 1.0;
+  window.speechSynthesis.speak(utt);
+}
+
 export default function AppAssistant({ appContext = {}, onNavigate, onRefresh }) {
-  const [open,     setOpen]     = useState(false);
-  const [messages, setMessages] = useState([GREETING]);
-  const [input,    setInput]    = useState('');
-  const [sending,  setSending]  = useState(false);
-  const [minimized, setMinimized] = useState(() => {
+  const [open,       setOpen]       = useState(false);
+  const [messages,   setMessages]   = useState([GREETING]);
+  const [input,      setInput]      = useState('');
+  const [sending,    setSending]    = useState(false);
+  const [minimized,  setMinimized]  = useState(() => {
     try { return localStorage.getItem('apa-minimized') === '1'; } catch { return false; }
   });
+
+  // ── Voice state ─────────────────────────────────────────────────────────
+  const [listening,      setListening]      = useState(false);
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const recognizerRef  = useRef(null);
+  const voiceSupported = !!SpeechRecognition;
+
   const chatRef  = useRef(null);
   const inputRef = useRef(null);
 
@@ -31,28 +66,25 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     setMinimized(prev => {
       const next = !prev;
       try { localStorage.setItem('apa-minimized', next ? '1' : '0'); } catch {}
-      if (next) setOpen(false); // close panel when minimizing
+      if (next) setOpen(false);
       return next;
     });
   }, []);
 
-  // Expose trigger footprint via CSS variable so pages can add bottom padding
-  // and avoid placing their own buttons in the same corner.
   useEffect(() => {
     document.documentElement.style.setProperty('--apa-trigger-size', '80px');
     return () => document.documentElement.style.removeProperty('--apa-trigger-size');
   }, []);
 
-  // Auto-scroll
   useEffect(() => {
     if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
   }, [messages, open]);
 
-  // Focus input on open
   useEffect(() => {
     if (open) setTimeout(() => inputRef.current?.focus(), 120);
   }, [open]);
 
+  // ── Core send ────────────────────────────────────────────────────────────
   const send = useCallback(async (text) => {
     if (!text?.trim() || sending) return;
 
@@ -81,7 +113,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         error:  data.error,
       }]);
 
-      // Handle side effects
       if (data.navigate && onNavigate) {
         setTimeout(() => onNavigate(data.navigate), 400);
       }
@@ -101,6 +132,117 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     }
   }, [sending, messages, appContext, onNavigate, onRefresh]);
 
+  // ── Voice send — wraps send() and marks as voice-triggered ───────────────
+  const sendVoice = useCallback(async (text) => {
+    if (!text?.trim() || sending) return;
+
+    const userMsg = { role: 'user', text: text.trim() };
+    setMessages(prev => [...prev, userMsg]);
+    setInput('');
+    setSending(true);
+
+    try {
+      const res = await fetch(API, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({
+          message:         text.trim(),
+          history:         messages.slice(-6),
+          context:         appContext,
+          _voiceTriggered: true,
+        }),
+      });
+
+      const data  = await res.json();
+      const reply = data.reply || 'Done.';
+
+      setMessages(prev => [...prev, {
+        role:   'assistant',
+        text:   reply,
+        action: data.action,
+        error:  data.error,
+      }]);
+
+      // Voice-first: Amber speaks her reply
+      if (!data.error) speak(reply);
+
+      if (data.navigate && onNavigate) setTimeout(() => onNavigate(data.navigate), 400);
+      if (data.refresh  && onRefresh)  onRefresh(data.refresh);
+
+    } catch {
+      setMessages(prev => [...prev, {
+        role:  'assistant',
+        text:  "Something went wrong. Try again.",
+        error: true,
+      }]);
+    } finally {
+      setSending(false);
+      inputRef.current?.focus();
+    }
+  }, [sending, messages, appContext, onNavigate, onRefresh]);
+
+  // ── Voice: start listening ───────────────────────────────────────────────
+  const startListening = useCallback(() => {
+    if (!voiceSupported || listening || sending) return;
+
+    const rec = createRecognizer();
+    if (!rec) return;
+
+    recognizerRef.current = rec;
+
+    rec.onstart = () => {
+      setListening(true);
+      setLiveTranscript('');
+    };
+
+    rec.onresult = (e) => {
+      let interim = '';
+      let final   = '';
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript;
+        if (e.results[i].isFinal) final += t;
+        else interim += t;
+      }
+      setLiveTranscript(final || interim);
+
+      if (final) {
+        setListening(false);
+        setLiveTranscript('');
+        rec.stop();
+        sendVoice(final.trim());
+      }
+    };
+
+    rec.onerror = (e) => {
+      console.warn('SpeechRecognition error:', e.error);
+      setListening(false);
+      setLiveTranscript('');
+    };
+
+    rec.onend = () => {
+      setListening(false);
+    };
+
+    rec.start();
+  }, [voiceSupported, listening, sending, sendVoice]);
+
+  // ── Voice: stop listening early (release before final) ──────────────────
+  const stopListening = useCallback(() => {
+    if (recognizerRef.current) {
+      recognizerRef.current.stop();
+      recognizerRef.current = null;
+    }
+    setListening(false);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (recognizerRef.current) recognizerRef.current.stop();
+      window.speechSynthesis?.cancel();
+    };
+  }, []);
+
   const handleKey = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -108,18 +250,15 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     }
   };
 
-  // Unread dot
   const hasUnread = !open && messages.length > 1;
 
   return (
     <div className={`apa-root${open ? ' open' : ''}${minimized ? ' apa-minimized' : ''}`}>
 
-      {/* Dimming backdrop — mobile only, tap outside to close */}
       {open && (
         <div className="apa-backdrop" onClick={() => setOpen(false)} aria-hidden="true" />
       )}
 
-      {/* Chat panel */}
       {open && (
         <div className="apa-panel">
           <div className="apa-panel-header">
@@ -128,6 +267,9 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
               </svg>
               Amber
+              {listening && (
+                <span className="apa-listening-badge">● listening</span>
+              )}
             </div>
             <div className="apa-panel-context">
               {appContext.currentBook && (
@@ -149,7 +291,9 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               <div key={i} className={`apa-msg apa-msg--${msg.role}${msg.error ? ' apa-msg--error' : ''}`}>
                 {msg.role === 'assistant' && (
                   <span className="apa-msg-avatar">
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                      <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                    </svg>
                   </span>
                 )}
                 <div className="apa-msg-body">
@@ -160,10 +304,22 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 </div>
               </div>
             ))}
+
+            {/* Live transcript bubble — shows while speaking */}
+            {listening && liveTranscript && (
+              <div className="apa-msg apa-msg--user apa-msg--live">
+                <div className="apa-msg-body">
+                  <p className="apa-msg-text">{liveTranscript}</p>
+                </div>
+              </div>
+            )}
+
             {sending && (
               <div className="apa-msg apa-msg--assistant">
                 <span className="apa-msg-avatar">
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor">
+                    <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                  </svg>
                 </span>
                 <div className="apa-thinking">
                   <span /><span /><span />
@@ -172,7 +328,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
             )}
           </div>
 
-          {/* Quick commands */}
           {messages.length === 1 && (
             <div className="apa-quick-cmds">
               {[
@@ -195,14 +350,48 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKey}
-              placeholder="Tell me what to do..."
+              placeholder={listening ? 'Listening...' : 'Tell me what to do...'}
               rows={2}
-              disabled={sending}
+              disabled={sending || listening}
             />
+
+            {/* Mic button — only renders if browser supports STT */}
+            {voiceSupported && (
+              <button
+                className={`apa-mic${listening ? ' apa-mic--active' : ''}`}
+                onMouseDown={startListening}
+                onMouseUp={stopListening}
+                onTouchStart={(e) => { e.preventDefault(); startListening(); }}
+                onTouchEnd={(e)   => { e.preventDefault(); stopListening();  }}
+                disabled={sending}
+                aria-label={listening ? 'Release to send' : 'Hold to speak'}
+                title={listening ? 'Release to send' : 'Hold to speak'}
+              >
+                {listening ? (
+                  /* Waveform icon while active */
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                    <line x1="12" y1="2"  x2="12" y2="22" />
+                    <line x1="7"  y1="6"  x2="7"  y2="18" />
+                    <line x1="17" y1="6"  x2="17" y2="18" />
+                    <line x1="3"  y1="10" x2="3"  y2="14" />
+                    <line x1="21" y1="10" x2="21" y2="14" />
+                  </svg>
+                ) : (
+                  /* Mic icon at rest */
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <rect x="9" y="2" width="6" height="11" rx="3" />
+                    <path d="M5 10a7 7 0 0 0 14 0" />
+                    <line x1="12" y1="19" x2="12" y2="22" />
+                    <line x1="9"  y1="22" x2="15" y2="22" />
+                  </svg>
+                )}
+              </button>
+            )}
+
             <button
               className="apa-send"
               onClick={() => send(input)}
-              disabled={sending || !input.trim()}
+              disabled={sending || !input.trim() || listening}
               aria-label="Send"
             >
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -211,10 +400,14 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               </svg>
             </button>
           </div>
+
+          {/* Voice hint — shown once, below input */}
+          {voiceSupported && messages.length === 1 && (
+            <p className="apa-voice-hint">Hold the mic to speak. Amber will talk back.</p>
+          )}
         </div>
       )}
 
-      {/* Minimize / restore affordance */}
       {minimized ? (
         <button
           className="apa-restore-tab"
@@ -226,7 +419,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         </button>
       ) : (
         <>
-          {/* Minimize chevron — tuck Amber out of the way */}
           {!open && (
             <button
               className="apa-minimize-btn"
@@ -237,8 +429,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               ▾
             </button>
           )}
-
-          {/* Floating trigger button */}
           <button
             className="apa-trigger"
             onClick={() => setOpen(o => !o)}
@@ -260,7 +450,6 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
           </button>
         </>
       )}
-
     </div>
   );
 }
