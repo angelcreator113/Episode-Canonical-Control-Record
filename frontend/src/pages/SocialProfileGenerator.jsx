@@ -10,7 +10,7 @@
  *   worldTag  — optional world filter inherited from WorldStudio
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import FeedBulkImport from '../components/FeedBulkImport';
 import './SocialProfileGenerator.css';
 
@@ -383,6 +383,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           onCross={crossProfile}
           onEdit={editProfile}
           onDelete={deleteProfile}
+          autoScroll
         />}
       </div>}
     </div>
@@ -392,11 +393,18 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 /* ════════════════════════════════════════════════════════════════════════════ */
 /* Detail Panel Sub-component                                                 */
 /* ════════════════════════════════════════════════════════════════════════════ */
-function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDelete }) {
+function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDelete, autoScroll }) {
   const p = profile;
   const d = fp;
   const score = p.lala_relevance_score ?? d.lala_relevance_score ?? 0;
   const cls = lalaClass(score);
+  const panelRef = useRef(null);
+
+  useEffect(() => {
+    if (autoScroll && panelRef.current) {
+      panelRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [profile?.id, autoScroll]);
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
@@ -442,7 +450,7 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
   };
 
   return (
-    <div className="spg-detail">
+    <div className="spg-detail" ref={panelRef}>
       <div className="spg-detail-header">
         <button className="spg-detail-close" onClick={onClose}>✕ Close</button>
         <div className="spg-detail-handle">{p.handle}</div>
