@@ -2,11 +2,11 @@
 //
 // POST /api/v1/franchise-brain/ingest-pdf
 //
-// Accepts a PDF file upload, extracts text server-side, runs it through
-// the same Claude extraction flow as the existing ingest-document endpoint.
+// Accepts document uploads (PDF, TXT, MD, DOCX), extracts text server-side,
+// runs it through Claude extraction to populate Franchise Knowledge tables.
 //
 // ─── SETUP ───────────────────────────────────────────────────────────────────
-// npm install multer pdf-parse
+// npm install multer pdf-parse mammoth
 //
 // In app.js, mount alongside your existing franchise-brain routes:
 //   const pdfIngestRoute = require('./routes/pdfIngestRoute');
@@ -18,6 +18,7 @@
 const express  = require('express');
 const multer   = require('multer');
 const pdfParse = require('pdf-parse');
+const mammoth  = require('mammoth');
 const Anthropic = require('@anthropic-ai/sdk');
 const router   = express.Router();
 const db       = require('../models');
@@ -25,15 +26,24 @@ const { optionalAuth } = require('../middleware/auth');
 
 const client = new Anthropic();
 
-// Memory storage — we never write the PDF to disk, just buffer it
+// Memory storage — we never write the file to disk, just buffer it
+const ALLOWED_MIMETYPES = [
+  'application/pdf',
+  'text/plain',
+  'text/markdown',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+];
+const ALLOWED_EXTS = ['.pdf', '.txt', '.md', '.markdown', '.docx'];
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits:  { fileSize: 20 * 1024 * 1024 }, // 20MB max
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf') {
+    const ext = '.' + file.originalname.split('.').pop().toLowerCase();
+    if (ALLOWED_MIMETYPES.includes(file.mimetype) || ALLOWED_EXTS.includes(ext)) {
       cb(null, true);
     } else {
-      cb(new Error('Only PDF files are accepted'), false);
+      cb(new Error('Unsupported file type. Accepted: PDF, TXT, MD, DOCX'), false);
     }
   },
 });
@@ -70,34 +80,52 @@ router.post(
   upload.single('file'),
   async (req, res) => {
     if (!req.file) {
-      return res.status(400).json({ error: 'No PDF file uploaded' });
+      return res.status(400).json({ error: 'No file uploaded' });
     }
 
     const brain          = req.body.brain          || 'story';
     const source_version = req.body.source_version || '';
     const source_document = req.body.source_document
-      || req.file.originalname.replace('.pdf', '').replace(/_/g, ' ').toLowerCase();
+      || req.file.originalname.replace(/\.[^.]+$/, '').replace(/_/g, ' ').toLowerCase();
 
     try {
-      // ── 1. Extract text from PDF ──────────────────────────────────────────
-      let pdfData;
-      try {
-        pdfData = await pdfParse(req.file.buffer);
-      } catch (parseErr) {
-        return res.status(422).json({
-          error: 'Could not extract text from this PDF. Make sure it is not scanned/image-only.',
-          detail: parseErr.message,
-        });
+      // ── 1. Extract text based on file type ────────────────────────────────
+      const ext = '.' + req.file.originalname.split('.').pop().toLowerCase();
+      let extractedText = '';
+      let pageCount = 0;
+
+      if (ext === '.pdf' || req.file.mimetype === 'application/pdf') {
+        let pdfData;
+        try {
+          pdfData = await pdfParse(req.file.buffer);
+        } catch (parseErr) {
+          return res.status(422).json({
+            error: 'Could not extract text from this PDF. Make sure it is not scanned/image-only.',
+            detail: parseErr.message,
+          });
+        }
+        extractedText = pdfData.text?.trim() || '';
+        pageCount = pdfData.numpages || 0;
+      } else if (ext === '.docx' || req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+        try {
+          const result = await mammoth.extractRawText({ buffer: req.file.buffer });
+          extractedText = result.value?.trim() || '';
+        } catch (docxErr) {
+          return res.status(422).json({
+            error: 'Could not extract text from this DOCX file.',
+            detail: docxErr.message,
+          });
+        }
+      } else {
+        // TXT, MD, markdown — plain text
+        extractedText = req.file.buffer.toString('utf-8').trim();
       }
 
-      const extractedText = pdfData.text?.trim();
       if (!extractedText || extractedText.length < 50) {
         return res.status(422).json({
-          error: 'PDF appears to contain no readable text. Scanned PDFs are not supported yet.',
+          error: 'Document appears to contain no readable text.',
         });
       }
-
-      const pageCount = pdfData.numpages || 0;
 
       // ── 2. Chunk if large (Claude context window safety) ─────────────────
       // ~12,000 chars per chunk — comfortable for a single Claude call
@@ -205,7 +233,7 @@ router.post(
           : 'Tech entries are active immediately.',
       });
     } catch (err) {
-      console.error('PDF ingest error:', err);
+      console.error('Document ingest error:', err);
       return res.status(500).json({ error: err.message });
     }
   }
@@ -217,12 +245,12 @@ router.post(
 router.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === 'LIMIT_FILE_SIZE') {
-      return res.status(413).json({ error: 'PDF too large. Maximum size is 20MB.' });
+      return res.status(413).json({ error: 'File too large. Maximum size is 20MB.' });
     }
     return res.status(400).json({ error: err.message });
   }
-  if (err?.message === 'Only PDF files are accepted') {
-    return res.status(415).json({ error: 'Only PDF files are accepted.' });
+  if (err?.message?.startsWith('Unsupported file type')) {
+    return res.status(415).json({ error: err.message });
   }
   next(err);
 });
