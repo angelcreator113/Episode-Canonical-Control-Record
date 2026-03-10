@@ -2886,11 +2886,6 @@ function HeaderBar({ viewMode, onViewMode, showFilters, onToggleFilters, onNewCh
 
       <div className="cr-header-center">
         <h1 className="cr-header-title">Characters</h1>
-        {!isMobile && (
-          <div style={{ fontSize: '0.8rem', color: '#94a3b8', marginTop: '2px' }}>
-            Your character development bible
-          </div>
-        )}
       </div>
 
       <div className="cr-header-right">
