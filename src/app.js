@@ -1075,6 +1075,15 @@ try {
   console.error('✗ Failed to load Tier feature routes:', e.message);
 }
 
+// Amber Session Awareness routes (greeting, voice, status)
+try {
+  const amberSessionRoutes = require('./routes/amberSessionRoutes');
+  app.use('/api/v1/amber', amberSessionRoutes);
+  console.log('✓ Amber Session routes loaded at /api/v1/amber');
+} catch (e) {
+  console.error('✗ Failed to load Amber Session routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
