@@ -1609,11 +1609,25 @@ export default function CharacterRegistryPage() {
                   )}
                 </div>
 
-                {/* Status */}
+                {/* Status + Deep Profile indicator */}
                 <div className={`cr-dossier-status ${c.status}`}>
                   <span className="cr-dossier-status-dot" />
                   {c.status?.toUpperCase()}
                 </div>
+                {(() => {
+                  const dp = c.deep_profile || {};
+                  const filled = Object.keys(dp).filter(k => {
+                    const d = dp[k];
+                    return d && typeof d === 'object' && Object.values(d).some(v => v !== null && v !== undefined && v !== '');
+                  }).length;
+                  if (filled === 0) return null;
+                  return (
+                    <div className={`cr-dossier-profile-badge ${filled >= 14 ? 'complete' : ''}`}>
+                      <span className="cr-dossier-profile-badge-icon">🧬</span>
+                      {filled >= 14 ? 'Profile Complete' : `${filled}/14`}
+                    </div>
+                  );
+                })()}
 
                 {/* Relationship Quick View */}
                 {c.relationships_map && (() => {
@@ -2932,13 +2946,6 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, 
         <button className="cr-card-quick-edit-btn" onClick={e => { e.stopPropagation(); onQuickEdit(); }} title="Quick Edit">✎</button>
       )}
 
-      {/* Quick accept button */}
-      {!selectMode && !isQuickEditing && canAccept && onAccept && (
-        <button className="cr-card-accept-btn" onClick={e => { e.stopPropagation(); onAccept(c.id); }} title="Accept">
-          ✓
-        </button>
-      )}
-
       {/* Quick-edit overlay */}
       {isQuickEditing && (
         <div className="cr-card-quick-overlay" onClick={e => e.stopPropagation()}>
@@ -3009,6 +3016,16 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, 
           ) : <span />}
           <span className={`cr-card-status-badge ${c.status}`}>{c.status}</span>
         </div>
+        {/* Status action strip */}
+        {!selectMode && !isQuickEditing && canAccept && onAccept && (
+          <button
+            className="cr-card-status-strip"
+            onClick={e => { e.stopPropagation(); onAccept(c.id); }}
+            title="Accept this character"
+          >
+            Accept ✓
+          </button>
+        )}
         {cardSize === 'large' && c.updated_at && (
           <div className="cr-card-timeline">
             <span className="cr-card-timeline-label">Updated</span>
@@ -3135,9 +3152,6 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   <span className="cr-dossier-belief-text">"{c.core_belief}"</span>
                 </div>
               )}
-              <DRow label="First Appearance" value={c.first_appearance} />
-              <DRow label="Era Introduced" value={c.era_introduced} />
-              <DRow label="Canon Tier" value={c.canon_tier} accent={c.canon_tier === 'Core Canon'} />
               <DRow label="Appearance Mode" value={c.appearance_mode?.replace('_', ' ')} />
               <DRow label="Pressure Type" value={c.pressure_type} />
               {c.pressure_quote && (
@@ -3702,7 +3716,9 @@ function DeepProfileTab({ character }) {
     <div className="cr-dossier-section">
       <div className="cr-dossier-section-header">
         <span className="cr-dossier-section-title">🧬 Deep Profile</span>
-        <span style={{ fontSize: 12, color: '#888' }}>{filledCount}/{DEEP_DIMS.length} dimensions</span>
+        <span className={`cr-deep-profile-progress ${filledCount >= DEEP_DIMS.length ? 'complete' : filledCount > 0 ? 'partial' : ''}`}>
+          {filledCount >= DEEP_DIMS.length ? '✓ Complete' : `${filledCount}/${DEEP_DIMS.length} dimensions`}
+        </span>
       </div>
 
       {/* Dimension accordion */}

@@ -5735,45 +5735,71 @@
   transform: scale(1.1);
 }
 
-/* ── Card Accept Button ── */
+/* ── Card Accept Button (legacy — hidden, replaced by status strip) ── */
 .cr-card-accept-btn {
-  position: absolute;
-  top: 8px;
-  left: 8px;
-  z-index: 5;
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: none;
-  background: rgba(60, 140, 80, .85);
-  backdrop-filter: blur(4px);
-  color: #fff;
-  font-size: 16px;
-  font-weight: 700;
-  cursor: pointer;
-  opacity: 0;
-  transition: opacity .15s, transform .15s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-.cr-card:hover .cr-card-accept-btn {
-  opacity: 1;
-}
-.cr-card-accept-btn:hover {
-  background: #2e9e4a;
-  transform: scale(1.15);
+  display: none;
 }
 
-/* On touch devices: always show accept button */
+/* ── Card Status Strip ── */
+.cr-card-status-strip {
+  display: block;
+  width: 100%;
+  padding: 6px 0;
+  border: none;
+  border-top: 1px solid rgba(61,142,66,0.15);
+  background: rgba(61,142,66,0.05);
+  color: var(--green, #3d8e42);
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  text-align: center;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  border-radius: 0 0 var(--radius, 12px) var(--radius, 12px);
+}
+.cr-card-status-strip:hover {
+  background: rgba(61,142,66,0.12);
+  color: #2e9e4a;
+}
+
+/* ── Deep Profile Badge (dossier left panel) ── */
+.cr-dossier-profile-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  background: rgba(106,76,147,0.08);
+  color: #6a4c93;
+}
+.cr-dossier-profile-badge.complete {
+  background: rgba(61,142,66,0.1);
+  color: var(--green, #3d8e42);
+}
+.cr-dossier-profile-badge-icon {
+  font-size: 13px;
+}
+
+/* ── Deep Profile Progress (tab header) ── */
+.cr-deep-profile-progress {
+  font-size: 12px;
+  color: #888;
+}
+.cr-deep-profile-progress.partial {
+  color: #6a4c93;
+}
+.cr-deep-profile-progress.complete {
+  color: var(--green, #3d8e42);
+  font-weight: 600;
+}
+
+/* On touch devices: always show quick-edit button */
 @media (hover: none) and (pointer: coarse) {
-  .cr-card-accept-btn {
-    opacity: 1;
-    width: 36px;
-    height: 36px;
-    font-size: 18px;
-  }
   .cr-card-quick-edit-btn {
     opacity: 1;
     width: 32px;
