@@ -428,10 +428,10 @@
   justify-content: center;
   width: 36px;
   height: 36px;
-  border-radius: 50%;
-  border: 1.5px solid rgba(255, 255, 255, 0.15);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.5);
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #f3f4f6;
+  color: #6b7280;
   cursor: pointer;
   transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
   user-select: none;
@@ -440,28 +440,28 @@
 }
 
 .apa-mic:hover:not(:disabled) {
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.8);
-  border-color: rgba(255, 255, 255, 0.3);
+  background: #eef2ff;
+  border-color: #c7d2fe;
+  color: #6366f1;
 }
 
 .apa-mic:disabled {
-  opacity: 0.35;
+  opacity: 0.3;
   cursor: not-allowed;
 }
 
 /* Active state — holding the mic */
 .apa-mic.apa-mic--active {
-  background: #d4789a;
-  border-color: #d4789a;
+  background: #6366f1;
+  border-color: #6366f1;
   color: #fff;
-  box-shadow: 0 0 0 4px rgba(212, 120, 154, 0.25);
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25);
   animation: apa-mic-pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes apa-mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 4px rgba(212, 120, 154, 0.25); }
-  50%      { box-shadow: 0 0 0 8px rgba(212, 120, 154, 0.10); }
+  0%, 100% { box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.25); }
+  50%      { box-shadow: 0 0 0 8px rgba(99, 102, 241, 0.10); }
 }
 
 /* ── Listening badge in header ───────────────────────────────────── */
@@ -469,8 +469,8 @@
 .apa-listening-badge {
   margin-left: 8px;
   font-size: 10px;
-  font-weight: 500;
-  color: #d4789a;
+  font-weight: 600;
+  color: #ef4444;
   letter-spacing: 0.04em;
   animation: apa-blink 1s step-start infinite;
 }
@@ -493,9 +493,10 @@
 /* ── Voice hint ──────────────────────────────────────────────────── */
 
 .apa-voice-hint {
-  margin: 4px 12px 10px;
+  margin: 0;
+  padding: 0 16px 10px;
   font-size: 10px;
-  color: rgba(255, 255, 255, 0.3);
+  color: #9ca3af;
   text-align: center;
   letter-spacing: 0.02em;
 }
