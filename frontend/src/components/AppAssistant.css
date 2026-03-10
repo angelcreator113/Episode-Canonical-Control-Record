@@ -463,3 +463,10 @@
     display: none;
   }
 }
+
+/* Shift FAB above the mobile bottom bar on Character Registry dossier */
+@media (max-width: 768px) {
+  body:has(.cr-mobile-bottom-bar) .apa-root {
+    bottom: calc(68px + env(safe-area-inset-bottom, 0px));
+  }
+}
