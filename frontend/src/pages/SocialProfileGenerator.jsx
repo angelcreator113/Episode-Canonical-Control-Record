@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
 import './SocialProfileGenerator.css';
 
@@ -227,7 +228,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const showToast = (message, type = 'success') => {
     clearTimeout(toastTimer.current);
     setToast({ message, type });
-    toastTimer.current = setTimeout(() => setToast(null), 4000);
+    toastTimer.current = setTimeout(() => setToast(null), 5000);
   };
 
   // ── Bulk selection helpers ───────────────────────────────────────────────
@@ -824,11 +825,12 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
         />}
       </div>}
 
-      {/* Toast notification */}
-      {toast && (
+      {/* Toast notification — portaled to body so no parent can clip/trap it */}
+      {toast && createPortal(
         <div className={`spg-toast spg-toast-${toast.type}`} onClick={() => setToast(null)}>
           {toast.message}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
