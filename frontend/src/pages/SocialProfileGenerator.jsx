@@ -107,28 +107,107 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const [view, setView]           = useState('feed'); // 'feed' | 'bulk'
   const [protagonist, setProtagonist] = useState(PROTAGONISTS[0]);
 
+  // Pagination
+  const [page, setPage]           = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const PAGE_SIZE = 24;
+
+  // Search & sort
+  const [search, setSearch]       = useState('');
+  const [sortBy, setSortBy]       = useState('score');
+  const searchTimer = useRef(null);
+
+  // Bulk selection
+  const [bulkMode, setBulkMode]   = useState(false);
+  const [selectedIds, setSelectedIds] = useState(new Set());
+
   // Spark form
   const [handle, setHandle]       = useState('');
   const [platform, setPlatform]   = useState('instagram');
   const [vibe, setVibe]           = useState('');
 
   // ── Load profiles ────────────────────────────────────────────────────────
-  const loadProfiles = useCallback(async () => {
+  const loadProfiles = useCallback(async (targetPage) => {
     setLoading(true);
     try {
+      const pg = targetPage || page;
       const qs = new URLSearchParams();
       if (filterStatus) qs.set('status', filterStatus);
+      if (search.trim()) qs.set('search', search.trim());
+      qs.set('sort', sortBy);
+      qs.set('page', pg);
+      qs.set('limit', PAGE_SIZE);
       const res = await fetch(`${API}?${qs}`, { headers: authHeaders() });
       const data = await res.json();
       setProfiles(data.profiles || []);
+      if (data.pagination) {
+        setTotalPages(data.pagination.totalPages || 1);
+        setTotalCount(data.pagination.total || 0);
+      }
     } catch (err) {
       console.error('Load profiles error:', err);
     } finally {
       setLoading(false);
     }
-  }, [filterStatus]);
+  }, [filterStatus, search, sortBy, page]);
 
   useEffect(() => { loadProfiles(); }, [loadProfiles]);
+
+  // Reset to page 1 when filters change
+  const changeFilter = (s) => { setFilterStatus(s); setPage(1); setSelectedIds(new Set()); };
+  const changeSort = (s) => { setSortBy(s); setPage(1); };
+  const handleSearch = (val) => {
+    setSearch(val);
+    clearTimeout(searchTimer.current);
+    searchTimer.current = setTimeout(() => setPage(1), 400);
+  };
+
+  // ── Bulk selection helpers ───────────────────────────────────────────────
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  const selectAllVisible = () => {
+    setSelectedIds(new Set(profiles.map(p => p.id)));
+  };
+  const clearSelection = () => { setSelectedIds(new Set()); setBulkMode(false); };
+
+  const bulkFinalize = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    if (!window.confirm(`Finalize ${ids.length} profile(s)?`)) return;
+    try {
+      const res = await fetch(`${API}/bulk/finalize`, {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSelectedIds(new Set());
+      loadProfiles();
+    } catch (err) { setError(err.message); }
+  };
+
+  const bulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (!ids.length) return;
+    if (!window.confirm(`Permanently delete ${ids.length} profile(s)? This cannot be undone.`)) return;
+    try {
+      const res = await fetch(`${API}/bulk/delete`, {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSelectedIds(new Set());
+      if (selected && ids.includes(selected.id)) setSelected(null);
+      loadProfiles();
+    } catch (err) { setError(err.message); }
+  };
 
   // ── Generate ─────────────────────────────────────────────────────────────
   const generateProfile = async () => {
@@ -148,10 +227,11 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Generation failed');
-      setProfiles(prev => [data.profile, ...prev]);
       setSelected(data.profile);
       setHandle('');
       setVibe('');
+      setPage(1);
+      loadProfiles(1);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -224,7 +304,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
   // ── Computed ─────────────────────────────────────────────────────────────
   const stats = {
-    total: profiles.length,
+    total: totalCount,
     generated: profiles.filter(p => p.status === 'generated').length,
     finalized: profiles.filter(p => p.status === 'finalized').length,
     crossed:   profiles.filter(p => p.status === 'crossed').length,
@@ -284,7 +364,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
       {/* ── Bulk Import View ─────────────────────────────────── */}
       {view === 'bulk' && (
-        <FeedBulkImport onDone={() => { setView('feed'); loadProfiles(); }} characterContext={protagonist.context} />
+        <FeedBulkImport onDone={() => { setView('feed'); setPage(1); loadProfiles(1); }} characterContext={protagonist.context} />
       )}
 
       {/* ── Spark Form ──────────────────────────────────────────── */}
@@ -338,18 +418,70 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
       {/* ── Content ─────────────────────────────────────────────── */}
       {view === 'feed' && <div className="spg-content">
-        {/* Filters */}
-        <div className="spg-filters" style={{ marginBottom: 4 }}>
-          {[null, 'generated', 'finalized', 'crossed', 'archived'].map(s => (
+        {/* Toolbar: Filters + Search + Sort + Bulk */}
+        <div className="spg-toolbar">
+          <div className="spg-filters">
+            {[null, 'generated', 'finalized', 'crossed', 'archived'].map(s => (
+              <button
+                key={s || 'all'}
+                className={`spg-filter-btn ${filterStatus === s ? 'spg-filter-btn-active' : ''}`}
+                onClick={() => changeFilter(s)}
+              >
+                {s ? STATUS_LABELS[s] : 'All'}
+              </button>
+            ))}
+          </div>
+          <div className="spg-toolbar-right">
+            <input
+              className="spg-search-input"
+              placeholder="Search handle or name…"
+              value={search}
+              onChange={e => handleSearch(e.target.value)}
+            />
+            <select className="spg-sort-select" value={sortBy} onChange={e => changeSort(e.target.value)}>
+              <option value="score">Score ↓</option>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+              <option value="handle">Handle A–Z</option>
+            </select>
             <button
-              key={s || 'all'}
-              className={`spg-filter-btn ${filterStatus === s ? 'spg-filter-btn-active' : ''}`}
-              onClick={() => setFilterStatus(s)}
+              className={`spg-btn spg-btn-sm ${bulkMode ? 'spg-btn-gold' : 'spg-btn-outline'}`}
+              onClick={() => { setBulkMode(!bulkMode); setSelectedIds(new Set()); }}
             >
-              {s ? STATUS_LABELS[s] : 'All'}
+              {bulkMode ? '✕ Cancel' : '☐ Select'}
             </button>
-          ))}
+          </div>
         </div>
+
+        {/* Bulk Action Bar */}
+        {bulkMode && (
+          <div className="spg-bulk-bar">
+            <div className="spg-bulk-bar-left">
+              <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={selectAllVisible}>
+                Select All ({profiles.length})
+              </button>
+              {selectedIds.size > 0 && (
+                <span className="spg-bulk-count">{selectedIds.size} selected</span>
+              )}
+            </div>
+            <div className="spg-bulk-bar-right">
+              <button
+                className="spg-btn spg-btn-sm spg-btn-green"
+                disabled={selectedIds.size === 0}
+                onClick={bulkFinalize}
+              >
+                ✓ Finalize ({selectedIds.size})
+              </button>
+              <button
+                className="spg-btn spg-btn-sm spg-btn-danger"
+                disabled={selectedIds.size === 0}
+                onClick={bulkDelete}
+              >
+                ✕ Delete ({selectedIds.size})
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Loading */}
         {loading && (
@@ -362,9 +494,9 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
         {!loading && profiles.length === 0 && (
           <div className="spg-empty">
             <div className="spg-empty-icon">📱</div>
-            <div className="spg-empty-text">No creators yet</div>
+            <div className="spg-empty-text">{search ? 'No matching creators' : 'No creators yet'}</div>
             <div className="spg-empty-sub">
-              Enter a handle, platform, and vibe above to generate a creator profile
+              {search ? 'Try a different search term' : 'Enter a handle, platform, and vibe above to generate a creator profile'}
             </div>
           </div>
         )}
@@ -374,15 +506,23 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           <div className="spg-grid">
             {profiles.map(p => {
               const data = fp(p);
+              const isChecked = selectedIds.has(p.id);
               return (
                 <div
                   key={p.id}
-                  className={`spg-card ${selected?.id === p.id ? 'spg-card-active' : ''}`}
+                  className={`spg-card ${selected?.id === p.id ? 'spg-card-active' : ''} ${isChecked ? 'spg-card-checked' : ''}`}
                   role="button"
                   tabIndex={0}
-                  onClick={() => setSelected(selected?.id === p.id ? null : p)}
-                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') setSelected(selected?.id === p.id ? null : p); }}
+                  onClick={() => bulkMode ? toggleSelect(p.id) : setSelected(selected?.id === p.id ? null : p)}
+                  onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { bulkMode ? toggleSelect(p.id) : setSelected(selected?.id === p.id ? null : p); } }}
                 >
+                  {bulkMode && (
+                    <div className="spg-card-checkbox">
+                      <span className={`spg-checkbox ${isChecked ? 'spg-checkbox-checked' : ''}`}>
+                        {isChecked ? '✓' : ''}
+                      </span>
+                    </div>
+                  )}
                   <div className="spg-card-header">
                     <span className="spg-card-handle">{p.handle}</span>
                     <div className="spg-card-header-right">
@@ -417,6 +557,45 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {/* ── Pagination ─────────────────────────────────────── */}
+        {!loading && totalPages > 1 && (
+          <div className="spg-pagination">
+            <button
+              className="spg-page-btn"
+              disabled={page <= 1}
+              onClick={() => setPage(1)}
+              title="First page"
+            >
+              «
+            </button>
+            <button
+              className="spg-page-btn"
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+            >
+              ‹ Prev
+            </button>
+            <span className="spg-page-info">
+              Page {page} of {totalPages}
+            </span>
+            <button
+              className="spg-page-btn"
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            >
+              Next ›
+            </button>
+            <button
+              className="spg-page-btn"
+              disabled={page >= totalPages}
+              onClick={() => setPage(totalPages)}
+              title="Last page"
+            >
+              »
+            </button>
           </div>
         )}
 

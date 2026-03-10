@@ -188,6 +188,54 @@
   .spg-card {
     transition: none;
   }
+
+  /* Toolbar stacks on tablet */
+  .spg-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  .spg-toolbar-right {
+    justify-content: flex-start;
+  }
+  .spg-search-input {
+    flex: 1;
+    min-width: 0;
+    width: auto;
+  }
+
+  /* Protagonist selector wraps */
+  .spg-protagonist-selector {
+    flex-wrap: wrap;
+  }
+  .spg-protagonist-btn {
+    font-size: 0.72rem;
+    padding: 6px 10px;
+  }
+
+  /* Bulk bar stacks */
+  .spg-bulk-bar {
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+  .spg-bulk-bar-left,
+  .spg-bulk-bar-right {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Pagination compact */
+  .spg-pagination {
+    gap: 4px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .spg-page-btn {
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    min-height: 44px;
+  }
 }
 .spg-field {
   display: flex;
@@ -715,6 +763,145 @@ select.spg-input {
   color: #fff;
 }
 
+/* ── Toolbar (filters + search + sort + bulk toggle) ───── */
+.spg-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.spg-toolbar-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.spg-search-input {
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 0.82rem;
+  font-family: inherit;
+  width: 180px;
+  transition: border-color 0.15s;
+}
+.spg-search-input:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+.spg-search-input::placeholder {
+  color: var(--ink-faint);
+}
+.spg-sort-select {
+  padding: 7px 12px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink-dim);
+  font-size: 0.78rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+.spg-sort-select:focus {
+  outline: none;
+  border-color: var(--gold);
+}
+
+/* ── Bulk Action Bar ───────────────────────────────────────── */
+.spg-bulk-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  margin: 8px 0;
+  background: var(--gold-bg);
+  border: 1px solid var(--gold-border);
+  border-radius: 10px;
+  flex-wrap: wrap;
+}
+.spg-bulk-bar-left,
+.spg-bulk-bar-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.spg-bulk-count {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--gold-dim);
+}
+
+/* ── Card Checkbox (bulk mode) ─────────────────────────────── */
+.spg-card-checkbox {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+}
+.spg-checkbox {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--border2);
+  border-radius: 5px;
+  background: var(--surface);
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #fff;
+  transition: all 0.12s;
+}
+.spg-checkbox-checked {
+  background: var(--gold);
+  border-color: var(--gold);
+}
+.spg-card-checked {
+  border-color: var(--gold);
+  background: var(--gold-bg);
+}
+
+/* ── Pagination ────────────────────────────────────────────── */
+.spg-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 6px;
+  margin-top: 24px;
+  padding: 16px 0;
+}
+.spg-page-btn {
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--ink-dim);
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.15s;
+  min-height: 40px;
+}
+.spg-page-btn:hover:not(:disabled) {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+.spg-page-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+.spg-page-info {
+  padding: 0 12px;
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+  font-weight: 600;
+}
+
 /* ── Pinned post block ─────────────────────────────────────── */
 .spg-pinned {
   background: var(--surface2);
@@ -895,6 +1082,50 @@ select.spg-input {
   .spg-crossing {
     padding: 14px 12px;
   }
+
+  /* Search/sort prevent iOS zoom */
+  .spg-search-input {
+    font-size: 16px;
+    padding: 8px 12px;
+  }
+  .spg-sort-select {
+    font-size: 16px;
+    padding: 8px 10px;
+  }
+
+  /* Toolbar tighter */
+  .spg-toolbar-right {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* Protagonist buttons smaller */
+  .spg-protagonist-btn {
+    font-size: 0.68rem;
+    padding: 5px 8px;
+  }
+
+  /* Bulk bar compact */
+  .spg-bulk-bar {
+    font-size: 0.78rem;
+    padding: 8px 10px;
+  }
+  .spg-bulk-bar .spg-btn-sm {
+    font-size: 0.72rem;
+    padding: 6px 10px;
+  }
+
+  /* Pagination tighter */
+  .spg-pagination {
+    gap: 3px;
+  }
+  .spg-page-btn {
+    padding: 6px 8px;
+    font-size: 0.72rem;
+  }
+  .spg-page-info {
+    font-size: 0.72rem;
+  }
 }
 
 /* ── Very small phones (≤360px) ── */
@@ -934,6 +1165,28 @@ select.spg-input {
 
   .spg-empty {
     padding: 32px 10px;
+  }
+
+  /* Search/sort/pagination shrink more */
+  .spg-search-input {
+    padding: 7px 10px;
+  }
+  .spg-sort-select {
+    padding: 7px 8px;
+  }
+  .spg-bulk-bar {
+    padding: 6px 8px;
+  }
+  .spg-pagination {
+    gap: 2px;
+  }
+  .spg-page-btn {
+    padding: 5px 6px;
+    font-size: 0.68rem;
+  }
+  .spg-protagonist-btn {
+    font-size: 0.62rem;
+    padding: 4px 6px;
   }
 }
 
@@ -980,7 +1233,12 @@ select.spg-input {
   .spg-btn,
   .spg-filter-btn,
   .spg-card,
-  .spg-detail-close {
+  .spg-detail-close,
+  .spg-page-btn,
+  .spg-checkbox,
+  .spg-search-input,
+  .spg-sort-select,
+  .spg-protagonist-btn {
     touch-action: manipulation;
   }
 }

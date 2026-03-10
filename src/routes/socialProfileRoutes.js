@@ -188,18 +188,97 @@ router.post('/generate', optionalAuth, async (req, res) => {
 // ── GET / ────────────────────────────────────────────────────────────────────
 router.get('/', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
-  const { series_id, archetype, status, platform } = req.query;
+  const { Op } = require('sequelize');
+  const { series_id, archetype, status, platform, page, limit, search, sort } = req.query;
   try {
     const where = {};
     if (series_id) where.series_id = series_id;
     if (archetype) where.archetype = archetype;
     if (status)    where.status    = status;
     if (platform)  where.platform  = platform;
-    const profiles = await db.SocialProfile.findAll({
+    if (search) {
+      where[Op.or] = [
+        { handle: { [Op.iLike]: `%${search}%` } },
+        { display_name: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    // Sorting
+    let order;
+    switch (sort) {
+      case 'newest':  order = [['created_at', 'DESC']]; break;
+      case 'oldest':  order = [['created_at', 'ASC']]; break;
+      case 'handle':  order = [['handle', 'ASC']]; break;
+      case 'score':   order = [['lala_relevance_score', 'DESC'], ['created_at', 'DESC']]; break;
+      default:        order = [['lala_relevance_score', 'DESC'], ['created_at', 'DESC']];
+    }
+
+    // Pagination
+    const pageNum  = Math.max(1, parseInt(page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 24));
+    const offset   = (pageNum - 1) * pageSize;
+
+    const { count, rows } = await db.SocialProfile.findAndCountAll({
       where,
-      order: [['lala_relevance_score', 'DESC'], ['created_at', 'DESC']],
+      order,
+      limit: pageSize,
+      offset,
     });
-    return res.json({ profiles });
+
+    return res.json({
+      profiles: rows,
+      pagination: {
+        page: pageNum,
+        limit: pageSize,
+        total: count,
+        totalPages: Math.ceil(count / pageSize),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /bulk/finalize ──────────────────────────────────────────────────────
+// Finalize multiple profiles at once
+router.post('/bulk/finalize', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  if (ids.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 profiles per bulk finalize' });
+  }
+  try {
+    const { Op } = require('sequelize');
+    const [count] = await db.SocialProfile.update(
+      { status: 'finalized' },
+      { where: { id: { [Op.in]: ids }, status: 'generated' } }
+    );
+    return res.json({ finalized: count });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /bulk/delete ────────────────────────────────────────────────────────
+// Delete multiple profiles at once
+router.post('/bulk/delete', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  if (ids.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 profiles per bulk delete' });
+  }
+  try {
+    const { Op } = require('sequelize');
+    const count = await db.SocialProfile.destroy(
+      { where: { id: { [Op.in]: ids } } }
+    );
+    return res.json({ deleted: count });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
