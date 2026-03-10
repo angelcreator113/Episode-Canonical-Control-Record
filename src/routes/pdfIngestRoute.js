@@ -17,12 +17,22 @@
 
 const express  = require('express');
 const multer   = require('multer');
-const pdfParse = require('pdf-parse');
-const mammoth  = require('mammoth');
 const Anthropic = require('@anthropic-ai/sdk');
 const router   = express.Router();
 const db       = require('../models');
 const { optionalAuth } = require('../middleware/auth');
+
+// Polyfill DOMMatrix for Node.js — required by pdfjs-dist used inside pdf-parse
+if (typeof globalThis.DOMMatrix === 'undefined') {
+  globalThis.DOMMatrix = class DOMMatrix {
+    constructor(init) {
+      const values = init || [1, 0, 0, 1, 0, 0];
+      this.a = values[0]; this.b = values[1];
+      this.c = values[2]; this.d = values[3];
+      this.e = values[4]; this.f = values[5];
+    }
+  };
+}
 
 const client = new Anthropic();
 
@@ -97,6 +107,7 @@ router.post(
       if (ext === '.pdf' || req.file.mimetype === 'application/pdf') {
         let pdfData;
         try {
+          const pdfParse = require('pdf-parse');
           pdfData = await pdfParse(req.file.buffer);
         } catch (parseErr) {
           return res.status(422).json({
@@ -108,6 +119,7 @@ router.post(
         pageCount = pdfData.numpages || 0;
       } else if (ext === '.docx' || req.file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
         try {
+          const mammoth = require('mammoth');
           const result = await mammoth.extractRawText({ buffer: req.file.buffer });
           extractedText = result.value?.trim() || '';
         } catch (docxErr) {
