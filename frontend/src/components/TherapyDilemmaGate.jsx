@@ -202,26 +202,26 @@ const s = {
 
   // Running
   running: {
-    background: '#0d0b09', // dark for dilemma engine
+    background: PARCHMENT,
   },
   runningHeader: {
     padding:        '16px 24px 0',
     display:        'flex',
     alignItems:     'center',
     gap:            12,
-    borderBottom:   '1px solid rgba(250,247,240,0.06)',
+    borderBottom:   '1px solid rgba(28,24,20,0.08)',
     paddingBottom:  12,
   },
   runningLabel: {
     fontSize:      7.5,
     letterSpacing: '0.2em',
-    color:         'rgba(250,247,240,0.3)',
+    color:         INK_LIGHT,
     fontFamily:    "'DM Mono', monospace",
   },
   runningName: {
     fontFamily:    "'Cormorant Garamond', Georgia, serif",
     fontSize:      16,
-    color:         'rgba(250,247,240,0.8)',
+    color:         INK,
   },
 
   // Done
