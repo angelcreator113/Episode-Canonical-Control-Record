@@ -243,29 +243,27 @@ router.post('/generate', optionalAuth, async (req, res) => {
     }
 
     const db = getModels();
-    const results = [];
 
-    for (let idx = 0; idx < creators.length; idx++) {
-      const c = creators[idx];
-      // Small delay between AI calls to avoid rate limiting
-      if (idx > 0) await new Promise(r => setTimeout(r, 1000));
+    // Process creators sequentially to avoid overwhelming Anthropic API / small EC2
+    const results = [];
+    for (const c of creators) {
       try {
         const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence);
-        const aiRes = await client.messages.create({
-          model: 'claude-sonnet-4-20250514',
-          max_tokens: 4000,
-          messages: [{ role: 'user', content: prompt }],
-        });
+        const aiRes = await Promise.race([
+          client.messages.create({
+            model: 'claude-sonnet-4-20250514',
+            max_tokens: 3000,
+            messages: [{ role: 'user', content: prompt }],
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000)),
+        ]);
 
         const text = aiRes.content[0].text;
-        // Strip markdown fences, then extract the JSON object
         const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
         const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('AI did not return valid JSON');
 
-        // Fix common AI JSON quirks: trailing commas before } or ]
-        const fixedJson = jsonMatch[0]
-          .replace(/,\s*([\]}])/g, '$1');
+        const fixedJson = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
 
         let profile;
         try {
@@ -314,7 +312,6 @@ router.post('/generate', optionalAuth, async (req, res) => {
           });
           saved = record;
           if (!created) {
-            // Already exists — update with fresh AI data
             await record.update({
               vibe_sentence: c.vibe_sentence,
               display_name: profile.display_name,
@@ -334,12 +331,13 @@ router.post('/generate', optionalAuth, async (req, res) => {
           profile_id: saved?.id || null,
           lala_score: profile.lala_relevance_score || 0,
         });
-      } catch (genErr) {
+      } catch (creatorErr) {
+        console.error(`[bulk-generate] Failed for @${c.handle}:`, creatorErr.message);
         results.push({
           handle: c.handle,
           platform: c.platform,
           status: 'failed',
-          error: genErr.message,
+          error: creatorErr.message || 'Unknown error',
         });
       }
     }

@@ -136,7 +136,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
     if (!candidates?.length) return;
     setGenerating(true); setErr(null);
 
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 1;
     const total = candidates.length;
     const allResults = [];
     setProgress({ done: 0, total, results: [] });
@@ -163,6 +163,9 @@ export default function FeedBulkImport({ onDone, seriesId }) {
           }
         }
         setProgress({ done: allResults.length, total, results: [...allResults] });
+
+        // Brief pause between requests to give server breathing room
+        if (i + BATCH_SIZE < total) await new Promise(r => setTimeout(r, 1000));
       }
 
       const succeeded = allResults.filter(r => r.status === 'success').length;

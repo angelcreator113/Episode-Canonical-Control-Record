@@ -233,11 +233,14 @@ async function startServer() {
     // Handle connection events
     server.on('connection', (socket) => {
       // Set socket timeout to prevent hanging connections
-      socket.setTimeout(300000); // 5 minutes (needed for long Claude API calls)
+      // Use 10 minutes — bulk generate can run 5 profiles × 20s each + DB writes
+      socket.setTimeout(600000);
 
       socket.on('timeout', () => {
-        console.warn('⏰ Socket timeout - closing connection');
-        socket.destroy();
+        // Only destroy truly idle sockets, not ones with active requests
+        if (!socket.destroyed && !socket.writableFinished === false) {
+          socket.end();
+        }
       });
     });
 
