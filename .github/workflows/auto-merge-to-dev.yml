@@ -18,7 +18,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          # PAT_TOKEN is required so the push to dev triggers deploy-dev.yml.
+          # GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security rule).
+          # Create a fine-grained PAT with Contents:Read+Write, add as repo secret PAT_TOKEN.
+          token: ${{ secrets.PAT_TOKEN }}
 
       - name: Configure git
         run: |
@@ -33,7 +36,11 @@ jobs:
           git checkout dev
           git pull origin dev
 
-          git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"
-          git push origin dev
-
-          echo "Merged $BRANCH into dev — deploy workflow will trigger automatically."
+          if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"; then
+            git push origin dev
+            echo "Merged $BRANCH into dev — deploy workflow will trigger automatically."
+          else
+            echo "Merge conflict — manual resolution needed."
+            git merge --abort
+            exit 1
+          fi
