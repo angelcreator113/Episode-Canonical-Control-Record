@@ -263,6 +263,20 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+
+    /* ── Therapy Dilemma Profile fields ── */
+    therapy_primary_defense: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    therapy_emotional_state: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    therapy_baseline: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
   }, {
     tableName: 'registry_characters',
     underscored: true,

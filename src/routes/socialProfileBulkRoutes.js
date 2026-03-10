@@ -46,6 +46,29 @@ function getModels() {
 
 const PLATFORMS = ['tiktok','instagram','youtube','twitter','onlyfans','twitch','substack','multi'];
 
+// Retry helper for Anthropic API calls (handles rate limits + transient errors)
+async function callAnthropicWithRetry(requestFn, { retries = 2, baseDelay = 5000 } = {}) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      return await Promise.race([
+        requestFn(),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000)),
+      ]);
+    } catch (err) {
+      const isRetryable = err.status === 429 || err.status === 529 || err.status >= 500
+        || err.message?.includes('overloaded') || err.message?.includes('rate')
+        || err.message?.includes('timeout') || err.message?.includes('ECONNRESET');
+      if (isRetryable && attempt < retries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.warn(`[bulk-generate] Anthropic API error (attempt ${attempt + 1}/${retries + 1}): ${err.message}. Retrying in ${delay}ms…`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 // ── POST /parse-paste ────────────────────────────────────────────────────────
 router.post('/parse-paste', optionalAuth, async (req, res) => {
   try {
@@ -252,14 +275,13 @@ router.post('/generate', optionalAuth, async (req, res) => {
     for (const c of creators) {
       try {
         const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence, character_context);
-        const aiRes = await Promise.race([
+        const aiRes = await callAnthropicWithRetry(() =>
           client.messages.create({
             model: 'claude-sonnet-4-20250514',
             max_tokens: 3000,
             messages: [{ role: 'user', content: prompt }],
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000)),
-        ]);
+          })
+        );
 
         const text = aiRes.content[0].text;
         const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
@@ -467,14 +489,14 @@ async function processJobInBackground(jobId) {
       for (const c of candidates) {
         try {
           const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence, job.character_context);
-          const aiRes = await Promise.race([
+          const aiRes = await callAnthropicWithRetry(() =>
             client.messages.create({
               model: 'claude-sonnet-4-20250514',
               max_tokens: 3000,
               messages: [{ role: 'user', content: prompt }],
             }),
-            new Promise((_, reject) => setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000)),
-          ]);
+            { retries: 2, baseDelay: 5000 }
+          );
 
           const text = aiRes.content[0].text;
           const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
@@ -570,9 +592,9 @@ async function processJobInBackground(jobId) {
           results,
         });
 
-        // Brief pause between API calls
+        // Pause between API calls to respect rate limits
         if (completedCount + failedCount < candidates.length) {
-          await new Promise(r => setTimeout(r, 1000));
+          await new Promise(r => setTimeout(r, 2000));
         }
       }
 

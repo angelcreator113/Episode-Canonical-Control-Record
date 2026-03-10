@@ -34,6 +34,36 @@ function loadDraft() {
   } catch { return null; }
 }
 
+function getAuthHeaders() {
+  const t = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
+  return t ? { Authorization: `Bearer ${t}`, 'Content-Type': 'application/json' }
+           : { 'Content-Type': 'application/json' };
+}
+
+async function fetchWithRetry(url, opts, { retries = 2, baseDelay = 3000 } = {}) {
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url, opts);
+      // Retry on rate limit (429) or server errors (5xx)
+      if ((res.status === 429 || res.status >= 500) && attempt < retries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.warn(`[bulk-import] ${res.status} on attempt ${attempt + 1}, retrying in ${delay}ms…`);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      return res;
+    } catch (err) {
+      if (attempt < retries) {
+        const delay = baseDelay * Math.pow(2, attempt);
+        console.warn(`[bulk-import] Network error on attempt ${attempt + 1}, retrying in ${delay}ms…`, err.message);
+        await new Promise(r => setTimeout(r, delay));
+        continue;
+      }
+      throw err;
+    }
+  }
+}
+
 export default function FeedBulkImport({ onDone, seriesId, characterContext, characterKey, onJobStarted }) {
   const draft = useRef(loadDraft());
 
@@ -89,8 +119,8 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     if (!pasteText.trim()) return;
     setParsing(true); setErr(null); setCandidates(null);
     try {
-      const res  = await fetch(`${API}/bulk/parse-paste`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const res  = await fetchWithRetry(`${API}/bulk/parse-paste`, {
+        method: 'POST', headers: getAuthHeaders(),
         body: JSON.stringify({ text: pasteText }),
       });
       const data = await res.json();
@@ -109,8 +139,10 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
       for (const file of files) {
         const fd = new FormData();
         fd.append('file', file);
-        const res  = await fetch(`${API}/bulk/parse-file`, {
-          method: 'POST', body: fd,
+        const authToken = localStorage.getItem('authToken') || localStorage.getItem('token') || sessionStorage.getItem('token');
+        const fileHeaders = authToken ? { Authorization: `Bearer ${authToken}` } : {};
+        const res  = await fetchWithRetry(`${API}/bulk/parse-file`, {
+          method: 'POST', headers: fileHeaders, body: fd,
         });
         const data = await res.json();
         if (!res.ok) throw new Error(`${file.name}: ${data.error}`);
@@ -149,12 +181,12 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
 
         setProgress({ done: allResults.length, total, batchNum, totalBatches, results: [...allResults] });
         try {
-          const res = await fetch(`${API}/bulk/generate`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+          const res = await fetchWithRetry(`${API}/bulk/generate`, {
+            method: 'POST', headers: getAuthHeaders(),
             body: JSON.stringify({ creators: batch, series_id: seriesId, character_context: characterContext, character_key: characterKey }),
-          });
+          }, { retries: 2, baseDelay: 4000 });
           const data = await res.json();
-          if (!res.ok) throw new Error(data.error);
+          if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
           allResults.push(...data.results);
         } catch (batchErr) {
           // Mark every creator in this batch as failed, but keep going
@@ -184,9 +216,9 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     if (!candidates?.length) return;
     setSubmittingJob(true); setErr(null);
     try {
-      const res = await fetch(`${API}/bulk/generate-job`, {
+      const res = await fetchWithRetry(`${API}/bulk/generate-job`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: getAuthHeaders(),
         body: JSON.stringify({
           creators: candidates,
           series_id: seriesId,
@@ -239,20 +271,41 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
           {/* Results list */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
             {progress?.results?.map((r, i) => (
-              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: C.surface, border: `1px solid ${r.status === 'success' ? C.green + '44' : C.red + '44'}`, borderRadius: '8px' }}>
-                <span style={{ fontFamily: 'monospace', fontSize: '13px', color: r.status === 'success' ? C.green : C.red }}>{r.handle}</span>
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {r.status === 'success' && r.lala_score > 0 && (
-                    <span style={{ fontSize: '10px', color: C.gold }}>⬡ Lala {r.lala_score}/10</span>
-                  )}
-                  <span style={{ fontSize: '11px', color: r.status === 'success' ? C.green : C.red }}>
-                    {r.status === 'success' ? '✓ Generated' : '✕ Failed'}
-                  </span>
+              <div key={i} style={{ padding: '10px 14px', background: C.surface, border: `1px solid ${r.status === 'success' ? C.green + '44' : C.red + '44'}`, borderRadius: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span style={{ fontFamily: 'monospace', fontSize: '13px', color: r.status === 'success' ? C.green : C.red }}>{r.handle}</span>
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    {r.status === 'success' && r.lala_score > 0 && (
+                      <span style={{ fontSize: '10px', color: C.gold }}>⬡ Lala {r.lala_score}/10</span>
+                    )}
+                    <span style={{ fontSize: '11px', color: r.status === 'success' ? C.green : C.red }}>
+                      {r.status === 'success' ? '✓ Generated' : '✕ Failed'}
+                    </span>
+                  </div>
                 </div>
+                {r.status === 'failed' && r.error && (
+                  <div style={{ fontSize: '11px', color: C.textFaint, marginTop: '4px', lineHeight: '1.4', wordBreak: 'break-word' }}>
+                    {r.error}
+                  </div>
+                )}
               </div>
             ))}
           </div>
 
+          {summary.failed > 0 && (
+            <button onClick={() => {
+              // Reset to candidates view with only the failed ones
+              const failedHandles = new Set((progress?.results || []).filter(r => r.status === 'failed').map(r => r.handle));
+              const failedCandidates = (candidates || []).filter(c => failedHandles.has(c.handle));
+              if (failedCandidates.length > 0) {
+                setCandidates(failedCandidates);
+                setSummary(null);
+                setProgress(null);
+              }
+            }} style={{ width: '100%', padding: '12px', marginBottom: '8px', background: C.pink, border: 'none', borderRadius: '10px', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
+              Retry {summary.failed} Failed Profile{summary.failed !== 1 ? 's' : ''} →
+            </button>
+          )}
           <button onClick={() => { localStorage.removeItem(STORAGE_KEY); onDone(); }} style={{ width: '100%', padding: '12px', background: C.text, border: 'none', borderRadius: '10px', color: C.bg, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
             Back to The Feed →
           </button>
