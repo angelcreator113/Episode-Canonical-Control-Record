@@ -2941,9 +2941,9 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, 
         </div>
       )}
 
-      {/* Quick-edit pencil */}
+      {/* Quick-edit menu */}
       {!selectMode && !isQuickEditing && (
-        <button className="cr-card-quick-edit-btn" onClick={e => { e.stopPropagation(); onQuickEdit(); }} title="Quick Edit">✎</button>
+        <button className="cr-card-quick-edit-btn" onClick={e => { e.stopPropagation(); onQuickEdit(); }} title="Quick Edit">⋮</button>
       )}
 
       {/* Quick-edit overlay */}
