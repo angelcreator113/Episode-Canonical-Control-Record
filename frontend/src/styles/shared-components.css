@@ -702,3 +702,64 @@
     margin-bottom: 1rem;
   }
 }
+
+@media (max-width: 480px) {
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .form-section {
+    padding: 0.75rem;
+  }
+
+  .form-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+
+  .form-actions .btn,
+  .form-actions button {
+    width: 100%;
+  }
+
+  .modal-header,
+  .modal-footer {
+    padding: 0.75rem 1rem;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+  }
+
+  .modal-actions button,
+  .modal-actions .btn {
+    width: 100%;
+  }
+
+  .empty-state {
+    padding: 2rem 1rem;
+  }
+
+  .empty-state h3 {
+    font-size: 1.1rem;
+  }
+
+  .empty-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .btn,
+  .btn-primary,
+  .btn-secondary {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
+  }
+
+  .search-input {
+    padding: 0.625rem 0.75rem;
+    font-size: 16px; /* prevent iOS zoom */
+  }
+}

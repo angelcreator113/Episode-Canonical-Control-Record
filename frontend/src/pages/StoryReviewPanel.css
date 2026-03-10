@@ -256,3 +256,71 @@
   opacity: 0.9;
   transform: translateY(-1px);
 }
+
+/* ── Mobile Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .se-review-status-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 12px;
+  }
+
+  .se-review-status-left,
+  .se-review-status-right {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .se-review-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 10px 12px;
+  }
+
+  .se-review-textarea,
+  .se-review-text {
+    padding: 14px;
+  }
+
+  .se-review-editor-wrap {
+    max-height: 400px;
+  }
+
+  .se-review-notes {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .se-review-status-bar {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  .se-review-actions {
+    padding: 8px 10px;
+  }
+
+  .se-review-btn {
+    padding: 8px 12px;
+    font-size: 11px;
+    min-height: 40px;
+  }
+
+  .se-review-textarea,
+  .se-review-text {
+    padding: 10px;
+    font-size: 15px;
+  }
+
+  .se-review-editor-wrap {
+    max-height: 300px;
+  }
+
+  .se-review-notes-input {
+    font-size: 16px; /* prevent iOS zoom */
+    min-height: 48px;
+  }
+}
