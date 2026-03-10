@@ -107,6 +107,9 @@ let WorldLocation; // Location/geography database
 let WorldStateSnapshot; // World-state snapshots per chapter
 let PipelineTracking; // End-to-end pipeline status tracking
 let StoryThread; // Story thread / subplot tracking
+let AmberFinding; // Amber Diagnostic Engine — findings
+let AmberScanRun; // Amber Diagnostic Engine — scan runs
+let AmberTaskQueue; // Amber Diagnostic Engine — task queue
 
 try {
   // Core models
@@ -308,6 +311,11 @@ try {
   PipelineTracking = require('./PipelineTracking')(sequelize);
   StoryThread = require('./StoryThread')(sequelize);
 
+  // Amber Diagnostic Engine models
+  AmberFinding = require('./AmberFinding')(sequelize, DataTypes);
+  AmberScanRun = require('./AmberScanRun')(sequelize, DataTypes);
+  AmberTaskQueue = require('./AmberTaskQueue')(sequelize, DataTypes);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -421,6 +429,9 @@ const requiredModels = {
   WorldStateSnapshot,
   PipelineTracking,
   StoryThread,
+  AmberFinding,
+  AmberScanRun,
+  AmberTaskQueue,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -555,6 +566,14 @@ RegistryCharacter.hasMany(SocialProfile, {
   foreignKey: 'registry_character_id',
   as: 'socialProfiles',
 });
+
+// Amber Diagnostic Engine associations
+if (AmberFinding && AmberFinding.associate) {
+  AmberFinding.associate(requiredModels);
+}
+if (AmberScanRun && AmberScanRun.associate) {
+  AmberScanRun.associate(requiredModels);
+}
 
 console.log('✅ Model associations defined');
 
@@ -1673,3 +1692,6 @@ module.exports.WorldLocation = WorldLocation;
 module.exports.WorldStateSnapshot = WorldStateSnapshot;
 module.exports.PipelineTracking = PipelineTracking;
 module.exports.StoryThread = StoryThread;
+module.exports.AmberFinding = AmberFinding;
+module.exports.AmberScanRun = AmberScanRun;
+module.exports.AmberTaskQueue = AmberTaskQueue;

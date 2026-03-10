@@ -97,6 +97,7 @@ const StudioTimelinePage = lazy(() => import('./pages/StudioTimelinePage'));
 const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPage'));
 const SocialProfileGenerator = lazy(() => import('./pages/SocialProfileGenerator'));
 const NarrativeControlCenter = lazy(() => import('./pages/NarrativeControlCenter'));
+const AmberCommandCenter = lazy(() => import('./pages/AmberCommandCenter'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -405,7 +406,10 @@ function AppContent() {
           
           {/* Diagnostics */}
           <Route path="/diagnostics" element={<DiagnosticPage />} />
-          
+
+          {/* Amber Command Center */}
+          <Route path="/amber" element={<AmberCommandCenter />} />
+
           {/* Settings */}
           <Route path="/settings" element={<SettingsPage />} />
           

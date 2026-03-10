@@ -69,6 +69,7 @@ const NAV = [
     items: [
       { icon: '📊', label: 'Analytics',       route: '/analytics/decisions' },
       { icon: '🔍', label: 'Search',          route: '/search' },
+      { icon: '✦', label: 'Amber',           route: '/amber' },
       { icon: '🩺', label: 'Diagnostics',     route: '/diagnostics' },
       { icon: '🗑️', label: 'Recycle Bin',     route: '/recycle-bin' },
       { icon: '⚙️', label: 'Settings',        route: '/settings' },
