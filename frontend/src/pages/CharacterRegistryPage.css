@@ -351,40 +351,41 @@
 .cr-registry-tabs {
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 24px;
+  gap: 8px;
+  margin-bottom: 0;
   flex-wrap: wrap;
+  padding-bottom: 12px;
 }
 
 .cr-registry-pill {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 10px 20px;
-  border: 1.5px solid var(--border);
-  border-radius: 24px;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
   font-family: var(--sans);
-  font-size: var(--fs-base);
+  font-size: 13px;
   font-weight: 500;
-  color: var(--ink-soft);
+  color: var(--ink-dim);
   background: var(--surface);
   cursor: pointer;
-  transition: all .2s ease;
+  transition: all .15s ease;
   white-space: nowrap;
 }
 
 .cr-registry-pill:hover {
-  border-color: var(--purple);
-  color: var(--purple-deep);
-  background: var(--purple-bg);
+  border-color: var(--accent, #9b4dca);
+  color: var(--ink);
+  background: rgba(155, 77, 202, .04);
 }
 
 .cr-registry-pill.active {
-  border-color: transparent;
-  background: linear-gradient(135deg, var(--pink) 0%, var(--purple) 60%, var(--gold) 100%);
-  color: #fff;
+  border-color: var(--accent, #9b4dca);
+  background: rgba(155, 77, 202, .08);
+  color: var(--accent, #9b4dca);
   font-weight: 600;
-  box-shadow: 0 3px 12px rgba(196,160,224,.25);
+  box-shadow: none;
 }
 
 .cr-pill-title {
@@ -393,25 +394,26 @@
 
 .cr-pill-tag {
   font-family: var(--mono);
-  font-size: 10px;
+  font-size: 9px;
   letter-spacing: .06em;
   text-transform: uppercase;
-  opacity: .7;
-  padding: 2px 7px;
-  border-radius: 10px;
-  background: rgba(255,255,255,.15);
-}
-
-.cr-registry-pill:not(.active) .cr-pill-tag {
+  opacity: .6;
+  padding: 2px 6px;
+  border-radius: 4px;
   background: rgba(0,0,0,.06);
 }
 
+.cr-registry-pill.active .cr-pill-tag {
+  background: rgba(155, 77, 202, .1);
+  opacity: .8;
+}
+
 .cr-registry-pill.cr-pill-add {
-  width: 38px;
-  height: 38px;
+  width: 32px;
+  height: 32px;
   padding: 0;
   justify-content: center;
-  font-size: 20px;
+  font-size: 16px;
   font-weight: 300;
   color: var(--ink-faint);
   border-style: dashed;
@@ -421,16 +423,44 @@
 .cr-stats-strip {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 16px;
-  padding: 10px 16px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 10px;
+  gap: 12px;
+  margin-bottom: 14px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
 }
 
 .cr-stats-strip::before {
   display: none;
+}
+
+.cr-stat-counts {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cr-stat-chip {
+  font-family: var(--sans);
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ink-dim);
+  padding: 3px 8px;
+  border-radius: 12px;
+  background: rgba(0,0,0,.04);
+  white-space: nowrap;
+}
+
+.cr-stat-chip:first-child {
+  font-weight: 700;
+  color: var(--ink);
+}
+
+.cr-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .cr-stat-item {
@@ -1843,8 +1873,12 @@
 
   .cr-stats-strip {
     flex-wrap: wrap;
-    gap: 8px 14px;
-    padding: 10px 14px;
+    gap: 6px;
+    padding: 8px 0;
+  }
+
+  .cr-toolbar-right {
+    width: 100%;
   }
 
   .cr-grid {
@@ -1973,11 +2007,13 @@
   .cr-content { padding: 16px 12px 48px; }
 
   .cr-stats-strip {
-    gap: 6px 12px;
-    padding: 8px 12px;
+    gap: 6px;
+    padding: 6px 0;
   }
-  .cr-stat-count { font-size: 16px; }
-  .cr-stat-label { font-size: 9px; }
+
+  .cr-stat-chip { font-size: 10px; padding: 2px 6px; }
+
+  .cr-toolbar-right { width: 100%; gap: 6px; }
 
   .cr-grid {
     grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
@@ -2069,9 +2105,8 @@
   .cr-filter-label { font-size: 10px; }
 
   .cr-content { padding: 12px 8px 40px; }
-  .cr-stats-strip { padding: 8px 10px; gap: 6px 10px; }
-  .cr-stat-count { font-size: 15px; }
-  .cr-stat-label { font-size: 9px; }
+  .cr-stats-strip { padding: 6px 0; gap: 4px; }
+  .cr-stat-chip { font-size: 10px; padding: 2px 5px; }
 
   .cr-grid { gap: 10px; }
   .cr-card-body { padding: 12px 14px; }
@@ -2255,50 +2290,42 @@
 /* ── Stats strip: wrap on small mobile ── */
 @media (max-width: 480px) {
   .cr-stats-strip {
-    display: flex;
     flex-wrap: wrap;
-    gap: 4px 10px;
-    padding: 8px 10px;
+    gap: 6px;
+    padding: 6px 0;
     margin-bottom: 10px;
   }
 
-  .cr-stat-item {
-    padding: 0;
+  .cr-stat-counts {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 4px;
   }
 
-  .cr-stat-count {
-    font-size: 15px;
+  .cr-stat-chip {
+    font-size: 11px;
+    padding: 2px 6px;
   }
 
-  .cr-stat-label {
-    font-size: 9px;
-  }
-
-  .cr-stat-sort {
-    margin-left: auto;
-    width: auto;
-    order: 10;
+  .cr-toolbar-right {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 6px;
   }
 
   .cr-sort-select {
-    width: auto;
-    padding: 4px 6px;
     font-size: 10px;
-  }
-
-  .cr-card-size-toggle {
-    order: 11;
+    padding: 3px 20px 3px 6px;
   }
 
   .cr-stat-actions {
-    order: 12;
     display: flex;
     gap: 2px;
   }
 
   .cr-stat-actions .cr-btn-outline {
-    padding: 5px 8px;
-    font-size: 11px;
+    padding: 4px 6px;
+    font-size: 10px;
   }
 }
 
@@ -5572,58 +5599,67 @@
 .cr-stat-sort {
   display: flex;
   align-items: center;
-  margin-left: auto;
 }
 .cr-sort-select {
-  padding: 5px 10px;
-  border: 1px solid rgba(255,255,255,.12);
+  padding: 4px 8px;
+  border: 1px solid var(--border);
   border-radius: 6px;
-  background: var(--surface2, rgba(255,255,255,.06));
-  color: var(--ink, #1C1814);
-  font-size: 12px;
-  font-weight: 600;
+  background: var(--surface);
+  color: var(--ink-dim);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 500;
   cursor: pointer;
   outline: none;
   transition: border-color .2s;
+  -webkit-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%23999' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 6px center;
+  padding-right: 22px;
 }
 .cr-sort-select:hover,
 .cr-sort-select:focus {
-  border-color: var(--gold, #C9A84C);
+  border-color: var(--accent, #9b4dca);
+  color: var(--ink);
 }
 
 /* ── Card Size Toggle ── */
 .cr-card-size-toggle {
   display: flex;
   align-items: center;
-  gap: 2px;
-  background: var(--surface2, rgba(255,255,255,.06));
-  border: 1px solid rgba(255,255,255,.12);
+  gap: 1px;
+  background: rgba(0,0,0,.04);
   border-radius: 6px;
   padding: 2px;
 }
 .cr-size-btn {
-  padding: 4px 8px;
+  padding: 3px 8px;
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--ink-secondary, #888);
-  font-size: 14px;
+  color: var(--ink-faint);
+  font-family: var(--sans);
+  font-size: 11px;
+  font-weight: 600;
   cursor: pointer;
   transition: all .15s;
   line-height: 1;
 }
 .cr-size-btn:hover {
-  color: var(--ink, #1C1814);
-  background: rgba(255,255,255,.1);
+  color: var(--ink);
+  background: rgba(0,0,0,.06);
 }
 .cr-size-btn.active {
-  color: var(--gold, #C9A84C);
-  background: rgba(201,168,76,.12);
+  color: var(--accent, #9b4dca);
+  background: var(--surface);
+  box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
 
 /* ── Export Button ── */
 .cr-export-toggle {
-  font-size: 12px !important;
+  font-size: 11px !important;
 }
 .cr-export-toggle:disabled {
   opacity: .5;
@@ -6068,7 +6104,7 @@
   }
 
   /* Registry tabs — compact pills */
-  .cr-registry-tabs { gap: 4px; margin-bottom: 14px; }
+  .cr-registry-tabs { gap: 4px; margin-bottom: 8px; }
   .cr-registry-pill {
     padding: 5px 10px;
     font-size: 11px;
@@ -6091,7 +6127,7 @@
   .cr-world-gen-all-text { font-size: 12px; }
 
   /* Export / outline buttons */
-  .cr-btn-outline { padding: 4px 8px; font-size: 11px; }
+  .cr-btn-outline { padding: 3px 6px; font-size: 10px; }
 
   /* Type filter pills */
   .cr-world-filter-btn { padding: 4px 10px; font-size: 10px; }
@@ -6099,9 +6135,8 @@
   .cr-world-filters { gap: 5px; margin-bottom: 14px; }
 
   /* Stats strip */
-  .cr-stats-strip { padding: 6px 8px; gap: 4px 8px; margin-bottom: 10px; }
-  .cr-stat-count { font-size: 14px; }
-  .cr-stat-label { font-size: 8px; }
+  .cr-stats-strip { padding: 4px 0; gap: 4px; margin-bottom: 8px; }
+  .cr-stat-chip { font-size: 9px; padding: 2px 4px; }
 
   /* Content area tighter */
   .cr-content { padding: 10px 8px 40px; }

@@ -2361,55 +2361,43 @@ export default function CharacterRegistryPage() {
           </div>
         )}
 
-        {/* Stats */}
+        {/* Toolbar */}
         <div className="cr-stats-strip">
-          <div className="cr-stat-item">
-            <span className="cr-stat-count">{statusCounts.total}</span>
-            <span className="cr-stat-label">Characters</span>
-          </div>
-          <div className="cr-stat-item">
-            <span className="cr-stat-count">{statusCounts.finalized}</span>
-            <span className="cr-stat-label">Canon</span>
-          </div>
-          <div className="cr-stat-item">
-            <span className="cr-stat-count">{statusCounts.accepted}</span>
-            <span className="cr-stat-label">Accepted</span>
-          </div>
-          <div className="cr-stat-item">
-            <span className="cr-stat-count">{statusCounts.draft}</span>
-            <span className="cr-stat-label">Draft</span>
+          <div className="cr-stat-counts">
+            <span className="cr-stat-chip">{statusCounts.total} total</span>
+            <span className="cr-stat-chip">{statusCounts.finalized} canon</span>
+            <span className="cr-stat-chip">{statusCounts.accepted} accepted</span>
+            <span className="cr-stat-chip">{statusCounts.draft} draft</span>
           </div>
 
-          {/* Sort dropdown */}
-          <div className="cr-stat-sort">
+          <div className="cr-toolbar-right">
             <select className="cr-sort-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
-              <option value="default">Sort: Default</option>
-              <option value="name">Sort: Name</option>
-              <option value="role">Sort: Role</option>
-              <option value="status">Sort: Status</option>
-              <option value="recent">Sort: Recent</option>
+              <option value="default">Default</option>
+              <option value="name">Name</option>
+              <option value="role">Role</option>
+              <option value="status">Status</option>
+              <option value="recent">Recent</option>
             </select>
-          </div>
 
-          {/* Card size toggle */}
-          <div className="cr-card-size-toggle">
-            <button className={`cr-size-btn ${cardSize === 'compact' ? 'active' : ''}`} onClick={() => setCardSize('compact')} title="Compact">▪</button>
-            <button className={`cr-size-btn ${cardSize === 'normal' ? 'active' : ''}`} onClick={() => setCardSize('normal')} title="Normal">▦</button>
-            <button className={`cr-size-btn ${cardSize === 'large' ? 'active' : ''}`} onClick={() => setCardSize('large')} title="Large">▣</button>
-          </div>
+            <div className="cr-card-size-toggle">
+              <button className={`cr-size-btn ${cardSize === 'compact' ? 'active' : ''}`} onClick={() => setCardSize('compact')} title="Small cards">S</button>
+              <button className={`cr-size-btn ${cardSize === 'normal' ? 'active' : ''}`} onClick={() => setCardSize('normal')} title="Medium cards">M</button>
+              <button className={`cr-size-btn ${cardSize === 'large' ? 'active' : ''}`} onClick={() => setCardSize('large')} title="Large cards">L</button>
+            </div>
 
-          <div className="cr-stat-actions">
-            <button className="cr-btn-outline cr-export-toggle" onClick={exportRegistryJSON} disabled={exporting} title="Export registry as JSON">
-              📥 Export
-            </button>
-            <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
-              onClick={() => { setCompareMode(m => !m); setCompareSelection([]); if (selectMode) exitSelectMode(); }}>
-              {compareMode ? '✕ Cancel Compare' : '⟷ Compare'}
-            </button>
-            <button className={`cr-btn-outline cr-select-toggle ${selectMode ? 'active' : ''}`}
-              onClick={() => { if (selectMode) { exitSelectMode(); } else { setSelectMode(true); if (compareMode) { setCompareMode(false); setCompareSelection([]); } } }}>
-              {selectMode ? '✕ Cancel Select' : '☐ Select'}
-            </button>
+            <div className="cr-stat-actions">
+              <button className="cr-btn-outline cr-export-toggle" onClick={exportRegistryJSON} disabled={exporting} title="Export registry as JSON">
+                Export
+              </button>
+              <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
+                onClick={() => { setCompareMode(m => !m); setCompareSelection([]); if (selectMode) exitSelectMode(); }}>
+                {compareMode ? '✕ Cancel' : 'Compare'}
+              </button>
+              <button className={`cr-btn-outline cr-select-toggle ${selectMode ? 'active' : ''}`}
+                onClick={() => { if (selectMode) { exitSelectMode(); } else { setSelectMode(true); if (compareMode) { setCompareMode(false); setCompareSelection([]); } } }}>
+                {selectMode ? '✕ Cancel' : 'Select'}
+              </button>
+            </div>
           </div>
         </div>
 
