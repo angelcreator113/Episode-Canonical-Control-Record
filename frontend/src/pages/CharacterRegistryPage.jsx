@@ -1569,27 +1569,31 @@ export default function CharacterRegistryPage() {
                   )}
                 </div>
 
-                {/* Identity */}
-                <div>
-                  <h2 className="cr-dossier-name">{c.selected_name || c.display_name}</h2>
-                  {c.selected_name && c.display_name !== c.selected_name && (
-                    <div className="cr-dossier-alias">née {c.display_name}</div>
-                  )}
-                </div>
-
-                {/* Meta fields */}
-                <div className="cr-dossier-meta">
-                  <div className="cr-dossier-meta-row">
-                    <span className="cr-dossier-meta-label">Role</span>
-                    <span className="cr-dossier-meta-value">{c.role_label || ROLE_LABELS[c.role_type] || c.role_type}</span>
+                {/* Identity — hidden on mobile (already in summary strip) */}
+                {!isMobile && (
+                  <div>
+                    <h2 className="cr-dossier-name">{c.selected_name || c.display_name}</h2>
+                    {c.selected_name && c.display_name !== c.selected_name && (
+                      <div className="cr-dossier-alias">née {c.display_name}</div>
+                    )}
                   </div>
+                )}
+
+                {/* Meta fields — on mobile, skip Role & Archetype (already in strip) */}
+                <div className="cr-dossier-meta">
+                  {!isMobile && (
+                    <div className="cr-dossier-meta-row">
+                      <span className="cr-dossier-meta-label">Role</span>
+                      <span className="cr-dossier-meta-value">{c.role_label || ROLE_LABELS[c.role_type] || c.role_type}</span>
+                    </div>
+                  )}
                   <div className="cr-dossier-meta-row">
                     <span className="cr-dossier-meta-label">Canon Tier</span>
                     <span className={`cr-dossier-meta-value ${isCore ? 'gold' : ''}`}>
                       {c.canon_tier || '—'}
                     </span>
                   </div>
-                  {c.character_archetype && (
+                  {!isMobile && c.character_archetype && (
                     <div className="cr-dossier-meta-row">
                       <span className="cr-dossier-meta-label">Archetype</span>
                       <span className="cr-dossier-meta-value">{c.character_archetype}</span>
@@ -1609,11 +1613,13 @@ export default function CharacterRegistryPage() {
                   )}
                 </div>
 
-                {/* Status + Deep Profile indicator */}
-                <div className={`cr-dossier-status ${c.status}`}>
-                  <span className="cr-dossier-status-dot" />
-                  {c.status?.toUpperCase()}
-                </div>
+                {/* Status — hidden on mobile (already in strip) */}
+                {!isMobile && (
+                  <div className={`cr-dossier-status ${c.status}`}>
+                    <span className="cr-dossier-status-dot" />
+                    {c.status?.toUpperCase()}
+                  </div>
+                )}
                 {(() => {
                   const dp = c.deep_profile || {};
                   const filled = Object.keys(dp).filter(k => {
