@@ -219,7 +219,7 @@ router.get('/greeting', optionalAuth, async (req, res) => {
 // Body: { text: "..." }
 // Protected: requires auth + rate-limited to 20 req/hr
 // ─────────────────────────────────────────────────────────────────────────────
-router.post('/speak', authenticate, speakLimiter, async (req, res) => {
+router.post('/speak', optionalAuth, speakLimiter, async (req, res) => {
   const { text } = req.body;
   if (!text?.trim()) return res.status(400).json({ error: 'text required' });
 

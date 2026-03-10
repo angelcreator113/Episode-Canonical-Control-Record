@@ -102,14 +102,17 @@ export default function AmberPresence({ page = 'dashboard', className = '' }) {
     };
   }, [page]);
 
-  // ── ElevenLabs voice ───────────────────────────────────────────────────────
+  // ── Voice — ElevenLabs with browser TTS fallback ────────────────────────────
   async function speakGreeting(text) {
     if (!text) return;
     setSpeaking(true);
     try {
+      const token = localStorage.getItem('authToken') || localStorage.getItem('token');
+      const headers = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
       const res = await fetch(`${API}/api/v1/amber/speak`, {
         method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body:    JSON.stringify({ text }),
       });
       if (!res.ok) throw new Error('speak failed');
@@ -125,7 +128,23 @@ export default function AmberPresence({ page = 'dashboard', className = '' }) {
         };
       }
     } catch {
-      setSpeaking(false);
+      // Fallback to browser speech synthesis
+      if (window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+        const utter = new SpeechSynthesisUtterance(text);
+        utter.rate = 0.92;
+        utter.pitch = 1.0;
+        // Prefer a female English voice
+        const voices = window.speechSynthesis.getVoices();
+        const preferred = voices.find(v => /samantha|zira|female|karen/i.test(v.name) && /en/i.test(v.lang))
+                       || voices.find(v => /en/i.test(v.lang));
+        if (preferred) utter.voice = preferred;
+        utter.onend = () => setSpeaking(false);
+        utter.onerror = () => setSpeaking(false);
+        window.speechSynthesis.speak(utter);
+      } else {
+        setSpeaking(false);
+      }
     }
   }
 
@@ -133,8 +152,9 @@ export default function AmberPresence({ page = 'dashboard', className = '' }) {
     const next = !voiceEnabled;
     setVoiceEnabled(next);
     try { localStorage.setItem('amber-voice', next ? '1' : '0'); } catch {}
-    if (!next && audioRef.current) {
-      audioRef.current.pause();
+    if (!next) {
+      if (audioRef.current) audioRef.current.pause();
+      if (window.speechSynthesis) window.speechSynthesis.cancel();
       setSpeaking(false);
     }
   }
