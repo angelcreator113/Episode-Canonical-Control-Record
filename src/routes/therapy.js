@@ -684,4 +684,145 @@ router.post('/clear-waiting/:id', optionalAuth, async (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════════════
+// ROUTE 8: GET /dilemmas — generate dilemmas for a character
+// ════════════════════════════════════════════════════════════════════════
+
+router.get('/dilemmas', optionalAuth, async (req, res) => {
+  try {
+    const { character_id, count = 5 } = req.query;
+    const models = req.app.get('models');
+    let char = null;
+    if (character_id && models?.RegistryCharacter) {
+      char = await models.RegistryCharacter.findByPk(character_id, {
+        attributes: ['id', 'name', 'selected_name', 'type', 'role', 'wound', 'belief_pressured'],
+      });
+    }
+
+    const charName = char?.selected_name || char?.name || 'this character';
+    const wound    = char?.wound || '';
+    const role     = char?.role  || '';
+    const charType = char?.type  || '';
+
+    const prompt = `Generate exactly ${count} psychological dilemmas for a character named ${charName}.
+CHARACTER CONTEXT:
+- Type: ${charType}
+- Role in story: ${role}
+- Core wound: ${wound}
+DILEMMA RULES:
+1. Both choices must be TRUE to who they are. Neither is obviously wrong.
+2. Each choice must COST something real — something they value.
+3. The cost reveals their hierarchy of values, not a moral judgment.
+4. Situations should feel specific to this character's world, not generic.
+5. Tension note: one sentence on what the dilemma actually reveals.
+Return ONLY a JSON array — no markdown, no preamble:
+[
+  {
+    "id": "d0",
+    "context": "one sentence setting the scene",
+    "prompt": "the dilemma question (one sentence)",
+    "choices": [
+      { "text": "Choice A (15-25 words)", "cost": "what accepting this costs them (10-15 words)" },
+      { "text": "Choice B (15-25 words)", "cost": "what accepting this costs them (10-15 words)" }
+    ],
+    "tension_note": "what this dilemma reveals about them"
+  }
+]`;
+
+    const raw = await safeAI(prompt, 1200);
+    if (!raw) {
+      return res.json({ success: true, dilemmas: [] });
+    }
+
+    let dilemmas;
+    try {
+      dilemmas = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch {
+      return res.status(500).json({ success: false, error: 'Failed to parse dilemma generation' });
+    }
+
+    res.json({ success: true, dilemmas });
+  } catch (err) {
+    console.error('GET /therapy/dilemmas error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// ROUTE 9: POST /dilemma-profile — compile profile from dilemma choices
+// ════════════════════════════════════════════════════════════════════════
+
+router.post('/dilemma-profile', optionalAuth, async (req, res) => {
+  try {
+    const { character_id, character_name, wound, choices } = req.body;
+    if (!Array.isArray(choices) || choices.length === 0) {
+      return res.status(400).json({ success: false, error: 'No choices provided' });
+    }
+
+    const choiceSummary = choices.map((c, i) =>
+      `Dilemma ${i + 1}: "${c.prompt}" → chose "${c.choice_text}" | cost accepted: "${c.cost_accepted}"`
+    ).join('\n');
+
+    const prompt = `A character named ${character_name} just completed a psychological baseline. Their wound: "${wound}".
+Their choices under pressure:
+${choiceSummary}
+Based on these choices, derive:
+1. primary_defense — their dominant psychological defense mechanism (pick the most accurate single phrase)
+2. belief_pressured — a single sentence (15-20 words) describing what they fundamentally believe when under pressure, inferred from the pattern of their choices
+3. writer_notes — 2-3 sentences the author should know about this character based on their choices
+Return ONLY JSON — no markdown, no preamble:
+{
+  "primary_defense": "...",
+  "belief_pressured": "...",
+  "writer_notes": "...",
+  "emotional_state": {
+    "trust": 0-100,
+    "grief": 0-100,
+    "anger": 0-100,
+    "hope": 0-100,
+    "fear": 0-100,
+    "love": 0-100
+  }
+}`;
+
+    const raw = await safeAI(prompt, 500);
+    if (!raw) {
+      return res.status(500).json({ success: false, error: 'AI generation failed' });
+    }
+
+    let profile;
+    try {
+      profile = JSON.parse(raw.replace(/```json|```/g, '').trim());
+    } catch {
+      return res.status(500).json({ success: false, error: 'Failed to parse profile generation' });
+    }
+
+    // Persist to registry_characters if character_id provided
+    if (character_id) {
+      try {
+        const models = req.app.get('models');
+        const char = models?.RegistryCharacter
+          ? await models.RegistryCharacter.findByPk(character_id)
+          : null;
+        if (char) {
+          await char.update({
+            therapy_primary_defense:  profile.primary_defense  || '',
+            belief_pressured:         profile.belief_pressured || '',
+            writer_notes:             profile.writer_notes     || '',
+            therapy_emotional_state:  profile.emotional_state  || null,
+            therapy_baseline:         profile.emotional_state  || null,
+          });
+        }
+      } catch (saveErr) {
+        console.error('Failed to persist dilemma profile:', saveErr);
+      }
+    }
+
+    res.json({ success: true, profile });
+  } catch (err) {
+    console.error('POST /therapy/dilemma-profile error:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

@@ -1,0 +1,11 @@
+{
+  "name": "alexa-amber-skill",
+  "version": "1.0.0",
+  "description": "Alexa skill Lambda for Prime Studios — talk to Amber via voice",
+  "main": "index.js",
+  "author": "Prime Studios",
+  "license": "PROPRIETARY",
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

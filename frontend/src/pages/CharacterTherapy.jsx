@@ -296,7 +296,20 @@ export default function CharacterTherapy() {
   useEffect(() => {
     (async () => {
       try {
-        const res = await fetch(`/api/v1/character-registry/registries/${registryId}`);
+        let resolvedId = registryId;
+        // Resolve 'default' → first available registry
+        if (registryId === 'default') {
+          const listRes  = await fetch('/api/v1/character-registry/registries');
+          const listData = await listRes.json();
+          const first    = listData.registries?.[0] || listData[0];
+          if (first?.id) {
+            resolvedId = first.id;
+          } else {
+            setLoading(false);
+            return;
+          }
+        }
+        const res  = await fetch(`/api/v1/character-registry/registries/${resolvedId}`);
         const data = await res.json();
         if (data.success && data.registry?.characters) {
           setCharacters(data.registry.characters);
