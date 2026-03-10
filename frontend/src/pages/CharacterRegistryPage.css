@@ -371,6 +371,8 @@
   width: 100%;
   flex-wrap: wrap;
   padding-top: 12px;
+  position: relative;
+  z-index: 2;
 }
 
 .cr-registry-pill {

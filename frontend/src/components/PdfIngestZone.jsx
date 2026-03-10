@@ -1,9 +1,10 @@
 // PdfIngestZone.jsx
-// Drop-in PDF upload zone for the Franchise Brain ingest tab.
+// Drop-in document upload zone for the Franchise Brain ingest tab.
+// Accepts PDF, TXT, MD, and DOCX files.
 
 import { useState, useRef, useCallback } from 'react';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 const C = {
   surface: '#ffffff', surfaceAlt: '#faf8f5', bgDeep: '#f0ece4',
@@ -25,19 +26,27 @@ export default function PdfIngestZone({ brain = 'story', source = 'franchise_bib
 
   const handleFile = useCallback(async (file) => {
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      setError('Only PDF files are accepted.');
+    const allowedTypes = [
+      'application/pdf',
+      'text/plain',
+      'text/markdown',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    ];
+    const allowedExts = ['.pdf', '.txt', '.md', '.markdown', '.docx'];
+    const ext = '.' + file.name.split('.').pop().toLowerCase();
+    if (!allowedTypes.includes(file.type) && !allowedExts.includes(ext)) {
+      setError('Unsupported file type. Accepted: PDF, TXT, MD, DOCX.');
       return;
     }
     if (file.size > 20 * 1024 * 1024) {
-      setError('PDF is too large. Maximum size is 20MB.');
+      setError('File is too large. Maximum size is 20MB.');
       return;
     }
 
     setError(null);
     setFileName(file.name);
     setUploading(true);
-    setProgress('Extracting text from PDF…');
+    setProgress('Extracting text from document…');
 
     try {
       const formData = new FormData();
@@ -48,7 +57,7 @@ export default function PdfIngestZone({ brain = 'story', source = 'franchise_bib
 
       setProgress('Sending to knowledge extraction…');
 
-      const res  = await fetch(`${API}/api/v1/franchise-brain/ingest-pdf`, {
+      const res  = await fetch(`${API}/franchise-brain/ingest-pdf`, {
         method: 'POST',
         body:   formData,
         // No Content-Type header — browser sets it with boundary automatically
@@ -116,10 +125,10 @@ export default function PdfIngestZone({ brain = 'story', source = 'franchise_bib
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px' }}>
             <div style={{ fontSize: '22px', opacity: 0.4 }}>⬡</div>
             <div style={{ fontSize: '13px', color: C.textDim, fontWeight: '500' }}>
-              Drop a PDF here, or <span style={{ color: C.accent, textDecoration: 'underline' }}>browse</span>
+              Drop a document here, or <span style={{ color: C.accent, textDecoration: 'underline' }}>browse</span>
             </div>
             <div style={{ fontSize: '11px', color: C.textFaint }}>
-              Franchise bible, TDD, Roadmap, Deviations — any of your v3.1 docs · Max 20MB
+              PDF, TXT, MD, DOCX — Franchise bible, TDD, Roadmap, Deviations · Max 20MB
             </div>
             <div style={{ display: 'flex', gap: '6px', marginTop: '4px', flexWrap: 'wrap', justifyContent: 'center' }}>
               <BrainBadge active={brain === 'story'} color={C.accent}>Story Brain</BrainBadge>
@@ -136,7 +145,7 @@ export default function PdfIngestZone({ brain = 'story', source = 'franchise_bib
       <input
         ref={inputRef}
         type="file"
-        accept="application/pdf"
+        accept=".pdf,.txt,.md,.markdown,.docx,application/pdf,text/plain,text/markdown,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         onChange={onFileInput}
         style={{ display: 'none' }}
       />
