@@ -695,14 +695,14 @@ router.get('/dilemmas', optionalAuth, async (req, res) => {
     let char = null;
     if (character_id && models?.RegistryCharacter) {
       char = await models.RegistryCharacter.findByPk(character_id, {
-        attributes: ['id', 'name', 'selected_name', 'type', 'role', 'wound', 'belief_pressured'],
+        attributes: ['id', 'display_name', 'selected_name', 'role_type', 'role_label', 'core_wound', 'belief_pressured'],
       });
     }
 
-    const charName = char?.selected_name || char?.name || 'this character';
-    const wound    = char?.wound || '';
-    const role     = char?.role  || '';
-    const charType = char?.type  || '';
+    const charName = char?.selected_name || char?.display_name || 'this character';
+    const wound    = char?.core_wound  || '';
+    const role     = char?.role_label  || '';
+    const charType = char?.role_type   || '';
 
     const prompt = `Generate exactly ${count} psychological dilemmas for a character named ${charName}.
 CHARACTER CONTEXT:
