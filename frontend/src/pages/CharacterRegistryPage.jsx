@@ -2010,15 +2010,47 @@ export default function CharacterRegistryPage() {
 
       {/* Header */}
       <HeaderBar
-        search={search}
-        onSearch={setSearch}
         viewMode={viewMode}
         onViewMode={setViewMode}
         showFilters={showFilters}
         onToggleFilters={() => setShowFilters(f => !f)}
         onNewChar={() => activeRegistry ? setShowNewChar(true) : null}
         isMobile={isMobile}
-      />
+      >
+        {/* Registry tabs inside header */}
+        {registries.length > 0 && (
+          <div className="cr-registry-tabs">
+            {registries.map(r => (
+              <button
+                key={r.id}
+                className={`cr-registry-pill${!worldMode && !feedMode && activeRegistry?.id === r.id ? ' active' : ''}`}
+                onClick={() => { exitWorldMode(); exitFeedMode(); fetchRegistry(r.id); }}
+              >
+                <span className="cr-pill-title">{r.title || 'Untitled'}</span>
+                {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
+                {!worldMode && !feedMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
+              </button>
+            ))}
+            <button
+              className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
+              onClick={enterWorldMode}
+              title="View all characters across all registries"
+            >
+              <span className="cr-pill-title">🌍 All Characters</span>
+            </button>
+            <button
+              className={`cr-registry-pill${feedMode ? ' active' : ''}`}
+              onClick={enterFeedMode}
+              title="The Feed — parasocial creator profiles"
+            >
+              <span className="cr-pill-title">📱 The Feed</span>
+            </button>
+            <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
+              +
+            </button>
+          </div>
+        )}
+      </HeaderBar>
 
       {/* Filters */}
       {showFilters && (
@@ -2059,39 +2091,19 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
-      {/* Registry tabs */}
-      {registries.length > 0 && (
-        <div className="cr-registry-tabs">
-          {registries.map(r => (
-            <button
-              key={r.id}
-              className={`cr-registry-pill${!worldMode && !feedMode && activeRegistry?.id === r.id ? ' active' : ''}`}
-              onClick={() => { exitWorldMode(); exitFeedMode(); fetchRegistry(r.id); }}
-            >
-              <span className="cr-pill-title">{r.title || 'Untitled'}</span>
-              {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
-              {!worldMode && !feedMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
-            </button>
-          ))}
-          <button
-            className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
-            onClick={enterWorldMode}
-            title="View all characters across all registries"
-          >
-            <span className="cr-pill-title">🌍 All Characters</span>
-          </button>
-          <button
-            className={`cr-registry-pill${feedMode ? ' active' : ''}`}
-            onClick={enterFeedMode}
-            title="The Feed — parasocial creator profiles"
-          >
-            <span className="cr-pill-title">📱 The Feed</span>
-          </button>
-          <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
-            +
-          </button>
+      {/* Search */}
+      <div className="cr-search-standalone">
+        <div className="cr-search-wrap">
+          <span className="cr-search-icon">⌕</span>
+          <input
+            className="cr-search-input"
+            type="text"
+            placeholder={isMobile ? 'Search…' : 'Search characters…'}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
         </div>
-      )}
+      </div>
 
       {/* Content */}
       <div className="cr-content">
@@ -2864,7 +2876,7 @@ export default function CharacterRegistryPage() {
 /* ================================================================
    HEADER BAR
    ================================================================ */
-function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onToggleFilters, onNewChar, isMobile }) {
+function HeaderBar({ viewMode, onViewMode, showFilters, onToggleFilters, onNewChar, isMobile, children }) {
   return (
     <div className="cr-header">
       <div className="cr-header-left">
@@ -2890,17 +2902,6 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
           {isMobile ? '⚙' : 'Filter'}
         </button>
 
-        <div className="cr-search-wrap">
-          <span className="cr-search-icon">⌕</span>
-          <input
-            className="cr-search-input"
-            type="text"
-            placeholder={isMobile ? 'Search…' : 'Search characters…'}
-            value={search}
-            onChange={e => onSearch(e.target.value)}
-          />
-        </div>
-
         {!isMobile && (
           <div className="cr-view-toggle">
             <button className={viewMode === 'grid' ? 'active' : ''} onClick={() => onViewMode('grid')}
@@ -2910,6 +2911,8 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
           </div>
         )}
       </div>
+
+      {children}
     </div>
   );
 }

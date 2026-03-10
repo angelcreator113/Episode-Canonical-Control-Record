@@ -88,6 +88,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   padding: 16px 32px;
   background: rgba(255,255,255,0.82);
   backdrop-filter: blur(16px) saturate(1.4);
@@ -346,19 +347,30 @@
   box-sizing: border-box;
 }
 
+/* Standalone search bar (below header) */
+.cr-search-standalone {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 12px 32px 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+.cr-search-standalone .cr-search-wrap { width: 100%; }
+.cr-search-standalone .cr-search-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+.cr-search-standalone .cr-search-input:focus { width: 100%; }
+
 /* Registry selector (when multiple registries) */
-/* Registry tab pills */
+/* Registry tab pills — inside header */
 .cr-registry-tabs {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 auto;
-  padding: 16px 32px 0;
-  max-width: 1400px;
   width: 100%;
-  box-sizing: border-box;
   flex-wrap: wrap;
-  padding-bottom: 12px;
+  padding-top: 12px;
 }
 
 .cr-registry-pill {
@@ -1831,7 +1843,7 @@
 
   .cr-header { padding: 14px 20px; }
   .cr-content { padding: 24px 20px 60px; }
-  .cr-registry-tabs { padding: 12px 20px 0; }
+  .cr-search-standalone { padding: 12px 20px 0; }
   .cr-filters { padding: 10px 20px; }
 }
 
@@ -1875,7 +1887,7 @@
   .cr-filters::-webkit-scrollbar { display: none; }
   .cr-filter-pill { padding: 7px 14px; font-size: 13px; min-height: 44px; flex-shrink: 0; }
   .cr-content { padding: 20px 16px 60px; }
-  .cr-registry-tabs { padding: 10px 16px 0; }
+  .cr-search-standalone { padding: 10px 16px 0; }
 
   .cr-stats-strip {
     flex-wrap: wrap;
@@ -2011,7 +2023,7 @@
   .cr-filter-label { font-size: 10px; }
 
   .cr-content { padding: 16px 12px 48px; }
-  .cr-registry-tabs { padding: 10px 12px 0; }
+  .cr-search-standalone { padding: 10px 12px 0; }
 
   .cr-stats-strip {
     gap: 6px;
@@ -2112,7 +2124,7 @@
   .cr-filter-label { font-size: 10px; }
 
   .cr-content { padding: 12px 8px 40px; }
-  .cr-registry-tabs { padding: 8px 8px 0; }
+  .cr-search-standalone { padding: 8px 8px 0; }
   .cr-stats-strip { padding: 6px 0; gap: 4px; }
   .cr-stat-chip { font-size: 10px; padding: 2px 5px; }
 
@@ -6112,7 +6124,7 @@
   }
 
   /* Registry tabs — compact pills */
-  .cr-registry-tabs { gap: 4px; margin-bottom: 0; padding: 8px 8px 0; }
+  .cr-registry-tabs { gap: 4px; margin-bottom: 0; padding-top: 8px; }
   .cr-registry-pill {
     padding: 5px 10px;
     font-size: 11px;
