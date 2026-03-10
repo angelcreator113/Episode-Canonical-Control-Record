@@ -28,6 +28,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName:  'SocialProfileFollower',
     tableName:  'social_profile_followers',
     underscored: true,
+    paranoid: false,
   });
 
   return SocialProfileFollower;

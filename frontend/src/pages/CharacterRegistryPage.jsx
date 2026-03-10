@@ -775,17 +775,18 @@ export default function CharacterRegistryPage() {
   };
 
   /* ── Bulk Status Update ── */
-  const bulkUpdateStatus = async () => {
-    if (selectedIds.size === 0 || !bulkStatusTarget) return;
+  const bulkUpdateStatus = async (overrideStatus) => {
+    const targetStatus = overrideStatus || bulkStatusTarget;
+    if (selectedIds.size === 0 || !targetStatus) return;
     try {
       const res = await fetch(`${API}/characters/bulk-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [...selectedIds], status: bulkStatusTarget }),
+        body: JSON.stringify({ ids: [...selectedIds], status: targetStatus }),
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`${data.updated} character(s) → ${bulkStatusTarget}`);
+        showToast(`${data.updated} character(s) → ${targetStatus}`);
         exitSelectMode();
         setShowBulkStatusModal(false);
         await fetchRegistries();
@@ -821,6 +822,58 @@ export default function CharacterRegistryPage() {
     } catch (e) {
       showToast('Move failed: ' + e.message, 'error');
     }
+  };
+
+  /* ── Bulk Deep Profile Generation ── */
+  const [bulkDeepProfileRunning, setBulkDeepProfileRunning] = useState(false);
+  const bulkGenerateDeepProfiles = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Generate deep profiles for ${selectedIds.size} character(s)? This uses AI and may take a while.`)) return;
+    setBulkDeepProfileRunning(true);
+    try {
+      const res = await fetch(`${API}/characters/bulk-deep-profile`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Deep profiles: ${data.succeeded} generated, ${data.skipped} skipped, ${data.failed} failed`);
+        exitSelectMode();
+        if (activeRegistry?.id) await fetchRegistry(activeRegistry.id);
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Bulk deep profile failed', 'error');
+      }
+    } catch (e) {
+      showToast('Bulk deep profile failed: ' + e.message, 'error');
+    } finally { setBulkDeepProfileRunning(false); }
+  };
+
+  /* ── Bulk Writer Paragraph Generation ── */
+  const [bulkWriterParagraphRunning, setBulkWriterParagraphRunning] = useState(false);
+  const [bulkWriterParagraphs, setBulkWriterParagraphs] = useState(null);
+  const bulkGenerateWriterParagraphs = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Generate writer paragraphs for ${selectedIds.size} character(s)? This uses AI and may take a while.`)) return;
+    setBulkWriterParagraphRunning(true);
+    try {
+      const res = await fetch(`${API}/characters/bulk-writer-paragraph`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Writer paragraphs: ${data.succeeded} generated, ${data.failed} failed`);
+        if (data.paragraphs && data.paragraphs.length > 0) {
+          setBulkWriterParagraphs(data.paragraphs);
+        }
+        exitSelectMode();
+      } else {
+        showToast(data.error || 'Bulk writer paragraph failed', 'error');
+      }
+    } catch (e) {
+      showToast('Bulk writer paragraph failed: ' + e.message, 'error');
+    } finally { setBulkWriterParagraphRunning(false); }
   };
 
   /* ── Clone Character ── */
@@ -1395,7 +1448,7 @@ export default function CharacterRegistryPage() {
             )}
           </div>
           <div className="cr-header-center">
-            <h1 className="cr-header-title">{c.selected_name || c.display_name}</h1>
+            <h1 className="cr-header-title">{isMobile ? 'Characters' : (c.selected_name || c.display_name)}</h1>
           </div>
           <div className="cr-header-right">
             {!isMobile && (
@@ -1516,27 +1569,31 @@ export default function CharacterRegistryPage() {
                   )}
                 </div>
 
-                {/* Identity */}
-                <div>
-                  <h2 className="cr-dossier-name">{c.selected_name || c.display_name}</h2>
-                  {c.selected_name && c.display_name !== c.selected_name && (
-                    <div className="cr-dossier-alias">née {c.display_name}</div>
-                  )}
-                </div>
-
-                {/* Meta fields */}
-                <div className="cr-dossier-meta">
-                  <div className="cr-dossier-meta-row">
-                    <span className="cr-dossier-meta-label">Role</span>
-                    <span className="cr-dossier-meta-value">{c.role_label || ROLE_LABELS[c.role_type] || c.role_type}</span>
+                {/* Identity — hidden on mobile (already in summary strip) */}
+                {!isMobile && (
+                  <div>
+                    <h2 className="cr-dossier-name">{c.selected_name || c.display_name}</h2>
+                    {c.selected_name && c.display_name !== c.selected_name && (
+                      <div className="cr-dossier-alias">née {c.display_name}</div>
+                    )}
                   </div>
+                )}
+
+                {/* Meta fields — on mobile, skip Role & Archetype (already in strip) */}
+                <div className="cr-dossier-meta">
+                  {!isMobile && (
+                    <div className="cr-dossier-meta-row">
+                      <span className="cr-dossier-meta-label">Role</span>
+                      <span className="cr-dossier-meta-value">{c.role_label || ROLE_LABELS[c.role_type] || c.role_type}</span>
+                    </div>
+                  )}
                   <div className="cr-dossier-meta-row">
                     <span className="cr-dossier-meta-label">Canon Tier</span>
                     <span className={`cr-dossier-meta-value ${isCore ? 'gold' : ''}`}>
                       {c.canon_tier || '—'}
                     </span>
                   </div>
-                  {c.character_archetype && (
+                  {!isMobile && c.character_archetype && (
                     <div className="cr-dossier-meta-row">
                       <span className="cr-dossier-meta-label">Archetype</span>
                       <span className="cr-dossier-meta-value">{c.character_archetype}</span>
@@ -1556,11 +1613,27 @@ export default function CharacterRegistryPage() {
                   )}
                 </div>
 
-                {/* Status */}
-                <div className={`cr-dossier-status ${c.status}`}>
-                  <span className="cr-dossier-status-dot" />
-                  {c.status?.toUpperCase()}
-                </div>
+                {/* Status — hidden on mobile (already in strip) */}
+                {!isMobile && (
+                  <div className={`cr-dossier-status ${c.status}`}>
+                    <span className="cr-dossier-status-dot" />
+                    {c.status?.toUpperCase()}
+                  </div>
+                )}
+                {(() => {
+                  const dp = c.deep_profile || {};
+                  const filled = Object.keys(dp).filter(k => {
+                    const d = dp[k];
+                    return d && typeof d === 'object' && Object.values(d).some(v => v !== null && v !== undefined && v !== '');
+                  }).length;
+                  if (filled === 0) return null;
+                  return (
+                    <div className={`cr-dossier-profile-badge ${filled >= 14 ? 'complete' : ''}`}>
+                      <span className="cr-dossier-profile-badge-icon">🧬</span>
+                      {filled >= 14 ? 'Profile Complete' : `${filled}/14`}
+                    </div>
+                  );
+                })()}
 
                 {/* Relationship Quick View */}
                 {c.relationships_map && (() => {
@@ -1937,15 +2010,47 @@ export default function CharacterRegistryPage() {
 
       {/* Header */}
       <HeaderBar
-        search={search}
-        onSearch={setSearch}
         viewMode={viewMode}
         onViewMode={setViewMode}
         showFilters={showFilters}
         onToggleFilters={() => setShowFilters(f => !f)}
         onNewChar={() => activeRegistry ? setShowNewChar(true) : null}
         isMobile={isMobile}
-      />
+      >
+        {/* Registry tabs inside header */}
+        {registries.length > 0 && (
+          <div className="cr-registry-tabs">
+            {registries.map(r => (
+              <button
+                key={r.id}
+                className={`cr-registry-pill${!worldMode && !feedMode && activeRegistry?.id === r.id ? ' active' : ''}`}
+                onClick={() => { exitWorldMode(); exitFeedMode(); fetchRegistry(r.id); }}
+              >
+                <span className="cr-pill-title">{r.title || 'Untitled'}</span>
+                {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
+                {!worldMode && !feedMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
+              </button>
+            ))}
+            <button
+              className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
+              onClick={enterWorldMode}
+              title="View all characters across all registries"
+            >
+              <span className="cr-pill-title">🌍 All Characters</span>
+            </button>
+            <button
+              className={`cr-registry-pill${feedMode ? ' active' : ''}`}
+              onClick={enterFeedMode}
+              title="The Feed — parasocial creator profiles"
+            >
+              <span className="cr-pill-title">📱 The Feed</span>
+            </button>
+            <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
+              +
+            </button>
+          </div>
+        )}
+      </HeaderBar>
 
       {/* Filters */}
       {showFilters && (
@@ -1986,42 +2091,22 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
+      {/* Search */}
+      <div className="cr-search-standalone">
+        <div className="cr-search-wrap">
+          <span className="cr-search-icon">⌕</span>
+          <input
+            className="cr-search-input"
+            type="text"
+            placeholder={isMobile ? 'Search…' : 'Search characters…'}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+          />
+        </div>
+      </div>
+
       {/* Content */}
       <div className="cr-content">
-
-        {/* Registry tabs */}
-        {registries.length > 0 && (
-          <div className="cr-registry-tabs">
-            {registries.map(r => (
-              <button
-                key={r.id}
-                className={`cr-registry-pill${!worldMode && !feedMode && activeRegistry?.id === r.id ? ' active' : ''}`}
-                onClick={() => { exitWorldMode(); exitFeedMode(); fetchRegistry(r.id); }}
-              >
-                <span className="cr-pill-title">{r.title || 'Untitled'}</span>
-                {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
-                {!worldMode && !feedMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
-              </button>
-            ))}
-            <button
-              className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
-              onClick={enterWorldMode}
-              title="View all characters across all registries"
-            >
-              <span className="cr-pill-title">🌍 All Characters</span>
-            </button>
-            <button
-              className={`cr-registry-pill${feedMode ? ' active' : ''}`}
-              onClick={enterFeedMode}
-              title="The Feed — parasocial creator profiles"
-            >
-              <span className="cr-pill-title">📱 The Feed</span>
-            </button>
-            <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
-              +
-            </button>
-          </div>
-        )}
 
         {/* ── FEED MODE ── */}
         {feedMode ? (
@@ -2288,55 +2373,43 @@ export default function CharacterRegistryPage() {
           </div>
         )}
 
-        {/* Stats */}
+        {/* Toolbar */}
         <div className="cr-stats-strip">
-          <div className="cr-stat-item">
-            <span className="cr-stat-count">{statusCounts.total}</span>
-            <span className="cr-stat-label">Characters</span>
-          </div>
-          <div className="cr-stat-item">
-            <span className="cr-stat-count">{statusCounts.finalized}</span>
-            <span className="cr-stat-label">Canon</span>
-          </div>
-          <div className="cr-stat-item">
-            <span className="cr-stat-count">{statusCounts.accepted}</span>
-            <span className="cr-stat-label">Accepted</span>
-          </div>
-          <div className="cr-stat-item">
-            <span className="cr-stat-count">{statusCounts.draft}</span>
-            <span className="cr-stat-label">Draft</span>
+          <div className="cr-stat-counts">
+            <span className="cr-stat-chip">{statusCounts.total} total</span>
+            <span className="cr-stat-chip">{statusCounts.finalized} canon</span>
+            <span className="cr-stat-chip">{statusCounts.accepted} accepted</span>
+            <span className="cr-stat-chip">{statusCounts.draft} draft</span>
           </div>
 
-          {/* Sort dropdown */}
-          <div className="cr-stat-sort">
+          <div className="cr-toolbar-right">
             <select className="cr-sort-select" value={sortBy} onChange={e => setSortBy(e.target.value)}>
-              <option value="default">Sort: Default</option>
-              <option value="name">Sort: Name</option>
-              <option value="role">Sort: Role</option>
-              <option value="status">Sort: Status</option>
-              <option value="recent">Sort: Recent</option>
+              <option value="default">Default</option>
+              <option value="name">Name</option>
+              <option value="role">Role</option>
+              <option value="status">Status</option>
+              <option value="recent">Recent</option>
             </select>
-          </div>
 
-          {/* Card size toggle */}
-          <div className="cr-card-size-toggle">
-            <button className={`cr-size-btn ${cardSize === 'compact' ? 'active' : ''}`} onClick={() => setCardSize('compact')} title="Compact">▪</button>
-            <button className={`cr-size-btn ${cardSize === 'normal' ? 'active' : ''}`} onClick={() => setCardSize('normal')} title="Normal">▦</button>
-            <button className={`cr-size-btn ${cardSize === 'large' ? 'active' : ''}`} onClick={() => setCardSize('large')} title="Large">▣</button>
-          </div>
+            <div className="cr-card-size-toggle">
+              <button className={`cr-size-btn ${cardSize === 'compact' ? 'active' : ''}`} onClick={() => setCardSize('compact')} title="Small cards">S</button>
+              <button className={`cr-size-btn ${cardSize === 'normal' ? 'active' : ''}`} onClick={() => setCardSize('normal')} title="Medium cards">M</button>
+              <button className={`cr-size-btn ${cardSize === 'large' ? 'active' : ''}`} onClick={() => setCardSize('large')} title="Large cards">L</button>
+            </div>
 
-          <div className="cr-stat-actions">
-            <button className="cr-btn-outline cr-export-toggle" onClick={exportRegistryJSON} disabled={exporting} title="Export registry as JSON">
-              📥 Export
-            </button>
-            <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
-              onClick={() => { setCompareMode(m => !m); setCompareSelection([]); if (selectMode) exitSelectMode(); }}>
-              {compareMode ? '✕ Cancel Compare' : '⟷ Compare'}
-            </button>
-            <button className={`cr-btn-outline cr-select-toggle ${selectMode ? 'active' : ''}`}
-              onClick={() => { if (selectMode) { exitSelectMode(); } else { setSelectMode(true); if (compareMode) { setCompareMode(false); setCompareSelection([]); } } }}>
-              {selectMode ? '✕ Cancel Select' : '☐ Select'}
-            </button>
+            <div className="cr-stat-actions">
+              <button className="cr-btn-outline cr-export-toggle" onClick={exportRegistryJSON} disabled={exporting} title="Export registry as JSON">
+                Export
+              </button>
+              <button className={`cr-btn-outline cr-compare-toggle ${compareMode ? 'active' : ''}`}
+                onClick={() => { setCompareMode(m => !m); setCompareSelection([]); if (selectMode) exitSelectMode(); }}>
+                {compareMode ? '✕ Cancel' : 'Compare'}
+              </button>
+              <button className={`cr-btn-outline cr-select-toggle ${selectMode ? 'active' : ''}`}
+                onClick={() => { if (selectMode) { exitSelectMode(); } else { setSelectMode(true); if (compareMode) { setCompareMode(false); setCompareSelection([]); } } }}>
+                {selectMode ? '✕ Cancel' : 'Select'}
+              </button>
+            </div>
           </div>
         </div>
 
@@ -2368,6 +2441,17 @@ export default function CharacterRegistryPage() {
             </div>
             {selectedIds.size > 0 && (
               <div className="cr-bulk-bar-right">
+                <button className="cr-bulk-bar-btn cr-bulk-bar-accept" onClick={() => bulkUpdateStatus('accepted')}>
+                  ✓ Accept {selectedIds.size}
+                </button>
+                <button className="cr-bulk-bar-btn" style={{ background: 'rgba(201,168,76,0.15)', color: '#8a7230' }}
+                  onClick={bulkGenerateDeepProfiles} disabled={bulkDeepProfileRunning}>
+                  {bulkDeepProfileRunning ? '🧬 Running…' : `🧬 Deep Profile ${selectedIds.size}`}
+                </button>
+                <button className="cr-bulk-bar-btn" style={{ background: 'rgba(106,76,147,0.15)', color: '#6a4c93' }}
+                  onClick={bulkGenerateWriterParagraphs} disabled={bulkWriterParagraphRunning}>
+                  {bulkWriterParagraphRunning ? '📝 Running…' : `📝 Writer Para ${selectedIds.size}`}
+                </button>
                 <button className="cr-bulk-bar-btn cr-bulk-bar-status" onClick={() => setShowBulkStatusModal(true)}>
                   ✎ Status
                 </button>
@@ -2383,6 +2467,35 @@ export default function CharacterRegistryPage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Bulk Writer Paragraphs Results */}
+        {bulkWriterParagraphs && bulkWriterParagraphs.length > 0 && (
+          <div style={{ background: 'rgba(106,76,147,0.06)', border: '1px solid rgba(106,76,147,0.25)', borderRadius: 10, padding: 18, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#6a4c93' }}>📝 Writer Paragraphs ({bulkWriterParagraphs.length})</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(bulkWriterParagraphs.map(p => `## ${p.name}\n\n${p.paragraph}`).join('\n\n---\n\n')); showToast('All paragraphs copied!'); }}
+                  style={{ padding: '5px 12px', background: '#6a4c93', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  📋 Copy All
+                </button>
+                <button
+                  onClick={() => setBulkWriterParagraphs(null)}
+                  style={{ padding: '5px 12px', background: '#ddd', color: '#666', border: 'none', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+                >
+                  ✕ Dismiss
+                </button>
+              </div>
+            </div>
+            {bulkWriterParagraphs.map((p, i) => (
+              <div key={p.id} style={{ marginBottom: i < bulkWriterParagraphs.length - 1 ? 16 : 0, paddingBottom: i < bulkWriterParagraphs.length - 1 ? 16 : 0, borderBottom: i < bulkWriterParagraphs.length - 1 ? '1px solid rgba(106,76,147,0.15)' : 'none' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#6a4c93', marginBottom: 6 }}>{p.name}</div>
+                <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{p.paragraph}</div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -2425,7 +2538,8 @@ export default function CharacterRegistryPage() {
                 onQuickEdit={() => startQuickEdit(c)}
                 onQuickEditChange={(field, val) => setQuickEditForm(p => ({ ...p, [field]: val }))}
                 onQuickEditSave={saveQuickEdit}
-                onQuickEditCancel={() => setQuickEditId(null)} />
+                onQuickEditCancel={() => setQuickEditId(null)}
+                onAccept={(id) => setCharStatus(id, 'accepted')} />
             ))}
           </div>
         ) : (
@@ -2762,7 +2876,7 @@ export default function CharacterRegistryPage() {
 /* ================================================================
    HEADER BAR
    ================================================================ */
-function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onToggleFilters, onNewChar, isMobile }) {
+function HeaderBar({ viewMode, onViewMode, showFilters, onToggleFilters, onNewChar, isMobile, children }) {
   return (
     <div className="cr-header">
       <div className="cr-header-left">
@@ -2788,17 +2902,6 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
           {isMobile ? '⚙' : 'Filter'}
         </button>
 
-        <div className="cr-search-wrap">
-          <span className="cr-search-icon">⌕</span>
-          <input
-            className="cr-search-input"
-            type="text"
-            placeholder={isMobile ? 'Search…' : 'Search characters…'}
-            value={search}
-            onChange={e => onSearch(e.target.value)}
-          />
-        </div>
-
         {!isMobile && (
           <div className="cr-view-toggle">
             <button className={viewMode === 'grid' ? 'active' : ''} onClick={() => onViewMode('grid')}
@@ -2808,6 +2911,8 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
           </div>
         )}
       </div>
+
+      {children}
     </div>
   );
 }
@@ -2817,10 +2922,11 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
    CHARACTER CARD (Grid)
    ================================================================ */
 function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, cardSize = 'normal', relCount = 0,
-  quickEditId, quickEditForm, onQuickEdit, onQuickEditChange, onQuickEditSave, onQuickEditCancel }) {
+  quickEditId, quickEditForm, onQuickEdit, onQuickEditChange, onQuickEditSave, onQuickEditCancel, onAccept }) {
   const isCore = c.canon_tier === 'Core Canon';
   const roleColor = `var(--role-${c.role_type || 'special'})`;
   const isQuickEditing = quickEditId === c.id;
+  const canAccept = c.status === 'draft' || c.status === 'declined';
 
   return (
     <div className={`cr-card cr-card-${cardSize} ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''} ${isSelected ? 'bulk-selected' : ''}`} onClick={onClick}>
@@ -2832,9 +2938,9 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, 
         </div>
       )}
 
-      {/* Quick-edit pencil */}
+      {/* Quick-edit menu */}
       {!selectMode && !isQuickEditing && (
-        <button className="cr-card-quick-edit-btn" onClick={e => { e.stopPropagation(); onQuickEdit(); }} title="Quick Edit">✎</button>
+        <button className="cr-card-quick-edit-btn" onClick={e => { e.stopPropagation(); onQuickEdit(); }} title="Quick Edit">⋮</button>
       )}
 
       {/* Quick-edit overlay */}
@@ -2907,6 +3013,16 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, 
           ) : <span />}
           <span className={`cr-card-status-badge ${c.status}`}>{c.status}</span>
         </div>
+        {/* Status action strip */}
+        {!selectMode && !isQuickEditing && canAccept && onAccept && (
+          <button
+            className="cr-card-status-strip"
+            onClick={e => { e.stopPropagation(); onAccept(c.id); }}
+            title="Accept this character"
+          >
+            Accept ✓
+          </button>
+        )}
         {cardSize === 'large' && c.updated_at && (
           <div className="cr-card-timeline">
             <span className="cr-card-timeline-label">Updated</span>
@@ -2989,7 +3105,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     <div className="cr-dossier-section-header">
       <span className="cr-dossier-section-title">{title}</span>
       {!editing && (
-        <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)}>✎ Edit</button>
+        <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)} title="Edit this section">✎</button>
       )}
     </div>
   );
@@ -3033,9 +3149,6 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
                   <span className="cr-dossier-belief-text">"{c.core_belief}"</span>
                 </div>
               )}
-              <DRow label="First Appearance" value={c.first_appearance} />
-              <DRow label="Era Introduced" value={c.era_introduced} />
-              <DRow label="Canon Tier" value={c.canon_tier} accent={c.canon_tier === 'Core Canon'} />
               <DRow label="Appearance Mode" value={c.appearance_mode?.replace('_', ' ')} />
               <DRow label="Pressure Type" value={c.pressure_type} />
               {c.pressure_quote && (
@@ -3527,6 +3640,8 @@ function DeepProfileTab({ character }) {
   const [writerParsing, setWriterParsing] = useState(false);
   const [proposedAdditions, setProposedAdditions] = useState(null);
   const [localProfile, setLocalProfile] = useState(null);
+  const [writerParagraph, setWriterParagraph] = useState(null);
+  const [paragraphGenerating, setParagraphGenerating] = useState(false);
 
   const dp = localProfile || character.deep_profile || {};
   const API = import.meta.env.VITE_API_URL || '/api/v1';
@@ -3582,11 +3697,25 @@ function DeepProfileTab({ character }) {
     } catch (err) { console.error('Accept error:', err); }
   };
 
+  const handleGenerateParagraph = async () => {
+    setParagraphGenerating(true);
+    try {
+      const resp = await fetch(`${API}/character-registry/characters/${character.id}/writer-paragraph/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await resp.json();
+      if (data.paragraph) setWriterParagraph(data.paragraph);
+    } catch (err) { console.error('Writer paragraph generation error:', err); }
+    finally { setParagraphGenerating(false); }
+  };
+
   return (
     <div className="cr-dossier-section">
       <div className="cr-dossier-section-header">
         <span className="cr-dossier-section-title">🧬 Deep Profile</span>
-        <span style={{ fontSize: 12, color: '#888' }}>{filledCount}/{DEEP_DIMS.length} dimensions</span>
+        <span className={`cr-deep-profile-progress ${filledCount >= DEEP_DIMS.length ? 'complete' : filledCount > 0 ? 'partial' : ''}`}>
+          {filledCount >= DEEP_DIMS.length ? '✓ Complete' : `${filledCount}/${DEEP_DIMS.length} dimensions`}
+        </span>
       </div>
 
       {/* Dimension accordion */}
@@ -3630,26 +3759,26 @@ function DeepProfileTab({ character }) {
         );
       })}
 
-      {/* Generate button for empty/sparse profiles */}
-      {filledCount < 5 && (
-        <div style={{ marginTop: 16, padding: 14, background: 'rgba(201,168,76,0.06)', border: '1px dashed rgba(201,168,76,0.3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 13, color: '#b8942f', marginBottom: 10 }}>
-            {filledCount === 0
-              ? 'Deep profile is empty — generate from existing character data?'
-              : `Only ${filledCount}/14 dimensions populated. Generate the rest?`}
-          </div>
-          <button
-            disabled={generating}
-            onClick={handleGenerate}
-            style={{
-              padding: '8px 20px', background: generating ? '#ddd' : '#c9a84c', color: generating ? '#888' : '#000',
-              border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            {generating ? '🧬 Generating…' : '🧬 Generate Deep Profile from Dossier'}
-          </button>
+      {/* Generate deep profile */}
+      <div style={{ marginTop: 16, padding: 14, background: 'rgba(201,168,76,0.06)', border: '1px dashed rgba(201,168,76,0.3)', borderRadius: 8 }}>
+        <div style={{ fontSize: 13, color: '#b8942f', marginBottom: 10 }}>
+          {filledCount === 0
+            ? 'Deep profile is empty — generate from existing character data?'
+            : filledCount < 14
+              ? `${filledCount}/14 dimensions populated. Generate the rest?`
+              : 'All 14 dimensions populated. Regenerate empty fields?'}
         </div>
-      )}
+        <button
+          disabled={generating}
+          onClick={handleGenerate}
+          style={{
+            padding: '8px 20px', background: generating ? '#ddd' : '#c9a84c', color: generating ? '#888' : '#000',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          {generating ? '🧬 Generating…' : '🧬 Generate Deep Profile from Dossier'}
+        </button>
+      </div>
 
       {/* Writer input */}
       <div style={{ marginTop: 20, borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 14 }}>
@@ -3711,6 +3840,43 @@ function DeepProfileTab({ character }) {
           </div>
         </div>
       )}
+
+      {/* Writer Paragraph Generator */}
+      <div style={{ marginTop: 20, borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 14 }}>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Writer Paragraph</div>
+        <div style={{ fontSize: 13, color: '#666', marginBottom: 10 }}>
+          Generate a rich, literary paragraph from this character's registry data and deep profile — a novelist's reference portrait.
+        </div>
+        <button
+          disabled={paragraphGenerating}
+          onClick={handleGenerateParagraph}
+          style={{
+            padding: '8px 20px', background: paragraphGenerating ? '#ddd' : '#6a4c93', color: paragraphGenerating ? '#888' : '#fff',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          {paragraphGenerating ? '📝 Generating…' : '📝 Generate Writer Paragraph'}
+        </button>
+        {writerParagraph && (
+          <div style={{ marginTop: 12, background: 'rgba(106,76,147,0.06)', border: '1px solid rgba(106,76,147,0.25)', borderRadius: 8, padding: 14 }}>
+            <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{writerParagraph}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => { navigator.clipboard.writeText(writerParagraph); }}
+                style={{ padding: '6px 14px', background: '#6a4c93', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                📋 Copy
+              </button>
+              <button
+                onClick={() => setWriterParagraph(null)}
+                style={{ padding: '6px 14px', background: '#ddd', color: '#666', border: 'none', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
