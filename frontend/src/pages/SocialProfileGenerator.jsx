@@ -111,6 +111,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const [page, setPage]           = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({ total: 0, generated: 0, finalized: 0, crossed: 0, archived: 0 });
   const PAGE_SIZE = 24;
 
   // Search & sort
@@ -152,6 +153,9 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       if (data.pagination) {
         setTotalPages(data.pagination.totalPages || 1);
         setTotalCount(data.pagination.total || 0);
+      }
+      if (data.statusCounts) {
+        setStatusCounts(data.statusCounts);
       }
     } catch (err) {
       console.error('Load profiles error:', err);
@@ -356,10 +360,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
   // ── Computed ─────────────────────────────────────────────────────────────
   const stats = {
-    total: totalCount,
-    generated: profiles.filter(p => p.status === 'generated').length,
-    finalized: profiles.filter(p => p.status === 'finalized').length,
-    crossed:   profiles.filter(p => p.status === 'crossed').length,
+    total: statusCounts.total || totalCount,
+    generated: statusCounts.generated,
+    finalized: statusCounts.finalized,
+    crossed:   statusCounts.crossed,
   };
 
   // ── Get full_profile data (AI output stored as JSONB) ────────────────────

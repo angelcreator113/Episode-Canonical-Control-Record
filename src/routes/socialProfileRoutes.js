@@ -253,6 +253,23 @@ router.get('/', optionalAuth, async (req, res) => {
       }] : [],
     });
 
+    // Count totals by status (unfiltered) for header stats
+    const baseWhere = {};
+    if (series_id) baseWhere.series_id = series_id;
+    const statusCounts = await db.SocialProfile.findAll({
+      where: baseWhere,
+      attributes: [
+        'status',
+        [db.sequelize.fn('COUNT', db.sequelize.col('id')), 'count'],
+      ],
+      group: ['status'],
+      raw: true,
+    });
+    const counts = {};
+    for (const row of statusCounts) {
+      counts[row.status] = parseInt(row.count, 10);
+    }
+
     return res.json({
       profiles: rows,
       pagination: {
@@ -260,6 +277,13 @@ router.get('/', optionalAuth, async (req, res) => {
         limit: pageSize,
         total: count,
         totalPages: Math.ceil(count / pageSize),
+      },
+      statusCounts: {
+        total: Object.values(counts).reduce((a, b) => a + b, 0),
+        generated: counts.generated || 0,
+        finalized: counts.finalized || 0,
+        crossed: counts.crossed || 0,
+        archived: counts.archived || 0,
       },
     });
   } catch (err) {
