@@ -143,6 +143,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       qs.set('page', pg);
       qs.set('limit', PAGE_SIZE);
       const res = await fetch(`${API}?${qs}`, { headers: authHeaders() });
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error (${res.status})`);
+      }
       const data = await res.json();
       setProfiles(data.profiles || []);
       if (data.pagination) {
@@ -151,6 +155,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       }
     } catch (err) {
       console.error('Load profiles error:', err);
+      setError(err.message);
     } finally {
       setLoading(false);
     }
@@ -526,7 +531,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
             </select>
             <button
               className={`spg-btn spg-btn-sm ${bulkMode ? 'spg-btn-gold' : 'spg-btn-outline'}`}
-              onClick={() => { setBulkMode(!bulkMode); setSelectedIds(new Set()); }}
+              onClick={() => { const entering = !bulkMode; setBulkMode(entering); setSelectedIds(new Set()); if (entering) setSelected(null); }}
             >
               {bulkMode ? '✕ Cancel' : '☐ Select'}
             </button>

@@ -824,6 +824,58 @@ export default function CharacterRegistryPage() {
     }
   };
 
+  /* ── Bulk Deep Profile Generation ── */
+  const [bulkDeepProfileRunning, setBulkDeepProfileRunning] = useState(false);
+  const bulkGenerateDeepProfiles = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Generate deep profiles for ${selectedIds.size} character(s)? This uses AI and may take a while.`)) return;
+    setBulkDeepProfileRunning(true);
+    try {
+      const res = await fetch(`${API}/characters/bulk-deep-profile`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Deep profiles: ${data.succeeded} generated, ${data.skipped} skipped, ${data.failed} failed`);
+        exitSelectMode();
+        if (activeRegistry?.id) await fetchRegistry(activeRegistry.id);
+        if (worldMode) await loadAllCharacters();
+      } else {
+        showToast(data.error || 'Bulk deep profile failed', 'error');
+      }
+    } catch (e) {
+      showToast('Bulk deep profile failed: ' + e.message, 'error');
+    } finally { setBulkDeepProfileRunning(false); }
+  };
+
+  /* ── Bulk Writer Paragraph Generation ── */
+  const [bulkWriterParagraphRunning, setBulkWriterParagraphRunning] = useState(false);
+  const [bulkWriterParagraphs, setBulkWriterParagraphs] = useState(null);
+  const bulkGenerateWriterParagraphs = async () => {
+    if (selectedIds.size === 0) return;
+    if (!window.confirm(`Generate writer paragraphs for ${selectedIds.size} character(s)? This uses AI and may take a while.`)) return;
+    setBulkWriterParagraphRunning(true);
+    try {
+      const res = await fetch(`${API}/characters/bulk-writer-paragraph`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: [...selectedIds] }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Writer paragraphs: ${data.succeeded} generated, ${data.failed} failed`);
+        if (data.paragraphs && data.paragraphs.length > 0) {
+          setBulkWriterParagraphs(data.paragraphs);
+        }
+        exitSelectMode();
+      } else {
+        showToast(data.error || 'Bulk writer paragraph failed', 'error');
+      }
+    } catch (e) {
+      showToast('Bulk writer paragraph failed: ' + e.message, 'error');
+    } finally { setBulkWriterParagraphRunning(false); }
+  };
+
   /* ── Clone Character ── */
   const cloneCharacter = async (charId) => {
     try {
@@ -2372,6 +2424,14 @@ export default function CharacterRegistryPage() {
                 <button className="cr-bulk-bar-btn cr-bulk-bar-accept" onClick={() => bulkUpdateStatus('accepted')}>
                   ✓ Accept {selectedIds.size}
                 </button>
+                <button className="cr-bulk-bar-btn" style={{ background: 'rgba(201,168,76,0.15)', color: '#8a7230' }}
+                  onClick={bulkGenerateDeepProfiles} disabled={bulkDeepProfileRunning}>
+                  {bulkDeepProfileRunning ? '🧬 Running…' : `🧬 Deep Profile ${selectedIds.size}`}
+                </button>
+                <button className="cr-bulk-bar-btn" style={{ background: 'rgba(106,76,147,0.15)', color: '#6a4c93' }}
+                  onClick={bulkGenerateWriterParagraphs} disabled={bulkWriterParagraphRunning}>
+                  {bulkWriterParagraphRunning ? '📝 Running…' : `📝 Writer Para ${selectedIds.size}`}
+                </button>
                 <button className="cr-bulk-bar-btn cr-bulk-bar-status" onClick={() => setShowBulkStatusModal(true)}>
                   ✎ Status
                 </button>
@@ -2387,6 +2447,35 @@ export default function CharacterRegistryPage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {/* Bulk Writer Paragraphs Results */}
+        {bulkWriterParagraphs && bulkWriterParagraphs.length > 0 && (
+          <div style={{ background: 'rgba(106,76,147,0.06)', border: '1px solid rgba(106,76,147,0.25)', borderRadius: 10, padding: 18, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+              <div style={{ fontSize: 14, fontWeight: 600, color: '#6a4c93' }}>📝 Writer Paragraphs ({bulkWriterParagraphs.length})</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  onClick={() => { navigator.clipboard.writeText(bulkWriterParagraphs.map(p => `## ${p.name}\n\n${p.paragraph}`).join('\n\n---\n\n')); showToast('All paragraphs copied!'); }}
+                  style={{ padding: '5px 12px', background: '#6a4c93', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+                >
+                  📋 Copy All
+                </button>
+                <button
+                  onClick={() => setBulkWriterParagraphs(null)}
+                  style={{ padding: '5px 12px', background: '#ddd', color: '#666', border: 'none', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+                >
+                  ✕ Dismiss
+                </button>
+              </div>
+            </div>
+            {bulkWriterParagraphs.map((p, i) => (
+              <div key={p.id} style={{ marginBottom: i < bulkWriterParagraphs.length - 1 ? 16 : 0, paddingBottom: i < bulkWriterParagraphs.length - 1 ? 16 : 0, borderBottom: i < bulkWriterParagraphs.length - 1 ? '1px solid rgba(106,76,147,0.15)' : 'none' }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: '#6a4c93', marginBottom: 6 }}>{p.name}</div>
+                <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{p.paragraph}</div>
+              </div>
+            ))}
           </div>
         )}
 
@@ -3540,6 +3629,8 @@ function DeepProfileTab({ character }) {
   const [writerParsing, setWriterParsing] = useState(false);
   const [proposedAdditions, setProposedAdditions] = useState(null);
   const [localProfile, setLocalProfile] = useState(null);
+  const [writerParagraph, setWriterParagraph] = useState(null);
+  const [paragraphGenerating, setParagraphGenerating] = useState(false);
 
   const dp = localProfile || character.deep_profile || {};
   const API = import.meta.env.VITE_API_URL || '/api/v1';
@@ -3595,6 +3686,18 @@ function DeepProfileTab({ character }) {
     } catch (err) { console.error('Accept error:', err); }
   };
 
+  const handleGenerateParagraph = async () => {
+    setParagraphGenerating(true);
+    try {
+      const resp = await fetch(`${API}/character-registry/characters/${character.id}/writer-paragraph/generate`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      });
+      const data = await resp.json();
+      if (data.paragraph) setWriterParagraph(data.paragraph);
+    } catch (err) { console.error('Writer paragraph generation error:', err); }
+    finally { setParagraphGenerating(false); }
+  };
+
   return (
     <div className="cr-dossier-section">
       <div className="cr-dossier-section-header">
@@ -3643,26 +3746,26 @@ function DeepProfileTab({ character }) {
         );
       })}
 
-      {/* Generate button for empty/sparse profiles */}
-      {filledCount < 5 && (
-        <div style={{ marginTop: 16, padding: 14, background: 'rgba(201,168,76,0.06)', border: '1px dashed rgba(201,168,76,0.3)', borderRadius: 8 }}>
-          <div style={{ fontSize: 13, color: '#b8942f', marginBottom: 10 }}>
-            {filledCount === 0
-              ? 'Deep profile is empty — generate from existing character data?'
-              : `Only ${filledCount}/14 dimensions populated. Generate the rest?`}
-          </div>
-          <button
-            disabled={generating}
-            onClick={handleGenerate}
-            style={{
-              padding: '8px 20px', background: generating ? '#ddd' : '#c9a84c', color: generating ? '#888' : '#000',
-              border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
-            }}
-          >
-            {generating ? '🧬 Generating…' : '🧬 Generate Deep Profile from Dossier'}
-          </button>
+      {/* Generate deep profile */}
+      <div style={{ marginTop: 16, padding: 14, background: 'rgba(201,168,76,0.06)', border: '1px dashed rgba(201,168,76,0.3)', borderRadius: 8 }}>
+        <div style={{ fontSize: 13, color: '#b8942f', marginBottom: 10 }}>
+          {filledCount === 0
+            ? 'Deep profile is empty — generate from existing character data?'
+            : filledCount < 14
+              ? `${filledCount}/14 dimensions populated. Generate the rest?`
+              : 'All 14 dimensions populated. Regenerate empty fields?'}
         </div>
-      )}
+        <button
+          disabled={generating}
+          onClick={handleGenerate}
+          style={{
+            padding: '8px 20px', background: generating ? '#ddd' : '#c9a84c', color: generating ? '#888' : '#000',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          {generating ? '🧬 Generating…' : '🧬 Generate Deep Profile from Dossier'}
+        </button>
+      </div>
 
       {/* Writer input */}
       <div style={{ marginTop: 20, borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 14 }}>
@@ -3724,6 +3827,43 @@ function DeepProfileTab({ character }) {
           </div>
         </div>
       )}
+
+      {/* Writer Paragraph Generator */}
+      <div style={{ marginTop: 20, borderTop: '1px solid rgba(0,0,0,0.08)', paddingTop: 14 }}>
+        <div style={{ fontSize: 11, color: '#888', marginBottom: 6, textTransform: 'uppercase', letterSpacing: 1 }}>Writer Paragraph</div>
+        <div style={{ fontSize: 13, color: '#666', marginBottom: 10 }}>
+          Generate a rich, literary paragraph from this character's registry data and deep profile — a novelist's reference portrait.
+        </div>
+        <button
+          disabled={paragraphGenerating}
+          onClick={handleGenerateParagraph}
+          style={{
+            padding: '8px 20px', background: paragraphGenerating ? '#ddd' : '#6a4c93', color: paragraphGenerating ? '#888' : '#fff',
+            border: 'none', borderRadius: 6, fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          }}
+        >
+          {paragraphGenerating ? '📝 Generating…' : '📝 Generate Writer Paragraph'}
+        </button>
+        {writerParagraph && (
+          <div style={{ marginTop: 12, background: 'rgba(106,76,147,0.06)', border: '1px solid rgba(106,76,147,0.25)', borderRadius: 8, padding: 14 }}>
+            <div style={{ fontSize: 13, color: 'var(--ink)', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>{writerParagraph}</div>
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <button
+                onClick={() => { navigator.clipboard.writeText(writerParagraph); }}
+                style={{ padding: '6px 14px', background: '#6a4c93', color: '#fff', border: 'none', borderRadius: 4, fontSize: 12, fontWeight: 600, cursor: 'pointer' }}
+              >
+                📋 Copy
+              </button>
+              <button
+                onClick={() => setWriterParagraph(null)}
+                style={{ padding: '6px 14px', background: '#ddd', color: '#666', border: 'none', borderRadius: 4, fontSize: 12, cursor: 'pointer' }}
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
