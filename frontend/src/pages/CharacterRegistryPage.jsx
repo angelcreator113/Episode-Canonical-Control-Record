@@ -2059,42 +2059,42 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
+      {/* Registry tabs */}
+      {registries.length > 0 && (
+        <div className="cr-registry-tabs">
+          {registries.map(r => (
+            <button
+              key={r.id}
+              className={`cr-registry-pill${!worldMode && !feedMode && activeRegistry?.id === r.id ? ' active' : ''}`}
+              onClick={() => { exitWorldMode(); exitFeedMode(); fetchRegistry(r.id); }}
+            >
+              <span className="cr-pill-title">{r.title || 'Untitled'}</span>
+              {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
+              {!worldMode && !feedMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
+            </button>
+          ))}
+          <button
+            className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
+            onClick={enterWorldMode}
+            title="View all characters across all registries"
+          >
+            <span className="cr-pill-title">🌍 All Characters</span>
+          </button>
+          <button
+            className={`cr-registry-pill${feedMode ? ' active' : ''}`}
+            onClick={enterFeedMode}
+            title="The Feed — parasocial creator profiles"
+          >
+            <span className="cr-pill-title">📱 The Feed</span>
+          </button>
+          <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
+            +
+          </button>
+        </div>
+      )}
+
       {/* Content */}
       <div className="cr-content">
-
-        {/* Registry tabs */}
-        {registries.length > 0 && (
-          <div className="cr-registry-tabs">
-            {registries.map(r => (
-              <button
-                key={r.id}
-                className={`cr-registry-pill${!worldMode && !feedMode && activeRegistry?.id === r.id ? ' active' : ''}`}
-                onClick={() => { exitWorldMode(); exitFeedMode(); fetchRegistry(r.id); }}
-              >
-                <span className="cr-pill-title">{r.title || 'Untitled'}</span>
-                {r.book_tag && <span className="cr-pill-tag">{r.book_tag}</span>}
-                {!worldMode && !feedMode && activeRegistry?.id === r.id && <span className="cr-pill-edit-icon">✎</span>}
-              </button>
-            ))}
-            <button
-              className={`cr-registry-pill${worldMode ? ' active world' : ''}`}
-              onClick={enterWorldMode}
-              title="View all characters across all registries"
-            >
-              <span className="cr-pill-title">🌍 All Characters</span>
-            </button>
-            <button
-              className={`cr-registry-pill${feedMode ? ' active' : ''}`}
-              onClick={enterFeedMode}
-              title="The Feed — parasocial creator profiles"
-            >
-              <span className="cr-pill-title">📱 The Feed</span>
-            </button>
-            <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
-              +
-            </button>
-          </div>
-        )}
 
         {/* ── FEED MODE ── */}
         {feedMode ? (
