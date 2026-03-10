@@ -3,7 +3,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 
-const API = import.meta.env.VITE_API_URL || '';
+const API = import.meta.env.VITE_API_URL || '/api/v1';
 
 const C = {
   surface: '#ffffff', surfaceAlt: '#faf8f5', bgDeep: '#f0ece4',
@@ -48,7 +48,7 @@ export default function PdfIngestZone({ brain = 'story', source = 'franchise_bib
 
       setProgress('Sending to knowledge extraction…');
 
-      const res  = await fetch(`${API}/api/v1/franchise-brain/ingest-pdf`, {
+      const res  = await fetch(`${API}/franchise-brain/ingest-pdf`, {
         method: 'POST',
         body:   formData,
         // No Content-Type header — browser sets it with boundary automatically
