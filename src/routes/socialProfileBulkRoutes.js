@@ -244,9 +244,10 @@ router.post('/generate', optionalAuth, async (req, res) => {
 
     const db = getModels();
 
-    // Generate all profiles in parallel for speed
-    const settled = await Promise.allSettled(
-      creators.map(async (c) => {
+    // Process creators sequentially to avoid overwhelming Anthropic API / small EC2
+    const results = [];
+    for (const c of creators) {
+      try {
         const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence);
         const aiRes = await client.messages.create({
           model: 'claude-sonnet-4-20250514',
@@ -320,25 +321,23 @@ router.post('/generate', optionalAuth, async (req, res) => {
           }
         }
 
-        return {
+        results.push({
           handle: c.handle,
           platform: c.platform,
           status: 'success',
           profile_id: saved?.id || null,
           lala_score: profile.lala_relevance_score || 0,
-        };
-      })
-    );
-
-    const results = settled.map((s, i) => {
-      if (s.status === 'fulfilled') return s.value;
-      return {
-        handle: creators[i].handle,
-        platform: creators[i].platform,
-        status: 'failed',
-        error: s.reason?.message || 'Unknown error',
-      };
-    });
+        });
+      } catch (creatorErr) {
+        console.error(`[bulk-generate] Failed for @${c.handle}:`, creatorErr.message);
+        results.push({
+          handle: c.handle,
+          platform: c.platform,
+          status: 'failed',
+          error: creatorErr.message || 'Unknown error',
+        });
+      }
+    }
 
     const succeeded = results.filter(r => r.status === 'success').length;
     const failed    = results.filter(r => r.status === 'failed').length;

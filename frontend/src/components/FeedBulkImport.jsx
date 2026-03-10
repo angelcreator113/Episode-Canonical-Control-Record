@@ -136,7 +136,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
     if (!candidates?.length) return;
     setGenerating(true); setErr(null);
 
-    const BATCH_SIZE = 5;
+    const BATCH_SIZE = 3;
     const total = candidates.length;
     const allResults = [];
     setProgress({ done: 0, total, results: [] });
