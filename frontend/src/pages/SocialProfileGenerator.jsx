@@ -48,6 +48,37 @@ const STATUS_LABELS = {
   archived:  'Archived',
 };
 
+// ── Protagonist Contexts ─────────────────────────────────────────────────────
+// Each universe/book protagonist has their own character context for AI generation
+const PROTAGONISTS = [
+  {
+    key: 'justawoman',
+    label: 'Book 1 · JustAWoman',
+    icon: '◈',
+    context: {
+      name: 'JustAWoman',
+      description: 'A Black woman, mother, wife, content creator in fashion/beauty/lifestyle.',
+      wound: 'She does everything right and the right room has not found her yet.',
+      goal: 'To be legendary.',
+      audience: 'Besties',
+      detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
+    },
+  },
+  {
+    key: 'lala',
+    label: 'Book 2 · Lala',
+    icon: '✦',
+    context: {
+      name: 'Lala',
+      description: 'The daughter. Born from JustAWoman\'s world but building her own. Young, sharp, digitally native — she sees patterns her mother can\'t.',
+      wound: 'She inherited her mother\'s ambition but not her patience. The algorithm sees her before she sees herself.',
+      goal: 'To become something that can\'t be copied.',
+      audience: 'The generation that learned to perform before they learned to feel',
+      detail: 'She grew up watching her mother watch creators. Now she is one — or becoming one. The line between consuming and creating dissolved before she noticed.',
+    },
+  },
+];
+
 function lalaClass(score) {
   if (score >= 7) return 'high';
   if (score >= 4) return 'mid';
@@ -74,6 +105,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const [error, setError]         = useState(null);
   const [filterStatus, setFilterStatus] = useState(null);
   const [view, setView]           = useState('feed'); // 'feed' | 'bulk'
+  const [protagonist, setProtagonist] = useState(PROTAGONISTS[0]);
 
   // Spark form
   const [handle, setHandle]       = useState('');
@@ -111,6 +143,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           handle: handle.trim(),
           platform,
           vibe_sentence: vibe.trim(),
+          character_context: protagonist.context,
         }),
       });
       const data = await res.json();
@@ -205,20 +238,33 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     <div className={`spg-page ${embedded ? 'spg-embedded' : ''}`}>
       {/* ── Header ──────────────────────────────────────────────── */}
       <div className="spg-header">
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '10px' }}>
           <div>
             <div className="spg-header-title">📱 The Feed</div>
             <div className="spg-header-sub">
-              Parasocial Creator Profiles — The online world JustAWoman moves through
+              Parasocial Creator Profiles — {protagonist.context.name}'s online world
             </div>
           </div>
-          <button
-            className="spg-btn"
-            style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
-            onClick={() => setView(view === 'feed' ? 'bulk' : 'feed')}
-          >
-            {view === 'feed' ? '⊞ Bulk Import' : '← Back to Feed'}
-          </button>
+          <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+            <div className="spg-protagonist-selector">
+              {PROTAGONISTS.map(p => (
+                <button
+                  key={p.key}
+                  className={`spg-protagonist-btn ${protagonist.key === p.key ? 'spg-protagonist-btn-active' : ''}`}
+                  onClick={() => setProtagonist(p)}
+                >
+                  {p.icon} {p.label}
+                </button>
+              ))}
+            </div>
+            <button
+              className="spg-btn"
+              style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
+              onClick={() => setView(view === 'feed' ? 'bulk' : 'feed')}
+            >
+              {view === 'feed' ? '⊞ Bulk Import' : '← Back to Feed'}
+            </button>
+          </div>
         </div>
         <div className="spg-header-stats">
           <div className="spg-stat">
@@ -238,7 +284,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
       {/* ── Bulk Import View ─────────────────────────────────── */}
       {view === 'bulk' && (
-        <FeedBulkImport onDone={() => { setView('feed'); loadProfiles(); }} />
+        <FeedBulkImport onDone={() => { setView('feed'); loadProfiles(); }} characterContext={protagonist.context} />
       )}
 
       {/* ── Spark Form ──────────────────────────────────────────── */}

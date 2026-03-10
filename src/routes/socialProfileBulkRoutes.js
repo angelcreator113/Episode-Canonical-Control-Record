@@ -234,7 +234,7 @@ ${chunks[i]}`,
 // ── POST /generate ───────────────────────────────────────────────────────────
 router.post('/generate', optionalAuth, async (req, res) => {
   try {
-    const { creators, series_id } = req.body;
+    const { creators, series_id, character_context } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
       return res.status(400).json({ error: 'No creators provided' });
     }
@@ -248,7 +248,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
     const results = [];
     for (const c of creators) {
       try {
-        const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence);
+        const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence, character_context);
         const aiRes = await Promise.race([
           client.messages.create({
             model: 'claude-sonnet-4-20250514',

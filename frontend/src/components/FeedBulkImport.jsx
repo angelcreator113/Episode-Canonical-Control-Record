@@ -34,7 +34,7 @@ function loadDraft() {
   } catch { return null; }
 }
 
-export default function FeedBulkImport({ onDone, seriesId }) {
+export default function FeedBulkImport({ onDone, seriesId, characterContext }) {
   const draft = useRef(loadDraft());
 
   const [mode, setMode]           = useState(draft.current?.mode || 'paste');
@@ -151,7 +151,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
         try {
           const res = await fetch(`${API}/bulk/generate`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ creators: batch, series_id: seriesId }),
+            body: JSON.stringify({ creators: batch, series_id: seriesId, character_context: characterContext }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);

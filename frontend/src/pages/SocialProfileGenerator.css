@@ -66,6 +66,38 @@
   font-size: 0.85rem;
   margin-top: 4px;
 }
+
+/* ── Protagonist Selector ──────────────────────────────────── */
+.spg-protagonist-selector {
+  display: flex;
+  gap: 4px;
+  background: var(--surface3);
+  border-radius: 8px;
+  padding: 3px;
+}
+.spg-protagonist-btn {
+  padding: 6px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  background: transparent;
+  color: var(--ink-dim);
+  transition: all 0.15s;
+  font-family: inherit;
+  white-space: nowrap;
+}
+.spg-protagonist-btn:hover {
+  background: var(--surface);
+  color: var(--ink);
+}
+.spg-protagonist-btn-active {
+  background: var(--surface);
+  color: var(--gold);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+}
+
 .spg-header-stats {
   display: flex;
   gap: 20px;
