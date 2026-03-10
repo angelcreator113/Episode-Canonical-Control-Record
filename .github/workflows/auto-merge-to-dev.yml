@@ -1,0 +1,39 @@
+name: Auto-merge to Dev
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+
+concurrency:
+  group: auto-merge-dev
+  cancel-in-progress: false
+
+jobs:
+  merge-to-dev:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge into dev
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          echo "Merging $BRANCH into dev..."
+
+          git checkout dev
+          git pull origin dev
+
+          git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"
+          git push origin dev
+
+          echo "Merged $BRANCH into dev — deploy workflow will trigger automatically."
