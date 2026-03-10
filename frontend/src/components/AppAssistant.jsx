@@ -7,6 +7,9 @@
  * v2 — Voice input (STT) added via Web Speech API.
  * Push-to-talk: hold mic button → speak → release → Amber responds in voice.
  * Falls back gracefully if browser doesn't support SpeechRecognition.
+ *
+ * TTS: ElevenLabs via /api/v1/memories/assistant-speak (backend proxies to ElevenLabs).
+ * The browser's speechSynthesis is NOT used — Amber's voice is ElevenLabs only.
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
@@ -33,14 +36,48 @@ function createRecognizer() {
   return r;
 }
 
-// ─── TTS helper ──────────────────────────────────────────────────────────────
-function speak(text) {
-  if (!window.speechSynthesis || !text) return;
-  window.speechSynthesis.cancel();
-  const utt = new SpeechSynthesisUtterance(text);
-  utt.rate   = 1.0;
-  utt.pitch  = 1.0;
-  window.speechSynthesis.speak(utt);
+// ─── TTS via ElevenLabs (backend proxy) ──────────────────────────────────────
+// Backend route: POST /api/v1/memories/assistant-speak
+// Body: { text: string }
+// Returns: audio/mpeg stream — we create a Blob URL and play it.
+const SPEAK_API = '/api/v1/memories/assistant-speak';
+
+let currentAudio = null;
+
+async function speak(text) {
+  if (!text) return;
+  try {
+    // Stop any currently playing audio
+    if (currentAudio) {
+      currentAudio.pause();
+      currentAudio = null;
+    }
+
+    const res = await fetch(SPEAK_API, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ text }),
+    });
+
+    if (!res.ok) {
+      console.warn('ElevenLabs TTS failed:', res.status);
+      return;
+    }
+
+    const blob = await res.blob();
+    const url  = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    currentAudio = audio;
+
+    audio.onended = () => {
+      URL.revokeObjectURL(url);
+      currentAudio = null;
+    };
+
+    await audio.play();
+  } catch (err) {
+    console.warn('TTS error:', err);
+  }
 }
 
 export default function AppAssistant({ appContext = {}, onNavigate, onRefresh }) {
@@ -105,10 +142,11 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       });
 
       const data = await res.json();
+      const reply = data.reply || 'Done.';
 
       setMessages(prev => [...prev, {
         role:   'assistant',
-        text:   data.reply || 'Done.',
+        text:   reply,
         action: data.action,
         error:  data.error,
       }]);
@@ -206,6 +244,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       setLiveTranscript(final || interim);
 
       if (final) {
+        // Final result came in — fire immediately
         setListening(false);
         setLiveTranscript('');
         rec.stop();
@@ -239,7 +278,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
   useEffect(() => {
     return () => {
       if (recognizerRef.current) recognizerRef.current.stop();
-      window.speechSynthesis?.cancel();
+      if (currentAudio) { currentAudio.pause(); currentAudio = null; }
     };
   }, []);
 

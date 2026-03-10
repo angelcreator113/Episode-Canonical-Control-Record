@@ -422,74 +422,80 @@
 /* ── Mic button (voice input) ────────────────────────────────────── */
 
 .apa-mic {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  color: #6b7280;
-  cursor: pointer;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  flex-shrink: 0;
-  transition: all 0.15s;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s, box-shadow 0.15s;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none; /* prevent scroll on long-press mobile */
 }
 
 .apa-mic:hover:not(:disabled) {
-  background: #eef2ff;
-  border-color: #c7d2fe;
-  color: #6366f1;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.8);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .apa-mic:disabled {
-  opacity: 0.3;
-  cursor: default;
+  opacity: 0.35;
+  cursor: not-allowed;
 }
 
-.apa-mic--active {
-  background: #ef4444 !important;
-  border-color: #ef4444 !important;
-  color: white !important;
-  animation: apa-mic-pulse 1s ease infinite;
+/* Active state — holding the mic */
+.apa-mic.apa-mic--active {
+  background: #d4789a;
+  border-color: #d4789a;
+  color: #fff;
+  box-shadow: 0 0 0 4px rgba(212, 120, 154, 0.25);
+  animation: apa-mic-pulse 1.2s ease-in-out infinite;
 }
 
 @keyframes apa-mic-pulse {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
-  50%      { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  0%, 100% { box-shadow: 0 0 0 4px rgba(212, 120, 154, 0.25); }
+  50%      { box-shadow: 0 0 0 8px rgba(212, 120, 154, 0.10); }
 }
 
 /* ── Listening badge in header ───────────────────────────────────── */
 
 .apa-listening-badge {
+  margin-left: 8px;
   font-size: 10px;
-  color: #ef4444;
-  font-weight: 600;
+  font-weight: 500;
+  color: #d4789a;
   letter-spacing: 0.04em;
-  animation: apa-badge-blink 1.2s ease infinite;
-  margin-left: 4px;
+  animation: apa-blink 1s step-start infinite;
 }
 
-@keyframes apa-badge-blink {
+@keyframes apa-blink {
   0%, 100% { opacity: 1; }
-  50%      { opacity: 0.4; }
+  50%      { opacity: 0.3; }
 }
 
 /* ── Live transcript bubble ──────────────────────────────────────── */
 
+.apa-msg--live {
+  opacity: 0.6;
+}
+
 .apa-msg--live .apa-msg-text {
-  background: #818cf8 !important;
-  opacity: 0.7;
   font-style: italic;
 }
 
 /* ── Voice hint ──────────────────────────────────────────────────── */
 
 .apa-voice-hint {
-  margin: 0;
-  padding: 0 16px 10px;
+  margin: 4px 12px 10px;
   font-size: 10px;
-  color: #9ca3af;
+  color: rgba(255, 255, 255, 0.3);
   text-align: center;
   letter-spacing: 0.02em;
 }
