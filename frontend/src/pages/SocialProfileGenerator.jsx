@@ -127,6 +127,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const [platform, setPlatform]   = useState('instagram');
   const [vibe, setVibe]           = useState('');
 
+  // Active background job tracking
+  const [activeJob, setActiveJob] = useState(null);
+  const jobPollRef = useRef(null);
+
   // ── Load profiles ────────────────────────────────────────────────────────
   const loadProfiles = useCallback(async (targetPage) => {
     setLoading(true);
@@ -153,6 +157,48 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   }, [filterStatus, search, sortBy, page]);
 
   useEffect(() => { loadProfiles(); }, [loadProfiles]);
+
+  // ── Background job polling ───────────────────────────────────────────────
+  const pollJob = useCallback(async (jobId) => {
+    try {
+      const res = await fetch(`${API}/bulk/jobs/${jobId}`, { headers: authHeaders() });
+      const data = await res.json();
+      if (data.job) {
+        setActiveJob(data.job);
+        if (data.job.status === 'completed' || data.job.status === 'failed') {
+          clearInterval(jobPollRef.current);
+          jobPollRef.current = null;
+          localStorage.removeItem('spg_active_job');
+          loadProfiles();
+        }
+      }
+    } catch (err) {
+      console.error('Job poll error:', err);
+    }
+  }, [loadProfiles]);
+
+  // On mount, check for an active job from localStorage
+  useEffect(() => {
+    const savedJobId = localStorage.getItem('spg_active_job');
+    if (savedJobId) {
+      pollJob(savedJobId);
+      jobPollRef.current = setInterval(() => pollJob(savedJobId), 6000);
+    }
+    return () => { if (jobPollRef.current) clearInterval(jobPollRef.current); };
+  }, [pollJob]);
+
+  const startJobPolling = (jobId) => {
+    localStorage.setItem('spg_active_job', jobId);
+    pollJob(jobId);
+    if (jobPollRef.current) clearInterval(jobPollRef.current);
+    jobPollRef.current = setInterval(() => pollJob(jobId), 6000);
+  };
+
+  const dismissJob = () => {
+    setActiveJob(null);
+    localStorage.removeItem('spg_active_job');
+    if (jobPollRef.current) { clearInterval(jobPollRef.current); jobPollRef.current = null; }
+  };
 
   // Reset to page 1 when filters change
   const changeFilter = (s) => { setFilterStatus(s); setPage(1); setSelectedIds(new Set()); };
@@ -223,6 +269,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           platform,
           vibe_sentence: vibe.trim(),
           character_context: protagonist.context,
+          character_key: protagonist.key,
         }),
       });
       const data = await res.json();
@@ -362,9 +409,42 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
         </div>
       </div>
 
+      {/* ── Active Job Banner ──────────────────────────────────── */}
+      {activeJob && (
+        <div className={`spg-job-banner ${activeJob.status === 'completed' ? 'spg-job-done' : activeJob.status === 'failed' ? 'spg-job-failed' : 'spg-job-active'}`}>
+          <div className="spg-job-banner-text">
+            {activeJob.status === 'processing' && (
+              <>⟳ Generating profiles in background... {activeJob.completed || 0}/{activeJob.total || 0} done{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
+            )}
+            {activeJob.status === 'pending' && (
+              <>⟳ Job queued — waiting to start ({activeJob.total} profiles)...</>
+            )}
+            {activeJob.status === 'completed' && (
+              <>✓ Background import complete — {activeJob.completed}/{activeJob.total} profiles generated{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
+            )}
+            {activeJob.status === 'failed' && (
+              <>✕ Job failed{activeJob.error_message ? `: ${activeJob.error_message}` : ''}</>
+            )}
+          </div>
+          {(activeJob.status === 'processing' || activeJob.status === 'pending') && (
+            <div className="spg-job-progress-bar">
+              <div className="spg-job-progress-fill" style={{ width: `${activeJob.total ? ((activeJob.completed || 0) / activeJob.total) * 100 : 0}%` }} />
+            </div>
+          )}
+          {(activeJob.status === 'completed' || activeJob.status === 'failed') && (
+            <button className="spg-job-dismiss" onClick={dismissJob}>Dismiss</button>
+          )}
+        </div>
+      )}
+
       {/* ── Bulk Import View ─────────────────────────────────── */}
       {view === 'bulk' && (
-        <FeedBulkImport onDone={() => { setView('feed'); setPage(1); loadProfiles(1); }} characterContext={protagonist.context} />
+        <FeedBulkImport
+          onDone={() => { setView('feed'); setPage(1); loadProfiles(1); }}
+          characterContext={protagonist.context}
+          characterKey={protagonist.key}
+          onJobStarted={(jobId) => { setView('feed'); startJobPolling(jobId); }}
+        />
       )}
 
       {/* ── Spark Form ──────────────────────────────────────────── */}
@@ -550,6 +630,15 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
                     <span className="spg-card-followers">
                       {p.follower_count_approx || data.follower_count_approx || '—'}
                     </span>
+                    {p.followers && p.followers.length > 0 && (
+                      <span className="spg-card-followed-by">
+                        {p.followers.map(f => (
+                          <span key={f.character_key} className="spg-follower-pill" title={`${f.character_name} follows this profile`}>
+                            {f.character_key === 'justawoman' ? '◈' : '✦'}
+                          </span>
+                        ))}
+                      </span>
+                    )}
                     <span className={`spg-card-lala-score spg-lala-${lalaClass(p.lala_relevance_score || data.lala_relevance_score || 0)}`}>
                       ✦ {p.lala_relevance_score ?? data.lala_relevance_score ?? 0}/10
                     </span>
@@ -608,6 +697,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           onCross={crossProfile}
           onEdit={editProfile}
           onDelete={deleteProfile}
+          onRefresh={loadProfiles}
           autoScroll
         />}
       </div>}
@@ -618,7 +708,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 /* ════════════════════════════════════════════════════════════════════════════ */
 /* Detail Panel Sub-component                                                 */
 /* ════════════════════════════════════════════════════════════════════════════ */
-function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDelete, autoScroll }) {
+function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDelete, onRefresh, autoScroll }) {
   const p = profile;
   const d = fp;
   const score = p.lala_relevance_score ?? d.lala_relevance_score ?? 0;
@@ -633,6 +723,35 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState({});
+  const [followers, setFollowers] = useState(p.followers || []);
+  const [followLoading, setFollowLoading] = useState(null);
+
+  // Refresh followers when profile changes
+  useEffect(() => { setFollowers(p.followers || []); }, [profile?.id]);
+
+  const toggleFollow = async (protag) => {
+    setFollowLoading(protag.key);
+    try {
+      const isFollowing = followers.some(f => f.character_key === protag.key);
+      if (isFollowing) {
+        await fetch(`${API}/${p.id}/followers/${protag.key}`, { method: 'DELETE', headers: authHeaders() });
+        setFollowers(prev => prev.filter(f => f.character_key !== protag.key));
+      } else {
+        const res = await fetch(`${API}/${p.id}/followers`, {
+          method: 'POST',
+          headers: authHeaders(),
+          body: JSON.stringify({ character_key: protag.key, character_name: protag.context.name }),
+        });
+        const data = await res.json();
+        if (data.follower) setFollowers(prev => [...prev, data.follower]);
+      }
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      console.error('Follow toggle error:', err);
+    } finally {
+      setFollowLoading(null);
+    }
+  };
 
   const startEdit = () => {
     setDraft({
@@ -816,6 +935,41 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
             </div>
           </div>
         </div>}
+
+        {/* Followers */}
+        <div className="spg-section" style={{ marginTop: 24 }}>
+          <div className="spg-section-title">Character Followers</div>
+          <div className="spg-follower-row">
+            {PROTAGONISTS.map(protag => {
+              const isFollowing = followers.some(f => f.character_key === protag.key);
+              const isLoading = followLoading === protag.key;
+              return (
+                <button
+                  key={protag.key}
+                  className={`spg-follow-btn ${isFollowing ? 'spg-follow-btn-active' : ''}`}
+                  onClick={() => toggleFollow(protag)}
+                  disabled={isLoading}
+                >
+                  <span className="spg-follow-icon">{protag.icon}</span>
+                  <span>{isLoading ? '...' : isFollowing ? `${protag.context.name} follows` : `Add ${protag.context.name}`}</span>
+                </button>
+              );
+            })}
+          </div>
+          {followers.length > 0 && (
+            <div className="spg-follower-details">
+              {followers.map(f => (
+                <div key={f.character_key} className="spg-follower-detail-item">
+                  <span className="spg-follower-detail-name">
+                    {f.character_key === 'justawoman' ? '◈' : '✦'} {f.character_name}
+                  </span>
+                  {f.influence_type && <span className="spg-follower-detail-tag">{f.influence_type}</span>}
+                  {f.influence_level && <span className="spg-follower-detail-level">Influence: {f.influence_level}/10</span>}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {/* Pinned Post */}
         {(p.pinned_post || d.pinned_post) && (

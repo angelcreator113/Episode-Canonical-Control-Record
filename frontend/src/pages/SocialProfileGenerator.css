@@ -1242,3 +1242,166 @@ select.spg-input {
     touch-action: manipulation;
   }
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* Follower Pills on Cards                                                    */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+.spg-card-followed-by {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+.spg-follower-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--surface-alt, #f4f3f7);
+  border: 1px solid var(--border, #ddd9e3);
+  font-size: 0.7rem;
+  color: var(--purple-deep, #6b4e8a);
+  cursor: default;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* Follow/Unfollow Buttons in Detail Panel                                    */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+.spg-follower-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.spg-follow-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--border, #ddd9e3);
+  background: var(--surface, #f7f6f9);
+  color: var(--ink-dim, #5a5068);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.spg-follow-btn:hover {
+  border-color: var(--purple, #8a6aac);
+  color: var(--purple-deep, #6b4e8a);
+}
+.spg-follow-btn-active {
+  background: var(--purple-deep, #6b4e8a);
+  border-color: var(--purple-deep, #6b4e8a);
+  color: #fff;
+}
+.spg-follow-btn-active:hover {
+  background: #7a3e9a;
+  border-color: #7a3e9a;
+  color: #fff;
+}
+.spg-follow-icon {
+  font-size: 1rem;
+}
+.spg-follower-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 12px;
+}
+.spg-follower-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--surface, #f7f6f9);
+  border: 1px solid var(--border, #ddd9e3);
+  border-radius: 8px;
+  font-size: 0.82rem;
+}
+.spg-follower-detail-name {
+  font-weight: 600;
+  color: var(--ink, #1a1424);
+}
+.spg-follower-detail-tag {
+  font-size: 0.72rem;
+  color: var(--purple, #8a6aac);
+  background: var(--purple-soft, #8a6aac14);
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.spg-follower-detail-level {
+  font-size: 0.72rem;
+  color: var(--ink-faint, #8a8498);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/* Background Job Banner                                                      */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+.spg-job-banner {
+  padding: 14px 20px;
+  border-radius: 10px;
+  margin-bottom: 16px;
+  font-size: 0.85rem;
+}
+.spg-job-active {
+  background: linear-gradient(135deg, #8a6aac14, #c4588a14);
+  border: 1px solid #8a6aac33;
+  color: var(--ink, #1a1424);
+}
+.spg-job-done {
+  background: #4a987014;
+  border: 1px solid #4a987044;
+  color: var(--ink, #1a1424);
+}
+.spg-job-failed {
+  background: #c4585814;
+  border: 1px solid #c4585844;
+  color: var(--ink, #1a1424);
+}
+.spg-job-banner-text {
+  margin-bottom: 8px;
+  line-height: 1.5;
+}
+.spg-job-progress-bar {
+  height: 4px;
+  background: var(--border, #ddd9e3);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.spg-job-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #8a6aac, #c4588a);
+  border-radius: 2px;
+  transition: width 0.5s ease;
+}
+.spg-job-dismiss {
+  margin-top: 10px;
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--border, #ddd9e3);
+  background: var(--surface, #f7f6f9);
+  color: var(--ink-dim, #5a5068);
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.spg-job-dismiss:hover {
+  border-color: var(--purple, #8a6aac);
+}
+
+/* ── Mobile responsive for new elements ── */
+@media (max-width: 480px) {
+  .spg-follower-row {
+    gap: 6px;
+  }
+  .spg-follow-btn {
+    padding: 8px 10px;
+    font-size: 0.78rem;
+  }
+  .spg-job-banner {
+    padding: 12px 14px;
+    font-size: 0.8rem;
+  }
+}

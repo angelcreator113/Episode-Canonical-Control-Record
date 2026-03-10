@@ -100,6 +100,8 @@ let VoiceRule; // Novel Intelligence: confirmed voice rules
 let ManuscriptMetadata; // Novel Intelligence: book metadata cascade
 let BrainFingerprint; // Novel Intelligence: brain dedup fingerprints
 let SocialProfile; // The Feed: social media creator profiles
+let SocialProfileFollower; // The Feed: character-follows-profile join table
+let BulkImportJob; // The Feed: background bulk import job queue
 let RelationshipEvent; // Relationship timeline turning points
 let StoryRevision; // Revision history for edited stories
 let WorldTimelineEvent; // World calendar/timeline events
@@ -298,6 +300,8 @@ try {
 
   // The Feed: Social Profile Generator
   SocialProfile = require('./SocialProfile')(sequelize, DataTypes);
+  SocialProfileFollower = require('./SocialProfileFollower')(sequelize, DataTypes);
+  BulkImportJob = require('./BulkImportJob')(sequelize, DataTypes);
 
   // Tier feature models
   RelationshipEvent = require('./RelationshipEvent')(sequelize);
@@ -414,6 +418,8 @@ const requiredModels = {
   ManuscriptMetadata,
   BrainFingerprint,
   SocialProfile,
+  SocialProfileFollower,
+  BulkImportJob,
   RelationshipEvent,
   StoryRevision,
   WorldTimelineEvent,
@@ -555,6 +561,15 @@ RegistryCharacter.hasMany(SocialProfile, {
   foreignKey: 'registry_character_id',
   as: 'socialProfiles',
 });
+
+// SocialProfile ↔ SocialProfileFollower (1:N) — characters following a profile
+SocialProfile.hasMany(SocialProfileFollower, {
+  foreignKey: 'social_profile_id',
+  as: 'followers',
+});
+if (SocialProfileFollower && SocialProfileFollower.associate) {
+  SocialProfileFollower.associate(requiredModels);
+}
 
 console.log('✅ Model associations defined');
 
@@ -1666,6 +1681,8 @@ module.exports.VoiceRule = VoiceRule;
 module.exports.ManuscriptMetadata = ManuscriptMetadata;
 module.exports.BrainFingerprint = BrainFingerprint;
 module.exports.SocialProfile = SocialProfile;
+module.exports.SocialProfileFollower = SocialProfileFollower;
+module.exports.BulkImportJob = BulkImportJob;
 module.exports.RelationshipEvent = RelationshipEvent;
 module.exports.StoryRevision = StoryRevision;
 module.exports.WorldTimelineEvent = WorldTimelineEvent;

@@ -116,7 +116,7 @@ Respond ONLY in valid JSON:
 // ── POST /generate ───────────────────────────────────────────────────────────
 // Three inputs → full profile generated
 router.post('/generate', optionalAuth, async (req, res) => {
-  const { handle, platform, vibe_sentence, series_id, character_context } = req.body;
+  const { handle, platform, vibe_sentence, series_id, character_context, character_key } = req.body;
 
   if (!handle || !platform || !vibe_sentence) {
     return res.status(400).json({ error: 'handle, platform, and vibe_sentence are required' });
@@ -178,12 +178,35 @@ router.post('/generate', optionalAuth, async (req, res) => {
       crossing_mechanism:    generated.crossing_mechanism,
     });
 
+    // Auto-assign the generating protagonist as a follower
+    if (character_key) {
+      await autoAssignFollower(db, profile.id, character_context, character_key);
+    }
+
     return res.json({ profile });
   } catch (err) {
     console.error('Social profile generation error:', err);
     return res.status(500).json({ error: err.message });
   }
 });
+
+// ── Auto-assign follower helper ──────────────────────────────────────────────
+async function autoAssignFollower(db, profileId, characterContext, characterKey) {
+  if (!db.SocialProfileFollower || !characterKey) return;
+  try {
+    await db.SocialProfileFollower.findOrCreate({
+      where: { social_profile_id: profileId, character_key: characterKey },
+      defaults: {
+        character_name: characterContext?.name || characterKey,
+        follow_context: 'Auto-assigned on profile generation',
+        influence_type: 'aspiration',
+        influence_level: 5,
+      },
+    });
+  } catch (e) {
+    console.warn('Auto-assign follower failed:', e.message);
+  }
+}
 
 // ── GET / ────────────────────────────────────────────────────────────────────
 router.get('/', optionalAuth, async (req, res) => {
@@ -223,6 +246,11 @@ router.get('/', optionalAuth, async (req, res) => {
       order,
       limit: pageSize,
       offset,
+      include: db.SocialProfileFollower ? [{
+        model: db.SocialProfileFollower,
+        as: 'followers',
+        attributes: ['character_key', 'character_name', 'influence_type', 'influence_level'],
+      }] : [],
     });
 
     return res.json({
@@ -288,9 +316,67 @@ router.post('/bulk/delete', optionalAuth, async (req, res) => {
 router.get('/:id', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
-    const profile = await db.SocialProfile.findByPk(req.params.id);
+    const profile = await db.SocialProfile.findByPk(req.params.id, {
+      include: db.SocialProfileFollower ? [{
+        model: db.SocialProfileFollower,
+        as: 'followers',
+      }] : [],
+    });
     if (!profile) return res.status(404).json({ error: 'Not found' });
     return res.json({ profile });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /:id/followers ───────────────────────────────────────────────────────
+router.get('/:id/followers', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const followers = await db.SocialProfileFollower.findAll({
+      where: { social_profile_id: req.params.id },
+      order: [['influence_level', 'DESC']],
+    });
+    return res.json({ followers });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /:id/followers ──────────────────────────────────────────────────────
+// Add or update a character following this profile
+router.post('/:id/followers', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { character_key, character_name, follow_context, emotional_reaction, influence_type, influence_level } = req.body;
+  if (!character_key || !character_name) {
+    return res.status(400).json({ error: 'character_key and character_name required' });
+  }
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    const [follower, created] = await db.SocialProfileFollower.findOrCreate({
+      where: { social_profile_id: profile.id, character_key },
+      defaults: { character_name, follow_context, emotional_reaction, influence_type, influence_level: influence_level || 5 },
+    });
+    if (!created) {
+      await follower.update({ character_name, follow_context, emotional_reaction, influence_type, influence_level: influence_level || follower.influence_level });
+    }
+    return res.json({ follower, created });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /:id/followers/:characterKey ───────────────────────────────────────
+// Remove a character from following this profile
+router.delete('/:id/followers/:characterKey', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const count = await db.SocialProfileFollower.destroy({
+      where: { social_profile_id: req.params.id, character_key: req.params.characterKey },
+    });
+    return res.json({ removed: count > 0 });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -480,3 +566,4 @@ ${(p.sample_captions || []).map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 module.exports = router;
 module.exports.buildGenerationPrompt = buildGenerationPrompt;
+module.exports.autoAssignFollower = autoAssignFollower;

@@ -34,7 +34,7 @@ function loadDraft() {
   } catch { return null; }
 }
 
-export default function FeedBulkImport({ onDone, seriesId, characterContext }) {
+export default function FeedBulkImport({ onDone, seriesId, characterContext, characterKey, onJobStarted }) {
   const draft = useRef(loadDraft());
 
   const [mode, setMode]           = useState(draft.current?.mode || 'paste');
@@ -151,7 +151,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext }) {
         try {
           const res = await fetch(`${API}/bulk/generate`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ creators: batch, series_id: seriesId, character_context: characterContext }),
+            body: JSON.stringify({ creators: batch, series_id: seriesId, character_context: characterContext, character_key: characterKey }),
           });
           const data = await res.json();
           if (!res.ok) throw new Error(data.error);
@@ -177,6 +177,30 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext }) {
 
   const hasCandidates = candidates !== null && candidates.length > 0;
   const isDone        = summary !== null;
+  const [submittingJob, setSubmittingJob] = useState(false);
+
+  // ── Submit background job (large batches — safe to leave page) ──────────
+  async function submitBackgroundJob() {
+    if (!candidates?.length) return;
+    setSubmittingJob(true); setErr(null);
+    try {
+      const res = await fetch(`${API}/bulk/generate-job`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creators: candidates,
+          series_id: seriesId,
+          character_context: characterContext,
+          character_key: characterKey,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create job');
+      localStorage.removeItem(STORAGE_KEY);
+      if (onJobStarted) onJobStarted(data.job_id);
+    } catch (e) { setErr(e.message); }
+    finally { setSubmittingJob(false); }
+  }
 
   return (
     <div style={{ padding: 'clamp(16px, 4vw, 32px)', maxWidth: '720px', margin: '0 auto' }}>
@@ -316,6 +340,13 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext }) {
           <button onClick={generateAll} style={{ width: '100%', padding: '14px', minHeight: '48px', background: C.pink, border: 'none', borderRadius: '10px', color: '#fff', fontSize: '15px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', WebkitAppearance: 'none' }}>
             Generate {candidates.length} Profile{candidates.length !== 1 ? 's' : ''} →
           </button>
+
+          {/* Background job option for larger batches */}
+          {onJobStarted && (
+            <button onClick={submitBackgroundJob} disabled={submittingJob} style={{ width: '100%', marginTop: '8px', padding: '14px', minHeight: '48px', background: 'transparent', border: `1px solid ${C.lavender}44`, borderRadius: '10px', color: C.lavender, fontSize: '13px', fontWeight: '600', cursor: submittingJob ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', WebkitAppearance: 'none' }}>
+              {submittingJob ? <><Spin /> Submitting…</> : `⟳ Generate in Background (safe to leave page)`}
+            </button>
+          )}
         </div>
       )}
 
