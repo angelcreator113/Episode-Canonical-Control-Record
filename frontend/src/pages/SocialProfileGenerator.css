@@ -120,6 +120,42 @@
   .spg-grid {
     grid-template-columns: 1fr;
   }
+
+  .spg-header {
+    padding: 20px 16px 16px;
+  }
+  .spg-spark-form {
+    margin: 16px 16px;
+    padding: 18px 16px;
+  }
+  .spg-content {
+    padding: 0 16px 24px;
+  }
+  .spg-detail-header {
+    padding: 18px 16px;
+  }
+  .spg-detail-body {
+    padding: 18px 16px;
+  }
+  .spg-detail-handle {
+    font-size: 1.2rem;
+  }
+  .spg-header-title {
+    font-size: 1.3rem;
+  }
+
+  /* Touch targets */
+  .spg-btn {
+    min-height: 44px;
+    touch-action: manipulation;
+  }
+  .spg-filter-btn {
+    min-height: 40px;
+    touch-action: manipulation;
+  }
+  .spg-card {
+    transition: none;
+  }
 }
 .spg-field {
   display: flex;
@@ -672,4 +708,219 @@ select.spg-input {
   line-height: 1.6;
   color: var(--ink);
   white-space: pre-wrap;
+}
+
+
+/* ================================================================
+   MOBILE RESPONSIVE — Phones
+   ================================================================ */
+
+/* ── Phones (≤480px) ── */
+@media (max-width: 480px) {
+  .spg-header {
+    padding: 14px 12px 12px;
+  }
+  .spg-header-title {
+    font-size: 1.1rem;
+  }
+  .spg-header-sub {
+    font-size: 0.78rem;
+  }
+  .spg-header-stats {
+    gap: 14px;
+    flex-wrap: wrap;
+  }
+  .spg-stat-value {
+    font-size: 1rem;
+  }
+  .spg-stat-label {
+    font-size: 0.68rem;
+  }
+
+  .spg-spark-form {
+    margin: 12px 12px;
+    padding: 14px 12px;
+  }
+  .spg-spark-title {
+    font-size: 0.95rem;
+    margin-bottom: 12px;
+  }
+  .spg-spark-row {
+    gap: 10px;
+  }
+  .spg-label {
+    font-size: 0.68rem;
+  }
+  .spg-input {
+    padding: 10px 12px;
+    font-size: 16px; /* prevent iOS zoom */
+  }
+  select.spg-input {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .spg-content {
+    padding: 0 12px 20px;
+  }
+
+  .spg-card {
+    padding: 16px;
+    border-radius: 10px;
+  }
+  .spg-card-handle {
+    font-size: 0.95rem;
+  }
+  .spg-card-persona {
+    font-size: 0.8rem;
+  }
+
+  .spg-detail {
+    border-radius: 10px;
+  }
+  .spg-detail-header {
+    padding: 16px 12px;
+  }
+  .spg-detail-handle {
+    font-size: 1.1rem;
+  }
+  .spg-detail-meta {
+    gap: 10px;
+  }
+  .spg-detail-meta-item {
+    font-size: 0.75rem;
+  }
+  .spg-detail-actions {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .spg-detail-actions .spg-btn {
+    flex: 1 1 auto;
+    min-width: 100px;
+    justify-content: center;
+    text-align: center;
+  }
+  .spg-detail-body {
+    padding: 16px 12px;
+  }
+
+  .spg-section-title {
+    font-size: 0.82rem;
+  }
+  .spg-section-text {
+    font-size: 0.84rem;
+  }
+
+  .spg-moment {
+    padding: 12px;
+  }
+  .spg-sample {
+    padding: 8px 12px;
+    font-size: 0.82rem;
+  }
+
+  .spg-empty {
+    padding: 40px 16px;
+  }
+  .spg-empty-icon {
+    font-size: 2.4rem;
+  }
+  .spg-empty-text {
+    font-size: 0.95rem;
+  }
+
+  .spg-filters {
+    gap: 6px;
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .spg-filters::-webkit-scrollbar {
+    display: none;
+  }
+  .spg-filter-btn {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    min-height: 36px;
+  }
+
+  .spg-btn {
+    padding: 10px 16px;
+    font-size: 0.82rem;
+  }
+  .spg-btn-sm {
+    padding: 7px 12px;
+    font-size: 0.75rem;
+  }
+
+  .spg-pinned {
+    padding: 14px 12px;
+  }
+
+  .spg-crossing {
+    padding: 14px 12px;
+  }
+}
+
+/* ── Very small phones (≤360px) ── */
+@media (max-width: 360px) {
+  .spg-header {
+    padding: 10px 8px 10px;
+  }
+  .spg-header-title {
+    font-size: 1rem;
+  }
+
+  .spg-spark-form {
+    margin: 10px 8px;
+    padding: 12px 10px;
+  }
+
+  .spg-content {
+    padding: 0 8px 16px;
+  }
+
+  .spg-card {
+    padding: 14px 12px;
+  }
+  .spg-card-handle {
+    font-size: 0.9rem;
+  }
+
+  .spg-detail-header {
+    padding: 14px 10px;
+  }
+  .spg-detail-handle {
+    font-size: 1rem;
+  }
+  .spg-detail-body {
+    padding: 14px 10px;
+  }
+
+  .spg-empty {
+    padding: 32px 10px;
+  }
+}
+
+/* ── Touch device improvements ── */
+@media (hover: none) and (pointer: coarse) {
+  .spg-card,
+  .spg-card:hover {
+    transform: none !important;
+    box-shadow: 0 2px 8px rgba(45, 34, 50, 0.05) !important;
+  }
+  .spg-card:active {
+    opacity: 0.85;
+    border-color: var(--gold);
+  }
+
+  .spg-btn,
+  .spg-filter-btn,
+  .spg-card,
+  .spg-detail-close {
+    touch-action: manipulation;
+  }
 }

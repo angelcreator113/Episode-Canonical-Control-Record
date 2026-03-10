@@ -243,13 +243,10 @@ router.post('/generate', optionalAuth, async (req, res) => {
     }
 
     const db = getModels();
-    const results = [];
 
-    for (let idx = 0; idx < creators.length; idx++) {
-      const c = creators[idx];
-      // Small delay between AI calls to avoid rate limiting
-      if (idx > 0) await new Promise(r => setTimeout(r, 1000));
-      try {
+    // Generate all profiles in parallel for speed
+    const settled = await Promise.allSettled(
+      creators.map(async (c) => {
         const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence);
         const aiRes = await client.messages.create({
           model: 'claude-sonnet-4-20250514',
@@ -258,14 +255,11 @@ router.post('/generate', optionalAuth, async (req, res) => {
         });
 
         const text = aiRes.content[0].text;
-        // Strip markdown fences, then extract the JSON object
         const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
         const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
         if (!jsonMatch) throw new Error('AI did not return valid JSON');
 
-        // Fix common AI JSON quirks: trailing commas before } or ]
-        const fixedJson = jsonMatch[0]
-          .replace(/,\s*([\]}])/g, '$1');
+        const fixedJson = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
 
         let profile;
         try {
@@ -314,7 +308,6 @@ router.post('/generate', optionalAuth, async (req, res) => {
           });
           saved = record;
           if (!created) {
-            // Already exists — update with fresh AI data
             await record.update({
               vibe_sentence: c.vibe_sentence,
               display_name: profile.display_name,
@@ -327,22 +320,25 @@ router.post('/generate', optionalAuth, async (req, res) => {
           }
         }
 
-        results.push({
+        return {
           handle: c.handle,
           platform: c.platform,
           status: 'success',
           profile_id: saved?.id || null,
           lala_score: profile.lala_relevance_score || 0,
-        });
-      } catch (genErr) {
-        results.push({
-          handle: c.handle,
-          platform: c.platform,
-          status: 'failed',
-          error: genErr.message,
-        });
-      }
-    }
+        };
+      })
+    );
+
+    const results = settled.map((s, i) => {
+      if (s.status === 'fulfilled') return s.value;
+      return {
+        handle: creators[i].handle,
+        platform: creators[i].platform,
+        status: 'failed',
+        error: s.reason?.message || 'Unknown error',
+      };
+    });
 
     const succeeded = results.filter(r => r.status === 'success').length;
     const failed    = results.filter(r => r.status === 'failed').length;
