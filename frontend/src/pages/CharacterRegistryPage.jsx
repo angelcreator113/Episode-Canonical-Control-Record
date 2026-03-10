@@ -775,17 +775,18 @@ export default function CharacterRegistryPage() {
   };
 
   /* ── Bulk Status Update ── */
-  const bulkUpdateStatus = async () => {
-    if (selectedIds.size === 0 || !bulkStatusTarget) return;
+  const bulkUpdateStatus = async (overrideStatus) => {
+    const targetStatus = overrideStatus || bulkStatusTarget;
+    if (selectedIds.size === 0 || !targetStatus) return;
     try {
       const res = await fetch(`${API}/characters/bulk-status`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: [...selectedIds], status: bulkStatusTarget }),
+        body: JSON.stringify({ ids: [...selectedIds], status: targetStatus }),
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`${data.updated} character(s) → ${bulkStatusTarget}`);
+        showToast(`${data.updated} character(s) → ${targetStatus}`);
         exitSelectMode();
         setShowBulkStatusModal(false);
         await fetchRegistries();
@@ -2368,6 +2369,9 @@ export default function CharacterRegistryPage() {
             </div>
             {selectedIds.size > 0 && (
               <div className="cr-bulk-bar-right">
+                <button className="cr-bulk-bar-btn cr-bulk-bar-accept" onClick={() => bulkUpdateStatus('accepted')}>
+                  ✓ Accept {selectedIds.size}
+                </button>
                 <button className="cr-bulk-bar-btn cr-bulk-bar-status" onClick={() => setShowBulkStatusModal(true)}>
                   ✎ Status
                 </button>
@@ -2425,7 +2429,8 @@ export default function CharacterRegistryPage() {
                 onQuickEdit={() => startQuickEdit(c)}
                 onQuickEditChange={(field, val) => setQuickEditForm(p => ({ ...p, [field]: val }))}
                 onQuickEditSave={saveQuickEdit}
-                onQuickEditCancel={() => setQuickEditId(null)} />
+                onQuickEditCancel={() => setQuickEditId(null)}
+                onAccept={(id) => setCharStatus(id, 'accepted')} />
             ))}
           </div>
         ) : (
@@ -2817,10 +2822,11 @@ function HeaderBar({ search, onSearch, viewMode, onViewMode, showFilters, onTogg
    CHARACTER CARD (Grid)
    ================================================================ */
 function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, cardSize = 'normal', relCount = 0,
-  quickEditId, quickEditForm, onQuickEdit, onQuickEditChange, onQuickEditSave, onQuickEditCancel }) {
+  quickEditId, quickEditForm, onQuickEdit, onQuickEditChange, onQuickEditSave, onQuickEditCancel, onAccept }) {
   const isCore = c.canon_tier === 'Core Canon';
   const roleColor = `var(--role-${c.role_type || 'special'})`;
   const isQuickEditing = quickEditId === c.id;
+  const canAccept = c.status === 'draft' || c.status === 'declined';
 
   return (
     <div className={`cr-card cr-card-${cardSize} ${isCore ? 'canon-core' : ''} ${isCompareSelected ? 'compare-selected' : ''} ${isSelected ? 'bulk-selected' : ''}`} onClick={onClick}>
@@ -2835,6 +2841,13 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, 
       {/* Quick-edit pencil */}
       {!selectMode && !isQuickEditing && (
         <button className="cr-card-quick-edit-btn" onClick={e => { e.stopPropagation(); onQuickEdit(); }} title="Quick Edit">✎</button>
+      )}
+
+      {/* Quick accept button */}
+      {!selectMode && !isQuickEditing && canAccept && onAccept && (
+        <button className="cr-card-accept-btn" onClick={e => { e.stopPropagation(); onAccept(c.id); }} title="Accept">
+          ✓
+        </button>
       )}
 
       {/* Quick-edit overlay */}

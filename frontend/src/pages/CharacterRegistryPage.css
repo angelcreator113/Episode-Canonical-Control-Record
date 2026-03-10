@@ -5351,6 +5351,45 @@
   cursor: not-allowed;
 }
 
+/* ── Bulk Bar: mobile layout ── */
+@media (max-width: 480px) {
+  .cr-bulk-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    padding: 10px 12px;
+    padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+  .cr-bulk-bar-left {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cr-bulk-bar-right {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cr-bulk-bar-btn {
+    min-height: 44px;
+    padding: 8px 14px;
+    font-size: 13px;
+    flex: 1 1 auto;
+    text-align: center;
+    justify-content: center;
+    display: inline-flex;
+    align-items: center;
+  }
+  .cr-bulk-bar-accept {
+    flex: 1 0 100%;
+    order: -1;
+  }
+  .cr-bulk-bar-delete {
+    min-height: 44px;
+    padding: 8px 14px;
+    flex: 1 1 auto;
+    text-align: center;
+  }
+}
+
 /* Card checkbox */
 .cr-card-checkbox {
   position: absolute;
@@ -5696,6 +5735,53 @@
   transform: scale(1.1);
 }
 
+/* ── Card Accept Button ── */
+.cr-card-accept-btn {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  z-index: 5;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(60, 140, 80, .85);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity .15s, transform .15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.cr-card:hover .cr-card-accept-btn {
+  opacity: 1;
+}
+.cr-card-accept-btn:hover {
+  background: #2e9e4a;
+  transform: scale(1.15);
+}
+
+/* On touch devices: always show accept button */
+@media (hover: none) and (pointer: coarse) {
+  .cr-card-accept-btn {
+    opacity: 1;
+    width: 36px;
+    height: 36px;
+    font-size: 18px;
+  }
+  .cr-card-quick-edit-btn {
+    opacity: 1;
+    width: 32px;
+    height: 32px;
+    font-size: 14px;
+  }
+}
+
 /* ── Quick-Edit Overlay ── */
 .cr-card-quick-overlay {
   position: absolute;
@@ -5797,6 +5883,19 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: wrap;
+}
+.cr-bulk-bar-accept {
+  padding: 8px 16px !important;
+  background: rgba(60, 140, 80, .9) !important;
+  border-color: rgba(60, 140, 80, 1) !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  min-height: 44px;
+}
+.cr-bulk-bar-accept:hover {
+  background: #2e9e4a !important;
 }
 .cr-bulk-bar-status,
 .cr-bulk-bar-move {
