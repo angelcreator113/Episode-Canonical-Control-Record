@@ -3526,11 +3526,20 @@
 
 /* ── Dossier header on mobile ── */
 @media (max-width: 768px) {
+  .cr-header-dossier {
+    flex-wrap: nowrap;
+  }
+
   .cr-header-dossier .cr-header-left {
     display: flex !important; /* override the hide rule */
+    flex: 0 0 auto;
   }
 
   .cr-header-dossier .cr-header-center {
+    position: static;
+    transform: none;
+    width: auto;
+    order: 0;
     flex: 1;
     min-width: 0;
   }
@@ -3546,6 +3555,7 @@
   /* Compact the dossier header right buttons */
   .cr-header-dossier .cr-header-right {
     width: auto;
+    flex: 0 0 auto;
     flex-wrap: nowrap;
   }
   .cr-header-dossier .cr-header-btn {
