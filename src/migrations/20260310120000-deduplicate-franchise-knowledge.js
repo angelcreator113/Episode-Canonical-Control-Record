@@ -3,29 +3,46 @@
 /**
  * Deduplicate franchise_knowledge entries with substantially the same title.
  *
- * Priority: keep entries sourced from 'franchise_bible vv3.1 · system'
- * (extracted_by = 'system' OR source_document ILIKE '%franchise_bible%')
- * over entries from 'document_ingestion'.
+ * Keep-priority (highest wins):
+ *   1. source_document ILIKE '%franchise_bible%'  OR  extracted_by = 'system'
+ *   2. extracted_by = 'direct_entry'
+ *   3. extracted_by = 'conversation_extraction'
+ *   4. extracted_by = 'document_ingestion'
+ *
+ * Tiebreakers (same extracted_by tier):
+ *   - always_inject = true  wins over false
+ *   - higher id wins (newer row)
  *
  * Duplicates are soft-deleted (deleted_at set, status → 'superseded',
- * superseded_by → the kept entry's id).
+ * superseded_by → the kept entry's id, review_note annotated).
+ *
+ * Specific known duplicates targeted:
+ *   "HTTP 403 on Finalized Characters Rule"
+ *   "Protected Lines Never Overwritten"
+ *   "Blind Generation Non-Negotiable"
+ *   "Dual Memory Proposals Require Confirmation"
+ *   "JustAWoman is always self-possessed"
+ *   "Lala never knows she was built"
+ *   "David is not the obstacle"
+ *   "The reader holds all layers"
+ *   "Coaching realization comes in Book 2"
+ *   "Lala appears in Book 1 as ONE intrusive thought"
  */
 module.exports = {
   async up(queryInterface) {
-    // Find duplicate groups: entries whose LOWER(TRIM(title)) matches another row.
-    // For each group, keep the "best" row (franchise_bible / system source wins)
-    // and soft-delete the rest.
-    await queryInterface.sequelize.query(`
+    // ── Step 1: soft-delete duplicates ────────────────────────────────────────
+    const [, meta] = await queryInterface.sequelize.query(`
       WITH ranked AS (
         SELECT
           id,
           LOWER(TRIM(title)) AS norm_title,
           extracted_by,
           source_document,
+          always_inject,
           ROW_NUMBER() OVER (
             PARTITION BY LOWER(TRIM(title))
             ORDER BY
-              -- Priority 1: franchise_bible source or system extractor wins
+              -- Tier: franchise_bible / system wins over document_ingestion
               CASE
                 WHEN source_document ILIKE '%franchise_bible%' THEN 0
                 WHEN extracted_by = 'system'                   THEN 0
@@ -34,7 +51,9 @@ module.exports = {
                 WHEN extracted_by = 'document_ingestion'       THEN 3
                 ELSE 4
               END,
-              -- Priority 2: active > pending > others
+              -- Tiebreaker 1: always_inject = true wins
+              CASE WHEN always_inject = true THEN 0 ELSE 1 END,
+              -- Tiebreaker 2: active > pending > others
               CASE status
                 WHEN 'active'         THEN 0
                 WHEN 'pending_review' THEN 1
@@ -42,19 +61,17 @@ module.exports = {
                 WHEN 'archived'       THEN 3
                 ELSE 4
               END,
-              -- Priority 3: newer is better
-              created_at DESC
+              -- Tiebreaker 3: higher id (newer row) wins
+              id DESC
           ) AS rn
         FROM franchise_knowledge
         WHERE deleted_at IS NULL
       ),
-      -- Identify the "keeper" id for each duplicate group
       keepers AS (
         SELECT norm_title, id AS keeper_id
         FROM ranked
         WHERE rn = 1
       ),
-      -- Identify losers (rn > 1) that belong to groups with more than one entry
       losers AS (
         SELECT r.id AS loser_id, k.keeper_id
         FROM ranked r
@@ -71,10 +88,23 @@ module.exports = {
       FROM losers l
       WHERE fk.id = l.loser_id;
     `);
+
+    // ── Step 2: report results ───────────────────────────────────────────────
+    const [counts] = await queryInterface.sequelize.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE deleted_at IS NOT NULL
+          AND review_note LIKE '%Auto-deduplicated:%') AS removed,
+        COUNT(*) FILTER (WHERE deleted_at IS NULL)     AS remaining
+      FROM franchise_knowledge;
+    `);
+
+    const { removed, remaining } = counts[0];
+    console.log(`\n  ✓ franchise_knowledge dedup complete`);
+    console.log(`    Removed:   ${removed} duplicate(s)`);
+    console.log(`    Remaining: ${remaining} active entries\n`);
   },
 
   async down(queryInterface) {
-    // Reverse: restore any rows that were auto-deduplicated by this migration
     await queryInterface.sequelize.query(`
       UPDATE franchise_knowledge
       SET
@@ -90,5 +120,12 @@ module.exports = {
       WHERE review_note LIKE '%Auto-deduplicated: duplicate title, kept id=%'
         AND deleted_at IS NOT NULL;
     `);
+
+    const [counts] = await queryInterface.sequelize.query(`
+      SELECT
+        COUNT(*) FILTER (WHERE deleted_at IS NULL) AS restored_total
+      FROM franchise_knowledge;
+    `);
+    console.log(`\n  ✓ franchise_knowledge dedup reverted — ${counts[0].restored_total} entries now active\n`);
   },
 };
