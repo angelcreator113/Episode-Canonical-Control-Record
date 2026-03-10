@@ -26,15 +26,24 @@ try {
 const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ── Generation prompt ─────────────────────────────────────────────────────────
-function buildGenerationPrompt(handle, platform, vibe_sentence) {
+function buildGenerationPrompt(handle, platform, vibe_sentence, characterContext) {
+  // Default to JustAWoman (Book 1) if no character context provided
+  const ctx = characterContext || {
+    name: 'JustAWoman',
+    description: 'A Black woman, mother, wife, content creator in fashion/beauty/lifestyle.',
+    wound: 'She does everything right and the right room has not found her yet.',
+    goal: 'To be legendary.',
+    audience: 'Besties',
+    detail: 'She posts for women. Men show up with their wallets and something in her responds.\nShe watches certain creators alone, at night, and does not tell her husband.',
+  };
+
   return `You are generating a complete social media creator profile for a literary fiction franchise.
 
-This creator exists in the online world that JustAWoman — the protagonist — moves through daily.
-JustAWoman is a Black woman, mother, wife, content creator in fashion/beauty/lifestyle.
-Her wound: she does everything right and the right room has not found her yet.
-Her goal: to be legendary. Her audience: Besties.
-She posts for women. Men show up with their wallets and something in her responds.
-She watches certain creators alone, at night, and does not tell her husband.
+This creator exists in the online world that ${ctx.name} — the protagonist — moves through daily.
+${ctx.description}
+Their wound: ${ctx.wound}
+Their goal: ${ctx.goal}. Their audience: ${ctx.audience || 'their followers'}.
+${ctx.detail || ''}
 
 THE CREATOR SPARK:
 Handle: ${handle}
@@ -44,12 +53,13 @@ Vibe: ${vibe_sentence}
 Generate a complete, psychologically specific social profile. This is ADULT LITERARY FICTION.
 Write real content — explicit if the character warrants it. Do not sanitize.
 The persona vs. real signal gap is where the character lives. Find it.
+Generate a REALISTIC follower count for the platform and creator type — not everyone is mega-famous.
 
 Respond ONLY in valid JSON:
 {
   "display_name": "How their name appears on the platform",
   "follower_tier": "micro|mid|macro|mega",
-  "follower_count_approx": "e.g. 47k or 1.2M",
+  "follower_count_approx": "e.g. 2.3k or 47k or 1.2M — be realistic for this type of creator on this platform",
   "content_category": "primary content category",
   "archetype": "polished_curator|messy_transparent|soft_life|explicitly_paid|overnight_rise|cautionary|the_peer|the_watcher|chaos_creator|community_builder",
 
@@ -62,10 +72,10 @@ Respond ONLY in valid JSON:
   "adult_content_type": "If present: what kind, how explicit, what format it takes. null if absent.",
   "adult_content_framing": "If present: how they frame it to their audience — empowerment, desperation, business, art, accident. null if absent.",
 
-  "parasocial_function": "What this creator does to JustAWoman specifically. Not generally — specifically. What does watching this person activate in her?",
+  "parasocial_function": "What this creator does to ${ctx.name} specifically. Not generally — specifically. What does watching this person activate in them?",
   "emotional_activation": "One phrase: the specific emotional cocktail watching them produces. e.g. 'inspiration that curdles into inadequacy'",
-  "watch_reason": "Why JustAWoman cannot stop watching even when it costs her something.",
-  "what_it_costs_her": "What watching this creator takes from JustAWoman. Her peace, her confidence, her time, her fidelity to herself.",
+  "watch_reason": "Why ${ctx.name} cannot stop watching even when it costs them something.",
+  "what_it_costs_her": "What watching this creator takes from ${ctx.name}. Their peace, their confidence, their time, their fidelity to themselves.",
 
   "current_trajectory": "rising|plateauing|unraveling|pivoting|silent|viral_moment",
   "trajectory_detail": "What is specifically happening right now in their online life. Be specific — a recent post, a pattern, a shift.",
@@ -73,11 +83,11 @@ Respond ONLY in valid JSON:
   "moment_log": [
     {
       "moment_type": "live|post|comment|dm|collab|controversy|disappearance",
-      "description": "The specific moment JustAWoman encountered. What happened. What was said or shown.",
+      "description": "The specific moment ${ctx.name} encountered. What happened. What was said or shown.",
       "platform_format": "tiktok live|instagram reel|youtube video|etc",
-      "justawoman_reaction": "How JustAWoman responded internally. What she felt. What she did after.",
+      "protagonist_reaction": "How ${ctx.name} responded internally. What they felt. What they did after.",
       "lala_seed": true or false,
-      "lala_seed_reason": "If true: why this moment contains Lala seed potential."
+      "lala_seed_reason": "If true: why this moment contains narrative seed potential."
     }
   ],
 
@@ -94,11 +104,11 @@ Respond ONLY in valid JSON:
   "pinned_post": "Their most visible content. The thing someone sees first when they land on this profile. Write it as the actual post text.",
 
   "lala_relevance_score": 0-10,
-  "lala_relevance_reason": "Why this creator matters to Lala's emergence. What energy or behavior this creator models that lives in Lala.",
-  "book_relevance": ["Book 1: how they feed into JustAWoman's arc", "Potential Book 2 role if any"],
+  "lala_relevance_reason": "Why this creator matters to the protagonist's arc. What energy or behavior this creator models.",
+  "book_relevance": ["How they feed into the protagonist's story arc", "Potential future role if any"],
 
   "world_exists": true or false,
-  "crossing_trigger": "What story event would cause this creator to cross from parasocial into JustAWoman's real world.",
+  "crossing_trigger": "What story event would cause this creator to cross from parasocial into ${ctx.name}'s real world.",
   "crossing_mechanism": "How they would actually enter — DM, comment section, mutual connection, physical location, brand event."
 }`;
 }
@@ -106,7 +116,7 @@ Respond ONLY in valid JSON:
 // ── POST /generate ───────────────────────────────────────────────────────────
 // Three inputs → full profile generated
 router.post('/generate', optionalAuth, async (req, res) => {
-  const { handle, platform, vibe_sentence, series_id } = req.body;
+  const { handle, platform, vibe_sentence, series_id, character_context, character_key } = req.body;
 
   if (!handle || !platform || !vibe_sentence) {
     return res.status(400).json({ error: 'handle, platform, and vibe_sentence are required' });
@@ -118,7 +128,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
     const response = await client.messages.create({
       model:      'claude-sonnet-4-20250514',
       max_tokens: 4000,
-      messages:   [{ role: 'user', content: buildGenerationPrompt(handle, platform, vibe_sentence) }],
+      messages:   [{ role: 'user', content: buildGenerationPrompt(handle, platform, vibe_sentence, character_context) }],
     });
 
     let generated;
@@ -168,6 +178,11 @@ router.post('/generate', optionalAuth, async (req, res) => {
       crossing_mechanism:    generated.crossing_mechanism,
     });
 
+    // Auto-assign the generating protagonist as a follower
+    if (character_key) {
+      await autoAssignFollower(db, profile.id, character_context, character_key);
+    }
+
     return res.json({ profile });
   } catch (err) {
     console.error('Social profile generation error:', err);
@@ -175,21 +190,123 @@ router.post('/generate', optionalAuth, async (req, res) => {
   }
 });
 
+// ── Auto-assign follower helper ──────────────────────────────────────────────
+async function autoAssignFollower(db, profileId, characterContext, characterKey) {
+  if (!db.SocialProfileFollower || !characterKey) return;
+  try {
+    await db.SocialProfileFollower.findOrCreate({
+      where: { social_profile_id: profileId, character_key: characterKey },
+      defaults: {
+        character_name: characterContext?.name || characterKey,
+        follow_context: 'Auto-assigned on profile generation',
+        influence_type: 'aspiration',
+        influence_level: 5,
+      },
+    });
+  } catch (e) {
+    console.warn('Auto-assign follower failed:', e.message);
+  }
+}
+
 // ── GET / ────────────────────────────────────────────────────────────────────
 router.get('/', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
-  const { series_id, archetype, status, platform } = req.query;
+  const { Op } = require('sequelize');
+  const { series_id, archetype, status, platform, page, limit, search, sort } = req.query;
   try {
     const where = {};
     if (series_id) where.series_id = series_id;
     if (archetype) where.archetype = archetype;
     if (status)    where.status    = status;
     if (platform)  where.platform  = platform;
-    const profiles = await db.SocialProfile.findAll({
+    if (search) {
+      where[Op.or] = [
+        { handle: { [Op.iLike]: `%${search}%` } },
+        { display_name: { [Op.iLike]: `%${search}%` } },
+      ];
+    }
+
+    // Sorting
+    let order;
+    switch (sort) {
+      case 'newest':  order = [['created_at', 'DESC']]; break;
+      case 'oldest':  order = [['created_at', 'ASC']]; break;
+      case 'handle':  order = [['handle', 'ASC']]; break;
+      case 'score':   order = [['lala_relevance_score', 'DESC'], ['created_at', 'DESC']]; break;
+      default:        order = [['lala_relevance_score', 'DESC'], ['created_at', 'DESC']];
+    }
+
+    // Pagination
+    const pageNum  = Math.max(1, parseInt(page) || 1);
+    const pageSize = Math.min(100, Math.max(1, parseInt(limit) || 24));
+    const offset   = (pageNum - 1) * pageSize;
+
+    const { count, rows } = await db.SocialProfile.findAndCountAll({
       where,
-      order: [['lala_relevance_score', 'DESC'], ['created_at', 'DESC']],
+      order,
+      limit: pageSize,
+      offset,
+      include: db.SocialProfileFollower ? [{
+        model: db.SocialProfileFollower,
+        as: 'followers',
+        attributes: ['character_key', 'character_name', 'influence_type', 'influence_level'],
+      }] : [],
     });
-    return res.json({ profiles });
+
+    return res.json({
+      profiles: rows,
+      pagination: {
+        page: pageNum,
+        limit: pageSize,
+        total: count,
+        totalPages: Math.ceil(count / pageSize),
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /bulk/finalize ──────────────────────────────────────────────────────
+// Finalize multiple profiles at once
+router.post('/bulk/finalize', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  if (ids.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 profiles per bulk finalize' });
+  }
+  try {
+    const { Op } = require('sequelize');
+    const [count] = await db.SocialProfile.update(
+      { status: 'finalized' },
+      { where: { id: { [Op.in]: ids }, status: 'generated' } }
+    );
+    return res.json({ finalized: count });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /bulk/delete ────────────────────────────────────────────────────────
+// Delete multiple profiles at once
+router.post('/bulk/delete', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  if (ids.length > 100) {
+    return res.status(400).json({ error: 'Maximum 100 profiles per bulk delete' });
+  }
+  try {
+    const { Op } = require('sequelize');
+    const count = await db.SocialProfile.destroy(
+      { where: { id: { [Op.in]: ids } } }
+    );
+    return res.json({ deleted: count });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -199,9 +316,67 @@ router.get('/', optionalAuth, async (req, res) => {
 router.get('/:id', optionalAuth, async (req, res) => {
   const db = req.app.locals.db || require('../models');
   try {
-    const profile = await db.SocialProfile.findByPk(req.params.id);
+    const profile = await db.SocialProfile.findByPk(req.params.id, {
+      include: db.SocialProfileFollower ? [{
+        model: db.SocialProfileFollower,
+        as: 'followers',
+      }] : [],
+    });
     if (!profile) return res.status(404).json({ error: 'Not found' });
     return res.json({ profile });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── GET /:id/followers ───────────────────────────────────────────────────────
+router.get('/:id/followers', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const followers = await db.SocialProfileFollower.findAll({
+      where: { social_profile_id: req.params.id },
+      order: [['influence_level', 'DESC']],
+    });
+    return res.json({ followers });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /:id/followers ──────────────────────────────────────────────────────
+// Add or update a character following this profile
+router.post('/:id/followers', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  const { character_key, character_name, follow_context, emotional_reaction, influence_type, influence_level } = req.body;
+  if (!character_key || !character_name) {
+    return res.status(400).json({ error: 'character_key and character_name required' });
+  }
+  try {
+    const profile = await db.SocialProfile.findByPk(req.params.id);
+    if (!profile) return res.status(404).json({ error: 'Profile not found' });
+
+    const [follower, created] = await db.SocialProfileFollower.findOrCreate({
+      where: { social_profile_id: profile.id, character_key },
+      defaults: { character_name, follow_context, emotional_reaction, influence_type, influence_level: influence_level || 5 },
+    });
+    if (!created) {
+      await follower.update({ character_name, follow_context, emotional_reaction, influence_type, influence_level: influence_level || follower.influence_level });
+    }
+    return res.json({ follower, created });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── DELETE /:id/followers/:characterKey ───────────────────────────────────────
+// Remove a character from following this profile
+router.delete('/:id/followers/:characterKey', optionalAuth, async (req, res) => {
+  const db = req.app.locals.db || require('../models');
+  try {
+    const count = await db.SocialProfileFollower.destroy({
+      where: { social_profile_id: req.params.id, character_key: req.params.characterKey },
+    });
+    return res.json({ removed: count > 0 });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
@@ -273,7 +448,7 @@ router.post('/:id/cross', optionalAuth, async (req, res) => {
     // Log the crossing as a world timeline event
     try {
       await db.WorldTimelineEvent.create({
-        event_name: `${profile.display_name || profile.handle} crosses into JustAWoman's world`,
+        event_name: `${profile.display_name || profile.handle} crosses into the story world`,
         event_description: `Social media creator ${profile.handle} (${profile.platform}) enters the story via: ${profile.crossing_mechanism || 'direct encounter'}. Trigger: ${crossing_note || profile.crossing_trigger || 'story need'}`,
         event_type: 'character',
         impact_level: profile.lala_relevance_score >= 7 ? 'major' : 'moderate',
@@ -369,7 +544,7 @@ REAL SIGNAL: ${p.real_signal}
 POSTING VOICE: ${p.posting_voice}
 ${p.adult_content_present ? `\nADULT CONTENT: ${p.adult_content_type}\nFRAMING: ${p.adult_content_framing}` : ''}
 
-PARASOCIAL FUNCTION (what this creator does to JustAWoman):
+PARASOCIAL FUNCTION (what this creator does to the protagonist):
 ${p.parasocial_function}
 Emotional activation: ${p.emotional_activation}
 Why she watches: ${p.watch_reason}
@@ -391,3 +566,4 @@ ${(p.sample_captions || []).map((c, i) => `${i + 1}. ${c}`).join('\n')}
 
 module.exports = router;
 module.exports.buildGenerationPrompt = buildGenerationPrompt;
+module.exports.autoAssignFollower = autoAssignFollower;

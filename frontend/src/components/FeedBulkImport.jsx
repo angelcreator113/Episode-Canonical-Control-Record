@@ -1,6 +1,6 @@
 // FeedBulkImport.jsx — Bulk import panel for SocialProfileGenerator (The Feed)
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 const API = '/api/v1/social-profiles';
 
@@ -25,25 +25,56 @@ const PASTE_PLACEHOLDER = `@mollymeannn | tiktok | does makeup but something is 
 @theexplicitmess | onlyfans | went fully transparent, audience grew 3x
 @justlikeher_ | instagram | same niche same size, now pulling ahead`;
 
-export default function FeedBulkImport({ onDone, seriesId }) {
-  const [mode, setMode]           = useState('paste'); // 'paste' | 'file'
-  const [pasteText, setPasteText] = useState('');
+const STORAGE_KEY = 'feed_bulk_import_draft';
+
+function loadDraft() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch { return null; }
+}
+
+export default function FeedBulkImport({ onDone, seriesId, characterContext, characterKey, onJobStarted }) {
+  const draft = useRef(loadDraft());
+
+  const [mode, setMode]           = useState(draft.current?.mode || 'paste');
+  const [pasteText, setPasteText] = useState(draft.current?.pasteText || '');
   const [files, setFiles]         = useState([]);
   const [dragging, setDragging]   = useState(false);
 
   // Parsed candidates before generation
-  const [candidates, setCandidates] = useState(null); // null = not parsed yet
-  const [parseErrors, setParseErrors] = useState([]);
-  const [extractNotes, setExtractNotes] = useState('');
+  const [candidates, setCandidates] = useState(draft.current?.candidates ?? null);
+  const [parseErrors, setParseErrors] = useState(draft.current?.parseErrors || []);
+  const [extractNotes, setExtractNotes] = useState(draft.current?.extractNotes || '');
 
   // Generation state
   const [generating, setGenerating] = useState(false);
-  const [progress, setProgress]     = useState(null); // { done, total, results }
-  const [summary, setSummary]       = useState(null);
+  const [progress, setProgress]     = useState(draft.current?.progress ?? null);
+  const [summary, setSummary]       = useState(draft.current?.summary ?? null);
 
   const [parsing, setParsing]   = useState(false);
   const [err, setErr]           = useState(null);
   const fileRef = useRef();
+
+  // ── Persist draft to localStorage ──────────────────────────────────────────
+  useEffect(() => {
+    const data = { mode, pasteText, candidates, parseErrors, extractNotes, progress, summary };
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
+  }, [mode, pasteText, candidates, parseErrors, extractNotes, progress, summary]);
+
+  // ── Mobile paste fallback (some mobile browsers don't fire onChange for paste) ──
+  const handlePaste = useCallback(e => {
+    const pasted = e.clipboardData?.getData('text');
+    if (pasted) {
+      e.preventDefault();
+      setPasteText(prev => {
+        const el = e.target;
+        const start = el.selectionStart ?? prev.length;
+        const end   = el.selectionEnd   ?? prev.length;
+        return prev.slice(0, start) + pasted + prev.slice(end);
+      });
+    }
+  }, []);
 
   // ── Drag and drop ──────────────────────────────────────────────────────────
   const onDrop = useCallback(e => {
@@ -100,31 +131,79 @@ export default function FeedBulkImport({ onDone, seriesId }) {
     setCandidates(c => c.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
   }
 
-  // ── Generate all candidates ────────────────────────────────────────────────
+  // ── Generate all candidates (batched in small chunks) ───────────────────────
   async function generateAll() {
     if (!candidates?.length) return;
     setGenerating(true); setErr(null);
-    setProgress({ done: 0, total: candidates.length, results: [] });
+
+    const BATCH_SIZE = 1;
+    const total = candidates.length;
+    const allResults = [];
+    setProgress({ done: 0, total, results: [] });
 
     try {
-      const res  = await fetch(`${API}/bulk/generate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ creators: candidates, series_id: seriesId }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const totalBatches = Math.ceil(total / BATCH_SIZE);
+      for (let i = 0; i < total; i += BATCH_SIZE) {
+        const batch = candidates.slice(i, i + BATCH_SIZE);
+        const batchNum = Math.floor(i / BATCH_SIZE) + 1;
 
-      setProgress({ done: data.summary.total, total: data.summary.total, results: data.results });
-      setSummary(data.summary);
+        setProgress({ done: allResults.length, total, batchNum, totalBatches, results: [...allResults] });
+        try {
+          const res = await fetch(`${API}/bulk/generate`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ creators: batch, series_id: seriesId, character_context: characterContext, character_key: characterKey }),
+          });
+          const data = await res.json();
+          if (!res.ok) throw new Error(data.error);
+          allResults.push(...data.results);
+        } catch (batchErr) {
+          // Mark every creator in this batch as failed, but keep going
+          for (const c of batch) {
+            allResults.push({ handle: c.handle, platform: c.platform, status: 'failed', error: batchErr.message });
+          }
+        }
+        setProgress({ done: allResults.length, total, results: [...allResults] });
+
+        // Brief pause between requests to give server breathing room
+        if (i + BATCH_SIZE < total) await new Promise(r => setTimeout(r, 1000));
+      }
+
+      const succeeded = allResults.filter(r => r.status === 'success').length;
+      const failed    = allResults.filter(r => r.status === 'failed').length;
+      setSummary({ total, succeeded, failed });
     } catch (e) { setErr(e.message); }
     finally { setGenerating(false); }
   }
 
   const hasCandidates = candidates !== null && candidates.length > 0;
   const isDone        = summary !== null;
+  const [submittingJob, setSubmittingJob] = useState(false);
+
+  // ── Submit background job (large batches — safe to leave page) ──────────
+  async function submitBackgroundJob() {
+    if (!candidates?.length) return;
+    setSubmittingJob(true); setErr(null);
+    try {
+      const res = await fetch(`${API}/bulk/generate-job`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          creators: candidates,
+          series_id: seriesId,
+          character_context: characterContext,
+          character_key: characterKey,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to create job');
+      localStorage.removeItem(STORAGE_KEY);
+      if (onJobStarted) onJobStarted(data.job_id);
+    } catch (e) { setErr(e.message); }
+    finally { setSubmittingJob(false); }
+  }
 
   return (
-    <div style={{ padding: '32px', maxWidth: '720px', margin: '0 auto' }}>
+    <div style={{ padding: 'clamp(16px, 4vw, 32px)', maxWidth: '720px', margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ marginBottom: '28px' }}>
@@ -174,7 +253,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
             ))}
           </div>
 
-          <button onClick={onDone} style={{ width: '100%', padding: '12px', background: C.text, border: 'none', borderRadius: '10px', color: C.bg, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
+          <button onClick={() => { localStorage.removeItem(STORAGE_KEY); onDone(); }} style={{ width: '100%', padding: '12px', background: C.text, border: 'none', borderRadius: '10px', color: C.bg, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
             Back to The Feed →
           </button>
         </div>
@@ -195,6 +274,12 @@ export default function FeedBulkImport({ onDone, seriesId }) {
               <div style={{ height: '4px', background: C.border, borderRadius: '2px', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${(progress.done / progress.total) * 100}%`, background: C.pink, borderRadius: '2px', transition: 'width 0.4s ease' }} />
               </div>
+              <div style={{ fontSize: '12px', color: C.textDim, marginTop: '10px' }}>
+                {progress.done} of {progress.total} done
+                {progress.batchNum && progress.totalBatches > 1 && (
+                  <span> — batch {progress.batchNum} of {progress.totalBatches}</span>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -207,7 +292,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
             <div style={{ fontSize: '11px', color: C.pink, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               {candidates.length} creator{candidates.length !== 1 ? 's' : ''} ready to generate
             </div>
-            <button onClick={() => { setCandidates(null); setSummary(null); }} style={{ background: 'none', border: 'none', color: C.textFaint, fontSize: '12px', cursor: 'pointer' }}>
+            <button onClick={() => { setCandidates(null); setSummary(null); setPasteText(''); setParseErrors([]); setExtractNotes(''); setProgress(null); localStorage.removeItem(STORAGE_KEY); }} style={{ background: 'none', border: 'none', color: C.textFaint, fontSize: '12px', cursor: 'pointer' }}>
               Start over
             </button>
           </div>
@@ -252,9 +337,16 @@ export default function FeedBulkImport({ onDone, seriesId }) {
             ))}
           </div>
 
-          <button onClick={generateAll} style={{ width: '100%', padding: '13px', background: C.pink, border: 'none', borderRadius: '10px', color: '#fff', fontSize: '14px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px' }}>
+          <button onClick={generateAll} style={{ width: '100%', padding: '14px', minHeight: '48px', background: C.pink, border: 'none', borderRadius: '10px', color: '#fff', fontSize: '15px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '10px', WebkitAppearance: 'none' }}>
             Generate {candidates.length} Profile{candidates.length !== 1 ? 's' : ''} →
           </button>
+
+          {/* Background job option for larger batches */}
+          {onJobStarted && (
+            <button onClick={submitBackgroundJob} disabled={submittingJob} style={{ width: '100%', marginTop: '8px', padding: '14px', minHeight: '48px', background: 'transparent', border: `1px solid ${C.lavender}44`, borderRadius: '10px', color: C.lavender, fontSize: '13px', fontWeight: '600', cursor: submittingJob ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', WebkitAppearance: 'none' }}>
+              {submittingJob ? <><Spin /> Submitting…</> : `⟳ Generate in Background (safe to leave page)`}
+            </button>
+          )}
         </div>
       )}
 
@@ -267,7 +359,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
               { key: 'paste', label: '✎ Paste List' },
               { key: 'file',  label: '⊞ Upload Files' },
             ].map(m => (
-              <button key={m.key} onClick={() => setMode(m.key)} style={{ flex: 1, padding: '9px', background: mode === m.key ? C.surfaceHigh : 'transparent', border: `1px solid ${mode === m.key ? C.border : 'transparent'}`, borderRadius: '8px', color: mode === m.key ? C.text : C.textFaint, fontSize: '13px', fontWeight: mode === m.key ? '600' : '400', cursor: 'pointer', transition: 'all 0.15s' }}>
+              <button key={m.key} onClick={() => setMode(m.key)} style={{ flex: 1, padding: '12px 9px', minHeight: '44px', background: mode === m.key ? C.surfaceHigh : 'transparent', border: `1px solid ${mode === m.key ? C.border : 'transparent'}`, borderRadius: '8px', color: mode === m.key ? C.text : C.textFaint, fontSize: '14px', fontWeight: mode === m.key ? '600' : '400', cursor: 'pointer', transition: 'all 0.15s', WebkitAppearance: 'none' }}>
                 {m.label}
               </button>
             ))}
@@ -277,19 +369,41 @@ export default function FeedBulkImport({ onDone, seriesId }) {
           {mode === 'paste' && (
             <div>
               <div style={{ fontSize: '11px', color: C.textFaint, marginBottom: '8px', lineHeight: '1.6' }}>
-                One creator per line: <span style={{ color: C.pink, fontFamily: 'monospace' }}>@handle | platform | vibe sentence</span>
+                Paste anything — creator lists, notes, freeform text. Use <span style={{ color: C.pink, fontFamily: 'monospace' }}>@handle | platform | vibe</span> for instant parsing, or paste freeform text and AI will extract creators.
               </div>
               <textarea
                 value={pasteText}
                 onChange={e => setPasteText(e.target.value)}
+                onPaste={handlePaste}
                 placeholder={PASTE_PLACEHOLDER}
-                rows={10}
-                style={{ width: '100%', padding: '14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '10px', color: C.text, fontSize: '12px', fontFamily: 'monospace', lineHeight: '1.8', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }}
+                rows={8}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{ width: '100%', padding: '14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '10px', color: C.text, fontSize: '16px', fontFamily: 'monospace', lineHeight: '1.6', outline: 'none', resize: 'vertical', boxSizing: 'border-box', WebkitAppearance: 'none', WebkitTextSizeAdjust: '100%' }}
               />
+
+              {/* Show parse errors inline when no candidates found */}
+              {parseErrors.length > 0 && candidates !== null && candidates.length === 0 && (
+                <div style={{ marginTop: '12px', padding: '10px 14px', background: C.redSoft, border: `1px solid ${C.red}33`, borderRadius: '8px' }}>
+                  <div style={{ fontSize: '11px', color: C.red, fontWeight: '700', marginBottom: '6px' }}>
+                    {parseErrors.length} line{parseErrors.length !== 1 ? 's' : ''} could not be parsed:
+                  </div>
+                  {parseErrors.slice(0, 5).map((e, i) => (
+                    <div key={i} style={{ fontSize: '11px', color: C.textDim, marginBottom: '2px' }}>
+                      <span style={{ color: C.red }}>✕</span> &ldquo;{e.line}&rdquo; — {e.reason}
+                    </div>
+                  ))}
+                  {parseErrors.length > 5 && (
+                    <div style={{ fontSize: '11px', color: C.textFaint, marginTop: '4px' }}>…and {parseErrors.length - 5} more</div>
+                  )}
+                </div>
+              )}
+
               <button
                 onClick={parsePaste}
                 disabled={parsing || !pasteText.trim()}
-                style={{ marginTop: '12px', width: '100%', padding: '12px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '13px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                style={{ marginTop: '12px', width: '100%', padding: '14px', minHeight: '48px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '15px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', WebkitAppearance: 'none' }}>
                 {parsing && <Spin />}
                 {parsing ? 'Parsing…' : 'Parse List →'}
               </button>
@@ -330,7 +444,7 @@ export default function FeedBulkImport({ onDone, seriesId }) {
               <button
                 onClick={parseFiles}
                 disabled={parsing || !files.length}
-                style={{ width: '100%', padding: '12px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '13px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+                style={{ width: '100%', padding: '14px', minHeight: '48px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '15px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', WebkitAppearance: 'none' }}>
                 {parsing && <Spin />}
                 {parsing ? 'Extracting creators…' : `Extract from ${files.length} file${files.length !== 1 ? 's' : ''} →`}
               </button>

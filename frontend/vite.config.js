@@ -21,7 +21,8 @@ export default defineConfig(({ mode }) => {
         '/api': {
           target: 'http://127.0.0.1:3002',
           changeOrigin: true,
-          secure: false
+          secure: false,
+          timeout: 300000,
         },
         '/s3-proxy': {
           target: 'https://episode-metadata-storage-dev.s3.amazonaws.com',

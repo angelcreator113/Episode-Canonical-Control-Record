@@ -47,10 +47,11 @@ apiClient.interceptors.response.use(
   (error) => {
     // Handle 401 Unauthorized
     if (error.response?.status === 401) {
-      localStorage.removeItem('authToken');
-      localStorage.removeItem('token');
-      // Don't redirect in development to avoid breaking testing
-      if (process.env.NODE_ENV !== 'development') {
+      // In development, skip token removal — dev mode doesn't attach tokens
+      // so 401s are expected and shouldn't wipe stored credentials
+      if (!import.meta.env.DEV) {
+        localStorage.removeItem('authToken');
+        localStorage.removeItem('token');
         window.location.href = '/login';
       }
     }

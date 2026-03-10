@@ -1515,4 +1515,216 @@ router.post('/characters/:id/deep-profile/accept', async (req, res) => {
   }
 });
 
+/**
+ * POST /characters/bulk-deep-profile
+ * Generate deep profiles for multiple characters sequentially.
+ * Body: { ids: [1,2,3] }
+ */
+router.post('/characters/bulk-deep-profile', async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  if (ids.length > 50) {
+    return res.status(400).json({ error: 'Maximum 50 characters per batch' });
+  }
+
+  const db = getModels();
+  const Anthropic = require('@anthropic-ai/sdk');
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const results = { succeeded: 0, failed: 0, skipped: 0, errors: [] };
+
+  for (const id of ids) {
+    try {
+      const character = await db.RegistryCharacter.findByPk(id);
+      if (!character) { results.skipped++; continue; }
+
+      const existing = character.deep_profile || {};
+      const filledDims = Object.keys(existing).filter(k => {
+        const v = existing[k];
+        return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
+      });
+      if (filledDims.length >= 10) { results.skipped++; continue; }
+
+      const dossier = {};
+      for (const [k, v] of Object.entries({
+        name: character.display_name || character.selected_name,
+        role_type: character.role_type, role_label: character.role_label,
+        subtitle: character.subtitle, gender: character.gender,
+        ethnicity: character.ethnicity, personality: character.personality,
+        description: character.description, core_wound: character.core_wound,
+        core_desire: character.core_desire, core_fear: character.core_fear,
+        core_belief: character.core_belief, hidden_want: character.hidden_want,
+        mask_persona: character.mask_persona, truth_persona: character.truth_persona,
+        character_archetype: character.character_archetype,
+        signature_trait: character.signature_trait,
+        emotional_baseline: character.emotional_baseline,
+        aesthetic_dna: character.aesthetic_dna, career_status: character.career_status,
+        voice_signature: character.voice_signature, living_context: character.living_context,
+      })) { if (v !== null && v !== undefined && v !== '') dossier[k] = v; }
+
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 6000,
+        system: `You are generating a 14-dimension deep character anthropology.
+Character data: ${JSON.stringify(dossier, null, 2)}
+${filledDims.length > 0 ? `Existing (do NOT overwrite): ${JSON.stringify(existing, null, 2)}` : ''}
+Return ONLY a JSON object with 14 dimensions: life_stage, the_body, class_and_money, religion_and_meaning, race_and_culture, sexuality_and_desire, family_architecture, friendship_and_loyalty, ambition_and_identity, habits_and_rituals, speech_and_silence, grief_and_loss, politics_and_justice, the_unseen. Use null for fields you cannot infer. Be specific to THIS character.`,
+        messages: [{ role: 'user', content: `Generate deep_profile for ${dossier.name || 'this character'}.` }],
+      });
+
+      const raw = response.content[0].text;
+      const jsonMatch = raw.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) { results.failed++; results.errors.push(`${character.display_name}: parse failed`); continue; }
+      const generated = JSON.parse(jsonMatch[0]);
+
+      const merged = { ...existing };
+      for (const [dimKey, dimVal] of Object.entries(generated)) {
+        if (!dimVal || typeof dimVal !== 'object') continue;
+        merged[dimKey] = merged[dimKey] || {};
+        for (const [fieldKey, fieldVal] of Object.entries(dimVal)) {
+          if (fieldVal === null || fieldVal === undefined) continue;
+          if (!merged[dimKey][fieldKey]) merged[dimKey][fieldKey] = fieldVal;
+        }
+      }
+
+      character.deep_profile = merged;
+      await character.save();
+      results.succeeded++;
+    } catch (err) {
+      results.failed++;
+      results.errors.push(`ID ${id}: ${err.message}`);
+    }
+  }
+
+  return res.json({ success: true, ...results });
+});
+
+/**
+ * POST /characters/:id/writer-paragraph/generate
+ * Generate a writer-friendly narrative paragraph from the character's deep_profile + registry data.
+ */
+router.post('/characters/:id/writer-paragraph/generate', async (req, res) => {
+  const { id } = req.params;
+  const db = getModels();
+  try {
+    const character = await db.RegistryCharacter.findByPk(id);
+    if (!character) return res.status(404).json({ error: 'Character not found' });
+
+    const dp = character.deep_profile || {};
+    const hasProfile = Object.keys(dp).some(k => {
+      const v = dp[k];
+      return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
+    });
+
+    const charData = {};
+    for (const [k, v] of Object.entries({
+      name: character.display_name || character.selected_name,
+      role_type: character.role_type, role_label: character.role_label,
+      subtitle: character.subtitle, gender: character.gender,
+      ethnicity: character.ethnicity, personality: character.personality,
+      description: character.description, core_wound: character.core_wound,
+      core_desire: character.core_desire, core_fear: character.core_fear,
+      hidden_want: character.hidden_want, mask_persona: character.mask_persona,
+      truth_persona: character.truth_persona, character_archetype: character.character_archetype,
+      signature_trait: character.signature_trait, emotional_baseline: character.emotional_baseline,
+      aesthetic_dna: character.aesthetic_dna, voice_signature: character.voice_signature,
+    })) { if (v !== null && v !== undefined && v !== '') charData[k] = v; }
+
+    const Anthropic = require('@anthropic-ai/sdk');
+    const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 2000,
+      system: `You are writing a rich, literary character paragraph for a writer's reference.
+
+CHARACTER REGISTRY DATA:
+${JSON.stringify(charData, null, 2)}
+
+${hasProfile ? `DEEP PROFILE (14-dimension anthropology):\n${JSON.stringify(dp, null, 2)}` : 'No deep profile available — work only with registry data.'}
+
+Write a single, flowing paragraph (200–400 words) that captures who this person IS — not a list of traits but a lived-in portrait. Write it as a writer's reference paragraph, the kind of text a novelist pins above their desk. Include specific sensory details, behavioral tells, contradictions, and emotional textures. Do NOT use bullet points, headers, or labels. Write prose.`,
+      messages: [{ role: 'user', content: `Write the writer paragraph for ${charData.name || 'this character'}.` }],
+    });
+
+    const paragraph = response.content[0].text.trim();
+
+    return res.json({
+      success: true,
+      character_id: id,
+      character_name: character.display_name || character.selected_name,
+      paragraph,
+    });
+  } catch (err) {
+    console.error('[CharacterRegistry] POST /writer-paragraph/generate error:', err);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * POST /characters/bulk-writer-paragraph
+ * Generate writer paragraphs for multiple characters sequentially.
+ * Body: { ids: [1,2,3] }
+ */
+router.post('/characters/bulk-writer-paragraph', async (req, res) => {
+  const { ids } = req.body;
+  if (!Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'ids array required' });
+  }
+  if (ids.length > 50) {
+    return res.status(400).json({ error: 'Maximum 50 characters per batch' });
+  }
+
+  const db = getModels();
+  const Anthropic = require('@anthropic-ai/sdk');
+  const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+  const results = { succeeded: 0, failed: 0, skipped: 0, paragraphs: [] };
+
+  for (const id of ids) {
+    try {
+      const character = await db.RegistryCharacter.findByPk(id);
+      if (!character) { results.skipped++; continue; }
+
+      const dp = character.deep_profile || {};
+      const charData = {};
+      for (const [k, v] of Object.entries({
+        name: character.display_name || character.selected_name,
+        role_type: character.role_type, role_label: character.role_label,
+        subtitle: character.subtitle, gender: character.gender,
+        ethnicity: character.ethnicity, personality: character.personality,
+        description: character.description, core_wound: character.core_wound,
+        core_desire: character.core_desire, hidden_want: character.hidden_want,
+        mask_persona: character.mask_persona, truth_persona: character.truth_persona,
+        character_archetype: character.character_archetype,
+        signature_trait: character.signature_trait,
+        aesthetic_dna: character.aesthetic_dna, voice_signature: character.voice_signature,
+      })) { if (v !== null && v !== undefined && v !== '') charData[k] = v; }
+
+      const hasProfile = Object.keys(dp).some(k => {
+        const v = dp[k];
+        return v && typeof v === 'object' && Object.values(v).some(fv => fv !== null && fv !== undefined && fv !== '');
+      });
+
+      const response = await anthropic.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 2000,
+        system: `You are writing a rich, literary character paragraph for a writer's reference.
+CHARACTER: ${JSON.stringify(charData, null, 2)}
+${hasProfile ? `DEEP PROFILE:\n${JSON.stringify(dp, null, 2)}` : ''}
+Write a single flowing paragraph (200–400 words) capturing who this person IS — a writer's reference portrait with sensory details, behavioral tells, contradictions, emotional textures. Prose only, no lists or headers.`,
+        messages: [{ role: 'user', content: `Write the writer paragraph for ${charData.name || 'this character'}.` }],
+      });
+
+      const paragraph = response.content[0].text.trim();
+      results.paragraphs.push({ id, name: character.display_name || character.selected_name, paragraph });
+      results.succeeded++;
+    } catch (err) {
+      results.failed++;
+    }
+  }
+
+  return res.json({ success: true, ...results });
+});
+
 module.exports = router;
