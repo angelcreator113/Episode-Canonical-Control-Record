@@ -1448,7 +1448,7 @@ export default function CharacterRegistryPage() {
             )}
           </div>
           <div className="cr-header-center">
-            <h1 className="cr-header-title">{c.selected_name || c.display_name}</h1>
+            <h1 className="cr-header-title">{isMobile ? 'Characters' : (c.selected_name || c.display_name)}</h1>
           </div>
           <div className="cr-header-right">
             {!isMobile && (
@@ -3114,7 +3114,7 @@ function renderDossierTab(c, tab, editSection, form, saving, startEdit, cancelEd
     <div className="cr-dossier-section-header">
       <span className="cr-dossier-section-title">{title}</span>
       {!editing && (
-        <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)}>✎ Edit</button>
+        <button className="cr-dossier-edit-btn" onClick={() => startEdit(tab)} title="Edit this section">✎</button>
       )}
     </div>
   );

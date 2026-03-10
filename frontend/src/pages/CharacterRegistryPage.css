@@ -1121,13 +1121,15 @@
 /* Tab row (tabs + edit button) */
 .cr-dossier-tabs-row {
   display: flex;
-  align-items: stretch;
+  align-items: center;
   border-bottom: 1px solid var(--border);
-  background: var(--surface);
+  background: rgba(255,255,255,0.75);
+  backdrop-filter: blur(12px) saturate(1.3);
+  -webkit-backdrop-filter: blur(12px) saturate(1.3);
   position: sticky;
   top: 0;
   z-index: 50;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.04);
+  padding: 4px 0;
 }
 
 /* Tab scroll arrow buttons */
@@ -1206,106 +1208,113 @@
 .cr-dossier-tab {
   background: none;
   border: none;
-  padding: 14px 18px;
+  padding: 10px 16px;
   font-family: var(--sans);
-  font-size: var(--fs-base);
+  font-size: var(--fs-sm);
   font-weight: 500;
   color: var(--ink-faint);
   cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: all 0.12s;
+  border-radius: 20px;
+  border-bottom: none;
+  transition: all 0.18s ease;
   white-space: nowrap;
   flex-shrink: 0;
+  margin: 4px 2px;
 }
 
 .cr-dossier-tab:hover {
   color: var(--ink-dim);
+  background: var(--surface2);
 }
 
 .cr-dossier-tab.active {
-  color: var(--ink);
-  border-bottom-color: var(--pink);
+  color: #fff;
+  background: linear-gradient(135deg, var(--pink-deep), var(--purple-deep));
+  box-shadow: 0 2px 8px rgba(155, 77, 202, 0.2);
+  font-weight: 600;
 }
 
 /* Tab content */
 .cr-dossier-tab-content {
-  padding: 28px 32px 60px;
+  padding: 24px 28px 60px;
   flex: 1;
   min-width: 0;
   overflow-wrap: break-word;
   word-break: break-word;
+  background: var(--bg);
 }
 
 /* Section within a tab */
 .cr-dossier-section {
-  margin-bottom: 28px;
+  margin-bottom: 24px;
   min-width: 0;
   overflow-wrap: break-word;
   word-break: break-word;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.03);
 }
 
 .cr-dossier-section-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
   position: relative;
   z-index: 5;
 }
 
 .cr-dossier-section-title {
-  font-family: var(--mono);
-  font-size: var(--fs-xs);
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--ink-faint);
+  font-family: var(--sans);
+  font-size: var(--fs-base);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ink);
 }
 
 .cr-dossier-edit-btn {
-  background: var(--gold-bg);
-  border: 1px solid var(--gold-border);
-  border-radius: 8px;
-  padding: 8px 18px;
-  font-family: var(--mono);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--gold);
+  background: none;
+  border: none;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 16px;
+  color: var(--ink-faint);
   cursor: pointer;
-  transition: all 0.15s;
+  transition: all 0.18s ease;
   position: relative;
   z-index: 5;
-  -webkit-tap-highlight-color: rgba(184, 150, 58, 0.2);
+  -webkit-tap-highlight-color: rgba(0, 0, 0, 0.08);
   touch-action: manipulation;
-  min-height: 38px;
-  min-width: 64px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 4px;
   user-select: none;
 }
 
 .cr-dossier-edit-btn:hover {
-  background: rgba(184, 150, 58, 0.15);
-  border-color: var(--gold);
-  color: var(--gold-dim);
-  transform: translateY(-1px);
+  background: var(--surface2);
+  color: var(--ink);
+  transform: scale(1.1);
 }
 
 .cr-dossier-edit-btn:active {
-  transform: translateY(0);
-  background: rgba(184, 150, 58, 0.2);
+  transform: scale(0.95);
+  background: var(--surface3);
 }
 
 /* Read-mode data rows */
 .cr-dossier-row {
-  display: grid;
-  grid-template-columns: 140px 1fr;
-  gap: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
   padding: 10px 0;
-  border-bottom: 1px solid rgba(224,216,204,0.5);
-  align-items: baseline;
+  border-bottom: 1px solid rgba(224,216,204,0.3);
   min-width: 0;
 }
 
@@ -1321,26 +1330,25 @@
 
 .cr-dossier-row-label {
   font-family: var(--mono);
-  font-size: var(--fs-xs);
-  letter-spacing: 0.06em;
+  font-size: 11px;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-faint);
-  padding-top: 2px;
 }
 
 .cr-dossier-row-value {
   font-family: var(--sans);
-  font-size: var(--fs-md);
+  font-size: var(--fs-base);
   color: var(--ink);
-  line-height: 1.55;
+  line-height: 1.5;
   min-width: 0;
   overflow-wrap: break-word;
   word-break: break-word;
 }
 
 .cr-dossier-row-value.accent {
-  color: var(--gold);
-  font-weight: 500;
+  color: var(--accent);
+  font-weight: 600;
 }
 
 .cr-dossier-row-value.serif {
@@ -1885,10 +1893,11 @@
   .cr-dossier-tabs-row { top: 0; flex-wrap: wrap; }
   .cr-dossier-tabs { padding: 0 16px; flex: 1; min-width: 0; overflow-x: auto; -webkit-overflow-scrolling: touch; scrollbar-width: none; }
   .cr-dossier-tabs::-webkit-scrollbar { display: none; }
-  .cr-dossier-tab { padding: 12px 14px; font-size: 13px; }
+  .cr-dossier-tab { padding: 8px 12px; font-size: 13px; }
   .cr-tab-edit-btn { border-left: none; border-top: 1px solid var(--border); width: 100%; justify-content: center; min-height: 44px; font-size: 13px; padding: 12px; }
-  .cr-dossier-tab-content { padding: 20px 16px 40px; }
-  .cr-dossier-row { grid-template-columns: 120px 1fr; gap: 8px; }
+  .cr-dossier-tab-content { padding: 16px 12px 40px; }
+  .cr-dossier-row { gap: 2px; }
+  .cr-dossier-section { padding: 18px 16px; border-radius: 12px; }
   .cr-dossier-back { padding: 6px 16px; }
   .cr-dossier-name { font-size: 22px; }
 
@@ -2025,9 +2034,10 @@
     scrollbar-width: none;
   }
   .cr-dossier-tabs::-webkit-scrollbar { display: none; }
-  .cr-dossier-tab { padding: 11px 10px; font-size: 13px; min-height: 44px; }
-  .cr-dossier-tab-content { padding: 16px 12px 32px; }
-  .cr-dossier-row { grid-template-columns: 1fr; gap: 2px; }
+  .cr-dossier-tab { padding: 8px 10px; font-size: 12px; min-height: 44px; }
+  .cr-dossier-tab-content { padding: 14px 10px 32px; }
+  .cr-dossier-row { gap: 2px; }
+  .cr-dossier-section { padding: 16px 12px; border-radius: 10px; }
   .cr-dossier-section-header { flex-wrap: wrap; gap: 8px; }
   .cr-dossier-triad-item { padding: 12px; }
   .cr-dossier-duality-item { padding: 12px; }
@@ -2091,8 +2101,9 @@
   .cr-dossier-name { font-size: 18px; }
   .cr-dossier-back { padding: 8px 8px; }
   .cr-dossier-tabs { padding: 0 4px; }
-  .cr-dossier-tab { padding: 10px 8px; font-size: 12px; }
-  .cr-dossier-tab-content { padding: 12px 8px 28px; }
+  .cr-dossier-tab { padding: 7px 8px; font-size: 11px; }
+  .cr-dossier-tab-content { padding: 10px 8px 28px; }
+  .cr-dossier-section { padding: 14px 10px; border-radius: 10px; }
   .cr-dossier-left { padding: 12px 8px; }
   .cr-dossier-portrait { max-width: 100px; }
   .cr-dossier-portrait .portrait-icon { font-size: 52px; }
@@ -2440,10 +2451,9 @@
 }
 
 
-/* ── Dossier row labels: stacked layout on small phones ── */
+/* ── Dossier row labels: tighter on small phones ── */
 @media (max-width: 360px) {
   .cr-dossier-row {
-    grid-template-columns: 1fr;
     gap: 1px;
     padding: 8px 0;
   }
@@ -4917,19 +4927,30 @@
 
 /* ── Core Belief Banner (Overview tab) ── */
 .cr-dossier-belief-banner {
-  background: linear-gradient(135deg, rgba(var(--accent-rgb, 99,102,241), .12), rgba(var(--accent-rgb, 99,102,241), .04));
-  border-left: 3px solid var(--accent, #6366f1);
-  padding: 10px 14px;
-  border-radius: 6px;
-  margin-bottom: 12px;
+  background: linear-gradient(135deg, rgba(var(--accent-rgb), .08), rgba(var(--accent-rgb), .03));
+  border: 1px solid rgba(var(--accent-rgb), .15);
+  border-left: 3px solid var(--accent);
+  padding: 14px 18px;
+  border-radius: 10px;
+  margin-bottom: 16px;
   font-style: italic;
   color: var(--ink);
-  font-size: var(--fs-sm, 13px);
+  font-size: var(--fs-base);
+  line-height: 1.6;
+}
+.cr-dossier-belief-icon {
+  color: var(--accent);
+  margin-right: 8px;
+  font-style: normal;
+  font-size: 16px;
+}
+.cr-dossier-belief-text {
+  font-family: var(--serif);
 }
 .cr-dossier-belief-banner strong {
   font-style: normal;
   margin-right: 6px;
-  color: var(--accent, #6366f1);
+  color: var(--accent);
 }
 
 /* ── Writer Notes (Overview tab) ── */
