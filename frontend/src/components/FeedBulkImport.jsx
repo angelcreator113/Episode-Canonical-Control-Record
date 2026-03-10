@@ -30,7 +30,14 @@ const STORAGE_KEY = 'feed_bulk_import_draft';
 function loadDraft() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    return raw ? JSON.parse(raw) : null;
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    // Don't restore completed or in-progress generation — start fresh
+    if (data.summary || data.progress) {
+      localStorage.removeItem(STORAGE_KEY);
+      return null;
+    }
+    return data;
   } catch { return null; }
 }
 
@@ -92,18 +99,13 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
   }, [mode, pasteText, candidates, parseErrors, extractNotes, progress, summary]);
 
-  // ── Mobile paste fallback (some mobile browsers don't fire onChange for paste) ──
-  const handlePaste = useCallback(e => {
-    const pasted = e.clipboardData?.getData('text');
-    if (pasted) {
-      e.preventDefault();
-      setPasteText(prev => {
-        const el = e.target;
-        const start = el.selectionStart ?? prev.length;
-        const end   = el.selectionEnd   ?? prev.length;
-        return prev.slice(0, start) + pasted + prev.slice(end);
-      });
-    }
+  // ── Clear localStorage on unmount if generation completed ──────────────────
+  const summaryRef = useRef(summary);
+  useEffect(() => { summaryRef.current = summary; }, [summary]);
+  useEffect(() => {
+    return () => {
+      if (summaryRef.current) localStorage.removeItem(STORAGE_KEY);
+    };
   }, []);
 
   // ── Drag and drop ──────────────────────────────────────────────────────────
@@ -345,7 +347,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
             <div style={{ fontSize: '11px', color: C.pink, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               {candidates.length} creator{candidates.length !== 1 ? 's' : ''} ready to generate
             </div>
-            <button onClick={() => { setCandidates(null); setSummary(null); setPasteText(''); setParseErrors([]); setExtractNotes(''); setProgress(null); localStorage.removeItem(STORAGE_KEY); }} style={{ background: 'none', border: 'none', color: C.textFaint, fontSize: '12px', cursor: 'pointer' }}>
+            <button onClick={() => { setCandidates(null); setSummary(null); setPasteText(''); setFiles([]); setParseErrors([]); setExtractNotes(''); setProgress(null); localStorage.removeItem(STORAGE_KEY); }} style={{ background: 'none', border: 'none', color: C.textFaint, fontSize: '12px', cursor: 'pointer' }}>
               Start over
             </button>
           </div>
@@ -427,7 +429,6 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
               <textarea
                 value={pasteText}
                 onChange={e => setPasteText(e.target.value)}
-                onPaste={handlePaste}
                 placeholder={PASTE_PLACEHOLDER}
                 rows={8}
                 autoComplete="off"
