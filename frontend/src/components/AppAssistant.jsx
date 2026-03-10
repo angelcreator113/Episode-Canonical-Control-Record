@@ -13,6 +13,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import AmberPromptLibrary from './AmberPromptLibrary';
 import './AppAssistant.css';
 
 const API = '/api/v1/memories/assistant-command';
@@ -381,6 +382,11 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
               ))}
             </div>
           )}
+
+          <AmberPromptLibrary onSelect={(text) => {
+            setInput(text);
+            inputRef.current?.focus();
+          }} />
 
           <div className="apa-input-row">
             <textarea
