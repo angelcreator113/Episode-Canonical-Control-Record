@@ -22,6 +22,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName:   'AmberTaskQueue',
     tableName:   'amber_task_queue',
     underscored: true,
+    paranoid:    false,
   });
 
   return AmberTaskQueue;

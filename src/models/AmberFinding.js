@@ -41,6 +41,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName:   'AmberFinding',
     tableName:   'amber_findings',
     underscored: true,
+    paranoid:    false,
   });
 
   return AmberFinding;

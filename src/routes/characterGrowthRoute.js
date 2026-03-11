@@ -173,8 +173,8 @@ Respond with this exact JSON structure:
       );
       if (!character) continue;
 
-      // Respect finalized rule — no updates to finalized characters
-      if (character.status === 'finalized') continue;
+      // Alive characters skip bulk ops — individual edits only
+      if (character.depth_level === 'alive') continue;
 
       // ── Apply silent updates ──────────────────────────────────────────────
       const silentChanges = {};
@@ -295,8 +295,9 @@ router.post('/character-growth/:id/review', optionalAuth, async (req, res) => {
     const character = await db.RegistryCharacter.findByPk(log.character_id);
     if (!character) return res.status(404).json({ error: 'Character not found' });
 
-    if (character.status === 'finalized') {
-      return res.status(403).json({ error: 'Cannot update a finalized character' });
+    if (character.depth_level === 'alive') {
+      // Log the edit but do not block — alive characters can still be edited
+      console.log(`[characterGrowthRoute] Editing alive character: ${character.selected_name}`);
     }
 
     if (decision === 'accepted') {

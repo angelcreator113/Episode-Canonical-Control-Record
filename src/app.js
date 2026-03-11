@@ -1111,6 +1111,15 @@ try {
   console.error('✗ Failed to load Entanglement routes:', e.message);
 }
 
+// Character Generation v2 — full interior architecture from spark
+try {
+  const characterGenerationRoutes = require('./routes/characterGenerationRoutes');
+  app.use('/api/v1/character-generation', characterGenerationRoutes);
+  console.log('✓ Character Generation routes loaded at /api/v1/character-generation');
+} catch (e) {
+  console.error('✗ Failed to load Character Generation routes:', e.message);
+}
+
 // Tier Features — Continuity, Arcs, Timeline, Locations, Snapshots, Pipeline, Threads
 try {
   const tierFeaturesRoutes = require('./routes/tierFeatures');
