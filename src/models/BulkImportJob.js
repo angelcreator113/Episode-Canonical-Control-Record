@@ -23,6 +23,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName:  'BulkImportJob',
     tableName:  'bulk_import_jobs',
     underscored: true,
+    paranoid: false,
   });
 
   return BulkImportJob;
