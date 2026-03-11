@@ -24,6 +24,7 @@ import {
   ARCHETYPES, GLAM_ENERGIES, STORY_STATUSES,
 } from '../constants/characterConstants';
 import useRegistries from '../hooks/useRegistries';
+import CharacterCreationDrawer from '../components/CharacterCreationDrawer';
 
 /* ── Auto-scroll active tab into view on mobile ── */
 function useTabAutoScroll(tabRef, activeTab) {
@@ -201,9 +202,12 @@ export default function CharacterRegistryPage() {
   const [form, setForm]                   = useState({});
   const [saving, setSaving]               = useState(false);
 
-  // New character modal
+  // New character modal (legacy)
   const [showNewChar, setShowNewChar]     = useState(false);
   const [newCharForm, setNewCharForm]     = useState({ display_name: '', role_type: 'support', icon: '' });
+
+  // Character creation drawer
+  const [showCreationDrawer, setShowCreationDrawer] = useState(false);
 
   // Registry management
   const [showNewRegistry, setShowNewRegistry]     = useState(false);
@@ -1993,7 +1997,7 @@ export default function CharacterRegistryPage() {
         onViewMode={setViewMode}
         showFilters={showFilters}
         onToggleFilters={() => setShowFilters(f => !f)}
-        onNewChar={() => activeRegistry ? setShowNewChar(true) : null}
+        onNewChar={() => activeRegistry ? setShowCreationDrawer(true) : null}
         isMobile={isMobile}
       >
         {/* Registry tabs inside header */}
@@ -2845,6 +2849,27 @@ export default function CharacterRegistryPage() {
           </div>
         );
       })()}
+
+      {/* Character Creation Drawer */}
+      <CharacterCreationDrawer
+        open={showCreationDrawer}
+        onClose={() => setShowCreationDrawer(false)}
+        registryId={activeRegistry?.id}
+        registryTitle={activeRegistry?.title}
+        bookTag={activeRegistry?.book_tag || 'book1'}
+        existingCast={(activeRegistry?.characters || []).map(c => ({
+          id: c.id,
+          name: c.selected_name || c.display_name,
+          selected_name: c.selected_name,
+          display_name: c.display_name,
+          role_type: c.role_type,
+        }))}
+        onCommitted={() => {
+          showToast('Character created');
+          setShowCreationDrawer(false);
+          if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
+        }}
+      />
 
       {toast && <Toast msg={toast.msg} type={toast.type} onClose={() => setToast(null)} />}
     </div>

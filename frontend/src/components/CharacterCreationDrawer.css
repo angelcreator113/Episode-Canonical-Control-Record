@@ -1,0 +1,584 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   CharacterCreationDrawer.css — Right-slide drawer for character creation
+   Three states: Spark → Generating → Proposal
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── Backdrop ── */
+.ccd-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(3px);
+  z-index: 9000;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+.ccd-backdrop.open { opacity: 1; }
+
+/* ── Drawer panel ── */
+.ccd-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 560px;
+  max-width: 100vw;
+  background: #fafaf8;
+  border-left: 1px solid #e0ddd6;
+  z-index: 9001;
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+.ccd-drawer.open {
+  transform: translateX(0);
+}
+
+/* ── Header ── */
+.ccd-header {
+  padding: 20px 24px 16px;
+  border-bottom: 1px solid #e8e5de;
+  flex-shrink: 0;
+}
+.ccd-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+.ccd-header-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: #1a1a18;
+  letter-spacing: -0.3px;
+  margin: 0;
+}
+.ccd-header-sub {
+  font-size: 11px;
+  color: #8a8680;
+  margin-top: 3px;
+  font-style: italic;
+}
+.ccd-close-btn {
+  background: none;
+  border: none;
+  font-size: 18px;
+  color: #999;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s, color 0.15s;
+}
+.ccd-close-btn:hover {
+  background: #eee;
+  color: #333;
+}
+
+/* ── Step indicator ── */
+.ccd-steps {
+  display: flex;
+  gap: 6px;
+  margin-top: 14px;
+}
+.ccd-step {
+  flex: 1;
+  text-align: center;
+}
+.ccd-step-bar {
+  height: 2px;
+  border-radius: 1px;
+  background: #e0ddd6;
+  margin-bottom: 5px;
+  transition: background 0.4s ease;
+}
+.ccd-step.active .ccd-step-bar,
+.ccd-step.done .ccd-step-bar {
+  background: #c9a84c;
+}
+.ccd-step-label {
+  font-size: 9.5px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  font-weight: 500;
+  color: #bbb;
+  transition: color 0.3s;
+}
+.ccd-step.active .ccd-step-label {
+  color: #c9a84c;
+  font-weight: 700;
+}
+.ccd-step.done .ccd-step-label {
+  color: #999;
+}
+
+/* ── Scrollable body ── */
+.ccd-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 24px;
+}
+
+/* ── Footer ── */
+.ccd-footer {
+  padding: 16px 24px;
+  border-top: 1px solid #e8e5de;
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  flex-shrink: 0;
+  background: #fafaf8;
+}
+
+/* ── Buttons ── */
+.ccd-btn {
+  padding: 9px 18px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  letter-spacing: 0.2px;
+  border: none;
+}
+.ccd-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.ccd-btn-primary {
+  background: #c9a84c;
+  color: #fff;
+}
+.ccd-btn-primary:hover:not(:disabled) {
+  background: #b8944e;
+}
+.ccd-btn-ghost {
+  background: transparent;
+  color: #8a8680;
+  border: 1px solid #e0ddd6;
+}
+.ccd-btn-ghost:hover:not(:disabled) {
+  background: #f0ede6;
+  color: #555;
+}
+.ccd-btn-confirm {
+  background: #5dab62;
+  color: #fff;
+}
+.ccd-btn-confirm:hover:not(:disabled) {
+  background: #4d9b52;
+}
+.ccd-btn-discard {
+  background: transparent;
+  color: #c96e6e;
+  border: 1px solid #e0ddd6;
+}
+.ccd-btn-discard:hover:not(:disabled) {
+  background: #fdf2f2;
+}
+
+/* ═══ STATE 1: SPARK ═══ */
+
+.ccd-spark-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.ccd-field {
+  display: flex;
+  flex-direction: column;
+}
+.ccd-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #8a8680;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ccd-input,
+.ccd-select {
+  padding: 10px 12px;
+  background: #fff;
+  border: 1px solid #e0ddd6;
+  border-radius: 6px;
+  color: #1a1a18;
+  font-size: 13.5px;
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.ccd-input:focus,
+.ccd-select:focus {
+  border-color: #c9a84c;
+}
+.ccd-input::placeholder {
+  color: #c0b8a8;
+}
+.ccd-context-row {
+  display: flex;
+  gap: 12px;
+  margin-top: 4px;
+}
+.ccd-context-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 10px;
+  background: #f0ede6;
+  border: 1px solid #e0ddd6;
+  border-radius: 4px;
+  font-size: 11px;
+  color: #666;
+}
+.ccd-context-chip strong {
+  color: #444;
+  font-weight: 600;
+}
+
+/* ═══ STATE 2: GENERATING ═══ */
+
+.ccd-generating {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-top: 12px;
+}
+.ccd-amber-voice {
+  position: relative;
+  padding: 18px 20px;
+  background: linear-gradient(135deg, #faf6ee 0%, #f5f0e4 100%);
+  border: 1px solid #e8e0cc;
+  border-radius: 10px;
+}
+.ccd-amber-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  color: #c9a84c;
+  margin-bottom: 8px;
+}
+.ccd-amber-text {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #4a4640;
+  font-style: italic;
+  min-height: 60px;
+}
+.ccd-amber-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 14px;
+  background: #c9a84c;
+  margin-left: 2px;
+  vertical-align: text-bottom;
+  animation: ccd-blink 1s step-end infinite;
+}
+@keyframes ccd-blink {
+  50% { opacity: 0; }
+}
+
+.ccd-gen-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 8px;
+}
+.ccd-gen-step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11.5px;
+  color: #999;
+  transition: color 0.3s;
+}
+.ccd-gen-step.active {
+  color: #c9a84c;
+  font-weight: 600;
+}
+.ccd-gen-step.done {
+  color: #5dab62;
+}
+.ccd-gen-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ddd;
+  flex-shrink: 0;
+  transition: background 0.3s;
+}
+.ccd-gen-step.active .ccd-gen-dot {
+  background: #c9a84c;
+  animation: ccd-pulse 1.5s ease infinite;
+}
+.ccd-gen-step.done .ccd-gen-dot {
+  background: #5dab62;
+}
+@keyframes ccd-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.7; }
+}
+
+/* ═══ STATE 3: PROPOSAL ═══ */
+
+.ccd-proposal {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.ccd-proposal-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a1a18;
+  letter-spacing: -0.5px;
+  margin-bottom: 4px;
+}
+.ccd-proposal-meta {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.ccd-meta-tag {
+  padding: 3px 10px;
+  border-radius: 4px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* ── Want Architecture 3-card row ── */
+.ccd-want-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 10px;
+}
+.ccd-want-card {
+  padding: 14px;
+  background: #fff;
+  border: 1px solid #e8e5de;
+  border-radius: 8px;
+  transition: border-color 0.2s;
+}
+.ccd-want-card:hover {
+  border-color: #c9a84c;
+}
+.ccd-want-card-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  margin-bottom: 6px;
+}
+.ccd-want-card-label.desire { color: #c9a84c; }
+.ccd-want-card-label.hidden { color: #9b4dca; }
+.ccd-want-card-label.fear   { color: #d46070; }
+.ccd-want-card-value {
+  font-size: 12px;
+  color: #333;
+  line-height: 1.55;
+}
+
+/* ── Collapsible sections ── */
+.ccd-section {
+  border: 1px solid #e8e5de;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+.ccd-section-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s;
+}
+.ccd-section-header:hover {
+  background: #faf8f4;
+}
+.ccd-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1a1a18;
+  letter-spacing: -0.2px;
+}
+.ccd-section-chevron {
+  font-size: 11px;
+  color: #999;
+  transition: transform 0.2s;
+}
+.ccd-section.open .ccd-section-chevron {
+  transform: rotate(180deg);
+}
+.ccd-section-body {
+  padding: 0 16px 14px;
+}
+
+/* ── Inline editable field ── */
+.ccd-editable {
+  position: relative;
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+  cursor: text;
+  margin: 4px 0;
+}
+.ccd-editable:hover {
+  background: #f5f2ec;
+}
+.ccd-editable-label {
+  font-size: 9.5px;
+  font-weight: 600;
+  color: #8a8680;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.ccd-editable-value {
+  font-size: 12.5px;
+  color: #333;
+  line-height: 1.5;
+}
+.ccd-editable-input {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid #c9a84c;
+  border-radius: 4px;
+  font-size: 12.5px;
+  color: #333;
+  background: #fff;
+  font-family: inherit;
+  outline: none;
+  resize: vertical;
+}
+
+/* ── Dilemma cards ── */
+.ccd-dilemma-card {
+  padding: 12px 14px;
+  background: #faf6ee;
+  border: 1px solid #e8e0cc;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.ccd-dilemma-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: #c9a84c;
+  margin-bottom: 4px;
+}
+.ccd-dilemma-text {
+  font-size: 12px;
+  color: #4a4640;
+  line-height: 1.5;
+}
+
+/* ── Feed Profile toggle ── */
+.ccd-feed-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 16px;
+  background: #fff;
+  border: 1px solid #e8e5de;
+  border-radius: 8px;
+}
+.ccd-toggle-switch {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: #ddd;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  flex-shrink: 0;
+}
+.ccd-toggle-switch.on {
+  background: #c9a84c;
+}
+.ccd-toggle-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #fff;
+  border-radius: 50%;
+  transition: left 0.2s;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+.ccd-toggle-switch.on .ccd-toggle-knob {
+  left: 18px;
+}
+.ccd-feed-fields {
+  margin-top: 10px;
+  padding: 12px;
+  background: #faf8f4;
+  border-radius: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Ghost characters list ── */
+.ccd-ghost-section {
+  margin-top: 4px;
+  padding: 14px 16px;
+  background: #f8f6f0;
+  border: 1px dashed #e0ddd6;
+  border-radius: 8px;
+}
+.ccd-ghost-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+  color: #8a8680;
+  margin-bottom: 10px;
+}
+.ccd-ghost-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid #eee;
+}
+.ccd-ghost-item:last-child {
+  border-bottom: none;
+}
+.ccd-ghost-name {
+  font-size: 12px;
+  color: #555;
+  font-weight: 500;
+}
+.ccd-ghost-rel {
+  font-size: 10.5px;
+  color: #999;
+  font-style: italic;
+}
+
+/* ── Error banner ── */
+.ccd-error {
+  padding: 8px 12px;
+  background: #fdf2f2;
+  border: 1px solid #e8c0c0;
+  border-radius: 6px;
+  font-size: 12px;
+  color: #c96e6e;
+}
+
+/* ── Responsive ── */
+@media (max-width: 600px) {
+  .ccd-drawer {
+    width: 100vw;
+  }
+  .ccd-want-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+}
