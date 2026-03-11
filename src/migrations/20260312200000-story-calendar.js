@@ -12,6 +12,21 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
 
+    // Drop any partially-created tables from previous failed runs
+    // (reverse order for FK constraints; safe since these are brand new tables)
+    await queryInterface.dropTable('calendar_event_ripples').catch(() => {});
+    await queryInterface.dropTable('calendar_event_attendees').catch(() => {});
+    await queryInterface.dropTable('story_calendar_events').catch(() => {});
+    await queryInterface.dropTable('story_clock_markers').catch(() => {});
+
+    // Drop ENUM types that may have been partially created
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_story_calendar_events_event_type" CASCADE').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_story_calendar_events_visibility" CASCADE').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_story_calendar_events_logged_by" CASCADE').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_calendar_event_attendees_attendee_type" CASCADE').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_calendar_event_ripples_ripple_type" CASCADE').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_calendar_event_ripples_deep_profile_dimension" CASCADE').catch(() => {});
+
     // ═══════════════════════════════════════════════════════════════════════
     // 1. story_clock_markers — named story positions with real calendar dates
     // ═══════════════════════════════════════════════════════════════════════

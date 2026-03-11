@@ -9,6 +9,10 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Drop partially-created table from previous failed runs
+    await queryInterface.dropTable('feed_profile_relationships').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_feed_profile_relationships_relationship_type" CASCADE').catch(() => {});
+
     await queryInterface.createTable('feed_profile_relationships', {
       id: {
         type: Sequelize.UUID,

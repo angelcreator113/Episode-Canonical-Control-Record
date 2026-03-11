@@ -8,6 +8,9 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    const desc = await queryInterface.describeTable('social_profiles');
+    if (desc.visibility_tier) return; // Already applied
+
     await queryInterface.addColumn('social_profiles', 'visibility_tier', {
       type: Sequelize.ENUM('public', 'semi_private', 'underground'),
       defaultValue: 'public',

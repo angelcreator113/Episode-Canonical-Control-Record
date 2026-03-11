@@ -50,29 +50,10 @@ if (process.env.NODE_ENV !== 'test') {
       await db.authenticate();
       console.log('✅ Database connection authenticated');
 
-      // Run pending Sequelize CLI migrations automatically on startup
-      try {
-        const Umzug = require('umzug');
-        const path = require('path');
-        const umzug = new Umzug({
-          storage: 'sequelize',
-          storageOptions: { sequelize: db.sequelize },
-          migrations: {
-            path: path.join(__dirname, 'migrations'),
-            params: [db.sequelize.getQueryInterface(), db.Sequelize || require('sequelize')],
-          },
-        });
-        const pending = await umzug.pending();
-        if (pending.length > 0) {
-          console.log(`🔄 Running ${pending.length} pending migration(s)...`);
-          await umzug.up();
-          console.log('✅ Migrations completed');
-        } else {
-          console.log('✅ All migrations already applied');
-        }
-      } catch (migErr) {
-        console.error('⚠️  Migration runner error (non-fatal):', migErr.message);
-      }
+      // Migrations are handled by sequelize-cli db:migrate during deployment.
+      // Running them again at app startup via Umzug causes partial state when
+      // migrations fail mid-execution (tables half-created, missing columns).
+      // The deploy pipeline now uses 'set -eo pipefail' to catch migration errors.
 
       // Check if DB sync is enabled via environment variable
       console.log('DEBUG: ENABLE_DB_SYNC =', process.env.ENABLE_DB_SYNC);
