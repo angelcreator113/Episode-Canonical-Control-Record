@@ -318,7 +318,9 @@ export default function AmberPromptLibrary({ onSelect }) {
         /* ── Prompt list ────────────────────────────────────────────── */
         .apl-prompts {
           flex: 1;
+          min-width: 0;
           overflow-y: auto;
+          overflow-x: hidden;
           padding: 12px 16px 20px;
         }
         .apl-category-label {
@@ -351,6 +353,8 @@ export default function AmberPromptLibrary({ onSelect }) {
           cursor: pointer;
           text-align: left;
           transition: background 0.12s, border-color 0.12s, box-shadow 0.12s;
+          min-width: 0;
+          overflow: hidden;
         }
         .apl-prompt-btn:hover {
           background: #fff;
@@ -380,6 +384,42 @@ export default function AmberPromptLibrary({ onSelect }) {
           letter-spacing: 0.03em;
         }
         .apl-prompt-btn.copied .apl-prompt-action { color: #a889c8; }
+
+        /* ── Embedded inside AppAssistant panel ─────────────────────── */
+        .apa-panel .apl-trigger {
+          position: static;
+          width: 28px;
+          height: 28px;
+          font-size: 12px;
+          margin: 0 14px 0 auto;
+          display: flex;
+          flex-shrink: 0;
+          z-index: 1;
+          box-shadow: none;
+          border-color: #e0e7ff;
+          color: #6366f1;
+          background: #eef2ff;
+        }
+        .apa-panel .apl-trigger:hover {
+          background: #e0e7ff;
+          box-shadow: none;
+          transform: scale(1.05);
+        }
+        .apa-panel .apl-overlay {
+          display: none;
+        }
+        .apa-panel .apl-panel {
+          position: absolute;
+          bottom: 60px;
+          right: 0;
+          left: 0;
+          width: auto;
+          max-width: 100%;
+          max-height: 50vh;
+          z-index: 10;
+          border-radius: 12px 12px 0 0;
+          box-shadow: 0 -4px 20px rgba(0,0,0,0.10);
+        }
 
         /* ── Mobile ─────────────────────────────────────────────────── */
         @media (max-width: 600px) {
