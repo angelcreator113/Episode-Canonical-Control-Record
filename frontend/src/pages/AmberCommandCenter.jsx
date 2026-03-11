@@ -37,18 +37,18 @@ const PRIORITY_COLOR = {
   low:    '#9a94a8',
 };
 
-// ── Shared styles ─────────────────────────────────────────────────────────────
+// ── Shared styles (light theme) ──────────────────────────────────────────────
 const s = {
   page: {
     minHeight:   '100vh',
-    background:  '#0d0d0f',
+    background:  '#fafaf9',
     padding:     '32px',
-    fontFamily:  'system-ui, -apple-system, sans-serif',
-    color:       '#f0eef4',
+    fontFamily:  "'DM Sans', system-ui, -apple-system, sans-serif",
+    color:       '#2a1f2d',
   },
   card: {
-    background:   '#141416',
-    border:       '1px solid #2a2a2f',
+    background:   '#fff',
+    border:       '1px solid #ede8e3',
     borderRadius: '12px',
     padding:      '20px 24px',
     marginBottom: '12px',
@@ -62,8 +62,8 @@ const s = {
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
     color,
-    background:    color + '20',
-    border:        `1px solid ${color}40`,
+    background:    color + '14',
+    border:        `1px solid ${color}30`,
   }),
   btn: (bg, color = '#fff') => ({
     padding:      '8px 16px',
@@ -79,9 +79,9 @@ const s = {
   btnGhost: {
     padding:      '8px 16px',
     background:   'transparent',
-    border:       '1px solid #2a2a2f',
+    border:       '1px solid #ede8e3',
     borderRadius: '8px',
-    color:        '#9a94a8',
+    color:        '#9a8c9e',
     fontSize:     '12px',
     cursor:       'pointer',
   },
@@ -111,7 +111,7 @@ function FindingCard({ finding, onApprove, onExecute, onDismiss, executing }) {
               <span style={s.pill('#78b89a')} title="Eligible for Level 2 auto-approve when unlocked">L2 eligible</span>
             )}
           </div>
-          <div style={{ fontSize: '14px', fontWeight: '600', color: '#f0eef4', lineHeight: '1.4' }}>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: '#2a1f2d', lineHeight: '1.4' }}>
             {finding.title}
           </div>
         </div>
@@ -126,28 +126,28 @@ function FindingCard({ finding, onApprove, onExecute, onDismiss, executing }) {
       {/* Expanded detail */}
       {expanded && (
         <div style={{ marginTop: '14px' }}>
-          <p style={{ fontSize: '13px', color: '#9a94a8', lineHeight: '1.7', margin: '0 0 12px' }}>
+          <p style={{ fontSize: '13px', color: '#666', lineHeight: '1.7', margin: '0 0 12px' }}>
             {finding.description}
           </p>
 
           {finding.affected_file && (
-            <div style={{ fontSize: '11px', color: '#5a5468', marginBottom: '8px', fontFamily: 'monospace' }}>
+            <div style={{ fontSize: '11px', color: '#9a8c9e', marginBottom: '8px', fontFamily: 'monospace' }}>
               {finding.affected_file}
             </div>
           )}
           {finding.affected_route && (
-            <div style={{ fontSize: '11px', color: '#5a5468', marginBottom: '8px', fontFamily: 'monospace' }}>
+            <div style={{ fontSize: '11px', color: '#9a8c9e', marginBottom: '8px', fontFamily: 'monospace' }}>
               {finding.affected_route}
             </div>
           )}
 
           {/* Proposed fix */}
           {finding.proposed_fix && (
-            <div style={{ background: '#1c1c20', border: '1px solid #2a2a2f', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
+            <div style={{ background: '#fdf9f5', border: '1px solid #f0e4d0', borderRadius: '8px', padding: '12px', marginBottom: '12px' }}>
               <div style={{ fontSize: '10px', color: '#d4789a', fontWeight: '700', letterSpacing: '0.1em', marginBottom: '6px' }}>
                 AMBER'S PROPOSED FIX
               </div>
-              <p style={{ fontSize: '12px', color: '#b0a8c0', lineHeight: '1.7', margin: 0 }}>
+              <p style={{ fontSize: '12px', color: '#555', lineHeight: '1.7', margin: 0 }}>
                 {finding.proposed_fix}
               </p>
             </div>
@@ -155,11 +155,11 @@ function FindingCard({ finding, onApprove, onExecute, onDismiss, executing }) {
 
           {/* Diff */}
           {finding.proposed_diff && (
-            <div style={{ background: '#0d0d0f', border: '1px solid #2a2a2f', borderRadius: '8px', padding: '12px', marginBottom: '12px', overflowX: 'auto' }}>
+            <div style={{ background: '#f5f3f8', border: '1px solid #e8dff0', borderRadius: '8px', padding: '12px', marginBottom: '12px', overflowX: 'auto' }}>
               <div style={{ fontSize: '10px', color: '#7ab3d4', fontWeight: '700', letterSpacing: '0.1em', marginBottom: '6px' }}>
                 CODE CHANGE
               </div>
-              <pre style={{ fontSize: '11px', color: '#9a94a8', margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+              <pre style={{ fontSize: '11px', color: '#555', margin: 0, whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
                 {finding.proposed_diff}
               </pre>
             </div>
@@ -168,8 +168,8 @@ function FindingCard({ finding, onApprove, onExecute, onDismiss, executing }) {
           {/* Confidence */}
           {finding.fix_confidence != null && (
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
-              <span style={{ fontSize: '11px', color: '#5a5468' }}>Amber's confidence:</span>
-              <div style={{ flex: 1, height: '4px', background: '#2a2a2f', borderRadius: '2px', maxWidth: '120px' }}>
+              <span style={{ fontSize: '11px', color: '#9a8c9e' }}>Amber's confidence:</span>
+              <div style={{ flex: 1, height: '4px', background: '#ede8e3', borderRadius: '2px', maxWidth: '120px' }}>
                 <div style={{
                   height: '100%',
                   width: `${finding.fix_confidence}%`,
@@ -177,15 +177,15 @@ function FindingCard({ finding, onApprove, onExecute, onDismiss, executing }) {
                   borderRadius: '2px',
                 }} />
               </div>
-              <span style={{ fontSize: '11px', color: '#9a94a8' }}>{finding.fix_confidence}%</span>
+              <span style={{ fontSize: '11px', color: '#888' }}>{finding.fix_confidence}%</span>
             </div>
           )}
 
           {/* Amber verdict after execution */}
           {finding.amber_verdict && (
-            <div style={{ background: '#1c1c20', borderLeft: '3px solid #d4789a', padding: '10px 14px', borderRadius: '0 8px 8px 0', marginBottom: '12px' }}>
+            <div style={{ background: '#fdf0f4', borderLeft: '3px solid #d4789a', padding: '10px 14px', borderRadius: '0 8px 8px 0', marginBottom: '12px' }}>
               <div style={{ fontSize: '10px', color: '#d4789a', fontWeight: '700', letterSpacing: '0.1em', marginBottom: '4px' }}>AMBER</div>
-              <p style={{ fontSize: '12px', color: '#b0a8c0', margin: 0, fontStyle: 'italic', lineHeight: '1.6' }}>
+              <p style={{ fontSize: '12px', color: '#555', margin: 0, fontStyle: 'italic', lineHeight: '1.6' }}>
                 {finding.amber_verdict}
               </p>
             </div>
@@ -208,11 +208,11 @@ function FindingCard({ finding, onApprove, onExecute, onDismiss, executing }) {
               <button
                 onClick={() => onExecute(finding.id)}
                 disabled={executing === finding.id}
-                style={s.btn(executing === finding.id ? '#2a2a2f' : '#7ab3d4')}
+                style={s.btn(executing === finding.id ? '#ede8e3' : '#7ab3d4', executing === finding.id ? '#9a8c9e' : '#fff')}
               >
                 {executing === finding.id ? 'Sending to Claude Code...' : 'Execute via Claude Code'}
               </button>
-              <span style={{ fontSize: '11px', color: '#5a5468' }}>
+              <span style={{ fontSize: '11px', color: '#9a8c9e' }}>
                 Approved — Claude Code will apply this change to your codebase
               </span>
             </div>
@@ -240,9 +240,9 @@ function TaskCard({ task }) {
         <span style={s.pill('#5a5468')}>{task.type}</span>
         <span style={s.pill('#3a3a42')}>{task.status}</span>
       </div>
-      <div style={{ fontSize: '14px', fontWeight: '600', color: '#f0eef4' }}>{task.title}</div>
+      <div style={{ fontSize: '14px', fontWeight: '600', color: '#2a1f2d' }}>{task.title}</div>
       {task.description && (
-        <p style={{ fontSize: '12px', color: '#9a94a8', margin: '6px 0 0', lineHeight: '1.6' }}>
+        <p style={{ fontSize: '12px', color: '#666', margin: '6px 0 0', lineHeight: '1.6' }}>
           {task.description}
         </p>
       )}
@@ -342,17 +342,17 @@ export default function AmberCommandCenter() {
           <div style={{ fontSize: '11px', color: '#d4789a', fontWeight: '700', letterSpacing: '0.12em', textTransform: 'uppercase', marginBottom: '6px' }}>
             Amber
           </div>
-          <h1 style={{ fontFamily: 'Georgia, serif', fontSize: '28px', fontWeight: '700', color: '#f0eef4', margin: 0 }}>
+          <h1 style={{ fontFamily: "'Cormorant Garamond', Georgia, serif", fontSize: '28px', fontWeight: '700', color: '#2a1f2d', margin: 0 }}>
             Command Center
           </h1>
-          <p style={{ fontSize: '13px', color: '#9a94a8', margin: '6px 0 0', lineHeight: '1.6' }}>
+          <p style={{ fontSize: '13px', color: '#9a8c9e', margin: '6px 0 0', lineHeight: '1.6' }}>
             Amber's findings, proposed fixes, and the build queue. You approve. She executes.
           </p>
         </div>
         <button
           onClick={runScan}
           disabled={scanning}
-          style={s.btn(scanning ? '#2a2a2f' : '#d4789a')}
+          style={s.btn(scanning ? '#ede8e3' : '#d4789a', scanning ? '#9a8c9e' : '#fff')}
         >
           {scanning ? 'Scanning...' : 'Run Diagnostic Scan'}
         </button>
@@ -360,8 +360,8 @@ export default function AmberCommandCenter() {
 
       {/* Scan result banner */}
       {scanResult && !scanResult.error && (
-        <div style={{ ...s.card, borderLeft: '3px solid #78b89a', marginBottom: '20px' }}>
-          <span style={{ fontSize: '13px', color: '#78b89a' }}>
+        <div style={{ ...s.card, borderLeft: '3px solid #78b89a', background: '#f0f7ee', marginBottom: '20px' }}>
+          <span style={{ fontSize: '13px', color: '#5a8a50' }}>
             Scan complete — {scanResult.newFindings} new finding{scanResult.newFindings !== 1 ? 's' : ''}
             {scanResult.criticalCount > 0 && `, ${scanResult.criticalCount} critical`}
           </span>
@@ -370,11 +370,11 @@ export default function AmberCommandCenter() {
 
       {/* Critical alert */}
       {critical.length > 0 && (
-        <div style={{ ...s.card, borderLeft: '3px solid #d47878', background: '#1a1012', marginBottom: '20px' }}>
+        <div style={{ ...s.card, borderLeft: '3px solid #d47878', background: '#fdf0f0', marginBottom: '20px' }}>
           <div style={{ fontSize: '11px', color: '#d47878', fontWeight: '700', letterSpacing: '0.1em', marginBottom: '4px' }}>
             {critical.length} CRITICAL / URGENT
           </div>
-          <p style={{ fontSize: '13px', color: '#b0a8c0', margin: 0, lineHeight: '1.6' }}>
+          <p style={{ fontSize: '13px', color: '#555', margin: 0, lineHeight: '1.6' }}>
             {critical.map(f => f.title).join(' \u00B7 ')}
           </p>
         </div>
@@ -389,27 +389,27 @@ export default function AmberCommandCenter() {
           { label: 'Applied this session',  value: findings.filter(f => f.status === 'applied').length,                      color: '#78b89a' },
           { label: 'Build queue',           value: tasks.length,                                                              color: '#a889c8' },
         ].map(stat => (
-          <div key={stat.label} style={{ background: '#141416', border: '1px solid #2a2a2f', borderRadius: '10px', padding: '14px 20px', minWidth: '120px' }}>
-            <div style={{ fontSize: '22px', fontWeight: '700', color: stat.color, fontFamily: 'Georgia, serif' }}>{stat.value}</div>
-            <div style={{ fontSize: '11px', color: '#5a5468', marginTop: '2px' }}>{stat.label}</div>
+          <div key={stat.label} style={{ background: '#fff', border: '1px solid #ede8e3', borderRadius: '10px', padding: '14px 20px', minWidth: '120px' }}>
+            <div style={{ fontSize: '22px', fontWeight: '700', color: stat.color, fontFamily: "'Cormorant Garamond', Georgia, serif" }}>{stat.value}</div>
+            <div style={{ fontSize: '11px', color: '#9a8c9e', marginTop: '2px' }}>{stat.label}</div>
           </div>
         ))}
       </div>
 
       {/* Tabs */}
-      <div style={{ display: 'flex', gap: '4px', background: '#141416', border: '1px solid #2a2a2f', borderRadius: '10px', padding: '4px', marginBottom: '20px', width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: '8px', marginBottom: '20px' }}>
         {[
           { key: 'findings', label: `Findings (${active.length})` },
           { key: 'queue',    label: `Build Queue (${tasks.length})` },
         ].map(t => (
           <button key={t.key} onClick={() => setTab(t.key)} style={{
-            padding:      '8px 18px',
-            background:   tab === t.key ? '#1c1c20' : 'transparent',
-            border:       `1px solid ${tab === t.key ? '#2a2a2f' : 'transparent'}`,
+            padding:      '7px 16px',
+            background:   tab === t.key ? 'rgba(168, 137, 200, 0.08)' : '#fff',
+            border:       `1px solid ${tab === t.key ? '#a889c8' : '#ede8e3'}`,
             borderRadius: '8px',
-            color:        tab === t.key ? '#f0eef4' : '#5a5468',
+            color:        tab === t.key ? '#a889c8' : '#9a8c9e',
             fontSize:     '13px',
-            fontWeight:   tab === t.key ? '600' : '400',
+            fontWeight:   tab === t.key ? '600' : '500',
             cursor:       'pointer',
             transition:   'all 0.15s',
           }}>
@@ -425,8 +425,8 @@ export default function AmberCommandCenter() {
             {['active', 'applied', 'all'].map(f => (
               <button key={f} onClick={() => setFilter(f)} style={{
                 ...s.btnGhost,
-                color:       filter === f ? '#d4789a' : '#5a5468',
-                borderColor: filter === f ? '#d4789a44' : '#2a2a2f',
+                color:       filter === f ? '#d4789a' : '#9a8c9e',
+                borderColor: filter === f ? '#d4789a44' : '#ede8e3',
                 background:  filter === f ? '#d4789a10' : 'transparent',
               }}>
                 {f}
@@ -435,9 +435,9 @@ export default function AmberCommandCenter() {
           </div>
 
           {loading ? (
-            <div style={{ textAlign: 'center', color: '#5a5468', padding: '40px' }}>Loading...</div>
+            <div style={{ textAlign: 'center', color: '#9a8c9e', padding: '40px' }}>Loading...</div>
           ) : displayed.length === 0 ? (
-            <div style={{ ...s.card, textAlign: 'center', color: '#5a5468', padding: '40px' }}>
+            <div style={{ ...s.card, textAlign: 'center', color: '#9a8c9e', padding: '40px' }}>
               <div style={{ fontSize: '24px', marginBottom: '10px' }}>&#x2726;</div>
               {filter === 'active' ? 'No active findings. Run a scan to check the system.' : 'Nothing here yet.'}
             </div>
@@ -462,7 +462,7 @@ export default function AmberCommandCenter() {
       {tab === 'queue' && (
         <div>
           {tasks.length === 0 ? (
-            <div style={{ ...s.card, textAlign: 'center', color: '#5a5468', padding: '40px' }}>
+            <div style={{ ...s.card, textAlign: 'center', color: '#9a8c9e', padding: '40px' }}>
               <div style={{ fontSize: '24px', marginBottom: '10px' }}>&#x2726;</div>
               Build queue is empty. Tell Amber what you want to build next.
             </div>
