@@ -777,6 +777,23 @@ select.spg-input {
   border-color: var(--gold);
   color: #fff;
 }
+.spg-filter-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 5px;
+  border-radius: 9px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+.spg-filter-btn-active .spg-filter-count {
+  background: rgba(255, 255, 255, 0.25);
+}
 
 /* ── Toolbar (filters + search + sort + bulk toggle) ───── */
 .spg-toolbar {
@@ -1458,6 +1475,40 @@ select.spg-input {
       padding-right: max(12px, env(safe-area-inset-right));
     }
   }
+}
+
+/* ── Toast Notifications ──────────────────────────────────── */
+.spg-toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2000;
+  padding: 12px 24px;
+  border-radius: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+  animation: spg-toast-in 0.25s ease-out;
+  max-width: 90vw;
+  text-align: center;
+}
+@keyframes spg-toast-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(12px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+.spg-toast-success {
+  background: var(--green);
+  color: #fff;
+}
+.spg-toast-warn {
+  background: var(--orange);
+  color: #fff;
+}
+.spg-toast-error {
+  background: var(--red);
+  color: #fff;
 }
 
 /* ── iOS text size adjustment prevention ── */

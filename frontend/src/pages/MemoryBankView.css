@@ -785,6 +785,64 @@
   }
 }
 
+@media (max-width: 480px) {
+  .mb-legend {
+    gap: 6px;
+    padding: 10px 0;
+  }
+  .mb-legend-title {
+    font-size: 16px;
+  }
+  .mb-legend-item {
+    font-size: 10px;
+  }
+  .mb-filters {
+    gap: 4px;
+  }
+  .mb-filter-btn {
+    padding: 4px 8px;
+    font-size: 10px;
+  }
+  .mb-char-select {
+    min-width: 0;
+    width: 100%;
+  }
+  .mb-cluster-header {
+    padding: 8px 8px;
+    gap: 8px;
+  }
+  .mb-cluster-body {
+    padding: 0 4px 6px 12px;
+  }
+  .mb-memory-row {
+    padding: 6px 8px;
+    gap: 8px;
+  }
+  .mb-memory-statement {
+    font-size: 13px;
+  }
+  .mb-detail-card {
+    padding: 14px;
+  }
+  .mb-detail-statement {
+    font-size: 14px;
+  }
+  .mb-detail-statement-edit {
+    font-size: 16px; /* prevent iOS zoom */
+  }
+  .mb-detail-actions {
+    gap: 4px;
+  }
+  .mb-action-btn {
+    padding: 6px 10px;
+    font-size: 10px;
+    min-height: 36px;
+  }
+  .mb-tension-pair {
+    padding: 6px 10px;
+  }
+}
+
 /* ── Extract All Button ──────────────────────────────────────── */
 .mb-extract-btn {
   display: inline-block;

@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import FeedBulkImport from '../components/FeedBulkImport';
 import './SocialProfileGenerator.css';
 
@@ -111,6 +112,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const [page, setPage]           = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [statusCounts, setStatusCounts] = useState({ total: 0, generated: 0, finalized: 0, crossed: 0, archived: 0 });
   const PAGE_SIZE = 24;
 
   // Search & sort
@@ -121,6 +123,11 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   // Bulk selection
   const [bulkMode, setBulkMode]   = useState(false);
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [selectAllPages, setSelectAllPages] = useState(false); // true = all profiles across pages
+
+  // Toast notifications
+  const [toast, setToast]         = useState(null);
+  const toastTimer = useRef(null);
 
   // Spark form
   const [handle, setHandle]       = useState('');
@@ -152,6 +159,9 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       if (data.pagination) {
         setTotalPages(data.pagination.totalPages || 1);
         setTotalCount(data.pagination.total || 0);
+      }
+      if (data.statusCounts) {
+        setStatusCounts(data.statusCounts);
       }
     } catch (err) {
       console.error('Load profiles error:', err);
@@ -214,8 +224,16 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     searchTimer.current = setTimeout(() => setPage(1), 400);
   };
 
+  // ── Toast helper ────────────────────────────────────────────────────────
+  const showToast = (message, type = 'success') => {
+    clearTimeout(toastTimer.current);
+    setToast({ message, type });
+    toastTimer.current = setTimeout(() => setToast(null), 5000);
+  };
+
   // ── Bulk selection helpers ───────────────────────────────────────────────
   const toggleSelect = (id) => {
+    setSelectAllPages(false);
     setSelectedIds(prev => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id); else next.add(id);
@@ -223,14 +241,34 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     });
   };
   const selectAllVisible = () => {
+    setSelectAllPages(false);
     setSelectedIds(new Set(profiles.map(p => p.id)));
   };
-  const clearSelection = () => { setSelectedIds(new Set()); setBulkMode(false); };
+  const selectAllAcrossPages = () => {
+    setSelectAllPages(true);
+  };
+  const clearSelection = () => { setSelectedIds(new Set()); setSelectAllPages(false); setBulkMode(false); };
+
+  // Helper: get IDs for bulk ops (handles multi-page select all)
+  const getBulkIds = async () => {
+    if (!selectAllPages) return [...selectedIds];
+    // Fetch ALL profile IDs matching current filter
+    const qs = new URLSearchParams();
+    if (filterStatus) qs.set('status', filterStatus);
+    if (search.trim()) qs.set('search', search.trim());
+    qs.set('sort', sortBy);
+    qs.set('page', 1);
+    qs.set('limit', 100); // max batch
+    const res = await fetch(`${API}?${qs}`, { headers: authHeaders() });
+    const data = await res.json();
+    return (data.profiles || []).map(p => p.id);
+  };
 
   const bulkFinalize = async () => {
-    const ids = [...selectedIds];
+    const ids = await getBulkIds();
     if (!ids.length) return;
-    if (!window.confirm(`Finalize ${ids.length} profile(s)?`)) return;
+    const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
+    if (!window.confirm(`Finalize ${count} profile(s)?`)) return;
     try {
       const res = await fetch(`${API}/bulk/finalize`, {
         method: 'POST', headers: authHeaders(),
@@ -239,14 +277,67 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSelectedIds(new Set());
+      setSelectAllPages(false);
       loadProfiles();
+      if (data.finalized > 0) {
+        showToast(`Finalized ${data.finalized} profile(s)${data.skipped ? ` · ${data.skipped} already finalized` : ''}`);
+      } else {
+        showToast(`No profiles changed — ${data.skipped} already finalized or not in "Generated" status`, 'warn');
+      }
+    } catch (err) { setError(err.message); }
+  };
+
+  const bulkCross = async () => {
+    const ids = await getBulkIds();
+    if (!ids.length) return;
+    const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
+    if (!window.confirm(`Cross ${count} profile(s) into the story world?`)) return;
+    try {
+      const res = await fetch(`${API}/bulk/cross`, {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSelectedIds(new Set());
+      setSelectAllPages(false);
+      loadProfiles();
+      if (data.crossed > 0) {
+        showToast(`Crossed ${data.crossed} profile(s)${data.skipped ? ` · ${data.skipped} skipped (not finalized)` : ''}`);
+      } else {
+        showToast(`No profiles crossed — only finalized profiles can be crossed`, 'warn');
+      }
+    } catch (err) { setError(err.message); }
+  };
+
+  const bulkArchive = async () => {
+    const ids = await getBulkIds();
+    if (!ids.length) return;
+    const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
+    if (!window.confirm(`Archive ${count} profile(s)?`)) return;
+    try {
+      const res = await fetch(`${API}/bulk/archive`, {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ ids }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setSelectedIds(new Set());
+      setSelectAllPages(false);
+      loadProfiles();
+      if (data.archived > 0) {
+        showToast(`Archived ${data.archived} profile(s)${data.skipped ? ` · ${data.skipped} already archived` : ''}`);
+      } else {
+        showToast(`No profiles changed — all already archived`, 'warn');
+      }
     } catch (err) { setError(err.message); }
   };
 
   const bulkDelete = async () => {
-    const ids = [...selectedIds];
+    const ids = await getBulkIds();
     if (!ids.length) return;
-    if (!window.confirm(`Permanently delete ${ids.length} profile(s)? This cannot be undone.`)) return;
+    const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
+    if (!window.confirm(`Permanently delete ${count} profile(s)? This cannot be undone.`)) return;
     try {
       const res = await fetch(`${API}/bulk/delete`, {
         method: 'POST', headers: authHeaders(),
@@ -255,8 +346,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setSelectedIds(new Set());
+      setSelectAllPages(false);
       if (selected && ids.includes(selected.id)) setSelected(null);
       loadProfiles();
+      showToast(`Deleted ${data.deleted} profile(s)`);
     } catch (err) { setError(err.message); }
   };
 
@@ -356,10 +449,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
   // ── Computed ─────────────────────────────────────────────────────────────
   const stats = {
-    total: totalCount,
-    generated: profiles.filter(p => p.status === 'generated').length,
-    finalized: profiles.filter(p => p.status === 'finalized').length,
-    crossed:   profiles.filter(p => p.status === 'crossed').length,
+    total: statusCounts.total || totalCount,
+    generated: statusCounts.generated,
+    finalized: statusCounts.finalized,
+    crossed:   statusCounts.crossed,
   };
 
   // ── Get full_profile data (AI output stored as JSONB) ────────────────────
@@ -506,15 +599,19 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
         {/* Toolbar: Filters + Search + Sort + Bulk */}
         <div className="spg-toolbar">
           <div className="spg-filters">
-            {[null, 'generated', 'finalized', 'crossed', 'archived'].map(s => (
-              <button
-                key={s || 'all'}
-                className={`spg-filter-btn ${filterStatus === s ? 'spg-filter-btn-active' : ''}`}
-                onClick={() => changeFilter(s)}
-              >
-                {s ? STATUS_LABELS[s] : 'All'}
-              </button>
-            ))}
+            {[null, 'generated', 'finalized', 'crossed', 'archived'].map(s => {
+              const count = s ? (statusCounts[s] || 0) : statusCounts.total;
+              return (
+                <button
+                  key={s || 'all'}
+                  className={`spg-filter-btn ${filterStatus === s ? 'spg-filter-btn-active' : ''}`}
+                  onClick={() => changeFilter(s)}
+                >
+                  {s ? STATUS_LABELS[s] : 'All'}
+                  {count > 0 && <span className="spg-filter-count">{count}</span>}
+                </button>
+              );
+            })}
           </div>
           <div className="spg-toolbar-right">
             <input
@@ -543,26 +640,47 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           <div className="spg-bulk-bar">
             <div className="spg-bulk-bar-left">
               <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={selectAllVisible}>
-                Select All ({profiles.length})
+                Select Page ({profiles.length})
               </button>
-              {selectedIds.size > 0 && (
-                <span className="spg-bulk-count">{selectedIds.size} selected</span>
+              {totalCount > profiles.length && (
+                <button className="spg-btn spg-btn-sm spg-btn-outline" onClick={selectAllAcrossPages}>
+                  Select All {totalCount}
+                </button>
+              )}
+              {(selectedIds.size > 0 || selectAllPages) && (
+                <span className="spg-bulk-count">
+                  {selectAllPages ? `All ${totalCount}` : selectedIds.size} selected
+                </span>
               )}
             </div>
             <div className="spg-bulk-bar-right">
               <button
                 className="spg-btn spg-btn-sm spg-btn-green"
-                disabled={selectedIds.size === 0}
+                disabled={selectedIds.size === 0 && !selectAllPages}
                 onClick={bulkFinalize}
               >
-                ✓ Finalize ({selectedIds.size})
+                ✓ Finalize
+              </button>
+              <button
+                className="spg-btn spg-btn-sm spg-btn-purple"
+                disabled={selectedIds.size === 0 && !selectAllPages}
+                onClick={bulkCross}
+              >
+                ✦ Cross
+              </button>
+              <button
+                className="spg-btn spg-btn-sm spg-btn-outline"
+                disabled={selectedIds.size === 0 && !selectAllPages}
+                onClick={bulkArchive}
+              >
+                ▪ Archive
               </button>
               <button
                 className="spg-btn spg-btn-sm spg-btn-danger"
-                disabled={selectedIds.size === 0}
+                disabled={selectedIds.size === 0 && !selectAllPages}
                 onClick={bulkDelete}
               >
-                ✕ Delete ({selectedIds.size})
+                ✕ Delete
               </button>
             </div>
           </div>
@@ -591,7 +709,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           <div className="spg-grid">
             {profiles.map(p => {
               const data = fp(p);
-              const isChecked = selectedIds.has(p.id);
+              const isChecked = selectAllPages || selectedIds.has(p.id);
               return (
                 <div
                   key={p.id}
@@ -706,6 +824,14 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           autoScroll
         />}
       </div>}
+
+      {/* Toast notification — portaled to body so no parent can clip/trap it */}
+      {toast && createPortal(
+        <div className={`spg-toast spg-toast-${toast.type}`} onClick={() => setToast(null)}>
+          {toast.message}
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

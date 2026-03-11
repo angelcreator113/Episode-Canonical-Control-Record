@@ -402,6 +402,26 @@
   .ew-list-show { display: none; }
   .ew-list-actions { display: none; }
   .ew-filters { flex-direction: column; align-items: stretch; }
-  .ew-search { max-width: none; }
+  .ew-search { max-width: none; min-width: 0; }
   .ew-view-toggle { align-self: flex-end; }
+  .ew-filter-select { min-width: 0; width: 100%; }
+  .ew-stats { gap: 6px; }
+  .ew-stat-pill { font-size: 12px; padding: 5px 10px; }
+}
+
+@media (max-width: 480px) {
+  .ew-root { padding: 0 12px 48px; }
+  .ew-title { font-size: 20px; }
+  .ew-subtitle { font-size: 13px; }
+  .ew-header { padding-top: 16px; gap: 10px; }
+  .ew-btn { padding: 8px 14px; font-size: 13px; width: 100%; justify-content: center; }
+  .ew-card { padding: 16px; }
+  .ew-card-title { font-size: 15px; }
+  .ew-card-actions { flex-wrap: wrap; }
+  .ew-card-action { min-width: calc(50% - 3px); }
+  .ew-list-row { padding: 10px 12px; gap: 8px; }
+  .ew-list-title { font-size: 14px; }
+  .ew-stat-pill { padding: 4px 8px; font-size: 11px; gap: 4px; }
+  .ew-empty { padding: 40px 16px; }
+  .ew-empty-icon { font-size: 36px; }
 }

@@ -184,3 +184,34 @@
   font-style: italic;
   color: rgba(26,21,16,0.35);
 }
+
+/* ── Mobile Responsive ──────────────────────────────────────────────────── */
+@media (max-width: 480px) {
+  .tocp-shell {
+    padding: 12px 10px;
+    gap: 8px;
+  }
+
+  .tocp-bookTitle {
+    font-size: 15px;
+  }
+
+  .tocp-row {
+    gap: 8px;
+    padding: 8px 6px;
+  }
+
+  .tocp-title {
+    font-size: 13px;
+  }
+
+  .tocp-counts {
+    gap: 6px;
+    font-size: 10px;
+  }
+
+  .tocp-num {
+    width: 22px;
+    font-size: 10px;
+  }
+}

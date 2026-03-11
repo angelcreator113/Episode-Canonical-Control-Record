@@ -1,0 +1,46 @@
+name: Auto-merge to Dev
+
+on:
+  push:
+    branches:
+      - 'claude/**'
+
+concurrency:
+  group: auto-merge-dev
+  cancel-in-progress: false
+
+jobs:
+  merge-to-dev:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          # PAT_TOKEN is required so the push to dev triggers deploy-dev.yml.
+          # GITHUB_TOKEN pushes do NOT trigger other workflows (GitHub security rule).
+          # Create a fine-grained PAT with Contents:Read+Write, add as repo secret PAT_TOKEN.
+          token: ${{ secrets.PAT_TOKEN }}
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Merge into dev
+        run: |
+          BRANCH="${{ github.ref_name }}"
+          echo "Merging $BRANCH into dev..."
+
+          git checkout dev
+          git pull origin dev
+
+          if git merge origin/$BRANCH --no-edit -m "Auto-merge $BRANCH into dev"; then
+            git push origin dev
+            echo "Merged $BRANCH into dev — deploy workflow will trigger automatically."
+          else
+            echo "Merge conflict — manual resolution needed."
+            git merge --abort
+            exit 1
+          fi

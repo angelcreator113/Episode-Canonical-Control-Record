@@ -894,6 +894,42 @@ try {
   console.error('✗ Failed to load Character Growth routes:', e.message);
 }
 
+// Episode Orchestration — 9-beat director-level plan generator
+try {
+  const episodeOrchestrationRoute = require('./routes/episodeOrchestrationRoute');
+  app.use('/api/v1/memories', episodeOrchestrationRoute);
+  console.log('✓ Episode Orchestration route loaded at /api/v1/memories/generate-episode-orchestration');
+} catch (e) {
+  console.error('✗ Failed to load Episode Orchestration route:', e.message);
+}
+
+// Event Generator — bulk-generate 24 world events via Claude
+try {
+  const eventGeneratorRoute = require('./routes/eventGeneratorRoute');
+  app.use('/api/v1/memories', eventGeneratorRoute);
+  console.log('✓ Event Generator route loaded at /api/v1/memories/generate-events');
+} catch (e) {
+  console.error('✗ Failed to load Event Generator route:', e.message);
+}
+
+// Hair Library — asset library for Lala's hair styles
+try {
+  const hairLibraryRoutes = require('./routes/hairLibraryRoutes');
+  app.use('/api/v1/hair-library', hairLibraryRoutes);
+  console.log('✓ Hair Library routes loaded at /api/v1/hair-library');
+} catch (e) {
+  console.error('✗ Failed to load Hair Library routes:', e.message);
+}
+
+// Makeup Library — asset library for Lala's makeup looks
+try {
+  const makeupLibraryRoutes = require('./routes/makeupLibraryRoutes');
+  app.use('/api/v1/makeup-library', makeupLibraryRoutes);
+  console.log('✓ Makeup Library routes loaded at /api/v1/makeup-library');
+} catch (e) {
+  console.error('✗ Failed to load Makeup Library routes:', e.message);
+}
+
 // Stories — Persistence + Social Import + Novel Assembler
 try {
   const storiesRoutes = require('./routes/stories');
