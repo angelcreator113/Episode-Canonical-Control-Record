@@ -305,6 +305,8 @@ body.page-story-engine .app-main-wrapper.full-screen .app-content {
   .app-content > * {
     padding: 2.5rem 3rem;
     max-width: 1600px;
+    margin-left: auto;
+    margin-right: auto;
   }
 }
 

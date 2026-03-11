@@ -396,12 +396,12 @@
     display: none;
   }
 
-  /* Invisible backdrop — catches taps to close, no dark overlay */
+  /* Semi-transparent backdrop — catches taps to close */
   .sidebar-backdrop {
     display: block;
     position: fixed;
     inset: 0;
-    background: transparent;
+    background: rgba(0, 0, 0, 0.3);
     z-index: 999;
   }
 
@@ -409,8 +409,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 28px;
-    height: 28px;
+    width: 44px;
+    height: 44px;
     background: rgba(99,102,241,0.08);
     border: 1px solid rgba(99,102,241,0.12);
     border-radius: 6px;
@@ -425,5 +425,21 @@
     background: rgba(239, 68, 68, 0.1);
     border-color: rgba(239, 68, 68, 0.2);
     color: #ef4444;
+  }
+
+  /* Mobile tap targets — 44px minimum */
+  .nav-item {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+
+  .nav-subitem {
+    min-height: 44px;
+    padding: 10px 8px 10px 24px;
+  }
+
+  .sub-create {
+    min-height: 44px;
+    padding: 10px 8px 10px 24px;
   }
 }
