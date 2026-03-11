@@ -49,6 +49,118 @@ const WORLD_CONFIGS = {
   },
 };
 
+// ─── Demographic Snapshot: reads existing roster before generation ────────────
+function buildDemographicSnapshot(existingCharacters) {
+  const chars = existingCharacters || [];
+  const total = chars.length;
+  if (total === 0) return { empty: true };
+
+  const ages = chars.map(c => c.age).filter(Boolean);
+  const ageRanges = {
+    '18-22': ages.filter(a => a >= 18 && a <= 22).length,
+    '23-27': ages.filter(a => a >= 23 && a <= 27).length,
+    '28-32': ages.filter(a => a >= 28 && a <= 32).length,
+    '33-38': ages.filter(a => a >= 33 && a <= 38).length,
+    '39-45': ages.filter(a => a >= 39 && a <= 45).length,
+    'unset':  total - ages.length,
+  };
+
+  const cityCount = {};
+  ['nova_prime','velour_city','the_drift','solenne','cascade_row'].forEach(c => {
+    cityCount[c] = chars.filter(ch => ch.current_city === c).length;
+  });
+  const cityUnset = chars.filter(c => !c.current_city || c.current_city === 'unknown').length;
+
+  const classCount = {};
+  ['poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money'].forEach(c => {
+    classCount[c] = chars.filter(ch => ch.class_origin === c).length;
+  });
+
+  const familyCount = {};
+  ['two_parents_intact','single_mother','single_father','raised_by_grandparents',
+   'raised_by_other_relatives','blended_family','foster_or_adopted','effectively_alone'].forEach(f => {
+    familyCount[f] = chars.filter(c => c.family_structure === f).length;
+  });
+
+  const gaps = [];
+  if (ageRanges['33-38'] === 0) gaps.push('no characters in their mid-30s');
+  if (ageRanges['39-45'] === 0) gaps.push('no characters in their 40s');
+  if (cityCount['the_drift'] === 0) gaps.push('no characters in The Drift');
+  if (cityCount['solenne'] === 0) gaps.push('no characters in Solenne');
+  if (cityCount['cascade_row'] === 0) gaps.push('no characters in Cascade Row');
+  if (classCount['poverty'] === 0) gaps.push('no characters from poverty origin');
+  if (classCount['working_class'] <= 1) gaps.push('very few working class origin characters');
+  if (classCount['wealthy'] === 0 && classCount['old_money'] === 0) gaps.push('no wealthy origin characters');
+  if (familyCount['single_mother'] === 0) gaps.push('no characters raised by single mother');
+  if (familyCount['foster_or_adopted'] === 0) gaps.push('no characters who were fostered or adopted');
+  if (familyCount['effectively_alone'] === 0) gaps.push('no characters who were effectively alone');
+
+  return { total, ageRanges, cityCount, cityUnset, classCount, familyCount, gaps };
+}
+
+// ─── Demographic Coherence Check (advisory, not blocking) ────────────────────
+function checkDemographicCoherence(character) {
+  const warnings = [];
+  const c = character;
+  const profile = c.profile || c;
+  const depth = profile.depth || {};
+  const demo = profile.demographics || {};
+  const psych = profile.psychology || {};
+  const wound = psych.core_wound || depth.blind_spot || '';
+
+  const classOrigin = demo.class_origin || c.class_origin;
+  const moneyPattern = depth.money_behavior_pattern || demo.money_behavior_pattern;
+  const familyStruct = demo.family_structure || c.family_structure;
+  const age = demo.age || c.age || profile.identity?.age;
+  const yearsPosting = demo.years_posting || c.years_posting;
+  const classMobility = demo.class_mobility_direction || c.class_mobility_direction;
+  const foreclosed = depth.foreclosed_category || c.foreclosed_category;
+
+  if (classOrigin === 'poverty' && moneyPattern === 'performs_wealth') {
+    warnings.push({
+      field: 'money_behavior_pattern',
+      message: 'Poverty origin + performs_wealth is a valid combination but requires a clear story reason',
+      note: 'the performance is usually covering survival anxiety',
+    });
+  }
+  if (classOrigin === 'wealthy' && moneyPattern === 'hoarder') {
+    warnings.push({
+      field: 'money_behavior_pattern',
+      message: 'Wealthy origin + hoarder is unusual — confirm this is intentional',
+      note: 'old_money hoarding is different from scarcity hoarding — both exist',
+    });
+  }
+
+  if (familyStruct === 'effectively_alone' && wound &&
+      !wound.toLowerCase().includes('invisible') &&
+      !wound.toLowerCase().includes('seen') &&
+      !wound.toLowerCase().includes('abandon')) {
+    warnings.push({
+      field: 'wound',
+      message: 'effectively_alone family structure often produces invisibility or abandonment wounds',
+      note: 'Confirm the stated wound connects to this specific family architecture',
+    });
+  }
+
+  if (age && yearsPosting && (age - yearsPosting) < 14) {
+    warnings.push({
+      field: 'years_posting',
+      message: `Age ${age} - ${yearsPosting} years posting = started at age ${age - yearsPosting}`,
+      note: 'Started posting before age 14 — confirm this is intentional (child creator narrative)',
+    });
+  }
+
+  if (classMobility === 'ascending' && foreclosed === 'belonging') {
+    warnings.push({
+      field: 'foreclosed_category',
+      message: 'ascending mobility + foreclosed belonging is a strong combination',
+      note: 'She rose but cannot feel she belongs where she arrived — confirm this is the story',
+    });
+  }
+
+  return warnings;
+}
+
 // ─── Pain point categories (for profile generation) ──────────────────────────
 const PAIN_CATEGORIES = [
   'comparison_spiral', 'visibility_gap', 'identity_drift',
@@ -208,6 +320,19 @@ DIVERSITY:
 - Vary career meaningfully — not all content creators
 - Each seed should feel like a different kind of person
 
+DEMOGRAPHIC HINTS:
+For each seed, also include a demographic_hint object:
+{
+  age_range: '18-22' | '23-27' | '28-32' | '33-38' | '39-45',
+  city_hint: one of the 5 LalaVerse cities (nova_prime, velour_city, the_drift, solenne, cascade_row),
+  class_origin_hint: one of poverty, working_class, lower_middle, middle_class, upper_middle, wealthy, old_money,
+  family_hint: brief (e.g. 'raised by grandmother', 'single mother, oldest of 4')
+}
+The demographic_hint is a suggestion, not a lock.
+generate-batch will finalize all demographic fields — the hint just sets direction.
+Choose hints that create variety across the batch.
+Do not suggest the same age_range or city for more than 2 seeds in a batch.
+
 Return ONLY valid JSON — no preamble, no markdown:
 {
   "seeds": [
@@ -220,7 +345,13 @@ Return ONLY valid JSON — no preamble, no markdown:
       "role_type": "pressure|mirror|support|shadow|special",
       "career": "one sentence describing their job",
       "tension": "one sentence — the live wire",
-      "why_this_world": "one sentence — why they belong in this world specifically"
+      "why_this_world": "one sentence — why they belong in this world specifically",
+      "demographic_hint": {
+        "age_range": "23-27",
+        "city_hint": "nova_prime",
+        "class_origin_hint": "working_class",
+        "family_hint": "brief family note"
+      }
     }
   ]
 }`;
@@ -266,6 +397,20 @@ router.post('/generate-batch', optionalAuth, async (req, res) => {
   const existingStr = (existingCharacters || [])
     .map((c) => `${c.name} (${c.role_type}) — ${c.tension || 'tension unknown'}`)
     .join('\n') || 'none yet';
+
+  // Build demographic snapshot from existing roster for gap detection
+  const snapshot = buildDemographicSnapshot(existingCharacters || []);
+  const demographicContext = snapshot.empty ? '' : `
+EXISTING ROSTER DEMOGRAPHICS:
+Total characters: ${snapshot.total}
+Age distribution: ${JSON.stringify(snapshot.ageRanges)}
+City distribution: ${JSON.stringify(snapshot.cityCount)} (${snapshot.cityUnset} unset)
+Class origin: ${JSON.stringify(snapshot.classCount)}
+Family structure: ${JSON.stringify(snapshot.familyCount)}
+
+GAPS TO FILL (prioritize these in your generation):
+${snapshot.gaps.length > 0 ? snapshot.gaps.map(g => '- ' + g).join('\n') : '- No critical gaps. Vary naturally.'}
+`;
 
   // Fetch protagonist consciousness for tonal consistency
   let protagonistConsciousness = '';
@@ -325,6 +470,50 @@ ${protagonistConsciousness ? `${protagonistConsciousness}\nNew characters should
 REGISTER: Adult fiction. Explicit — real wounds, real sexuality, real conflict. No softening.
 The profile should read like a file on a real person, not a character description.
 
+${demographicContext}
+═══════════════════════════════════════════════
+DEMOGRAPHIC GENERATION — REQUIRED FOR ALL CHARACTERS
+═══════════════════════════════════════════════
+
+Every character MUST have a "demographics" object with all fields populated.
+Do not leave them vague or unspecified. These are world facts, not psychological notes.
+
+AGE: Generate a specific age between 18 and 45. Do not cluster between 22-26. A 38-year-old who has been grinding for 15 years is different from a 23-year-old who blew up overnight. If the roster gaps show no characters in their 30s or 40s, generate in those ranges.
+
+CITY: Assign one of: nova_prime, velour_city, the_drift, solenne, cascade_row.
+- nova_prime: ambition capital, everyone is building toward industry
+- velour_city: fashion/beauty epicenter, aesthetics are currency, old money new money clash
+- the_drift: underground, experimental, the city for people who don't fit the main narrative
+- solenne: quieter, old world, legacy families, slower burn, longer memory
+- cascade_row: emerging, hustler energy, everyone building from nothing
+Choose the city that makes her story richer, not the most common in the roster.
+
+CLASS ORIGIN (where she was born into, not where she is now):
+poverty | working_class | lower_middle | middle_class | upper_middle | wealthy | old_money
+Class origin shapes money_behavior_pattern and operative_cosmology. Make the choice intentional.
+
+CURRENT CLASS vs ORIGIN: If they differ, specify class_mobility_direction.
+- ascending: rose — carries survivor guilt, imposter syndrome, cost of leaving your people
+- descending: fell — carries shame, reinvention, anger of losing what she had
+
+FAMILY STRUCTURE: Do not default to two_parents_intact. Most people did not grow up this way.
+- effectively_alone: parents physically present but not actually there — the invisible wound
+
+CULTURAL BACKGROUND & NATIONALITY: Be specific. Not generic labels. The specific texture of identity — generation, region, how class and culture intersect for this particular person.
+
+PHYSICAL PRESENCE: Not measurements. How she takes up space. What people notice before she speaks.
+
+VOICE SIGNATURE: How she actually sounds. Cadence, vocabulary, code-switching patterns. In DMs vs captions vs arguments vs apologies.
+
+CAREER HISTORY: What she tried before this. Nobody arrives at content creator without a before.
+
+YEARS POSTING: A specific number between 1 and 12. Duration shapes the entire story.
+
+FOLLOWER TIER: ghost (<1k) | micro (1k-10k) | mid (10k-100k) | macro (100k-1M) | mega (1M+)
+
+CONSISTENCY RULE: All demographic fields must be internally consistent with psychological fields. The test: could you trace from class_origin → family_structure → wound → money_behavior_pattern → operative_cosmology in a single coherent line?
+═══════════════════════════════════════════════
+
 LIFE STAGE CONTEXT (infer from age ${seed.age}):
 - Early Adulthood (18-28): identity formation, first real failures, belief that exceptions apply to them
 - Establishment (29-39): building, proving, the gap between the life imagined and the life happening
@@ -346,6 +535,33 @@ Return ONLY valid JSON:
     "role_type": "${seed.role_type}",
     "canon_tier": "minor_canon|supporting_canon|core_canon",
     "story_presence": "story_only|registry|canon"
+  },
+  "demographics": {
+    "age": "number (18-45)",
+    "birth_year": "number (LalaVerse calendar year)",
+    "cultural_background": "specific cultural identity — generation, region, texture",
+    "nationality": "where they're from, may differ from current city",
+    "first_language": "shapes voice and code-switching",
+    "hometown": "where they grew up — specific",
+    "current_city": "nova_prime|velour_city|the_drift|solenne|cascade_row|outside_lalaverse",
+    "city_migration_history": "cities lived in before current",
+    "class_origin": "poverty|working_class|lower_middle|middle_class|upper_middle|wealthy|old_money",
+    "current_class": "poverty|working_class|lower_middle|middle_class|upper_middle|wealthy|old_money",
+    "class_mobility_direction": "ascending|descending|stable|volatile",
+    "family_structure": "two_parents_intact|single_mother|single_father|raised_by_grandparents|raised_by_other_relatives|blended_family|foster_or_adopted|effectively_alone",
+    "parents_status": "alive/gone/estranged/complicated — specific",
+    "sibling_position": "only_child|oldest|middle|youngest",
+    "sibling_count": "number",
+    "relationship_status": "single|dating|committed|married|separated|divorced|widowed|complicated",
+    "has_children": "boolean",
+    "children_ages": "freeform: '4 and 7' or 'infant' or null",
+    "education_experience": "what it cost and gave — not credentials",
+    "career_history": "what she tried before this",
+    "years_posting": "number (1-12)",
+    "physical_presence": "how she takes up space, not appearance stats",
+    "voice_signature_text": "cadence, vocabulary, code-switching — how she actually sounds",
+    "platform_primary": "lalaverse_main|multi_platform|live_first|archive_heavy",
+    "follower_tier": "ghost|micro|mid|macro|mega"
   },
   "living_state": {
     "current_emotional_state": "string — specific, not generic",
@@ -743,6 +959,16 @@ router.post('/check-staging', optionalAuth, async (req, res) => {
   const activeDilemma = character.dilemma?.active || character.profile?.dilemma?.active;
   const collisionTarget = character.dilemma?.collision_potential || character.profile?.dilemma?.collision_potential;
 
+  // ── Demographic coherence check (advisory, not blocking) ──
+  const demographicWarnings = checkDemographicCoherence(character);
+  warnings.push(...demographicWarnings.map(w => ({
+    type: 'demographic_coherence',
+    severity: 'warning',
+    message: w.message,
+    note: w.note,
+    field: w.field,
+  })));
+
   const collisionCharacter = collisionTarget
     ? existing.find((c) => c.name?.toLowerCase().includes(collisionTarget.toLowerCase()))
     : null;
@@ -780,6 +1006,7 @@ router.post('/commit', optionalAuth, async (req, res) => {
     const dilemma    = profile.dilemma || {};
     const storyPres  = profile.story_presence || {};
     const threads    = profile.plot_threads || [];
+    const demo       = profile.demographics || {};
 
     // ── Duplicate guard: check if character with same name already exists in registry ──
     const rawName = seed?.name || identity.name || 'unnamed';
@@ -960,6 +1187,33 @@ router.post('/commit', optionalAuth, async (req, res) => {
         status: t.status || 'open',
         source: t.source || '',
       })) }) : null,
+
+      // ── Demographics ──
+      age:                      demo.age || identity.age || seed?.age || null,
+      birth_year:               demo.birth_year || null,
+      cultural_background:      demo.cultural_background || null,
+      nationality:              demo.nationality || null,
+      first_language:           demo.first_language || null,
+      hometown:                 demo.hometown || null,
+      current_city:             demo.current_city || null,
+      city_migration_history:   demo.city_migration_history || null,
+      class_origin:             demo.class_origin || null,
+      current_class:            demo.current_class || null,
+      class_mobility_direction: demo.class_mobility_direction || null,
+      family_structure:         demo.family_structure || null,
+      parents_status:           demo.parents_status || null,
+      sibling_position:         demo.sibling_position || null,
+      sibling_count:            demo.sibling_count ?? null,
+      relationship_status:      demo.relationship_status || null,
+      has_children:             demo.has_children ?? null,
+      children_ages:            demo.children_ages || null,
+      education_experience:     demo.education_experience || null,
+      career_history:           demo.career_history || null,
+      years_posting:            demo.years_posting ?? null,
+      physical_presence:        demo.physical_presence || null,
+      demographic_voice_signature: demo.voice_signature_text || null,
+      platform_primary:         demo.platform_primary || null,
+      follower_tier:            demo.follower_tier || null,
     };
 
     const newChar = await db.RegistryCharacter.create(characterData);
