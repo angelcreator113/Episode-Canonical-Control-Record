@@ -2053,7 +2053,7 @@ export default function CharacterRegistryPage() {
       </HeaderBar>
 
       {/* Filters */}
-      {showFilters && (
+      {showFilters && !feedMode && (
         <div className="cr-filters">
           <span className="cr-filter-label">Filter</span>
 
@@ -2091,7 +2091,8 @@ export default function CharacterRegistryPage() {
         </div>
       )}
 
-      {/* Search */}
+      {/* Search — hidden in Feed mode (Feed has its own search) */}
+      {!feedMode && (
       <div className="cr-search-standalone">
         <div className="cr-search-wrap">
           <span className="cr-search-icon">⌕</span>
@@ -2104,6 +2105,7 @@ export default function CharacterRegistryPage() {
           />
         </div>
       </div>
+      )}
 
       {/* Content */}
       <div className="cr-content">

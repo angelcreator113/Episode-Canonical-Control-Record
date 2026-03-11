@@ -4,10 +4,13 @@
 // Routes:
 // POST /parse-paste       — Parse pasted text into candidate creators
 // POST /parse-file        — Parse uploaded file (PDF, Word, TXT, MD) into creators
+// POST /parse-csv         — Parse CSV/TSV data into candidate creators (#3)
 // POST /generate          — Batch-generate profiles from parsed candidates (sync)
 // POST /generate-job      — Queue a background bulk generation job
 // GET  /jobs              — List recent jobs
 // GET  /jobs/:id          — Get job status/progress
+// GET  /jobs/:id/stream   — SSE stream for real-time job progress (#1)
+// POST /jobs/:id/cancel   — Cancel a running job (#5)
 // ─────────────────────────────────────────────────────────────────────────────
 
 const express = require('express');
@@ -16,7 +19,7 @@ const multer  = require('multer');
 const path    = require('path');
 const Anthropic = require('@anthropic-ai/sdk');
 
-const { buildGenerationPrompt, autoAssignFollower } = require('./socialProfileRoutes');
+const { buildGenerationPrompt, autoAssignFollower, autoAssignAllFollowers } = require('./socialProfileRoutes');
 
 let optionalAuth;
 try {
@@ -33,7 +36,7 @@ const upload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 10 * 1024 * 1024 },
   fileFilter: (req, file, cb) => {
-    const allowed = ['.pdf', '.docx', '.doc', '.txt', '.md'];
+    const allowed = ['.pdf', '.docx', '.doc', '.txt', '.md', '.csv', '.tsv'];
     const ext = path.extname(file.originalname).toLowerCase();
     cb(null, allowed.includes(ext));
   },
@@ -46,27 +49,148 @@ function getModels() {
 
 const PLATFORMS = ['tiktok','instagram','youtube','twitter','onlyfans','twitch','substack','multi'];
 
-// Retry helper for Anthropic API calls (handles rate limits + transient errors)
-async function callAnthropicWithRetry(requestFn, { retries = 2, baseDelay = 5000 } = {}) {
-  for (let attempt = 0; attempt <= retries; attempt++) {
-    try {
-      return await Promise.race([
-        requestFn(),
-        new Promise((_, reject) => setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000)),
-      ]);
-    } catch (err) {
-      const isRetryable = err.status === 429 || err.status === 529 || err.status >= 500
-        || err.message?.includes('overloaded') || err.message?.includes('rate')
-        || err.message?.includes('timeout') || err.message?.includes('ECONNRESET');
-      if (isRetryable && attempt < retries) {
-        const delay = baseDelay * Math.pow(2, attempt);
-        console.warn(`[bulk-generate] Anthropic API error (attempt ${attempt + 1}/${retries + 1}): ${err.message}. Retrying in ${delay}ms…`);
-        await new Promise(r => setTimeout(r, delay));
-        continue;
-      }
-      throw err;
+// ── SSE client registry for real-time streaming (#1) ─────────────────────────
+const jobSSEClients = new Map(); // jobId → Set<res>
+
+function notifyJobSSE(jobId, event, data) {
+  const clients = jobSSEClients.get(String(jobId));
+  if (!clients || clients.size === 0) return;
+  const payload = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+  for (const client of clients) {
+    try { client.write(payload); } catch {}
+  }
+}
+
+// ── Cancellation registry (#5) ──────────────────────────────────────────────
+const cancelledJobs = new Set();
+
+// ── Error categorization (#8) ───────────────────────────────────────────────
+function categorizeError(err) {
+  const msg = (err.message || err || '').toString();
+  if (/timed?\s*out|timeout/i.test(msg))
+    return { category: 'timeout', retryable: true, label: 'AI Timeout' };
+  if (/rate.?limit|429|too many/i.test(msg))
+    return { category: 'rate_limit', retryable: true, label: 'Rate Limited' };
+  if (/JSON|parse|valid/i.test(msg))
+    return { category: 'ai_parse', retryable: true, label: 'AI Parse Error' };
+  if (/ECONN|ENETUNREACH|socket|network/i.test(msg))
+    return { category: 'network', retryable: true, label: 'Network Error' };
+  if (/database|sequelize|SQL|constraint|unique/i.test(msg))
+    return { category: 'db_error', retryable: false, label: 'Database Error' };
+  if (/cancelled|canceled/i.test(msg))
+    return { category: 'cancelled', retryable: false, label: 'Cancelled' };
+  return { category: 'unknown', retryable: true, label: 'Unknown Error' };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SHARED PROFILE GENERATION — Deduplicated (#4)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+async function generateSingleProfile(creator, { db, seriesId, characterContext, characterKey }) {
+  const prompt = buildGenerationPrompt(creator.handle, creator.platform, creator.vibe_sentence, characterContext);
+  const aiRes = await Promise.race([
+    client.messages.create({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 3000,
+      messages: [{ role: 'user', content: prompt }],
+    }),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('AI call timed out after 120s')), 120000)),
+  ]);
+
+  const text = aiRes.content[0].text;
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
+  const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
+  if (!jsonMatch) throw new Error('AI did not return valid JSON');
+
+  const fixedJson = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
+  let profile;
+  try {
+    profile = JSON.parse(fixedJson);
+  } catch (parseErr) {
+    throw new Error(`Profile JSON parse failed: ${parseErr.message}`);
+  }
+
+  // Save to DB — findOrCreate to prevent duplicates on retry
+  let saved = null;
+  if (db && db.SocialProfile) {
+    const [record, created] = await db.SocialProfile.findOrCreate({
+      where: { handle: creator.handle, platform: creator.platform },
+      defaults: {
+        vibe_sentence: creator.vibe_sentence,
+        display_name: profile.display_name,
+        archetype: profile.archetype,
+        content_persona: profile.content_persona,
+        real_signal: profile.real_signal,
+        posting_voice: profile.posting_voice,
+        comment_energy: profile.comment_energy,
+        follower_count_approx: profile.follower_count_approx,
+        parasocial_function: profile.parasocial_function,
+        emotional_activation: profile.emotional_activation,
+        watch_reason: profile.watch_reason,
+        what_it_costs_her: profile.what_it_costs_her,
+        current_trajectory: profile.current_trajectory,
+        trajectory_detail: profile.trajectory_detail,
+        lala_relevance_score: profile.lala_relevance_score,
+        lala_relevance_reason: profile.lala_relevance_reason,
+        pinned_post: profile.pinned_post,
+        sample_captions: profile.sample_captions,
+        sample_comments: profile.sample_comments,
+        adult_content_present: profile.adult_content_present || false,
+        adult_content_type: profile.adult_content_type,
+        adult_content_framing: profile.adult_content_framing,
+        crossing_trigger: profile.crossing_trigger,
+        crossing_mechanism: profile.crossing_mechanism,
+        book_relevance: profile.book_relevance,
+        moment_log: profile.moment_log || [],
+        full_profile: profile,
+        status: 'generated',
+        series_id: seriesId || null,
+      },
+    });
+    saved = record;
+    if (!created) {
+      await record.update({
+        vibe_sentence: creator.vibe_sentence,
+        display_name: profile.display_name,
+        archetype: profile.archetype,
+        content_persona: profile.content_persona,
+        full_profile: profile,
+        lala_relevance_score: profile.lala_relevance_score,
+        status: 'generated',
+      });
+    }
+
+    // Auto-assign ALL characters as followers via intelligent follow engine
+    if (saved) {
+      await autoAssignAllFollowers(db, saved.id, {
+        ...profile,
+        platform: creator.platform,
+      });
     }
   }
+
+  return {
+    handle: creator.handle,
+    platform: creator.platform,
+    status: 'success',
+    profile_id: saved?.id || null,
+    lala_score: profile.lala_relevance_score || 0,
+    archetype: profile.archetype || null,
+  };
+}
+
+// ── Concurrency limiter for parallel generation (#2) ─────────────────────────
+async function runWithConcurrency(tasks, concurrency) {
+  const results = [];
+  let idx = 0;
+  async function worker() {
+    while (idx < tasks.length) {
+      const i = idx++;
+      results[i] = await tasks[i]();
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(concurrency, tasks.length) }, () => worker()));
+  return results;
 }
 
 // ── POST /parse-paste ────────────────────────────────────────────────────────
@@ -147,12 +271,123 @@ ${text.slice(0, 20000)}`,
   }
 });
 
+// ── POST /parse-csv — CSV/TSV spreadsheet import (#3) ────────────────────────
+router.post('/parse-csv', optionalAuth, async (req, res) => {
+  try {
+    const { text, column_map } = req.body;
+    if (!text || !text.trim()) return res.status(400).json({ error: 'No CSV data provided' });
+
+    // Detect delimiter: tab or comma
+    const firstLine = text.split('\n')[0];
+    const delimiter = firstLine.includes('\t') ? '\t' : ',';
+
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    if (lines.length < 2) return res.status(400).json({ error: 'CSV needs a header row and at least one data row' });
+
+    // Parse header
+    const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+
+    // Column mapping — user can specify or we auto-detect
+    const map = column_map || {};
+    const handleCol   = map.handle   || headers.find(h => /handle|username|user|screen.?name|creator|account/i.test(h)) || headers[0];
+    const platformCol = map.platform || headers.find(h => /platform|network|site|channel/i.test(h));
+    const vibeCol     = map.vibe     || headers.find(h => /vibe|description|bio|notes?|about|summary/i.test(h));
+
+    const handleIdx   = headers.indexOf(handleCol);
+    const platformIdx = platformCol ? headers.indexOf(platformCol) : -1;
+    const vibeIdx     = vibeCol ? headers.indexOf(vibeCol) : -1;
+
+    if (handleIdx === -1) {
+      return res.status(400).json({ error: 'Could not identify a handle/username column', detected_headers: headers });
+    }
+
+    const creators = [];
+    const errors = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      // Simple CSV field split (handles quoted fields with commas)
+      const fields = [];
+      let current = '';
+      let inQuotes = false;
+      for (const ch of lines[i]) {
+        if (ch === '"') { inQuotes = !inQuotes; continue; }
+        if (ch === delimiter && !inQuotes) { fields.push(current.trim()); current = ''; continue; }
+        current += ch;
+      }
+      fields.push(current.trim());
+
+      const handle = (fields[handleIdx] || '').replace(/^@/, '').trim();
+      if (!handle) { errors.push({ line: lines[i], reason: 'Empty handle' }); continue; }
+
+      let platform = platformIdx >= 0 ? (fields[platformIdx] || '').toLowerCase().trim() : 'instagram';
+      if (!PLATFORMS.includes(platform)) platform = 'instagram';
+
+      const vibe = vibeIdx >= 0 ? (fields[vibeIdx] || '').trim() : '';
+
+      creators.push({ handle, platform, vibe_sentence: vibe || `Imported from spreadsheet row ${i}` });
+    }
+
+    return res.json({
+      creators,
+      errors,
+      total_rows: lines.length - 1,
+      detected_columns: { handle: handleCol, platform: platformCol, vibe: vibeCol },
+      all_headers: headers,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
 // ── POST /parse-file ─────────────────────────────────────────────────────────
 router.post('/parse-file', optionalAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
     const ext  = path.extname(req.file.originalname).toLowerCase();
+
+    // CSV/TSV files handled by parse-csv logic directly
+    if (ext === '.csv' || ext === '.tsv') {
+      const rawText = req.file.buffer.toString('utf-8');
+      // Forward internally to CSV parser
+      const delimiter = ext === '.tsv' ? '\t' : ',';
+      const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+      if (lines.length < 2) {
+        return res.status(400).json({ error: 'CSV needs a header row and at least one data row' });
+      }
+      const headers = lines[0].split(delimiter).map(h => h.trim().toLowerCase().replace(/^["']|["']$/g, ''));
+      const handleCol = headers.find(h => /handle|username|user|screen.?name|creator|account/i.test(h)) || headers[0];
+      const platformCol = headers.find(h => /platform|network|site|channel/i.test(h));
+      const vibeCol = headers.find(h => /vibe|description|bio|notes?|about|summary/i.test(h));
+      const handleIdx = headers.indexOf(handleCol);
+      const platformIdx = platformCol ? headers.indexOf(platformCol) : -1;
+      const vibeIdx = vibeCol ? headers.indexOf(vibeCol) : -1;
+
+      const creators = [];
+      for (let i = 1; i < lines.length; i++) {
+        const fields = [];
+        let current = '';
+        let inQuotes = false;
+        for (const ch of lines[i]) {
+          if (ch === '"') { inQuotes = !inQuotes; continue; }
+          if (ch === delimiter && !inQuotes) { fields.push(current.trim()); current = ''; continue; }
+          current += ch;
+        }
+        fields.push(current.trim());
+        const handle = (fields[handleIdx] || '').replace(/^@/, '').trim();
+        if (!handle) continue;
+        let platform = platformIdx >= 0 ? (fields[platformIdx] || '').toLowerCase().trim() : 'instagram';
+        if (!PLATFORMS.includes(platform)) platform = 'instagram';
+        const vibe = vibeIdx >= 0 ? (fields[vibeIdx] || '').trim() : '';
+        creators.push({ handle, platform, vibe_sentence: vibe || `Imported from ${req.file.originalname} row ${i}` });
+      }
+      return res.json({
+        creators,
+        extraction_notes: `Parsed ${creators.length} creator(s) from ${req.file.originalname} (CSV)`,
+        file_name: req.file.originalname,
+      });
+    }
+
     let rawText = '';
 
     if (ext === '.pdf') {
@@ -257,10 +492,10 @@ ${chunks[i]}`,
   }
 });
 
-// ── POST /generate ───────────────────────────────────────────────────────────
+// ── POST /generate — Sync with parallel concurrency (#2, #4) ─────────────────
 router.post('/generate', optionalAuth, async (req, res) => {
   try {
-    const { creators, series_id, character_context, character_key } = req.body;
+    const { creators, series_id, character_context, character_key, concurrency } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
       return res.status(400).json({ error: 'No creators provided' });
     }
@@ -269,108 +504,27 @@ router.post('/generate', optionalAuth, async (req, res) => {
     }
 
     const db = getModels();
+    const CONCURRENCY = Math.min(Math.max(concurrency || 3, 1), 5);
 
-    // Process creators sequentially to avoid overwhelming Anthropic API / small EC2
-    const results = [];
-    for (const c of creators) {
+    const tasks = creators.map(c => async () => {
       try {
-        const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence, character_context);
-        const aiRes = await callAnthropicWithRetry(() =>
-          client.messages.create({
-            model: 'claude-sonnet-4-20250514',
-            max_tokens: 3000,
-            messages: [{ role: 'user', content: prompt }],
-          })
-        );
-
-        const text = aiRes.content[0].text;
-        const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-        const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-        if (!jsonMatch) throw new Error('AI did not return valid JSON');
-
-        const fixedJson = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
-
-        let profile;
-        try {
-          profile = JSON.parse(fixedJson);
-        } catch (parseErr) {
-          console.error(`JSON parse failed for @${c.handle}:`, parseErr.message, '\nRaw excerpt:', fixedJson.slice(0, 300));
-          throw new Error(`Profile JSON parse failed: ${parseErr.message}`);
-        }
-
-        // Save to DB — use findOrCreate to prevent duplicates on retry
-        let saved = null;
-        if (db && db.SocialProfile) {
-          const [record, created] = await db.SocialProfile.findOrCreate({
-            where: { handle: c.handle, platform: c.platform },
-            defaults: {
-              vibe_sentence: c.vibe_sentence,
-              display_name: profile.display_name,
-              archetype: profile.archetype,
-              content_persona: profile.content_persona,
-              real_signal: profile.real_signal,
-              posting_voice: profile.posting_voice,
-              comment_energy: profile.comment_energy,
-              follower_count_approx: profile.follower_count_approx,
-              parasocial_function: profile.parasocial_function,
-              emotional_activation: profile.emotional_activation,
-              watch_reason: profile.watch_reason,
-              what_it_costs_her: profile.what_it_costs_her,
-              current_trajectory: profile.current_trajectory,
-              trajectory_detail: profile.trajectory_detail,
-              lala_relevance_score: profile.lala_relevance_score,
-              lala_relevance_reason: profile.lala_relevance_reason,
-              pinned_post: profile.pinned_post,
-              sample_captions: profile.sample_captions,
-              sample_comments: profile.sample_comments,
-              adult_content_present: profile.adult_content_present || false,
-              adult_content_type: profile.adult_content_type,
-              adult_content_framing: profile.adult_content_framing,
-              crossing_trigger: profile.crossing_trigger,
-              crossing_mechanism: profile.crossing_mechanism,
-              book_relevance: profile.book_relevance,
-              moment_log: profile.moment_log || [],
-              full_profile: profile,
-              status: 'generated',
-              series_id: series_id || null,
-            },
-          });
-          saved = record;
-          if (!created) {
-            await record.update({
-              vibe_sentence: c.vibe_sentence,
-              display_name: profile.display_name,
-              archetype: profile.archetype,
-              content_persona: profile.content_persona,
-              full_profile: profile,
-              lala_relevance_score: profile.lala_relevance_score,
-              status: 'generated',
-            });
-          }
-        }
-
-        results.push({
-          handle: c.handle,
-          platform: c.platform,
-          status: 'success',
-          profile_id: saved?.id || null,
-          lala_score: profile.lala_relevance_score || 0,
-        });
-
-        // Auto-assign protagonist as follower
-        if (saved && character_key) {
-          await autoAssignFollower(db, saved.id, character_context, character_key);
-        }
+        return await generateSingleProfile(c, { db, seriesId: series_id, characterContext: character_context, characterKey: character_key });
       } catch (creatorErr) {
         console.error(`[bulk-generate] Failed for @${c.handle}:`, creatorErr.message);
-        results.push({
+        const errInfo = categorizeError(creatorErr);
+        return {
           handle: c.handle,
           platform: c.platform,
           status: 'failed',
           error: creatorErr.message || 'Unknown error',
-        });
+          error_category: errInfo.category,
+          error_label: errInfo.label,
+          retryable: errInfo.retryable,
+        };
       }
-    }
+    });
+
+    const results = await runWithConcurrency(tasks, CONCURRENCY);
 
     const succeeded = results.filter(r => r.status === 'success').length;
     const failed    = results.filter(r => r.status === 'failed').length;
@@ -392,7 +546,7 @@ router.post('/generate', optionalAuth, async (req, res) => {
 // Create a background job for bulk generation — returns immediately
 router.post('/generate-job', optionalAuth, async (req, res) => {
   try {
-    const { creators, series_id, character_context, character_key } = req.body;
+    const { creators, series_id, character_context, character_key, concurrency } = req.body;
     if (!Array.isArray(creators) || creators.length === 0) {
       return res.status(400).json({ error: 'No creators provided' });
     }
@@ -418,7 +572,7 @@ router.post('/generate-job', optionalAuth, async (req, res) => {
     });
 
     // Start processing in background (non-blocking)
-    processJobInBackground(job.id);
+    processJobInBackground(job.id, Math.min(Math.max(concurrency || 3, 1), 5));
 
     return res.json({
       job_id: job.id,
@@ -451,17 +605,14 @@ router.get('/jobs', optionalAuth, async (req, res) => {
 });
 
 // ── GET /jobs/:id ────────────────────────────────────────────────────────────
-// Get progress for a specific job (lightweight — excludes bulky candidates/results)
+// Get progress for a specific job
 router.get('/jobs/:id', optionalAuth, async (req, res) => {
   try {
     const db = getModels();
     if (!db || !db.BulkImportJob) {
       return res.status(404).json({ error: 'Not available' });
     }
-    const job = await db.BulkImportJob.findByPk(req.params.id, {
-      attributes: ['id', 'status', 'total', 'completed', 'failed', 'error_message',
-                   'character_key', 'created_at', 'started_at', 'completed_at'],
-    });
+    const job = await db.BulkImportJob.findByPk(req.params.id);
     if (!job) return res.status(404).json({ error: 'Job not found' });
     return res.json({ job });
   } catch (err) {
@@ -469,8 +620,44 @@ router.get('/jobs/:id', optionalAuth, async (req, res) => {
   }
 });
 
-// ── POST /jobs/:id/cancel ───────────────────────────────────────────────────
-// Cancel a stuck or running job — marks it failed so the processor loop exits
+// ── GET /jobs/:id/stream — SSE endpoint for real-time progress (#1) ──────────
+router.get('/jobs/:id/stream', optionalAuth, (req, res) => {
+  const jobId = String(req.params.id);
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write(`event: connected\ndata: {"job_id":${jobId}}\n\n`);
+
+  if (!jobSSEClients.has(jobId)) jobSSEClients.set(jobId, new Set());
+  jobSSEClients.get(jobId).add(res);
+
+  // Send current state immediately
+  const db = getModels();
+  if (db && db.BulkImportJob) {
+    db.BulkImportJob.findByPk(req.params.id).then(job => {
+      if (job) res.write(`event: status\ndata: ${JSON.stringify({ job })}\n\n`);
+    }).catch(() => {});
+  }
+
+  const keepAlive = setInterval(() => {
+    try { res.write(': keepalive\n\n'); } catch { clearInterval(keepAlive); }
+  }, 15000);
+
+  req.on('close', () => {
+    clearInterval(keepAlive);
+    const clients = jobSSEClients.get(jobId);
+    if (clients) {
+      clients.delete(res);
+      if (clients.size === 0) jobSSEClients.delete(jobId);
+    }
+  });
+});
+
+// ── POST /jobs/:id/cancel — Cancel a running job (#5) ───────────────────────
 router.post('/jobs/:id/cancel', optionalAuth, async (req, res) => {
   try {
     const db = getModels();
@@ -481,81 +668,20 @@ router.post('/jobs/:id/cancel', optionalAuth, async (req, res) => {
     if (!job) return res.status(404).json({ error: 'Job not found' });
 
     if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
-      return res.json({ job, message: 'Job already finished' });
+      return res.status(400).json({ error: `Job is already ${job.status}` });
     }
 
-    await job.update({
-      status: 'failed',
-      error_message: `Cancelled by user at ${job.completed || 0}/${job.total} (${job.failed || 0} previously failed)`,
-      completed_at: new Date(),
-    });
-
-    // Signal the in-process loop to stop
-    cancelledJobs.add(job.id);
-
-    return res.json({ job: await job.reload(), message: 'Job cancelled' });
+    cancelledJobs.add(String(job.id));
+    await job.update({ status: 'cancelled', error_message: 'Cancelled by user', completed_at: new Date() });
+    notifyJobSSE(job.id, 'cancelled', { job_id: job.id });
+    return res.json({ success: true, message: `Job #${job.id} cancelled` });
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
 });
 
-// ── POST /jobs/:id/retry ────────────────────────────────────────────────────
-// Retry remaining unprocessed candidates from a failed/cancelled job
-router.post('/jobs/:id/retry', optionalAuth, async (req, res) => {
-  try {
-    const db = getModels();
-    if (!db || !db.BulkImportJob) {
-      return res.status(404).json({ error: 'Not available' });
-    }
-    const oldJob = await db.BulkImportJob.findByPk(req.params.id);
-    if (!oldJob) return res.status(404).json({ error: 'Job not found' });
-
-    if (oldJob.status !== 'failed') {
-      return res.status(400).json({ error: 'Only failed jobs can be retried' });
-    }
-
-    // Figure out which candidates weren't successfully processed
-    const doneHandles = new Set(
-      (oldJob.results || []).filter(r => r.status === 'success').map(r => `${r.handle}::${r.platform}`)
-    );
-    const remaining = (oldJob.candidates || []).filter(c => !doneHandles.has(`${c.handle}::${c.platform}`));
-
-    if (remaining.length === 0) {
-      return res.json({ message: 'All candidates were already processed — nothing to retry' });
-    }
-
-    const newJob = await db.BulkImportJob.create({
-      status: 'pending',
-      total: remaining.length,
-      completed: 0,
-      failed: 0,
-      candidates: remaining,
-      results: [],
-      character_context: oldJob.character_context,
-      character_key: oldJob.character_key,
-      series_id: oldJob.series_id,
-    });
-
-    processJobInBackground(newJob.id);
-
-    return res.json({
-      job_id: newJob.id,
-      status: 'pending',
-      total: remaining.length,
-      skipped: oldJob.candidates.length - remaining.length,
-      message: `Retry job #${newJob.id} queued: ${remaining.length} remaining profiles.`,
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-// ── In-memory cancellation signal ───────────────────────────────────────────
-const cancelledJobs = new Set();
-
-// ── Background Job Processor ─────────────────────────────────────────────────
-// Processes a single job — called non-blocking via setImmediate
-async function processJobInBackground(jobId) {
+// ── Background Job Processor — parallel + SSE + cancellation (#1,#2,#4,#5) ──
+async function processJobInBackground(jobId, concurrency = 3) {
   // Defer to next tick so the HTTP response goes out first
   setImmediate(async () => {
     const db = getModels();
@@ -567,142 +693,106 @@ async function processJobInBackground(jobId) {
       if (!job || job.status !== 'pending') return;
 
       await job.update({ status: 'processing', started_at: new Date() });
+      notifyJobSSE(jobId, 'started', { job_id: jobId, total: job.total });
 
       const candidates = job.candidates || [];
       const results = [];
       let completedCount = 0;
       let failedCount = 0;
 
-      for (const c of candidates) {
-        // Check for cancellation signal
-        if (cancelledJobs.has(jobId)) {
-          cancelledJobs.delete(jobId);
-          console.log(`⛔ Bulk job #${jobId} cancelled by user at ${completedCount}/${candidates.length}`);
-          return; // Job already marked failed by cancel endpoint
+      // Build tasks for concurrent processing
+      const tasks = candidates.map((c, idx) => async () => {
+        // Check cancellation before starting (#5)
+        if (cancelledJobs.has(String(jobId))) {
+          return { handle: c.handle, platform: c.platform, status: 'failed', error: 'Job cancelled', error_category: 'cancelled', skipped: true };
         }
 
         try {
-          const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence, job.character_context);
-          const aiRes = await callAnthropicWithRetry(() =>
-            client.messages.create({
-              model: 'claude-sonnet-4-20250514',
-              max_tokens: 3000,
-              messages: [{ role: 'user', content: prompt }],
-            }),
-            { retries: 2, baseDelay: 5000 }
-          );
-
-          const text = aiRes.content[0].text;
-          const cleaned = text.replace(/```json\s*/gi, '').replace(/```/g, '').trim();
-          const jsonMatch = cleaned.match(/\{[\s\S]*\}/);
-          if (!jsonMatch) throw new Error('AI did not return valid JSON');
-
-          const fixedJson = jsonMatch[0].replace(/,\s*([\]}])/g, '$1');
-          let profile;
-          try {
-            profile = JSON.parse(fixedJson);
-          } catch (parseErr) {
-            throw new Error(`Profile JSON parse failed: ${parseErr.message}`);
-          }
-
-          // Save to DB
-          let saved = null;
-          if (db.SocialProfile) {
-            const [record, created] = await db.SocialProfile.findOrCreate({
-              where: { handle: c.handle, platform: c.platform },
-              defaults: {
-                vibe_sentence: c.vibe_sentence,
-                display_name: profile.display_name,
-                archetype: profile.archetype,
-                content_persona: profile.content_persona,
-                real_signal: profile.real_signal,
-                posting_voice: profile.posting_voice,
-                comment_energy: profile.comment_energy,
-                follower_count_approx: profile.follower_count_approx,
-                parasocial_function: profile.parasocial_function,
-                emotional_activation: profile.emotional_activation,
-                watch_reason: profile.watch_reason,
-                what_it_costs_her: profile.what_it_costs_her,
-                current_trajectory: profile.current_trajectory,
-                trajectory_detail: profile.trajectory_detail,
-                lala_relevance_score: profile.lala_relevance_score,
-                lala_relevance_reason: profile.lala_relevance_reason,
-                pinned_post: profile.pinned_post,
-                sample_captions: profile.sample_captions,
-                sample_comments: profile.sample_comments,
-                adult_content_present: profile.adult_content_present || false,
-                adult_content_type: profile.adult_content_type,
-                adult_content_framing: profile.adult_content_framing,
-                crossing_trigger: profile.crossing_trigger,
-                crossing_mechanism: profile.crossing_mechanism,
-                book_relevance: profile.book_relevance,
-                moment_log: profile.moment_log || [],
-                full_profile: profile,
-                status: 'generated',
-                series_id: job.series_id || null,
-              },
-            });
-            saved = record;
-            if (!created) {
-              await record.update({
-                vibe_sentence: c.vibe_sentence,
-                display_name: profile.display_name,
-                archetype: profile.archetype,
-                content_persona: profile.content_persona,
-                full_profile: profile,
-                lala_relevance_score: profile.lala_relevance_score,
-                status: 'generated',
-              });
-            }
-
-            // Auto-assign protagonist as follower
-            if (saved && job.character_key) {
-              await autoAssignFollower(db, saved.id, job.character_context, job.character_key);
-            }
-          }
-
-          completedCount++;
-          results.push({
-            handle: c.handle,
-            platform: c.platform,
-            status: 'success',
-            profile_id: saved?.id || null,
-            lala_score: profile.lala_relevance_score || 0,
+          const result = await generateSingleProfile(c, {
+            db,
+            seriesId: job.series_id,
+            characterContext: job.character_context,
+            characterKey: job.character_key,
           });
+          completedCount++;
+
+          // SSE: push each completed profile in real-time (#1, #10)
+          notifyJobSSE(jobId, 'profile_complete', {
+            index: idx,
+            result,
+            completed: completedCount,
+            failed: failedCount,
+            total: candidates.length,
+          });
+
+          return result;
         } catch (creatorErr) {
           failedCount++;
-          results.push({
+          const errInfo = categorizeError(creatorErr);
+          const failResult = {
             handle: c.handle,
             platform: c.platform,
             status: 'failed',
             error: creatorErr.message || 'Unknown error',
+            error_category: errInfo.category,
+            error_label: errInfo.label,
+            retryable: errInfo.retryable,
+          };
+
+          notifyJobSSE(jobId, 'profile_failed', {
+            index: idx,
+            result: failResult,
+            completed: completedCount,
+            failed: failedCount,
+            total: candidates.length,
           });
-        }
 
-        // Update progress after each creator (so polling can see live progress)
-        await job.update({
-          completed: completedCount,
-          failed: failedCount,
-          results,
-        });
-
-        // Pause between API calls to respect rate limits
-        if (completedCount + failedCount < candidates.length) {
-          await new Promise(r => setTimeout(r, 2000));
+          return failResult;
         }
-      }
+      });
+
+      // Run with concurrency (#2)
+      const allResults = await runWithConcurrency(tasks, concurrency);
+      results.push(...allResults.filter(Boolean));
+
+      // Finalize counts from actual results
+      completedCount = results.filter(r => r.status === 'success').length;
+      failedCount = results.filter(r => r.status === 'failed').length;
+
+      // Check if we were cancelled mid-run
+      const finalStatus = cancelledJobs.has(String(jobId)) ? 'cancelled' : 'completed';
+      cancelledJobs.delete(String(jobId));
 
       await job.update({
-        status: 'completed',
+        status: finalStatus,
         completed: completedCount,
         failed: failedCount,
         results,
         completed_at: new Date(),
       });
 
-      console.log(`✅ Bulk job #${jobId} completed: ${completedCount} succeeded, ${failedCount} failed out of ${candidates.length}`);
+      notifyJobSSE(jobId, 'done', {
+        job_id: jobId,
+        status: finalStatus,
+        completed: completedCount,
+        failed: failedCount,
+        total: candidates.length,
+        results,
+      });
+
+      // Close all SSE connections for this job
+      const clients = jobSSEClients.get(String(jobId));
+      if (clients) {
+        for (const client of clients) {
+          try { client.end(); } catch {}
+        }
+        jobSSEClients.delete(String(jobId));
+      }
+
+      console.log(`✅ Bulk job #${jobId} ${finalStatus}: ${completedCount} succeeded, ${failedCount} failed out of ${candidates.length}`);
     } catch (err) {
       console.error(`❌ Bulk job #${jobId} fatal error:`, err.message);
+      cancelledJobs.delete(String(jobId));
       if (job) {
         await job.update({
           status: 'failed',
@@ -710,6 +800,7 @@ async function processJobInBackground(jobId) {
           completed_at: new Date(),
         }).catch(() => {});
       }
+      notifyJobSSE(jobId, 'error', { job_id: jobId, error: err.message });
     }
   });
 }

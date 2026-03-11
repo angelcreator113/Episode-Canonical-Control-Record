@@ -134,11 +134,17 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   const [platform, setPlatform]   = useState('instagram');
   const [vibe, setVibe]           = useState('');
 
+  // Advanced context (expandable)
+  const [showAdvanced, setShowAdvanced] = useState(false);
+  const [advLocationHint, setAdvLocationHint]     = useState('');
+  const [advFollowerHint, setAdvFollowerHint]     = useState('');
+  const [advRelationshipHint, setAdvRelationshipHint] = useState('');
+  const [advDramaHint, setAdvDramaHint]           = useState('');
+  const [advAestheticHint, setAdvAestheticHint]   = useState('');
+  const [advRevenueHint, setAdvRevenueHint]       = useState('');
+
   // Active background job tracking
   const [activeJob, setActiveJob] = useState(null);
-  const [jobStale, setJobStale] = useState(false);
-  const jobPollRef = useRef(null);
-  const lastProgressRef = useRef({ completed: 0, since: Date.now() });
 
   // ── Load profiles ────────────────────────────────────────────────────────
   const loadProfiles = useCallback(async (targetPage) => {
@@ -175,61 +181,129 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
   useEffect(() => { loadProfiles(); }, [loadProfiles]);
 
-  // ── Background job polling ───────────────────────────────────────────────
-  const pollJob = useCallback(async (jobId) => {
-    try {
-      const res = await fetch(`${API}/bulk/jobs/${jobId}`, { headers: authHeaders() });
-      const data = await res.json();
-      if (data.job) {
-        setActiveJob(data.job);
+  // ── Background job SSE streaming (replaces polling) ──────────────────────
+  const sseRef = useRef(null);
+  const [cancellingJob, setCancellingJob] = useState(false);
 
-        // Stale detection: if progress hasn't changed in 3 minutes, flag as stuck
-        const currentCompleted = (data.job.completed || 0) + (data.job.failed || 0);
-        if (data.job.status === 'processing') {
-          if (currentCompleted !== lastProgressRef.current.completed) {
-            lastProgressRef.current = { completed: currentCompleted, since: Date.now() };
-            setJobStale(false);
-          } else if (Date.now() - lastProgressRef.current.since > 3 * 60 * 1000) {
-            setJobStale(true);
+  const connectJobSSE = useCallback((jobId) => {
+    // Close any existing connection
+    if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+
+    const es = new EventSource(`${API}/bulk/jobs/${jobId}/stream`);
+    sseRef.current = es;
+
+    es.addEventListener('connected', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setActiveJob(prev => ({ ...prev, ...data, id: jobId }));
+      } catch {}
+    });
+
+    es.addEventListener('started', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setActiveJob(prev => ({ ...prev, ...data, status: 'processing' }));
+      } catch {}
+    });
+
+    es.addEventListener('profile_complete', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setActiveJob(prev => ({ ...prev, completed: data.completed, total: data.total, status: 'processing' }));
+      } catch {}
+    });
+
+    es.addEventListener('profile_failed', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setActiveJob(prev => ({ ...prev, completed: data.completed, failed: data.failed, total: data.total, status: 'processing' }));
+      } catch {}
+    });
+
+    es.addEventListener('cancelled', () => {
+      setActiveJob(prev => prev ? { ...prev, status: 'cancelled' } : prev);
+      localStorage.removeItem('spg_active_job');
+      es.close(); sseRef.current = null;
+      loadProfiles();
+    });
+
+    es.addEventListener('done', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setActiveJob(prev => ({ ...prev, ...data, status: 'completed' }));
+      } catch {}
+      localStorage.removeItem('spg_active_job');
+      es.close(); sseRef.current = null;
+      loadProfiles();
+    });
+
+    es.addEventListener('error', () => {
+      // SSE connection lost — fall back to a single poll then reconnect
+      es.close(); sseRef.current = null;
+      setTimeout(async () => {
+        try {
+          const res = await fetch(`${API}/bulk/jobs/${jobId}`, { headers: authHeaders() });
+          const data = await res.json();
+          if (data.job) {
+            setActiveJob(data.job);
+            if (data.job.status === 'completed' || data.job.status === 'failed' || data.job.status === 'cancelled') {
+              localStorage.removeItem('spg_active_job');
+              loadProfiles();
+            } else {
+              connectJobSSE(jobId); // Reconnect
+            }
           }
+        } catch (err) {
+          console.error('Job fallback poll error:', err);
         }
-
-        if (data.job.status === 'completed' || data.job.status === 'failed') {
-          clearInterval(jobPollRef.current);
-          jobPollRef.current = null;
-          localStorage.removeItem('spg_active_job');
-          setJobStale(false);
-          loadProfiles();
-        }
-      }
-    } catch (err) {
-      console.error('Job poll error:', err);
-    }
+      }, 3000);
+    });
   }, [loadProfiles]);
 
   // On mount, check for an active job from localStorage
   useEffect(() => {
     const savedJobId = localStorage.getItem('spg_active_job');
     if (savedJobId) {
-      pollJob(savedJobId);
-      jobPollRef.current = setInterval(() => pollJob(savedJobId), 6000);
+      // Initial fetch to show something immediately, then open SSE
+      fetch(`${API}/bulk/jobs/${savedJobId}`, { headers: authHeaders() })
+        .then(r => r.json())
+        .then(data => {
+          if (data.job) {
+            setActiveJob(data.job);
+            if (data.job.status !== 'completed' && data.job.status !== 'failed' && data.job.status !== 'cancelled') {
+              connectJobSSE(savedJobId);
+            } else {
+              localStorage.removeItem('spg_active_job');
+            }
+          }
+        })
+        .catch(() => {});
     }
-    return () => { if (jobPollRef.current) clearInterval(jobPollRef.current); };
-  }, [pollJob]);
+    return () => { if (sseRef.current) { sseRef.current.close(); sseRef.current = null; } };
+  }, [connectJobSSE]);
 
   const startJobPolling = (jobId) => {
     localStorage.setItem('spg_active_job', jobId);
-    lastProgressRef.current = { completed: 0, since: Date.now() };
-    setJobStale(false);
-    pollJob(jobId);
-    if (jobPollRef.current) clearInterval(jobPollRef.current);
-    jobPollRef.current = setInterval(() => pollJob(jobId), 6000);
+    setActiveJob({ id: jobId, status: 'pending', total: 0, completed: 0, failed: 0 });
+    connectJobSSE(jobId);
   };
 
   const dismissJob = () => {
     setActiveJob(null);
     localStorage.removeItem('spg_active_job');
-    if (jobPollRef.current) { clearInterval(jobPollRef.current); jobPollRef.current = null; }
+    if (sseRef.current) { sseRef.current.close(); sseRef.current = null; }
+  };
+
+  const cancelJob = async () => {
+    if (!activeJob?.id) return;
+    setCancellingJob(true);
+    try {
+      await fetch(`${API}/bulk/jobs/${activeJob.id}/cancel`, { method: 'POST', headers: authHeaders() });
+    } catch (err) {
+      console.error('Cancel job error:', err);
+    } finally {
+      setCancellingJob(false);
+    }
   };
 
   const cancelJob = async (jobId) => {
@@ -412,6 +486,17 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     setGenerating(true);
     setError(null);
     try {
+      // Build advanced context only if any hint is filled
+      const advFields = {
+        location_hint: advLocationHint.trim(),
+        follower_hint: advFollowerHint.trim(),
+        relationship_hint: advRelationshipHint.trim(),
+        drama_hint: advDramaHint.trim(),
+        aesthetic_hint: advAestheticHint.trim(),
+        revenue_hint: advRevenueHint.trim(),
+      };
+      const hasAdvanced = Object.values(advFields).some(v => v);
+
       const res = await fetch(`${API}/generate`, {
         method: 'POST',
         headers: authHeaders(),
@@ -421,6 +506,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           vibe_sentence: vibe.trim(),
           character_context: protagonist.context,
           character_key: protagonist.key,
+          ...(hasAdvanced ? { advanced_context: advFields } : {}),
         }),
       });
       const data = await res.json();
@@ -428,6 +514,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       setSelected(data.profile);
       setHandle('');
       setVibe('');
+      // Clear advanced fields
+      setAdvLocationHint(''); setAdvFollowerHint(''); setAdvRelationshipHint('');
+      setAdvDramaHint(''); setAdvAestheticHint(''); setAdvRevenueHint('');
+      setShowAdvanced(false);
       setPage(1);
       loadProfiles(1);
     } catch (err) {
@@ -511,6 +601,20 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   // ── Get full_profile data (AI output stored as JSONB) ────────────────────
   const fp = (profile) => profile?.full_profile || profile || {};
 
+  // ── Pagination helper ───────────────────────────────────────────────────
+  const renderPagination = () => {
+    if (loading || totalPages <= 1) return null;
+    return (
+      <div className="spg-pagination">
+        <button className="spg-page-btn" disabled={page <= 1} onClick={() => setPage(1)} title="First page">«</button>
+        <button className="spg-page-btn" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>‹ Prev</button>
+        <span className="spg-page-info">Page {page} of {totalPages}</span>
+        <button className="spg-page-btn" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next ›</button>
+        <button className="spg-page-btn" disabled={page >= totalPages} onClick={() => setPage(totalPages)} title="Last page">»</button>
+      </div>
+    );
+  };
+
   // ────────────────────────────────────────────────────────────────────────
   return (
     <div className={`spg-page ${embedded ? 'spg-embedded' : ''}`}>
@@ -520,21 +624,10 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           <div>
             <div className="spg-header-title">📱 The Feed</div>
             <div className="spg-header-sub">
-              Parasocial Creator Profiles — {protagonist.context.name}'s online world
+              Parasocial Creator Profiles — Lala's online world
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
-            <div className="spg-protagonist-selector">
-              {PROTAGONISTS.map(p => (
-                <button
-                  key={p.key}
-                  className={`spg-protagonist-btn ${protagonist.key === p.key ? 'spg-protagonist-btn-active' : ''}`}
-                  onClick={() => setProtagonist(p)}
-                >
-                  {p.icon} {p.label}
-                </button>
-              ))}
-            </div>
             <button
               className="spg-btn"
               style={{ fontSize: '0.82rem', whiteSpace: 'nowrap' }}
@@ -562,43 +655,36 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
       {/* ── Active Job Banner ──────────────────────────────────── */}
       {activeJob && (
-        <div className={`spg-job-banner ${activeJob.status === 'completed' ? 'spg-job-done' : activeJob.status === 'failed' ? 'spg-job-failed' : jobStale ? 'spg-job-stale' : 'spg-job-active'}`}>
-          <div className="spg-job-banner-top">
-            <div className="spg-job-banner-text">
-              {activeJob.status === 'processing' && !jobStale && (
-                <>⟳ Generating profiles in background... {activeJob.completed || 0}/{activeJob.total || 0} done{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
-              )}
-              {activeJob.status === 'processing' && jobStale && (
-                <>⚠ Job appears stuck at {activeJob.completed || 0}/{activeJob.total || 0} — no progress for 3+ minutes. You can cancel and retry the remaining profiles.</>
-              )}
-              {activeJob.status === 'pending' && (
-                <>⟳ Job queued — waiting to start ({activeJob.total} profiles)...</>
-              )}
-              {activeJob.status === 'completed' && (
-                <>✓ Background import complete — {activeJob.completed}/{activeJob.total} profiles generated{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
-              )}
-              {activeJob.status === 'failed' && (
-                <>✕ Job failed{activeJob.error_message ? `: ${activeJob.error_message}` : ''}</>
-              )}
-            </div>
-            {(activeJob.status === 'processing' || activeJob.status === 'pending') && (
-              <button className="spg-job-cancel" onClick={() => cancelJob(activeJob.id)}>Cancel</button>
+        <div className={`spg-job-banner ${activeJob.status === 'completed' ? 'spg-job-done' : activeJob.status === 'failed' ? 'spg-job-failed' : activeJob.status === 'cancelled' ? 'spg-job-failed' : 'spg-job-active'}`}>
+          <div className="spg-job-banner-text">
+            {activeJob.status === 'processing' && (
+              <>⟳ Generating profiles in background... {activeJob.completed || 0}/{activeJob.total || 0} done{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
+            )}
+            {activeJob.status === 'pending' && (
+              <>⟳ Job queued — waiting to start ({activeJob.total} profiles)...</>
+            )}
+            {activeJob.status === 'completed' && (
+              <>✓ Background import complete — {activeJob.completed}/{activeJob.total} profiles generated{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
+            )}
+            {activeJob.status === 'cancelled' && (
+              <>⊘ Job cancelled — {activeJob.completed || 0}/{activeJob.total || 0} profiles generated before cancellation</>
+            )}
+            {activeJob.status === 'failed' && (
+              <>✕ Job failed{activeJob.error_message ? `: ${activeJob.error_message}` : ''}</>
             )}
           </div>
           {(activeJob.status === 'processing' || activeJob.status === 'pending') && (
-            <div className="spg-job-progress-bar">
-              <div className="spg-job-progress-fill" style={{ width: `${activeJob.total ? ((activeJob.completed || 0) / activeJob.total) * 100 : 0}%` }} />
-            </div>
+            <>
+              <div className="spg-job-progress-bar">
+                <div className="spg-job-progress-fill" style={{ width: `${activeJob.total ? ((activeJob.completed || 0) / activeJob.total) * 100 : 0}%` }} />
+              </div>
+              <button className="spg-job-dismiss" onClick={cancelJob} disabled={cancellingJob} style={{ marginLeft: '8px' }}>
+                {cancellingJob ? 'Cancelling…' : '✕ Cancel'}
+              </button>
+            </>
           )}
-          {(activeJob.status === 'completed' || activeJob.status === 'failed') && (
-            <div className="spg-job-actions">
-              {activeJob.status === 'failed' && (activeJob.completed || 0) < (activeJob.total || 0) && (
-                <button className="spg-job-retry" onClick={() => retryJob(activeJob.id)}>
-                  ↻ Retry Remaining ({(activeJob.total || 0) - (activeJob.completed || 0)})
-                </button>
-              )}
-              <button className="spg-job-dismiss" onClick={dismissJob}>Dismiss</button>
-            </div>
+          {(activeJob.status === 'completed' || activeJob.status === 'failed' || activeJob.status === 'cancelled') && (
+            <button className="spg-job-dismiss" onClick={dismissJob}>Dismiss</button>
           )}
         </div>
       )}
@@ -648,7 +734,7 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
               value={vibe}
               onChange={e => setVibe(e.target.value)}
               disabled={generating}
-              onKeyDown={e => e.key === 'Enter' && generateProfile()}
+              onKeyDown={e => e.key === 'Enter' && !e.shiftKey && generateProfile()}
             />
           </div>
           <button
@@ -659,6 +745,85 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
             {generating ? <><span className="spg-spinner" /> Generating…</> : '✦ Generate'}
           </button>
         </div>
+
+        {/* Advanced Context Toggle */}
+        <button
+          className="spg-advanced-toggle"
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          type="button"
+        >
+          {showAdvanced ? '▾' : '▸'} Advanced Context
+          <span className="spg-advanced-hint">optional — guide the AI with extra detail</span>
+        </button>
+
+        {/* Advanced Context Panel */}
+        {showAdvanced && (
+          <div className="spg-advanced-panel">
+            <div className="spg-advanced-grid">
+              <div className="spg-field">
+                <span className="spg-label">📍 Location</span>
+                <input
+                  className="spg-input"
+                  placeholder="e.g. Atlanta, Houston, Lagos, London"
+                  value={advLocationHint}
+                  onChange={e => setAdvLocationHint(e.target.value)}
+                  disabled={generating}
+                />
+              </div>
+              <div className="spg-field">
+                <span className="spg-label">👥 Follower Range</span>
+                <input
+                  className="spg-input"
+                  placeholder="e.g. 50K-100K, micro, mega"
+                  value={advFollowerHint}
+                  onChange={e => setAdvFollowerHint(e.target.value)}
+                  disabled={generating}
+                />
+              </div>
+              <div className="spg-field">
+                <span className="spg-label">💔 Relationship Hint</span>
+                <input
+                  className="spg-input"
+                  placeholder="e.g. ex of @kingdave, collabs with @styleguru"
+                  value={advRelationshipHint}
+                  onChange={e => setAdvRelationshipHint(e.target.value)}
+                  disabled={generating}
+                />
+              </div>
+              <div className="spg-field">
+                <span className="spg-label">🔥 Drama Context</span>
+                <input
+                  className="spg-input"
+                  placeholder="e.g. caught cheating scandal, brand deal gone wrong"
+                  value={advDramaHint}
+                  onChange={e => setAdvDramaHint(e.target.value)}
+                  disabled={generating}
+                />
+              </div>
+              <div className="spg-field">
+                <span className="spg-label">🎨 Aesthetic</span>
+                <input
+                  className="spg-input"
+                  placeholder="e.g. clean girl, dark academia, y2k nostalgic"
+                  value={advAestheticHint}
+                  onChange={e => setAdvAestheticHint(e.target.value)}
+                  disabled={generating}
+                />
+              </div>
+              <div className="spg-field">
+                <span className="spg-label">💰 Revenue</span>
+                <input
+                  className="spg-input"
+                  placeholder="e.g. brand deals only, OF crossover, merch empire"
+                  value={advRevenueHint}
+                  onChange={e => setAdvRevenueHint(e.target.value)}
+                  disabled={generating}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
         {error && <div style={{ color: 'var(--red)', marginTop: 8, fontSize: '0.82rem' }}>{error}</div>}
       </div>}
 
@@ -754,6 +919,9 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           </div>
         )}
 
+        {/* Top Pagination */}
+        {renderPagination()}
+
         {/* Loading */}
         {loading && (
           <div className="spg-loading">
@@ -817,6 +985,14 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
                   <div className="spg-card-persona">
                     {p.content_persona || data.content_persona || p.vibe_sentence}
                   </div>
+                  {/* Enhanced data badges */}
+                  {(p.geographic_cluster || p.post_frequency || p.engagement_rate) && (
+                    <div className="spg-card-badges">
+                      {p.geographic_cluster && <span className="spg-card-badge spg-badge-geo">📍 {p.geographic_cluster}</span>}
+                      {p.post_frequency && <span className="spg-card-badge spg-badge-freq">{p.post_frequency}</span>}
+                      {p.engagement_rate && <span className="spg-card-badge spg-badge-engage">💬 {p.engagement_rate}</span>}
+                    </div>
+                  )}
                   <div className="spg-card-footer">
                     <span className="spg-card-followers">
                       {p.follower_count_approx || data.follower_count_approx || '—'}
@@ -840,44 +1016,8 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           </div>
         )}
 
-        {/* ── Pagination ─────────────────────────────────────── */}
-        {!loading && totalPages > 1 && (
-          <div className="spg-pagination">
-            <button
-              className="spg-page-btn"
-              disabled={page <= 1}
-              onClick={() => setPage(1)}
-              title="First page"
-            >
-              «
-            </button>
-            <button
-              className="spg-page-btn"
-              disabled={page <= 1}
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-            >
-              ‹ Prev
-            </button>
-            <span className="spg-page-info">
-              Page {page} of {totalPages}
-            </span>
-            <button
-              className="spg-page-btn"
-              disabled={page >= totalPages}
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-            >
-              Next ›
-            </button>
-            <button
-              className="spg-page-btn"
-              disabled={page >= totalPages}
-              onClick={() => setPage(totalPages)}
-              title="Last page"
-            >
-              »
-            </button>
-          </div>
-        )}
+        {/* ── Bottom Pagination ────────────────────────────── */}
+        {renderPagination()}
 
         {/* ── Detail Panel ──────────────────────────────────────── */}
         {selected && <DetailPanel
@@ -1002,6 +1142,8 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
           <span className="spg-detail-meta-item">{p.platform}</span>
           <span className="spg-detail-meta-item">{p.follower_count_approx || d.follower_count_approx}</span>
           <span className="spg-detail-meta-item">{ARCHETYPE_LABELS[p.archetype || d.archetype] || p.archetype || d.archetype}</span>
+          {(p.geographic_base || d.geographic_base) && <span className="spg-detail-meta-item">📍 {p.geographic_base || d.geographic_base}</span>}
+          {(p.relationship_status || d.relationship_status) && <span className="spg-detail-meta-item">💍 {p.relationship_status || d.relationship_status}</span>}
           {p.adult_content_present && <span className="spg-adult-badge">18+ Content</span>}
         </div>
         <div className="spg-detail-actions">
@@ -1141,6 +1283,7 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
           <div className="spg-follower-row">
             {PROTAGONISTS.map(protag => {
               const isFollowing = followers.some(f => f.character_key === protag.key);
+              const followData = followers.find(f => f.character_key === protag.key);
               const isLoading = followLoading === protag.key;
               return (
                 <button
@@ -1148,9 +1291,13 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
                   className={`spg-follow-btn ${isFollowing ? 'spg-follow-btn-active' : ''}`}
                   onClick={() => toggleFollow(protag)}
                   disabled={isLoading}
+                  title={followData?.follow_context || ''}
                 >
                   <span className="spg-follow-icon">{protag.icon}</span>
                   <span>{isLoading ? '...' : isFollowing ? `${protag.context.name} follows` : `Add ${protag.context.name}`}</span>
+                  {followData?.follow_probability != null && (
+                    <span className="spg-follow-prob">{Math.round(followData.follow_probability * 100)}%</span>
+                  )}
                 </button>
               );
             })}
@@ -1158,12 +1305,31 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
           {followers.length > 0 && (
             <div className="spg-follower-details">
               {followers.map(f => (
-                <div key={f.character_key} className="spg-follower-detail-item">
-                  <span className="spg-follower-detail-name">
-                    {f.character_key === 'justawoman' ? '◈' : '✦'} {f.character_name}
-                  </span>
-                  {f.influence_type && <span className="spg-follower-detail-tag">{f.influence_type}</span>}
-                  {f.influence_level && <span className="spg-follower-detail-level">Influence: {f.influence_level}/10</span>}
+                <div key={f.character_key} className="spg-follower-detail-item spg-follower-detail-enhanced">
+                  <div className="spg-follower-detail-header">
+                    <span className="spg-follower-detail-name">
+                      {f.character_key === 'justawoman' ? '◈' : '✦'} {f.character_name}
+                    </span>
+                    {f.auto_generated && <span className="spg-follower-auto-badge">auto</span>}
+                    {f.follow_motivation && (
+                      <span className={`spg-follower-motivation spg-motivation-${f.follow_motivation}`}>
+                        {f.follow_motivation.replace('_', ' ')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="spg-follower-detail-meta">
+                    {f.influence_type && <span className="spg-follower-detail-tag">{f.influence_type}</span>}
+                    {f.influence_level && <span className="spg-follower-detail-level">Influence: {f.influence_level}/10</span>}
+                    {f.follow_probability != null && (
+                      <span className="spg-follower-detail-prob">Match: {Math.round(f.follow_probability * 100)}%</span>
+                    )}
+                  </div>
+                  {f.emotional_reaction && (
+                    <div className="spg-follower-emotional">{f.emotional_reaction}</div>
+                  )}
+                  {f.follow_context && (
+                    <div className="spg-follower-context">{f.follow_context}</div>
+                  )}
                 </div>
               ))}
             </div>
@@ -1233,6 +1399,185 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
             <div className="spg-samples">
               {(p.book_relevance || d.book_relevance || []).map((b, i) => (
                 <div key={i} className="spg-sample" style={{ borderLeftColor: 'var(--cyan)' }}>{b}</div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ── Enhanced Creator Intel ──────────────────────────────── */}
+        {(p.post_frequency || d.post_frequency || p.engagement_rate || d.engagement_rate || p.geographic_base || d.geographic_base) && (
+          <div className="spg-section" style={{ marginTop: 24 }}>
+            <div className="spg-section-title">Creator Intel</div>
+            <div className="spg-intel-grid">
+              {(p.post_frequency || d.post_frequency) && (
+                <div className="spg-intel-item">
+                  <span className="spg-intel-icon">📊</span>
+                  <span className="spg-intel-label">Post Frequency</span>
+                  <span className="spg-intel-value">{p.post_frequency || d.post_frequency}</span>
+                </div>
+              )}
+              {(p.engagement_rate || d.engagement_rate) && (
+                <div className="spg-intel-item">
+                  <span className="spg-intel-icon">💬</span>
+                  <span className="spg-intel-label">Engagement Rate</span>
+                  <span className="spg-intel-value">{p.engagement_rate || d.engagement_rate}</span>
+                </div>
+              )}
+              {(p.geographic_base || d.geographic_base) && (
+                <div className="spg-intel-item">
+                  <span className="spg-intel-icon">📍</span>
+                  <span className="spg-intel-label">Location</span>
+                  <span className="spg-intel-value">{p.geographic_base || d.geographic_base}</span>
+                </div>
+              )}
+              {(p.geographic_cluster || d.geographic_cluster) && (
+                <div className="spg-intel-item">
+                  <span className="spg-intel-icon">🗺️</span>
+                  <span className="spg-intel-label">Cluster</span>
+                  <span className="spg-intel-value">{p.geographic_cluster || d.geographic_cluster}</span>
+                </div>
+              )}
+              {(p.age_range || d.age_range) && (
+                <div className="spg-intel-item">
+                  <span className="spg-intel-icon">🎂</span>
+                  <span className="spg-intel-label">Age Range</span>
+                  <span className="spg-intel-value">{p.age_range || d.age_range}</span>
+                </div>
+              )}
+              {(p.relationship_status || d.relationship_status) && (
+                <div className="spg-intel-item">
+                  <span className="spg-intel-icon">💍</span>
+                  <span className="spg-intel-label">Relationship</span>
+                  <span className="spg-intel-value">{p.relationship_status || d.relationship_status}</span>
+                </div>
+              )}
+              {(p.influencer_tier_detail || d.influencer_tier_detail) && (
+                <div className="spg-intel-item">
+                  <span className="spg-intel-icon">👑</span>
+                  <span className="spg-intel-label">Tier Detail</span>
+                  <span className="spg-intel-value">{p.influencer_tier_detail || d.influencer_tier_detail}</span>
+                </div>
+              )}
+              {(p.collab_style || d.collab_style) && (
+                <div className="spg-intel-item">
+                  <span className="spg-intel-icon">🤝</span>
+                  <span className="spg-intel-label">Collab Style</span>
+                  <span className="spg-intel-value">{p.collab_style || d.collab_style}</span>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Aesthetic DNA */}
+        {(p.aesthetic_dna || d.aesthetic_dna) && (
+          <div className="spg-section" style={{ marginTop: 24 }}>
+            <div className="spg-section-title">Aesthetic DNA</div>
+            <div className="spg-aesthetic-grid">
+              {(() => {
+                const aes = p.aesthetic_dna || d.aesthetic_dna;
+                return (
+                  <>
+                    {aes.visual_style && <div className="spg-aesthetic-item"><span className="spg-section-label">Visual Style</span><span>{aes.visual_style}</span></div>}
+                    {aes.color_palette && <div className="spg-aesthetic-item"><span className="spg-section-label">Color Palette</span><span>{aes.color_palette}</span></div>}
+                    {aes.editing_style && <div className="spg-aesthetic-item"><span className="spg-section-label">Editing Style</span><span>{aes.editing_style}</span></div>}
+                    {aes.vibe_tags && Array.isArray(aes.vibe_tags) && (
+                      <div className="spg-aesthetic-tags">
+                        {aes.vibe_tags.map((t, i) => <span key={i} className="spg-tag">{t}</span>)}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Revenue Streams */}
+        {((p.revenue_streams || d.revenue_streams) || []).length > 0 && (
+          <div className="spg-section" style={{ marginTop: 24 }}>
+            <div className="spg-section-title">Revenue Streams</div>
+            <div className="spg-tag-row">
+              {(p.revenue_streams || d.revenue_streams || []).map((r, i) => (
+                <span key={i} className="spg-tag spg-tag-green">{typeof r === 'string' ? r : r.source || r.type || JSON.stringify(r)}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Brand Partnerships */}
+        {((p.brand_partnerships || d.brand_partnerships) || []).length > 0 && (
+          <div className="spg-section" style={{ marginTop: 16 }}>
+            <div className="spg-section-title">Brand Partnerships</div>
+            <div className="spg-tag-row">
+              {(p.brand_partnerships || d.brand_partnerships || []).map((b, i) => (
+                <span key={i} className="spg-tag spg-tag-purple">{typeof b === 'string' ? b : b.brand || b.name || JSON.stringify(b)}</span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Audience Demographics */}
+        {(p.audience_demographics || d.audience_demographics) && (
+          <div className="spg-section" style={{ marginTop: 24 }}>
+            <div className="spg-section-title">Audience Demographics</div>
+            <div className="spg-intel-grid">
+              {(() => {
+                const aud = p.audience_demographics || d.audience_demographics;
+                return (
+                  <>
+                    {aud.primary_age && <div className="spg-intel-item"><span className="spg-intel-icon">📊</span><span className="spg-intel-label">Primary Age</span><span className="spg-intel-value">{aud.primary_age}</span></div>}
+                    {aud.gender_split && <div className="spg-intel-item"><span className="spg-intel-icon">⚤</span><span className="spg-intel-label">Gender Split</span><span className="spg-intel-value">{aud.gender_split}</span></div>}
+                    {aud.psychographic && <div className="spg-intel-item"><span className="spg-intel-icon">🧠</span><span className="spg-intel-label">Psychographic</span><span className="spg-intel-value">{aud.psychographic}</span></div>}
+                    {aud.top_locations && Array.isArray(aud.top_locations) && (
+                      <div className="spg-intel-item"><span className="spg-intel-icon">🌍</span><span className="spg-intel-label">Top Locations</span><span className="spg-intel-value">{aud.top_locations.join(', ')}</span></div>
+                    )}
+                  </>
+                );
+              })()}
+            </div>
+          </div>
+        )}
+
+        {/* Known Associates / Network */}
+        {((p.known_associates || d.known_associates) || []).length > 0 && (
+          <div className="spg-section" style={{ marginTop: 24 }}>
+            <div className="spg-section-title">Network / Known Associates</div>
+            <div className="spg-associates">
+              {(p.known_associates || d.known_associates || []).map((a, i) => (
+                <div key={i} className="spg-associate-card">
+                  <div className="spg-associate-handle">{a.handle || a}</div>
+                  {a.platform && <span className="spg-associate-platform">{a.platform}</span>}
+                  {a.relationship_type && (
+                    <span className={`spg-associate-rel spg-rel-${a.relationship_type}`}>
+                      {a.relationship_type.replace(/_/g, ' ')}
+                    </span>
+                  )}
+                  {a.drama_level != null && a.drama_level > 0 && (
+                    <span className="spg-associate-drama" title={`Drama Level: ${a.drama_level}/10`}>
+                      {'🔥'.repeat(Math.min(5, Math.ceil(a.drama_level / 2)))}
+                    </span>
+                  )}
+                  {a.description && <div className="spg-associate-desc">{a.description}</div>}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Controversy History */}
+        {((p.controversy_history || d.controversy_history) || []).length > 0 && (
+          <div className="spg-section" style={{ marginTop: 24 }}>
+            <div className="spg-section-title">Controversy History</div>
+            <div className="spg-controversies">
+              {(p.controversy_history || d.controversy_history || []).map((c, i) => (
+                <div key={i} className="spg-controversy-item">
+                  <div className="spg-controversy-event">{c.event || c}</div>
+                  {c.date_approx && <span className="spg-controversy-date">{c.date_approx}</span>}
+                  {c.severity && <span className={`spg-controversy-severity spg-severity-${c.severity}`}>{c.severity}</span>}
+                  {c.resolved != null && <span className={`spg-tag ${c.resolved ? 'spg-tag-green' : 'spg-tag-red'}`}>{c.resolved ? 'Resolved' : 'Ongoing'}</span>}
+                  {c.narrative_potential && <div className="spg-controversy-narrative">{c.narrative_potential}</div>}
+                </div>
               ))}
             </div>
           </div>

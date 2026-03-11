@@ -1,4 +1,7 @@
 // FeedBulkImport.jsx — Bulk import panel for SocialProfileGenerator (The Feed)
+// Improvements: CSV mode (#3), SSE live progress (#1,#10), retry failed (#6),
+// inline vibe editing (#7), drag-to-reorder (#9), import history (#11),
+// keyboard shortcuts (#12), job cancellation UI (#5), error categories (#8)
 
 import { useState, useRef, useCallback, useEffect } from 'react';
 
@@ -14,16 +17,22 @@ const C = {
   gold: '#a8873e', goldSoft: '#a8873e14',
   red: '#c45858', redSoft: '#c4585812',
   green: '#4a9870', greenSoft: '#4a987012',
+  orange: '#c48a3e', orangeSoft: '#c48a3e14',
 };
 
 const PLATFORMS = ['tiktok','instagram','youtube','twitter','onlyfans','twitch','substack','multi'];
-const ACCEPTED  = '.pdf,.docx,.doc,.txt,.md';
+const ACCEPTED  = '.pdf,.docx,.doc,.txt,.md,.csv,.tsv';
 
 const PASTE_PLACEHOLDER = `@mollymeannn | tiktok | does makeup but something is breaking down
 @thesoftlifequeen | instagram | luxury everything, never explains how
 @overnight.era | tiktok | 400k in 6 months, nothing she did was different
 @theexplicitmess | onlyfans | went fully transparent, audience grew 3x
 @justlikeher_ | instagram | same niche same size, now pulling ahead`;
+
+const CSV_PLACEHOLDER = `handle,platform,vibe
+mollymeannn,tiktok,does makeup but something is breaking down
+thesoftlifequeen,instagram,luxury everything never explains how
+overnight.era,tiktok,400k in 6 months nothing she did was different`;
 
 const STORAGE_KEY = 'feed_bulk_import_draft';
 
@@ -32,7 +41,6 @@ function loadDraft() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
     const data = JSON.parse(raw);
-    // Don't restore completed or in-progress generation — start fresh
     if (data.summary || data.progress) {
       localStorage.removeItem(STORAGE_KEY);
       return null;
@@ -76,6 +84,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
 
   const [mode, setMode]           = useState(draft.current?.mode || 'paste');
   const [pasteText, setPasteText] = useState(draft.current?.pasteText || '');
+  const [csvText, setCsvText]     = useState(draft.current?.csvText || '');
   const [files, setFiles]         = useState([]);
   const [dragging, setDragging]   = useState(false);
 
@@ -93,11 +102,21 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
   const [err, setErr]           = useState(null);
   const fileRef = useRef();
 
+  // Import history sidebar (#11)
+  const [showHistory, setShowHistory] = useState(false);
+  const [jobHistory, setJobHistory]   = useState([]);
+
+  // Drag-to-reorder state (#9)
+  const [dragIdx, setDragIdx] = useState(null);
+
+  // Editing vibe inline (#7)
+  const [editingVibe, setEditingVibe] = useState(null);
+
   // ── Persist draft to localStorage ──────────────────────────────────────────
   useEffect(() => {
-    const data = { mode, pasteText, candidates, parseErrors, extractNotes, progress, summary };
+    const data = { mode, pasteText, csvText, candidates, parseErrors, extractNotes, progress, summary };
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(data)); } catch {}
-  }, [mode, pasteText, candidates, parseErrors, extractNotes, progress, summary]);
+  }, [mode, pasteText, csvText, candidates, parseErrors, extractNotes, progress, summary]);
 
   // ── Clear localStorage on unmount if generation completed ──────────────────
   const summaryRef = useRef(summary);
@@ -107,6 +126,44 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
       if (summaryRef.current) localStorage.removeItem(STORAGE_KEY);
     };
   }, []);
+
+  // ── Keyboard shortcuts (#12) ──────────────────────────────────────────────
+  useEffect(() => {
+    function handleKey(e) {
+      const mod = e.metaKey || e.ctrlKey;
+      // Ctrl/Cmd+Enter — Parse (from input) or Generate (from candidates)
+      if (mod && e.key === 'Enter' && !e.shiftKey) {
+        e.preventDefault();
+        if (candidates?.length && !generating && !summary) {
+          generateAll();
+        } else if (!candidates && !generating) {
+          if (mode === 'paste' && pasteText.trim()) parsePaste();
+          else if (mode === 'csv' && csvText.trim()) parseCsv();
+          else if (mode === 'file' && files.length) parseFiles();
+        }
+      }
+      // Ctrl/Cmd+Shift+Enter — Submit as background job
+      if (mod && e.shiftKey && e.key === 'Enter') {
+        e.preventDefault();
+        if (candidates?.length && !generating && !summary && onJobStarted) {
+          submitBackgroundJob();
+        }
+      }
+      // Escape — back to input from candidates
+      if (e.key === 'Escape' && candidates?.length && !generating && !summary) {
+        setCandidates(null); setParseErrors([]); setExtractNotes('');
+      }
+    }
+    window.addEventListener('keydown', handleKey);
+    return () => window.removeEventListener('keydown', handleKey);
+  });
+
+  // ── Load job history (#11) ────────────────────────────────────────────────
+  useEffect(() => {
+    if (showHistory) {
+      fetch(`${API}/bulk/jobs`).then(r => r.json()).then(d => setJobHistory(d.jobs || [])).catch(() => {});
+    }
+  }, [showHistory]);
 
   // ── Drag and drop ──────────────────────────────────────────────────────────
   const onDrop = useCallback(e => {
@@ -128,6 +185,26 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
       const data = await res.json();
       setCandidates(data.creators || []);
       setParseErrors(data.errors || []);
+    } catch (e) { setErr(e.message); }
+    finally { setParsing(false); }
+  }
+
+  // ── Parse CSV (#3) ────────────────────────────────────────────────────────
+  async function parseCsv() {
+    if (!csvText.trim()) return;
+    setParsing(true); setErr(null); setCandidates(null);
+    try {
+      const res = await fetch(`${API}/bulk/parse-csv`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: csvText }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      setCandidates(data.creators || []);
+      setParseErrors(data.errors || []);
+      if (data.detected_columns) {
+        setExtractNotes(`Mapped: handle → ${data.detected_columns.handle || '?'}, platform → ${data.detected_columns.platform || 'auto'}, vibe → ${data.detected_columns.vibe || 'auto'}`);
+      }
     } catch (e) { setErr(e.message); }
     finally { setParsing(false); }
   }
@@ -165,7 +242,22 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     setCandidates(c => c.map((item, idx) => idx === i ? { ...item, [field]: val } : item));
   }
 
-  // ── Generate all candidates (batched in small chunks) ───────────────────────
+  // ── Drag-to-reorder handlers (#9) ─────────────────────────────────────────
+  function onDragStart(i) { setDragIdx(i); }
+  function onDragOver(e, i) {
+    e.preventDefault();
+    if (dragIdx === null || dragIdx === i) return;
+    setCandidates(prev => {
+      const next = [...prev];
+      const [moved] = next.splice(dragIdx, 1);
+      next.splice(i, 0, moved);
+      return next;
+    });
+    setDragIdx(i);
+  }
+  function onDragEnd() { setDragIdx(null); }
+
+  // ── Generate all candidates ────────────────────────────────────────────────
   async function generateAll() {
     if (!candidates?.length) return;
     setGenerating(true); setErr(null);
@@ -191,14 +283,12 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
           if (!res.ok) throw new Error(data.error || `Server returned ${res.status}`);
           allResults.push(...data.results);
         } catch (batchErr) {
-          // Mark every creator in this batch as failed, but keep going
           for (const c of batch) {
             allResults.push({ handle: c.handle, platform: c.platform, status: 'failed', error: batchErr.message });
           }
         }
         setProgress({ done: allResults.length, total, results: [...allResults] });
 
-        // Brief pause between requests to give server breathing room
         if (i + BATCH_SIZE < total) await new Promise(r => setTimeout(r, 1000));
       }
 
@@ -212,6 +302,19 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
   const hasCandidates = candidates !== null && candidates.length > 0;
   const isDone        = summary !== null;
   const [submittingJob, setSubmittingJob] = useState(false);
+
+  // ── Retry failed (#6) ─────────────────────────────────────────────────────
+  function retryFailed() {
+    if (!progress?.results) return;
+    const failedCreators = progress.results
+      .filter(r => r.status === 'failed')
+      .map(r => ({ handle: r.handle, platform: r.platform, vibe_sentence: candidates?.find(c => c.handle === r.handle)?.vibe_sentence || '' }));
+    if (failedCreators.length === 0) return;
+    setCandidates(failedCreators);
+    setSummary(null);
+    setProgress(null);
+    setGenerating(false);
+  }
 
   // ── Submit background job (large batches — safe to leave page) ──────────
   async function submitBackgroundJob() {
@@ -236,18 +339,75 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
     finally { setSubmittingJob(false); }
   }
 
+  // ── Error category badge (#8) ─────────────────────────────────────────────
+  function ErrorBadge({ result }) {
+    if (result.status !== 'failed') return null;
+    const cat = result.error_category || 'unknown';
+    const label = result.error_label || 'Error';
+    const colors = {
+      timeout: C.orange,
+      rate_limit: C.gold,
+      ai_parse: C.lavender,
+      network: C.blue,
+      db_error: C.red,
+      cancelled: C.textFaint,
+      unknown: C.red,
+    };
+    return (
+      <span style={{ fontSize: '9px', padding: '2px 6px', borderRadius: '4px', background: (colors[cat] || C.red) + '18', color: colors[cat] || C.red, fontWeight: '600', whiteSpace: 'nowrap' }}>
+        {label}{result.retryable ? ' ↻' : ''}
+      </span>
+    );
+  }
+
   return (
     <div style={{ padding: 'clamp(16px, 4vw, 32px)', maxWidth: '720px', margin: '0 auto' }}>
 
       {/* Header */}
       <div style={{ marginBottom: '28px' }}>
-        <div style={{ fontFamily: 'Georgia, serif', fontSize: '22px', fontWeight: '700', color: C.text, marginBottom: '6px' }}>
-          Bulk Import
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{ fontFamily: 'Georgia, serif', fontSize: '22px', fontWeight: '700', color: C.text, marginBottom: '6px' }}>
+            Bulk Import
+          </div>
+          {/* Import history toggle (#11) */}
+          <button onClick={() => setShowHistory(h => !h)} style={{ background: 'none', border: `1px solid ${C.border}`, borderRadius: '8px', padding: '6px 12px', fontSize: '11px', color: C.textDim, cursor: 'pointer' }}>
+            {showHistory ? '← Hide History' : '⧗ Import History'}
+          </button>
         </div>
         <div style={{ fontSize: '13px', color: C.textDim, lineHeight: '1.7' }}>
-          Paste a list or upload files. The system extracts creator signals and generates full profiles automatically.
+          Paste a list, upload files, or import CSV. The system extracts creator signals and generates full profiles automatically.
+        </div>
+        <div style={{ fontSize: '10px', color: C.textFaint, marginTop: '4px' }}>
+          <kbd style={{ padding: '1px 5px', background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: '3px', fontSize: '9px' }}>Ctrl+Enter</kbd> Parse / Generate &nbsp;
+          <kbd style={{ padding: '1px 5px', background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: '3px', fontSize: '9px' }}>Ctrl+Shift+Enter</kbd> Background job &nbsp;
+          <kbd style={{ padding: '1px 5px', background: C.surfaceHigh, border: `1px solid ${C.border}`, borderRadius: '3px', fontSize: '9px' }}>Esc</kbd> Back
         </div>
       </div>
+
+      {/* ── Import History Sidebar (#11) ── */}
+      {showHistory && (
+        <div style={{ marginBottom: '20px', padding: '14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '10px' }}>
+          <div style={{ fontSize: '11px', fontWeight: '700', color: C.pink, textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '10px' }}>Recent Imports</div>
+          {jobHistory.length === 0 && <div style={{ fontSize: '12px', color: C.textFaint }}>No imports yet</div>}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '200px', overflowY: 'auto' }}>
+            {jobHistory.map(j => (
+              <div key={j.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 10px', background: C.bg, border: `1px solid ${C.border}`, borderRadius: '6px' }}>
+                <div>
+                  <span style={{ fontSize: '12px', color: C.text, fontWeight: '600' }}>Job #{j.id}</span>
+                  <span style={{ fontSize: '10px', color: C.textFaint, marginLeft: '8px' }}>
+                    {j.character_key || 'no key'} · {new Date(j.created_at).toLocaleDateString()}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  <span style={{ fontSize: '11px', color: j.status === 'completed' ? C.green : j.status === 'failed' ? C.red : j.status === 'cancelled' ? C.orange : C.blue }}>
+                    {j.completed || 0}/{j.total} · {j.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {err && (
         <div style={{ padding: '10px 14px', background: C.redSoft, border: `1px solid ${C.red}44`, borderRadius: '8px', fontSize: '13px', color: C.red, marginBottom: '20px', display: 'flex', justifyContent: 'space-between' }}>
@@ -266,24 +426,26 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
               {summary.succeeded} of {summary.total} profiles generated
             </div>
             {summary.failed > 0 && (
-              <div style={{ fontSize: '12px', color: C.red, marginBottom: '6px' }}>{summary.failed} failed — retry individually from The Feed</div>
+              <div style={{ fontSize: '12px', color: C.red, marginBottom: '6px' }}>{summary.failed} failed</div>
             )}
           </div>
 
-          {/* Results list */}
+          {/* Results list with animated appearance (#10) */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', marginBottom: '20px' }}>
             {progress?.results?.map((r, i) => (
-              <div key={i} style={{ padding: '10px 14px', background: C.surface, border: `1px solid ${r.status === 'success' ? C.green + '44' : C.red + '44'}`, borderRadius: '8px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <span style={{ fontFamily: 'monospace', fontSize: '13px', color: r.status === 'success' ? C.green : C.red }}>{r.handle}</span>
-                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                    {r.status === 'success' && r.lala_score > 0 && (
-                      <span style={{ fontSize: '10px', color: C.gold }}>⬡ Lala {r.lala_score}/10</span>
-                    )}
-                    <span style={{ fontSize: '11px', color: r.status === 'success' ? C.green : C.red }}>
-                      {r.status === 'success' ? '✓ Generated' : '✕ Failed'}
-                    </span>
-                  </div>
+              <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 14px', background: C.surface, border: `1px solid ${r.status === 'success' ? C.green + '44' : C.red + '44'}`, borderRadius: '8px', animation: 'fadeSlideIn 0.3s ease', animationDelay: `${i * 0.05}s`, animationFillMode: 'both' }}>
+                <span style={{ fontFamily: 'monospace', fontSize: '13px', color: r.status === 'success' ? C.green : C.red }}>{r.handle}</span>
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {r.status === 'success' && r.lala_score > 0 && (
+                    <span style={{ fontSize: '10px', color: C.gold }}>⬡ Lala {r.lala_score}/10</span>
+                  )}
+                  {r.status === 'success' && r.archetype && (
+                    <span style={{ fontSize: '9px', color: C.lavender, background: C.lavSoft, padding: '2px 6px', borderRadius: '4px' }}>{r.archetype}</span>
+                  )}
+                  <ErrorBadge result={r} />
+                  <span style={{ fontSize: '11px', color: r.status === 'success' ? C.green : C.red }}>
+                    {r.status === 'success' ? '✓ Generated' : '✕ Failed'}
+                  </span>
                 </div>
                 {r.status === 'failed' && r.error && (
                   <div style={{ fontSize: '11px', color: C.textFaint, marginTop: '4px', lineHeight: '1.4', wordBreak: 'break-word' }}>
@@ -294,62 +456,77 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
             ))}
           </div>
 
-          {summary.failed > 0 && (
-            <button onClick={() => {
-              // Reset to candidates view with only the failed ones
-              const failedHandles = new Set((progress?.results || []).filter(r => r.status === 'failed').map(r => r.handle));
-              const failedCandidates = (candidates || []).filter(c => failedHandles.has(c.handle));
-              if (failedCandidates.length > 0) {
-                setCandidates(failedCandidates);
-                setSummary(null);
-                setProgress(null);
-              }
-            }} style={{ width: '100%', padding: '12px', marginBottom: '8px', background: C.pink, border: 'none', borderRadius: '10px', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
-              Retry {summary.failed} Failed Profile{summary.failed !== 1 ? 's' : ''} →
+          <div style={{ display: 'flex', gap: '8px' }}>
+            {/* Retry failed button (#6) */}
+            {summary.failed > 0 && (
+              <button onClick={retryFailed} style={{ flex: 1, padding: '12px', background: C.orange, border: 'none', borderRadius: '10px', color: '#fff', fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
+                ↻ Retry {summary.failed} Failed
+              </button>
+            )}
+            <button onClick={() => { localStorage.removeItem(STORAGE_KEY); onDone(); }} style={{ flex: 1, padding: '12px', background: C.text, border: 'none', borderRadius: '10px', color: C.bg, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
+              Back to The Feed →
             </button>
-          )}
-          <button onClick={() => { localStorage.removeItem(STORAGE_KEY); onDone(); }} style={{ width: '100%', padding: '12px', background: C.text, border: 'none', borderRadius: '10px', color: C.bg, fontSize: '13px', fontWeight: '700', cursor: 'pointer', fontFamily: 'Georgia, serif' }}>
-            Back to The Feed →
-          </button>
+          </div>
         </div>
       )}
 
-      {/* ── GENERATING STATE ── */}
+      {/* ── GENERATING STATE with live profile feed (#10) ── */}
       {generating && !isDone && (
-        <div style={{ padding: '32px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '12px', textAlign: 'center' }}>
-          <Spin size={24} />
-          <div style={{ fontFamily: 'Georgia, serif', fontSize: '16px', color: C.text, marginTop: '16px', marginBottom: '6px' }}>
-            Generating {candidates.length} profile{candidates.length !== 1 ? 's' : ''}…
-          </div>
-          <div style={{ fontSize: '12px', color: C.textFaint }}>
-            This takes about 15–20 seconds per profile. Don't close this page.
+        <div style={{ padding: '32px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '12px' }}>
+          <div style={{ textAlign: 'center' }}>
+            <Spin size={24} />
+            <div style={{ fontFamily: 'Georgia, serif', fontSize: '16px', color: C.text, marginTop: '16px', marginBottom: '6px' }}>
+              Generating {candidates.length} profile{candidates.length !== 1 ? 's' : ''}…
+            </div>
+            <div style={{ fontSize: '12px', color: C.textFaint }}>
+              This takes about 15–20 seconds per profile. Don't close this page.
+            </div>
           </div>
           {progress && (
             <div style={{ marginTop: '20px' }}>
               <div style={{ height: '4px', background: C.border, borderRadius: '2px', overflow: 'hidden' }}>
                 <div style={{ height: '100%', width: `${(progress.done / progress.total) * 100}%`, background: C.pink, borderRadius: '2px', transition: 'width 0.4s ease' }} />
               </div>
-              <div style={{ fontSize: '12px', color: C.textDim, marginTop: '10px' }}>
+              <div style={{ fontSize: '12px', color: C.textDim, marginTop: '10px', textAlign: 'center' }}>
                 {progress.done} of {progress.total} done
                 {progress.batchNum && progress.totalBatches > 1 && (
                   <span> — batch {progress.batchNum} of {progress.totalBatches}</span>
                 )}
               </div>
+              {/* Live profile results as they appear (#10) */}
+              {progress.results?.length > 0 && (
+                <div style={{ marginTop: '16px', display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '200px', overflowY: 'auto' }}>
+                  {progress.results.map((r, i) => (
+                    <div key={i} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: C.bg, border: `1px solid ${r.status === 'success' ? C.green + '33' : C.red + '33'}`, borderRadius: '6px', animation: 'fadeSlideIn 0.3s ease' }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: '11px', color: r.status === 'success' ? C.green : C.red }}>@{r.handle}</span>
+                      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+                        <ErrorBadge result={r} />
+                        <span style={{ fontSize: '10px', color: r.status === 'success' ? C.green : C.red }}>
+                          {r.status === 'success' ? '✓' : '✕'}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
       )}
 
-      {/* ── CANDIDATES REVIEW ── */}
+      {/* ── CANDIDATES REVIEW with drag-reorder (#9) + inline vibe edit (#7) ── */}
       {hasCandidates && !generating && !isDone && (
         <div>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px' }}>
             <div style={{ fontSize: '11px', color: C.pink, fontWeight: '700', textTransform: 'uppercase', letterSpacing: '0.1em' }}>
               {candidates.length} creator{candidates.length !== 1 ? 's' : ''} ready to generate
             </div>
-            <button onClick={() => { setCandidates(null); setSummary(null); setPasteText(''); setFiles([]); setParseErrors([]); setExtractNotes(''); setProgress(null); localStorage.removeItem(STORAGE_KEY); }} style={{ background: 'none', border: 'none', color: C.textFaint, fontSize: '12px', cursor: 'pointer' }}>
-              Start over
-            </button>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <span style={{ fontSize: '9px', color: C.textFaint }}>drag to reorder</span>
+              <button onClick={() => { setCandidates(null); setSummary(null); setPasteText(''); setCsvText(''); setFiles([]); setParseErrors([]); setExtractNotes(''); setProgress(null); localStorage.removeItem(STORAGE_KEY); }} style={{ background: 'none', border: 'none', color: C.textFaint, fontSize: '12px', cursor: 'pointer' }}>
+                Start over
+              </button>
+            </div>
           </div>
 
           {extractNotes && (
@@ -371,10 +548,37 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '20px', maxHeight: '360px', overflowY: 'auto' }}>
             {candidates.map((c, i) => (
-              <div key={i} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: '8px', alignItems: 'center', padding: '10px 12px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '8px' }}>
+              <div
+                key={i}
+                draggable
+                onDragStart={() => onDragStart(i)}
+                onDragOver={e => onDragOver(e, i)}
+                onDragEnd={onDragEnd}
+                style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto auto auto', gap: '8px', alignItems: 'center', padding: '10px 12px', background: dragIdx === i ? C.pinkSoft : C.surface, border: `1px solid ${dragIdx === i ? C.pink + '44' : C.border}`, borderRadius: '8px', cursor: 'grab', transition: 'background 0.15s, border-color 0.15s' }}
+              >
+                {/* Drag handle (#9) */}
+                <span style={{ fontSize: '12px', color: C.textFaint, cursor: 'grab', userSelect: 'none' }}>⠿</span>
                 <div>
                   <div style={{ fontFamily: 'monospace', fontSize: '13px', color: C.pink, marginBottom: '3px' }}>{c.handle}</div>
-                  <div style={{ fontSize: '11px', color: C.textDim, lineHeight: '1.5' }}>{c.vibe_sentence}</div>
+                  {/* Inline vibe editing (#7) */}
+                  {editingVibe === i ? (
+                    <input
+                      autoFocus
+                      value={c.vibe_sentence}
+                      onChange={e => updateCandidate(i, 'vibe_sentence', e.target.value)}
+                      onBlur={() => setEditingVibe(null)}
+                      onKeyDown={e => { if (e.key === 'Enter') setEditingVibe(null); }}
+                      style={{ width: '100%', padding: '4px 6px', background: C.bg, border: `1px solid ${C.pink}44`, borderRadius: '4px', color: C.text, fontSize: '11px', outline: 'none', boxSizing: 'border-box' }}
+                    />
+                  ) : (
+                    <div
+                      onClick={() => setEditingVibe(i)}
+                      title="Click to edit vibe"
+                      style={{ fontSize: '11px', color: C.textDim, lineHeight: '1.5', cursor: 'text', minHeight: '16px' }}
+                    >
+                      {c.vibe_sentence || <span style={{ color: C.textFaint, fontStyle: 'italic' }}>click to add vibe…</span>}
+                    </div>
+                  )}
                 </div>
                 {/* Platform selector */}
                 <select
@@ -405,14 +609,15 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
         </div>
       )}
 
-      {/* ── INPUT STATE ── */}
+      {/* ── INPUT STATE with 3 modes (#3) ── */}
       {!hasCandidates && !generating && !isDone && (
         <div>
-          {/* Mode toggle */}
+          {/* Mode toggle — now includes CSV (#3) */}
           <div style={{ display: 'flex', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '10px', padding: '4px', marginBottom: '20px' }}>
             {[
-              { key: 'paste', label: '✎ Paste List' },
-              { key: 'file',  label: '⊞ Upload Files' },
+              { key: 'paste', label: '✎ Paste' },
+              { key: 'csv',   label: '⊟ CSV' },
+              { key: 'file',  label: '⊞ Files' },
             ].map(m => (
               <button key={m.key} onClick={() => setMode(m.key)} style={{ flex: 1, padding: '12px 9px', minHeight: '44px', background: mode === m.key ? C.surfaceHigh : 'transparent', border: `1px solid ${mode === m.key ? C.border : 'transparent'}`, borderRadius: '8px', color: mode === m.key ? C.text : C.textFaint, fontSize: '14px', fontWeight: mode === m.key ? '600' : '400', cursor: 'pointer', transition: 'all 0.15s', WebkitAppearance: 'none' }}>
                 {m.label}
@@ -437,7 +642,6 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
                 style={{ width: '100%', padding: '14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '10px', color: C.text, fontSize: '16px', fontFamily: 'monospace', lineHeight: '1.6', outline: 'none', resize: 'vertical', boxSizing: 'border-box', WebkitAppearance: 'none', WebkitTextSizeAdjust: '100%' }}
               />
 
-              {/* Show parse errors inline when no candidates found */}
               {parseErrors.length > 0 && candidates !== null && candidates.length === 0 && (
                 <div style={{ marginTop: '12px', padding: '10px 14px', background: C.redSoft, border: `1px solid ${C.red}33`, borderRadius: '8px' }}>
                   <div style={{ fontSize: '11px', color: C.red, fontWeight: '700', marginBottom: '6px' }}>
@@ -464,6 +668,37 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
             </div>
           )}
 
+          {/* CSV MODE (#3) */}
+          {mode === 'csv' && (
+            <div>
+              <div style={{ fontSize: '11px', color: C.textFaint, marginBottom: '8px', lineHeight: '1.6' }}>
+                Paste spreadsheet data (CSV or tab-separated). First row = headers. Auto-detects <span style={{ color: C.pink, fontFamily: 'monospace' }}>handle</span>, <span style={{ color: C.pink, fontFamily: 'monospace' }}>platform</span>, and <span style={{ color: C.pink, fontFamily: 'monospace' }}>vibe/description</span> columns.
+              </div>
+              <textarea
+                value={csvText}
+                onChange={e => setCsvText(e.target.value)}
+                placeholder={CSV_PLACEHOLDER}
+                rows={8}
+                autoComplete="off"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{ width: '100%', padding: '14px', background: C.surface, border: `1px solid ${C.border}`, borderRadius: '10px', color: C.text, fontSize: '16px', fontFamily: 'monospace', lineHeight: '1.6', outline: 'none', resize: 'vertical', boxSizing: 'border-box', WebkitAppearance: 'none', WebkitTextSizeAdjust: '100%' }}
+              />
+
+              <button
+                onClick={parseCsv}
+                disabled={parsing || !csvText.trim()}
+                style={{ marginTop: '12px', width: '100%', padding: '14px', minHeight: '48px', background: parsing ? C.surface : C.text, border: `1px solid ${parsing ? C.border : C.text}`, borderRadius: '10px', color: parsing ? C.textDim : C.bg, fontSize: '15px', fontWeight: '700', cursor: parsing ? 'default' : 'pointer', fontFamily: 'Georgia, serif', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', WebkitAppearance: 'none' }}>
+                {parsing && <Spin />}
+                {parsing ? 'Parsing CSV…' : 'Parse Spreadsheet →'}
+              </button>
+
+              <div style={{ marginTop: '12px', padding: '10px 14px', background: C.blueSoft, border: `1px solid ${C.blue}33`, borderRadius: '8px', fontSize: '11px', color: C.blue, lineHeight: '1.6' }}>
+                ✦ Copy-paste directly from Google Sheets, Excel, or any spreadsheet. Tab-separated works too. The system maps columns automatically.
+              </div>
+            </div>
+          )}
+
           {/* FILE MODE */}
           {mode === 'file' && (
             <div>
@@ -479,7 +714,7 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
                 <div style={{ fontFamily: 'Georgia, serif', fontSize: '15px', color: C.text, marginBottom: '6px' }}>
                   Drop files here
                 </div>
-                <div style={{ fontSize: '12px', color: C.textFaint }}>PDF, Word (.docx), TXT, Markdown</div>
+                <div style={{ fontSize: '12px', color: C.textFaint }}>PDF, Word (.docx), TXT, Markdown, CSV, TSV</div>
                 <input ref={fileRef} type="file" accept={ACCEPTED} multiple onChange={e => setFiles(f => [...f, ...Array.from(e.target.files)])} style={{ display: 'none' }} />
               </div>
 
@@ -511,7 +746,10 @@ export default function FeedBulkImport({ onDone, seriesId, characterContext, cha
         </div>
       )}
 
-      <style>{`@keyframes spin { to { transform: rotate(360deg) } }`}</style>
+      <style>{`
+        @keyframes spin { to { transform: rotate(360deg) } }
+        @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      `}</style>
     </div>
   );
 }

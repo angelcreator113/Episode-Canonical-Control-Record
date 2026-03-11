@@ -10,6 +10,16 @@ module.exports = (sequelize, DataTypes) => {
           as: 'registryCharacter',
         });
       }
+      if (models.SocialProfileRelationship) {
+        SocialProfile.hasMany(models.SocialProfileRelationship, {
+          foreignKey: 'source_profile_id',
+          as: 'outgoingRelationships',
+        });
+        SocialProfile.hasMany(models.SocialProfileRelationship, {
+          foreignKey: 'target_profile_id',
+          as: 'incomingRelationships',
+        });
+      }
     }
   }
 
@@ -49,6 +59,24 @@ module.exports = (sequelize, DataTypes) => {
     crossing_mechanism:    { type: DataTypes.TEXT, allowNull: true },
     crossed_at:            { type: DataTypes.DATE, allowNull: true },
     registry_character_id: { type: DataTypes.INTEGER, allowNull: true },
+
+    // ── Enhanced dataset fields ──────────────────────────────────────────────
+    post_frequency:        { type: DataTypes.STRING(100), allowNull: true },   // e.g. "3-4x/day", "weekly drops"
+    engagement_rate:       { type: DataTypes.STRING(50), allowNull: true },    // e.g. "4.2%", "high for tier"
+    platform_metrics:      { type: DataTypes.JSONB, defaultValue: {} },        // avg_views, stories_per_day, live_frequency, etc.
+    geographic_base:       { type: DataTypes.STRING(200), allowNull: true },   // city/region
+    geographic_cluster:    { type: DataTypes.STRING(100), allowNull: true },   // e.g. "Atlanta creator scene", "LA beauty"
+    age_range:             { type: DataTypes.STRING(30), allowNull: true },    // e.g. "mid-20s", "early 30s"
+    relationship_status:   { type: DataTypes.STRING(100), allowNull: true },   // single, taken, situationship, it's complicated
+    known_associates:      { type: DataTypes.JSONB, defaultValue: [] },        // [{handle, platform, relationship_type, drama_level}]
+    revenue_streams:       { type: DataTypes.JSONB, defaultValue: [] },        // ["brand deals", "OF subs", "merch"]
+    brand_partnerships:    { type: DataTypes.JSONB, defaultValue: [] },        // [{brand, type, visible}]
+    audience_demographics: { type: DataTypes.JSONB, defaultValue: {} },        // {age_range, gender_split, psychographic}
+    aesthetic_dna:         { type: DataTypes.JSONB, defaultValue: {} },        // {visual_style, color_palette, editing_style, vibe_tags}
+    controversy_history:   { type: DataTypes.JSONB, defaultValue: [] },        // [{event, date_approx, severity, resolved}]
+    collab_style:          { type: DataTypes.TEXT, allowNull: true },           // how they collaborate, who they collab with
+    influencer_tier_detail:{ type: DataTypes.TEXT, allowNull: true },           // nuanced tier analysis
+
     status:                { type: DataTypes.ENUM('draft','generated','finalized','crossed','archived'), defaultValue: 'draft' },
     generation_model:      { type: DataTypes.STRING(60), allowNull: true },
     full_profile:          { type: DataTypes.JSONB, defaultValue: {} },
