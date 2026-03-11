@@ -118,6 +118,13 @@ let AmberScanRun; // Amber Diagnostic Engine — scan runs
 let AmberTaskQueue; // Amber Diagnostic Engine — task queue
 let HairLibrary; // Hair style asset library
 let MakeupLibrary; // Makeup look asset library
+let StoryClockMarker; // Story Calendar: named story positions with calendar dates
+let StoryCalendarEvent; // Story Calendar: events in LalaVerse time
+let CalendarEventAttendee; // Story Calendar: per-character event experience
+let CalendarEventRipple; // Story Calendar: event propagation / ripple threads
+let FeedProfileRelationship; // Feed Relationship Map: influencer-to-influencer
+let CharacterCrossing; // Character Crossings: interior → public transition
+let AuthorNote; // Author Layer: polymorphic creative decision notes
 
 try {
   // Core models
@@ -334,6 +341,15 @@ try {
   HairLibrary = require('./HairLibrary')(sequelize);
   MakeupLibrary = require('./MakeupLibrary')(sequelize);
 
+  // Feed Nervous System models
+  StoryClockMarker = require('./StoryClockMarker')(sequelize, DataTypes);
+  StoryCalendarEvent = require('./StoryCalendarEvent')(sequelize, DataTypes);
+  CalendarEventAttendee = require('./CalendarEventAttendee')(sequelize, DataTypes);
+  CalendarEventRipple = require('./CalendarEventRipple')(sequelize, DataTypes);
+  FeedProfileRelationship = require('./FeedProfileRelationship')(sequelize, DataTypes);
+  CharacterCrossing = require('./CharacterCrossing')(sequelize, DataTypes);
+  AuthorNote = require('./AuthorNote')(sequelize, DataTypes);
+
   console.log('✅ All models loaded successfully');
 } catch (error) {
   console.error('❌ Error loading models:', error.message);
@@ -458,6 +474,13 @@ const requiredModels = {
   AmberTaskQueue,
   HairLibrary,
   MakeupLibrary,
+  StoryClockMarker,
+  StoryCalendarEvent,
+  CalendarEventAttendee,
+  CalendarEventRipple,
+  FeedProfileRelationship,
+  CharacterCrossing,
+  AuthorNote,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -634,6 +657,29 @@ if (EntanglementEvent && EntanglementEvent.associate) {
 }
 if (EntanglementUnfollow && EntanglementUnfollow.associate) {
   EntanglementUnfollow.associate(requiredModels);
+}
+
+// Feed Nervous System associations
+if (StoryClockMarker && StoryClockMarker.associate) {
+  StoryClockMarker.associate(requiredModels);
+}
+if (StoryCalendarEvent && StoryCalendarEvent.associate) {
+  StoryCalendarEvent.associate(requiredModels);
+}
+if (CalendarEventAttendee && CalendarEventAttendee.associate) {
+  CalendarEventAttendee.associate(requiredModels);
+}
+if (CalendarEventRipple && CalendarEventRipple.associate) {
+  CalendarEventRipple.associate(requiredModels);
+}
+if (FeedProfileRelationship && FeedProfileRelationship.associate) {
+  FeedProfileRelationship.associate(requiredModels);
+}
+if (CharacterCrossing && CharacterCrossing.associate) {
+  CharacterCrossing.associate(requiredModels);
+}
+if (AuthorNote && AuthorNote.associate) {
+  AuthorNote.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1765,3 +1811,10 @@ module.exports.AmberScanRun = AmberScanRun;
 module.exports.AmberTaskQueue = AmberTaskQueue;
 module.exports.HairLibrary = HairLibrary;
 module.exports.MakeupLibrary = MakeupLibrary;
+module.exports.StoryClockMarker = StoryClockMarker;
+module.exports.StoryCalendarEvent = StoryCalendarEvent;
+module.exports.CalendarEventAttendee = CalendarEventAttendee;
+module.exports.CalendarEventRipple = CalendarEventRipple;
+module.exports.FeedProfileRelationship = FeedProfileRelationship;
+module.exports.CharacterCrossing = CharacterCrossing;
+module.exports.AuthorNote = AuthorNote;

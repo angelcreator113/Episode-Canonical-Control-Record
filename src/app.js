@@ -1147,6 +1147,64 @@ try {
   console.error('✗ Failed to load Amber Diagnostic routes:', e.message);
 }
 
+// ============================================================================
+// FEED NERVOUS SYSTEM ROUTES
+// ============================================================================
+
+// Story Calendar — temporal spine
+try {
+  const calendarRoutes = require('./routes/calendarRoutes');
+  app.use('/api/v1/calendar', calendarRoutes);
+  console.log('✓ Calendar routes loaded at /api/v1/calendar');
+} catch (e) {
+  console.error('✗ Failed to load Calendar routes:', e.message);
+}
+
+// Mirror Field — JustAWoman's externalized interior
+try {
+  const mirrorFieldRoutes = require('./routes/mirrorFieldRoutes');
+  app.use('/api/v1/social-profiles', mirrorFieldRoutes);
+  console.log('✓ Mirror Field routes loaded at /api/v1/social-profiles');
+} catch (e) {
+  console.error('✗ Failed to load Mirror Field routes:', e.message);
+}
+
+// Want Field — desire layer on entanglements
+try {
+  const wantFieldRoutes = require('./routes/wantFieldRoutes');
+  app.use('/api/v1/character-entanglements', wantFieldRoutes);
+  console.log('✓ Want Field routes loaded at /api/v1/character-entanglements');
+} catch (e) {
+  console.error('✗ Failed to load Want Field routes:', e.message);
+}
+
+// Feed Relationship Map — influencer-to-influencer
+try {
+  const feedRelationshipRoutes = require('./routes/feedRelationshipRoutes');
+  app.use('/api/v1/feed-relationships', feedRelationshipRoutes);
+  console.log('✓ Feed Relationship routes loaded at /api/v1/feed-relationships');
+} catch (e) {
+  console.error('✗ Failed to load Feed Relationship routes:', e.message);
+}
+
+// Character Crossings — interior → public transition
+try {
+  const characterCrossingRoutes = require('./routes/characterCrossingRoutes');
+  app.use('/api/v1/character-crossings', characterCrossingRoutes);
+  console.log('✓ Character Crossing routes loaded at /api/v1/character-crossings');
+} catch (e) {
+  console.error('✗ Failed to load Character Crossing routes:', e.message);
+}
+
+// Author Notes — polymorphic creative decision layer
+try {
+  const authorNoteRoutes = require('./routes/authorNoteRoutes');
+  app.use('/api/v1/author-notes', authorNoteRoutes);
+  console.log('✓ Author Note routes loaded at /api/v1/author-notes');
+} catch (e) {
+  console.error('✗ Failed to load Author Note routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({
