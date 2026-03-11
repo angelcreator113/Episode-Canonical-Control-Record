@@ -1403,9 +1403,21 @@ select.spg-input {
   border: 1px solid #c4585844;
   color: var(--ink, #1a1424);
 }
+.spg-job-stale {
+  background: #d0884014;
+  border: 1px solid #d0884044;
+  color: var(--ink, #1a1424);
+}
+.spg-job-banner-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
 .spg-job-banner-text {
   margin-bottom: 8px;
   line-height: 1.5;
+  flex: 1;
 }
 .spg-job-progress-bar {
   height: 4px;
@@ -1432,6 +1444,43 @@ select.spg-input {
 .spg-job-dismiss:hover {
   border-color: var(--purple, #8a6aac);
 }
+.spg-job-cancel {
+  padding: 5px 14px;
+  border-radius: 6px;
+  border: 1px solid rgba(196, 88, 88, 0.3);
+  background: rgba(196, 88, 88, 0.08);
+  color: #c45858;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s;
+}
+.spg-job-cancel:hover {
+  background: rgba(196, 88, 88, 0.15);
+  border-color: rgba(196, 88, 88, 0.5);
+}
+.spg-job-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-top: 10px;
+}
+.spg-job-retry {
+  padding: 6px 16px;
+  border-radius: 6px;
+  border: 1px solid var(--gold-border, rgba(201, 168, 76, 0.35));
+  background: var(--gold-bg, rgba(201, 168, 76, 0.10));
+  color: var(--gold-dim, #a08530);
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.spg-job-retry:hover {
+  background: rgba(201, 168, 76, 0.18);
+  border-color: var(--gold, #c9a84c);
+}
 
 /* ── Mobile responsive for new elements ── */
 @media (max-width: 480px) {
@@ -1447,9 +1496,14 @@ select.spg-input {
     padding: 12px 14px;
     font-size: 0.8rem;
   }
-  .spg-job-dismiss {
+  .spg-job-dismiss,
+  .spg-job-cancel,
+  .spg-job-retry {
     min-height: 44px;
     padding: 8px 16px;
+  }
+  .spg-job-actions {
+    flex-wrap: wrap;
   }
 }
 

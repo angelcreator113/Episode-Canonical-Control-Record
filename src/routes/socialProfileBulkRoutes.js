@@ -466,6 +466,90 @@ router.get('/jobs/:id', optionalAuth, async (req, res) => {
   }
 });
 
+// ── POST /jobs/:id/cancel ───────────────────────────────────────────────────
+// Cancel a stuck or running job — marks it failed so the processor loop exits
+router.post('/jobs/:id/cancel', optionalAuth, async (req, res) => {
+  try {
+    const db = getModels();
+    if (!db || !db.BulkImportJob) {
+      return res.status(404).json({ error: 'Not available' });
+    }
+    const job = await db.BulkImportJob.findByPk(req.params.id);
+    if (!job) return res.status(404).json({ error: 'Job not found' });
+
+    if (job.status === 'completed' || job.status === 'failed' || job.status === 'cancelled') {
+      return res.json({ job, message: 'Job already finished' });
+    }
+
+    await job.update({
+      status: 'failed',
+      error_message: `Cancelled by user at ${job.completed || 0}/${job.total} (${job.failed || 0} previously failed)`,
+      completed_at: new Date(),
+    });
+
+    // Signal the in-process loop to stop
+    cancelledJobs.add(job.id);
+
+    return res.json({ job: await job.reload(), message: 'Job cancelled' });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── POST /jobs/:id/retry ────────────────────────────────────────────────────
+// Retry remaining unprocessed candidates from a failed/cancelled job
+router.post('/jobs/:id/retry', optionalAuth, async (req, res) => {
+  try {
+    const db = getModels();
+    if (!db || !db.BulkImportJob) {
+      return res.status(404).json({ error: 'Not available' });
+    }
+    const oldJob = await db.BulkImportJob.findByPk(req.params.id);
+    if (!oldJob) return res.status(404).json({ error: 'Job not found' });
+
+    if (oldJob.status !== 'failed') {
+      return res.status(400).json({ error: 'Only failed jobs can be retried' });
+    }
+
+    // Figure out which candidates weren't successfully processed
+    const doneHandles = new Set(
+      (oldJob.results || []).filter(r => r.status === 'success').map(r => `${r.handle}::${r.platform}`)
+    );
+    const remaining = (oldJob.candidates || []).filter(c => !doneHandles.has(`${c.handle}::${c.platform}`));
+
+    if (remaining.length === 0) {
+      return res.json({ message: 'All candidates were already processed — nothing to retry' });
+    }
+
+    const newJob = await db.BulkImportJob.create({
+      status: 'pending',
+      total: remaining.length,
+      completed: 0,
+      failed: 0,
+      candidates: remaining,
+      results: [],
+      character_context: oldJob.character_context,
+      character_key: oldJob.character_key,
+      series_id: oldJob.series_id,
+    });
+
+    processJobInBackground(newJob.id);
+
+    return res.json({
+      job_id: newJob.id,
+      status: 'pending',
+      total: remaining.length,
+      skipped: oldJob.candidates.length - remaining.length,
+      message: `Retry job #${newJob.id} queued: ${remaining.length} remaining profiles.`,
+    });
+  } catch (err) {
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// ── In-memory cancellation signal ───────────────────────────────────────────
+const cancelledJobs = new Set();
+
 // ── Background Job Processor ─────────────────────────────────────────────────
 // Processes a single job — called non-blocking via setImmediate
 async function processJobInBackground(jobId) {
@@ -487,6 +571,13 @@ async function processJobInBackground(jobId) {
       let failedCount = 0;
 
       for (const c of candidates) {
+        // Check for cancellation signal
+        if (cancelledJobs.has(jobId)) {
+          cancelledJobs.delete(jobId);
+          console.log(`⛔ Bulk job #${jobId} cancelled by user at ${completedCount}/${candidates.length}`);
+          return; // Job already marked failed by cancel endpoint
+        }
+
         try {
           const prompt = buildGenerationPrompt(c.handle, c.platform, c.vibe_sentence, job.character_context);
           const aiRes = await callAnthropicWithRetry(() =>
