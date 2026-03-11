@@ -49,6 +49,19 @@ const STATUS_LABELS = {
   archived:  'Archived',
 };
 
+const FEED_STATE_CONFIG = {
+  rising:        { label: 'Rising',        color: '#6a9e60', bg: '#f0f7ee' },
+  peaking:       { label: 'Peaking',       color: '#c9a84c', bg: '#fdf6ee' },
+  plateauing:    { label: 'Plateauing',    color: '#888',    bg: '#f5f5f5' },
+  controversial: { label: 'Controversial', color: '#d47a3a', bg: '#fdf3ee' },
+  cancelled:     { label: 'Cancelled',     color: '#c44',    bg: '#fdf0f0' },
+  gone_dark:     { label: 'Gone Dark',     color: '#555',    bg: '#eee' },
+  rebuilding:    { label: 'Rebuilding',    color: '#7ab3d4', bg: '#eef5fb' },
+  crossed:       { label: 'Crossed',       color: '#d4789a', bg: '#fdf0f4' },
+};
+
+const FEED_STATES = Object.keys(FEED_STATE_CONFIG);
+
 // ── Protagonist Contexts ─────────────────────────────────────────────────────
 // Each universe/book protagonist has their own character context for AI generation
 const PROTAGONISTS = [
@@ -163,7 +176,33 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
         throw new Error(errData.error || `Server error (${res.status})`);
       }
       const data = await res.json();
-      setProfiles(data.profiles || []);
+      const loadedProfiles = data.profiles || [];
+
+      // Enrich profiles with turbulence indicator (unresolved entanglements)
+      const charIds = [...new Set(loadedProfiles.filter(p => p.character_id).map(p => p.character_id))];
+      if (charIds.length > 0) {
+        try {
+          const turbResults = await Promise.all(
+            charIds.map(cid =>
+              fetch(`/api/v1/entanglements/character/${cid}`, { headers: authHeaders() })
+                .then(r => r.ok ? r.json() : { entanglements: [] })
+                .catch(() => ({ entanglements: [] }))
+            )
+          );
+          const turbMap = {};
+          charIds.forEach((cid, i) => {
+            const ents = turbResults[i].entanglements || turbResults[i] || [];
+            turbMap[cid] = Array.isArray(ents) && ents.some(e => !e.resolved);
+          });
+          loadedProfiles.forEach(p => {
+            if (p.character_id && turbMap[p.character_id]) {
+              p._has_turbulence = true;
+            }
+          });
+        } catch (_) { /* turbulence enrichment is best-effort */ }
+      }
+
+      setProfiles(loadedProfiles);
       if (data.pagination) {
         setTotalPages(data.pagination.totalPages || 1);
         setTotalCount(data.pagination.total || 0);
@@ -949,6 +988,17 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
                   <div className="spg-card-header">
                     <span className="spg-card-handle">{p.handle}</span>
                     <div className="spg-card-header-right">
+                      {p.current_state && FEED_STATE_CONFIG[p.current_state] && (
+                        <span
+                          className="spg-current-state-badge"
+                          style={{ background: FEED_STATE_CONFIG[p.current_state].bg, color: FEED_STATE_CONFIG[p.current_state].color }}
+                        >
+                          {FEED_STATE_CONFIG[p.current_state].label}
+                        </span>
+                      )}
+                      {p._has_turbulence && (
+                        <span className="spg-turbulence-warn" title="Unresolved entanglement">&#x26A0;</span>
+                      )}
                       <span className={`spg-status spg-status-${p.status}`}>
                         {STATUS_LABELS[p.status] || p.status}
                       </span>
@@ -1023,6 +1073,65 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
           {toast.message}
         </div>,
         document.body
+      )}
+    </div>
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════════════════ */
+/* Feed State Picker — inline state change for social profiles                */
+/* ════════════════════════════════════════════════════════════════════════════ */
+function FeedStatePicker({ profile, onStateChange }) {
+  const [open, setOpen] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const current = profile.current_state;
+
+  const changeState = async (newState) => {
+    if (newState === current || saving) return;
+    setSaving(true);
+    try {
+      await fetch(`${API}/${profile.id}`, {
+        method: 'PATCH',
+        headers: authHeaders(),
+        body: JSON.stringify({ current_state: newState }),
+      });
+      onStateChange?.();
+    } catch (err) {
+      console.error('State change failed:', err);
+    } finally {
+      setSaving(false);
+      setOpen(false);
+    }
+  };
+
+  const cfg = current ? FEED_STATE_CONFIG[current] : null;
+
+  return (
+    <div className="spg-state-picker">
+      <button
+        className="spg-state-picker-trigger"
+        onClick={(e) => { e.stopPropagation(); setOpen(!open); }}
+        style={cfg ? { background: cfg.bg, color: cfg.color } : undefined}
+      >
+        {cfg ? cfg.label : 'Set State'}
+      </button>
+      {open && (
+        <div className="spg-state-picker-dropdown">
+          {FEED_STATES.map(s => {
+            const sc = FEED_STATE_CONFIG[s];
+            return (
+              <button
+                key={s}
+                className={`spg-state-option ${s === current ? 'spg-state-option-active' : ''}`}
+                style={{ color: sc.color }}
+                onClick={(e) => { e.stopPropagation(); changeState(s); }}
+                disabled={saving}
+              >
+                {sc.label}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -1158,6 +1267,8 @@ function DetailPanel({ profile, fp, onClose, onFinalize, onCross, onEdit, onDele
             </>
           )}
         </div>
+        {/* State picker */}
+        <FeedStatePicker profile={p} onStateChange={onRefresh} />
       </div>
 
       <div className="spg-detail-body">

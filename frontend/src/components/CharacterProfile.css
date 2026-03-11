@@ -1,0 +1,956 @@
+/* ─────────────────────────────────────────────────────────────────────────────
+   CharacterProfile.css
+   Light theme · Prime Studios palette · Refined editorial
+   Colors: pink #d4789a · blue #7ab3d4 · lavender #a889c8
+   ───────────────────────────────────────────────────────────────────────────── */
+@import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=DM+Sans:wght@300;400;500&display=swap');
+
+/* ── Layout ────────────────────────────────────────────────────────────────── */
+.character-profile {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+  background: #fafaf9;
+  font-family: 'DM Sans', sans-serif;
+}
+
+/* ── Sidebar ───────────────────────────────────────────────────────────────── */
+.profile-sidebar {
+  background: #fff;
+  border-right: 1px solid #ede8e3;
+  padding: 24px 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  overflow-y: auto;
+}
+
+.back-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  color: #999;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: color 0.15s;
+}
+.back-btn:hover { color: #d4789a; }
+
+.sidebar-avatar {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f5e0e9, #e8d5f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  font-weight: 500;
+  color: #a889c8;
+  margin-bottom: 4px;
+}
+
+.sidebar-name {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  font-weight: 600;
+  color: #2a1f2d;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.sidebar-role {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #aaa;
+  margin: 0;
+}
+
+/* ── Depth Pill ────────────────────────────────────────────────────────────── */
+.depth-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+}
+
+.depth-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+/* ── Sidebar Actions ───────────────────────────────────────────────────────── */
+.sidebar-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  margin-top: 4px;
+}
+
+.btn-deepen {
+  width: 100%;
+  padding: 8px 14px;
+  background: linear-gradient(135deg, #d4789a, #a889c8);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+}
+.btn-deepen:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.btn-view-feed,
+.btn-export {
+  width: 100%;
+  padding: 7px 14px;
+  background: #f5f0f8;
+  color: #a889c8;
+  border: 1px solid #e8dff0;
+  border-radius: 8px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-view-feed:hover,
+.btn-export:hover { background: #ede4f5; }
+
+/* ── Ghost Indicator ───────────────────────────────────────────────────────── */
+.ghost-indicator {
+  width: 100%;
+  padding: 8px 12px;
+  background: #fdf6ee;
+  border: 1px solid #f0e4d0;
+  border-radius: 8px;
+  font-size: 12px;
+  color: #d4a574;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: background 0.15s;
+}
+.ghost-indicator:hover { background: #faeee0; }
+.ghost-num { font-weight: 600; font-size: 13px; }
+
+/* ── Sidebar Meta ──────────────────────────────────────────────────────────── */
+.sidebar-meta-item {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.mobility-badge,
+.time-badge-sm {
+  font-size: 11px;
+  color: #888;
+  text-transform: capitalize;
+}
+
+/* ── Main Panel ────────────────────────────────────────────────────────────── */
+.profile-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+/* ── Tab Bar ───────────────────────────────────────────────────────────────── */
+.tab-bar {
+  display: flex;
+  gap: 2px;
+  padding: 16px 28px 0;
+  border-bottom: 1px solid #ede8e3;
+  background: #fff;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.tab-btn {
+  position: relative;
+  padding: 10px 16px 12px;
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  color: #aaa;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+  white-space: nowrap;
+}
+.tab-btn:hover { color: #666; }
+.tab-btn.active {
+  color: #d4789a;
+  border-bottom-color: #d4789a;
+  font-weight: 500;
+}
+
+.tab-dot {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: #7ab3d4;
+}
+
+/* ── Tab Panel ─────────────────────────────────────────────────────────────── */
+.tab-panel {
+  flex: 1;
+  padding: 28px;
+  overflow-y: auto;
+}
+
+.tab-content {
+  max-width: 780px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+/* ── Content Sections ──────────────────────────────────────────────────────── */
+.content-section {
+  background: #fff;
+  border: 1px solid #ede8e3;
+  border-radius: 12px;
+  padding: 24px;
+}
+
+.content-section.author-only {
+  border-color: #f0e4d0;
+  background: #fdf9f5;
+}
+
+.section-title {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #bbb;
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.author-badge {
+  font-size: 10px;
+  padding: 2px 8px;
+  background: #f0e4d0;
+  color: #d4a574;
+  border-radius: 20px;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  font-weight: 500;
+}
+
+/* ── Prose Overview ────────────────────────────────────────────────────────── */
+.prose-overview {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 18px;
+  line-height: 1.65;
+  color: #3a2d3f;
+  margin: 0;
+}
+
+.arc-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #a889c8;
+  margin: 0;
+}
+
+/* ── Meta Grid ─────────────────────────────────────────────────────────────── */
+.meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #bbb;
+}
+
+.meta-value {
+  font-size: 13px;
+  color: #444;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+/* ── Want Architecture ─────────────────────────────────────────────────────── */
+.want-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.want-tier {
+  padding: 14px 16px;
+  border-radius: 8px;
+  border-left: 3px solid transparent;
+}
+.want-tier p {
+  margin: 6px 0 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: #444;
+}
+.want-tier.surface  { background: #f5f8ff; border-color: #7ab3d4; }
+.want-tier.real     { background: #f5f0fb; border-color: #a889c8; }
+.want-tier.forbidden{ background: #fdf0f4; border-color: #d4789a; }
+
+.want-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #aaa;
+}
+
+/* ── Wound ─────────────────────────────────────────────────────────────────── */
+.wound-description {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #3a2d3f;
+  margin: 0 0 12px;
+}
+
+.wound-meta {
+  font-size: 12px;
+  color: #aaa;
+  margin: 0 0 8px;
+}
+
+.wound-effects {
+  font-size: 13px;
+  line-height: 1.55;
+  color: #666;
+  margin: 0 0 12px;
+  font-style: italic;
+}
+
+.dimension-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.dim-tag {
+  font-size: 11px;
+  padding: 3px 8px;
+  background: #f5f0fb;
+  color: #a889c8;
+  border-radius: 20px;
+  text-transform: capitalize;
+}
+
+/* ── Mask ──────────────────────────────────────────────────────────────────── */
+.mask-block p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #444;
+  margin: 0 0 12px;
+}
+
+.divergence-list { margin-top: 12px; }
+
+.divergence-item {
+  font-size: 13px;
+  color: #888;
+  line-height: 1.5;
+  margin: 4px 0;
+}
+
+/* ── Dilemma ───────────────────────────────────────────────────────────────── */
+.dilemma-tension {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #3a2d3f;
+  margin: 0 0 20px;
+  font-style: italic;
+}
+
+.dilemma-options {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.dilemma-option {
+  padding: 14px;
+  background: #fafaf9;
+  border: 1px solid #ede8e3;
+  border-radius: 8px;
+}
+
+.option-label {
+  display: block;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: #d4789a;
+  margin-bottom: 6px;
+}
+
+.dilemma-option p {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #555;
+}
+
+.dilemma-vs {
+  font-size: 11px;
+  color: #ccc;
+  text-align: center;
+}
+
+.dilemma-cost {
+  font-size: 13px;
+  color: #aaa;
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── Interior Grid ─────────────────────────────────────────────────────────── */
+.interior-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.interior-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.interior-field p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #444;
+  margin: 0;
+}
+
+.blind-spot-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #888;
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── Relationships ─────────────────────────────────────────────────────────── */
+.relationships-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.relationship-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: #fafaf9;
+  border-radius: 8px;
+  border: 1px solid #ede8e3;
+}
+
+.rel-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #e8d5f0, #d0e8f5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: #a889c8;
+  flex-shrink: 0;
+}
+
+.rel-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.rel-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.rel-type {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #bbb;
+}
+
+.tension-badge {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 20px;
+  text-transform: capitalize;
+  background: #fdf0f4;
+  color: #d4789a;
+}
+.tension-badge.tension-low    { background: #f0f7ee; color: #6a9e60; }
+.tension-badge.tension-medium { background: #fdf6ee; color: #d4a574; }
+.tension-badge.tension-high   { background: #fdf0f4; color: #d4789a; }
+
+/* ── Belonging Map ─────────────────────────────────────────────────────────── */
+.belonging-group { margin-bottom: 16px; }
+.belonging-group.excluded .belonging-name { color: #aaa; }
+
+.belonging-item {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f5f0f0;
+}
+.belonging-item:last-child { border-bottom: none; }
+
+.belonging-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.belonging-type {
+  font-size: 11px;
+  color: #bbb;
+  text-transform: capitalize;
+}
+
+.belonging-why {
+  font-size: 12px;
+  color: #aaa;
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── Online / Feed ─────────────────────────────────────────────────────────── */
+.feed-profile-header {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.feed-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d5e8f5, #e8d5f0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 20px;
+  color: #7ab3d4;
+  flex-shrink: 0;
+}
+
+.feed-identity {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.feed-handle {
+  font-size: 15px;
+  font-weight: 600;
+  color: #333;
+}
+
+.feed-display {
+  font-size: 12px;
+  color: #888;
+}
+
+.feed-platform {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #bbb;
+}
+
+.state-badge {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+.feed-bio {
+  font-family: 'Cormorant Garamond', serif;
+  font-style: italic;
+  font-size: 15px;
+  color: #555;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.vibe-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.vibe-tag {
+  font-size: 11px;
+  padding: 3px 10px;
+  background: #eef5fb;
+  color: #7ab3d4;
+  border-radius: 20px;
+}
+
+.feed-stats {
+  display: flex;
+  gap: 24px;
+}
+
+.feed-stat {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.stat-num {
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: #aaa;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gap-text {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #888;
+  font-style: italic;
+  margin: 0;
+}
+
+.mask-note {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #d4789a;
+  margin: 0;
+}
+
+/* ── World / Living State ──────────────────────────────────────────────────── */
+.living-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.living-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.living-field p {
+  font-size: 14px;
+  line-height: 1.6;
+  color: #444;
+  margin: 0;
+}
+
+.time-badge {
+  display: inline-block;
+  padding: 5px 12px;
+  background: #eef5fb;
+  color: #7ab3d4;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  text-transform: capitalize;
+}
+
+/* ── Ghost Characters ──────────────────────────────────────────────────────── */
+.ghost-note {
+  font-size: 12px;
+  color: #aaa;
+  margin: 0 0 12px;
+  font-style: italic;
+}
+
+.ghost-count {
+  margin-left: 8px;
+  font-size: 11px;
+  padding: 2px 8px;
+  background: #fdf6ee;
+  color: #d4a574;
+  border-radius: 20px;
+}
+
+.ghost-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ghost-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: #fafaf9;
+  border: 1px solid #ede8e3;
+  border-radius: 8px;
+}
+.ghost-item.promoted { opacity: 0.5; }
+
+.ghost-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+  flex: 1;
+}
+
+.ghost-relation {
+  font-size: 11px;
+  color: #bbb;
+  text-transform: capitalize;
+}
+
+.btn-promote {
+  font-size: 11px;
+  padding: 3px 10px;
+  background: linear-gradient(135deg, #d4789a, #a889c8);
+  color: #fff;
+  border: none;
+  border-radius: 20px;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+.btn-promote:hover { opacity: 0.85; }
+
+.promoted-badge {
+  font-size: 11px;
+  color: #6a9e60;
+}
+
+/* ── Family ────────────────────────────────────────────────────────────────── */
+.generational-wound {
+  font-size: 13px;
+  font-style: italic;
+  color: #888;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  background: #fdf9f5;
+  border-left: 3px solid #d4a574;
+  border-radius: 0 6px 6px 0;
+}
+
+.family-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.family-member {
+  display: grid;
+  grid-template-columns: 140px 100px 1fr;
+  align-items: start;
+  gap: 10px;
+  padding: 10px 0;
+  border-bottom: 1px solid #f5f0f0;
+}
+.family-member:last-child { border-bottom: none; }
+
+.member-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #333;
+}
+
+.member-relation {
+  font-size: 11px;
+  color: #bbb;
+  text-transform: capitalize;
+}
+
+.member-sketch {
+  font-size: 12px;
+  color: #888;
+  font-style: italic;
+  margin: 0;
+}
+
+/* ── Deep Profile ──────────────────────────────────────────────────────────── */
+.deep-profile-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.dp-row {
+  border-bottom: 1px solid #f0ebe5;
+  cursor: pointer;
+  transition: background 0.12s;
+}
+.dp-row:last-child { border-bottom: none; }
+.dp-row:hover { background: #fafaf9; }
+.dp-row.open { background: #fdf9f5; }
+
+.dp-row-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.dp-icon {
+  font-size: 15px;
+  flex-shrink: 0;
+}
+
+.dp-label {
+  flex: 1;
+  font-size: 13px;
+  font-weight: 500;
+  color: #444;
+  text-transform: capitalize;
+}
+
+.dp-chevron {
+  font-size: 12px;
+  color: #bbb;
+}
+
+.dp-content {
+  font-size: 13px;
+  line-height: 1.65;
+  color: #555;
+  margin: 0;
+  padding: 0 16px 16px 43px;
+}
+
+/* ── Empty State ───────────────────────────────────────────────────────────── */
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.empty-label {
+  font-size: 13px;
+  color: #bbb;
+  margin: 0;
+}
+
+.btn-generate {
+  padding: 8px 20px;
+  background: linear-gradient(135deg, #d4789a22, #a889c822);
+  color: #a889c8;
+  border: 1px solid #e8dff0;
+  border-radius: 20px;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.btn-generate:hover {
+  background: linear-gradient(135deg, #d4789a33, #a889c833);
+}
+
+/* ── Loading / Error ───────────────────────────────────────────────────────── */
+.profile-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+}
+
+.loading-pulse {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #d4789a, #a889c8);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(0.8); opacity: 0.5; }
+  50% { transform: scale(1); opacity: 1; }
+}
+
+.profile-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 300px;
+  color: #aaa;
+  font-size: 14px;
+}
+
+.profile-error button {
+  padding: 8px 20px;
+  background: none;
+  border: 1px solid #ede8e3;
+  border-radius: 20px;
+  cursor: pointer;
+  font-size: 13px;
+  color: #888;
+}

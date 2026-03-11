@@ -1003,8 +1003,8 @@ export default function WorldStudio() {
                   <div className="ws-detail-header-badges">
                     <span style={{ fontSize: 20 }}>{ROLE_ICONS[selectedRegChar.role_type] || '✦'}</span>
                     <Badge cls={ROLE_BADGE_CLASS[selectedRegChar.role_type] || ''}>{ROLE_LABELS[selectedRegChar.role_type]}</Badge>
-                    <Badge cls={selectedRegChar.status === 'finalized' ? 'ws-badge-approved' : 'ws-badge-draft'}>
-                      {selectedRegChar.status}
+                    <Badge cls={selectedRegChar.depth_level === 'alive' ? 'ws-badge-approved' : 'ws-badge-draft'}>
+                      {selectedRegChar.depth_level || selectedRegChar.status}
                     </Badge>
                     {selectedRegChar.world_exists && <Badge cls="ws-badge-protagonist">Canon</Badge>}
                   </div>
@@ -1050,13 +1050,13 @@ export default function WorldStudio() {
                       <div className="ws-registry-card-top">
                         <span className="ws-registry-card-icon">{ROLE_ICONS[ch.role_type] || '✦'}</span>
                         <span className="ws-registry-card-name">{ch.selected_name || ch.display_name}</span>
-                        {ch.status === 'finalized' && ch.world_exists && (
+                        {ch.depth_level === 'alive' && ch.world_exists && (
                           <Badge cls="ws-badge-protagonist">Canon</Badge>
                         )}
                       </div>
                       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                         <Badge cls={ROLE_BADGE_CLASS[ch.role_type] || ''}>{ROLE_LABELS[ch.role_type] || ch.role_type}</Badge>
-                        <Badge cls={ch.status === 'finalized' ? 'ws-badge-approved' : 'ws-badge-draft'}>{ch.status}</Badge>
+                        <Badge cls={ch.depth_level === 'alive' ? 'ws-badge-approved' : 'ws-badge-draft'}>{ch.depth_level || ch.status}</Badge>
                       </div>
                       {ch.core_desire && (
                         <div className="ws-registry-card-trait ws-registry-card-trait-desire">

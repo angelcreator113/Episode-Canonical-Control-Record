@@ -86,6 +86,7 @@ const StoryEvaluationEngine = lazy(() => import('./pages/StoryEvaluationEngine')
 const StoryProposer = lazy(() => import('./pages/StoryProposer'));
 const NovelAssembler = lazy(() => import('./pages/NovelAssembler'));
 const CharacterGenerator = lazy(() => import('./pages/CharacterGenerator'));
+const CharacterProfile = lazy(() => import('./pages/CharacterProfilePage'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));
@@ -353,6 +354,7 @@ function AppContent() {
           
           {/* PNOS Character Registry */}
           <Route path="/character-registry" element={<CharacterRegistryPage />} />
+          <Route path="/character/:id" element={<CharacterProfile />} />
           <Route path="/character-generator" element={<Navigate to="/world-studio" replace />} />
           <Route path="/setup" element={<SetupWizard />} />
           
