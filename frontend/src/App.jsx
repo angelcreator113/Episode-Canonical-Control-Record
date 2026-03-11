@@ -86,7 +86,7 @@ const StoryEvaluationEngine = lazy(() => import('./pages/StoryEvaluationEngine')
 const StoryProposer = lazy(() => import('./pages/StoryProposer'));
 const NovelAssembler = lazy(() => import('./pages/NovelAssembler'));
 const CharacterGenerator = lazy(() => import('./pages/CharacterGenerator'));
-const CharacterProfile = lazy(() => import('./components/CharacterProfile'));
+const CharacterProfile = lazy(() => import('./pages/CharacterProfilePage'));
 const SetupWizard = lazy(() => import('./pages/SetupWizard'));
 const SettingsPage = lazy(() => import('./pages/SettingsPage'));
 const RecycleBin = lazy(() => import('./pages/RecycleBin'));

@@ -1351,7 +1351,7 @@ export default function CharacterRegistryPage() {
     total: sorted.length,
     draft: sorted.filter(c => c.status === 'draft').length,
     accepted: sorted.filter(c => c.status === 'accepted').length,
-    finalized: sorted.filter(c => c.status === 'finalized').length,
+    alive: sorted.filter(c => c.depth_level === 'alive').length,
   };
 
   // World mode stats
@@ -2189,7 +2189,7 @@ export default function CharacterRegistryPage() {
                 {paged.map((char, i) => {
                   const ls = livingStates[char.id] || null;
                   const meta = { color: ROLE_COLORS[char.role_type] || '#9a8c9e' };
-                  const statusM = { draft: '#9a8c9e', accepted: '#3d8e42', declined: '#c43a2a', finalized: '#c9a84c' };
+                  const statusM = { draft: '#9a8c9e', accepted: '#3d8e42', declined: '#c43a2a', alive: '#c9a84c', sparked: '#aaa', breathing: '#7ab3d4', active: '#a889c8' };
                   const expanded = !!worldExpanded[char.id];
                   const mom = MOMENTUM[ls?.momentum || 'dormant'];
                   const charName = char.selected_name || char.display_name || '?';
@@ -2358,7 +2358,7 @@ export default function CharacterRegistryPage() {
         <div className="cr-stats-strip">
           <div className="cr-stat-counts">
             <span className="cr-stat-chip">{statusCounts.total} total</span>
-            <span className="cr-stat-chip">{statusCounts.finalized} canon</span>
+            <span className="cr-stat-chip">{statusCounts.alive} alive</span>
             <span className="cr-stat-chip">{statusCounts.accepted} accepted</span>
             <span className="cr-stat-chip">{statusCounts.draft} draft</span>
           </div>
@@ -2737,8 +2737,6 @@ export default function CharacterRegistryPage() {
                   onChange={e => setBulkStatusTarget(e.target.value)}>
                   <option value="draft">Draft</option>
                   <option value="accepted">Accepted</option>
-                  <option value="finalized">Finalized (Canon)</option>
-                  <option value="declined">Declined</option>
                 </select>
               </div>
               <div className="cr-modal-actions">
@@ -2932,8 +2930,6 @@ function CharacterCard({ c, onClick, isCompareSelected, isSelected, selectMode, 
             onChange={e => onQuickEditChange('status', e.target.value)}>
             <option value="draft">Draft</option>
             <option value="accepted">Accepted</option>
-            <option value="finalized">Finalized</option>
-            <option value="declined">Declined</option>
           </select>
           <div className="cr-quick-btns">
             <button className="cr-quick-save" onClick={onQuickEditSave}>Save</button>
