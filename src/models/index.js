@@ -101,6 +101,7 @@ let ManuscriptMetadata; // Novel Intelligence: book metadata cascade
 let BrainFingerprint; // Novel Intelligence: brain dedup fingerprints
 let SocialProfile; // The Feed: social media creator profiles
 let SocialProfileFollower; // The Feed: character-follows-profile join table
+let SocialProfileRelationship; // The Feed: creator-to-creator relationships (drama, collabs, couples)
 let BulkImportJob; // The Feed: background bulk import job queue
 let RelationshipEvent; // Relationship timeline turning points
 let StoryRevision; // Revision history for edited stories
@@ -306,6 +307,7 @@ try {
   // The Feed: Social Profile Generator
   SocialProfile = require('./SocialProfile')(sequelize, DataTypes);
   SocialProfileFollower = require('./SocialProfileFollower')(sequelize, DataTypes);
+  SocialProfileRelationship = require('./SocialProfileRelationship')(sequelize, DataTypes);
   BulkImportJob = require('./BulkImportJob')(sequelize, DataTypes);
 
   // Tier feature models
@@ -433,6 +435,7 @@ const requiredModels = {
   BrainFingerprint,
   SocialProfile,
   SocialProfileFollower,
+  SocialProfileRelationship,
   BulkImportJob,
   RelationshipEvent,
   StoryRevision,
@@ -604,6 +607,13 @@ SocialProfile.hasMany(SocialProfileFollower, {
 });
 if (SocialProfileFollower && SocialProfileFollower.associate) {
   SocialProfileFollower.associate(requiredModels);
+}
+
+// SocialProfile ↔ SocialProfileRelationship associations are defined
+// inside SocialProfile.associate() and SocialProfileRelationship.associate()
+// so we only need to call associate() on the relationship model here.
+if (SocialProfileRelationship && SocialProfileRelationship.associate) {
+  SocialProfileRelationship.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');

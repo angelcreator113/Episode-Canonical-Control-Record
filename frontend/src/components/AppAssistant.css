@@ -138,7 +138,7 @@
 /* ── Panel ────────────────────────────────────────────────────────── */
 
 .apa-panel {
-  width: 380px;
+  width: min(380px, calc(100vw - 32px));
   max-height: 520px;
   background: white;
   border: 1px solid #e5e7eb;

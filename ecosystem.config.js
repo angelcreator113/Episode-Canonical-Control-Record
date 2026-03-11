@@ -44,6 +44,9 @@ const sharedEnv = {
 
   // Claude AI — Anthropic API
   ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY || '',
+
+  // ElevenLabs TTS (Amber voice)
+  ELEVENLABS_API_KEY: process.env.ELEVENLABS_API_KEY || '',
 };
 
 module.exports = {

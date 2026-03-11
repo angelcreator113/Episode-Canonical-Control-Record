@@ -23,6 +23,9 @@ module.exports = (sequelize, DataTypes) => {
     influence_type:      { type: DataTypes.STRING(50), allowNull: true },
     influence_level:     { type: DataTypes.INTEGER, allowNull: true, defaultValue: 5 },
     discovered_in:       { type: DataTypes.STRING(200), allowNull: true },
+    follow_motivation:   { type: DataTypes.STRING(50), allowNull: true },   // identity|aspiration|entertainment|information|social_proof|personal|parasocial
+    follow_probability:  { type: DataTypes.FLOAT, allowNull: true },        // 0.0-1.0 — how likely this character would follow
+    auto_generated:      { type: DataTypes.BOOLEAN, allowNull: true, defaultValue: false },
   }, {
     sequelize,
     modelName:  'SocialProfileFollower',
