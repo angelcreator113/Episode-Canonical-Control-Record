@@ -194,9 +194,11 @@
     flex-direction: column;
     align-items: stretch;
     gap: 8px;
+    padding: 10px 12px;
   }
   .spg-toolbar-right {
     justify-content: flex-start;
+    margin-left: 0;
   }
   .spg-search-input {
     flex: 1;
@@ -798,23 +800,27 @@ select.spg-input {
 /* ── Toolbar (filters + search + sort + bulk toggle) ───── */
 .spg-toolbar {
   display: flex;
-  justify-content: space-between;
   align-items: center;
-  gap: 12px;
+  gap: 16px;
   flex-wrap: wrap;
   margin-bottom: 4px;
+  padding: 10px 16px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
 }
 .spg-toolbar-right {
   display: flex;
   gap: 8px;
   align-items: center;
   flex-wrap: wrap;
+  margin-left: auto;
 }
 .spg-search-input {
   padding: 7px 14px;
   border: 1px solid var(--border);
   border-radius: 20px;
-  background: var(--surface);
+  background: var(--surface2);
   color: var(--ink);
   font-size: 0.82rem;
   font-family: inherit;
@@ -832,7 +838,7 @@ select.spg-input {
   padding: 7px 12px;
   border: 1px solid var(--border);
   border-radius: 20px;
-  background: var(--surface);
+  background: var(--surface2);
   color: var(--ink-dim);
   font-size: 0.78rem;
   font-family: inherit;
