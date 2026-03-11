@@ -451,14 +451,17 @@ router.get('/jobs', optionalAuth, async (req, res) => {
 });
 
 // ── GET /jobs/:id ────────────────────────────────────────────────────────────
-// Get progress for a specific job
+// Get progress for a specific job (lightweight — excludes bulky candidates/results)
 router.get('/jobs/:id', optionalAuth, async (req, res) => {
   try {
     const db = getModels();
     if (!db || !db.BulkImportJob) {
       return res.status(404).json({ error: 'Not available' });
     }
-    const job = await db.BulkImportJob.findByPk(req.params.id);
+    const job = await db.BulkImportJob.findByPk(req.params.id, {
+      attributes: ['id', 'status', 'total', 'completed', 'failed', 'error_message',
+                   'character_key', 'created_at', 'started_at', 'completed_at'],
+    });
     if (!job) return res.status(404).json({ error: 'Job not found' });
     return res.json({ job });
   } catch (err) {
