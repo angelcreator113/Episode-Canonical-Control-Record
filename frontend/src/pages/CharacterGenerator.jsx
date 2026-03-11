@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ROLE_COLORS, ROLE_ICONS, MOMENTUM_COLORS, WORLD_LABELS } from '../constants/characterConstants';
 import useRegistries from '../hooks/useRegistries';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -920,6 +920,7 @@ function StagingCard({ result, checks, onCommit, onDiscard, onDelete, onRegenera
 // ─── Main CharacterGenerator ──────────────────────────────────────────────────
 export default function CharacterGenerator() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Ecosystem
   const [ecosystem, setEcosystem]         = useState(null);
@@ -1008,6 +1009,23 @@ export default function CharacterGenerator() {
     loadEcosystem();
     setHistory(loadHistory());
   }, []);
+
+  // ── Spark on-ramp: auto-generate from CharacterCreationDrawer seed ────────
+  const sparkHandled = useRef(false);
+  useEffect(() => {
+    if (ecoLoading || sparkHandled.current) return;
+    const sparkSeed = location.state?.sparkSeed;
+    if (!sparkSeed) return;
+    sparkHandled.current = true;
+
+    // Clear route state so a refresh doesn't re-trigger
+    window.history.replaceState({}, '', window.location.pathname);
+
+    // Pre-approve the seed and fire generate-batch immediately
+    const approved = { ...sparkSeed, _status: 'approved' };
+    setSeeds([approved]);
+    handleGenerateBatch([approved]);
+  }, [ecoLoading]);
 
   async function loadEcosystem() {
     setEcoLoading(true);
@@ -1546,7 +1564,7 @@ export default function CharacterGenerator() {
             <>
               <div className="cg-phase-header">
                 <div className="cg-panel-title">
-                  Staging Area
+                  {seeds.some(s => s._from_spark) ? 'Spark → Staging' : 'Staging Area'}
                   <span className="cg-seed-count">
                     {batch.filter((r) => r._committed).length} committed · {batch.filter((r) => !r._committed).length} pending
                   </span>
