@@ -297,16 +297,40 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
   // Helper: get IDs for bulk ops (handles multi-page select all)
   const getBulkIds = async () => {
     if (!selectAllPages) return [...selectedIds];
-    // Fetch ALL profile IDs matching current filter
-    const qs = new URLSearchParams();
-    if (filterStatus) qs.set('status', filterStatus);
-    if (search.trim()) qs.set('search', search.trim());
-    qs.set('sort', sortBy);
-    qs.set('page', 1);
-    qs.set('limit', 100); // max batch
-    const res = await fetch(`${API}?${qs}`, { headers: authHeaders() });
-    const data = await res.json();
-    return (data.profiles || []).map(p => p.id);
+    // Fetch ALL profile IDs matching current filter, paginating through
+    const allIds = [];
+    let pg = 1;
+    while (true) {
+      const qs = new URLSearchParams();
+      if (filterStatus) qs.set('status', filterStatus);
+      if (search.trim()) qs.set('search', search.trim());
+      qs.set('sort', sortBy);
+      qs.set('page', pg);
+      qs.set('limit', 100);
+      const res = await fetch(`${API}?${qs}`, { headers: authHeaders() });
+      const data = await res.json();
+      const batch = (data.profiles || []).map(p => p.id);
+      allIds.push(...batch);
+      if (batch.length < 100 || allIds.length >= (data.total || 0)) break;
+      pg++;
+    }
+    return allIds;
+  };
+
+  // Helper: run a bulk operation in batches of 100
+  const runBulkInBatches = async (ids, endpoint) => {
+    const results = [];
+    for (let i = 0; i < ids.length; i += 100) {
+      const chunk = ids.slice(i, i + 100);
+      const res = await fetch(`${API}/${endpoint}`, {
+        method: 'POST', headers: authHeaders(),
+        body: JSON.stringify({ ids: chunk }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error);
+      results.push(data);
+    }
+    return results;
   };
 
   const bulkFinalize = async () => {
@@ -315,19 +339,15 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
     if (!window.confirm(`Finalize ${count} profile(s)?`)) return;
     try {
-      const res = await fetch(`${API}/bulk/finalize`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ ids }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const results = await runBulkInBatches(ids, 'bulk/finalize');
+      const totals = results.reduce((acc, d) => ({ finalized: acc.finalized + (d.finalized || 0), skipped: acc.skipped + (d.skipped || 0) }), { finalized: 0, skipped: 0 });
       setSelectedIds(new Set());
       setSelectAllPages(false);
       loadProfiles();
-      if (data.finalized > 0) {
-        showToast(`Finalized ${data.finalized} profile(s)${data.skipped ? ` · ${data.skipped} already finalized` : ''}`);
+      if (totals.finalized > 0) {
+        showToast(`Finalized ${totals.finalized} profile(s)${totals.skipped ? ` · ${totals.skipped} already finalized` : ''}`);
       } else {
-        showToast(`No profiles changed — ${data.skipped} already finalized or not in "Generated" status`, 'warn');
+        showToast(`No profiles changed — ${totals.skipped} already finalized or not in "Generated" status`, 'warn');
       }
     } catch (err) { setError(err.message); }
   };
@@ -338,17 +358,13 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
     if (!window.confirm(`Cross ${count} profile(s) into the story world?`)) return;
     try {
-      const res = await fetch(`${API}/bulk/cross`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ ids }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const results = await runBulkInBatches(ids, 'bulk/cross');
+      const totals = results.reduce((acc, d) => ({ crossed: acc.crossed + (d.crossed || 0), skipped: acc.skipped + (d.skipped || 0) }), { crossed: 0, skipped: 0 });
       setSelectedIds(new Set());
       setSelectAllPages(false);
       loadProfiles();
-      if (data.crossed > 0) {
-        showToast(`Crossed ${data.crossed} profile(s)${data.skipped ? ` · ${data.skipped} skipped (not finalized)` : ''}`);
+      if (totals.crossed > 0) {
+        showToast(`Crossed ${totals.crossed} profile(s)${totals.skipped ? ` · ${totals.skipped} skipped (not finalized)` : ''}`);
       } else {
         showToast(`No profiles crossed — only finalized profiles can be crossed`, 'warn');
       }
@@ -361,17 +377,13 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
     if (!window.confirm(`Archive ${count} profile(s)?`)) return;
     try {
-      const res = await fetch(`${API}/bulk/archive`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ ids }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const results = await runBulkInBatches(ids, 'bulk/archive');
+      const totals = results.reduce((acc, d) => ({ archived: acc.archived + (d.archived || 0), skipped: acc.skipped + (d.skipped || 0) }), { archived: 0, skipped: 0 });
       setSelectedIds(new Set());
       setSelectAllPages(false);
       loadProfiles();
-      if (data.archived > 0) {
-        showToast(`Archived ${data.archived} profile(s)${data.skipped ? ` · ${data.skipped} already archived` : ''}`);
+      if (totals.archived > 0) {
+        showToast(`Archived ${totals.archived} profile(s)${totals.skipped ? ` · ${totals.skipped} already archived` : ''}`);
       } else {
         showToast(`No profiles changed — all already archived`, 'warn');
       }
@@ -384,17 +396,13 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     const count = selectAllPages ? `all ${statusCounts.total}` : ids.length;
     if (!window.confirm(`Permanently delete ${count} profile(s)? This cannot be undone.`)) return;
     try {
-      const res = await fetch(`${API}/bulk/delete`, {
-        method: 'POST', headers: authHeaders(),
-        body: JSON.stringify({ ids }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const results = await runBulkInBatches(ids, 'bulk/delete');
+      const totalDeleted = results.reduce((acc, d) => acc + (d.deleted || 0), 0);
       setSelectedIds(new Set());
       setSelectAllPages(false);
       if (selected && ids.includes(selected.id)) setSelected(null);
       loadProfiles();
-      showToast(`Deleted ${data.deleted} profile(s)`);
+      showToast(`Deleted ${totalDeleted} profile(s)`);
     } catch (err) { setError(err.message); }
   };
 
