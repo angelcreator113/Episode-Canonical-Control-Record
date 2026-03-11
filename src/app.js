@@ -50,6 +50,30 @@ if (process.env.NODE_ENV !== 'test') {
       await db.authenticate();
       console.log('✅ Database connection authenticated');
 
+      // Run pending Sequelize CLI migrations automatically on startup
+      try {
+        const Umzug = require('umzug');
+        const path = require('path');
+        const umzug = new Umzug({
+          storage: 'sequelize',
+          storageOptions: { sequelize: db.sequelize },
+          migrations: {
+            path: path.join(__dirname, 'migrations'),
+            params: [db.sequelize.getQueryInterface(), db.Sequelize || require('sequelize')],
+          },
+        });
+        const pending = await umzug.pending();
+        if (pending.length > 0) {
+          console.log(`🔄 Running ${pending.length} pending migration(s)...`);
+          await umzug.up();
+          console.log('✅ Migrations completed');
+        } else {
+          console.log('✅ All migrations already applied');
+        }
+      } catch (migErr) {
+        console.error('⚠️  Migration runner error (non-fatal):', migErr.message);
+      }
+
       // Check if DB sync is enabled via environment variable
       console.log('DEBUG: ENABLE_DB_SYNC =', process.env.ENABLE_DB_SYNC);
       console.log('DEBUG: DB_SYNC_FORCE =', process.env.DB_SYNC_FORCE);

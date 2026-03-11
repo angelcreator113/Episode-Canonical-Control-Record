@@ -83,11 +83,20 @@ module.exports = {
     ];
 
     for (const [name, type] of cols) {
-      await queryInterface.addColumn('registry_characters', name, {
-        type,
-        allowNull: true,
-        defaultValue: null,
-      });
+      try {
+        await queryInterface.addColumn('registry_characters', name, {
+          type,
+          allowNull: true,
+          defaultValue: null,
+        });
+      } catch (e) {
+        // Column may already exist — skip gracefully
+        if (e.message && e.message.includes('already exists')) {
+          console.log(`  ↳ Column ${name} already exists, skipping`);
+        } else {
+          throw e;
+        }
+      }
     }
   },
 
@@ -105,7 +114,15 @@ module.exports = {
       'joy_source','joy_accessibility','joy_vs_ambition',
     ];
     for (const name of names) {
-      await queryInterface.removeColumn('registry_characters', name);
+      try {
+        await queryInterface.removeColumn('registry_characters', name);
+      } catch (e) {
+        if (e.message && e.message.includes('does not exist')) {
+          console.log(`  ↳ Column ${name} does not exist, skipping`);
+        } else {
+          throw e;
+        }
+      }
     }
   }
 };
