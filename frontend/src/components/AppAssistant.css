@@ -538,6 +538,19 @@
     width: calc(100vw - 32px);
     max-height: 70vh;
   }
+
+  /* Ensure touch-friendly 44px targets on mobile */
+  .apa-mic,
+  .apa-send {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+
+  .apa-minimize-btn {
+    width: 48px;
+    height: 44px;
+  }
 }
 
 /* Hide Amber on Story Engine page at mobile widths — the page has its own AI tools */
