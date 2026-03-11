@@ -136,7 +136,9 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
   // Active background job tracking
   const [activeJob, setActiveJob] = useState(null);
+  const [jobStale, setJobStale] = useState(false);
   const jobPollRef = useRef(null);
+  const lastProgressRef = useRef({ completed: 0, since: Date.now() });
 
   // ── Load profiles ────────────────────────────────────────────────────────
   const loadProfiles = useCallback(async (targetPage) => {
@@ -180,10 +182,23 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
       const data = await res.json();
       if (data.job) {
         setActiveJob(data.job);
+
+        // Stale detection: if progress hasn't changed in 3 minutes, flag as stuck
+        const currentCompleted = (data.job.completed || 0) + (data.job.failed || 0);
+        if (data.job.status === 'processing') {
+          if (currentCompleted !== lastProgressRef.current.completed) {
+            lastProgressRef.current = { completed: currentCompleted, since: Date.now() };
+            setJobStale(false);
+          } else if (Date.now() - lastProgressRef.current.since > 3 * 60 * 1000) {
+            setJobStale(true);
+          }
+        }
+
         if (data.job.status === 'completed' || data.job.status === 'failed') {
           clearInterval(jobPollRef.current);
           jobPollRef.current = null;
           localStorage.removeItem('spg_active_job');
+          setJobStale(false);
           loadProfiles();
         }
       }
@@ -204,6 +219,8 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
   const startJobPolling = (jobId) => {
     localStorage.setItem('spg_active_job', jobId);
+    lastProgressRef.current = { completed: 0, since: Date.now() };
+    setJobStale(false);
     pollJob(jobId);
     if (jobPollRef.current) clearInterval(jobPollRef.current);
     jobPollRef.current = setInterval(() => pollJob(jobId), 6000);
@@ -213,6 +230,34 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     setActiveJob(null);
     localStorage.removeItem('spg_active_job');
     if (jobPollRef.current) { clearInterval(jobPollRef.current); jobPollRef.current = null; }
+  };
+
+  const cancelJob = async (jobId) => {
+    try {
+      const res = await fetch(`${API}/bulk/jobs/${jobId}/cancel`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (data.job) {
+        setActiveJob(data.job);
+        clearInterval(jobPollRef.current);
+        jobPollRef.current = null;
+        localStorage.removeItem('spg_active_job');
+        loadProfiles();
+      }
+    } catch (err) {
+      console.error('Cancel job error:', err);
+    }
+  };
+
+  const retryJob = async (jobId) => {
+    try {
+      const res = await fetch(`${API}/bulk/jobs/${jobId}/retry`, { method: 'POST', headers: authHeaders() });
+      const data = await res.json();
+      if (data.job_id) {
+        startJobPolling(data.job_id);
+      }
+    } catch (err) {
+      console.error('Retry job error:', err);
+    }
   };
 
   // Reset to page 1 when filters change
@@ -509,19 +554,27 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
 
       {/* ── Active Job Banner ──────────────────────────────────── */}
       {activeJob && (
-        <div className={`spg-job-banner ${activeJob.status === 'completed' ? 'spg-job-done' : activeJob.status === 'failed' ? 'spg-job-failed' : 'spg-job-active'}`}>
-          <div className="spg-job-banner-text">
-            {activeJob.status === 'processing' && (
-              <>⟳ Generating profiles in background... {activeJob.completed || 0}/{activeJob.total || 0} done{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
-            )}
-            {activeJob.status === 'pending' && (
-              <>⟳ Job queued — waiting to start ({activeJob.total} profiles)...</>
-            )}
-            {activeJob.status === 'completed' && (
-              <>✓ Background import complete — {activeJob.completed}/{activeJob.total} profiles generated{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
-            )}
-            {activeJob.status === 'failed' && (
-              <>✕ Job failed{activeJob.error_message ? `: ${activeJob.error_message}` : ''}</>
+        <div className={`spg-job-banner ${activeJob.status === 'completed' ? 'spg-job-done' : activeJob.status === 'failed' ? 'spg-job-failed' : jobStale ? 'spg-job-stale' : 'spg-job-active'}`}>
+          <div className="spg-job-banner-top">
+            <div className="spg-job-banner-text">
+              {activeJob.status === 'processing' && !jobStale && (
+                <>⟳ Generating profiles in background... {activeJob.completed || 0}/{activeJob.total || 0} done{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
+              )}
+              {activeJob.status === 'processing' && jobStale && (
+                <>⚠ Job appears stuck at {activeJob.completed || 0}/{activeJob.total || 0} — no progress for 3+ minutes. You can cancel and retry the remaining profiles.</>
+              )}
+              {activeJob.status === 'pending' && (
+                <>⟳ Job queued — waiting to start ({activeJob.total} profiles)...</>
+              )}
+              {activeJob.status === 'completed' && (
+                <>✓ Background import complete — {activeJob.completed}/{activeJob.total} profiles generated{activeJob.failed > 0 && `, ${activeJob.failed} failed`}</>
+              )}
+              {activeJob.status === 'failed' && (
+                <>✕ Job failed{activeJob.error_message ? `: ${activeJob.error_message}` : ''}</>
+              )}
+            </div>
+            {(activeJob.status === 'processing' || activeJob.status === 'pending') && (
+              <button className="spg-job-cancel" onClick={() => cancelJob(activeJob.id)}>Cancel</button>
             )}
           </div>
           {(activeJob.status === 'processing' || activeJob.status === 'pending') && (
@@ -530,7 +583,14 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
             </div>
           )}
           {(activeJob.status === 'completed' || activeJob.status === 'failed') && (
-            <button className="spg-job-dismiss" onClick={dismissJob}>Dismiss</button>
+            <div className="spg-job-actions">
+              {activeJob.status === 'failed' && (activeJob.completed || 0) < (activeJob.total || 0) && (
+                <button className="spg-job-retry" onClick={() => retryJob(activeJob.id)}>
+                  ↻ Retry Remaining ({(activeJob.total || 0) - (activeJob.completed || 0)})
+                </button>
+              )}
+              <button className="spg-job-dismiss" onClick={dismissJob}>Dismiss</button>
+            </div>
           )}
         </div>
       )}
