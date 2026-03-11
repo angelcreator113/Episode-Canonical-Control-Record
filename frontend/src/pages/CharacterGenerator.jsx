@@ -583,6 +583,7 @@ function StagingCard({ result, checks, onCommit, onDiscard, onDelete, onRegenera
   const voice    = profile?.voice || {};
   const dilemma  = profile?.dilemma || {};
   const threads  = profile?.plot_threads || [];
+  const demo     = profile?.demographics || {};
 
   if (status === 'failed') return (
     <div className="cg-staging-card cg-staging-failed">
@@ -634,7 +635,10 @@ function StagingCard({ result, checks, onCommit, onDiscard, onDelete, onRegenera
             <div key={i} className="cg-check cg-check-error">✗ {e.message}</div>
           ))}
           {checks.warnings?.map((w, i) => (
-            <div key={i} className="cg-check cg-check-warning">⚠ {w.message}</div>
+            <div key={i} className="cg-check cg-check-warning" title={w.note || ''}>
+              ⚠ {w.message}
+              {w.note && <span className="cg-dim" style={{ display: 'block', fontSize: 11, marginTop: 2 }}>{w.note}</span>}
+            </div>
           ))}
           {checks.collision_character && (
             <div className="cg-check cg-check-collision">
@@ -720,6 +724,79 @@ function StagingCard({ result, checks, onCommit, onDiscard, onDelete, onRegenera
               </div>
             </div>
           </div>
+
+          {/* Demographics */}
+          {Object.keys(demo).length > 0 && (
+          <div className="cg-profile-section" style={{ borderLeft: '3px solid #7ab3d4' }}>
+            <div className="cg-profile-section-title">Demographics</div>
+            <div className="cg-profile-grid">
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Age</div>
+                <div className="cg-profile-value">{demo.age || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">City</div>
+                <div className="cg-profile-value cg-enum-badge">{(demo.current_city || '—').replace(/_/g, ' ')}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Class Origin</div>
+                <div className="cg-profile-value cg-enum-badge">{(demo.class_origin || '—').replace(/_/g, ' ')}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Current Class</div>
+                <div className="cg-profile-value">
+                  {(demo.current_class || '—').replace(/_/g, ' ')}
+                  {demo.class_mobility_direction && demo.class_mobility_direction !== 'stable' && (
+                    <span style={{ marginLeft: 6, color: demo.class_mobility_direction === 'ascending' ? '#4caf50' : demo.class_mobility_direction === 'descending' ? '#f44336' : '#ff9800' }}>
+                      {demo.class_mobility_direction === 'ascending' ? '↑' : demo.class_mobility_direction === 'descending' ? '↓' : '~'}
+                      {' '}{demo.class_mobility_direction}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Family</div>
+                <div className="cg-profile-value cg-enum-badge">{(demo.family_structure || '—').replace(/_/g, ' ')}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Siblings</div>
+                <div className="cg-profile-value">{demo.sibling_position ? `${demo.sibling_position.replace(/_/g, ' ')}${demo.sibling_count ? ` of ${demo.sibling_count}` : ''}` : '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Cultural Background</div>
+                <div className="cg-profile-value">{demo.cultural_background || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Physical Presence</div>
+                <div className="cg-profile-value">{demo.physical_presence || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Voice Signature</div>
+                <div className="cg-profile-value">{demo.voice_signature_text || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Career History</div>
+                <div className="cg-profile-value">{demo.career_history || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Years Posting</div>
+                <div className="cg-profile-value">{demo.years_posting ?? '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Follower Tier</div>
+                <div className="cg-profile-value cg-enum-badge">{demo.follower_tier || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Relationship</div>
+                <div className="cg-profile-value">{(demo.relationship_status || '—').replace(/_/g, ' ')}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Children</div>
+                <div className="cg-profile-value">{demo.has_children ? `Yes${demo.children_ages ? ` (${demo.children_ages})` : ''}` : demo.has_children === false ? 'No' : '—'}</div>
+              </div>
+            </div>
+          </div>
+          )}
 
           {/* Psychology */}
           <div className="cg-profile-section">
