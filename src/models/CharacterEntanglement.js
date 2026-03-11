@@ -79,6 +79,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName:  'CharacterEntanglement',
     tableName:  'character_entanglements',
     underscored: true,
+    paranoid:    false,
   });
   return CharacterEntanglement;
 };

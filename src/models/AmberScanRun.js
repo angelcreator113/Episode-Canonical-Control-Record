@@ -23,6 +23,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName:   'AmberScanRun',
     tableName:   'amber_scan_runs',
     underscored: true,
+    paranoid:    false,
   });
 
   return AmberScanRun;

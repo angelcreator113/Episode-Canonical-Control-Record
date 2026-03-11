@@ -65,6 +65,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName:   'EntanglementUnfollow',
     tableName:   'entanglement_unfollows',
     underscored: true,
+    paranoid:    false,
   });
   return EntanglementUnfollow;
 };
