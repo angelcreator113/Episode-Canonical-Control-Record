@@ -2269,3 +2269,50 @@
   color: var(--cg-text);
   line-height: 1.5;
 }
+
+/* ── Character Depth Engine sections ─────────────────────────────────────── */
+.cg-enum-badge {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--cg-gold);
+  background: rgba(176, 146, 46, 0.08);
+  padding: 2px 8px;
+  border-radius: 4px;
+  display: inline-block;
+}
+
+/* Author Knowledge — visually distinct warning styling */
+.cg-section-author-knowledge {
+  border: 2px solid rgba(220, 80, 80, 0.25);
+  background: rgba(220, 80, 80, 0.03);
+  border-radius: 10px;
+  position: relative;
+}
+.cg-section-author-knowledge .cg-profile-section-title {
+  color: #b33;
+  font-weight: 700;
+}
+.cg-section-author-knowledge .cg-profile-section-title::before {
+  content: '⚠ ';
+}
+.cg-author-knowledge-banner {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: #b33;
+  background: rgba(220, 80, 80, 0.06);
+  border: 1px solid rgba(220, 80, 80, 0.15);
+  border-radius: 6px;
+  padding: 8px 14px;
+  margin: 0 22px 14px;
+  letter-spacing: 0.02em;
+}
+.cg-author-knowledge {
+  color: #8b3333;
+  font-style: italic;
+  border-left: 3px solid rgba(220, 80, 80, 0.3);
+  padding-left: 10px;
+}

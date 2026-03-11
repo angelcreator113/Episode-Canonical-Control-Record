@@ -364,6 +364,110 @@ module.exports = (sequelize) => {
       type: DataTypes.TEXT,
       allowNull: true,
     },
+
+    /* ── Character Depth Engine (Section 9–13) ── */
+
+    // Body
+    body_relationship: { type: DataTypes.TEXT, allowNull: true },
+    body_history: { type: DataTypes.TEXT, allowNull: true },
+    body_currency: { type: DataTypes.TEXT, allowNull: true },
+    body_control_pattern: { type: DataTypes.TEXT, allowNull: true },
+
+    // Money
+    money_behavior_pattern: {
+      type: DataTypes.ENUM(
+        'hoarder','compulsive_giver','spends_to_feel_powerful',
+        'deprives_out_of_guilt','uses_money_to_control',
+        'performs_wealth','balanced','unknown'
+      ),
+      allowNull: true,
+    },
+    money_behavior_note: { type: DataTypes.TEXT, allowNull: true },
+
+    // Time (v2 — expanded from original time_orientation ENUM)
+    time_orientation_v2: {
+      type: DataTypes.ENUM(
+        'past_anchored','future_focused','present_impulsive',
+        'suspended','cyclical','unknown'
+      ),
+      allowNull: true,
+    },
+    time_orientation_note: { type: DataTypes.TEXT, allowNull: true },
+
+    // Change (v2 — ENUM classifier alongside existing JSONB change_capacity)
+    change_capacity_v2: {
+      type: DataTypes.ENUM(
+        'rigid','slow','conditional','fluid','ready','unknown'
+      ),
+      allowNull: true,
+    },
+    change_conditions: { type: DataTypes.TEXT, allowNull: true },
+    change_blocker: { type: DataTypes.TEXT, allowNull: true },
+
+    // Circumstance
+    circumstance_advantages: { type: DataTypes.TEXT, allowNull: true },
+    circumstance_disadvantages: { type: DataTypes.TEXT, allowNull: true },
+    luck_belief: {
+      type: DataTypes.ENUM(
+        'merit_based','rigged','divinely_ordered','random','relational','chaotic','unknown'
+      ),
+      allowNull: true,
+    },
+    luck_belief_vs_stated: { type: DataTypes.TEXT, allowNull: true },
+
+    // Self-narrative (self_narrative already exists above — these extend it)
+    actual_narrative: { type: DataTypes.TEXT, allowNull: true },
+    narrative_gap_type: {
+      type: DataTypes.ENUM(
+        'villain_misidentified','hero_exaggerated','wound_mislocated',
+        'cause_reversed','timeline_collapsed','significance_inverted',
+        'none_yet','unknown'
+      ),
+      allowNull: true,
+    },
+
+    // Blind spot (blind_spot TEXT already exists above — these extend it)
+    blind_spot_category: {
+      type: DataTypes.ENUM(
+        'self_assessment','motivation','impact','pattern',
+        'relationship','wound','unknown'
+      ),
+      allowNull: true,
+    },
+    blind_spot_visible_to: {
+      type: DataTypes.ARRAY(DataTypes.UUID),
+      allowNull: true,
+    },
+
+    // Cosmology (v2 — ENUM alongside existing TEXT operative_cosmology)
+    operative_cosmology_v2: {
+      type: DataTypes.ENUM(
+        'merit_based','rigged','divinely_ordered','random','relational','unknown'
+      ),
+      allowNull: true,
+    },
+    cosmology_vs_stated_religion: { type: DataTypes.TEXT, allowNull: true },
+
+    // Foreclosed possibility
+    foreclosed_category: {
+      type: DataTypes.ENUM(
+        'love','safety','belonging','success','rest','joy',
+        'visibility','being_known','being_chosen','starting_over','none','unknown'
+      ),
+      allowNull: true,
+    },
+    foreclosure_origin: { type: DataTypes.TEXT, allowNull: true },
+    foreclosure_vs_stated_want: { type: DataTypes.TEXT, allowNull: true },
+
+    // Joy
+    joy_source: { type: DataTypes.TEXT, allowNull: true },
+    joy_accessibility: {
+      type: DataTypes.ENUM(
+        'freely_accessible','conditional','buried','forgotten','unknown'
+      ),
+      allowNull: true,
+    },
+    joy_vs_ambition: { type: DataTypes.TEXT, allowNull: true },
   }, {
     tableName: 'registry_characters',
     underscored: true,

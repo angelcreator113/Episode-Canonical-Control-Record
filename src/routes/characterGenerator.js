@@ -565,8 +565,51 @@ Return ONLY valid JSON:
       "the_criticism_they_cant_let_go": "the one they're still trying to disprove or secretly believe is true",
       "what_they_do_with_ten_free_minutes": "the specific way they handle unexpected unscheduled time"
     }
+  },
+  "depth": {
+    "body_relationship": "How does this character relate to her physical self? Is it currency? Art? Armor? A site of shame? A source of power?",
+    "body_history": "What has happened to this body that shaped that relationship? Illness, pregnancy, injury, transformation, discipline, violation.",
+    "body_currency": "Does she use her physical appearance as economic or social capital — consciously or not? How?",
+    "body_control_pattern": "How does she use physical discipline, deprivation, or indulgence as a stress response?",
+    "money_behavior_pattern": "hoarder|compulsive_giver|spends_to_feel_powerful|deprives_out_of_guilt|uses_money_to_control|performs_wealth|balanced|unknown",
+    "money_behavior_note": "The specific flavor for this character — the origin in her wound or family architecture.",
+    "time_orientation": "past_anchored|future_focused|present_impulsive|suspended|cyclical|unknown",
+    "time_orientation_note": "How does this orientation manifest specifically for this character?",
+    "change_capacity": "rigid|slow|conditional|fluid|ready|unknown",
+    "change_conditions": "What specific conditions make change possible for her? Who needs to be present? What would she need to lose or gain?",
+    "change_blocker": "What is the specific thing preventing change — the story, the relationship, the belief, the fear?",
+    "circumstance_advantages": "The unchosen advantages — access, timing, proximity, doors that were open. What did she not earn?",
+    "circumstance_disadvantages": "The unchosen obstacles — systems working against her, timing that cost her, doors closed before she arrived.",
+    "luck_belief": "merit_based|rigged|divinely_ordered|random|relational|chaotic|unknown",
+    "luck_belief_vs_stated": "The gap between what she says she believes about how the world works and what she actually operates from.",
+    "operative_cosmology": "merit_based|rigged|divinely_ordered|random|relational|unknown",
+    "cosmology_vs_stated_religion": "The gap between her stated religious/spiritual beliefs and the actual logic she uses to make meaning.",
+    "self_narrative": "The story she tells herself about who she is and why — her origin story, her turning points, her villains, her justifications.",
+    "actual_narrative": "AUTHOR KNOWLEDGE — what actually happened, who was actually responsible, what the turning point actually was.",
+    "narrative_gap_type": "villain_misidentified|hero_exaggerated|wound_mislocated|cause_reversed|timeline_collapsed|significance_inverted|none_yet|unknown",
+    "blind_spot": "AUTHOR KNOWLEDGE — The specific truth about this character that she cannot access. The thing the story is written toward delivering to her.",
+    "blind_spot_category": "self_assessment|motivation|impact|pattern|relationship|wound|unknown",
+    "foreclosed_category": "AUTHOR KNOWLEDGE — love|safety|belonging|success|rest|joy|visibility|being_known|being_chosen|starting_over|none|unknown",
+    "foreclosure_origin": "AUTHOR KNOWLEDGE — When and why did this foreclosure happen? The specific moment or accumulated experience.",
+    "foreclosure_vs_stated_want": "AUTHOR KNOWLEDGE — The gap between what she says she's pursuing and what she secretly doesn't believe is available to her.",
+    "joy_source": "What makes this character come completely alive — not happy, alive. Present, lit up, fully herself. As specific as a wound.",
+    "joy_accessibility": "freely_accessible|conditional|buried|forgotten|unknown",
+    "joy_vs_ambition": "Are the joy source and the ambition aligned or in tension? Does what she's building give her the feeling she's actually looking for?"
   }
-}`;
+}
+
+DEPTH FIELD RULES:
+- The body_relationship should follow from the wound and the class/money history
+- The money_behavior_pattern must be consistent with family architecture and wound
+- The time_orientation should be consistent with the character's primary defense mechanism
+- The change_capacity should create productive tension with their wound and arc stage
+- The blind_spot must be something INVISIBLE to the character — not a secret they hide but a truth they genuinely cannot see. It should be obvious to the reader.
+- The actual_narrative is the author's version — often harder, not kinder, than the self_narrative
+- The narrative_gap_type should explain the specific distortion in the self_narrative
+- The foreclosed_category must be a category the character actively WANTS but secretly doesn't believe is available to them specifically
+- The joy_source must be as specific as a wound — not 'creativity' but the exact thing
+- Do NOT generate content that contradicts existing locked registry fields
+- Mark author_knowledge fields clearly in the depth section`;
 
     try {
       const response = await anthropic.messages.create({
