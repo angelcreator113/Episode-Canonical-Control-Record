@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { ROLE_COLORS, ROLE_ICONS, MOMENTUM_COLORS, WORLD_LABELS } from '../constants/characterConstants';
 import useRegistries from '../hooks/useRegistries';
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
@@ -882,6 +882,162 @@ function StagingCard({ result, checks, onCommit, onDiscard, onDelete, onRegenera
               </div>
             ))}
           </div>
+
+          {/* ── Section 9: Physical Self & Money ── */}
+          <div className="cg-profile-section">
+            <div className="cg-profile-section-title">Physical Self & Money</div>
+            <div className="cg-profile-grid">
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Body Relationship</div>
+                <div className="cg-profile-value">{profile?.depth?.body_relationship || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Body History</div>
+                <div className="cg-profile-value">{profile?.depth?.body_history || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Body as Currency</div>
+                <div className="cg-profile-value">{profile?.depth?.body_currency || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Control Pattern</div>
+                <div className="cg-profile-value">{profile?.depth?.body_control_pattern || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Money Pattern</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.money_behavior_pattern || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Money Note</div>
+                <div className="cg-profile-value">{profile?.depth?.money_behavior_note || '—'}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 10: Time, Change & Capacity ── */}
+          <div className="cg-profile-section">
+            <div className="cg-profile-section-title">Time, Change & Capacity</div>
+            <div className="cg-profile-grid">
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Time Orientation</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.time_orientation || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Time Note</div>
+                <div className="cg-profile-value">{profile?.depth?.time_orientation_note || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Change Capacity</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.change_capacity || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Change Conditions</div>
+                <div className="cg-profile-value">{profile?.depth?.change_conditions || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Change Blocker</div>
+                <div className="cg-profile-value">{profile?.depth?.change_blocker || '—'}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 11: Meaning, Cosmology & Circumstance ── */}
+          <div className="cg-profile-section">
+            <div className="cg-profile-section-title">Meaning, Cosmology & Circumstance</div>
+            <div className="cg-profile-grid">
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Unchosen Advantages</div>
+                <div className="cg-profile-value">{profile?.depth?.circumstance_advantages || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Unchosen Obstacles</div>
+                <div className="cg-profile-value">{profile?.depth?.circumstance_disadvantages || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Luck Belief</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.luck_belief || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Luck Belief vs Stated</div>
+                <div className="cg-profile-value">{profile?.depth?.luck_belief_vs_stated || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Operative Cosmology</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.operative_cosmology || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Cosmology vs Stated Religion</div>
+                <div className="cg-profile-value">{profile?.depth?.cosmology_vs_stated_religion || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Self-Narrative</div>
+                <div className="cg-profile-value">{profile?.depth?.self_narrative || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Actual Narrative</div>
+                <div className="cg-profile-value cg-author-knowledge">{profile?.depth?.actual_narrative || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Narrative Gap Type</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.narrative_gap_type || '—'}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 12: Author Knowledge — Blind Spot & Foreclosure ── */}
+          <div className="cg-profile-section cg-section-author-knowledge">
+            <div className="cg-profile-section-title">
+              Author Knowledge — Never Shown to Character
+            </div>
+            <div className="cg-author-knowledge-banner">
+              These fields are visible to the author and the evaluation engine only. They are never injected into character voice generation.
+            </div>
+            <div className="cg-profile-grid">
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Blind Spot</div>
+                <div className="cg-profile-value cg-author-knowledge">{profile?.depth?.blind_spot || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Blind Spot Category</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.blind_spot_category || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Visible To</div>
+                <div className="cg-profile-value">{(profile?.depth?.blind_spot_visible_to || []).join(', ') || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Foreclosed Category</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.foreclosed_category || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Foreclosure Origin</div>
+                <div className="cg-profile-value cg-author-knowledge">{profile?.depth?.foreclosure_origin || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Foreclosure vs Stated Want</div>
+                <div className="cg-profile-value cg-author-knowledge">{profile?.depth?.foreclosure_vs_stated_want || '—'}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Section 13: Aliveness — Experience of Joy ── */}
+          <div className="cg-profile-section">
+            <div className="cg-profile-section-title">Aliveness — The Experience of Joy</div>
+            <div className="cg-profile-grid">
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Joy Source</div>
+                <div className="cg-profile-value">{profile?.depth?.joy_source || '—'}</div>
+              </div>
+              <div className="cg-profile-field">
+                <div className="cg-profile-label">Joy Accessibility</div>
+                <div className="cg-profile-value cg-enum-badge">{profile?.depth?.joy_accessibility || '—'}</div>
+              </div>
+              <div className="cg-profile-field cg-field-full">
+                <div className="cg-profile-label">Joy vs Ambition</div>
+                <div className="cg-profile-value">{profile?.depth?.joy_vs_ambition || '—'}</div>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -920,6 +1076,7 @@ function StagingCard({ result, checks, onCommit, onDiscard, onDelete, onRegenera
 // ─── Main CharacterGenerator ──────────────────────────────────────────────────
 export default function CharacterGenerator() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Ecosystem
   const [ecosystem, setEcosystem]         = useState(null);
@@ -1008,6 +1165,23 @@ export default function CharacterGenerator() {
     loadEcosystem();
     setHistory(loadHistory());
   }, []);
+
+  // ── Spark on-ramp: auto-generate from CharacterCreationDrawer seed ────────
+  const sparkHandled = useRef(false);
+  useEffect(() => {
+    if (ecoLoading || sparkHandled.current) return;
+    const sparkSeed = location.state?.sparkSeed;
+    if (!sparkSeed) return;
+    sparkHandled.current = true;
+
+    // Clear route state so a refresh doesn't re-trigger
+    window.history.replaceState({}, '', window.location.pathname);
+
+    // Pre-approve the seed and fire generate-batch immediately
+    const approved = { ...sparkSeed, _status: 'approved' };
+    setSeeds([approved]);
+    handleGenerateBatch([approved]);
+  }, [ecoLoading]);
 
   async function loadEcosystem() {
     setEcoLoading(true);
@@ -1546,7 +1720,7 @@ export default function CharacterGenerator() {
             <>
               <div className="cg-phase-header">
                 <div className="cg-panel-title">
-                  Staging Area
+                  {seeds.some(s => s._from_spark) ? 'Spark → Staging' : 'Staging Area'}
                   <span className="cg-seed-count">
                     {batch.filter((r) => r._committed).length} committed · {batch.filter((r) => !r._committed).length} pending
                   </span>

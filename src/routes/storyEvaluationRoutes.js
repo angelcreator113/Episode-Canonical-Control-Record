@@ -80,6 +80,72 @@ ${scene_brief}
 Write a 2500–3500 word scene. Adult literary fiction — explicit language, sexuality, and conflict permitted. Close third person. End on a shift, not a resolution. Return ONLY the prose — no meta commentary, no title.`;
 }
 
+// ── Character depth knowledge classification ─────────────────────────────────
+// CHARACTER_KNOWLEDGE → injected into all 3 generation agents (A, B, C)
+// AUTHOR_KNOWLEDGE_ONLY → injected into evaluation agent + author layer ONLY
+const CHARACTER_KNOWLEDGE_FIELDS = [
+  'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
+  'money_behavior_pattern', 'money_behavior_note',
+  'time_orientation_v2', 'time_orientation_note',
+  'change_capacity_v2', 'change_conditions', 'change_blocker',
+  'circumstance_advantages', 'circumstance_disadvantages',
+  'luck_belief', 'luck_belief_vs_stated',
+  'self_narrative',
+  'operative_cosmology_v2', 'cosmology_vs_stated_religion',
+  'joy_source', 'joy_accessibility', 'joy_vs_ambition',
+];
+
+const AUTHOR_KNOWLEDGE_ONLY_FIELDS = [
+  'blind_spot',
+  'blind_spot_category',
+  'blind_spot_visible_to',
+  'actual_narrative',
+  'narrative_gap_type',
+  'foreclosed_category',
+  'foreclosure_origin',
+  'foreclosure_vs_stated_want',
+];
+
+// ── Helper: build depth lines for character block (character knowledge only) ─
+function buildDepthLines(d) {
+  const lines = [];
+  if (d.body_relationship) lines.push(`  Body relationship: ${d.body_relationship}`);
+  if (d.body_history) lines.push(`  Body history (depth): ${d.body_history}`);
+  if (d.body_currency) lines.push(`  Body as currency: ${d.body_currency}`);
+  if (d.body_control_pattern) lines.push(`  Body control pattern: ${d.body_control_pattern}`);
+  if (d.money_behavior_pattern) lines.push(`  Money pattern: ${d.money_behavior_pattern}`);
+  if (d.money_behavior_note) lines.push(`  Money note: ${d.money_behavior_note}`);
+  if (d.time_orientation_v2) lines.push(`  Time orientation: ${d.time_orientation_v2}`);
+  if (d.time_orientation_note) lines.push(`  Time note: ${d.time_orientation_note}`);
+  if (d.change_capacity_v2) lines.push(`  Change capacity: ${d.change_capacity_v2}`);
+  if (d.change_conditions) lines.push(`  Change conditions: ${d.change_conditions}`);
+  if (d.change_blocker) lines.push(`  Change blocker: ${d.change_blocker}`);
+  if (d.circumstance_advantages) lines.push(`  Unchosen advantages: ${d.circumstance_advantages}`);
+  if (d.circumstance_disadvantages) lines.push(`  Unchosen obstacles: ${d.circumstance_disadvantages}`);
+  if (d.luck_belief) lines.push(`  Luck belief: ${d.luck_belief}`);
+  if (d.luck_belief_vs_stated) lines.push(`  Luck gap: ${d.luck_belief_vs_stated}`);
+  if (d.self_narrative) lines.push(`  Self-narrative: ${d.self_narrative}`);
+  if (d.operative_cosmology_v2) lines.push(`  Operative cosmology: ${d.operative_cosmology_v2}`);
+  if (d.cosmology_vs_stated_religion) lines.push(`  Cosmology gap: ${d.cosmology_vs_stated_religion}`);
+  if (d.joy_source) lines.push(`  Joy source: ${d.joy_source}`);
+  if (d.joy_accessibility) lines.push(`  Joy accessibility: ${d.joy_accessibility}`);
+  if (d.joy_vs_ambition) lines.push(`  Joy vs ambition: ${d.joy_vs_ambition}`);
+  return lines;
+}
+
+// ── Helper: build author-knowledge lines (evaluation agent only) ─────────────
+function buildAuthorKnowledgeLines(d) {
+  const lines = [];
+  if (d.blind_spot) lines.push(`  BLIND SPOT: ${d.blind_spot}`);
+  if (d.blind_spot_category) lines.push(`  Blind spot category: ${d.blind_spot_category}`);
+  if (d.actual_narrative) lines.push(`  ACTUAL NARRATIVE: ${d.actual_narrative}`);
+  if (d.narrative_gap_type) lines.push(`  Narrative gap type: ${d.narrative_gap_type}`);
+  if (d.foreclosed_category) lines.push(`  FORECLOSED POSSIBILITY: ${d.foreclosed_category}`);
+  if (d.foreclosure_origin) lines.push(`  Foreclosure origin: ${d.foreclosure_origin}`);
+  if (d.foreclosure_vs_stated_want) lines.push(`  Foreclosure vs stated want: ${d.foreclosure_vs_stated_want}`);
+  return lines;
+}
+
 // ── Helper: build structured character blocks for generation ───────────────
 function buildCharacterBlock(dossier, relationships) {
   const d = dossier;
@@ -164,6 +230,13 @@ function buildCharacterBlock(dossier, relationships) {
   if (ad.visual_signature) lines.push(`  Visual signature: ${ad.visual_signature}`);
   if (ad.color_palette) lines.push(`  Color palette: ${ad.color_palette}`);
 
+  // Character depth dimensions (character knowledge — safe for voice generation)
+  const depthLines = buildDepthLines(d);
+  if (depthLines.length) {
+    lines.push('');
+    lines.push(...depthLines);
+  }
+
   // Relationships to other characters in the scene
   if (relationships?.length) {
     lines.push('');
@@ -198,6 +271,19 @@ async function fetchSceneContext(characterKeys, registryId) {
       'emotional_baseline', 'aesthetic_dna', 'voice_signature', 'story_presence',
       'evolution_tracking', 'career_status',
       'living_context', 'personality_matrix', 'deep_profile',
+      // Depth engine fields — character knowledge
+      'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
+      'money_behavior_pattern', 'money_behavior_note',
+      'time_orientation_v2', 'time_orientation_note',
+      'change_capacity_v2', 'change_conditions', 'change_blocker',
+      'circumstance_advantages', 'circumstance_disadvantages',
+      'luck_belief', 'luck_belief_vs_stated',
+      'self_narrative', 'operative_cosmology_v2', 'cosmology_vs_stated_religion',
+      'joy_source', 'joy_accessibility', 'joy_vs_ambition',
+      // Depth engine fields — author knowledge (for evaluation agent only)
+      'blind_spot', 'blind_spot_category', 'blind_spot_visible_to',
+      'actual_narrative', 'narrative_gap_type',
+      'foreclosed_category', 'foreclosure_origin', 'foreclosure_vs_stated_want',
     ],
   });
 
@@ -495,13 +581,27 @@ router.post('/evaluate-stories', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'All three story variants must exist before evaluation' });
     }
 
+    // Build author-knowledge block for evaluation agent (never shown to voice generation agents)
+    let authorKnowledgeBlock = '';
+    if (story.registry_dossiers_used?.length) {
+      const akLines = story.registry_dossiers_used
+        .map(d => {
+          const aLines = buildAuthorKnowledgeLines(d);
+          return aLines.length ? `${d.display_name || d.character_key}:\n${aLines.join('\n')}` : null;
+        })
+        .filter(Boolean);
+      if (akLines.length) {
+        authorKnowledgeBlock = `\n\nAUTHOR KNOWLEDGE (use for evaluation depth — these truths are invisible to the characters):\n${akLines.join('\n\n')}`;
+      }
+    }
+
     const msg = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 8000,
       system: `You are a ruthlessly honest literary editor. Evaluate three blind versions of the same scene. Your PRIMARY task is to create a synthesised version that COMBINES the best elements from ALL three voices into an enhanced final version — do NOT simply pick the winner's text. Return ONLY valid JSON — no markdown fences, no commentary.`,
       messages: [{
         role: 'user',
-        content: `Original brief:\n"${story.scene_brief || ''}"\n\nTone dial: ${story.tone_dial || 'literary'}\n\n=== VOICE A (Depth & Interiority) ===\n${story.story_a}\n\n=== VOICE B (Tension & Momentum) ===\n${story.story_b}\n\n=== VOICE C (Sensory & Desire) ===\n${story.story_c}\n\nReturn JSON:\n{\n  "scores": {\n    "voice_a": { "interiority": 0-10, "desire_tension": 0-10, "specificity": 0-10, "stakes": 0-10, "voice": 0-10, "body_presence": 0-10, "total": 0-60, "summary": "one sentence", "best_moment": "direct quote" },\n    "voice_b": { ...same },\n    "voice_c": { ...same }\n  },\n  "winner": "voice_a"|"voice_b"|"voice_c",\n  "winner_reason": "why this version wins",\n  "what_each_brings": { "voice_a": "strength", "voice_b": "strength", "voice_c": "strength" },\n  "proofreading": { "voice_a": ["issue"], "voice_b": ["issue"], "voice_c": ["issue"] },\n  "brief_diagnosis": { "score": 0-10, "what_was_missing": "text", "improved_brief": "text" },\n  "synthesis_notes": "Detailed explanation of how you combined elements: which passages/moments came from Voice A, which pacing/structure from Voice B, which sensory details from Voice C, and what you enhanced or rewrote to unify them into a cohesive whole",\n  "approved_version": "A FULLY SYNTHESISED version (2500-3500 words) that COMBINES the strongest elements from ALL three voices. Do NOT simply copy the winner. Take Voice A's best interiority/psychological depth passages, Voice B's best tension/pacing/structural momentum, and Voice C's best sensory details/desire/body language. Weave them together into a unified narrative that is BETTER than any single version. Enhance weak transitions, deepen where all three fell short, and ensure tonal consistency throughout."\n}`,
+        content: `Original brief:\n"${story.scene_brief || ''}"\n\nTone dial: ${story.tone_dial || 'literary'}${authorKnowledgeBlock}\n\n=== VOICE A (Depth & Interiority) ===\n${story.story_a}\n\n=== VOICE B (Tension & Momentum) ===\n${story.story_b}\n\n=== VOICE C (Sensory & Desire) ===\n${story.story_c}\n\nReturn JSON:\n{\n  "scores": {\n    "voice_a": { "interiority": 0-10, "desire_tension": 0-10, "specificity": 0-10, "stakes": 0-10, "voice": 0-10, "body_presence": 0-10, "total": 0-60, "summary": "one sentence", "best_moment": "direct quote" },\n    "voice_b": { ...same },\n    "voice_c": { ...same }\n  },\n  "winner": "voice_a"|"voice_b"|"voice_c",\n  "winner_reason": "why this version wins",\n  "what_each_brings": { "voice_a": "strength", "voice_b": "strength", "voice_c": "strength" },\n  "proofreading": { "voice_a": ["issue"], "voice_b": ["issue"], "voice_c": ["issue"] },\n  "brief_diagnosis": { "score": 0-10, "what_was_missing": "text", "improved_brief": "text" },\n  "synthesis_notes": "Detailed explanation of how you combined elements: which passages/moments came from Voice A, which pacing/structure from Voice B, which sensory details from Voice C, and what you enhanced or rewrote to unify them into a cohesive whole",\n  "approved_version": "A FULLY SYNTHESISED version (2500-3500 words) that COMBINES the strongest elements from ALL three voices. Do NOT simply copy the winner. Take Voice A's best interiority/psychological depth passages, Voice B's best tension/pacing/structural momentum, and Voice C's best sensory details/desire/body language. Weave them together into a unified narrative that is BETTER than any single version. Enhance weak transitions, deepen where all three fell short, and ensure tonal consistency throughout."\n}`,
       }],
     });
 

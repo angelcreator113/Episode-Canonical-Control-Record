@@ -227,7 +227,6 @@ export default function CharacterRegistryPage() {
   const [plotThreads, setPlotThreads]     = useState([]);
   const [generatingArc, setGeneratingArc] = useState(false);
   const [generatingId, setGeneratingId]   = useState(null);   // single char generation
-  const [generatingAll, setGeneratingAll] = useState(false);   // batch generation
 
   // Plot thread CRUD state
   const [showNewThread, setShowNewThread] = useState(false);
@@ -241,7 +240,6 @@ export default function CharacterRegistryPage() {
   const [worldMode, setWorldMode]           = useState(false);
   const [allCharacters, setAllCharacters]   = useState([]);
   const [worldType, setWorldType]           = useState('all');  // role type filter
-  const [worldExpanded, setWorldExpanded]   = useState({});     // { charId: true }
 
   // AI Writer state
   const [aiMode, setAiMode]             = useState('scene');    // scene | monologue | profile | gaps | next
@@ -394,7 +392,7 @@ export default function CharacterRegistryPage() {
       shadow:      { currentKnows: `${name} appeared at exactly the right moment.`, currentWants: `To be the answer someone needed.`, unresolved: `Whether the rescue was real.`, momentum: 'falling' },
     };
     const defaults = typeDefaults[character?.role_type] || typeDefaults.support;
-    return { ...defaults, relationships: [], isGenerated: true, isConfirmed: false };
+    return { ...defaults, relationships: [], isGenerated: true };
   }
 
   const generateState = useCallback(async (charId) => {
@@ -428,7 +426,6 @@ export default function CharacterRegistryPage() {
           momentum:      data.momentum || 'steady',
           relationships: data.relationships || [],
           isGenerated:   true,
-          isConfirmed:   false,
         };
       } else {
         newState = generateFallbackState(character);
@@ -466,37 +463,6 @@ export default function CharacterRegistryPage() {
     }
   }, [allCharacters, activeRegistry]);
 
-  const confirmState = useCallback((charId) => {
-    setLivingStates(prev => {
-      const confirmedState = { ...prev[charId], isConfirmed: true };
-      const updated = { ...prev, [charId]: confirmedState };
-      localStorage.setItem('wv_living_states', JSON.stringify(updated));
-      // Persist confirmation to DB
-      const character = allCharacters.find(c => c.id === charId) ||
-                        (activeRegistry?.characters || []).find(c => c.id === charId);
-      if (character) {
-        fetch(`${API}/characters/${charId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
-        })
-          .then(r => { if (!r.ok) console.warn('[ConfirmState] PUT failed:', r.status); })
-          .catch(err => console.warn('[ConfirmState] Network error:', err.message));
-      }
-      return updated;
-    });
-  }, [allCharacters, activeRegistry]);
-
-  const generateAllStates = useCallback(async () => {
-    const charList = worldMode ? allCharacters : (activeRegistry?.characters || []);
-    const ungenerated = charList.filter(c => !livingStates[c.id]?.isGenerated);
-    if (ungenerated.length === 0) return;
-    setGeneratingAll(true);
-    for (const char of ungenerated) {
-      await generateState(char.id);
-    }
-    setGeneratingAll(false);
-  }, [worldMode, allCharacters, activeRegistry, livingStates, generateState]);
 
   // Fetch book ID for interview context
   useEffect(() => {
@@ -1376,7 +1342,6 @@ export default function CharacterRegistryPage() {
   const exitWorldMode = useCallback(() => {
     setWorldMode(false);
     setWorldType('all');
-    setWorldExpanded({});
   }, []);
 
   // Enter/exit feed mode
@@ -1745,16 +1710,7 @@ export default function CharacterRegistryPage() {
                           {ls.lastChapter && (
                             <div className="cr-living-footer">Last seen: {ls.lastChapter}</div>
                           )}
-                          {/* Confirm / Regenerate actions */}
-                          {!ls.isConfirmed ? (
-                            <div className="cr-living-actions">
-                              <button
-                                className="cr-btn-outline"
-                                style={{ borderColor: meta.color, color: meta.color }}
-                                onClick={() => confirmState(c.id)}
-                              >
-                                ✓ Confirm State
-                              </button>
+                          <div className="cr-living-actions">
                               <button
                                 className="cr-btn-outline"
                                 onClick={() => generateState(c.id)}
@@ -1763,14 +1719,6 @@ export default function CharacterRegistryPage() {
                                 {isGen ? '✦ Regenerating…' : '↺ Regenerate'}
                               </button>
                             </div>
-                          ) : (
-                            <div className="cr-living-actions">
-                              <span className="cr-living-confirmed-badge" style={{ color: meta.color }}>✓ State confirmed</span>
-                              <button className="cr-btn-outline" onClick={() => generateState(c.id)} disabled={isGen}>
-                                {isGen ? '✦ Updating…' : 'Update'}
-                              </button>
-                            </div>
-                          )}
                         </>
                       ) : (
                         <div className="cr-dossier-empty">
@@ -2028,9 +1976,6 @@ export default function CharacterRegistryPage() {
             >
               <span className="cr-pill-title">📱 The Feed</span>
             </button>
-            <button className="cr-registry-pill cr-pill-add" onClick={createRegistry} title="New registry">
-              +
-            </button>
           </div>
         )}
       </HeaderBar>
@@ -2104,61 +2049,15 @@ export default function CharacterRegistryPage() {
                 <h2 className="cr-world-title">All Characters</h2>
                 <p className="cr-world-subtitle">
                   {characters.length} character{characters.length !== 1 ? 's' : ''} · {generatedCount} alive
-                  {' · '}{characters.filter(c => livingStates[c.id]?.isConfirmed).length} confirmed
                 </p>
               </div>
               <div className="cr-world-header-actions">
                 <button className="cr-btn-outline" onClick={exportRegistryJSON} disabled={exporting}>
                   📥 Export JSON
                 </button>
-                {(() => {
-                  const unconfirmed = characters.filter(c => livingStates[c.id]?.isGenerated && !livingStates[c.id]?.isConfirmed);
-                  if (unconfirmed.length === 0) return null;
-                  return (
-                    <button className="cr-btn-outline" style={{ borderColor: '#3d8e42', color: '#3d8e42' }}
-                      onClick={() => {
-                        // Batch confirm all unconfirmed states in one setState
-                        setLivingStates(prev => {
-                          const updated = { ...prev };
-                          unconfirmed.forEach(c => {
-                            updated[c.id] = { ...prev[c.id], isConfirmed: true };
-                          });
-                          localStorage.setItem('wv_living_states', JSON.stringify(updated));
-                          // Persist each confirmation to DB
-                          unconfirmed.forEach(c => {
-                            const confirmedState = updated[c.id];
-                            fetch(`${API}/characters/${c.id}`, {
-                              method: 'PUT',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({ evolution_tracking: { ...c.evolution_tracking, living_state: confirmedState } }),
-                            }).catch(() => {});
-                          });
-                          return updated;
-                        });
-                        showToast(`Confirmed ${unconfirmed.length} states`);
-                      }}>
-                      ✓ Confirm All ({unconfirmed.length})
-                    </button>
-                  );
-                })()}
               </div>
             </div>
 
-            {/* Generate All banner */}
-            {generatedCount < characters.length && (
-              <div className="cr-world-gen-all">
-                <span className="cr-world-gen-all-text">
-                  <strong>{characters.length - generatedCount}</strong> character{characters.length - generatedCount !== 1 ? 's' : ''} don't have a living state yet.
-                </span>
-                <button
-                  className="cr-btn-outline"
-                  onClick={generateAllStates}
-                  disabled={generatingAll}
-                >
-                  {generatingAll ? '✦ Generating…' : '✦ Generate All States'}
-                </button>
-              </div>
-            )}
 
             {/* Type filter bar */}
             <div className="cr-world-filters">
@@ -2167,6 +2066,7 @@ export default function CharacterRegistryPage() {
                 const count = t === 'all'
                   ? Object.values(worldTypeCounts).reduce((a, b) => a + b, 0)
                   : (worldTypeCounts[t] || 0);
+                if (t !== 'all' && count === 0) return null;
                 return (
                   <button
                     key={t}
@@ -2194,7 +2094,6 @@ export default function CharacterRegistryPage() {
                   const ls = livingStates[char.id] || null;
                   const meta = { color: ROLE_COLORS[char.role_type] || '#9a8c9e' };
                   const statusM = { draft: '#9a8c9e', accepted: '#3d8e42', declined: '#c43a2a', alive: '#c9a84c', sparked: '#aaa', breathing: '#7ab3d4', active: '#a889c8' };
-                  const expanded = !!worldExpanded[char.id];
                   const mom = MOMENTUM[ls?.momentum || 'dormant'];
                   const charName = char.selected_name || char.display_name || '?';
                   const initials = charName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -2202,11 +2101,12 @@ export default function CharacterRegistryPage() {
                   return (
                     <div
                       key={char.id}
-                      className={`cr-world-card ${expanded ? 'cr-world-card--expanded' : ''} ${ls?.isConfirmed ? 'cr-world-confirmed' : ls?.isGenerated ? 'cr-world-unconfirmed' : 'cr-world-nostate'}`}
-                      style={{ '--wc-accent': meta.color, animationDelay: `${i * 60}ms` }}
+                      className={`cr-world-card ${ls?.isGenerated ? 'cr-world-unconfirmed' : 'cr-world-nostate'}`}
+                      style={{ '--wc-accent': meta.color, animationDelay: `${i * 60}ms`, cursor: 'pointer' }}
+                      onClick={() => openDossier(char)}
                     >
-                      {/* Card header */}
-                      <div className="cr-world-card-header" onClick={() => setWorldExpanded(p => ({ ...p, [char.id]: !p[char.id] }))}>
+                      {/* Card header — click opens dossier */}
+                      <div className="cr-world-card-header">
                         <div className="cr-world-avatar" style={{ background: `${meta.color}18`, borderColor: `${meta.color}55`, color: meta.color }}>
                           {initials}
                         </div>
@@ -2223,95 +2123,13 @@ export default function CharacterRegistryPage() {
                             </span>
                           </div>
                         </div>
-                        {/* Mini preview when collapsed */}
-                        {ls?.isGenerated && !expanded && (
+                        {ls?.isGenerated && (
                           <div className="cr-world-card-preview">
                             <span style={{ color: mom.color }}>{mom.symbol}</span>
-                            {ls.isConfirmed && <span style={{ color: meta.color }}>✓</span>}
                           </div>
                         )}
-                        <button className="cr-world-expand-btn" onClick={e => { e.stopPropagation(); setWorldExpanded(p => ({ ...p, [char.id]: !p[char.id] })); }}>{expanded ? '−' : '+'}</button>
+                        <span className="cr-world-expand-btn">→</span>
                       </div>
-
-                      {/* Expanded body */}
-                      {expanded && (
-                        <div className="cr-world-card-body">
-                          <div className="cr-world-card-section">
-                            <div className="cr-world-section-label">LIVING STATE</div>
-                            {ls?.isGenerated ? (
-                              <div className="cr-world-state-body">
-                                <div className="cr-world-state-fields">
-                                  <div className="cr-world-state-field"><span className="cr-world-state-label">KNOWS</span><span>{ls.currentKnows || '—'}</span></div>
-                                  <div className="cr-world-state-field"><span className="cr-world-state-label">WANTS</span><span>{ls.currentWants || '—'}</span></div>
-                                  <div className="cr-world-state-field cr-world-state-unresolved"><span className="cr-world-state-label">UNRESOLVED</span><span>{ls.unresolved || '—'}</span></div>
-                                </div>
-                                <div className="cr-world-state-meta">
-                                  <span style={{ color: mom.color }}>{mom.symbol} {mom.label}</span>
-                                  {ls.lastChapter && <span className="cr-world-last-chapter">Last seen: {ls.lastChapter}</span>}
-                                </div>
-                                {!ls.isConfirmed ? (
-                                  <div className="cr-world-state-actions">
-                                    <button className="cr-btn-outline" style={{ borderColor: meta.color, color: meta.color }} onClick={e => { e.stopPropagation(); confirmState(char.id); }}>✓ Confirm</button>
-                                    <button className="cr-btn-outline" onClick={e => { e.stopPropagation(); generateState(char.id); }} disabled={generatingId === char.id}>↺ Regenerate</button>
-                                  </div>
-                                ) : (
-                                  <div className="cr-world-state-actions">
-                                    <span style={{ color: meta.color, fontWeight: 600 }}>✓ Confirmed</span>
-                                    <button className="cr-btn-outline" onClick={e => { e.stopPropagation(); generateState(char.id); }} disabled={generatingId === char.id}>Update</button>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <div className="cr-world-state-empty">
-                                <p>No living state yet.</p>
-                                <button
-                                  className="cr-btn-outline"
-                                  style={{ borderColor: meta.color, color: meta.color }}
-                                  onClick={e => { e.stopPropagation(); generateState(char.id); }}
-                                  disabled={generatingId === char.id}
-                                >
-                                  {generatingId === char.id ? '✦ Generating…' : `✦ Generate State`}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Relationship preview */}
-                          {ls?.relationships?.length > 0 && (
-                            <div className="cr-world-card-section">
-                              <div className="cr-world-section-label">RELATIONSHIPS</div>
-                              <div className="cr-world-rel-list">
-                                {ls.relationships.slice(0, 3).map((rel, ri) => {
-                                  const other = allCharacters.find(c2 => c2.id === rel.characterId);
-                                  const otherName = other ? (other.selected_name || other.display_name) : 'Unknown';
-                                  const otherColor = other ? (ROLE_COLORS[other.role_type] || '#9a8c9e') : '#9a8c9e';
-                                  return (
-                                    <div key={ri} className="cr-world-rel-item">
-                                      <span className="cr-world-rel-dot" style={{ background: otherColor }} />
-                                      <span className="cr-world-rel-name">{otherName}</span>
-                                      <span className="cr-world-rel-type">{rel.type}</span>
-                                      {rel.asymmetric && <span className="cr-world-rel-asym" title="One-way">⇢</span>}
-                                    </div>
-                                  );
-                                })}
-                                {ls.relationships.length > 3 && (
-                                  <p className="cr-world-rel-more">+{ls.relationships.length - 3} more</p>
-                                )}
-                              </div>
-                            </div>
-                          )}
-
-                          <div className="cr-world-card-footer">
-                            <button
-                              className="cr-btn-outline"
-                              style={{ borderColor: meta.color, color: meta.color }}
-                              onClick={e => { e.stopPropagation(); openDossier(char); }}
-                            >
-                              Open Dossier →
-                            </button>
-                          </div>
-                        </div>
-                      )}
                     </div>
                   );
                 })}

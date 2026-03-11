@@ -50,6 +50,30 @@ if (process.env.NODE_ENV !== 'test') {
       await db.authenticate();
       console.log('✅ Database connection authenticated');
 
+      // Run pending Sequelize CLI migrations automatically on startup
+      try {
+        const Umzug = require('umzug');
+        const path = require('path');
+        const umzug = new Umzug({
+          storage: 'sequelize',
+          storageOptions: { sequelize: db.sequelize },
+          migrations: {
+            path: path.join(__dirname, 'migrations'),
+            params: [db.sequelize.getQueryInterface(), db.Sequelize || require('sequelize')],
+          },
+        });
+        const pending = await umzug.pending();
+        if (pending.length > 0) {
+          console.log(`🔄 Running ${pending.length} pending migration(s)...`);
+          await umzug.up();
+          console.log('✅ Migrations completed');
+        } else {
+          console.log('✅ All migrations already applied');
+        }
+      } catch (migErr) {
+        console.error('⚠️  Migration runner error (non-fatal):', migErr.message);
+      }
+
       // Check if DB sync is enabled via environment variable
       console.log('DEBUG: ENABLE_DB_SYNC =', process.env.ENABLE_DB_SYNC);
       console.log('DEBUG: DB_SYNC_FORCE =', process.env.DB_SYNC_FORCE);
@@ -1145,6 +1169,64 @@ try {
   console.log('✓ Amber Diagnostic routes loaded at /api/v1/amber/diagnostic');
 } catch (e) {
   console.error('✗ Failed to load Amber Diagnostic routes:', e.message);
+}
+
+// ============================================================================
+// FEED NERVOUS SYSTEM ROUTES
+// ============================================================================
+
+// Story Calendar — temporal spine
+try {
+  const calendarRoutes = require('./routes/calendarRoutes');
+  app.use('/api/v1/calendar', calendarRoutes);
+  console.log('✓ Calendar routes loaded at /api/v1/calendar');
+} catch (e) {
+  console.error('✗ Failed to load Calendar routes:', e.message);
+}
+
+// Mirror Field — JustAWoman's externalized interior
+try {
+  const mirrorFieldRoutes = require('./routes/mirrorFieldRoutes');
+  app.use('/api/v1/social-profiles', mirrorFieldRoutes);
+  console.log('✓ Mirror Field routes loaded at /api/v1/social-profiles');
+} catch (e) {
+  console.error('✗ Failed to load Mirror Field routes:', e.message);
+}
+
+// Want Field — desire layer on entanglements
+try {
+  const wantFieldRoutes = require('./routes/wantFieldRoutes');
+  app.use('/api/v1/character-entanglements', wantFieldRoutes);
+  console.log('✓ Want Field routes loaded at /api/v1/character-entanglements');
+} catch (e) {
+  console.error('✗ Failed to load Want Field routes:', e.message);
+}
+
+// Feed Relationship Map — influencer-to-influencer
+try {
+  const feedRelationshipRoutes = require('./routes/feedRelationshipRoutes');
+  app.use('/api/v1/feed-relationships', feedRelationshipRoutes);
+  console.log('✓ Feed Relationship routes loaded at /api/v1/feed-relationships');
+} catch (e) {
+  console.error('✗ Failed to load Feed Relationship routes:', e.message);
+}
+
+// Character Crossings — interior → public transition
+try {
+  const characterCrossingRoutes = require('./routes/characterCrossingRoutes');
+  app.use('/api/v1/character-crossings', characterCrossingRoutes);
+  console.log('✓ Character Crossing routes loaded at /api/v1/character-crossings');
+} catch (e) {
+  console.error('✗ Failed to load Character Crossing routes:', e.message);
+}
+
+// Author Notes — polymorphic creative decision layer
+try {
+  const authorNoteRoutes = require('./routes/authorNoteRoutes');
+  app.use('/api/v1/author-notes', authorNoteRoutes);
+  console.log('✓ Author Note routes loaded at /api/v1/author-notes');
+} catch (e) {
+  console.error('✗ Failed to load Author Note routes:', e.message);
 }
 
 // API info endpoint

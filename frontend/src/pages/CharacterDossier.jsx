@@ -32,6 +32,11 @@ const SECTIONS = [
   { key: 'evolution',   icon: '💎', label: 'EVOLUTION TRACKING',     number: '09' },
   { key: 'living',      icon: '🏠', label: 'LIVING CONTEXT',          number: '10' },
   { key: 'deep',        icon: '🧬', label: 'DEEP PROFILE',             number: '11' },
+  { key: 'physical',    icon: '🫀', label: 'PHYSICAL SELF & MONEY',    number: '12' },
+  { key: 'temporal',    icon: '⏳', label: 'TIME, CHANGE & CAPACITY',  number: '13' },
+  { key: 'cosmology',   icon: '✦',  label: 'MEANING & COSMOLOGY',      number: '14' },
+  { key: 'authorknow',  icon: '🔒', label: 'AUTHOR KNOWLEDGE',          number: '15' },
+  { key: 'aliveness',   icon: '🌅', label: 'ALIVENESS',                 number: '16' },
 ];
 
 /* ─── Role labels ── */
@@ -695,6 +700,267 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
             )}
           </div>
         </DossierSection>
+
+        {/* ═══ SECTION 12: PHYSICAL SELF & MONEY ═══ */}
+        <DossierSection
+          def={SECTIONS[11]}
+          ref={el => sectionRefs.current.physical = el}
+          collapsed={collapsed.has('physical')}
+          onToggle={() => toggleCollapse('physical')}
+          editing={editSection === 'physical'}
+          onEdit={() => startEdit('physical')}
+          onCancel={cancelEdit}
+          onSave={saveSection}
+          saving={saving}
+          isEmpty={!c.body_relationship && !c.money_behavior_pattern}
+        >
+          {editSection === 'physical' ? (
+            <div className="dossier-fields">
+              <DArea label="Body Relationship" value={form.body_relationship} onChange={v => F('body_relationship', v)} placeholder="How does this character relate to her physical self?" rows={3} />
+              <DArea label="Body History" value={form.body_history} onChange={v => F('body_history', v)} placeholder="What has happened to this body that shaped that relationship?" rows={3} />
+              <DArea label="Body as Currency" value={form.body_currency} onChange={v => F('body_currency', v)} placeholder="Does she use her physical appearance as economic or social capital?" rows={2} />
+              <DArea label="Control Pattern" value={form.body_control_pattern} onChange={v => F('body_control_pattern', v)} placeholder="How does she use physical discipline, deprivation, or indulgence as a stress response?" rows={2} />
+              <DSelect label="Money Behavior Pattern" value={form.money_behavior_pattern} onChange={v => F('money_behavior_pattern', v)} allowEmpty
+                options={[
+                  { value: 'hoarder', label: 'Hoarder' },
+                  { value: 'compulsive_giver', label: 'Compulsive Giver' },
+                  { value: 'spends_to_feel_powerful', label: 'Spends to Feel Powerful' },
+                  { value: 'deprives_out_of_guilt', label: 'Deprives Out of Guilt' },
+                  { value: 'uses_money_to_control', label: 'Uses Money to Control' },
+                  { value: 'performs_wealth', label: 'Performs Wealth' },
+                  { value: 'balanced', label: 'Balanced' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <DArea label="Money Note" value={form.money_behavior_note} onChange={v => F('money_behavior_note', v)} placeholder="The specific flavor — the origin in her wound or family architecture." rows={2} />
+            </div>
+          ) : (
+            <div className="dossier-grid">
+              <DossierRow label="Body Relationship" value={c.body_relationship} />
+              <DossierRow label="Body History" value={c.body_history} />
+              <DossierRow label="Body as Currency" value={c.body_currency} />
+              <DossierRow label="Control Pattern" value={c.body_control_pattern} />
+              <DossierRow label="Money Pattern" value={c.money_behavior_pattern} accent />
+              <DossierRow label="Money Note" value={c.money_behavior_note} />
+            </div>
+          )}
+        </DossierSection>
+
+        {/* ═══ SECTION 13: TIME, CHANGE & CAPACITY ═══ */}
+        <DossierSection
+          def={SECTIONS[12]}
+          ref={el => sectionRefs.current.temporal = el}
+          collapsed={collapsed.has('temporal')}
+          onToggle={() => toggleCollapse('temporal')}
+          editing={editSection === 'temporal'}
+          onEdit={() => startEdit('temporal')}
+          onCancel={cancelEdit}
+          onSave={saveSection}
+          saving={saving}
+          isEmpty={!c.time_orientation_v2 && !c.change_capacity_v2}
+        >
+          {editSection === 'temporal' ? (
+            <div className="dossier-fields">
+              <DSelect label="Time Orientation" value={form.time_orientation_v2} onChange={v => F('time_orientation_v2', v)} allowEmpty
+                options={[
+                  { value: 'past_anchored', label: 'Past Anchored' },
+                  { value: 'future_focused', label: 'Future Focused' },
+                  { value: 'present_impulsive', label: 'Present Impulsive' },
+                  { value: 'suspended', label: 'Suspended' },
+                  { value: 'cyclical', label: 'Cyclical' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <DArea label="Time Note" value={form.time_orientation_note} onChange={v => F('time_orientation_note', v)} placeholder="How does this orientation manifest specifically?" rows={2} />
+              <DSelect label="Change Capacity" value={form.change_capacity_v2} onChange={v => F('change_capacity_v2', v)} allowEmpty
+                options={[
+                  { value: 'rigid', label: 'Rigid' },
+                  { value: 'slow', label: 'Slow' },
+                  { value: 'conditional', label: 'Conditional' },
+                  { value: 'fluid', label: 'Fluid' },
+                  { value: 'ready', label: 'Ready' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <DArea label="Change Conditions" value={form.change_conditions} onChange={v => F('change_conditions', v)} placeholder="What specific conditions make change possible?" rows={2} />
+              <DArea label="Change Blocker" value={form.change_blocker} onChange={v => F('change_blocker', v)} placeholder="What is the specific thing preventing change?" rows={2} />
+            </div>
+          ) : (
+            <div className="dossier-grid">
+              <DossierRow label="Time Orientation" value={c.time_orientation_v2} accent />
+              <DossierRow label="Time Note" value={c.time_orientation_note} />
+              <DossierRow label="Change Capacity" value={c.change_capacity_v2} accent />
+              <DossierRow label="Change Conditions" value={c.change_conditions} />
+              <DossierRow label="Change Blocker" value={c.change_blocker} />
+            </div>
+          )}
+        </DossierSection>
+
+        {/* ═══ SECTION 14: MEANING, COSMOLOGY & CIRCUMSTANCE ═══ */}
+        <DossierSection
+          def={SECTIONS[13]}
+          ref={el => sectionRefs.current.cosmology = el}
+          collapsed={collapsed.has('cosmology')}
+          onToggle={() => toggleCollapse('cosmology')}
+          editing={editSection === 'cosmology'}
+          onEdit={() => startEdit('cosmology')}
+          onCancel={cancelEdit}
+          onSave={saveSection}
+          saving={saving}
+          isEmpty={!c.self_narrative && !c.operative_cosmology_v2 && !c.luck_belief}
+        >
+          {editSection === 'cosmology' ? (
+            <div className="dossier-fields">
+              <DArea label="Unchosen Advantages" value={form.circumstance_advantages} onChange={v => F('circumstance_advantages', v)} placeholder="Access, timing, proximity, doors that were open." rows={2} />
+              <DArea label="Unchosen Obstacles" value={form.circumstance_disadvantages} onChange={v => F('circumstance_disadvantages', v)} placeholder="Systems working against her, timing that cost her." rows={2} />
+              <DSelect label="Luck Belief" value={form.luck_belief} onChange={v => F('luck_belief', v)} allowEmpty
+                options={[
+                  { value: 'merit_based', label: 'Merit Based' },
+                  { value: 'rigged', label: 'Rigged' },
+                  { value: 'divinely_ordered', label: 'Divinely Ordered' },
+                  { value: 'random', label: 'Random' },
+                  { value: 'relational', label: 'Relational' },
+                  { value: 'chaotic', label: 'Chaotic' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <DArea label="Luck Belief vs Stated" value={form.luck_belief_vs_stated} onChange={v => F('luck_belief_vs_stated', v)} placeholder="The gap between what she says she believes and what she operates from." rows={2} />
+              <DSelect label="Operative Cosmology" value={form.operative_cosmology_v2} onChange={v => F('operative_cosmology_v2', v)} allowEmpty
+                options={[
+                  { value: 'merit_based', label: 'Merit Based' },
+                  { value: 'rigged', label: 'Rigged' },
+                  { value: 'divinely_ordered', label: 'Divinely Ordered' },
+                  { value: 'random', label: 'Random' },
+                  { value: 'relational', label: 'Relational' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <DArea label="Cosmology vs Stated Religion" value={form.cosmology_vs_stated_religion} onChange={v => F('cosmology_vs_stated_religion', v)} placeholder="The gap between stated beliefs and actual meaning-making logic." rows={2} />
+              <DArea label="Self-Narrative" value={form.self_narrative} onChange={v => F('self_narrative', v)} placeholder="The story she tells herself about who she is and why." rows={3} />
+              <DArea label="Actual Narrative (Author Knowledge)" value={form.actual_narrative} onChange={v => F('actual_narrative', v)} placeholder="What actually happened — the author's version." rows={3} />
+              <DSelect label="Narrative Gap Type" value={form.narrative_gap_type} onChange={v => F('narrative_gap_type', v)} allowEmpty
+                options={[
+                  { value: 'villain_misidentified', label: 'Villain Misidentified' },
+                  { value: 'hero_exaggerated', label: 'Hero Exaggerated' },
+                  { value: 'wound_mislocated', label: 'Wound Mislocated' },
+                  { value: 'cause_reversed', label: 'Cause Reversed' },
+                  { value: 'timeline_collapsed', label: 'Timeline Collapsed' },
+                  { value: 'significance_inverted', label: 'Significance Inverted' },
+                  { value: 'none_yet', label: 'None Yet' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+            </div>
+          ) : (
+            <div className="dossier-grid">
+              <DossierRow label="Unchosen Advantages" value={c.circumstance_advantages} />
+              <DossierRow label="Unchosen Obstacles" value={c.circumstance_disadvantages} />
+              <DossierRow label="Luck Belief" value={c.luck_belief} accent />
+              <DossierRow label="Luck Gap" value={c.luck_belief_vs_stated} />
+              <DossierRow label="Operative Cosmology" value={c.operative_cosmology_v2} accent />
+              <DossierRow label="Cosmology Gap" value={c.cosmology_vs_stated_religion} />
+              <DossierRow label="Self-Narrative" value={c.self_narrative} />
+              <DossierRow label="Actual Narrative" value={c.actual_narrative} icon="🔒" />
+              <DossierRow label="Narrative Gap Type" value={c.narrative_gap_type} accent />
+            </div>
+          )}
+        </DossierSection>
+
+        {/* ═══ SECTION 15: AUTHOR KNOWLEDGE — BLIND SPOT & FORECLOSURE ═══ */}
+        <DossierSection
+          def={SECTIONS[14]}
+          ref={el => sectionRefs.current.authorknow = el}
+          collapsed={collapsed.has('authorknow')}
+          onToggle={() => toggleCollapse('authorknow')}
+          editing={editSection === 'authorknow'}
+          onEdit={() => startEdit('authorknow')}
+          onCancel={cancelEdit}
+          onSave={saveSection}
+          saving={saving}
+          isEmpty={!c.blind_spot && !c.foreclosed_category}
+        >
+          <div className="dossier-author-warning" style={{ padding: '8px 14px', margin: '0 0 12px', background: 'rgba(180,50,50,0.08)', border: '1px solid rgba(180,50,50,0.2)', borderRadius: 6, fontSize: 11, color: '#c44' }}>
+            AUTHOR KNOWLEDGE ONLY — These fields are never shown to the character or injected into voice generation. They inform the evaluation engine and the author's editorial layer.
+          </div>
+          {editSection === 'authorknow' ? (
+            <div className="dossier-fields">
+              <DArea label="Blind Spot" value={form.blind_spot} onChange={v => F('blind_spot', v)} placeholder="The specific truth this character cannot access." rows={3} />
+              <DSelect label="Blind Spot Category" value={form.blind_spot_category} onChange={v => F('blind_spot_category', v)} allowEmpty
+                options={[
+                  { value: 'self_assessment', label: 'Self Assessment' },
+                  { value: 'motivation', label: 'Motivation' },
+                  { value: 'impact', label: 'Impact' },
+                  { value: 'pattern', label: 'Pattern' },
+                  { value: 'relationship', label: 'Relationship' },
+                  { value: 'wound', label: 'Wound' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <DSelect label="Foreclosed Category" value={form.foreclosed_category} onChange={v => F('foreclosed_category', v)} allowEmpty
+                options={[
+                  { value: 'love', label: 'Love' },
+                  { value: 'safety', label: 'Safety' },
+                  { value: 'belonging', label: 'Belonging' },
+                  { value: 'success', label: 'Success' },
+                  { value: 'rest', label: 'Rest' },
+                  { value: 'joy', label: 'Joy' },
+                  { value: 'visibility', label: 'Visibility' },
+                  { value: 'being_known', label: 'Being Known' },
+                  { value: 'being_chosen', label: 'Being Chosen' },
+                  { value: 'starting_over', label: 'Starting Over' },
+                  { value: 'none', label: 'None' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <DArea label="Foreclosure Origin" value={form.foreclosure_origin} onChange={v => F('foreclosure_origin', v)} placeholder="When and why did this foreclosure happen?" rows={3} />
+              <DArea label="Foreclosure vs Stated Want" value={form.foreclosure_vs_stated_want} onChange={v => F('foreclosure_vs_stated_want', v)} placeholder="The gap between what she says she's pursuing and what she doesn't believe is available." rows={3} />
+            </div>
+          ) : (
+            <div className="dossier-grid">
+              <DossierRow label="Blind Spot" value={c.blind_spot} icon="🔒" />
+              <DossierRow label="Blind Spot Category" value={c.blind_spot_category} accent />
+              <DossierRow label="Foreclosed Category" value={c.foreclosed_category} accent />
+              <DossierRow label="Foreclosure Origin" value={c.foreclosure_origin} icon="🔒" />
+              <DossierRow label="Foreclosure vs Stated Want" value={c.foreclosure_vs_stated_want} icon="🔒" />
+            </div>
+          )}
+        </DossierSection>
+
+        {/* ═══ SECTION 16: ALIVENESS — EXPERIENCE OF JOY ═══ */}
+        <DossierSection
+          def={SECTIONS[15]}
+          ref={el => sectionRefs.current.aliveness = el}
+          collapsed={collapsed.has('aliveness')}
+          onToggle={() => toggleCollapse('aliveness')}
+          editing={editSection === 'aliveness'}
+          onEdit={() => startEdit('aliveness')}
+          onCancel={cancelEdit}
+          onSave={saveSection}
+          saving={saving}
+          isEmpty={!c.joy_source}
+        >
+          {editSection === 'aliveness' ? (
+            <div className="dossier-fields">
+              <DArea label="Joy Source" value={form.joy_source} onChange={v => F('joy_source', v)} placeholder="What makes this character come completely alive — as specific as a wound." rows={3} />
+              <DSelect label="Joy Accessibility" value={form.joy_accessibility} onChange={v => F('joy_accessibility', v)} allowEmpty
+                options={[
+                  { value: 'freely_accessible', label: 'Freely Accessible' },
+                  { value: 'conditional', label: 'Conditional' },
+                  { value: 'buried', label: 'Buried' },
+                  { value: 'forgotten', label: 'Forgotten' },
+                  { value: 'unknown', label: 'Unknown' },
+                ]}
+              />
+              <DArea label="Joy vs Ambition" value={form.joy_vs_ambition} onChange={v => F('joy_vs_ambition', v)} placeholder="Are the joy source and the ambition aligned or in tension?" rows={2} />
+            </div>
+          ) : (
+            <div className="dossier-grid">
+              <DossierRow label="Joy Source" value={c.joy_source} />
+              <DossierRow label="Joy Accessibility" value={c.joy_accessibility} accent />
+              <DossierRow label="Joy vs Ambition" value={c.joy_vs_ambition} />
+            </div>
+          )}
+        </DossierSection>
       </div>
 
       {/* ── STATUS ACTIONS (bottom bar) ── */}
@@ -728,7 +994,7 @@ const DossierSection = React.forwardRef(function DossierSection(
   ref,
 ) {
   return (
-    <section className={`dossier-section ${collapsed ? 'collapsed' : ''} ${editing ? 'editing' : ''}`} ref={ref}>
+    <section className={`dossier-section ${collapsed ? 'collapsed' : ''} ${editing ? 'editing' : ''} ${def.key === 'authorknow' ? 'dossier-section-author' : ''}`} ref={ref} data-section={def.key}>
       <div className="dossier-section-header" onClick={onToggle}>
         <div className="dossier-section-left">
           <span className="dossier-section-num">{def.number}</span>
@@ -975,6 +1241,49 @@ function buildFormForSection(sectionKey, c) {
         financial_reality:         jGet(c.living_context, 'financial_reality'),
         current_season:            jGet(c.living_context, 'current_season'),
       };
+    case 'physical':
+      return {
+        body_relationship:       c.body_relationship || '',
+        body_history:            c.body_history || '',
+        body_currency:           c.body_currency || '',
+        body_control_pattern:    c.body_control_pattern || '',
+        money_behavior_pattern:  c.money_behavior_pattern || '',
+        money_behavior_note:     c.money_behavior_note || '',
+      };
+    case 'temporal':
+      return {
+        time_orientation_v2:     c.time_orientation_v2 || '',
+        time_orientation_note:   c.time_orientation_note || '',
+        change_capacity_v2:      c.change_capacity_v2 || '',
+        change_conditions:       c.change_conditions || '',
+        change_blocker:          c.change_blocker || '',
+      };
+    case 'cosmology':
+      return {
+        circumstance_advantages:    c.circumstance_advantages || '',
+        circumstance_disadvantages: c.circumstance_disadvantages || '',
+        luck_belief:                c.luck_belief || '',
+        luck_belief_vs_stated:      c.luck_belief_vs_stated || '',
+        operative_cosmology_v2:     c.operative_cosmology_v2 || '',
+        cosmology_vs_stated_religion: c.cosmology_vs_stated_religion || '',
+        self_narrative:             c.self_narrative || '',
+        actual_narrative:           c.actual_narrative || '',
+        narrative_gap_type:         c.narrative_gap_type || '',
+      };
+    case 'authorknow':
+      return {
+        blind_spot:                 c.blind_spot || '',
+        blind_spot_category:        c.blind_spot_category || '',
+        foreclosed_category:        c.foreclosed_category || '',
+        foreclosure_origin:         c.foreclosure_origin || '',
+        foreclosure_vs_stated_want: c.foreclosure_vs_stated_want || '',
+      };
+    case 'aliveness':
+      return {
+        joy_source:        c.joy_source || '',
+        joy_accessibility: c.joy_accessibility || '',
+        joy_vs_ambition:   c.joy_vs_ambition || '',
+      };
     default:
       return {};
   }
@@ -1083,6 +1392,49 @@ function buildPayloadForSection(sectionKey, form) {
           financial_reality:         form.financial_reality,
           current_season:            form.current_season,
         },
+      };
+    case 'physical':
+      return {
+        body_relationship:      form.body_relationship,
+        body_history:           form.body_history,
+        body_currency:          form.body_currency,
+        body_control_pattern:   form.body_control_pattern,
+        money_behavior_pattern: form.money_behavior_pattern,
+        money_behavior_note:    form.money_behavior_note,
+      };
+    case 'temporal':
+      return {
+        time_orientation_v2:  form.time_orientation_v2,
+        time_orientation_note: form.time_orientation_note,
+        change_capacity_v2:   form.change_capacity_v2,
+        change_conditions:    form.change_conditions,
+        change_blocker:       form.change_blocker,
+      };
+    case 'cosmology':
+      return {
+        circumstance_advantages:    form.circumstance_advantages,
+        circumstance_disadvantages: form.circumstance_disadvantages,
+        luck_belief:                form.luck_belief,
+        luck_belief_vs_stated:      form.luck_belief_vs_stated,
+        operative_cosmology_v2:     form.operative_cosmology_v2,
+        cosmology_vs_stated_religion: form.cosmology_vs_stated_religion,
+        self_narrative:             form.self_narrative,
+        actual_narrative:           form.actual_narrative,
+        narrative_gap_type:         form.narrative_gap_type,
+      };
+    case 'authorknow':
+      return {
+        blind_spot:                 form.blind_spot,
+        blind_spot_category:        form.blind_spot_category,
+        foreclosed_category:        form.foreclosed_category,
+        foreclosure_origin:         form.foreclosure_origin,
+        foreclosure_vs_stated_want: form.foreclosure_vs_stated_want,
+      };
+    case 'aliveness':
+      return {
+        joy_source:        form.joy_source,
+        joy_accessibility: form.joy_accessibility,
+        joy_vs_ambition:   form.joy_vs_ambition,
       };
     default:
       return form;

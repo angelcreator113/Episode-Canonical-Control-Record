@@ -819,3 +819,35 @@
 
   .dossier-footer { padding: 10px 8px; }
 }
+
+/* ── Author Knowledge Section — visually distinct from all other sections ── */
+.dossier-section-author {
+  border: 2px solid rgba(180, 50, 50, 0.3) !important;
+  background: rgba(180, 50, 50, 0.04) !important;
+  border-radius: 10px;
+  position: relative;
+}
+.dossier-section-author .dossier-section-header {
+  background: rgba(180, 50, 50, 0.06);
+}
+.dossier-section-author .dossier-section-header:hover {
+  background: rgba(180, 50, 50, 0.10);
+}
+.dossier-section-author .dossier-section-label {
+  color: #b33;
+  font-weight: 700;
+}
+.dossier-section-author .dossier-section-label::before {
+  content: '\26A0\FE0F  ';
+}
+.dossier-section-author .dossier-section-num {
+  background: rgba(180, 50, 50, 0.12);
+  color: #c44;
+}
+.dossier-section-author .dossier-row-value {
+  color: #8b3333;
+  font-style: italic;
+}
+.dossier-section-author .dossier-row-value.accent {
+  color: #b33;
+}

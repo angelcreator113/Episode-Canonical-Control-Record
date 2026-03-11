@@ -1,0 +1,442 @@
+'use strict';
+/**
+ * calendarRoutes.js
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Mount in app.js:
+ *   const calendarRoutes = require('./routes/calendarRoutes');
+ *   app.use('/api/v1/calendar', calendarRoutes);
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * MARKERS
+ *   GET    /markers                         — list by series_id, ordered by sequence_order
+ *   POST   /markers                         — create marker; enforce one is_present=true per series
+ *   PUT    /markers/:id/set-present         — set is_present=true, clear others for same series
+ *
+ * EVENTS
+ *   GET    /events                          — list; query: series_id, event_type, story_position, visibility
+ *   POST   /events                          — create event
+ *   PUT    /events/:id                      — update event
+ *   DELETE /events/:id                      — delete event
+ *
+ * ATTENDEES
+ *   GET    /events/:id/attendees            — list attendees for event
+ *   POST   /events/:id/attendees            — add attendee
+ *   PUT    /events/:id/attendees/:attendeeId — update attendee
+ *
+ * RIPPLES
+ *   POST   /events/:id/ripples/generate     — Amber generates ripple threads via Claude
+ *   PUT    /ripples/:id/confirm             — set thread_confirmed=true
+ *
+ * SPECIAL
+ *   GET    /simultaneous                    — all events active at a story-time moment + attendees
+ *   POST   /auto-detect                     — Claude scans text for temporal markers; proposes event
+ */
+const express = require('express');
+const router  = express.Router();
+const { Op }  = require('sequelize');
+const { optionalAuth } = require('../middleware/auth');
+
+router.use(optionalAuth);
+
+function getModels(req) {
+  return req.app.get('models') || require('../models');
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// MARKERS
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /markers
+router.get('/markers', async (req, res) => {
+  const { StoryClockMarker } = getModels(req);
+  try {
+    const where = {};
+    if (req.query.series_id) where.series_id = req.query.series_id;
+    const markers = await StoryClockMarker.findAll({
+      where,
+      order: [['sequence_order', 'ASC']],
+    });
+    res.json({ markers });
+  } catch (err) {
+    console.error('[Calendar] GET /markers error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /markers
+router.post('/markers', async (req, res) => {
+  const { StoryClockMarker } = getModels(req);
+  try {
+    const { name, description, calendar_date, sequence_order, is_present, series_id } = req.body;
+    if (!name) return res.status(400).json({ error: 'name is required' });
+
+    // If creating as present, clear others first
+    if (is_present && series_id) {
+      await StoryClockMarker.update({ is_present: false }, {
+        where: { series_id, is_present: true },
+      });
+    }
+
+    const marker = await StoryClockMarker.create({
+      name, description, calendar_date,
+      sequence_order: sequence_order || 0,
+      is_present: is_present || false,
+      series_id,
+    });
+    res.status(201).json({ marker });
+  } catch (err) {
+    console.error('[Calendar] POST /markers error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /markers/:id/set-present
+router.put('/markers/:id/set-present', async (req, res) => {
+  const { StoryClockMarker } = getModels(req);
+  try {
+    const marker = await StoryClockMarker.findByPk(req.params.id);
+    if (!marker) return res.status(404).json({ error: 'Marker not found' });
+
+    // Clear all others for same series
+    if (marker.series_id) {
+      await StoryClockMarker.update({ is_present: false }, {
+        where: { series_id: marker.series_id, is_present: true },
+      });
+    }
+    marker.is_present = true;
+    await marker.save();
+    res.json({ marker });
+  } catch (err) {
+    console.error('[Calendar] PUT /markers/:id/set-present error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// EVENTS
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /events
+router.get('/events', async (req, res) => {
+  const { StoryCalendarEvent, StoryClockMarker } = getModels(req);
+  try {
+    const where = {};
+    if (req.query.series_id)      where.series_id = req.query.series_id;
+    if (req.query.event_type)     where.event_type = req.query.event_type;
+    if (req.query.story_position) where.story_position = req.query.story_position;
+    if (req.query.visibility)     where.visibility = req.query.visibility;
+
+    const events = await StoryCalendarEvent.findAll({
+      where,
+      include: [{ model: StoryClockMarker, as: 'marker', attributes: ['id', 'name', 'sequence_order'] }],
+      order: [['start_datetime', 'ASC']],
+    });
+    res.json({ events });
+  } catch (err) {
+    console.error('[Calendar] GET /events error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /events
+router.post('/events', async (req, res) => {
+  const { StoryCalendarEvent } = getModels(req);
+  try {
+    const {
+      title, event_type, start_datetime, end_datetime,
+      is_recurring, recurrence_pattern, location_name, location_address,
+      lalaverse_district, visibility, what_world_knows, what_only_we_know,
+      logged_by, source_line_id, story_position, series_id,
+    } = req.body;
+    if (!title || !event_type || !start_datetime) {
+      return res.status(400).json({ error: 'title, event_type, and start_datetime are required' });
+    }
+    const event = await StoryCalendarEvent.create({
+      title, event_type, start_datetime, end_datetime,
+      is_recurring: is_recurring || false,
+      recurrence_pattern, location_name, location_address,
+      lalaverse_district, visibility: visibility || 'public',
+      what_world_knows, what_only_we_know,
+      logged_by: logged_by || 'evoni',
+      source_line_id, story_position, series_id,
+    });
+    res.status(201).json({ event });
+  } catch (err) {
+    console.error('[Calendar] POST /events error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /events/:id
+router.put('/events/:id', async (req, res) => {
+  const { StoryCalendarEvent } = getModels(req);
+  try {
+    const event = await StoryCalendarEvent.findByPk(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+    await event.update(req.body);
+    res.json({ event });
+  } catch (err) {
+    console.error('[Calendar] PUT /events/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// DELETE /events/:id
+router.delete('/events/:id', async (req, res) => {
+  const { StoryCalendarEvent } = getModels(req);
+  try {
+    const event = await StoryCalendarEvent.findByPk(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+    await event.destroy();
+    res.json({ success: true, message: 'Event deleted' });
+  } catch (err) {
+    console.error('[Calendar] DELETE /events/:id error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// ATTENDEES
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /events/:id/attendees
+router.get('/events/:id/attendees', async (req, res) => {
+  const { CalendarEventAttendee, RegistryCharacter } = getModels(req);
+  try {
+    const attendees = await CalendarEventAttendee.findAll({
+      where: { event_id: req.params.id },
+      include: [{
+        model: RegistryCharacter, as: 'character',
+        attributes: ['id', 'selected_name', 'display_name', 'role_type'],
+      }],
+      order: [['created_at', 'ASC']],
+    });
+    res.json({ attendees });
+  } catch (err) {
+    console.error('[Calendar] GET /events/:id/attendees error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /events/:id/attendees
+router.post('/events/:id/attendees', async (req, res) => {
+  const { CalendarEventAttendee, StoryCalendarEvent } = getModels(req);
+  try {
+    const event = await StoryCalendarEvent.findByPk(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    const { character_id, feed_profile_id, attendee_type, knew_about_event_before, left_early, what_they_experienced, author_note } = req.body;
+    if (!character_id && !feed_profile_id) {
+      return res.status(400).json({ error: 'character_id or feed_profile_id required' });
+    }
+    if (!attendee_type) {
+      return res.status(400).json({ error: 'attendee_type required' });
+    }
+    const attendee = await CalendarEventAttendee.create({
+      event_id: req.params.id,
+      character_id, feed_profile_id, attendee_type,
+      knew_about_event_before, left_early,
+      what_they_experienced, author_note,
+    });
+    res.status(201).json({ attendee });
+  } catch (err) {
+    console.error('[Calendar] POST /events/:id/attendees error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /events/:id/attendees/:attendeeId
+router.put('/events/:id/attendees/:attendeeId', async (req, res) => {
+  const { CalendarEventAttendee } = getModels(req);
+  try {
+    const attendee = await CalendarEventAttendee.findOne({
+      where: { id: req.params.attendeeId, event_id: req.params.id },
+    });
+    if (!attendee) return res.status(404).json({ error: 'Attendee not found' });
+    await attendee.update(req.body);
+    res.json({ attendee });
+  } catch (err) {
+    console.error('[Calendar] PUT attendee error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// RIPPLES
+// ────────────────────────────────────────────────────────────────────────────
+
+// POST /events/:id/ripples/generate — Amber generates ripple threads via Claude
+router.post('/events/:id/ripples/generate', async (req, res) => {
+  const models = getModels(req);
+  const { StoryCalendarEvent, CalendarEventAttendee, CalendarEventRipple, RegistryCharacter } = models;
+  try {
+    const event = await StoryCalendarEvent.findByPk(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    // Get all attendees with character details
+    const attendees = await CalendarEventAttendee.findAll({
+      where: { event_id: event.id },
+      include: [{ model: RegistryCharacter, as: 'character' }],
+    });
+
+    if (attendees.length === 0) {
+      return res.json({ ripples: [], message: 'No attendees to generate ripples for' });
+    }
+
+    // Build context for Claude
+    const attendeeContext = attendees
+      .filter(a => a.character)
+      .map(a => `- ${a.character.selected_name || a.character.display_name} (${a.attendee_type}): ${a.what_they_experienced || 'no details'}`)
+      .join('\n');
+
+    let proposals = [];
+    try {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client = new Anthropic();
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 1000,
+        system: `You are Amber, production intelligence for a narrative fiction project called "Before Lala". You generate ripple thread proposals — short story threads that describe how an event propagates through the world and affects characters who weren't necessarily present. Each proposal is 2–3 sentences.
+
+Return a JSON array of objects: [{"affected_character_name": "...", "ripple_type": "witnessed|heard_secondhand|affected_by_outcome|doesnt_know_yet", "dimension": "ambition|desire|visibility|grief|class|body|habits|belonging", "intensity": 1-10, "thread": "..."}]`,
+        messages: [{
+          role: 'user',
+          content: `Event: "${event.title}" (${event.event_type})
+Location: ${event.location_name || 'unknown'}, ${event.lalaverse_district || 'unknown district'}
+What the world knows: ${event.what_world_knows || 'nothing public yet'}
+What actually happened: ${event.what_only_we_know || 'same as public'}
+
+Attendees:
+${attendeeContext}
+
+Generate ripple proposals for characters who may be affected — consider who was there, who heard about it, who is affected by the outcome, and who doesn't know yet. Return JSON array only.`,
+        }],
+      });
+
+      const text = response.content[0]?.text || '[]';
+      const jsonMatch = text.match(/\[[\s\S]*\]/);
+      proposals = jsonMatch ? JSON.parse(jsonMatch[0]) : [];
+    } catch (aiErr) {
+      console.warn('[Calendar] Claude ripple generation failed, using empty proposals:', aiErr.message);
+      proposals = [];
+    }
+
+    // Save proposals as unconfirmed ripples
+    const ripples = [];
+    for (const p of proposals) {
+      const ripple = await CalendarEventRipple.create({
+        event_id: event.id,
+        affected_character_id: attendees.find(a =>
+          a.character && (a.character.selected_name === p.affected_character_name || a.character.display_name === p.affected_character_name)
+        )?.character_id || null,
+        ripple_type: p.ripple_type || 'heard_secondhand',
+        deep_profile_dimension: p.dimension || null,
+        intensity: p.intensity || 5,
+        proposed_thread: p.thread,
+        thread_confirmed: false,
+      });
+      ripples.push(ripple);
+    }
+
+    res.json({ ripples, count: ripples.length });
+  } catch (err) {
+    console.error('[Calendar] POST ripples/generate error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /ripples/:id/confirm
+router.put('/ripples/:id/confirm', async (req, res) => {
+  const { CalendarEventRipple } = getModels(req);
+  try {
+    const ripple = await CalendarEventRipple.findByPk(req.params.id);
+    if (!ripple) return res.status(404).json({ error: 'Ripple not found' });
+    ripple.thread_confirmed = true;
+    await ripple.save();
+    res.json({ ripple });
+  } catch (err) {
+    console.error('[Calendar] PUT /ripples/:id/confirm error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ────────────────────────────────────────────────────────────────────────────
+// SPECIAL QUERIES
+// ────────────────────────────────────────────────────────────────────────────
+
+// GET /simultaneous — alibi view: all events active at a story-time moment
+router.get('/simultaneous', async (req, res) => {
+  const { StoryCalendarEvent, CalendarEventAttendee, RegistryCharacter } = getModels(req);
+  try {
+    const { datetime } = req.query;
+    if (!datetime) return res.status(400).json({ error: 'datetime query param required' });
+
+    const moment = new Date(datetime);
+    const events = await StoryCalendarEvent.findAll({
+      where: {
+        start_datetime: { [Op.lte]: moment },
+        [Op.or]: [
+          { end_datetime: { [Op.gte]: moment } },
+          { end_datetime: null },
+        ],
+      },
+      include: [{
+        model: CalendarEventAttendee, as: 'attendees',
+        include: [{
+          model: RegistryCharacter, as: 'character',
+          attributes: ['id', 'selected_name', 'display_name', 'role_type'],
+        }],
+      }],
+      order: [['start_datetime', 'ASC']],
+    });
+    res.json({ datetime, events, count: events.length });
+  } catch (err) {
+    console.error('[Calendar] GET /simultaneous error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /auto-detect — Claude scans text for temporal markers, proposes event
+router.post('/auto-detect', async (req, res) => {
+  try {
+    const { line_text, series_id } = req.body;
+    if (!line_text) return res.status(400).json({ error: 'line_text required' });
+
+    let proposal = null;
+    try {
+      const Anthropic = require('@anthropic-ai/sdk');
+      const client = new Anthropic();
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-20250514',
+        max_tokens: 500,
+        system: `You are Amber, production intelligence for a narrative fiction project. You scan approved storyteller lines for temporal markers and propose calendar events.
+
+If the text contains temporal markers (day names, dates, 'that night', 'the morning after', relative time references), return a JSON object:
+{"detected": true, "title": "...", "event_type": "world_event|story_event|character_event", "suggested_datetime": "YYYY-MM-DDTHH:mm:ss", "location": "...", "characters_mentioned": ["..."], "confidence": 0.0-1.0}
+
+If no temporal markers detected: {"detected": false}
+
+The story is set in year 8385. Use real months/days but year 8385.`,
+        messages: [{
+          role: 'user',
+          content: `Scan this approved line for temporal markers:\n\n"${line_text}"`,
+        }],
+      });
+
+      const text = response.content[0]?.text || '{}';
+      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      proposal = jsonMatch ? JSON.parse(jsonMatch[0]) : { detected: false };
+    } catch (aiErr) {
+      console.warn('[Calendar] Claude auto-detect failed:', aiErr.message);
+      proposal = { detected: false, error: 'AI unavailable' };
+    }
+
+    // NEVER auto-write — return proposal for author review
+    res.json({ proposal, series_id, note: 'Proposal only — requires author confirmation to create event' });
+  } catch (err) {
+    console.error('[Calendar] POST /auto-detect error:', err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+module.exports = router;
