@@ -2854,17 +2854,8 @@ export default function CharacterRegistryPage() {
       <CharacterCreationDrawer
         open={showCreationDrawer}
         onClose={() => setShowCreationDrawer(false)}
-        registryId={activeRegistry?.id}
-        registryTitle={activeRegistry?.title}
-        bookTag={activeRegistry?.book_tag || 'book1'}
-        existingCast={(activeRegistry?.characters || []).map(c => ({
-          id: c.id,
-          name: c.selected_name || c.display_name,
-          selected_name: c.selected_name,
-          display_name: c.display_name,
-          role_type: c.role_type,
-        }))}
-        onCommitted={() => {
+        worldId={null}
+        onCreated={(newChar) => {
           showToast('Character created');
           setShowCreationDrawer(false);
           if (activeRegistry?.id) fetchRegistry(activeRegistry.id);
