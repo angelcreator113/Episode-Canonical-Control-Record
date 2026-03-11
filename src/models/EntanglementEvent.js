@@ -69,6 +69,7 @@ module.exports = (sequelize, DataTypes) => {
     modelName:   'EntanglementEvent',
     tableName:   'entanglement_events',
     underscored: true,
+    paranoid:    false,
   });
   return EntanglementEvent;
 };

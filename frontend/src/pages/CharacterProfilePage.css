@@ -188,47 +188,55 @@
   min-height: 100vh;
 }
 
-/* ── Tab Bar ───────────────────────────────────────────────────────────────── */
+/* ── Tab Bar — pill style matching registry ────────────────────────────────── */
 .cp-tab-bar {
   display: flex;
-  gap: 2px;
-  padding: 16px 28px 0;
+  gap: 8px;
+  padding: 16px 28px;
   border-bottom: 1px solid #ede8e3;
   background: #fff;
   position: sticky;
   top: 0;
   z-index: 10;
+  flex-wrap: wrap;
 }
 
 .cp-tab-btn {
   position: relative;
-  padding: 10px 16px 12px;
-  background: none;
-  border: none;
-  border-bottom: 2px solid transparent;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 16px;
+  border: 1px solid #ede8e3;
+  border-radius: 8px;
   font-family: 'DM Sans', sans-serif;
   font-size: 13px;
-  font-weight: 400;
-  color: #aaa;
+  font-weight: 500;
+  color: #9a8c9e;
+  background: #fff;
   cursor: pointer;
-  transition: color 0.15s, border-color 0.15s;
+  transition: all 0.15s ease;
   white-space: nowrap;
 }
-.cp-tab-btn:hover { color: #666; }
+.cp-tab-btn:hover {
+  border-color: #a889c8;
+  color: #3a2d3f;
+  background: rgba(168, 137, 200, 0.04);
+}
 .cp-tab-active {
-  color: #d4789a;
-  border-bottom-color: #d4789a;
-  font-weight: 500;
+  border-color: #a889c8;
+  background: rgba(168, 137, 200, 0.08);
+  color: #a889c8;
+  font-weight: 600;
+  box-shadow: none;
 }
 
 .cp-tab-dot {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  width: 5px;
-  height: 5px;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
   background: #7ab3d4;
+  flex-shrink: 0;
 }
 
 /* ── Tab Panel ─────────────────────────────────────────────────────────────── */
