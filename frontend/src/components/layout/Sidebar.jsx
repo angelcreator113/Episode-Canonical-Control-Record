@@ -43,6 +43,7 @@ const NAV = [
           { icon: '🧠', label: 'Narrative Control',   route: '/narrative-control' },
         ],
       },
+      { icon: '🔥', label: 'Pressure',        route: '/pressure' },
       { icon: '▶',  label: 'Novel Session',   route: '/start' },
     ],
   },

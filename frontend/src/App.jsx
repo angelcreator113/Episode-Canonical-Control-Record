@@ -98,6 +98,7 @@ const StudioSceneComposerPage = lazy(() => import('./pages/StudioSceneComposerPa
 const SocialProfileGenerator = lazy(() => import('./pages/SocialProfileGenerator'));
 const NarrativeControlCenter = lazy(() => import('./pages/NarrativeControlCenter'));
 const AmberCommandCenter = lazy(() => import('./pages/AmberCommandCenter'));
+const NarrativePressureDashboard = lazy(() => import('./pages/NarrativePressureDashboard'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -381,6 +382,9 @@ function AppContent() {
 
           {/* The Feed — Parasocial Creator Profile Generator */}
           <Route path="/feed" element={<SocialProfileGenerator />} />
+
+          {/* Narrative Pressure Dashboard — Entanglement Layer */}
+          <Route path="/pressure" element={<NarrativePressureDashboard />} />
           
           {/* PNOS Social Import Pipeline — redirects to Universe tab */}
           <Route path="/social-import" element={<Navigate to="/universe?tab=social-import" replace />} />
