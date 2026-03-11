@@ -77,6 +77,29 @@ module.exports = (sequelize, DataTypes) => {
     collab_style:          { type: DataTypes.TEXT, allowNull: true },           // how they collaborate, who they collab with
     influencer_tier_detail:{ type: DataTypes.TEXT, allowNull: true },           // nuanced tier analysis
 
+    // ── Entanglement layer: state tracking ───────────────────────────────────
+    current_state: {
+      type: DataTypes.ENUM(
+        'rising', 'peaking', 'plateauing', 'controversial',
+        'cancelled', 'reinventing', 'gone_dark', 'posthumous'
+      ),
+      allowNull: true,
+      defaultValue: null,
+    },
+    previous_state: {
+      type: DataTypes.ENUM(
+        'rising', 'peaking', 'plateauing', 'controversial',
+        'cancelled', 'reinventing', 'gone_dark', 'posthumous'
+      ),
+      allowNull: true,
+      defaultValue: null,
+    },
+    state_changed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+      defaultValue: null,
+    },
+
     status:                { type: DataTypes.ENUM('draft','generated','finalized','crossed','archived'), defaultValue: 'draft' },
     generation_model:      { type: DataTypes.STRING(60), allowNull: true },
     full_profile:          { type: DataTypes.JSONB, defaultValue: {} },

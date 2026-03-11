@@ -1102,6 +1102,15 @@ try {
   console.error('✗ Failed to load Social Profile routes:', e.message);
 }
 
+// Entanglement Layer — character ↔ influencer ripple propagation
+try {
+  const entanglementRoutes = require('./routes/entanglementRoutes');
+  app.use('/api/v1/entanglements', entanglementRoutes);
+  console.log('✓ Entanglement routes loaded at /api/v1/entanglements');
+} catch (e) {
+  console.error('✗ Failed to load Entanglement routes:', e.message);
+}
+
 // Tier Features — Continuity, Arcs, Timeline, Locations, Snapshots, Pipeline, Threads
 try {
   const tierFeaturesRoutes = require('./routes/tierFeatures');
