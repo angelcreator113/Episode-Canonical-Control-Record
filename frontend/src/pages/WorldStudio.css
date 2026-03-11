@@ -1052,7 +1052,7 @@
 
 /* ── Registry header + grid ────────────────────────────────────────────────── */
 .ws-registry-header { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; flex-wrap: wrap; }
-.ws-registry-grid   { display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 14px; }
+.ws-registry-grid   { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(360px, 100%), 1fr)); gap: 14px; }
 
 /* ── Dashboard ─────────────────────────────────────────────────────────────── */
 .ws-dashboard        { padding: 28px; max-width: 900px; margin: 0 auto; animation: wsFadeIn 0.4s var(--ws-ease); }
