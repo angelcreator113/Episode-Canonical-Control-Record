@@ -271,7 +271,7 @@
   }
   
   .status-dropdown {
-    min-width: 260px;
+    min-width: min(260px, calc(100vw - 32px));
     right: 0;
     left: auto;
   }

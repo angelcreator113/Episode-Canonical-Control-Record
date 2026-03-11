@@ -530,7 +530,7 @@
 
   .stat-card {
     padding: 0.2rem 0.375rem;
-    min-width: 38px;
+    min-width: 44px;
   }
 
   .scene-composer-tab .stat-value {
@@ -538,7 +538,7 @@
   }
 
   .scene-composer-tab .stat-label {
-    font-size: 0.5rem;
+    font-size: 0.6rem;
   }
 
   .composer-actions {
@@ -553,8 +553,9 @@
   }
 
   .btn-action {
-    padding: 0.25rem 0.5rem;
-    font-size: 0.65rem;
+    padding: 0.35rem 0.5rem;
+    font-size: 0.7rem;
+    min-height: 36px;
   }
 
   .composer-empty-state {
