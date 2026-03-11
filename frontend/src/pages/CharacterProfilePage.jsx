@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { API_URL } from '../config/api';
+import CharacterDepthPanel from '../components/CharacterDepthPanel';
 import './CharacterProfilePage.css';
 
 /* ── Config ──────────────────────────────────────────────────────────────────── */
@@ -34,6 +35,7 @@ const STATE_CONFIG = {
 const TABS = [
   { id: 'overview',     label: 'Overview' },
   { id: 'interior',     label: 'Interior' },
+  { id: 'depth',        label: 'DEPTH' },
   { id: 'connections',  label: 'Connections' },
   { id: 'online',       label: 'Online' },
   { id: 'world',        label: 'World' },
@@ -857,6 +859,7 @@ export default function CharacterProfilePage() {
         <div className="cp-tab-panel">
           {activeTab === 'overview'     && <TabOverview character={character} />}
           {activeTab === 'interior'     && <TabInterior character={character} />}
+          {activeTab === 'depth'        && <CharacterDepthPanel characterId={character.id} characterName={character.selected_name || character.display_name} />}
           {activeTab === 'connections'   && <TabConnections character={character} relationships={relationships} entanglements={entanglements} />}
           {activeTab === 'online'       && <TabOnline character={character} feedProfile={feedProfile} />}
           {activeTab === 'world'        && <TabWorld character={character} />}

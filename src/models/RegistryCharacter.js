@@ -8,6 +8,14 @@
 
 const { DataTypes } = require('sequelize');
 
+/* ── Author-Only Fields (never returned to non-author clients) ── */
+const AUTHOR_ONLY_FIELDS = [
+  'de_blind_spot',
+  'de_blind_spot_evidence',
+  'de_blind_spot_crack_condition',
+  'de_actual_narrative_gap',
+];
+
 module.exports = (sequelize) => {
   const RegistryCharacter = sequelize.define('RegistryCharacter', {
     id: {
@@ -468,6 +476,109 @@ module.exports = (sequelize) => {
       allowNull: true,
     },
     joy_vs_ambition: { type: DataTypes.TEXT, allowNull: true },
+
+    /* ── Character Depth Engine v2 (10 dimensions — de_ prefix) ── */
+
+    // Body
+    de_body_relationship: {
+      type: DataTypes.ENUM('currency','discipline','burden','stranger','home','evidence'),
+      allowNull: true,
+    },
+    de_body_currency: { type: DataTypes.INTEGER, allowNull: true },
+    de_body_control: { type: DataTypes.INTEGER, allowNull: true },
+    de_body_comfort: { type: DataTypes.INTEGER, allowNull: true },
+    de_body_history: { type: DataTypes.TEXT, allowNull: true },
+
+    // Money
+    de_money_behavior: {
+      type: DataTypes.ENUM('hoarder','compulsive_giver','spend_to_feel','deprivation_guilt','control','performs_wealth','performs_poverty'),
+      allowNull: true,
+    },
+    de_money_origin_class: {
+      type: DataTypes.ENUM('poverty','working_class','middle_class','upper_middle','wealthy','ultra_wealthy'),
+      allowNull: true,
+    },
+    de_money_current_class: {
+      type: DataTypes.ENUM('poverty','working_class','middle_class','upper_middle','wealthy','ultra_wealthy'),
+      allowNull: true,
+    },
+    de_class_gap_direction: {
+      type: DataTypes.ENUM('up','down','stable'),
+      allowNull: true,
+    },
+    de_money_wound: { type: DataTypes.TEXT, allowNull: true },
+
+    // Time
+    de_time_orientation: {
+      type: DataTypes.ENUM('past_anchored','future_oriented','present_impulsive','perpetual_waiter','cyclical'),
+      allowNull: true,
+    },
+    de_time_wound: { type: DataTypes.TEXT, allowNull: true },
+
+    // Luck & Circumstance
+    de_world_belief: {
+      type: DataTypes.ENUM('random','rigged','effort','divine','strategy'),
+      allowNull: true,
+    },
+    de_circumstance_advantages: { type: DataTypes.TEXT, allowNull: true },
+    de_circumstance_disadvantages: { type: DataTypes.TEXT, allowNull: true },
+    de_luck_interpretation: { type: DataTypes.INTEGER, allowNull: true },
+    de_circumstance_wound: { type: DataTypes.TEXT, allowNull: true },
+
+    // Self-Narrative
+    de_self_narrative_origin: { type: DataTypes.TEXT, allowNull: true },
+    de_self_narrative_turning_point: { type: DataTypes.TEXT, allowNull: true },
+    de_self_narrative_villain: { type: DataTypes.TEXT, allowNull: true },
+    de_actual_narrative_gap: { type: DataTypes.TEXT, allowNull: true, comment: 'AUTHOR ONLY' },
+    de_therapy_target: { type: DataTypes.TEXT, allowNull: true },
+
+    // Blind Spot — AUTHOR ONLY
+    de_blind_spot_category: {
+      type: DataTypes.ENUM('impact','pattern','motivation','strength','wound'),
+      allowNull: true,
+    },
+    de_blind_spot: { type: DataTypes.TEXT, allowNull: true, comment: 'AUTHOR ONLY' },
+    de_blind_spot_evidence: { type: DataTypes.TEXT, allowNull: true, comment: 'AUTHOR ONLY' },
+    de_blind_spot_crack_condition: { type: DataTypes.TEXT, allowNull: true, comment: 'AUTHOR ONLY' },
+
+    // Change Capacity
+    de_change_capacity: {
+      type: DataTypes.ENUM('highly_rigid','conditionally_open','cyclically_mobile','highly_fluid','fixed_by_choice'),
+      allowNull: true,
+    },
+    de_change_capacity_score: { type: DataTypes.INTEGER, allowNull: true },
+    de_change_condition: { type: DataTypes.TEXT, allowNull: true },
+    de_change_witness: { type: DataTypes.TEXT, allowNull: true },
+    de_arc_function: {
+      type: DataTypes.ENUM('arc','fixed','both'),
+      allowNull: true,
+    },
+
+    // Operative Cosmology
+    de_operative_cosmology: {
+      type: DataTypes.ENUM('deserving','contractual','indifferent','relational','authored'),
+      allowNull: true,
+    },
+    de_stated_religion: { type: DataTypes.TEXT, allowNull: true },
+    de_cosmology_conflict: { type: DataTypes.TEXT, allowNull: true },
+    de_meaning_making_style: { type: DataTypes.TEXT, allowNull: true },
+
+    // Foreclosed Possibility
+    de_foreclosed_possibilities: { type: DataTypes.JSONB, allowNull: true },
+    de_foreclosure_origins: { type: DataTypes.JSONB, allowNull: true },
+    de_foreclosure_visibility: { type: DataTypes.JSONB, allowNull: true },
+    de_crack_conditions: { type: DataTypes.JSONB, allowNull: true },
+
+    // Joy
+    de_joy_trigger: { type: DataTypes.TEXT, allowNull: true },
+    de_joy_body_location: { type: DataTypes.TEXT, allowNull: true },
+    de_joy_origin: { type: DataTypes.TEXT, allowNull: true },
+    de_forbidden_joy: { type: DataTypes.TEXT, allowNull: true },
+    de_joy_threat_response: {
+      type: DataTypes.ENUM('fight','grieve','deny'),
+      allowNull: true,
+    },
+    de_joy_current_access: { type: DataTypes.INTEGER, allowNull: true },
   }, {
     tableName: 'registry_characters',
     underscored: true,
@@ -484,5 +595,9 @@ module.exports = (sequelize) => {
     }
   };
 
+  RegistryCharacter.AUTHOR_ONLY_FIELDS = AUTHOR_ONLY_FIELDS;
+
   return RegistryCharacter;
 };
+
+module.exports.AUTHOR_ONLY_FIELDS = AUTHOR_ONLY_FIELDS;

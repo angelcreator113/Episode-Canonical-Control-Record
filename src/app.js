@@ -1135,6 +1135,15 @@ try {
   console.error('✗ Failed to load Entanglement routes:', e.message);
 }
 
+// Character Depth Engine — 10-dimension depth profile
+try {
+  const characterDepthRoutes = require('./routes/characterDepthRoutes');
+  app.use('/api/v1/character-depth', characterDepthRoutes);
+  console.log('✓ Character Depth routes loaded at /api/v1/character-depth');
+} catch (e) {
+  console.error('✗ Failed to load Character Depth routes:', e.message);
+}
+
 // Character Generation v2 — full interior architecture from spark
 try {
   const characterGenerationRoutes = require('./routes/characterGenerationRoutes');
