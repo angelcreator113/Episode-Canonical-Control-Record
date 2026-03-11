@@ -143,14 +143,20 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       });
 
       const data = await res.json();
-      const reply = data.reply || 'Done.';
 
-      setMessages(prev => [...prev, {
-        role:   'assistant',
-        text:   reply,
-        action: data.action,
-        error:  data.error,
-      }]);
+      if (data.error) {
+        setMessages(prev => [...prev, {
+          role:  'assistant',
+          text:  data.reply || `Something went wrong: ${data.error}`,
+          error: true,
+        }]);
+      } else {
+        setMessages(prev => [...prev, {
+          role:   'assistant',
+          text:   data.reply || 'Done.',
+          action: data.action,
+        }]);
+      }
 
       if (data.navigate && onNavigate) {
         setTimeout(() => onNavigate(data.navigate), 400);
@@ -162,7 +168,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     } catch {
       setMessages(prev => [...prev, {
         role:  'assistant',
-        text:  "Something went wrong. Try again.",
+        text:  "Can't reach Amber right now. Check your connection and try again.",
         error: true,
       }]);
     } finally {
@@ -193,17 +199,23 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       });
 
       const data  = await res.json();
-      const reply = data.reply || 'Done.';
 
-      setMessages(prev => [...prev, {
-        role:   'assistant',
-        text:   reply,
-        action: data.action,
-        error:  data.error,
-      }]);
-
-      // Voice-first: Amber speaks her reply
-      if (!data.error) speak(reply);
+      if (data.error) {
+        setMessages(prev => [...prev, {
+          role:  'assistant',
+          text:  data.reply || `Something went wrong: ${data.error}`,
+          error: true,
+        }]);
+      } else {
+        const reply = data.reply || 'Done.';
+        setMessages(prev => [...prev, {
+          role:   'assistant',
+          text:   reply,
+          action: data.action,
+        }]);
+        // Voice-first: Amber speaks her reply
+        speak(reply);
+      }
 
       if (data.navigate && onNavigate) setTimeout(() => onNavigate(data.navigate), 400);
       if (data.refresh  && onRefresh)  onRefresh(data.refresh);
@@ -211,7 +223,7 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
     } catch {
       setMessages(prev => [...prev, {
         role:  'assistant',
-        text:  "Something went wrong. Try again.",
+        text:  "Can't reach Amber right now. Check your connection and try again.",
         error: true,
       }]);
     } finally {

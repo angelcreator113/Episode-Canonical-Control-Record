@@ -5022,8 +5022,15 @@ That matters to you. Let it show.`;
 
   } catch (err) {
     console.error('Assistant command error:', err);
+
+    // Provide a helpful message when the API key is the problem
+    const isAuthError = err.status === 401 || err.message?.includes('API key') || err.message?.includes('authentication');
+    const reply = isAuthError
+      ? "I can't connect to my brain right now — the API key may be missing or expired. Check your ANTHROPIC_API_KEY in .env."
+      : "Hmm, that didn't work — try again or rephrase it for me.";
+
     return res.json({
-      reply:   "Hmm, that didn't work — try again or rephrase it for me.",
+      reply,
       action:  null,
       refresh: null,
       error:   err.message,
