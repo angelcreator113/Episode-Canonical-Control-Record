@@ -306,22 +306,6 @@ export default function SocialProfileGenerator({ embedded = false, worldTag }) {
     }
   };
 
-  const cancelJob = async (jobId) => {
-    try {
-      const res = await fetch(`${API}/bulk/jobs/${jobId}/cancel`, { method: 'POST', headers: authHeaders() });
-      const data = await res.json();
-      if (data.job) {
-        setActiveJob(data.job);
-        clearInterval(jobPollRef.current);
-        jobPollRef.current = null;
-        localStorage.removeItem('spg_active_job');
-        loadProfiles();
-      }
-    } catch (err) {
-      console.error('Cancel job error:', err);
-    }
-  };
-
   const retryJob = async (jobId) => {
     try {
       const res = await fetch(`${API}/bulk/jobs/${jobId}/retry`, { method: 'POST', headers: authHeaders() });
