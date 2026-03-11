@@ -5131,8 +5131,8 @@ async function executeAssistantAction(action, params = {}, context = {}) {
           `SELECT status FROM registry_characters WHERE id = :charId AND deleted_at IS NULL`,
           { replacements: { charId }, type: sequelize.QueryTypes.SELECT }
         );
-        if (char?.status === 'finalized') {
-          return { error: 'Finalized characters cannot be deleted' };
+        if (char?.depth_level === 'alive') {
+          return { error: 'Alive characters cannot be deleted. Reduce depth level first if needed.' };
         }
 
         await sequelize.query(

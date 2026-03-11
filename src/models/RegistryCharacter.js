@@ -277,6 +277,93 @@ module.exports = (sequelize) => {
       type: DataTypes.JSONB,
       allowNull: true,
     },
+
+    /* ── Character Generation v2: Interior Architecture ── */
+    depth_level: {
+      type: DataTypes.ENUM('sparked', 'breathing', 'active', 'alive'),
+      allowNull: true,
+      defaultValue: null,
+    },
+    want_architecture: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    wound: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    the_mask: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    living_state: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    triggers: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    blind_spot: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    change_capacity: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    self_narrative: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    operative_cosmology: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    foreclosed_possibility: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    experience_of_joy: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    time_orientation: {
+      type: DataTypes.ENUM('past_anchored', 'future_obsessed', 'impulsive_present', 'waiting'),
+      allowNull: true,
+    },
+    dilemma: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    social_presence: {
+      type: DataTypes.BOOLEAN,
+      allowNull: true,
+    },
+    feed_profile_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    ghost_characters: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    family_tree: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    belonging_map: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    generation_context: {
+      type: DataTypes.JSONB,
+      allowNull: true,
+    },
+    prose_overview: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   }, {
     tableName: 'registry_characters',
     underscored: true,
