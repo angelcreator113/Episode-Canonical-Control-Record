@@ -34,6 +34,7 @@
   color: var(--ink);
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   padding: 0;
+  overflow-x: hidden;
 }
 
 /* ── Embedded mode (inside WorldStudio) ────────────────────── */
@@ -353,6 +354,7 @@ select.spg-input {
 /* ── Content Area ──────────────────────────────────────────── */
 .spg-content {
   padding: 0 32px 32px;
+  overflow-x: hidden;
 }
 .spg-embedded .spg-content {
   padding: 0;
@@ -361,7 +363,7 @@ select.spg-input {
 /* ── Card Grid ─────────────────────────────────────────────── */
 .spg-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: 16px;
   margin-top: 16px;
 }
@@ -414,6 +416,10 @@ select.spg-input {
   font-size: 1.05rem;
   font-weight: 600;
   color: var(--ink);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 .spg-card-platform {
   font-size: 0.72rem;
@@ -825,6 +831,7 @@ select.spg-input {
   font-size: 0.82rem;
   font-family: inherit;
   width: 180px;
+  min-width: 0;
   transition: border-color 0.15s;
 }
 .spg-search-input:focus {
