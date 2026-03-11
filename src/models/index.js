@@ -102,6 +102,9 @@ let BrainFingerprint; // Novel Intelligence: brain dedup fingerprints
 let SocialProfile; // The Feed: social media creator profiles
 let SocialProfileFollower; // The Feed: character-follows-profile join table
 let SocialProfileRelationship; // The Feed: creator-to-creator relationships (drama, collabs, couples)
+let CharacterEntanglement; // Entanglement Layer: character ↔ influencer links
+let EntanglementEvent; // Entanglement Layer: ripple log — state changes + content events
+let EntanglementUnfollow; // Entanglement Layer: unfollow as narrative event
 let BulkImportJob; // The Feed: background bulk import job queue
 let RelationshipEvent; // Relationship timeline turning points
 let StoryRevision; // Revision history for edited stories
@@ -308,6 +311,9 @@ try {
   SocialProfile = require('./SocialProfile')(sequelize, DataTypes);
   SocialProfileFollower = require('./SocialProfileFollower')(sequelize, DataTypes);
   SocialProfileRelationship = require('./SocialProfileRelationship')(sequelize, DataTypes);
+  CharacterEntanglement = require('./CharacterEntanglement')(sequelize, DataTypes);
+  EntanglementEvent = require('./EntanglementEvent')(sequelize, DataTypes);
+  EntanglementUnfollow = require('./EntanglementUnfollow')(sequelize, DataTypes);
   BulkImportJob = require('./BulkImportJob')(sequelize, DataTypes);
 
   // Tier feature models
@@ -436,6 +442,9 @@ const requiredModels = {
   SocialProfile,
   SocialProfileFollower,
   SocialProfileRelationship,
+  CharacterEntanglement,
+  EntanglementEvent,
+  EntanglementUnfollow,
   BulkImportJob,
   RelationshipEvent,
   StoryRevision,
@@ -614,6 +623,17 @@ if (SocialProfileFollower && SocialProfileFollower.associate) {
 // so we only need to call associate() on the relationship model here.
 if (SocialProfileRelationship && SocialProfileRelationship.associate) {
   SocialProfileRelationship.associate(requiredModels);
+}
+
+// Entanglement Layer associations
+if (CharacterEntanglement && CharacterEntanglement.associate) {
+  CharacterEntanglement.associate(requiredModels);
+}
+if (EntanglementEvent && EntanglementEvent.associate) {
+  EntanglementEvent.associate(requiredModels);
+}
+if (EntanglementUnfollow && EntanglementUnfollow.associate) {
+  EntanglementUnfollow.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
@@ -1729,6 +1749,9 @@ module.exports.ManuscriptMetadata = ManuscriptMetadata;
 module.exports.BrainFingerprint = BrainFingerprint;
 module.exports.SocialProfile = SocialProfile;
 module.exports.SocialProfileFollower = SocialProfileFollower;
+module.exports.CharacterEntanglement = CharacterEntanglement;
+module.exports.EntanglementEvent = EntanglementEvent;
+module.exports.EntanglementUnfollow = EntanglementUnfollow;
 module.exports.BulkImportJob = BulkImportJob;
 module.exports.RelationshipEvent = RelationshipEvent;
 module.exports.StoryRevision = StoryRevision;
