@@ -205,7 +205,7 @@ jobs:
 
           # ─── Deploy everything in a single SSH session ───
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=no ubuntu@$EC2_HOST "
-            set -e
+            set -eo pipefail
 
             # Use whatever Node is available on the system
             export NVM_DIR=\$HOME/.nvm

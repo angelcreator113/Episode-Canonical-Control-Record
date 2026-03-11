@@ -581,6 +581,9 @@ module.exports = (sequelize) => {
     de_joy_current_access: { type: DataTypes.INTEGER, allowNull: true },
 
     /* ── Demographics Layer ── */
+    // NOTE: Using STRING instead of ENUM in the model for deployment safety.
+    // The migration creates proper ENUM types in PostgreSQL.
+    // Sequelize STRING is compatible with Postgres ENUM columns at query time.
 
     // Identity
     age: { type: DataTypes.INTEGER, allowNull: true },
@@ -591,41 +594,20 @@ module.exports = (sequelize) => {
 
     // Geography
     hometown: { type: DataTypes.TEXT, allowNull: true },
-    current_city: {
-      type: DataTypes.ENUM('nova_prime','velour_city','the_drift','solenne','cascade_row','outside_lalaverse','unknown'),
-      allowNull: true,
-    },
+    current_city: { type: DataTypes.STRING, allowNull: true },
     city_migration_history: { type: DataTypes.TEXT, allowNull: true },
 
     // Class
-    class_origin: {
-      type: DataTypes.ENUM('poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'),
-      allowNull: true,
-    },
-    current_class: {
-      type: DataTypes.ENUM('poverty','working_class','lower_middle','middle_class','upper_middle','wealthy','old_money','unknown'),
-      allowNull: true,
-    },
-    class_mobility_direction: {
-      type: DataTypes.ENUM('ascending','descending','stable','volatile','unknown'),
-      allowNull: true,
-    },
+    class_origin: { type: DataTypes.STRING, allowNull: true },
+    current_class: { type: DataTypes.STRING, allowNull: true },
+    class_mobility_direction: { type: DataTypes.STRING, allowNull: true },
 
     // Family
-    family_structure: {
-      type: DataTypes.ENUM('two_parents_intact','single_mother','single_father','raised_by_grandparents','raised_by_other_relatives','blended_family','foster_or_adopted','effectively_alone','unknown'),
-      allowNull: true,
-    },
+    family_structure: { type: DataTypes.STRING, allowNull: true },
     parents_status: { type: DataTypes.TEXT, allowNull: true },
-    sibling_position: {
-      type: DataTypes.ENUM('only_child','oldest','middle','youngest','unknown'),
-      allowNull: true,
-    },
+    sibling_position: { type: DataTypes.STRING, allowNull: true },
     sibling_count: { type: DataTypes.INTEGER, allowNull: true },
-    relationship_status: {
-      type: DataTypes.ENUM('single','dating','committed','married','separated','divorced','widowed','complicated','unknown'),
-      allowNull: true,
-    },
+    relationship_status: { type: DataTypes.STRING, allowNull: true },
     has_children: { type: DataTypes.BOOLEAN, allowNull: true },
     children_ages: { type: DataTypes.TEXT, allowNull: true },
 
@@ -639,14 +621,8 @@ module.exports = (sequelize) => {
     demographic_voice_signature: { type: DataTypes.TEXT, allowNull: true },
 
     // Online Presence
-    platform_primary: {
-      type: DataTypes.ENUM('lalaverse_main','multi_platform','live_first','archive_heavy','unknown'),
-      allowNull: true,
-    },
-    follower_tier: {
-      type: DataTypes.ENUM('ghost','micro','mid','macro','mega','unknown'),
-      allowNull: true,
-    },
+    platform_primary: { type: DataTypes.STRING, allowNull: true },
+    follower_tier: { type: DataTypes.STRING, allowNull: true },
   }, {
     tableName: 'registry_characters',
     underscored: true,
