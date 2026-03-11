@@ -227,7 +227,6 @@ export default function CharacterRegistryPage() {
   const [plotThreads, setPlotThreads]     = useState([]);
   const [generatingArc, setGeneratingArc] = useState(false);
   const [generatingId, setGeneratingId]   = useState(null);   // single char generation
-  const [generatingAll, setGeneratingAll] = useState(false);   // batch generation
 
   // Plot thread CRUD state
   const [showNewThread, setShowNewThread] = useState(false);
@@ -241,7 +240,6 @@ export default function CharacterRegistryPage() {
   const [worldMode, setWorldMode]           = useState(false);
   const [allCharacters, setAllCharacters]   = useState([]);
   const [worldType, setWorldType]           = useState('all');  // role type filter
-  const [worldExpanded, setWorldExpanded]   = useState({});     // { charId: true }
 
   // AI Writer state
   const [aiMode, setAiMode]             = useState('scene');    // scene | monologue | profile | gaps | next
@@ -394,7 +392,7 @@ export default function CharacterRegistryPage() {
       shadow:      { currentKnows: `${name} appeared at exactly the right moment.`, currentWants: `To be the answer someone needed.`, unresolved: `Whether the rescue was real.`, momentum: 'falling' },
     };
     const defaults = typeDefaults[character?.role_type] || typeDefaults.support;
-    return { ...defaults, relationships: [], isGenerated: true, isConfirmed: false };
+    return { ...defaults, relationships: [], isGenerated: true };
   }
 
   const generateState = useCallback(async (charId) => {
@@ -428,7 +426,6 @@ export default function CharacterRegistryPage() {
           momentum:      data.momentum || 'steady',
           relationships: data.relationships || [],
           isGenerated:   true,
-          isConfirmed:   false,
         };
       } else {
         newState = generateFallbackState(character);
@@ -466,37 +463,6 @@ export default function CharacterRegistryPage() {
     }
   }, [allCharacters, activeRegistry]);
 
-  const confirmState = useCallback((charId) => {
-    setLivingStates(prev => {
-      const confirmedState = { ...prev[charId], isConfirmed: true };
-      const updated = { ...prev, [charId]: confirmedState };
-      localStorage.setItem('wv_living_states', JSON.stringify(updated));
-      // Persist confirmation to DB
-      const character = allCharacters.find(c => c.id === charId) ||
-                        (activeRegistry?.characters || []).find(c => c.id === charId);
-      if (character) {
-        fetch(`${API}/characters/${charId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ evolution_tracking: { ...character.evolution_tracking, living_state: confirmedState } }),
-        })
-          .then(r => { if (!r.ok) console.warn('[ConfirmState] PUT failed:', r.status); })
-          .catch(err => console.warn('[ConfirmState] Network error:', err.message));
-      }
-      return updated;
-    });
-  }, [allCharacters, activeRegistry]);
-
-  const generateAllStates = useCallback(async () => {
-    const charList = worldMode ? allCharacters : (activeRegistry?.characters || []);
-    const ungenerated = charList.filter(c => !livingStates[c.id]?.isGenerated);
-    if (ungenerated.length === 0) return;
-    setGeneratingAll(true);
-    for (const char of ungenerated) {
-      await generateState(char.id);
-    }
-    setGeneratingAll(false);
-  }, [worldMode, allCharacters, activeRegistry, livingStates, generateState]);
 
   // Fetch book ID for interview context
   useEffect(() => {
@@ -1376,7 +1342,6 @@ export default function CharacterRegistryPage() {
   const exitWorldMode = useCallback(() => {
     setWorldMode(false);
     setWorldType('all');
-    setWorldExpanded({});
   }, []);
 
   // Enter/exit feed mode
@@ -2129,7 +2094,6 @@ export default function CharacterRegistryPage() {
                   const ls = livingStates[char.id] || null;
                   const meta = { color: ROLE_COLORS[char.role_type] || '#9a8c9e' };
                   const statusM = { draft: '#9a8c9e', accepted: '#3d8e42', declined: '#c43a2a', alive: '#c9a84c', sparked: '#aaa', breathing: '#7ab3d4', active: '#a889c8' };
-                  const expanded = !!worldExpanded[char.id];
                   const mom = MOMENTUM[ls?.momentum || 'dormant'];
                   const charName = char.selected_name || char.display_name || '?';
                   const initials = charName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
