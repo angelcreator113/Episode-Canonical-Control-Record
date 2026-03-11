@@ -708,24 +708,8 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
             character={c}
             onProfileUpdate={() => onRefresh?.()}
           />
-          {c.status !== 'finalized' && (
-            <>
-              {c.status !== 'accepted' && (
-                <button className="dossier-btn accept" onClick={() => onStatusChange?.(c.id, 'accepted')}>✓ Accept</button>
-              )}
-              {c.status !== 'declined' && (
-                <button className="dossier-btn decline" onClick={() => onStatusChange?.(c.id, 'declined')}>✗ Decline</button>
-              )}
-              {c.status === 'accepted' && (
-                <button className="dossier-btn finalize" onClick={() => onStatusChange?.(c.id, 'finalized')}>◆ Finalize to Canon</button>
-              )}
-            </>
-          )}
-          {c.status === 'finalized' && (
-            <>
-              <span className="dossier-finalized-label">◆ CANON LOCKED</span>
-              <button className="dossier-btn revert" onClick={() => onStatusChange?.(c.id, 'draft')}>↺ Revert to Draft</button>
-            </>
+          {c.status !== 'accepted' && (
+            <button className="dossier-btn accept" onClick={() => onStatusChange?.(c.id, 'accepted')}>✓ Accept</button>
           )}
         </div>
       </footer>

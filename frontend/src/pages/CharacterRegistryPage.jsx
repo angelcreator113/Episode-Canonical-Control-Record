@@ -1675,31 +1675,10 @@ export default function CharacterRegistryPage() {
 
                 {/* Actions */}
                 <div className="cr-dossier-actions">
-                  {c.status !== 'finalized' ? (
-                    <>
-                      {c.status !== 'accepted' && (
-                        <button className="cr-dossier-action-btn accept" onClick={() => setCharStatus(c.id, 'accepted')}>
-                          Accept
-                        </button>
-                      )}
-                      {c.status === 'accepted' && (
-                        <button className="cr-dossier-action-btn finalize" onClick={() => setCharStatus(c.id, 'finalized')}>
-                          Finalize to Canon
-                        </button>
-                      )}
-                      {c.status !== 'declined' && (
-                        <button className="cr-dossier-action-btn decline" onClick={() => setCharStatus(c.id, 'declined')}>
-                          Decline
-                        </button>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <div className="cr-dossier-finalized-label">CANON LOCKED</div>
-                      <button className="cr-dossier-action-btn revert" onClick={() => setCharStatus(c.id, 'draft')}>
-                        Revert to Draft
-                      </button>
-                    </>
+                  {c.status !== 'accepted' && (
+                    <button className="cr-dossier-action-btn accept" onClick={() => setCharStatus(c.id, 'accepted')}>
+                      Accept
+                    </button>
                   )}
                   <button className="cr-dossier-action-btn clone" onClick={() => cloneCharacter(c.id)} title="Duplicate this character">
                     ⧉ Clone
