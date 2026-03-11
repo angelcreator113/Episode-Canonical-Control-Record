@@ -366,6 +366,9 @@ export default function AmberPromptLibrary({ onSelect }) {
           color: #3d2030;
           line-height: 1.45;
           font-family: system-ui, sans-serif;
+          min-width: 0;
+          word-wrap: break-word;
+          overflow-wrap: break-word;
         }
         .apl-prompt-action {
           font-size: 10px;
@@ -393,7 +396,46 @@ export default function AmberPromptLibrary({ onSelect }) {
             bottom: 140px;
             right: 16px;
           }
-          .apl-nav { width: 120px; }
+          .apl-body {
+            flex-direction: column;
+          }
+          .apl-nav {
+            width: 100%;
+            flex-shrink: 0;
+            border-right: none;
+            border-bottom: 1px solid #f5edf1;
+            display: flex;
+            flex-direction: row;
+            overflow-x: auto;
+            overflow-y: hidden;
+            padding: 6px 8px;
+            gap: 4px;
+          }
+          .apl-nav-item {
+            flex-shrink: 0;
+            padding: 6px 10px;
+            border-radius: 20px;
+            white-space: nowrap;
+          }
+          .apl-nav-item.active {
+            background: #fef0f5;
+            border-right: none;
+            border: 1px solid #d4789a;
+          }
+          .apl-nav-label {
+            font-size: 10px;
+          }
+          .apl-prompts {
+            padding: 10px 12px 16px;
+            min-width: 0;
+          }
+          .apl-prompt-btn {
+            padding: 10px 12px;
+            gap: 8px;
+          }
+          .apl-prompt-text {
+            font-size: 12px;
+          }
         }
       `}</style>
     </>
