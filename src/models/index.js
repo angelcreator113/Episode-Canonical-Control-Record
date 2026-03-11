@@ -609,12 +609,11 @@ if (SocialProfileFollower && SocialProfileFollower.associate) {
   SocialProfileFollower.associate(requiredModels);
 }
 
-// SocialProfile ↔ SocialProfileRelationship (1:N both directions) — creator network
-if (SocialProfileRelationship) {
-  SocialProfile.hasMany(SocialProfileRelationship, { foreignKey: 'source_profile_id', as: 'outgoingRelationships' });
-  SocialProfile.hasMany(SocialProfileRelationship, { foreignKey: 'target_profile_id', as: 'incomingRelationships' });
-  SocialProfileRelationship.belongsTo(SocialProfile, { foreignKey: 'source_profile_id', as: 'sourceProfile' });
-  SocialProfileRelationship.belongsTo(SocialProfile, { foreignKey: 'target_profile_id', as: 'targetProfile' });
+// SocialProfile ↔ SocialProfileRelationship associations are defined
+// inside SocialProfile.associate() and SocialProfileRelationship.associate()
+// so we only need to call associate() on the relationship model here.
+if (SocialProfileRelationship && SocialProfileRelationship.associate) {
+  SocialProfileRelationship.associate(requiredModels);
 }
 
 console.log('✅ Model associations defined');
