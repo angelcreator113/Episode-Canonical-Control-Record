@@ -994,7 +994,7 @@ const DossierSection = React.forwardRef(function DossierSection(
   ref,
 ) {
   return (
-    <section className={`dossier-section ${collapsed ? 'collapsed' : ''} ${editing ? 'editing' : ''}`} ref={ref}>
+    <section className={`dossier-section ${collapsed ? 'collapsed' : ''} ${editing ? 'editing' : ''} ${def.key === 'authorknow' ? 'dossier-section-author' : ''}`} ref={ref} data-section={def.key}>
       <div className="dossier-section-header" onClick={onToggle}>
         <div className="dossier-section-left">
           <span className="dossier-section-num">{def.number}</span>
