@@ -1085,6 +1085,8 @@ router.post('/commit', optionalAuth, async (req, res) => {
       character_key: uniqueKey,
       display_name:   seed?.name || identity.name,
       selected_name:  seed?.name || identity.name,
+      gender:         identity.gender || seed?.gender || null,
+      pronouns:       identity.pronouns || seed?.pronouns || null,
       role_type:      safeRole,
       role_label:     identity.role_type || seed?.role_type || 'support',
       appearance_mode: 'on_page',

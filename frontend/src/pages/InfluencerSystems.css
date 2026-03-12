@@ -1,0 +1,616 @@
+/* ─────────────────────────────────────────────────
+   InfluencerSystems.css — Doc 03 · v1.0
+   Prefix: .is-
+   ───────────────────────────────────────────────── */
+
+/* ─── Shell ─── */
+.is-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  background: #faf9fc;
+  color: #0f0c14;
+  overflow: hidden;
+}
+
+/* ─── Header ─── */
+.is-header {
+  flex-shrink: 0;
+  padding: 28px 36px 0;
+  background: linear-gradient(135deg, #fdf2f6 0%, #f3effa 50%, #eef6fb 100%);
+  border-bottom: 1px solid #e8e4f0;
+}
+
+.is-header h1 {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  color: #0f0c14;
+  margin: 0 0 4px;
+}
+
+.is-header p {
+  font-size: 13px;
+  color: #7a7088;
+  margin: 0 0 18px;
+  letter-spacing: 0.2px;
+}
+
+/* ─── Tab Bar ─── */
+.is-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.is-tab {
+  padding: 10px 18px;
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #7a7088;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  letter-spacing: 0.3px;
+  white-space: nowrap;
+}
+
+.is-tab:hover {
+  color: #3d3548;
+  background: rgba(168, 137, 200, 0.06);
+}
+
+.is-tab.active {
+  color: #d4789a;
+  border-bottom-color: #d4789a;
+}
+
+/* ─── Content Area ─── */
+.is-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 28px 36px;
+}
+
+.is-content::-webkit-scrollbar { width: 6px; }
+.is-content::-webkit-scrollbar-track { background: transparent; }
+.is-content::-webkit-scrollbar-thumb {
+  background: #b8b0c8;
+  border-radius: 3px;
+}
+
+/* ─── Section Headers ─── */
+.is-section-title {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: #0f0c14;
+}
+
+.is-section-desc {
+  font-size: 13px;
+  color: #7a7088;
+  margin: 0 0 24px;
+  line-height: 1.5;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   01 · ARCHETYPES
+   ═══════════════════════════════════════════════════════════════════ */
+
+.is-archetype-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.is-archetype-card {
+  background: #ffffff;
+  border: 1px solid #e8e4f0;
+  border-top: 3px solid #e8e4f0;
+  border-radius: 12px;
+  padding: 18px;
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(15,12,20,.04);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+.is-archetype-card:hover {
+  box-shadow: 0 2px 12px rgba(15,12,20,.08);
+  transform: translateY(-1px);
+}
+
+.is-archetype-card.expanded {
+  grid-column: span 1;
+}
+
+.is-archetype-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.is-archetype-num {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 12px;
+  font-weight: 800;
+  letter-spacing: 0.5px;
+}
+
+.is-archetype-icon {
+  font-size: 22px;
+}
+
+.is-archetype-name {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  margin: 0 0 6px;
+  color: #0f0c14;
+}
+
+.is-archetype-content {
+  font-size: 12px;
+  color: #7a7088;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.is-archetype-content strong {
+  color: #3d3548;
+}
+
+.is-archetype-detail {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px dashed #e8e4f0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.is-archetype-row {
+  font-size: 12px;
+  line-height: 1.5;
+  color: #3d3548;
+}
+
+.is-archetype-row em {
+  color: #a889c8;
+}
+
+.is-archetype-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #b8b0c8;
+  margin-bottom: 2px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   02 · RELATIONSHIPS
+   ═══════════════════════════════════════════════════════════════════ */
+
+.is-rel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.is-rel-card {
+  background: #ffffff;
+  border: 1px solid #e8e4f0;
+  border-left: 4px solid #e8e4f0;
+  border-radius: 12px;
+  padding: 20px 24px;
+  box-shadow: 0 1px 3px rgba(15,12,20,.04);
+}
+
+.is-rel-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.is-rel-icon { font-size: 22px; }
+
+.is-rel-type {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 17px;
+  font-weight: 700;
+  margin: 0;
+  color: #0f0c14;
+}
+
+.is-rel-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.is-rel-cell {
+  background: #faf9fc;
+  border-radius: 8px;
+  padding: 12px 14px;
+}
+
+.is-rel-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #b8b0c8;
+  margin-bottom: 4px;
+}
+
+.is-rel-cell p {
+  font-size: 12px;
+  color: #3d3548;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.is-rel-story {
+  padding-top: 10px;
+  border-top: 1px dashed #e8e4f0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.is-rel-story em {
+  color: #a889c8;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   03 · ECONOMY
+   ═══════════════════════════════════════════════════════════════════ */
+
+.is-economy-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.is-economy-card {
+  background: #ffffff;
+  border: 1px solid #e8e4f0;
+  border-top: 3px solid #e8e4f0;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 1px 3px rgba(15,12,20,.04);
+}
+
+.is-economy-icon {
+  font-size: 26px;
+  margin-bottom: 8px;
+}
+
+.is-economy-name {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: #0f0c14;
+}
+
+.is-economy-what {
+  font-size: 12px;
+  color: #7a7088;
+  line-height: 1.5;
+  margin: 0 0 10px;
+}
+
+.is-economy-meta {
+  font-size: 12px;
+  color: #3d3548;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.is-economy-label {
+  font-weight: 600;
+  color: #7a7088;
+  margin-right: 6px;
+}
+
+.is-economy-narrative {
+  padding-top: 8px;
+  border-top: 1px dashed #e8e4f0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a889c8;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   04 & 05 · TREND ENGINES (Fashion + Beauty)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.is-trend-pipeline {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.is-trend-stage {
+  flex: 1;
+  min-width: 200px;
+  background: #ffffff;
+  border: 1px solid #e8e4f0;
+  border-top: 3px solid #e8e4f0;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 1px 3px rgba(15,12,20,.04);
+}
+
+.is-trend-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 22px;
+  color: #b8b0c8;
+  padding: 0 8px;
+  flex-shrink: 0;
+}
+
+.is-trend-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: #ffffff;
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 13px;
+  font-weight: 800;
+  margin-bottom: 8px;
+}
+
+.is-trend-name {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 10px;
+  color: #0f0c14;
+}
+
+.is-trend-row {
+  font-size: 12px;
+  color: #3d3548;
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+
+.is-trend-label {
+  font-weight: 600;
+  color: #7a7088;
+  margin-right: 6px;
+}
+
+.is-trend-story {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px dashed #e8e4f0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a889c8;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   06 · MOMENTUM WAVES
+   ═══════════════════════════════════════════════════════════════════ */
+
+.is-momentum-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.is-momentum-card {
+  background: #ffffff;
+  border: 1px solid #e8e4f0;
+  border-left: 4px solid #e8e4f0;
+  border-radius: 12px;
+  padding: 18px 22px;
+  box-shadow: 0 1px 3px rgba(15,12,20,.04);
+}
+
+.is-momentum-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.is-momentum-icon { font-size: 22px; }
+
+.is-momentum-event {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: #0f0c14;
+  flex: 1;
+}
+
+.is-momentum-duration {
+  font-size: 12px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.is-momentum-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.is-momentum-row {
+  font-size: 12px;
+  color: #3d3548;
+  line-height: 1.5;
+}
+
+.is-momentum-label {
+  font-weight: 600;
+  color: #7a7088;
+  margin-right: 6px;
+}
+
+.is-momentum-permanent {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed #e8e4f0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a889c8;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   07 · INFLUENCE POWER (3 Forces)
+   ═══════════════════════════════════════════════════════════════════ */
+
+.is-influence-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 20px;
+}
+
+.is-influence-card {
+  background: #ffffff;
+  border: 1px solid #e8e4f0;
+  border-top: 3px solid #e8e4f0;
+  border-radius: 12px;
+  padding: 22px;
+  box-shadow: 0 1px 3px rgba(15,12,20,.04);
+}
+
+.is-influence-icon {
+  font-size: 28px;
+  margin-bottom: 8px;
+}
+
+.is-influence-name {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 18px;
+  font-weight: 700;
+  margin: 0 0 8px;
+  color: #0f0c14;
+}
+
+.is-influence-def {
+  font-size: 13px;
+  color: #7a7088;
+  line-height: 1.5;
+  margin: 0 0 14px;
+}
+
+.is-influence-row {
+  font-size: 12px;
+  color: #3d3548;
+  line-height: 1.5;
+  margin-bottom: 6px;
+  padding: 8px 12px;
+  background: #faf9fc;
+  border-radius: 6px;
+}
+
+.is-influence-destroys {
+  background: #fdf2f6;
+}
+
+.is-influence-label {
+  display: block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #b8b0c8;
+  margin-bottom: 3px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   08 · LEGACY SIGNALS
+   ═══════════════════════════════════════════════════════════════════ */
+
+.is-legacy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.is-legacy-card {
+  background: #ffffff;
+  border: 1px solid #e8e4f0;
+  border-left: 4px solid #e8e4f0;
+  border-radius: 12px;
+  padding: 18px 22px;
+  box-shadow: 0 1px 3px rgba(15,12,20,.04);
+}
+
+.is-legacy-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.is-legacy-icon { font-size: 22px; }
+
+.is-legacy-signal {
+  font-family: 'Syne', 'Helvetica Neue', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+  color: #0f0c14;
+}
+
+.is-legacy-looks {
+  font-size: 12px;
+  color: #3d3548;
+  line-height: 1.5;
+  margin: 0 0 8px;
+}
+
+.is-legacy-story {
+  padding-top: 8px;
+  border-top: 1px dashed #e8e4f0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #a889c8;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ═══════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 1100px) {
+  .is-archetype-grid { grid-template-columns: repeat(2, 1fr); }
+  .is-economy-grid { grid-template-columns: repeat(2, 1fr); }
+  .is-influence-grid { grid-template-columns: 1fr; }
+  .is-rel-grid { grid-template-columns: 1fr; }
+  .is-trend-pipeline { flex-wrap: wrap; gap: 12px; }
+  .is-trend-arrow { display: none; }
+}
+
+@media (max-width: 720px) {
+  .is-header { padding: 20px 20px 0; }
+  .is-content { padding: 20px; }
+  .is-archetype-grid { grid-template-columns: 1fr; }
+  .is-economy-grid { grid-template-columns: 1fr; }
+  .is-tab { padding: 8px 12px; font-size: 12px; }
+}

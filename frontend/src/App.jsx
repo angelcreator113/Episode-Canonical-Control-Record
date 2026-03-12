@@ -101,6 +101,9 @@ const NarrativeControlCenter = lazy(() => import('./pages/NarrativeControlCenter
 const AmberCommandCenter = lazy(() => import('./pages/AmberCommandCenter'));
 const NarrativePressureDashboard = lazy(() => import('./pages/NarrativePressureDashboard'));
 const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
+const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
+const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
+const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -367,6 +370,15 @@ function AppContent() {
           
           {/* PNOS Relationships — Unified Tree + Web + Candidates + List */}
           <Route path="/relationships" element={<RelationshipEngine />} />
+
+          {/* Cultural Calendar — LalaVerse Social & Industry Calendar */}
+          <Route path="/cultural-calendar" element={<CulturalCalendar />} />
+
+          {/* Influencer Systems — Archetypes, Relationships, Economy, Trends, Momentum, Legacy */}
+          <Route path="/influencer-systems" element={<InfluencerSystems />} />
+
+          {/* World Infrastructure — Cities, Universities, Corporations, 50 Legends, The Loop */}
+          <Route path="/world-infrastructure" element={<WorldInfrastructure />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />

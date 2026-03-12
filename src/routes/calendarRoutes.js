@@ -121,10 +121,15 @@ router.get('/events', async (req, res) => {
   const { StoryCalendarEvent, StoryClockMarker } = getModels(req);
   try {
     const where = {};
-    if (req.query.series_id)      where.series_id = req.query.series_id;
-    if (req.query.event_type)     where.event_type = req.query.event_type;
-    if (req.query.story_position) where.story_position = req.query.story_position;
-    if (req.query.visibility)     where.visibility = req.query.visibility;
+    if (req.query.series_id)         where.series_id = req.query.series_id;
+    if (req.query.event_type)        where.event_type = req.query.event_type;
+    if (req.query.story_position)    where.story_position = req.query.story_position;
+    if (req.query.visibility)        where.visibility = req.query.visibility;
+    if (req.query.cultural_category) where.cultural_category = req.query.cultural_category;
+    if (req.query.severity_level)    where.severity_level = req.query.severity_level;
+    if (req.query.is_micro_event !== undefined) {
+      where.is_micro_event = req.query.is_micro_event === 'true';
+    }
 
     const events = await StoryCalendarEvent.findAll({
       where,

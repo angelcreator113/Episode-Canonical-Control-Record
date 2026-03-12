@@ -91,6 +91,27 @@ module.exports = (sequelize, DataTypes) => {
       type:      DataTypes.UUID,
       allowNull: true,
     },
+    /* ─── cultural calendar fields ─── */
+    severity_level: {
+      type:      DataTypes.STRING(50),
+      allowNull: true,
+    },
+    cultural_category: {
+      type:      DataTypes.STRING(100),
+      allowNull: true,
+    },
+    activities: {
+      type:      DataTypes.JSONB,
+      allowNull: true,
+    },
+    phrases: {
+      type:      DataTypes.JSONB,
+      allowNull: true,
+    },
+    is_micro_event: {
+      type:         DataTypes.BOOLEAN,
+      defaultValue: false,
+    },
   }, {
     sequelize,
     modelName:   'StoryCalendarEvent',
