@@ -1947,6 +1947,8 @@ export default function CharacterRegistryPage() {
         onToggleFilters={() => setShowFilters(f => !f)}
         onNewChar={() => activeRegistry ? setShowCreationDrawer(true) : null}
         isMobile={isMobile}
+        feedMode={feedMode}
+        worldMode={worldMode}
       >
         {/* Registry tabs inside header */}
         {registries.length > 0 && (
@@ -2689,7 +2691,8 @@ export default function CharacterRegistryPage() {
 /* ================================================================
    HEADER BAR
    ================================================================ */
-function HeaderBar({ viewMode, onViewMode, showFilters, onToggleFilters, onNewChar, isMobile, children }) {
+function HeaderBar({ viewMode, onViewMode, showFilters, onToggleFilters, onNewChar, isMobile, feedMode, worldMode, children }) {
+  const showControls = !feedMode;
   return (
     <div className="cr-header">
       <div className="cr-header-left">
@@ -2702,15 +2705,19 @@ function HeaderBar({ viewMode, onViewMode, showFilters, onToggleFilters, onNewCh
       </div>
 
       <div className="cr-header-right">
-        <button className="cr-header-btn primary" onClick={onNewChar}>
-          {isMobile ? '+' : '+ New Character'}
-        </button>
+        {showControls && !worldMode && (
+          <button className="cr-header-btn primary" onClick={onNewChar}>
+            {isMobile ? '+' : '+ New Character'}
+          </button>
+        )}
 
-        <button className={`cr-header-btn ${showFilters ? 'active' : ''}`} onClick={onToggleFilters}>
-          {isMobile ? '⚙' : 'Filter'}
-        </button>
+        {showControls && (
+          <button className={`cr-header-btn ${showFilters ? 'active' : ''}`} onClick={onToggleFilters}>
+            {isMobile ? '⚙' : 'Filter'}
+          </button>
+        )}
 
-        {!isMobile && (
+        {showControls && !isMobile && (
           <div className="cr-view-toggle">
             <button className={viewMode === 'grid' ? 'active' : ''} onClick={() => onViewMode('grid')}
               title="Grid view">▦</button>

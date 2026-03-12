@@ -19,6 +19,8 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import SocialProfileGenerator from './SocialProfileGenerator';
+import RelationshipEngine from './RelationshipEngine';
 import './WorldStudio.css';
 
 const API = '/api/v1';
@@ -368,6 +370,9 @@ function DemographicsPanel({ charDetail }) {
 export default function WorldStudio() {
   const navigate = useNavigate();
 
+  /* ── Top-level page tab ─────────────────────────────────────────────── */
+  const [pageTab, setPageTab] = useState('lalaverse');
+
   /* ── World ─────────────────────────────────────────────────────────── */
   const [worldTag, setWorldTag] = useState('lalaverse');
   const curWorld = WORLD_OPTIONS.find(w => w.tag === worldTag) || WORLD_OPTIONS[0];
@@ -390,7 +395,6 @@ export default function WorldStudio() {
   const [showPreview,   setShowPreview]   = useState(false);
   const [bulkActivating,setBulkActivating]= useState(false);
   const [currentPage,   setCurrentPage]  = useState(1);
-  const [seeding,       setSeeding]      = useState(false);
 
   /* ── Relationship modal ────────────────────────────────────────────── */
   const [showAddRel, setShowAddRel] = useState(false);
@@ -416,7 +420,12 @@ export default function WorldStudio() {
   /* ── Loaders ───────────────────────────────────────────────────────── */
   const loadCharacters = useCallback(async (tag) => {
     try {
-      const r = await fetch(`${API}/world/characters?world_tag=${encodeURIComponent(tag || worldTag)}`);
+      // All Characters tab: fetch all worlds combined
+      const effectiveTag = tag || worldTag;
+      const url = effectiveTag === 'all'
+        ? `${API}/world/characters`
+        : `${API}/world/characters?world_tag=${encodeURIComponent(effectiveTag)}`;
+      const r = await fetch(url);
       const d = await r.json();
       setCharacters(d.characters || []);
     } catch (e) { console.error(e); }
@@ -432,9 +441,11 @@ export default function WorldStudio() {
   }, []);
 
   useEffect(() => {
-    loadCharacters(worldTag);
+    if (pageTab !== 'feed' && pageTab !== 'relationships') {
+      loadCharacters(worldTag);
+    }
     setSelectedChar(null); setCharDetail(null); setEditMode(false); setCurrentPage(1);
-  }, [worldTag]);
+  }, [worldTag, pageTab]);
 
   useEffect(() => { setCurrentPage(1); }, [charSearch, charFilter]);
   useEffect(() => { if (selectedChar) loadCharDetail(selectedChar); }, [selectedChar]);
@@ -529,19 +540,6 @@ export default function WorldStudio() {
     setBulkActivating(false);
   };
 
-  const seedRelationships = async () => {
-    setSeeding(true);
-    try {
-      const r = await fetch(`${API}/world/seed-relationships`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ world_tag: worldTag }),
-      });
-      const d = await r.json();
-      flash(d.message || 'Done');
-    } catch (e) { flash(e.message, 'error'); }
-    finally { setSeeding(false); }
-  };
-
   /* ── Relationship ──────────────────────────────────────────────────── */
   const addRelationship = async () => {
     if (!selectedChar) return;
@@ -589,47 +587,79 @@ export default function WorldStudio() {
 
       {/* ── PAGE HEADER ─────────────────────────────────────────────── */}
       <div className="ws4-page-header">
-        <div className="ws4-breadcrumb">
-          <span className="ws4-breadcrumb-link" onClick={() => navigate('/')}>Home</span>
-          <span className="ws4-breadcrumb-sep">/</span>
-          <span className="ws4-breadcrumb-current">Create World</span>
-        </div>
-
         <div className="ws4-header-row">
-          <div>
-            <h1 className="ws4-page-title">Create World</h1>
+          <div className="ws4-header-title-block">
+            <div className="ws4-breadcrumb">
+              <span className="ws4-breadcrumb-link" onClick={() => navigate('/')}>Home</span>
+              <span className="ws4-breadcrumb-sep">/</span>
+              <span className="ws4-breadcrumb-current">World Studio</span>
+            </div>
+            <h1 className="ws4-page-title">World Studio</h1>
           </div>
 
-          {/* World Switcher */}
-          <div className="ws4-world-switcher">
-            {WORLD_OPTIONS.map(w => (
+          {/* Top-level tabs — matches Character Registry pattern */}
+          <nav className="ws4-page-tabs">
+            {[
+              { key: 'lalaverse',      label: 'LalaVerse',      icon: '✦' },
+              { key: 'before-lala',    label: 'Before Lala',    icon: '◈' },
+              { key: 'all-characters', label: 'All Characters', icon: '🌍' },
+              { key: 'relationships',  label: 'Relationships',  icon: '🔗' },
+              { key: 'feed',           label: 'The Feed',       icon: '📱' },
+            ].map(t => (
               <button
-                key={w.tag}
-                className={`ws4-world-btn ${worldTag === w.tag ? 'ws4-world-btn-active' : ''}`}
-                onClick={() => setWorldTag(w.tag)}
+                key={t.key}
+                className={`ws4-page-tab ${pageTab === t.key ? 'ws4-page-tab-active' : ''}`}
+                onClick={() => {
+                  setPageTab(t.key);
+                  if (t.key === 'lalaverse')      setWorldTag('lalaverse');
+                  if (t.key === 'before-lala')    setWorldTag('book-1');
+                  if (t.key === 'all-characters') setWorldTag('all');
+                  setSelectedChar(null);
+                  setCharDetail(null);
+                  setCharFilter('all');
+                }}
               >
-                <span className="ws4-world-icon">{w.icon}</span>
-                {w.label}
+                <span className="ws4-page-tab-icon">{t.icon}</span>
+                {t.label}
               </button>
             ))}
-          </div>
+          </nav>
 
-          {/* Action buttons */}
-          <div className="ws4-header-actions">
-            {draftCount > 0 && (
-              <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={bulkActivate} disabled={bulkActivating}>
-                {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
-              </button>
-            )}
-            <button className="ws4-btn ws4-btn-ghost ws4-btn-sm" onClick={seedRelationships} disabled={seeding}>
-              {seeding ? '…' : '🔗 Seed Relationships'}
-            </button>
-            <button className="ws4-btn ws4-btn-primary" onClick={generatePreview} disabled={generating}>
-              {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
-            </button>
-          </div>
+          {/* Action buttons — only on world tabs */}
+          {(pageTab === 'lalaverse' || pageTab === 'before-lala' || pageTab === 'all-characters') && (
+            <div className="ws4-header-actions">
+              {draftCount > 0 && (
+                <button className="ws4-btn ws4-btn-outline ws4-btn-sm" onClick={bulkActivate} disabled={bulkActivating}>
+                  {bulkActivating ? '…' : `✓ Activate ${draftCount}`}
+                </button>
+              )}
+              {(pageTab === 'lalaverse' || pageTab === 'before-lala') && (
+                <button className="ws4-btn ws4-btn-primary" onClick={generatePreview} disabled={generating}>
+                  {generating ? '⏳ Generating…' : '✦ Generate Ecosystem'}
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </div>
+
+      {/* ── FEED TAB ────────────────────────────────────────────────── */}
+      {pageTab === 'feed' && (
+        <div className="ws4-feed-tab">
+          <SocialProfileGenerator embedded={true} />
+        </div>
+      )}
+
+      {/* ── RELATIONSHIPS TAB ───────────────────────────────────────── */}
+      {pageTab === 'relationships' && (
+        <div className="ws4-feed-tab">
+          <RelationshipEngine />
+        </div>
+      )}
+
+      {/* ── WORLD / CHARACTER TABS ──────────────────────────────────── */}
+      {pageTab !== 'feed' && pageTab !== 'relationships' && (
+      <>
 
       {/* ── STATS BAR ───────────────────────────────────────────────── */}
       <div className="ws4-stats-bar">
@@ -675,6 +705,15 @@ export default function WorldStudio() {
                 );
               })}
             </div>
+
+            {/* Top Pagination */}
+            {totalPages > 1 && (
+              <div className="ws4-pagination">
+                <button className="ws4-page-btn" disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)}>‹</button>
+                <span className="ws4-page-info">{currentPage} / {totalPages}</span>
+                <button className="ws4-page-btn" disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)}>›</button>
+              </div>
+            )}
 
             {/* Character list */}
             <div className="ws4-char-list">
@@ -1210,6 +1249,9 @@ export default function WorldStudio() {
           </div>
         </div>
       )}
+
+      </>
+      ) /* end world/character tabs */}
 
       {/* Toast */}
       {toast && (
