@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import './CharacterLifeSimulation.css';
+import usePageData from '../hooks/usePageData';
+import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════
    Character Life Simulation System — Doc 07 · v1.0
@@ -106,6 +108,11 @@ const GENERATIONAL_MOMENTS = [
   { moment: 'Founding a brand or institution', changes: 'She moves from creator to architect — building the structure others will inhabit', stays: 'The voice. The original vision.', story: 'Who built it and who benefits from it are not always the same person.' },
 ];
 
+const DEFAULTS = {
+  CAREER_STAGES, CAREER_PATHS, ROMANTIC_TYPES, FAMILY_ROLES, FRIEND_GROUPS,
+  MILESTONES, RIVALRIES, MENTORSHIP_CHAINS, MIGRATIONS, PERSONA_GAPS, GENERATIONAL_MOMENTS,
+};
+
 /* ─── TAB RENDERERS ─── */
 
 function renderStages() {
@@ -124,8 +131,9 @@ function renderStages() {
       </div>
 
       <div className="cls-stage-track">
-        {CAREER_STAGES.map((s) => (
-          <div key={s.stage} className="cls-stage-card">
+        <EditableList constantKey="CAREER_STAGES" defaults={CAREER_STAGES} label="Add Stage">
+          {(s) => (
+          <div className="cls-stage-card">
             <div className="cls-stage-number">Stage {s.stage}</div>
             <h3 className="cls-stage-name">{s.name}</h3>
             <div className="cls-stage-field"><strong>Position</strong><p>{s.position}</p></div>
@@ -133,7 +141,8 @@ function renderStages() {
             <div className="cls-stage-field"><strong>Access</strong><p>{s.access}</p></div>
             <div className="cls-stage-tension"><strong>Internal Arc Tension</strong><p>{s.tension}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -146,8 +155,9 @@ function renderCareers() {
         Career path shapes what cultural events are relevant, which cities they live in, which institutions trained them, and which legendary figures they look up to.
       </p>
       <div className="cls-career-grid">
-        {CAREER_PATHS.map((c) => (
-          <div key={c.industry} className="cls-career-card" style={{ borderTopColor: c.color }}>
+        <EditableList constantKey="CAREER_PATHS" defaults={CAREER_PATHS} label="Add Career Path">
+          {(c) => (
+          <div className="cls-career-card" style={{ borderTopColor: c.color }}>
             <h3 className="cls-career-industry">{c.industry}</h3>
             <div className="cls-career-tracks">{c.tracks}</div>
             <table className="cls-mini-table">
@@ -158,7 +168,8 @@ function renderCareers() {
               </tbody>
             </table>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -173,25 +184,29 @@ function renderRelationships() {
 
       <h3 className="cls-sub-heading">Romantic Relationship Types</h3>
       <div className="cls-rel-grid">
-        {ROMANTIC_TYPES.map((r) => (
-          <div key={r.type} className="cls-rel-card">
+        <EditableList constantKey="ROMANTIC_TYPES" defaults={ROMANTIC_TYPES} label="Add Romantic Type">
+          {(r) => (
+          <div className="cls-rel-card">
             <h4>{r.type}</h4>
             <div className="cls-rel-row"><span className="cls-rel-tag provides">Provides</span><p>{r.provides}</p></div>
             <div className="cls-rel-row"><span className="cls-rel-tag costs">Costs</span><p>{r.costs}</p></div>
             <div className="cls-rel-row"><span className="cls-rel-tag ends">When It Ends</span><p>{r.ends}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
 
       <h3 className="cls-sub-heading">Family Tree Structure</h3>
       <div className="cls-family-grid">
-        {FAMILY_ROLES.map((f) => (
-          <div key={f.role} className="cls-family-card">
+        <EditableList constantKey="FAMILY_ROLES" defaults={FAMILY_ROLES} label="Add Family Role">
+          {(f) => (
+          <div className="cls-family-card">
             <h4>{f.role}</h4>
             <div className="cls-family-field"><strong>Feed Impact</strong><p>{f.feed}</p></div>
             <div className="cls-family-field"><strong>Story Potential</strong><p className="cls-story-italic">{f.story}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -204,20 +219,24 @@ function renderFriends() {
         The cluster a character belongs to is part of their identity — and leaving one is always a story.
       </p>
       <div className="cls-friend-grid">
-        {FRIEND_GROUPS.map((f) => (
-          <div key={f.type} className="cls-friend-card">
+        <EditableList constantKey="FRIEND_GROUPS" defaults={FRIEND_GROUPS} label="Add Friend Group">
+          {(f) => (
+          <div className="cls-friend-card">
             <h4>{f.type}</h4>
             <div className="cls-friend-field"><strong>Who's In It</strong><p>{f.who}</p></div>
             <div className="cls-friend-field"><strong>What It Creates</strong><p>{f.creates}</p></div>
             <div className="cls-friend-break"><strong>What Breaks It</strong><p>{f.breaks}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
 }
 
 function renderMilestones() {
+  const { data } = usePageEdit();
+  const milestones = data.MILESTONES || MILESTONES;
   const categories = ['Career', 'Relationship', 'Life'];
   return (
     <div className="cls-section">
@@ -228,8 +247,8 @@ function renderMilestones() {
         <div key={cat}>
           <h3 className="cls-sub-heading">{cat} Milestones</h3>
           <div className="cls-milestone-grid">
-            {MILESTONES.filter((m) => m.cat === cat).map((m) => (
-              <div key={m.milestone} className="cls-milestone-card">
+            {milestones.filter((m) => m.cat === cat).map((m, i) => (
+              <div key={i} className="cls-milestone-card">
                 <h4>{m.milestone}</h4>
                 <div className="cls-milestone-field"><strong>Feed Event</strong><p>{m.feed}</p></div>
                 <div className="cls-milestone-signal"><strong>Internal Arc Signal</strong><p>{m.signal}</p></div>
@@ -249,8 +268,9 @@ function renderRivalries() {
         Rivalries intensify at specific cultural pressure points — award seasons, Atelier Circuit, trend cycles — when the stakes of being better are publicly legible.
       </p>
       <div className="cls-rivalry-stack">
-        {RIVALRIES.map((r) => (
-          <div key={r.type} className="cls-rivalry-card">
+        <EditableList constantKey="RIVALRIES" defaults={RIVALRIES} label="Add Rivalry">
+          {(r) => (
+          <div className="cls-rivalry-card">
             <h4 className="cls-rivalry-title">{r.type}</h4>
             <div className="cls-rivalry-phases">
               <div className="cls-rivalry-phase"><span className="cls-phase-label">Trigger</span><p>{r.trigger}</p></div>
@@ -262,31 +282,36 @@ function renderRivalries() {
               <div className="cls-rivalry-phase"><span className="cls-phase-label">Resolution</span><p>{r.ends}</p></div>
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
 }
 
 function renderMentorship() {
+  const { data } = usePageEdit();
+  const items = data.MENTORSHIP_CHAINS || MENTORSHIP_CHAINS;
   return (
     <div className="cls-section">
       <p className="cls-intro">
         The chain creates generational influence — the mentor's approach lives in the student's work long after the relationship ends.
       </p>
       <div className="cls-mentor-chain">
-        {MENTORSHIP_CHAINS.map((m, i) => (
-          <React.Fragment key={m.gen}>
-            <div className="cls-mentor-card">
-              <h4 className="cls-mentor-gen">{m.gen}</h4>
-              <p className="cls-mentor-role">{m.role}</p>
-              <div className="cls-mentor-row"><span className="cls-mentor-tag gives">Provides</span><p>{m.provides}</p></div>
-              <div className="cls-mentor-row"><span className="cls-mentor-tag takes">Takes</span><p>{m.takes}</p></div>
-              <div className="cls-mentor-break"><strong>When the Chain Breaks</strong><p>{m.breaks}</p></div>
-            </div>
-            {i < MENTORSHIP_CHAINS.length - 1 && <div className="cls-chain-arrow">↓</div>}
-          </React.Fragment>
-        ))}
+        <EditableList constantKey="MENTORSHIP_CHAINS" defaults={MENTORSHIP_CHAINS} label="Add Generation">
+          {(m, idx) => (
+            <>
+              <div className="cls-mentor-card">
+                <h4 className="cls-mentor-gen">{m.gen}</h4>
+                <p className="cls-mentor-role">{m.role}</p>
+                <div className="cls-mentor-row"><span className="cls-mentor-tag gives">Provides</span><p>{m.provides}</p></div>
+                <div className="cls-mentor-row"><span className="cls-mentor-tag takes">Takes</span><p>{m.takes}</p></div>
+                <div className="cls-mentor-break"><strong>When the Chain Breaks</strong><p>{m.breaks}</p></div>
+              </div>
+              {idx < items.length - 1 && <div className="cls-chain-arrow">↓</div>}
+            </>
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -299,14 +324,16 @@ function renderMigration() {
         Where a character lives is a character statement. Where they move to reveals what they're looking for. What they leave behind is the story.
       </p>
       <div className="cls-migration-stack">
-        {MIGRATIONS.map((m) => (
-          <div key={m.pattern} className="cls-migration-card">
+        <EditableList constantKey="MIGRATIONS" defaults={MIGRATIONS} label="Add Migration">
+          {(m) => (
+          <div className="cls-migration-card">
             <h4 className="cls-migration-pattern">{m.pattern}</h4>
             <div className="cls-migration-field"><strong>What It Signals</strong><p>{m.signals}</p></div>
             <div className="cls-migration-field"><strong>Career Effect</strong><p>{m.career}</p></div>
             <div className="cls-migration-story"><strong>Story Beneath It</strong><p>{m.story}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -319,8 +346,9 @@ function renderPersona() {
         Every character maintains two identities. The gap between them is where the most important stories live.
       </p>
       <div className="cls-persona-grid">
-        {PERSONA_GAPS.map((p) => (
-          <div key={p.gap} className={`cls-persona-card cls-gap-${p.gap.toLowerCase().replace(/\s+/g, '-')}`}>
+        <EditableList constantKey="PERSONA_GAPS" defaults={PERSONA_GAPS} label="Add Gap Type">
+          {(p) => (
+          <div className={`cls-persona-card cls-gap-${(p.gap || '').toLowerCase().replace(/\s+/g, '-')}`}>
             <h4 className="cls-gap-label">{p.gap} Gap</h4>
             <div className="cls-persona-side">
               <div className="cls-persona-half public"><strong>Public Persona</strong><p>{p.public}</p></div>
@@ -328,7 +356,8 @@ function renderPersona() {
             </div>
             <div className="cls-persona-story"><strong>Story in the Gap</strong><p>{p.story}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -341,8 +370,9 @@ function renderGenerational() {
         Characters mature, shift priorities, and eventually transition from participant to institution.
       </p>
       <div className="cls-gen-stack">
-        {GENERATIONAL_MOMENTS.map((g) => (
-          <div key={g.moment} className="cls-gen-card">
+        <EditableList constantKey="GENERATIONAL_MOMENTS" defaults={GENERATIONAL_MOMENTS} label="Add Moment">
+          {(g) => (
+          <div className="cls-gen-card">
             <h4>{g.moment}</h4>
             <div className="cls-gen-columns">
               <div className="cls-gen-col changes"><strong>What Changes</strong><p>{g.changes}</p></div>
@@ -350,7 +380,8 @@ function renderGenerational() {
             </div>
             <div className="cls-gen-story"><strong>Story It Creates</strong><p>{g.story}</p></div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -373,11 +404,18 @@ const TAB_RENDERERS = {
 
 export default function CharacterLifeSimulation() {
   const [activeTab, setActiveTab] = useState('stages');
+  const [editItem, setEditItem] = useState(null);
+  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('character_life_simulation', DEFAULTS);
+  const Renderer = TAB_RENDERERS[activeTab];
 
   return (
+    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
     <div className="cls-page">
       <header className="cls-header">
-        <h1>Character Life Simulation</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1>Character Life Simulation</h1>
+          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+        </div>
         <p className="cls-subtitle">Doc 07 · v1.0 — How characters evolve through career stages, relationships, cities, and life events</p>
       </header>
 
@@ -396,8 +434,22 @@ export default function CharacterLifeSimulation() {
       </nav>
 
       <main className="cls-content">
-        {TAB_RENDERERS[activeTab]?.()}
+        {Renderer && <Renderer />}
       </main>
+
+      {editItem && (
+        <EditItemModal
+          item={editItem.item}
+          title={`Edit ${editItem.key.replace(/_/g, ' ')}`}
+          onSave={(updated) => {
+            if (editItem.index === -1) addItem(editItem.key, updated);
+            else updateItem(editItem.key, editItem.index, updated);
+            setEditItem(null);
+          }}
+          onCancel={() => setEditItem(null)}
+        />
+      )}
     </div>
+    </PageEditContext.Provider>
   );
 }

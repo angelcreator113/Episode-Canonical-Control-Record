@@ -125,6 +125,7 @@ let CalendarEventRipple; // Story Calendar: event propagation / ripple threads
 let FeedProfileRelationship; // Feed Relationship Map: influencer-to-influencer
 let CharacterCrossing; // Character Crossings: interior → public transition
 let AuthorNote; // Author Layer: polymorphic creative decision notes
+let PageContent; // Page Content: editable page data (JSONB)
 
 try {
   // Core models
@@ -349,6 +350,7 @@ try {
   FeedProfileRelationship = require('./FeedProfileRelationship')(sequelize, DataTypes);
   CharacterCrossing = require('./CharacterCrossing')(sequelize, DataTypes);
   AuthorNote = require('./AuthorNote')(sequelize, DataTypes);
+  PageContent = require('./PageContent')(sequelize, DataTypes);
 
   console.log('✅ All models loaded successfully');
 } catch (error) {
@@ -481,6 +483,7 @@ const requiredModels = {
   FeedProfileRelationship,
   CharacterCrossing,
   AuthorNote,
+  PageContent,
 };
 
 Object.entries(requiredModels).forEach(([name, model]) => {
@@ -1818,3 +1821,4 @@ module.exports.CalendarEventRipple = CalendarEventRipple;
 module.exports.FeedProfileRelationship = FeedProfileRelationship;
 module.exports.CharacterCrossing = CharacterCrossing;
 module.exports.AuthorNote = AuthorNote;
+module.exports.PageContent = PageContent;

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './CulturalCalendar.css';
+import usePageData from '../hooks/usePageData';
+import { EditItemModal, EditToolbar, PageEditContext, EditableList } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════════════
    CulturalCalendar.jsx — LalaVerse Cultural & Social Systems v2.0
@@ -253,11 +255,20 @@ const BIRTHDAY_TEMPLATES = [
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════════════ */
 
+const DEFAULTS = {
+  CELEBRITY_HIERARCHY, FASHION_TIERS, BEAUTY_TIERS,
+  ALGORITHM_FORCES, DRAMA_MECHANICS, AWARD_SHOWS,
+  GOSSIP_MEDIA, FAMOUS_CHARACTERS, BIRTHDAY_TEMPLATES,
+};
+
 export default function CulturalCalendar() {
   const [tab, setTab]             = useState('timeline');
   const [events, setEvents]       = useState([]);
   const [loading, setLoading]     = useState(true);
   const [expandedId, setExpandedId] = useState(null);
+  const [editItem, setEditItem]   = useState(null);
+
+  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('cultural_calendar', DEFAULTS);
 
   /* ── Fetch events from API ── */
   useEffect(() => {
@@ -296,9 +307,13 @@ export default function CulturalCalendar() {
 
   /* ── Render ── */
   return (
+    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
     <div className="cc-shell">
       <header className="cc-header">
-        <h1>Cultural Calendar</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1>Cultural Calendar</h1>
+          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+        </div>
         <p>LalaVerse Cultural & Social Systems — franchise_law · always_inject</p>
         <nav className="cc-tabs">
           {TABS.map(t => (
@@ -319,7 +334,7 @@ export default function CulturalCalendar() {
         {!loading && tab === 'timeline' && (
           <TimelineView byMonth={byMonth()} toggle={toggle}
             expandedId={expandedId} majorCount={majorEvents.length}
-            microCount={microEvents.length} totalCount={events.length} />
+            microCount={microEvents.length} totalCount={events.length} data={data} />
         )}
         {!loading && tab === 'hierarchy' && <HierarchyView />}
         {!loading && tab === 'industries' && <IndustriesView />}
@@ -331,7 +346,21 @@ export default function CulturalCalendar() {
         )}
         {!loading && tab === 'famous'     && <FamousView />}
       </div>
+
+      {editItem && (
+        <EditItemModal
+          item={editItem.item}
+          title={`Edit ${editItem.key.replace(/_/g, ' ')}`}
+          onSave={(updated) => {
+            if (editItem.index === -1) addItem(editItem.key, updated);
+            else updateItem(editItem.key, editItem.index, updated);
+            setEditItem(null);
+          }}
+          onCancel={() => setEditItem(null)}
+        />
+      )}
     </div>
+    </PageEditContext.Provider>
   );
 }
 
@@ -389,12 +418,13 @@ function EventCard({ ev, expanded, toggle }) {
   );
 }
 
-function TierPanel({ title, icon, tiers }) {
+function TierPanel({ title, icon, tiers, constantKey }) {
   return (
     <div className="cc-industry-panel">
       <h3 className="cc-industry-title">{icon} {title}</h3>
-      {tiers.map(t => (
-        <div className="cc-tier" key={t.tier}>
+      <EditableList constantKey={constantKey} defaults={tiers} label={`Add ${title} Tier`}>
+        {(t) => (
+        <div className="cc-tier">
           <div className="cc-tier-badge" style={{ background: t.color }}>{t.tier}</div>
           <div className="cc-tier-info">
             <h4>{t.name}</h4>
@@ -405,7 +435,8 @@ function TierPanel({ title, icon, tiers }) {
             )}
           </div>
         </div>
-      ))}
+        )}
+      </EditableList>
     </div>
   );
 }
@@ -414,15 +445,15 @@ function TierPanel({ title, icon, tiers }) {
    TIMELINE VIEW
    ═══════════════════════════════════════════════════════════════════════ */
 
-function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, totalCount }) {
+function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, totalCount, data }) {
   return (
     <>
       <div className="cc-stats">
         <Stat n={majorCount} label="Major Events" color={T.rose} />
         <Stat n={microCount} label="Micro Events" color={T.orchid} />
         <Stat n={totalCount} label="Total Events" color={T.steel} />
-        <Stat n={CELEBRITY_HIERARCHY.length} label="Status Tiers" color={T.gold} />
-        <Stat n={FAMOUS_CHARACTERS.length} label="Famous Icons" color={T.amber} />
+        <Stat n={(data.CELEBRITY_HIERARCHY || CELEBRITY_HIERARCHY).length} label="Status Tiers" color={T.gold} />
+        <Stat n={(data.FAMOUS_CHARACTERS || FAMOUS_CHARACTERS).length} label="Famous Icons" color={T.amber} />
       </div>
       <div className="cc-timeline-grid">
         {MONTHS.map((m, i) => (
@@ -457,8 +488,9 @@ function HierarchyView() {
         Where a character sits determines what they can access, who notices them, and what cultural events mean for their arc.
       </p>
       <div className="cc-hierarchy-grid">
-        {CELEBRITY_HIERARCHY.map(h => (
-          <div className="cc-hierarchy-card" key={h.tier} style={{ borderTopColor: h.color }}>
+        <EditableList constantKey="CELEBRITY_HIERARCHY" defaults={CELEBRITY_HIERARCHY} label="Add Tier">
+          {(h) => (
+          <div className="cc-hierarchy-card" style={{ borderTopColor: h.color }}>
             <div className="cc-hierarchy-header">
               <span className="cc-hierarchy-badge" style={{ background: h.color }}>
                 Tier {h.tier}
@@ -470,7 +502,8 @@ function HierarchyView() {
             <h3 className="cc-hierarchy-name">{h.name}</h3>
             <p className="cc-hierarchy-desc">{h.desc}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -488,8 +521,8 @@ function IndustriesView() {
         Power structures within Fashion and Beauty industries. Where a character sits determines access, visibility, and arc.
       </p>
       <div className="cc-industries">
-        <TierPanel title="Fashion Industry" icon="👗" tiers={FASHION_TIERS} />
-        <TierPanel title="Beauty Industry" icon="💄" tiers={BEAUTY_TIERS} />
+        <TierPanel title="Fashion Industry" icon="👗" tiers={FASHION_TIERS} constantKey="FASHION_TIERS" />
+        <TierPanel title="Beauty Industry" icon="💄" tiers={BEAUTY_TIERS} constantKey="BEAUTY_TIERS" />
       </div>
     </>
   );
@@ -507,26 +540,28 @@ function AwardsView() {
         Four major award shows, each with its own culture, politics, and snubs the Feed argues about for weeks.
       </p>
       <div className="cc-awards-grid">
-        {AWARD_SHOWS.map(show => (
-          <div className="cc-award-card" key={show.name}>
+        <EditableList constantKey="AWARD_SHOWS" defaults={AWARD_SHOWS} label="Add Award Show">
+          {(show) => (
+          <div className="cc-award-card">
             <div className="cc-award-header">
               <h3 style={{ color: show.color }}>{show.icon} {show.name}</h3>
               <div className="cc-award-meta">
                 <span className="cc-award-month">{show.month}</span>
                 <span>·</span>
-                <span>{show.categories.length} categories</span>
+                <span>{(show.categories || []).length} categories</span>
               </div>
               <p className="cc-award-desc">{show.desc}</p>
             </div>
             <div className="cc-award-categories">
-              {show.categories.map(c => (
+              {(show.categories || []).map(c => (
                 <div className="cc-award-category" key={c} style={{ borderLeftColor: show.color }}>
                   {c}
                 </div>
               ))}
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -544,11 +579,12 @@ function MediaView() {
         Five outlets cover all major events and drama. Every character has a relationship to these outlets.
       </p>
       <div className="cc-media-grid">
-        {GOSSIP_MEDIA.map(m => {
+        <EditableList constantKey="GOSSIP_MEDIA" defaults={GOSSIP_MEDIA} label="Add Outlet">
+          {(m) => {
           const styleColor = MEDIA_STYLE_COLORS[m.style] || {};
           return (
-            <div className="cc-media-card" key={m.name}>
-              <h3 style={{ color: m.color.text }}>{m.name}</h3>
+            <div className="cc-media-card">
+              <h3 style={{ color: (m.color || {}).text }}>{m.name}</h3>
               <span className="cc-media-style" style={{ background: styleColor.bg, color: styleColor.text }}>
                 {m.style}
               </span>
@@ -561,7 +597,8 @@ function MediaView() {
               </div>
             </div>
           );
-        })}
+          }}
+        </EditableList>
       </div>
     </>
   );
@@ -580,8 +617,9 @@ function AlgorithmView() {
         Content visibility is shaped by four forces. The story engine reads these when determining what characters see, what goes viral, and what gets buried.
       </p>
       <div className="cc-algo-grid">
-        {ALGORITHM_FORCES.map(f => (
-          <div className="cc-algo-card" key={f.name} style={{ borderTopColor: f.color }}>
+        <EditableList constantKey="ALGORITHM_FORCES" defaults={ALGORITHM_FORCES} label="Add Force">
+          {(f) => (
+          <div className="cc-algo-card" style={{ borderTopColor: f.color }}>
             <div className="cc-algo-icon" style={{ color: f.color }}>{f.icon}</div>
             <h3 className="cc-algo-name">{f.name}</h3>
             <div className="cc-algo-row">
@@ -594,7 +632,8 @@ function AlgorithmView() {
             </div>
             <div className="cc-algo-hook">{f.storyHook}</div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
 
       {/* ── DRAMA MECHANICS ── */}
@@ -603,8 +642,9 @@ function AlgorithmView() {
         Drama drives viral engagement. These situations consistently generate feed spikes — the algorithm amplifies them because engagement is extreme.
       </p>
       <div className="cc-drama-grid">
-        {DRAMA_MECHANICS.map(d => (
-          <div className="cc-drama-card" key={d.type} style={{ borderLeftColor: d.color }}>
+        <EditableList constantKey="DRAMA_MECHANICS" defaults={DRAMA_MECHANICS} label="Add Drama Type">
+          {(d) => (
+          <div className="cc-drama-card" style={{ borderLeftColor: d.color }}>
             <div className="cc-drama-header">
               <span className="cc-drama-icon">{d.icon}</span>
               <h4 className="cc-drama-type">{d.type}</h4>
@@ -622,7 +662,8 @@ function AlgorithmView() {
               <em>{d.storyThread}</em>
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -670,14 +711,16 @@ function MicroView({ events: microEvents, toggle, expandedId }) {
           Dates assigned when icon characters are generated.
         </p>
         <div className="cc-birthday-grid">
-          {BIRTHDAY_TEMPLATES.map(b => (
-            <div className="cc-birthday-card" key={b.name}>
+          <EditableList constantKey="BIRTHDAY_TEMPLATES" defaults={BIRTHDAY_TEMPLATES} label="Add Birthday">
+            {(b) => (
+            <div className="cc-birthday-card">
               <div className="cc-birthday-icon">{b.icon}</div>
               <h4>{b.name}</h4>
               <p><strong>{b.community}</strong></p>
               <p>{b.desc}</p>
             </div>
-          ))}
+            )}
+          </EditableList>
         </div>
       </div>
     </>
@@ -696,14 +739,16 @@ function FamousView() {
         These figures shape the culture of LalaVerse. All placeholders — names assigned when characters are generated through the Character Registry.
       </p>
       <div className="cc-famous-grid">
-        {FAMOUS_CHARACTERS.map(c => (
-          <div className="cc-famous-card" key={c.rank} style={{ borderTopColor: c.color }}>
+        <EditableList constantKey="FAMOUS_CHARACTERS" defaults={FAMOUS_CHARACTERS} label="Add Character">
+          {(c) => (
+          <div className="cc-famous-card" style={{ borderTopColor: c.color }}>
             <div className="cc-famous-rank" style={{ color: c.color }}>#{c.rank}</div>
             <div className="cc-famous-icon">{c.icon}</div>
             <h4 className="cc-famous-title">{c.title}</h4>
             <p className="cc-famous-role">{c.role}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );

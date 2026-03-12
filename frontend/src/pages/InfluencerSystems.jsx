@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import './InfluencerSystems.css';
+import usePageData from '../hooks/usePageData';
+import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════════════
    InfluencerSystems.jsx — Doc 03 · v1.0
@@ -260,13 +262,25 @@ const LEGACY_SIGNALS = [
    MAIN COMPONENT
    ═══════════════════════════════════════════════════════════════════════ */
 
+const DEFAULTS = {
+  ARCHETYPES, RELATIONSHIP_TYPES, ECONOMY_STREAMS,
+  FASHION_TREND_STAGES, BEAUTY_TREND_STAGES, MOMENTUM_WAVES,
+  INFLUENCE_FORCES, LEGACY_SIGNALS,
+};
+
 export default function InfluencerSystems() {
   const [tab, setTab] = useState('archetypes');
+  const [editItem, setEditItem] = useState(null);
+  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('influencer_systems', DEFAULTS);
 
   return (
+    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
     <div className="is-shell">
       <header className="is-header">
-        <h1>Influencer Systems & Mechanics</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1>Influencer Systems & Mechanics</h1>
+          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+        </div>
         <p>Doc 03 — franchise_law · always_inject — Archetypes, relationships, economy, trends, momentum, influence, legacy</p>
         <nav className="is-tabs">
           {TABS.map(t => (
@@ -291,7 +305,21 @@ export default function InfluencerSystems() {
         {tab === 'influence'     && <InfluenceView />}
         {tab === 'legacy'        && <LegacyView />}
       </div>
+
+      {editItem && (
+        <EditItemModal
+          item={editItem.item}
+          title={`Edit ${editItem.key.replace(/_/g, ' ')}`}
+          onSave={(updated) => {
+            if (editItem.index === -1) addItem(editItem.key, updated);
+            else updateItem(editItem.key, editItem.index, updated);
+            setEditItem(null);
+          }}
+          onCancel={() => setEditItem(null)}
+        />
+      )}
     </div>
+    </PageEditContext.Provider>
   );
 }
 
@@ -308,10 +336,10 @@ function ArchetypesView() {
         Every major creator tends to fall into one of these patterns. A creator can carry more than one archetype — the tension between two archetypes in the same person is often the story.
       </p>
       <div className="is-archetype-grid">
-        {ARCHETYPES.map(a => (
+        <EditableList constantKey="ARCHETYPES" defaults={ARCHETYPES} label="Add Archetype">
+          {(a) => (
           <div
             className={`is-archetype-card${expanded === a.num ? ' expanded' : ''}`}
-            key={a.num}
             style={{ borderTopColor: a.color }}
             onClick={() => setExpanded(expanded === a.num ? null : a.num)}
           >
@@ -334,7 +362,8 @@ function ArchetypesView() {
               </div>
             )}
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -352,8 +381,9 @@ function RelationshipsView() {
         Creators are connected through five relationship types. Every relationship type has its own narrative metabolism — what it produces, what it costs, what happens when it breaks.
       </p>
       <div className="is-rel-list">
-        {RELATIONSHIP_TYPES.map(r => (
-          <div className="is-rel-card" key={r.type} style={{ borderLeftColor: r.color }}>
+        <EditableList constantKey="RELATIONSHIP_TYPES" defaults={RELATIONSHIP_TYPES} label="Add Relationship Type">
+          {(r) => (
+          <div className="is-rel-card" style={{ borderLeftColor: r.color }}>
             <div className="is-rel-header">
               <span className="is-rel-icon">{r.icon}</span>
               <h3 className="is-rel-type">{r.type}</h3>
@@ -377,7 +407,8 @@ function RelationshipsView() {
               <em>{r.storyBreaks}</em>
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -395,8 +426,9 @@ function EconomyView() {
         Creators generate income through multiple streams. How a creator earns reveals who they are — what they're willing to do, what they protect, and what they're pretending not to need.
       </p>
       <div className="is-economy-grid">
-        {ECONOMY_STREAMS.map(e => (
-          <div className="is-economy-card" key={e.stream} style={{ borderTopColor: e.color }}>
+        <EditableList constantKey="ECONOMY_STREAMS" defaults={ECONOMY_STREAMS} label="Add Income Stream">
+          {(e) => (
+          <div className="is-economy-card" style={{ borderTopColor: e.color }}>
             <div className="is-economy-icon">{e.icon}</div>
             <h3 className="is-economy-name">{e.stream}</h3>
             <p className="is-economy-what">{e.what}</p>
@@ -408,7 +440,8 @@ function EconomyView() {
               <em>{e.narrative}</em>
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -419,6 +452,8 @@ function EconomyView() {
    ═══════════════════════════════════════════════════════════════════════ */
 
 function FashionTrendView() {
+  const { data } = usePageEdit();
+  const items = data.FASHION_TREND_STAGES || FASHION_TREND_STAGES;
   return (
     <>
       <h2 className="is-section-title">The Fashion Trend Engine</h2>
@@ -426,26 +461,28 @@ function FashionTrendView() {
         Fashion spreads through a five-stage cycle. Where a character sits in this cycle determines whether they're a leader, a follower, or someone who missed it entirely.
       </p>
       <div className="is-trend-pipeline">
-        {FASHION_TREND_STAGES.map((s, i) => (
-          <React.Fragment key={s.stage}>
-            <div className="is-trend-stage" style={{ borderTopColor: s.color }}>
-              <div className="is-trend-badge" style={{ background: s.color }}>{s.stage}</div>
-              <h3 className="is-trend-name">{s.name}</h3>
-              <div className="is-trend-row">
-                <span className="is-trend-label">Who</span>
-                <span>{s.who}</span>
+        <EditableList constantKey="FASHION_TREND_STAGES" defaults={FASHION_TREND_STAGES} label="Add Stage">
+          {(s, idx) => (
+            <>
+              <div className="is-trend-stage" style={{ borderTopColor: s.color }}>
+                <div className="is-trend-badge" style={{ background: s.color }}>{s.stage}</div>
+                <h3 className="is-trend-name">{s.name}</h3>
+                <div className="is-trend-row">
+                  <span className="is-trend-label">Who</span>
+                  <span>{s.who}</span>
+                </div>
+                <div className="is-trend-row">
+                  <span className="is-trend-label">Feed</span>
+                  <span>{s.feed}</span>
+                </div>
+                <div className="is-trend-story"><em>{s.story}</em></div>
               </div>
-              <div className="is-trend-row">
-                <span className="is-trend-label">Feed</span>
-                <span>{s.feed}</span>
-              </div>
-              <div className="is-trend-story"><em>{s.story}</em></div>
-            </div>
-            {i < FASHION_TREND_STAGES.length - 1 && (
-              <div className="is-trend-arrow">→</div>
-            )}
-          </React.Fragment>
-        ))}
+              {idx < items.length - 1 && (
+                <div className="is-trend-arrow">→</div>
+              )}
+            </>
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -456,6 +493,8 @@ function FashionTrendView() {
    ═══════════════════════════════════════════════════════════════════════ */
 
 function BeautyTrendView() {
+  const { data } = usePageEdit();
+  const items = data.BEAUTY_TREND_STAGES || BEAUTY_TREND_STAGES;
   return (
     <>
       <h2 className="is-section-title">The Beauty Trend Engine</h2>
@@ -463,22 +502,24 @@ function BeautyTrendView() {
         Beauty trends spread differently from fashion — they originate in professional spaces before they reach the Feed. The distance between invention and adoption is the story.
       </p>
       <div className="is-trend-pipeline is-trend-pipeline--beauty">
-        {BEAUTY_TREND_STAGES.map((s, i) => (
-          <React.Fragment key={s.stage}>
-            <div className="is-trend-stage" style={{ borderTopColor: s.color }}>
-              <div className="is-trend-badge" style={{ background: s.color }}>{s.stage}</div>
-              <h3 className="is-trend-name">{s.name}</h3>
-              <div className="is-trend-row">
-                <span className="is-trend-label">Where</span>
-                <span>{s.where}</span>
+        <EditableList constantKey="BEAUTY_TREND_STAGES" defaults={BEAUTY_TREND_STAGES} label="Add Stage">
+          {(s, idx) => (
+            <>
+              <div className="is-trend-stage" style={{ borderTopColor: s.color }}>
+                <div className="is-trend-badge" style={{ background: s.color }}>{s.stage}</div>
+                <h3 className="is-trend-name">{s.name}</h3>
+                <div className="is-trend-row">
+                  <span className="is-trend-label">Where</span>
+                  <span>{s.where}</span>
+                </div>
+                <div className="is-trend-story"><em>{s.story}</em></div>
               </div>
-              <div className="is-trend-story"><em>{s.story}</em></div>
-            </div>
-            {i < BEAUTY_TREND_STAGES.length - 1 && (
-              <div className="is-trend-arrow">→</div>
-            )}
-          </React.Fragment>
-        ))}
+              {idx < items.length - 1 && (
+                <div className="is-trend-arrow">→</div>
+              )}
+            </>
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -496,8 +537,9 @@ function MomentumView() {
         Some moments cause massive global attention — they dominate the Feed and reshape what's possible for every character in range.
       </p>
       <div className="is-momentum-list">
-        {MOMENTUM_WAVES.map(m => (
-          <div className="is-momentum-card" key={m.event} style={{ borderLeftColor: m.color }}>
+        <EditableList constantKey="MOMENTUM_WAVES" defaults={MOMENTUM_WAVES} label="Add Wave">
+          {(m) => (
+          <div className="is-momentum-card" style={{ borderLeftColor: m.color }}>
             <div className="is-momentum-header">
               <span className="is-momentum-icon">{m.icon}</span>
               <h3 className="is-momentum-event">{m.event}</h3>
@@ -514,7 +556,8 @@ function MomentumView() {
               </div>
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -532,8 +575,9 @@ function InfluenceView() {
         Influence grows through three forces. A creator who is strong in all three is nearly unstoppable. A creator who is strong in only one is always vulnerable.
       </p>
       <div className="is-influence-grid">
-        {INFLUENCE_FORCES.map(f => (
-          <div className="is-influence-card" key={f.force} style={{ borderTopColor: f.color }}>
+        <EditableList constantKey="INFLUENCE_FORCES" defaults={INFLUENCE_FORCES} label="Add Force">
+          {(f) => (
+          <div className="is-influence-card" style={{ borderTopColor: f.color }}>
             <div className="is-influence-icon" style={{ color: f.color }}>{f.icon}</div>
             <h3 className="is-influence-name">{f.force}</h3>
             <p className="is-influence-def">{f.definition}</p>
@@ -546,7 +590,8 @@ function InfluenceView() {
               <span>{f.destroys}</span>
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );
@@ -564,8 +609,9 @@ function LegacyView() {
         Some creators become permanent cultural icons. This status is rare and irreversible — it outlasts the platform, the trend cycle, and the creator's active posting period.
       </p>
       <div className="is-legacy-list">
-        {LEGACY_SIGNALS.map(l => (
-          <div className="is-legacy-card" key={l.signal} style={{ borderLeftColor: l.color }}>
+        <EditableList constantKey="LEGACY_SIGNALS" defaults={LEGACY_SIGNALS} label="Add Signal">
+          {(l) => (
+          <div className="is-legacy-card" style={{ borderLeftColor: l.color }}>
             <div className="is-legacy-header">
               <span className="is-legacy-icon">{l.icon}</span>
               <h3 className="is-legacy-signal">{l.signal}</h3>
@@ -575,7 +621,8 @@ function LegacyView() {
               <em>{l.story}</em>
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </>
   );

@@ -13,7 +13,7 @@ import {
   Inspector, AddModal, GenModal,
   Btn, LFBtn, Spinner, useToast,
   API, T, LAYER, TENSION, cname, clayer, initials, roleColor,
-} from '../../components/RelationshipEngine';
+} from '../components/RelationshipEngine';
 
 /* ═══════════════════════════════════════════════════════════════════════
    State management (replaces 16 individual useState hooks)

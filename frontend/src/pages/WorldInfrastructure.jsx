@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import './WorldInfrastructure.css';
+import usePageData from '../hooks/usePageData';
+import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════
    DATA CONSTANTS — Doc 04 · v1.0
@@ -147,6 +149,10 @@ const TABS = [
   { key: 'loop',         label: 'The Loop' },
 ];
 
+const DEFAULTS = {
+  CITIES, UNIVERSITIES, CORPORATIONS, LEGENDARY_GROUPS, WORLD_LAYERS,
+};
+
 /* ═══════════════════════════════════════════════════
    VIEW COMPONENTS
    ═══════════════════════════════════════════════════ */
@@ -159,9 +165,9 @@ function CitiesView() {
       <h2 className="wi-section-title">The City System — Global Cultural Capitals</h2>
       <p className="wi-section-desc">Where a character lives or travels to is a character statement. Different cities are centers of influence for specific industries.</p>
       <div className="wi-city-grid">
-        {CITIES.map((c) => (
+        <EditableList constantKey="CITIES" defaults={CITIES} label="Add City">
+          {(c) => (
           <div
-            key={c.name}
             className={`wi-city-card${expanded === c.name ? ' expanded' : ''}`}
             style={{ borderTopColor: c.color }}
             onClick={() => setExpanded(expanded === c.name ? null : c.name)}
@@ -191,7 +197,8 @@ function CitiesView() {
               </div>
             )}
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -204,8 +211,9 @@ function UniversitiesView() {
       <h2 className="wi-section-title">The University System</h2>
       <p className="wi-section-desc">These schools produce the next generation of creators and industry leaders. Where a character went to school — or didn't — is part of their identity.</p>
       <div className="wi-uni-list">
-        {UNIVERSITIES.map((u) => (
-          <div key={u.name} className="wi-uni-card" style={{ borderLeftColor: u.color }}>
+        <EditableList constantKey="UNIVERSITIES" defaults={UNIVERSITIES} label="Add University">
+          {(u) => (
+          <div className="wi-uni-card" style={{ borderLeftColor: u.color }}>
             <div className="wi-uni-header">
               <span className="wi-uni-icon">{u.icon}</span>
               <div>
@@ -218,7 +226,8 @@ function UniversitiesView() {
             </div>
             <p className="wi-uni-sig"><em>{u.significance}</em></p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -232,9 +241,9 @@ function CorporationsView() {
       <h2 className="wi-section-title">Major Corporations & Brands</h2>
       <p className="wi-section-desc">These companies shape the economy of LalaVerse. They hold power, employ creators, and make the decisions that change the landscape.</p>
       <div className="wi-corp-grid">
-        {CORPORATIONS.map((c) => (
+        <EditableList constantKey="CORPORATIONS" defaults={CORPORATIONS} label="Add Corporation">
+          {(c) => (
           <div
-            key={c.name}
             className={`wi-corp-card${expanded === c.name ? ' expanded' : ''}`}
             style={{ borderTopColor: c.color }}
             onClick={() => setExpanded(expanded === c.name ? null : c.name)}
@@ -258,7 +267,8 @@ function CorporationsView() {
               </div>
             )}
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -266,28 +276,31 @@ function CorporationsView() {
 
 /* 04 — The 50 Legends */
 function LegendsView() {
-  const [openGroup, setOpenGroup] = useState(LEGENDARY_GROUPS[0].group);
+  const { data } = usePageEdit();
+  const groups = data.LEGENDARY_GROUPS || LEGENDARY_GROUPS;
+  const [openGroup, setOpenGroup] = useState(groups[0].group);
   return (
     <div>
       <h2 className="wi-section-title">The 50 Legendary Influencers</h2>
       <p className="wi-section-desc">The most powerful cultural figures in LalaVerse. All placeholders — names assigned through the Character Registry. These are the gravity wells the story orbits around.</p>
 
       <div className="wi-legend-groups">
-        {LEGENDARY_GROUPS.map((g) => (
+        <EditableList constantKey="LEGENDARY_GROUPS" defaults={LEGENDARY_GROUPS} label="Add Group">
+          {(g) => (
           <button
-            key={g.group}
             className={`wi-legend-group-btn${openGroup === g.group ? ' active' : ''}`}
             style={openGroup === g.group ? { background: g.color + '15', color: g.color, borderColor: g.color } : {}}
             onClick={() => setOpenGroup(g.group)}
           >
             <span>{g.icon}</span> {g.group} <span className="wi-legend-count">5</span>
           </button>
-        ))}
+          )}
+        </EditableList>
       </div>
 
-      {LEGENDARY_GROUPS.filter((g) => g.group === openGroup).map((g) => (
+      {groups.filter((g) => g.group === openGroup).map((g) => (
         <div key={g.group} className="wi-legend-roles">
-          {g.roles.map((r) => (
+          {(g.roles || []).map((r) => (
             <div key={r.role} className="wi-legend-card" style={{ borderLeftColor: g.color }}>
               <h4 className="wi-legend-role">{r.role} <span className="wi-legend-placeholder">[placeholder]</span></h4>
               <p className="wi-legend-fn">{r.fn}</p>
@@ -302,26 +315,30 @@ function LegendsView() {
 
 /* 05 — The Loop */
 function LoopView() {
+  const { data } = usePageEdit();
+  const items = data.WORLD_LAYERS || WORLD_LAYERS;
   return (
     <div>
       <h2 className="wi-section-title">How the Entire World Connects</h2>
       <p className="wi-section-desc">The infrastructure of LalaVerse operates as a single interconnected system.</p>
 
       <div className="wi-loop-pipeline">
-        {WORLD_LAYERS.map((l, i) => (
-          <React.Fragment key={l.layer}>
-            <div className="wi-loop-stage" style={{ borderTopColor: l.color }}>
-              <span className="wi-loop-icon">{l.icon}</span>
-              <h4 className="wi-loop-layer">{l.layer}</h4>
-              <p className="wi-loop-does">{l.whatItDoes}</p>
-              <div className="wi-loop-feeds">
-                <span className="wi-loop-label">Feeds Into</span>
-                <p className="wi-loop-into">{l.feedsInto}</p>
+        <EditableList constantKey="WORLD_LAYERS" defaults={WORLD_LAYERS} label="Add Layer">
+          {(l, idx) => (
+            <>
+              <div className="wi-loop-stage" style={{ borderTopColor: l.color }}>
+                <span className="wi-loop-icon">{l.icon}</span>
+                <h4 className="wi-loop-layer">{l.layer}</h4>
+                <p className="wi-loop-does">{l.whatItDoes}</p>
+                <div className="wi-loop-feeds">
+                  <span className="wi-loop-label">Feeds Into</span>
+                  <p className="wi-loop-into">{l.feedsInto}</p>
+                </div>
               </div>
-            </div>
-            {i < WORLD_LAYERS.length - 1 && <span className="wi-loop-arrow">→</span>}
-          </React.Fragment>
-        ))}
+              {idx < items.length - 1 && <span className="wi-loop-arrow">→</span>}
+            </>
+          )}
+        </EditableList>
       </div>
 
       <div className="wi-loop-summary">
@@ -342,12 +359,18 @@ const VIEWS = { cities: CitiesView, universities: UniversitiesView, corporations
 
 export default function WorldInfrastructure() {
   const [tab, setTab] = useState('cities');
+  const [editItem, setEditItem] = useState(null);
+  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('world_infrastructure', DEFAULTS);
   const View = VIEWS[tab];
 
   return (
+    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
     <div className="wi-shell">
       <header className="wi-header">
-        <h1>World Infrastructure</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1>World Infrastructure</h1>
+          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+        </div>
         <p>Cities · Universities · Corporations · 50 Legendary Influencers · The Loop — Doc 04 · v1.0</p>
         <nav className="wi-tabs">
           {TABS.map((t) => (
@@ -360,6 +383,20 @@ export default function WorldInfrastructure() {
       <main className="wi-content">
         <View />
       </main>
+
+      {editItem && (
+        <EditItemModal
+          item={editItem.item}
+          title={`Edit ${editItem.key.replace(/_/g, ' ')}`}
+          onSave={(updated) => {
+            if (editItem.index === -1) addItem(editItem.key, updated);
+            else updateItem(editItem.key, editItem.index, updated);
+            setEditItem(null);
+          }}
+          onCancel={() => setEditItem(null)}
+        />
+      )}
     </div>
+    </PageEditContext.Provider>
   );
 }

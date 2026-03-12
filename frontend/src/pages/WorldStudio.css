@@ -1039,8 +1039,18 @@
   .ws4-demo-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 680px) {
-  .ws4-body { flex-direction: column; }
-  .ws4-sidebar { width: 100%; height: 40vh; border-right: none; border-bottom: 1px solid var(--ws4-border); }
+  /*
+   * Mobile single-scroll fix.
+   * .app-content (App.css) is the ONLY scroll container.
+   * Everything below it must use overflow:visible so content
+   * flows into .app-content's scroller naturally.
+   */
+  .ws4-page { height: auto !important; min-height: 0 !important; overflow: visible !important; }
+  .ws4-body { flex-direction: column; overflow: visible !important; }
+  .ws4-sidebar { width: 100%; flex-shrink: 0; overflow: visible !important; border-right: none; border-bottom: 1px solid var(--ws4-border); }
+  .ws4-sidebar-inner { overflow: visible !important; }
+  .ws4-char-list { max-height: none !important; overflow: visible !important; }
+  .ws4-main { flex: none; overflow: visible !important; padding: 16px; }
   .ws4-header-actions .ws4-btn:not(.ws4-btn-primary) { display: none; }
   .ws4-want-grid { grid-template-columns: 1fr; }
   .ws4-form-two-col { grid-template-columns: 1fr; }

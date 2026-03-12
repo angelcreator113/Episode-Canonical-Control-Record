@@ -1219,6 +1219,15 @@ try {
   console.error('✗ Failed to load Author Note routes:', e.message);
 }
 
+// Page Content — editable world-building page data (JSONB)
+try {
+  const pageContentRoutes = require('./routes/pageContent');
+  app.use('/api/v1/page-content', pageContentRoutes);
+  console.log('✓ Page Content routes loaded at /api/v1/page-content');
+} catch (e) {
+  console.error('✗ Failed to load Page Content routes:', e.message);
+}
+
 // API info endpoint
 app.get('/api/v1', (req, res) => {
   res.json({

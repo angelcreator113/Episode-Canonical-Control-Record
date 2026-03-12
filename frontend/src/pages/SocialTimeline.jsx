@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import './SocialTimeline.css';
+import usePageData from '../hooks/usePageData';
+import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ══════════════════════════════════════════════
    Data Constants — Doc 05 · Social Timeline v1.0
@@ -107,6 +109,12 @@ const ENGINE_QUESTIONS = [
 
 const ENGINE_CORE_RULE = "THE FEED IS ALWAYS WATCHING. No post in LalaVerse exists in isolation. Every piece of content enters a living system with rules, memory, and momentum. The characters who understand this build empires. The characters who don't get used by the system instead of using it.";
 
+const DEFAULTS = {
+  TIMELINE_LAYERS, VIRAL_STAGES, ENGAGEMENT_SIGNALS, DRAMA_TRIGGERS,
+  CULTURAL_OVERRIDES, TREND_STEPS, MOMENTUM_ACTIONS, INFLUENCE_CLUSTERS,
+  SHOCK_EVENTS, CULTURAL_MEMORY, CROSS_INDUSTRY, ENGINE_QUESTIONS, ENGINE_CORE_RULE,
+};
+
 /* ═══════════════════
    Tab definitions
    ═══════════════════ */
@@ -134,8 +142,9 @@ function TabLayers() {
     <div className="st-tab-content">
       <p className="st-intro">Every character's Feed is built from four blended layers. The layer a post lives in determines its narrative weight.</p>
       <div className="st-card-grid st-cols-2">
-        {TIMELINE_LAYERS.map(l => (
-          <div key={l.layer} className="st-card">
+        <EditableList constantKey="TIMELINE_LAYERS" defaults={TIMELINE_LAYERS} label="Add Layer">
+          {(l) => (
+          <div className="st-card">
             <div className="st-card-header">
               <span className="st-badge st-badge-rose">Layer {l.layer}</span>
               <span className="st-card-title">{l.name}</span>
@@ -144,7 +153,8 @@ function TabLayers() {
             <p className="st-card-body"><strong>Contains:</strong> {l.contains}</p>
             <p className="st-card-body st-muted">{l.narrative}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -155,8 +165,9 @@ function TabViral() {
     <div className="st-tab-content">
       <p className="st-intro">Content spreads through four stages. The distance between Stage 1 and Stage 4 is the story of how something becomes culture.</p>
       <div className="st-card-grid st-cols-2">
-        {VIRAL_STAGES.map(s => (
-          <div key={s.stage} className="st-card">
+        <EditableList constantKey="VIRAL_STAGES" defaults={VIRAL_STAGES} label="Add Stage">
+          {(s) => (
+          <div className="st-card">
             <div className="st-card-header">
               <span className="st-badge st-badge-orchid">Stage {s.stage}</span>
               <span className="st-card-title">{s.name}</span>
@@ -165,7 +176,8 @@ function TabViral() {
             <p className="st-card-body"><strong>What's happening:</strong> {s.happening}</p>
             <p className="st-card-body st-muted">{s.story}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -187,15 +199,17 @@ function TabEngagement() {
             </tr>
           </thead>
           <tbody>
-            {ENGAGEMENT_SIGNALS.map(s => (
-              <tr key={s.type}>
+            <EditableList constantKey="ENGAGEMENT_SIGNALS" defaults={ENGAGEMENT_SIGNALS} label="Add Signal">
+              {(s) => (
+              <tr>
                 <td className="st-cell-label">{s.type}</td>
                 <td><span className={`st-badge ${s.strength === 'Strong' ? 'st-badge-mint' : 'st-badge-muted'}`}>{s.strength}</span></td>
                 <td>{s.looks}</td>
                 <td>{s.tells}</td>
                 <td className="st-muted">{s.story}</td>
               </tr>
-            ))}
+              )}
+            </EditableList>
           </tbody>
         </table>
       </div>
@@ -208,8 +222,9 @@ function TabDrama() {
     <div className="st-tab-content">
       <p className="st-intro">Drama posts receive extra algorithmic amplification. The system does not distinguish between good and bad attention — only volume.</p>
       <div className="st-card-grid st-cols-1">
-        {DRAMA_TRIGGERS.map((d, i) => (
-          <div key={i} className="st-card st-card-wide">
+        <EditableList constantKey="DRAMA_TRIGGERS" defaults={DRAMA_TRIGGERS} label="Add Trigger">
+          {(d) => (
+          <div className="st-card st-card-wide">
             <div className="st-card-header">
               <span className="st-badge st-badge-rose">{d.trigger}</span>
               <span className="st-badge st-badge-amber">{d.duration}</span>
@@ -217,7 +232,8 @@ function TabDrama() {
             <p className="st-card-body"><strong>Pattern:</strong> {d.pattern}</p>
             <p className="st-card-body st-muted"><strong>Cost:</strong> {d.cost}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -228,8 +244,9 @@ function TabEvents() {
     <div className="st-tab-content">
       <p className="st-intro">Major events temporarily reshape the entire Feed. Event-aligned content gets boosted; off-topic content gets suppressed.</p>
       <div className="st-card-grid st-cols-1">
-        {CULTURAL_OVERRIDES.map((e, i) => (
-          <div key={i} className="st-card st-card-wide">
+        <EditableList constantKey="CULTURAL_OVERRIDES" defaults={CULTURAL_OVERRIDES} label="Add Event">
+          {(e) => (
+          <div className="st-card st-card-wide">
             <div className="st-card-header">
               <span className="st-badge st-badge-gold">{e.event}</span>
               <span className="st-badge st-badge-steel">{e.dates}</span>
@@ -238,7 +255,8 @@ function TabEvents() {
             <p className="st-card-body"><strong>Buried:</strong> {e.buried}</p>
             <p className="st-card-body st-muted"><strong>Character choice:</strong> {e.choice}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -249,8 +267,9 @@ function TabTrends() {
     <div className="st-tab-content">
       <p className="st-intro">Trends spread through creator tiers in a predictable pattern. Where a trend is in its cycle tells you what it means for every character who touches it.</p>
       <div className="st-steps">
-        {TREND_STEPS.map(t => (
-          <div key={t.step} className="st-step-row">
+        <EditableList constantKey="TREND_STEPS" defaults={TREND_STEPS} label="Add Step">
+          {(t) => (
+          <div className="st-step-row">
             <div className="st-step-num">{t.step}</div>
             <div className="st-step-body">
               <div className="st-step-who">{t.who}</div>
@@ -258,7 +277,8 @@ function TabTrends() {
               <div className="st-step-story st-muted">{t.story}</div>
             </div>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -278,13 +298,15 @@ function TabMomentum() {
             </tr>
           </thead>
           <tbody>
-            {MOMENTUM_ACTIONS.map((m, i) => (
-              <tr key={i}>
+            <EditableList constantKey="MOMENTUM_ACTIONS" defaults={MOMENTUM_ACTIONS} label="Add Action">
+              {(m) => (
+              <tr>
                 <td className="st-cell-label">{m.action}</td>
                 <td>{m.effect}</td>
                 <td className="st-muted">{m.story}</td>
               </tr>
-            ))}
+              )}
+            </EditableList>
           </tbody>
         </table>
       </div>
@@ -297,8 +319,9 @@ function TabClusters() {
     <div className="st-tab-content">
       <p className="st-intro">LalaVerse contains defined social clusters. Cross-cluster contamination is how culture spreads beyond its origin industry.</p>
       <div className="st-card-grid st-cols-1">
-        {INFLUENCE_CLUSTERS.map((c, i) => (
-          <div key={i} className="st-card st-card-wide">
+        <EditableList constantKey="INFLUENCE_CLUSTERS" defaults={INFLUENCE_CLUSTERS} label="Add Cluster">
+          {(c) => (
+          <div className="st-card st-card-wide">
             <div className="st-card-header">
               <span className="st-badge st-badge-orchid">{c.cluster}</span>
             </div>
@@ -306,7 +329,8 @@ function TabClusters() {
             <p className="st-card-body"><strong>Dynamics:</strong> {c.dynamics}</p>
             <p className="st-card-body st-muted"><strong>Cross-influence:</strong> {c.cross}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -317,8 +341,9 @@ function TabShocks() {
     <div className="st-tab-content">
       <p className="st-intro">Massive events shake the entire network, dominate feeds for days, and reset the context for everything that follows.</p>
       <div className="st-card-grid st-cols-1">
-        {SHOCK_EVENTS.map((s, i) => (
-          <div key={i} className="st-card st-card-wide">
+        <EditableList constantKey="SHOCK_EVENTS" defaults={SHOCK_EVENTS} label="Add Shock Event">
+          {(s) => (
+          <div className="st-card st-card-wide">
             <div className="st-card-header">
               <span className="st-badge st-badge-rose">{s.event}</span>
               <span className="st-badge st-badge-amber">{s.dominance}</span>
@@ -326,7 +351,8 @@ function TabShocks() {
             <p className="st-card-body"><strong>Resets:</strong> {s.resets}</p>
             <p className="st-card-body st-muted"><strong>Opportunity:</strong> {s.opportunity}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
@@ -347,14 +373,16 @@ function TabMemory() {
             </tr>
           </thead>
           <tbody>
-            {CULTURAL_MEMORY.map((m, i) => (
-              <tr key={i}>
+            <EditableList constantKey="CULTURAL_MEMORY" defaults={CULTURAL_MEMORY} label="Add Memory Type">
+              {(m) => (
+              <tr>
                 <td className="st-cell-label">{m.type}</td>
                 <td>{m.lifespan}</td>
                 <td>{m.memory}</td>
                 <td className="st-muted">{m.story}</td>
               </tr>
-            ))}
+              )}
+            </EditableList>
           </tbody>
         </table>
       </div>
@@ -367,8 +395,9 @@ function TabCrossIndustry() {
     <div className="st-tab-content">
       <p className="st-intro">Industries influence each other. The most powerful cultural moments happen when an idea crosses cluster boundaries.</p>
       <div className="st-card-grid st-cols-1">
-        {CROSS_INDUSTRY.map((c, i) => (
-          <div key={i} className="st-card st-card-wide">
+        <EditableList constantKey="CROSS_INDUSTRY" defaults={CROSS_INDUSTRY} label="Add Cross-Industry">
+          {(c) => (
+          <div className="st-card st-card-wide">
             <div className="st-card-header">
               <span className="st-badge st-badge-gold">{c.origin}</span>
               <span className="st-card-arrow">→</span>
@@ -376,22 +405,26 @@ function TabCrossIndustry() {
             </div>
             <p className="st-card-body st-muted">{c.example}</p>
           </div>
-        ))}
+          )}
+        </EditableList>
       </div>
     </div>
   );
 }
 
 function TabEngine() {
+  const { data } = usePageEdit();
+  const questions = data.ENGINE_QUESTIONS || ENGINE_QUESTIONS;
+  const coreRule = data.ENGINE_CORE_RULE || ENGINE_CORE_RULE;
   return (
     <div className="st-tab-content">
       <p className="st-intro">The Social Timeline Engine is not background — it is active narrative infrastructure. Before generating any Feed scene, the story engine asks:</p>
       <ol className="st-engine-questions">
-        {ENGINE_QUESTIONS.map((q, i) => (
+        {questions.map((q, i) => (
           <li key={i} className="st-engine-q">{q}</li>
         ))}
       </ol>
-      <blockquote className="st-core-rule">{ENGINE_CORE_RULE}</blockquote>
+      <blockquote className="st-core-rule">{coreRule}</blockquote>
     </div>
   );
 }
@@ -417,12 +450,18 @@ const TAB_RENDERERS = {
 
 export default function SocialTimeline() {
   const [activeTab, setActiveTab] = useState('layers');
+  const [editItem, setEditItem] = useState(null);
+  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('social_timeline', DEFAULTS);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
+    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
     <div className="st-page">
       <header className="st-header">
-        <h1 className="st-title">The Social Timeline Engine</h1>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <h1 className="st-title">The Social Timeline Engine</h1>
+          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+        </div>
         <p className="st-subtitle">Doc 05 · v1.0 · March 2026 — How the Feed works, spreads, amplifies, and remembers</p>
       </header>
 
@@ -447,6 +486,20 @@ export default function SocialTimeline() {
       <footer className="st-footer">
         Source: <em>social-timeline-v1.0</em> · franchise_law · always_inject
       </footer>
+
+      {editItem && (
+        <EditItemModal
+          item={editItem.item}
+          title={`Edit ${editItem.key.replace(/_/g, ' ')}`}
+          onSave={(updated) => {
+            if (editItem.index === -1) addItem(editItem.key, updated);
+            else updateItem(editItem.key, editItem.index, updated);
+            setEditItem(null);
+          }}
+          onCancel={() => setEditItem(null)}
+        />
+      )}
     </div>
+    </PageEditContext.Provider>
   );
 }
