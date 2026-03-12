@@ -101,6 +101,7 @@ const NarrativeControlCenter = lazy(() => import('./pages/NarrativeControlCenter
 const AmberCommandCenter = lazy(() => import('./pages/AmberCommandCenter'));
 const NarrativePressureDashboard = lazy(() => import('./pages/NarrativePressureDashboard'));
 const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
+const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -367,6 +368,9 @@ function AppContent() {
           
           {/* PNOS Relationships — Unified Tree + Web + Candidates + List */}
           <Route path="/relationships" element={<RelationshipEngine />} />
+
+          {/* Cultural Calendar — LalaVerse Social & Industry Calendar */}
+          <Route path="/cultural-calendar" element={<CulturalCalendar />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
