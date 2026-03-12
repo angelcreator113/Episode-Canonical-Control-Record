@@ -108,6 +108,7 @@ const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
 const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
 const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
 const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
+const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -395,6 +396,9 @@ function AppContent() {
 
           {/* Cultural Memory System — Archives, legends, feuds, nostalgia, time capsules, influence rankings */}
           <Route path="/cultural-memory" element={<CulturalMemory />} />
+
+          {/* Character Depth Engine — Body, money, time, cosmology, blind spot, joy, change capacity */}
+          <Route path="/character-depth-engine" element={<CharacterDepthEngine />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
