@@ -8,18 +8,24 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.addColumn('character_entanglements', 'what_they_want', {
+    const desc = await queryInterface.describeTable('character_entanglements');
+
+    if (!desc.what_they_want) {
+      await queryInterface.addColumn('character_entanglements', 'what_they_want', {
       type: Sequelize.TEXT,
       allowNull: true,
       comment: 'Freeform; author-written or Amber-proposed',
     });
-    await queryInterface.addColumn('character_entanglements', 'want_category', {
-      type: Sequelize.ENUM(
-        'to_become', 'to_have', 'to_destroy', 'to_be_seen_by',
-        'to_escape', 'to_protect', 'to_understand'
-      ),
-      allowNull: true,
-    });
+    }
+    if (!desc.want_category) {
+      await queryInterface.addColumn('character_entanglements', 'want_category', {
+        type: Sequelize.ENUM(
+          'to_become', 'to_have', 'to_destroy', 'to_be_seen_by',
+          'to_escape', 'to_protect', 'to_understand'
+        ),
+        allowNull: true,
+      });
+    }
   },
 
   async down(queryInterface) {

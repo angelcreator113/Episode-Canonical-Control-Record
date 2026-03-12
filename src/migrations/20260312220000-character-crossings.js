@@ -12,6 +12,9 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
 
+    // Drop partially-created table from previous failed runs
+    await queryInterface.dropTable('character_crossings').catch(() => {});
+
     // ── character_crossings table ────────────────────────────────────────
 
     await queryInterface.createTable('character_crossings', {
@@ -77,22 +80,29 @@ module.exports = {
     await queryInterface.addIndex('character_crossings', ['gap_confirmed']);
     await queryInterface.addIndex('character_crossings', ['performance_gap_score']);
 
-    // ── Add columns to registry_characters ──────────────────────────────
+    // ── Add columns to registry_characters (idempotent) ──────────────────────
 
-    await queryInterface.addColumn('registry_characters', 'performing_publicly', {
-      type: Sequelize.BOOLEAN,
-      defaultValue: false,
-    });
-    await queryInterface.addColumn('registry_characters', 'dimensions_performed', {
-      type: Sequelize.JSONB,
-      defaultValue: [],
-      comment: 'Array of Deep Profile dimension strings being performed publicly',
-    });
-    await queryInterface.addColumn('registry_characters', 'dimensions_hidden', {
-      type: Sequelize.JSONB,
-      defaultValue: [],
-      comment: 'Array of dimensions being hidden',
-    });
+    const desc = await queryInterface.describeTable('registry_characters');
+    if (!desc.performing_publicly) {
+      await queryInterface.addColumn('registry_characters', 'performing_publicly', {
+        type: Sequelize.BOOLEAN,
+        defaultValue: false,
+      });
+    }
+    if (!desc.dimensions_performed) {
+      await queryInterface.addColumn('registry_characters', 'dimensions_performed', {
+        type: Sequelize.JSONB,
+        defaultValue: [],
+        comment: 'Array of Deep Profile dimension strings being performed publicly',
+      });
+    }
+    if (!desc.dimensions_hidden) {
+      await queryInterface.addColumn('registry_characters', 'dimensions_hidden', {
+        type: Sequelize.JSONB,
+        defaultValue: [],
+        comment: 'Array of dimensions being hidden',
+      });
+    }
   },
 
   async down(queryInterface) {

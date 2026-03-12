@@ -9,6 +9,12 @@
 
 module.exports = {
   async up(queryInterface, Sequelize) {
+    // Drop partially-created table from previous failed runs
+    await queryInterface.dropTable('author_notes').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_author_notes_entity_type" CASCADE').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_author_notes_note_type" CASCADE').catch(() => {});
+    await queryInterface.sequelize.query('DROP TYPE IF EXISTS "enum_author_notes_created_by" CASCADE').catch(() => {});
+
     await queryInterface.createTable('author_notes', {
       id: {
         type: Sequelize.UUID,
