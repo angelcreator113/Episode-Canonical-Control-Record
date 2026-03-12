@@ -103,6 +103,7 @@ const NarrativePressureDashboard = lazy(() => import('./pages/NarrativePressureD
 const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
 const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
 const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
+const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -375,6 +376,9 @@ function AppContent() {
 
           {/* Influencer Systems — Archetypes, Relationships, Economy, Trends, Momentum, Legacy */}
           <Route path="/influencer-systems" element={<InfluencerSystems />} />
+
+          {/* World Infrastructure — Cities, Universities, Corporations, 50 Legends, The Loop */}
+          <Route path="/world-infrastructure" element={<WorldInfrastructure />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
