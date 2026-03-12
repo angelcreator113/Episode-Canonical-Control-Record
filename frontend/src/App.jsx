@@ -102,6 +102,7 @@ const AmberCommandCenter = lazy(() => import('./pages/AmberCommandCenter'));
 const NarrativePressureDashboard = lazy(() => import('./pages/NarrativePressureDashboard'));
 const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
 const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
+const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -371,6 +372,9 @@ function AppContent() {
 
           {/* Cultural Calendar — LalaVerse Social & Industry Calendar */}
           <Route path="/cultural-calendar" element={<CulturalCalendar />} />
+
+          {/* Influencer Systems — Archetypes, Relationships, Economy, Trends, Momentum, Legacy */}
+          <Route path="/influencer-systems" element={<InfluencerSystems />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
