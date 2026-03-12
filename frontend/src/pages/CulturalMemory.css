@@ -10,7 +10,6 @@
   font-family: 'DM Sans', sans-serif;
   color: #2e2e3a;
   background: #faf9fc;
-  min-height: 100vh;
 }
 
 /* ─── HEADER ─── */
@@ -721,4 +720,9 @@
   .cm-nostalgia-grid { grid-template-columns: 1fr; }
   .cm-ranking-grid { grid-template-columns: 1fr; }
   .cm-capsule-grid { grid-template-columns: 1fr; }
+  .cm-living-card { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 480px) {
+  .cm-page { padding: 1rem 0.75rem 1.5rem; }
 }

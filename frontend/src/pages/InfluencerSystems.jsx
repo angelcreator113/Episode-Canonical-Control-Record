@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './InfluencerSystems.css';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════════════
    InfluencerSystems.jsx — Doc 03 · v1.0
@@ -271,15 +271,15 @@ const DEFAULTS = {
 export default function InfluencerSystems() {
   const [tab, setTab] = useState('archetypes');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('influencer_systems', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving } = usePageData('influencer_systems', DEFAULTS);
 
   return (
-    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="is-shell">
       <header className="is-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>Influencer Systems & Mechanics</h1>
-          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+          {saving && <span className="eim-saving">Saving…</span>}
         </div>
         <p>Doc 03 — franchise_law · always_inject — Archetypes, relationships, economy, trends, momentum, influence, legacy</p>
         <nav className="is-tabs">

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './SocialPersonality.css';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ══════════════════════════════════════════════
    Data Constants — Doc 06 · Social Personality v1.0
@@ -429,16 +429,16 @@ const TAB_RENDERERS = {
 export default function SocialPersonality() {
   const [activeTab, setActiveTab] = useState('traits');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('social_personality', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving } = usePageData('social_personality', DEFAULTS);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
-    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="sp-page">
       <header className="sp-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 className="sp-title">The Social Personality Engine</h1>
-          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+          {saving && <span className="eim-saving">Saving…</span>}
         </div>
         <p className="sp-subtitle">Doc 06 · v1.0 · March 2026 — What characters post, how they react, and how they grow</p>
       </header>

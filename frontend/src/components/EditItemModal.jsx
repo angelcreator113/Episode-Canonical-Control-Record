@@ -23,7 +23,7 @@ export function usePageEdit() {
  *   </EditableList>
  */
 export function EditableList({ constantKey, defaults, children, label }) {
-  const { data, editMode, setEditItem, removeItem } = usePageEdit();
+  const { data, setEditItem, removeItem } = usePageEdit();
   const items = data[constantKey] || defaults;
 
   return (
@@ -31,25 +31,21 @@ export function EditableList({ constantKey, defaults, children, label }) {
       {items.map((item, idx) => (
         <EditOverlay
           key={idx}
-          editMode={editMode}
           onEdit={() => setEditItem({ key: constantKey, index: idx, item })}
           onDelete={() => removeItem(constantKey, idx)}
         >
           {children(item, idx)}
         </EditOverlay>
       ))}
-      {editMode && (
-        <AddItemButton
-          editMode
-          onClick={() => {
-            const template = items[0]
-              ? Object.fromEntries(Object.keys(items[0]).map(k => [k, Array.isArray(items[0][k]) ? [] : '']))
-              : {};
-            setEditItem({ key: constantKey, index: -1, item: template });
-          }}
-          label={label || 'Add Item'}
-        />
-      )}
+      <AddItemButton
+        onClick={() => {
+          const template = items[0]
+            ? Object.fromEntries(Object.keys(items[0]).map(k => [k, Array.isArray(items[0][k]) ? [] : '']))
+            : {};
+          setEditItem({ key: constantKey, index: -1, item: template });
+        }}
+        label={label || 'Add Item'}
+      />
     </>
   );
 }
@@ -185,8 +181,7 @@ export function EditToolbar({ editMode, setEditMode, saving }) {
 /**
  * EditOverlay — wraps each item card with edit/delete buttons in edit mode.
  */
-export function EditOverlay({ editMode, onEdit, onDelete, children }) {
-  if (!editMode) return children;
+export function EditOverlay({ onEdit, onDelete, children }) {
   return (
     <div className="eim-item-wrapper">
       {children}
@@ -201,8 +196,7 @@ export function EditOverlay({ editMode, onEdit, onDelete, children }) {
 /**
  * AddItemButton — shows at end of a section in edit mode.
  */
-export function AddItemButton({ editMode, onClick, label }) {
-  if (!editMode) return null;
+export function AddItemButton({ onClick, label }) {
   return (
     <button className="eim-add-btn" onClick={onClick}>
       + {label || 'Add Item'}

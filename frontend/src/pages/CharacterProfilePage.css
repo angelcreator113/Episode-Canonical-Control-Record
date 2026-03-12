@@ -1057,6 +1057,79 @@
 }
 
 /* ── Deep Profile ──────────────────────────────────────────────────────────── */
+
+/* ── Responsive Breakpoints ────────────────────────────────────────────────── */
+@media (max-width: 768px) {
+  .cp-page {
+    grid-template-columns: 1fr;
+  }
+
+  .cp-sidebar {
+    position: static;
+    height: auto;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: 16px;
+    border-right: none;
+    border-bottom: 1px solid #ede8e3;
+    gap: 12px;
+  }
+
+  .cp-tab-bar {
+    padding: 12px 16px;
+  }
+
+  .cp-tab-btn {
+    font-size: 12px;
+    padding: 5px 12px;
+  }
+
+  .cp-content {
+    padding: 16px;
+  }
+
+  .cp-sidebar-actions {
+    flex-direction: row;
+    width: auto;
+  }
+
+  .cp-btn-deepen,
+  .cp-btn-export {
+    width: auto;
+  }
+}
+
+@media (max-width: 480px) {
+  .cp-sidebar {
+    padding: 12px;
+    gap: 8px;
+  }
+
+  .cp-name {
+    font-size: 17px;
+  }
+
+  .cp-tab-bar {
+    padding: 10px 12px;
+    gap: 4px;
+  }
+
+  .cp-tab-btn {
+    font-size: 11px;
+    padding: 4px 10px;
+  }
+
+  .cp-content {
+    padding: 12px;
+  }
+
+  .cp-avatar {
+    width: 40px;
+    height: 40px;
+    font-size: 16px;
+  }
+}
 .cp-dp-status {
   display: flex;
   align-items: center;

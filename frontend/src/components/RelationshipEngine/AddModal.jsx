@@ -6,7 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { CONN_MODES, STATUSES, TENSIONS, REL_PRESETS, cname, compatible } from './tokens';
 import { Btn, Label, Input, Select } from './primitives';
 
-export default function AddModal({ chars, onAdd, onClose }) {
+export default function AddModal({ chars, rels = [], onAdd, onClose }) {
   const [f, setF] = useState({
     character_id_a: '', character_id_b: '', relationship_type: '',
     connection_mode: 'IRL', status: 'Active', tension_state: '', situation: '',
@@ -14,7 +14,15 @@ export default function AddModal({ chars, onAdd, onClose }) {
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }));
   const charA = chars.find(c => c.id === f.character_id_a);
   const bOpts = chars.filter(c => c.id !== f.character_id_a && (!charA || compatible(charA, c)));
-  const valid = f.character_id_a && f.character_id_b && f.relationship_type;
+
+  /* check if chosen pair + type already exists (either direction) */
+  const isDupe = f.character_id_a && f.character_id_b && f.relationship_type && rels.some(r =>
+    r.relationship_type?.toLowerCase() === f.relationship_type.toLowerCase() && (
+      (r.character_id_a === f.character_id_a && r.character_id_b === f.character_id_b) ||
+      (r.character_id_a === f.character_id_b && r.character_id_b === f.character_id_a)
+    )
+  );
+  const valid = f.character_id_a && f.character_id_b && f.relationship_type && !isDupe;
 
   /* focus trap */
   const overlayRef = useRef(null);
@@ -82,7 +90,9 @@ export default function AddModal({ chars, onAdd, onClose }) {
         </div>
         <div className="re-modal-footer">
           <Btn variant="ghost" onClick={onClose}>Cancel</Btn>
-          <Btn variant="primary" onClick={() => valid && onAdd(f)} disabled={!valid}>Create</Btn>
+          <Btn variant="primary" onClick={() => valid && onAdd(f)} disabled={!valid}>
+            {isDupe ? 'Already exists' : 'Create'}
+          </Btn>
         </div>
       </div>
     </div>

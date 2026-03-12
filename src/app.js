@@ -207,6 +207,37 @@ app.use(attachRBAC);
 app.use(captureResponseData);
 
 // ============================================================================
+// RATE LIMITING
+// ============================================================================
+const rateLimit = require('express-rate-limit');
+
+// Global API rate limiter — generous for normal use, blocks abuse
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 500,                  // 500 requests per window per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests, please try again later' },
+});
+app.use('/api', apiLimiter);
+
+// Stricter limiter for write operations
+const writeLimiter = rateLimit({
+  windowMs: 60 * 1000,      // 1 minute
+  max: 60,                   // 60 writes per minute per IP
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many write requests, please slow down' },
+});
+// Apply to all mutating methods on /api
+app.use('/api', (req, res, next) => {
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+    return writeLimiter(req, res, next);
+  }
+  next();
+});
+
+// ============================================================================
 // HEALTH CHECK
 // ============================================================================
 app.get('/health', async (req, res) => {

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './CharacterLifeSimulation.css';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════
    Character Life Simulation System — Doc 07 · v1.0
@@ -405,16 +405,16 @@ const TAB_RENDERERS = {
 export default function CharacterLifeSimulation() {
   const [activeTab, setActiveTab] = useState('stages');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('character_life_simulation', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving } = usePageData('character_life_simulation', DEFAULTS);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
-    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="cls-page">
       <header className="cls-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>Character Life Simulation</h1>
-          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+          {saving && <span className="eim-saving">Saving…</span>}
         </div>
         <p className="cls-subtitle">Doc 07 · v1.0 — How characters evolve through career stages, relationships, cities, and life events</p>
       </header>

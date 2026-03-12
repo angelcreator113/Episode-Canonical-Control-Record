@@ -1341,8 +1341,14 @@ router.post('/characters/:id/deep-profile/generate', async (req, res) => {
       if (v !== null && v !== undefined && v !== '') cleanDossier[k] = v;
     }
 
+    const isMinor = character.age != null && character.age < 18;
+
     const Anthropic = require('@anthropic-ai/sdk');
     const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+
+    const minorSexualityRule = isMinor
+      ? `\n\nIMPORTANT — MINOR SAFEGUARD: This character is a minor (age ${character.age}). Do NOT generate the "sexuality_and_desire" dimension. Instead, set it to: { "note": "Dimension deferred — character is a minor." }\n`
+      : '';
 
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-20250514',
@@ -1353,7 +1359,7 @@ Here is everything currently known about this character:
 ${JSON.stringify(cleanDossier, null, 2)}
 
 ${filledDims.length > 0 ? `EXISTING deep_profile dimensions (do NOT overwrite — only fill empty dimensions):\n${JSON.stringify(existing, null, 2)}` : ''}
-
+${minorSexualityRule}
 Generate the deep_profile. Infer what you can from the existing data. Use null for fields you genuinely cannot infer — do NOT fabricate generic filler. Every non-null field should be specific to THIS person.
 
 Return ONLY a JSON object matching this structure (include ALL 14 top-level dimensions):
@@ -1379,6 +1385,11 @@ Return ONLY a JSON object matching this structure (include ALL 14 top-level dime
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) return res.status(500).json({ error: 'Failed to parse Claude response' });
     const generated = JSON.parse(jsonMatch[0]);
+
+    // Hard enforcement: strip sexuality_and_desire for minors regardless of what Claude returned
+    if (isMinor) {
+      generated.sexuality_and_desire = { note: 'Dimension deferred — character is a minor.' };
+    }
 
     // Merge: don't overwrite existing filled fields
     const merged = { ...existing };

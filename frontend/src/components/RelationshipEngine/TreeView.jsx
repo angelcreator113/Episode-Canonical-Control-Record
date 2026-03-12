@@ -62,6 +62,15 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
     return s;
   }, [selChar, rels]);
 
+  const relCountMap = useMemo(() => {
+    const m = {};
+    rels.forEach(r => {
+      m[r.character_id_a] = (m[r.character_id_a] || 0) + 1;
+      m[r.character_id_b] = (m[r.character_id_b] || 0) + 1;
+    });
+    return m;
+  }, [rels]);
+
   const zoom = dir => setVb(p => {
     const v = p || { x: 0, y: 0, w: svgW, h: svgH };
     const cx = v.x + v.w / 2, cy = v.y + v.h / 2;
@@ -91,6 +100,15 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
   const VIEW = vb || { x: 0, y: 0, w: svgW, h: svgH };
 
   const handleWheel = e => { e.preventDefault(); zoom(e.deltaY > 0 ? -1 : 1); };
+
+  /* attach wheel listener with { passive: false } so preventDefault works */
+  useEffect(() => {
+    const el = ref.current?.querySelector('svg');
+    if (!el) return;
+    el.addEventListener('wheel', handleWheel, { passive: false });
+    return () => el.removeEventListener('wheel', handleWheel);
+  });
+
   const handleMouseDown = e => {
     if (e.target.closest('.ni')) return;
     setPan(true);
@@ -119,7 +137,6 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
         viewBox={`${VIEW.x} ${VIEW.y} ${VIEW.w} ${VIEW.h}`}
         className="re-tree-svg"
         style={{ cursor: pan ? 'grabbing' : 'grab' }}
-        onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={endPan}
@@ -190,7 +207,7 @@ export default function TreeView({ chars, rels, layers, lf, selChar, onRelClick,
           const rc = roleColor(pos.c.role_type);
           const rb = roleBg(pos.c.role_type);
           const nr = isSel ? 26 : isHov ? 23 : 18;
-          const relCnt = rels.filter(r => r.character_id_a === cId || r.character_id_b === cId).length;
+          const relCnt = relCountMap[cId] || 0;
           return (
             <g key={cId} transform={`translate(${pos.x},${pos.y})`} className="ni"
               style={{ cursor: 'pointer' }} tabIndex={0}

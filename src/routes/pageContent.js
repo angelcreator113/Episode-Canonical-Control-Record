@@ -1,7 +1,7 @@
 'use strict';
 const express = require('express');
 const router = express.Router();
-const { optionalAuth } = require('../middleware/auth');
+const { optionalAuth, authenticateToken } = require('../middleware/auth');
 
 router.use(optionalAuth);
 
@@ -26,7 +26,7 @@ router.get('/:pageName', async (req, res) => {
 });
 
 // PUT /api/v1/page-content/:pageName/:constantKey — upsert one constant
-router.put('/:pageName/:constantKey', async (req, res) => {
+router.put('/:pageName/:constantKey', authenticateToken, async (req, res) => {
   const { PageContent } = getModels(req);
   const { pageName, constantKey } = req.params;
   const { data } = req.body;
@@ -48,7 +48,7 @@ router.put('/:pageName/:constantKey', async (req, res) => {
 });
 
 // DELETE /api/v1/page-content/:pageName/:constantKey — revert to default
-router.delete('/:pageName/:constantKey', async (req, res) => {
+router.delete('/:pageName/:constantKey', authenticateToken, async (req, res) => {
   const { PageContent } = getModels(req);
   try {
     const deleted = await PageContent.destroy({

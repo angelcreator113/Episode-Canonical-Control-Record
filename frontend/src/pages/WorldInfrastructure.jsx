@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './WorldInfrastructure.css';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════
    DATA CONSTANTS — Doc 04 · v1.0
@@ -360,16 +360,16 @@ const VIEWS = { cities: CitiesView, universities: UniversitiesView, corporations
 export default function WorldInfrastructure() {
   const [tab, setTab] = useState('cities');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('world_infrastructure', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving } = usePageData('world_infrastructure', DEFAULTS);
   const View = VIEWS[tab];
 
   return (
-    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="wi-shell">
       <header className="wi-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>World Infrastructure</h1>
-          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+          {saving && <span className="eim-saving">Saving…</span>}
         </div>
         <p>Cities · Universities · Corporations · 50 Legendary Influencers · The Loop — Doc 04 · v1.0</p>
         <nav className="wi-tabs">

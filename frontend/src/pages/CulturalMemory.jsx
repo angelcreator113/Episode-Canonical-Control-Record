@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './CulturalMemory.css';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════
    The Cultural Memory System — Doc 08 · v1.0
@@ -367,15 +367,15 @@ const TAB_RENDERERS = {
 
 export default function CulturalMemory() {
   const [activeTab, setActiveTab] = useState('types');
-  const { data, updateItems, addItem, removeItem, saving, editMode, setEditMode } = usePageData('cultural_memory', DEFAULTS);
+  const { data, updateItems, addItem, removeItem, saving } = usePageData('cultural_memory', DEFAULTS);
   const [editItem, setEditItem] = useState(null);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
-    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="cm-page">
       <header className="cm-header">
-        <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+        {saving && <span className="eim-saving">Saving…</span>}
         <h1>The Cultural Memory System</h1>
         <p className="cm-subtitle">Doc 08 · v1.0 — A living archive of moments that become part of LalaVerse history</p>
       </header>

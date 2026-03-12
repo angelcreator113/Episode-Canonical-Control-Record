@@ -11,7 +11,6 @@
   font-family: 'DM Sans', sans-serif;
   color: #2e2e3a;
   background: #faf9fc;
-  min-height: 100vh;
 }
 
 .cls-header { text-align: center; margin-bottom: 2rem; }
@@ -489,4 +488,9 @@
   .cls-rivalry-arrow { transform: rotate(90deg); text-align: center; padding: 0; }
   .cls-persona-side,
   .cls-gen-columns { flex-direction: column; }
+}
+
+@media (max-width: 480px) {
+  .cls-page { padding: 0.75rem; }
+  .cls-mini-label { width: auto; min-width: 0; }
 }

@@ -15,6 +15,12 @@ import {
   API, T, LAYER, TENSION, cname, clayer, initials, roleColor,
 } from '../components/RelationshipEngine';
 
+/* ── Auth helper ─────────────────────────────────────────────────────── */
+function authHeaders() {
+  const t = localStorage.getItem('authToken') || localStorage.getItem('token');
+  return t ? { Authorization: `Bearer ${t}` } : {};
+}
+
 /* ═══════════════════════════════════════════════════════════════════════
    State management (replaces 16 individual useState hooks)
    ═══════════════════════════════════════════════════════════════════════ */
@@ -83,9 +89,11 @@ export default function RelationshipEngine() {
     dispatch({ type: 'SET', payload: { loading: true, error: null } });
     try {
       const [treeR, pendR] = await Promise.all([
-        fetch(`${API}/relationships/tree/${s.reg.id}`),
-        fetch(`${API}/relationships/pending`),
+        fetch(`${API}/relationships/tree/${s.reg.id}`, { headers: authHeaders() }),
+        fetch(`${API}/relationships/pending`, { headers: authHeaders() }),
       ]);
+      if (!treeR.ok) throw new Error(`Tree load failed (${treeR.status})`);
+      if (!pendR.ok) throw new Error(`Pending load failed (${pendR.status})`);
       const tree = await treeR.json();
       const pend = await pendR.json();
       dispatch({
@@ -97,8 +105,8 @@ export default function RelationshipEngine() {
           cands:  pend.candidates || pend || [],
         },
       });
-    } catch {
-      dispatch({ type: 'ERROR', msg: 'Failed to load relationships. Check your connection and try again.' });
+    } catch (err) {
+      dispatch({ type: 'ERROR', msg: err.message || 'Failed to load relationships. Check your connection and try again.' });
     }
   }, [s.reg]);
 
@@ -108,10 +116,11 @@ export default function RelationshipEngine() {
   const fetchFamily = useCallback(async () => {
     if (!s.reg) return;
     try {
-      const r = await fetch(`${API}/relationships/family-tree/${s.reg.id}`);
+      const r = await fetch(`${API}/relationships/family-tree/${s.reg.id}`, { headers: authHeaders() });
+      if (!r.ok) throw new Error(`Family tree load failed (${r.status})`);
       dispatch({ type: 'FAM_LOADED', payload: await r.json() });
-    } catch {
-      toast('Could not load family tree', 'error');
+    } catch (err) {
+      toast(err.message || 'Could not load family tree', 'error');
     }
   }, [s.reg, toast]);
 
@@ -121,37 +130,40 @@ export default function RelationshipEngine() {
   const confirm = async id => {
     dispatch({ type: 'SET', payload: { busy: id } });
     try {
-      await fetch(`${API}/relationships/confirm/${id}`, { method: 'POST' });
+      const r = await fetch(`${API}/relationships/confirm/${id}`, { method: 'POST', headers: authHeaders() });
+      if (!r.ok) throw new Error(`Confirm failed (${r.status})`);
       dispatch({ type: 'REMOVE_CAND', id });
       toast('Relationship confirmed', 'success');
       fetchTree();
-    } catch {
+    } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
-      toast('Confirm failed', 'error');
+      toast(err.message || 'Confirm failed', 'error');
     }
   };
 
   const dismiss = async id => {
     dispatch({ type: 'SET', payload: { busy: id } });
     try {
-      await fetch(`${API}/relationships/dismiss/${id}`, { method: 'POST' });
+      const r = await fetch(`${API}/relationships/dismiss/${id}`, { method: 'POST', headers: authHeaders() });
+      if (!r.ok) throw new Error(`Dismiss failed (${r.status})`);
       dispatch({ type: 'REMOVE_CAND', id });
       toast('Seed dismissed', 'info');
-    } catch {
+    } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
-      toast('Dismiss failed', 'error');
+      toast(err.message || 'Dismiss failed', 'error');
     }
   };
 
   const del = async id => {
     dispatch({ type: 'SET', payload: { busy: id } });
     try {
-      await fetch(`${API}/relationships/${id}`, { method: 'DELETE' });
+      const r = await fetch(`${API}/relationships/${id}`, { method: 'DELETE', headers: authHeaders() });
+      if (!r.ok) throw new Error(`Delete failed (${r.status})`);
       dispatch({ type: 'DELETE_REL', id });
       toast('Deleted', 'info');
-    } catch {
+    } catch (err) {
       dispatch({ type: 'SET', payload: { busy: null } });
-      toast('Delete failed', 'error');
+      toast(err.message || 'Delete failed', 'error');
     }
   };
 
@@ -159,69 +171,74 @@ export default function RelationshipEngine() {
     dispatch({ type: 'SET', payload: { genning: true } });
     try {
       const r = await fetch(`${API}/relationships/generate`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ registry_id: s.reg?.id, focus_character_id: focusId }),
       });
+      if (!r.ok) throw new Error(`Generate failed (${r.status})`);
       const d = await r.json();
       dispatch({ type: 'SET', payload: { cands: d.candidates || d || [], genning: false, genOpen: false, tab: 'candidates' } });
       toast('Seeds generated', 'success');
-    } catch {
+    } catch (err) {
       dispatch({ type: 'SET', payload: { genning: false } });
-      toast('Generation failed', 'error');
+      toast(err.message || 'Generation failed', 'error');
     }
   };
 
   const addRel = async f => {
     try {
       const r = await fetch(`${API}/relationships`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ ...f, registry_id: s.reg?.id }),
       });
+      if (!r.ok) throw new Error(`Add failed (${r.status})`);
       const d = await r.json();
       dispatch({ type: 'ADD_REL', rel: d.relationship || d });
       toast('Relationship added', 'success');
-    } catch {
-      toast('Add failed', 'error');
+    } catch (err) {
+      toast(err.message || 'Add failed', 'error');
     }
   };
 
   const genFamFn = async () => {
     dispatch({ type: 'SET', payload: { genFam: true } });
     try {
-      await fetch(`${API}/relationships/generate-family`, {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+      const r = await fetch(`${API}/relationships/generate-family`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify({ registry_id: s.reg?.id }),
       });
+      if (!r.ok) throw new Error(`Family generation failed (${r.status})`);
       fetchFamily();
       toast('Family tree generated', 'success');
-    } catch {
+    } catch (err) {
       dispatch({ type: 'SET', payload: { genFam: false } });
-      toast('Family generation failed', 'error');
+      toast(err.message || 'Family generation failed', 'error');
     }
   };
 
   const updateFamRole = async (id, fields) => {
     try {
-      await fetch(`${API}/relationships/${id}/family`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      const r = await fetch(`${API}/relationships/${id}/family`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(fields),
       });
+      if (!r.ok) throw new Error(`Update failed (${r.status})`);
       fetchFamily();
-    } catch {
-      toast('Update failed', 'error');
+    } catch (err) {
+      toast(err.message || 'Update failed', 'error');
     }
   };
 
   const updateRel = async (id, fields) => {
     try {
-      await fetch(`${API}/relationships/${id}`, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+      const r = await fetch(`${API}/relationships/${id}`, {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json', ...authHeaders() },
         body: JSON.stringify(fields),
       });
+      if (!r.ok) throw new Error(`Update failed (${r.status})`);
       dispatch({ type: 'UPDATE_REL', id, fields });
       toast('Updated', 'success');
-    } catch {
-      toast('Update failed', 'error');
+    } catch (err) {
+      toast(err.message || 'Update failed', 'error');
     }
   };
 
@@ -326,6 +343,9 @@ export default function RelationshipEngine() {
             <div className="re-sidebar-divider" />
             {/* character list */}
             <div className="re-sidebar-chars">
+              {filtChars.length === 0 && (
+                <div className="re-sidebar-empty">No characters in this layer</div>
+              )}
               {filtChars.map(c => {
                 const lk = layerMap[c.id];
                 const lc = lk && LAYER[lk];
@@ -419,7 +439,7 @@ export default function RelationshipEngine() {
       </div>
 
       {/* Modals */}
-      {s.addOpen && <AddModal chars={s.chars} onAdd={addRel} onClose={() => dispatch({ type: 'SET', payload: { addOpen: false } })} />}
+      {s.addOpen && <AddModal chars={s.chars} rels={s.rels} onAdd={addRel} onClose={() => dispatch({ type: 'SET', payload: { addOpen: false } })} />}
       {s.genOpen && <GenModal chars={s.chars} genning={s.genning} onGenerate={generate} onClose={() => dispatch({ type: 'SET', payload: { genOpen: false } })} />}
     </div>
   );

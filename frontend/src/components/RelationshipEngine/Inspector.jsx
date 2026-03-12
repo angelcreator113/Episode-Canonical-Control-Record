@@ -2,7 +2,7 @@
  * Inspector — right-panel relationship detail & editor
  * Prime Studios · LalaVerse
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { T, TENSION, CONN_MODES, STATUSES, TENSIONS, LALA_CONN, initials } from './tokens';
 import { Btn, Field, Label, Input, Select, Pill } from './primitives';
 
@@ -26,6 +26,27 @@ export default function Inspector({ rel, onClose, onUpdate, onDelete }) {
     reader_knows:         rel.reader_knows || '',
   });
   const set = k => e => setF(p => ({ ...p, [k]: e.target.value }));
+
+  useEffect(() => {
+    setF({
+      relationship_type:    rel.relationship_type || '',
+      connection_mode:      rel.connection_mode || 'IRL',
+      lala_connection:      rel.lala_connection || 'none',
+      status:               rel.status || 'Active',
+      tension_state:        rel.tension_state || '',
+      pain_point_category:  rel.pain_point_category || '',
+      situation:            rel.situation || '',
+      lala_mirror:          rel.lala_mirror || '',
+      career_echo_potential: rel.career_echo_potential || '',
+      notes:                rel.notes || '',
+      family_role:          rel.family_role || '',
+      conflict_summary:     rel.conflict_summary || '',
+      source_knows:         rel.source_knows || '',
+      target_knows:         rel.target_knows || '',
+      reader_knows:         rel.reader_knows || '',
+    });
+    setEdit(false);
+  }, [rel.id]);
 
   return (
     <div className="re-inspector" role="complementary" aria-label="Relationship inspector">

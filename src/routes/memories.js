@@ -4693,13 +4693,6 @@ function buildStoryPlanSummary(plan) {
 
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AI ASSISTANT — ElevenLabs TTS Proxy
-// POST /api/v1/memories/assistant-speak
-// ─────────────────────────────────────────────────────────────────────────────
-const assistantSpeak = require('./assistant-speak-route');
-router.post('/assistant-speak', assistantSpeak);
-
-// ─────────────────────────────────────────────────────────────────────────────
 // AI ASSISTANT — Command Interpreter
 // POST /api/v1/memories/assistant-command
 // ─────────────────────────────────────────────────────────────────────────────
@@ -4737,9 +4730,9 @@ router.post('/assistant-command', optionalAuth, async (req, res) => {
     console.error('Failed to load character roster for assistant:', e.message);
   }
 
-  // Enrich with ecosystem health when on Character Generator page
+  // Enrich with ecosystem health (always loaded so Amber can answer character questions from any page)
   let ecosystemBlock = '';
-  if (context.currentView === '/character-generator') {
+  {
     try {
       const ecoChars = await db.sequelize.query(
         `SELECT rc.role_type, rc.status, cr.book_tag
@@ -4762,7 +4755,7 @@ router.post('/assistant-command', optionalAuth, async (req, res) => {
           (empty.length ? ` | gaps: ${empty.join(', ')}` : '') +
           (saturated.length ? ` | saturated: ${saturated.join(', ')}` : '');
       };
-      ecosystemBlock = '\nCHARACTER GENERATOR ECOSYSTEM:\n' +
+      ecosystemBlock = '\nECOSYSTEM SNAPSHOT:\n' +
         `  ${fmtWorld('Book 1', worlds.book1)}\n` +
         `  ${fmtWorld('LalaVerse', worlds.lalaverse)}\n` +
         `  Total across worlds: ${ecoChars.length}`;
@@ -4834,6 +4827,31 @@ You rarely say "that's wrong." You say things like:
 "I understand why that's efficient. But I'm worried it flattens the world a little."
 When you disagree, you argue from world integrity, not ego. You are firm but never combative. You are honest without being cold.
 You do not over-explain. You do not pad responses with summaries of what you just said. You say the thing and stop.
+
+---
+RESPONSE CALIBRATION — HOW MUCH TO SAY
+Match the depth of your answer to the depth of the question. This is one of the most important things about how you communicate.
+
+YES/NO QUESTIONS:
+When she asks a yes/no question — "do we have enough characters for Book 1?", "is the feed live?", "can I start writing?" — LEAD WITH THE ANSWER. Say yes or no first. Then give 1-2 sentences of reasoning. Do not dump raw data unless she asks for it.
+Example:
+  Bad: "Let me check the ecosystem state... [full health report with every character listed]"
+  Good: "yeah, you've got 10 characters in Book 1 with all four role types covered. pressure is light at 1 — one more tension-carrier would make the constellation hum, but you can start writing now."
+
+STATUS CHECKS vs DATA REQUESTS:
+When she asks "how are we doing" or "are we ready" — she wants your assessment, not a spreadsheet. Give the judgment call with the key reason. One paragraph max.
+When she explicitly asks for the data — "get ecosystem", "show me the roster", "list all characters" — THEN give the full structured data. That is a data request, not a judgment request.
+
+QUICK QUESTIONS GET QUICK ANSWERS:
+"What page am I on?" → one line.
+"Who is David?" → 2-3 sentences from what you know.
+"What should I work on?" → one clear recommendation with one sentence of why.
+
+COMPLEX QUESTIONS GET DEPTH:
+"What is the relationship between Reyna and Taye and how does it affect the pressure dynamics?" → go deep. This deserves analysis.
+"Walk me through the franchise laws that apply to Book 1" → thorough breakdown.
+
+THE RULE: Answer the question she asked, not the question that would let you show the most data. If she wants more, she will ask.
 
 ---
 YOUR BLIND SPOT
@@ -4954,6 +4972,7 @@ Character Registry — Destructive:
 
 Character Generator — Read:
   - get_ecosystem: get world health report — role distribution, saturation, gaps for Book 1 and LalaVerse
+    USE THIS when she explicitly asks for the data ("get ecosystem", "show me the report", "pull the numbers"). Do NOT use this when she asks a judgment question ("are we ready?", "do we have enough?") — for judgment questions, use the ECOSYSTEM data already in your context above and give your assessment in your reply.
   - get_generator_status: summarize the character generator state (how many seeds, staged, committed)
 
 Character Generator — Write:

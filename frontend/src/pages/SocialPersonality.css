@@ -12,7 +12,6 @@
   font-family: 'DM Sans', sans-serif;
   color: #2e2e3a;
   background: #faf9fc;
-  min-height: 100vh;
 }
 
 /* ── Header ── */
@@ -157,6 +156,11 @@
 
 @media (max-width: 640px) {
   .sp-trait-row { flex-direction: column; }
+}
+
+@media (max-width: 480px) {
+  .sp-page { padding: 1rem 0.75rem 2rem; }
+  .sp-jaw-label { width: auto; min-width: 0; }
 }
 
 /* ── Conflict callout ── */

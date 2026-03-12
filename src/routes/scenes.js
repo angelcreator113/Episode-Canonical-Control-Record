@@ -3,6 +3,7 @@ const router = express.Router();
 const sceneController = require('../controllers/sceneController');
 const { asyncHandler } = require('../middleware/errorHandler');
 const { validateUUIDParam } = require('../middleware/requestValidation');
+const { authenticateToken } = require('../middleware/auth');
 
 console.log('🔵 SCENES ROUTES FILE LOADING... [TIMESTAMP:', new Date().toISOString(), ']');
 console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:id LAST');
@@ -11,8 +12,6 @@ console.log('🆕 SCENES.JS VERSION: 2026-02-10-05:20 - Routes reordered with /:
  * Scene Routes
  * Base path: /api/v1/scenes
  *
- * ✅ AUTH TEMPORARILY DISABLED FOR TESTING (matching episodes.js pattern)
- * 
  * ⚠️ CRITICAL ROUTING ORDER:
  * - Specific routes (/, /ultra-test, /db-test, /test-direct/:id, /:id/duplicate, etc.) MUST come FIRST
  * - Generic parameterized route (/:id) MUST come LAST
@@ -114,8 +113,7 @@ router.get('/test-direct/:id', asyncHandler(async (req, res) => {
 // POST /api/v1/scenes - Create new scene
 router.post(
   '/',
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('scenes', 'create'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.createScene)
 );
 
@@ -123,7 +121,7 @@ router.post(
 router.post(
   '/:id/duplicate',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.duplicateScene)
 );
 
@@ -135,7 +133,7 @@ router.post(
 router.put(
   '/:id/status',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.updateSceneStatus)
 );
 
@@ -143,7 +141,7 @@ router.put(
 router.post(
   '/:id/characters',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.addCharacter)
 );
 
@@ -151,7 +149,7 @@ router.post(
 router.delete(
   '/:id/characters/:characterName',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.removeCharacter)
 );
 
@@ -159,8 +157,7 @@ router.delete(
 router.put(
   '/:id/thumbnail',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('scenes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.setSceneThumbnail)
 );
 
@@ -168,8 +165,7 @@ router.put(
 router.put(
   '/:id/assets',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('scenes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.updateSceneAssets)
 );
 
@@ -184,7 +180,7 @@ router.get('/:id/assets', validateUUIDParam('id'), asyncHandler(sceneController.
 router.post(
   '/:id/assets',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.addSceneAsset)
 );
 
@@ -193,7 +189,7 @@ router.delete(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   validateUUIDParam('assetId'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.removeSceneAsset)
 );
 
@@ -202,7 +198,7 @@ router.patch(
   '/:id/assets/:assetId',
   validateUUIDParam('id'),
   validateUUIDParam('assetId'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.updateSceneAsset)
 );
 
@@ -210,8 +206,7 @@ router.patch(
 router.put(
   '/:id',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('scenes', 'edit'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.updateScene)
 );
 
@@ -219,8 +214,7 @@ router.put(
 router.delete(
   '/:id',
   validateUUIDParam('id'),
-  // authenticateToken,  // ✅ COMMENTED OUT FOR TESTING
-  // requirePermission('scenes', 'delete'),  // ✅ COMMENTED OUT FOR TESTING
+  authenticateToken,
   asyncHandler(sceneController.deleteScene)
 );
 

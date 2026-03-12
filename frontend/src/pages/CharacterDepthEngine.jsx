@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './CharacterDepthEngine.css';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════
    The Character Depth Engine — Doc 09 · v1.0
@@ -483,15 +483,15 @@ const TAB_RENDERERS = {
 
 export default function CharacterDepthEngine() {
   const [activeTab, setActiveTab] = useState('body');
-  const { data, updateItems, addItem, removeItem, saving, editMode, setEditMode } = usePageData('character_depth_engine', DEFAULTS);
+  const { data, updateItems, addItem, removeItem, saving } = usePageData('character_depth_engine', DEFAULTS);
   const [editItem, setEditItem] = useState(null);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
-    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="cde-page">
       <header className="cde-header">
-        <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+        {saving && <span className="eim-saving">Saving…</span>}
         <h1>The Character Depth Engine</h1>
         <p className="cde-subtitle">Doc 09 · v1.0 — The missing dimensions that make characters irreducible</p>
       </header>

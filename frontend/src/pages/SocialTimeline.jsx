@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import './SocialTimeline.css';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, EditToolbar, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext, EditableList, usePageEdit } from '../components/EditItemModal';
 
 /* ══════════════════════════════════════════════
    Data Constants — Doc 05 · Social Timeline v1.0
@@ -451,16 +451,16 @@ const TAB_RENDERERS = {
 export default function SocialTimeline() {
   const [activeTab, setActiveTab] = useState('layers');
   const [editItem, setEditItem] = useState(null);
-  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('social_timeline', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving } = usePageData('social_timeline', DEFAULTS);
   const Renderer = TAB_RENDERERS[activeTab];
 
   return (
-    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="st-page">
       <header className="st-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1 className="st-title">The Social Timeline Engine</h1>
-          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+          {saving && <span className="eim-saving">Saving…</span>}
         </div>
         <p className="st-subtitle">Doc 05 · v1.0 · March 2026 — How the Feed works, spreads, amplifies, and remembers</p>
       </header>

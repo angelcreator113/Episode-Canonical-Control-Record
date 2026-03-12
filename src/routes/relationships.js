@@ -264,6 +264,27 @@ router.post('/', optionalAuth, async (req, res) => {
       });
     }
 
+    // ── Duplicate check (bidirectional) ─────────────────────────────
+    const [existing] = await db.sequelize.query(
+      `SELECT id FROM character_relationships
+       WHERE relationship_type = :rel_type
+         AND (
+           (character_id_a = :char_a AND character_id_b = :char_b)
+           OR
+           (character_id_a = :char_b AND character_id_b = :char_a)
+         )
+       LIMIT 1`,
+      {
+        replacements: { char_a: character_id_a, char_b: character_id_b, rel_type: relationship_type },
+        type: db.sequelize.QueryTypes.SELECT,
+      }
+    );
+    if (existing) {
+      return res.status(409).json({
+        error: `A "${relationship_type}" relationship already exists between these characters`,
+      });
+    }
+
     const id  = uuidv4();
     const now = new Date();
 

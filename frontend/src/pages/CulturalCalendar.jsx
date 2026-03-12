@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './CulturalCalendar.css';
 import usePageData from '../hooks/usePageData';
-import { EditItemModal, EditToolbar, PageEditContext, EditableList } from '../components/EditItemModal';
+import { EditItemModal, PageEditContext, EditableList } from '../components/EditItemModal';
 
 /* ═══════════════════════════════════════════════════════════════════════
    CulturalCalendar.jsx — LalaVerse Cultural & Social Systems v2.0
@@ -268,7 +268,7 @@ export default function CulturalCalendar() {
   const [expandedId, setExpandedId] = useState(null);
   const [editItem, setEditItem]   = useState(null);
 
-  const { data, updateItem, addItem, removeItem, saving, editMode, setEditMode } = usePageData('cultural_calendar', DEFAULTS);
+  const { data, updateItem, addItem, removeItem, saving } = usePageData('cultural_calendar', DEFAULTS);
 
   /* ── Fetch events from API ── */
   useEffect(() => {
@@ -307,12 +307,12 @@ export default function CulturalCalendar() {
 
   /* ── Render ── */
   return (
-    <PageEditContext.Provider value={{ data, editMode, setEditItem, removeItem }}>
+    <PageEditContext.Provider value={{ data, setEditItem, removeItem }}>
     <div className="cc-shell">
       <header className="cc-header">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <h1>Cultural Calendar</h1>
-          <EditToolbar editMode={editMode} setEditMode={setEditMode} saving={saving} />
+          {saving && <span className="eim-saving">Saving…</span>}
         </div>
         <p>LalaVerse Cultural & Social Systems — franchise_law · always_inject</p>
         <nav className="cc-tabs">
