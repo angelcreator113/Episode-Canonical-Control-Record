@@ -105,6 +105,7 @@ const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
 const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
 const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
 const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
+const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -383,6 +384,9 @@ function AppContent() {
 
           {/* Social Timeline Engine — Feed layers, viral spread, engagement, drama, cultural memory */}
           <Route path="/social-timeline" element={<SocialTimeline />} />
+
+          {/* Social Personality Engine — Traits, archetypes, motivations, reputation, arcs, algorithm */}
+          <Route path="/social-personality" element={<SocialPersonality />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
