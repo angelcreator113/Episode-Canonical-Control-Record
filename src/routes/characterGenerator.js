@@ -1007,6 +1007,7 @@ router.post('/commit', optionalAuth, async (req, res) => {
     const storyPres  = profile.story_presence || {};
     const threads    = profile.plot_threads || [];
     const demo       = profile.demographics || {};
+    const depth      = profile.depth || {};
 
     // ── Duplicate guard: check if character with same name already exists in registry ──
     const rawName = seed?.name || identity.name || 'unnamed';
@@ -1216,6 +1217,37 @@ router.post('/commit', optionalAuth, async (req, res) => {
       demographic_voice_signature: demo.voice_signature_text || null,
       platform_primary:         demo.platform_primary || null,
       follower_tier:            demo.follower_tier || null,
+
+      // ── Character Depth Engine (Section 9-13) ──
+      body_relationship:      depth.body_relationship || null,
+      body_history:           depth.body_history || null,
+      body_currency:          depth.body_currency || null,
+      body_control_pattern:   depth.body_control_pattern || null,
+      money_behavior_pattern: depth.money_behavior_pattern || null,
+      money_behavior_note:    depth.money_behavior_note || null,
+      time_orientation_v2:    depth.time_orientation || null,
+      time_orientation_note:  depth.time_orientation_note || null,
+      change_capacity_v2:     depth.change_capacity || null,
+      change_conditions:      depth.change_conditions || null,
+      change_blocker:         depth.change_blocker || null,
+      circumstance_advantages:    depth.circumstance_advantages || null,
+      circumstance_disadvantages: depth.circumstance_disadvantages || null,
+      luck_belief:                depth.luck_belief || null,
+      luck_belief_vs_stated:      depth.luck_belief_vs_stated || null,
+      self_narrative:             depth.self_narrative || null,
+      actual_narrative:           depth.actual_narrative || null,
+      narrative_gap_type:         depth.narrative_gap_type || null,
+      blind_spot:                 depth.blind_spot || null,
+      blind_spot_category:        depth.blind_spot_category || null,
+      blind_spot_visible_to:      depth.blind_spot_visible_to || null,
+      operative_cosmology_v2:     depth.operative_cosmology || null,
+      cosmology_vs_stated_religion: depth.cosmology_vs_stated_religion || null,
+      foreclosed_category:        depth.foreclosed_category || null,
+      foreclosure_origin:         depth.foreclosure_origin || null,
+      foreclosure_vs_stated_want: depth.foreclosure_vs_stated_want || null,
+      joy_source:                 depth.joy_source || null,
+      joy_accessibility:          depth.joy_accessibility || null,
+      joy_vs_ambition:            depth.joy_vs_ambition || null,
     };
 
     const newChar = await db.RegistryCharacter.create(characterData);

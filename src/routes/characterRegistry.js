@@ -463,6 +463,17 @@ router.put('/characters/:id', express.json(), async (req, res) => {
       'story_presence', 'voice_signature', 'evolution_tracking',
       // Section 9: Registry Sync fields
       'wound_depth', 'belief_pressured', 'emotional_function', 'writer_notes',
+      // Section 9-13: Character Depth Engine
+      'body_relationship', 'body_history', 'body_currency', 'body_control_pattern',
+      'money_behavior_pattern', 'money_behavior_note',
+      'time_orientation_v2', 'time_orientation_note',
+      'change_capacity_v2', 'change_conditions', 'change_blocker',
+      'circumstance_advantages', 'circumstance_disadvantages', 'luck_belief', 'luck_belief_vs_stated',
+      'self_narrative', 'actual_narrative', 'narrative_gap_type',
+      'blind_spot', 'blind_spot_category', 'blind_spot_visible_to',
+      'operative_cosmology_v2', 'cosmology_vs_stated_religion',
+      'foreclosed_category', 'foreclosure_origin', 'foreclosure_vs_stated_want',
+      'joy_source', 'joy_accessibility', 'joy_vs_ambition',
     ];
     allowed.forEach(f => { if (req.body[f] !== undefined) character[f] = req.body[f]; });
     await character.save();

@@ -896,6 +896,7 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
                   { value: 'unknown', label: 'Unknown' },
                 ]}
               />
+              <DArea label="Blind Spot Visible To" value={form.blind_spot_visible_to} onChange={v => F('blind_spot_visible_to', v)} placeholder="Comma-separated character names who can see this blind spot" rows={2} />
               <DSelect label="Foreclosed Category" value={form.foreclosed_category} onChange={v => F('foreclosed_category', v)} allowEmpty
                 options={[
                   { value: 'love', label: 'Love' },
@@ -919,6 +920,7 @@ export default function CharacterDossier({ character, onSave, onStatusChange, on
             <div className="dossier-grid">
               <DossierRow label="Blind Spot" value={c.blind_spot} icon="🔒" />
               <DossierRow label="Blind Spot Category" value={c.blind_spot_category} accent />
+              <DossierRow label="Blind Spot Visible To" value={(c.blind_spot_visible_to || []).join(', ')} />
               <DossierRow label="Foreclosed Category" value={c.foreclosed_category} accent />
               <DossierRow label="Foreclosure Origin" value={c.foreclosure_origin} icon="🔒" />
               <DossierRow label="Foreclosure vs Stated Want" value={c.foreclosure_vs_stated_want} icon="🔒" />
@@ -1274,6 +1276,7 @@ function buildFormForSection(sectionKey, c) {
       return {
         blind_spot:                 c.blind_spot || '',
         blind_spot_category:        c.blind_spot_category || '',
+        blind_spot_visible_to:      (c.blind_spot_visible_to || []).join(', '),
         foreclosed_category:        c.foreclosed_category || '',
         foreclosure_origin:         c.foreclosure_origin || '',
         foreclosure_vs_stated_want: c.foreclosure_vs_stated_want || '',
@@ -1426,6 +1429,7 @@ function buildPayloadForSection(sectionKey, form) {
       return {
         blind_spot:                 form.blind_spot,
         blind_spot_category:        form.blind_spot_category,
+        blind_spot_visible_to:      form.blind_spot_visible_to ? form.blind_spot_visible_to.split(',').map(s => s.trim()).filter(Boolean) : [],
         foreclosed_category:        form.foreclosed_category,
         foreclosure_origin:         form.foreclosure_origin,
         foreclosure_vs_stated_want: form.foreclosure_vs_stated_want,
