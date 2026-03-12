@@ -104,6 +104,7 @@ const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
 const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
 const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
 const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
+const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -379,6 +380,9 @@ function AppContent() {
 
           {/* World Infrastructure — Cities, Universities, Corporations, 50 Legends, The Loop */}
           <Route path="/world-infrastructure" element={<WorldInfrastructure />} />
+
+          {/* Social Timeline Engine — Feed layers, viral spread, engagement, drama, cultural memory */}
+          <Route path="/social-timeline" element={<SocialTimeline />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
