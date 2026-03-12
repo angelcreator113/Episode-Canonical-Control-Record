@@ -31,6 +31,7 @@ const NAV = [
           { icon: '📱', label: 'Social Timeline',      route: '/social-timeline' },
           { icon: '🧠', label: 'Social Personality',    route: '/social-personality' },
           { icon: '🎬', label: 'Life Simulation',        route: '/character-life-simulation' },
+          { icon: '📜', label: 'Cultural Memory',        route: '/cultural-memory' },
         ],
       },
       { icon: '💭', label: 'Therapy',              route: '/therapy/default' },
@@ -124,7 +125,7 @@ function Sidebar({ isOpen, onClose }) {
 
   // Auto-expand Create World sub-nav when on character-registry or relationships
   useEffect(() => {
-    if (['/world-studio', '/character-registry', '/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation'].some(p => location.pathname.startsWith(p))) {
+    if (['/world-studio', '/character-registry', '/cultural-calendar', '/influencer-systems', '/world-infrastructure', '/social-timeline', '/social-personality', '/character-life-simulation', '/cultural-memory'].some(p => location.pathname.startsWith(p))) {
       setWorldOpen(true);
     }
   }, [location.pathname]);

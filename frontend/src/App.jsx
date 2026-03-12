@@ -107,6 +107,7 @@ const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
 const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
 const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
 const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
+const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -391,6 +392,9 @@ function AppContent() {
 
           {/* Character Life Simulation — Career stages, paths, relationships, rivalries, migration, persona */}
           <Route path="/character-life-simulation" element={<CharacterLifeSimulation />} />
+
+          {/* Cultural Memory System — Archives, legends, feuds, nostalgia, time capsules, influence rankings */}
+          <Route path="/cultural-memory" element={<CulturalMemory />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
