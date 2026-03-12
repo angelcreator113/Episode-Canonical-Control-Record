@@ -106,6 +106,7 @@ const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
 const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
 const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
 const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
+const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -387,6 +388,9 @@ function AppContent() {
 
           {/* Social Personality Engine — Traits, archetypes, motivations, reputation, arcs, algorithm */}
           <Route path="/social-personality" element={<SocialPersonality />} />
+
+          {/* Character Life Simulation — Career stages, paths, relationships, rivalries, migration, persona */}
+          <Route path="/character-life-simulation" element={<CharacterLifeSimulation />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
