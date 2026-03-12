@@ -152,9 +152,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
         }]);
       } else {
         setMessages(prev => [...prev, {
-          role:   'assistant',
-          text:   data.reply || 'Done.',
-          action: data.action,
+          role:           'assistant',
+          text:           data.reply || 'Done.',
+          action:         data.action,
+          nextBestAction: data.nextBestAction || null,
         }]);
       }
 
@@ -209,9 +210,10 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
       } else {
         const reply = data.reply || 'Done.';
         setMessages(prev => [...prev, {
-          role:   'assistant',
-          text:   reply,
-          action: data.action,
+          role:           'assistant',
+          text:           reply,
+          action:         data.action,
+          nextBestAction: data.nextBestAction || null,
         }]);
         // Voice-first: Amber speaks her reply
         speak(reply);
@@ -350,6 +352,9 @@ export default function AppAssistant({ appContext = {}, onNavigate, onRefresh })
                 )}
                 <div className="apa-msg-body">
                   <p className="apa-msg-text">{msg.text}</p>
+                  {msg.nextBestAction && (
+                    <p className="apa-msg-nba">→ {msg.nextBestAction}</p>
+                  )}
                   {msg.action && !msg.error && (
                     <span className="apa-msg-tag">{msg.action.replace(/_/g, ' ')}</span>
                   )}
