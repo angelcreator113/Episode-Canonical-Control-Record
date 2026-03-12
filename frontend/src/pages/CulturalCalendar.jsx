@@ -1,239 +1,440 @@
-/* ─────────────────────────────────────────────────────────────
-   CulturalCalendar.jsx — The Cultural System of the World
-   A Canonical Social & Industry Calendar v1.0
-   ───────────────────────────────────────────────────────────── */
-import { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './CulturalCalendar.css';
 
-const API = '/api/v1';
+/* ═══════════════════════════════════════════════════════════════════════
+   CulturalCalendar.jsx — LalaVerse Cultural & Social Systems v2.0
+   ═══════════════════════════════════════════════════════════════════════
+   franchise_law · always_inject
+   24 major events · 13 micro events · 5 icon birthdays
+   + Celebrity Hierarchy · Social Algorithm · Drama Mechanics · Famous 25
+   ═══════════════════════════════════════════════════════════════════════ */
 
-/* ═══════════════════════════════════════════════════════════
-   PALETTE  (mirrors RelationshipEngine / WorldStudio tokens)
-   ═══════════════════════════════════════════════════════════ */
+// ─── Design Palette ─────────────────────────────────────────────────────
 const T = {
-  rose: '#d4789a', roseDeep: '#b85a7c', roseFog: '#fdf2f6',
-  steel: '#7ab3d4', steelDeep: '#5a93b4', steelFog: '#eef6fb',
-  orchid: '#a889c8', orchidDeep: '#8a66b0', orchidFog: '#f3effa',
-  gold: '#c9a84c', goldFog: '#fdf7e6',
-  mint: '#6bba9a', mintFog: '#edf7f2',
-  amber: '#b89060', amberFog: '#f7f0e8',
-  ink: '#0f0c14', inkMid: '#3d3548', inkDim: '#7a7088', inkFaint: '#b8b0c8',
-  paper: '#faf9fc', rule: '#e8e4f0',
+  rose:   '#d4789a',
+  steel:  '#7ab3d4',
+  orchid: '#a889c8',
+  gold:   '#c9a84c',
+  mint:   '#6bba9a',
+  amber:  '#b89060',
+  bg:     '#faf9fc',
+  text:   '#0f0c14',
+  muted:  '#7a7088',
+  border: '#e8e4f0',
 };
 
-/* ─── Category → color mapping ─── */
 const CAT_COLORS = {
-  fashion:         { c: T.rose,       bg: T.roseFog   },
-  beauty:          { c: T.orchid,     bg: T.orchidFog  },
-  lifestyle:       { c: T.steel,      bg: T.steelFog   },
-  entrepreneur:    { c: T.gold,       bg: T.goldFog    },
-  music:           { c: T.mint,       bg: T.mintFog    },
-  nightlife:       { c: T.orchidDeep, bg: T.orchidFog  },
-  awards:          { c: T.gold,       bg: T.goldFog    },
-  creative:        { c: T.mint,       bg: T.mintFog    },
-  creator_economy: { c: T.steel,      bg: T.steelFog   },
+  fashion:       { bg: '#fdf2f6', border: T.rose,   text: '#9c3d62' },
+  beauty:        { bg: '#f6f0fc', border: T.orchid,  text: '#6b4d8a' },
+  entertainment: { bg: '#eef6fb', border: T.steel,   text: '#3d6e8a' },
+  lifestyle:     { bg: '#f0faf5', border: T.mint,    text: '#3a7d60' },
+  community:     { bg: '#fdf8ee', border: T.gold,    text: '#8a7030' },
+  technology:    { bg: '#fcf0e8', border: T.amber,   text: '#7a5a30' },
 };
 
-const SEVERITY_LABEL = {
-  major:         '★',
-  largest_event: '★★★ LARGEST',
-  awards_peak:   '★★★ PEAK',
-};
+const SEVERITY_LABEL = { critical: '★★★', high: '★★', medium: '★', low: '·' };
 
-const MONTHS = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
-];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
+/* ─── Tabs ──────────────────────────────────────────────────────────── */
 const TABS = [
-  { key: 'timeline',   label: 'Timeline'    },
-  { key: 'industries', label: 'Industries'  },
-  { key: 'awards',     label: 'Awards'      },
-  { key: 'media',      label: 'Media'       },
-  { key: 'micro',      label: 'Micro Events'},
+  { id: 'timeline',  label: 'Timeline' },
+  { id: 'hierarchy', label: 'Hierarchy' },
+  { id: 'industries', label: 'Industries' },
+  { id: 'awards',    label: 'Awards' },
+  { id: 'media',     label: 'Media' },
+  { id: 'algorithm', label: 'Algorithm' },
+  { id: 'micro',     label: 'Micro Events' },
+  { id: 'famous',    label: 'Famous 25' },
 ];
 
-/* ═══════════════════════════════════════════════════════════
-   CANONICAL REFERENCE DATA  (franchise_law · always_inject)
-   ═══════════════════════════════════════════════════════════ */
+/* ─── Celebrity & Creator Hierarchy (6 Tiers) ──────────────────────── */
+const CELEBRITY_HIERARCHY = [
+  { tier: 1, name: 'Cultural Icons',    followers: '10M+',     color: T.gold,
+    desc: 'Platform-defining figures. Define trends. Headline global events. Their opinion reshapes the Feed.' },
+  { tier: 2, name: 'Industry Titans',   followers: '5M–10M',   color: T.rose,
+    desc: 'Major designers, beauty founders, entertainment stars. Shape industry direction. Sponsor major events.' },
+  { tier: 3, name: 'Major Influencers', followers: '1M–5M',    color: T.orchid,
+    desc: 'Fashion creators, lifestyle influencers. Move culture at scale. Front row at everything.' },
+  { tier: 4, name: 'Rising Creators',   followers: '100K–1M',  color: T.steel,
+    desc: 'Viral creators, niche experts. The dangerous tier — where careers accelerate or collapse.' },
+  { tier: 5, name: 'Micro Creators',    followers: '10K–100K', color: T.mint,
+    desc: 'Niche community creators. Deep trust, narrow reach. Brands court them for authenticity.' },
+  { tier: 6, name: 'Everyday Creators', followers: '0–10K',    color: T.amber,
+    desc: 'Local personalities, hobby creators. The origin of culture. Everything starts here.' },
+];
 
+/* ─── Fashion Industry Hierarchy (5 Tiers) ─────────────────────────── */
 const FASHION_TIERS = [
-  { tier: 1, title: 'Legendary Designers',  desc: 'The untouchable names. Their word is fashion law.',                      ex: 'Think Chanel, Valentino — but LalaVerse originals.'      },
-  { tier: 2, title: 'Established Houses',   desc: 'Major brands with seasonal shows and global reach.',                    ex: 'Fashion Week headliners with loyal followings.'           },
-  { tier: 3, title: 'Rising Labels',        desc: 'Independent designers making noise. Hungry and bold.',                  ex: 'Pop-up shows, viral drops, influencer collabs.'           },
-  { tier: 4, title: 'Influencer Brands',    desc: 'Creator-led lines. Powered by followers, not fashion school.',          ex: 'Merch-to-brand pipelines, TikTok-first launches.'         },
-  { tier: 5, title: 'Street Style Icons',   desc: 'No brand. Just taste. The ones who get photographed.',                  ex: 'Fan-favorite characters with iconic looks.'               },
+  { tier: 1, name: 'Legendary Designers', color: T.gold,
+    desc: 'Couture houses, global designers, style icons who define the culture.',
+    examples: 'Control trends. Headline Velvet Season. Dominate the Atelier Circuit.' },
+  { tier: 2, name: 'Fashion Houses', color: T.rose,
+    desc: 'Large clothing companies, luxury labels, established brands.',
+    examples: 'Influence seasonal aesthetics. Sponsor major events.' },
+  { tier: 3, name: 'Stylists', color: T.orchid,
+    desc: 'Image creators who work with celebrities, influencers, and campaigns.',
+    examples: 'They decide what the Tier 1s wear. Their aesthetic becomes canon.' },
+  { tier: 4, name: 'Fashion Creators', color: T.steel,
+    desc: 'Online fashion influencers, outfit creators, style bloggers.',
+    examples: 'Move product. Create desire. Tier 1s watch them for taste signals.' },
+  { tier: 5, name: 'Street Style Icons', color: T.mint,
+    desc: 'Emerging trendsetters, often discovered during Outfit Games and Style Market.',
+    examples: 'Before the trend is a trend, it\'s on their back.' },
 ];
 
+/* ─── Beauty Industry Ecosystem (5 Tiers) ──────────────────────────── */
 const BEAUTY_TIERS = [
-  { tier: 1, title: 'Beauty Empires',       desc: 'Mega-brands with global distribution and celebrity partnerships.',      ex: 'Think Fenty, Rare Beauty — but LalaVerse originals.'      },
-  { tier: 2, title: 'Cult Brands',          desc: 'Indie darlings with devoted communities.',                              ex: 'Skincare obsessives, clean beauty evangelists.'            },
-  { tier: 3, title: 'Influencer Lines',     desc: 'Creator-launched beauty brands riding their platform.',                 ex: 'YouTube-to-Sephora pipelines.'                            },
-  { tier: 4, title: 'Beauty Editors',       desc: 'The tastemakers. They review, rank, and destroy.',                      ex: 'Magazine editors, blog queens, TikTok reviewers.'         },
-  { tier: 5, title: 'Beauty Students',      desc: "Up-and-comers learning the craft. Tomorrow's empire builders.",         ex: 'MUA apprentices, cosmetology students, beauty school grads.' },
+  { tier: 1, name: 'Beauty Empires', color: T.gold,
+    desc: 'Major cosmetics and skincare companies that define the category.',
+    examples: 'Their launches become cultural events. Glow Week belongs to them.' },
+  { tier: 2, name: 'Beauty Labs', color: T.rose,
+    desc: 'Innovation companies developing ingredients, formulas, and tools.',
+    examples: 'Emerging brands partner with them to establish credibility.' },
+  { tier: 3, name: 'Salon Owners', color: T.orchid,
+    desc: 'Local beauty powerhouses — lash studios, nail salons, skin clinics.',
+    examples: 'The look starts in their chair before it\'s on the Feed.' },
+  { tier: 4, name: 'Beauty Creators', color: T.steel,
+    desc: 'Makeup artists, skincare influencers, tutorial creators.',
+    examples: 'Their reviews move product. Brands court them constantly.' },
+  { tier: 5, name: 'Beauty Students', color: T.mint,
+    desc: 'Emerging talent, often discovered during Glow Week.',
+    examples: 'One viral moment changes everything.' },
 ];
 
-const AWARD_SHOWS = [
-  {
-    name: 'The Starlight Awards', month: 'November', peak: true,
-    desc: 'The biggest night in the LalaVerse. Fashion, beauty, content, and cultural impact — all judged.',
-    categories: ['Designer of the Year','Beauty Brand of the Year','Best Digital Content Creator','Cultural Moment of the Year','Most Iconic Look','Best New Voice','Legend Award (Lifetime Achievement)'],
-  },
-  {
-    name: 'The Style Crown Awards', month: 'March',
-    desc: 'Focused on fashion excellence. Presented during Bloom Festival.',
-    categories: ['Best Collection','Breakthrough Designer','Most Daring Look','Best Use of Color','Street Style Icon Award'],
-  },
-  {
-    name: 'The Glow Honors', month: 'September',
-    desc: 'Beauty-focused awards. Innovation, artistry, and influence.',
-    categories: ['Best New Product','Beauty Innovator','Makeup Look of the Year','Skincare Breakthrough','Community Choice Award'],
-  },
-  {
-    name: 'Viral Impact Awards', month: 'July',
-    desc: 'Digital-first awards for virality, engagement, and cultural relevance.',
-    categories: ['Most Viral Moment','Best Brand Partnership','Creator of the Year','Best Campaign','Community Builder Award'],
-  },
+/* ─── Social Algorithm System (4 Forces) ───────────────────────────── */
+const ALGORITHM_FORCES = [
+  { name: 'Engagement Energy', icon: '⚡', color: T.rose,
+    measuredBy: 'Comments, shares, saves — active signals',
+    effect: 'High engagement = higher distribution',
+    storyHook: 'A post that sparks argument spreads further than one that gets likes.' },
+  { name: 'Trend Alignment', icon: '🎯', color: T.orchid,
+    measuredBy: 'Connection to current cultural events',
+    effect: 'Event-aligned content gets boosted during that event',
+    storyHook: 'Posting off-cycle gets buried.' },
+  { name: 'Creator Momentum', icon: '🔄', color: T.steel,
+    measuredBy: 'Consistency of posting cadence',
+    effect: 'Consistent accounts gain algorithmic favor',
+    storyHook: 'A creator who disappears for two weeks loses ground another creator took.' },
+  { name: 'Network Clusters', icon: '🔗', color: T.mint,
+    measuredBy: 'Fashion, beauty, entertainment, fitness circles',
+    effect: 'Content boosted within relevant community',
+    storyHook: 'A post that breaks its cluster and enters a new one is a cultural moment.' },
 ];
+
+/* ─── Social Drama Mechanics (5 Types) ─────────────────────────────── */
+const DRAMA_MECHANICS = [
+  { type: 'Breakups', icon: '💔', color: T.rose,
+    trigger: 'Relationship splits going public',
+    feedEffect: 'Massive attention spike — audiences choose sides',
+    storyThread: 'Who knew before the post. Who pretended to be surprised.' },
+  { type: 'Feuds', icon: '⚔️', color: T.amber,
+    trigger: 'Creator disagreements — public or leaked',
+    feedEffect: 'Viral debates, ratio wars, fan armies mobilizing',
+    storyThread: 'What started it privately vs. what the public sees.' },
+  { type: 'Public Apologies', icon: '🕊️', color: T.steel,
+    trigger: 'Controversy leading to accountability post',
+    feedEffect: 'Curiosity + judgment + counter-commentary',
+    storyThread: 'Whether the apology is real or strategic is always the subtext.' },
+  { type: 'Rivalries', icon: '🏆', color: T.gold,
+    trigger: 'Competitors pursuing the same space',
+    feedEffect: 'Fans organize, comparisons trend',
+    storyThread: 'The rivalry the audience invented vs. the relationship they actually have.' },
+  { type: 'Scandals', icon: '🔥', color: T.orchid,
+    trigger: 'Leaks, rumors, accusations',
+    feedEffect: 'Feed-dominating — pushes everything else out',
+    storyThread: 'What is true, what is exaggerated, who benefits from the timing.' },
+];
+
+/* ─── Award Systems (4 Major Shows — Doc 02) ──────────────────────── */
+const AWARD_SHOWS = [
+  { name: 'Starlight Awards', month: 'November', icon: '✨', color: T.gold,
+    desc: 'The main event. Creator recognition across all categories.',
+    categories: [
+      'Creator of the Year', 'Fashion Icon', 'Beauty Innovator',
+      'Storyteller of the Year', 'Breakout Creator', 'Entrepreneur of the Year',
+    ] },
+  { name: 'Style Crown Awards', month: 'March', icon: '👑', color: T.rose,
+    desc: 'Fashion industry recognition.',
+    categories: [
+      'Best Stylist', 'Best Outfit Creator', 'Best Designer',
+      'Best Brand Collaboration', 'Street Style Icon of the Year',
+    ] },
+  { name: 'Glow Honors', month: 'September', icon: '🌟', color: T.orchid,
+    desc: 'Beauty creator recognition.',
+    categories: [
+      'Best Makeup Artist', 'Best Skincare Creator', 'Best Beauty Brand',
+      'Best Tutorial Series', 'Glow Innovator of the Year',
+    ] },
+  { name: 'Viral Impact Awards', month: 'July', icon: '🚀', color: T.steel,
+    desc: 'Internet culture, viral moments, meme-ability.',
+    categories: [
+      'Most Viral Moment', 'Funniest Creator', 'Most Influential Post',
+      'Best Comeback', 'Community Builder of the Year',
+    ] },
+];
+
+/* ─── Gossip Media Networks (5 Outlets — with Power column) ────────── */
+const MEDIA_STYLE_COLORS = {
+  editorial:      { bg: '#fce8ef', text: '#9c3d62' },
+  'review-driven': { bg: '#ece4f6', text: '#6b4d8a' },
+  gossip:         { bg: '#fdf3dc', text: '#8a7030' },
+  trending:       { bg: '#dff0fa', text: '#3d6e8a' },
+  analytical:     { bg: '#e3f5ec', text: '#3a7d60' },
+};
 
 const GOSSIP_MEDIA = [
-  { name: 'The Velvet Report', style: 'Highbrow',   desc: 'Polished, insider-tone. Like Vogue meets Page Six.',         focus: 'Industry gossip, designer feuds, award predictions.'      },
-  { name: 'Glow Gazette',     style: 'Enthusiast',  desc: 'Think Allure meets Buzzfeed. Beauty-first.',                 focus: 'Product reviews, beauty drama, glow-ups and glow-downs.'  },
-  { name: 'The Whisper Wire',  style: 'Anonymous',   desc: 'Blinds, leaks, and speculation. DeuxMoi energy.',            focus: 'Relationship rumors, career moves, backstage chaos.'      },
-  { name: 'Pop Prism',        style: 'Gen Z',       desc: 'TikTok-native. Fast, chaotic, screenshot-heavy.',            focus: 'Viral moments, creator beef, ranking everything.'         },
-  { name: 'Trend Telescope',  style: 'Analytical',  desc: 'The Business of Fashion, but make it LalaVerse.',            focus: 'Trend forecasting, market analysis, industry shifts.'     },
+  { name: 'The Velvet Report', focus: 'Fashion & luxury culture', style: 'editorial',
+    covers: 'Velvet Season, Atelier Circuit, Tier 1–2 fashion news',
+    power: 'Being ignored by Velvet Report is its own story.',
+    color: { bg: '#fdf2f6', text: '#9c3d62' } },
+  { name: 'Glow Gazette', focus: 'Beauty industry', style: 'review-driven',
+    covers: 'Glow Week, beauty brand launches, salon trend reports',
+    power: 'A Glow Gazette review can make or break a product launch.',
+    color: { bg: '#f6f0fc', text: '#6b4d8a' } },
+  { name: 'The Whisper Wire', focus: 'Celebrity & influencer gossip', style: 'gossip',
+    covers: 'Relationship drama, feuds, who unfollowed who',
+    power: 'The Whisper Wire always knows. The question is when they publish.',
+    color: { bg: '#fdf8ee', text: '#8a7030' } },
+  { name: 'Pop Prism', focus: 'Entertainment & pop culture', style: 'trending',
+    covers: 'Music creators, viral moments, Cloud Carnival',
+    power: 'Pop Prism decides what becomes a cultural reference point.',
+    color: { bg: '#eef6fb', text: '#3d6e8a' } },
+  { name: 'Trend Telescope', focus: 'Trend forecasting', style: 'analytical',
+    covers: 'Trend Summit coverage, upcoming aesthetics, emerging creators',
+    power: 'Being predicted by Trend Telescope before you peak is the signal.',
+    color: { bg: '#f0faf5', text: '#3a7d60' } },
 ];
 
+/* ─── The 25 Most Famous Characters ────────────────────────────────── */
+const FAMOUS_CHARACTERS = [
+  { rank: 1,  title: 'The Style Queen',         role: 'Defines what is fashionable. Her opinion reshapes the Feed.', icon: '👑', color: T.rose },
+  { rank: 2,  title: 'The Glow Guru',           role: 'Defines beauty standards. Her recommendations sell out in hours.', icon: '✨', color: T.orchid },
+  { rank: 3,  title: 'The Creator King',         role: 'Represents success culture. Entrepreneurs model themselves on him.', icon: '🎯', color: T.gold },
+  { rank: 4,  title: 'The Trend Oracle',         role: 'Predicts cultural shifts before they happen. Always right, always cryptic.', icon: '🔮', color: T.orchid },
+  { rank: 5,  title: 'The Fashion Rebel',        role: 'Breaks every rule the Style Queen sets. The counterculture anchor.', icon: '⚡', color: T.rose },
+  { rank: 6,  title: 'The Beauty Scientist',     role: 'Makes beauty intellectual. Evidence-based, not aspirational.', icon: '🔬', color: T.mint },
+  { rank: 7,  title: 'The Street Style Icon',    role: 'Lives at the origin of trends before they have names.', icon: '🌆', color: T.amber },
+  { rank: 8,  title: 'The Meme Monarch',         role: 'Turns every cultural moment into a joke that outlasts the moment.', icon: '😂', color: T.steel },
+  { rank: 9,  title: 'The Nightlife Queen',      role: 'Controls what happens after midnight in LalaVerse.', icon: '🌙', color: T.orchid },
+  { rank: 10, title: 'The Viral Comedian',       role: 'Makes the platform laugh. Laughter is its own kind of power.', icon: '🎭', color: T.steel },
+  { rank: 11, title: 'The Wellness Prophet',     role: 'The counter-narrative to hustle culture. Rest as resistance.', icon: '🧘', color: T.mint },
+  { rank: 12, title: 'The Design Genius',        role: 'Solves problems beautifully. Aesthetics and function together.', icon: '✏️', color: T.amber },
+  { rank: 13, title: 'The Pop Star Creator',     role: 'Crosses music and content. Two audiences become one.', icon: '🎵', color: T.rose },
+  { rank: 14, title: 'The Gossip Empress',       role: 'Knows everything. Shares it strategically. Never wrong.', icon: '👄', color: T.gold },
+  { rank: 15, title: 'The Digital Mogul',        role: 'Built an empire from content. The proof that it\'s possible.', icon: '💎', color: T.gold },
+  { rank: 16, title: 'The Travel Queen',         role: 'Makes the world feel accessible and aspirational simultaneously.', icon: '✈️', color: T.steel },
+  { rank: 17, title: 'The Fitness Titan',        role: 'Physical transformation as identity. The body as project.', icon: '💪', color: T.mint },
+  { rank: 18, title: 'The Chef Creator',         role: 'Food as culture, not just content. Elevates the everyday.', icon: '🍳', color: T.amber },
+  { rank: 19, title: 'The Art Visionary',        role: 'Makes the platform take beauty seriously.', icon: '🎨', color: T.orchid },
+  { rank: 20, title: 'The Photographer Legend',  role: 'Documents LalaVerse. Everything important is in their archive.', icon: '📸', color: T.steel },
+  { rank: 21, title: 'The Music Architect',      role: 'Builds sonic worlds, not just songs.', icon: '🎧', color: T.rose },
+  { rank: 22, title: 'The Storytelling Master',  role: 'Narrative above everything. Makes content feel like literature.', icon: '📖', color: T.orchid },
+  { rank: 23, title: 'The Culture Commentator',  role: 'Names what everyone is feeling but hasn\'t articulated yet.', icon: '🗣️', color: T.gold },
+  { rank: 24, title: 'The Creator Mentor',       role: 'Grows other creators. Legacy through multiplication.', icon: '🤝', color: T.mint },
+  { rank: 25, title: 'The Fashion Archivist',    role: 'Preserves what the Feed forgets. Memory as power.', icon: '📚', color: T.amber },
+];
+
+/* ─── Birthday Templates (5 Icons) ─────────────────────────────────── */
 const BIRTHDAY_TEMPLATES = [
-  { icon: '👑', title: 'The Style Queen',  desc: 'Fashion icon birthday — industry tributes, collection drops, street named after her for a day.' },
-  { icon: '✨', title: 'The Glow Guru',    desc: 'Beauty maven birthday — limited edition product, masterclass, fan pilgrimage to her first salon.' },
-  { icon: '🎬', title: 'The Creator King', desc: 'Content creator birthday — 24-hour livestream, collab drops, fans recreate his most viral looks.' },
-  { icon: '💫', title: 'The Icon Twins',   desc: 'Twin birthday — city-wide split theme, fans choose a side, joint party that always goes wrong.' },
+  { name: 'The Style Queen',  icon: '👑', community: 'Fashion',
+    desc: 'Themed outfit posts across the Feed. Her aesthetic becomes a challenge.' },
+  { name: 'The Glow Guru',    icon: '✨', community: 'Beauty',
+    desc: 'Tutorial tributes honoring her techniques. Beauty creators compete.' },
+  { name: 'The Creator King',  icon: '🎯', community: 'Entrepreneur',
+    desc: 'Mentorship content. Creators share how he influenced their path.' },
+  { name: 'The Icon Twins',    icon: '♊', community: 'All Communities',
+    desc: 'Two legendary influencers born the same day. The annual debate: which one is greater?' },
+  { name: 'The Founder Day',   icon: '🌟', community: 'Platform-wide',
+    desc: 'Celebrates LalaVerse\'s creation. Every creator participates.' },
 ];
 
-const MEDIA_STYLE_COLORS = {
-  Highbrow:   { c: T.roseDeep,   bg: T.roseFog   },
-  Enthusiast: { c: T.orchid,     bg: T.orchidFog  },
-  Anonymous:  { c: T.inkDim,     bg: '#f0edf8'    },
-  'Gen Z':    { c: T.steelDeep,  bg: T.steelFog   },
-  Analytical: { c: T.amber,      bg: T.amberFog   },
-};
+/* ═══════════════════════════════════════════════════════════════════════
+   MAIN COMPONENT
+   ═══════════════════════════════════════════════════════════════════════ */
 
-/* ═══════════════════════════════════════════════════════════
-   COMPONENT
-   ═══════════════════════════════════════════════════════════ */
 export default function CulturalCalendar() {
-  const [tab, setTab]           = useState('timeline');
-  const [events, setEvents]     = useState([]);
-  const [loading, setLoading]   = useState(true);
-  const [expanded, setExpanded] = useState(null);   // event id
+  const [tab, setTab]             = useState('timeline');
+  const [events, setEvents]       = useState([]);
+  const [loading, setLoading]     = useState(true);
+  const [expandedId, setExpandedId] = useState(null);
 
-  /* ─── fetch cultural calendar events ─── */
+  /* ── Fetch events from API ── */
   useEffect(() => {
-    const token = localStorage.getItem('authToken') || localStorage.getItem('token');
-    fetch(`${API}/calendar/events?event_type=lalaverse_cultural`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    })
-      .then(r => r.json())
-      .then(data => {
-        const rows = Array.isArray(data) ? data : data.events || data.data || [];
-        setEvents(rows);
-      })
-      .catch(() => setEvents([]))
-      .finally(() => setLoading(false));
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch('/api/v1/calendar/events?event_type=lalaverse_cultural');
+        const data = await res.json();
+        if (!cancelled) setEvents(data.events || []);
+      } catch (err) {
+        console.error('[CulturalCalendar] fetch error:', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  /* ─── derived data ─── */
-  const { majorEvents, microEvents, monthMap } = useMemo(() => {
-    const major = [];
-    const micro = [];
-    const mMap  = {};
-    MONTHS.forEach((_, i) => { mMap[i] = []; });
-
+  /* ── Group events by month for timeline ── */
+  const byMonth = useCallback(() => {
+    const map = {};
+    MONTHS.forEach((_, i) => { map[i] = []; });
     events.forEach(ev => {
-      if (ev.is_micro_event) {
-        micro.push(ev);
-      } else {
-        major.push(ev);
-        if (ev.start_datetime) {
-          const m = new Date(ev.start_datetime).getMonth();
-          if (mMap[m]) mMap[m].push(ev);
-        }
-      }
+      if (ev.is_micro_event) return;
+      const d = new Date(ev.start_datetime);
+      const m = d.getUTCMonth();
+      if (map[m]) map[m].push(ev);
     });
-    return { majorEvents: major, microEvents: micro, monthMap: mMap };
+    return map;
   }, [events]);
 
-  const toggle = useCallback((id) => {
-    setExpanded(prev => prev === id ? null : id);
-  }, []);
+  const microEvents = events.filter(e => e.is_micro_event);
+  const majorEvents = events.filter(e => !e.is_micro_event);
 
-  /* ─── render ─── */
+  const toggle = id => setExpandedId(prev => (prev === id ? null : id));
+
+  /* ── Render ── */
   return (
     <div className="cc-shell">
-      {/* Header */}
-      <div className="cc-header">
-        <h1>The Cultural Calendar</h1>
-        <p>A Canonical Social &amp; Industry Calendar — {majorEvents.length} major events · {microEvents.length} micro events · {AWARD_SHOWS.length} award shows</p>
-        <div className="cc-tabs">
+      <header className="cc-header">
+        <h1>Cultural Calendar</h1>
+        <p>LalaVerse Cultural & Social Systems — franchise_law · always_inject</p>
+        <nav className="cc-tabs">
           {TABS.map(t => (
             <button
-              key={t.key}
-              className={`cc-tab${tab === t.key ? ' active' : ''}`}
-              onClick={() => setTab(t.key)}
+              key={t.id}
+              className={`cc-tab${tab === t.id ? ' active' : ''}`}
+              onClick={() => setTab(t.id)}
             >
               {t.label}
             </button>
           ))}
-        </div>
-      </div>
+        </nav>
+      </header>
 
-      {/* Content */}
       <div className="cc-content">
-        {loading ? (
-          <div className="cc-loading">Loading cultural calendar…</div>
-        ) : (
-          <>
-            {tab === 'timeline'   && <TimelineView monthMap={monthMap} expanded={expanded} toggle={toggle} microEvents={microEvents} />}
-            {tab === 'industries' && <IndustriesView />}
-            {tab === 'awards'     && <AwardsView />}
-            {tab === 'media'      && <MediaView />}
-            {tab === 'micro'      && <MicroView microEvents={microEvents} expanded={expanded} toggle={toggle} />}
-          </>
+        {loading && <div className="cc-loading">Loading cultural events…</div>}
+
+        {!loading && tab === 'timeline' && (
+          <TimelineView byMonth={byMonth()} toggle={toggle}
+            expandedId={expandedId} majorCount={majorEvents.length}
+            microCount={microEvents.length} totalCount={events.length} />
         )}
+        {!loading && tab === 'hierarchy' && <HierarchyView />}
+        {!loading && tab === 'industries' && <IndustriesView />}
+        {!loading && tab === 'awards'     && <AwardsView />}
+        {!loading && tab === 'media'      && <MediaView />}
+        {!loading && tab === 'algorithm'  && <AlgorithmView />}
+        {!loading && tab === 'micro'      && (
+          <MicroView events={microEvents} toggle={toggle} expandedId={expandedId} />
+        )}
+        {!loading && tab === 'famous'     && <FamousView />}
       </div>
     </div>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════
-   TIMELINE VIEW — 12-month grid
-   ═══════════════════════════════════════════════════════════ */
-function TimelineView({ monthMap, expanded, toggle, microEvents }) {
-  const totalEvents = Object.values(monthMap).reduce((s, arr) => s + arr.length, 0);
+/* ═══════════════════════════════════════════════════════════════════════
+   HELPER COMPONENTS
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function Stat({ n, label, color }) {
+  return (
+    <div className="cc-stat">
+      <span className="cc-stat-number" style={{ color }}>{n}</span>
+      <span className="cc-stat-label">{label}</span>
+    </div>
+  );
+}
+
+function EventCard({ ev, expanded, toggle }) {
+  const cat = CAT_COLORS[ev.cultural_category] || CAT_COLORS.community;
+  const sev = SEVERITY_LABEL[ev.severity_level] || '';
+  const activities = Array.isArray(ev.activities) ? ev.activities : [];
+  const phrases    = Array.isArray(ev.phrases) ? ev.phrases : [];
 
   return (
-    <>
-      {/* Stats */}
-      <div className="cc-stats">
-        <Stat n={totalEvents} label="Major Events" color={T.rose} />
-        <Stat n={microEvents.length} label="Micro Events" color={T.orchid} />
-        <Stat n={AWARD_SHOWS.length} label="Award Shows" color={T.gold} />
-        <Stat n={GOSSIP_MEDIA.length} label="Media Outlets" color={T.steel} />
+    <div
+      className="cc-event-card"
+      style={{ background: cat.bg, borderLeftColor: cat.border }}
+      onClick={() => toggle(ev.id)}
+    >
+      <div className="cc-event-top">
+        <span className="cc-event-title">{ev.title}</span>
+        {sev && <span className="cc-event-severity">{sev}</span>}
       </div>
+      {ev.cultural_category && (
+        <span className="cc-event-cat" style={{ background: cat.bg, color: cat.text }}>
+          {ev.cultural_category}
+        </span>
+      )}
+      {ev.what_world_knows && <p className="cc-event-desc">{ev.what_world_knows}</p>}
+      {expanded && (
+        <div className="cc-event-expanded">
+          {ev.what_only_we_know && <p className="cc-event-secret">{ev.what_only_we_know}</p>}
+          {activities.length > 0 && (
+            <div className="cc-event-tags">
+              {activities.map((a, i) => <span key={i} className="cc-event-tag">{a}</span>)}
+            </div>
+          )}
+          {phrases.length > 0 && (
+            <div className="cc-event-phrases">
+              {phrases.map((p, i) => <span key={i} className="cc-phrase">{p}</span>)}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
-      {/* Grid */}
+function TierPanel({ title, icon, tiers }) {
+  return (
+    <div className="cc-industry-panel">
+      <h3 className="cc-industry-title">{icon} {title}</h3>
+      {tiers.map(t => (
+        <div className="cc-tier" key={t.tier}>
+          <div className="cc-tier-badge" style={{ background: t.color }}>{t.tier}</div>
+          <div className="cc-tier-info">
+            <h4>{t.name}</h4>
+            <p>{t.desc}</p>
+            {t.examples && <span className="cc-tier-examples">{t.examples}</span>}
+            {t.followers && (
+              <span className="cc-tier-examples">{t.followers} followers</span>
+            )}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   TIMELINE VIEW
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function TimelineView({ byMonth, toggle, expandedId, majorCount, microCount, totalCount }) {
+  return (
+    <>
+      <div className="cc-stats">
+        <Stat n={majorCount} label="Major Events" color={T.rose} />
+        <Stat n={microCount} label="Micro Events" color={T.orchid} />
+        <Stat n={totalCount} label="Total Events" color={T.steel} />
+        <Stat n={CELEBRITY_HIERARCHY.length} label="Status Tiers" color={T.gold} />
+        <Stat n={FAMOUS_CHARACTERS.length} label="Famous Icons" color={T.amber} />
+      </div>
       <div className="cc-timeline-grid">
-        {MONTHS.map((name, i) => (
-          <div className="cc-month-cell" key={name}>
-            <div className="cc-month-label">{name}</div>
+        {MONTHS.map((m, i) => (
+          <div className="cc-month-cell" key={i}>
+            <div className="cc-month-label">{m}</div>
             <div className="cc-month-events">
-              {monthMap[i].length === 0 ? (
-                <div className="cc-month-empty">No events this month</div>
-              ) : (
-                monthMap[i].map(ev => (
-                  <EventCard key={ev.id} ev={ev} expanded={expanded === ev.id} onToggle={() => toggle(ev.id)} />
+              {byMonth[i] && byMonth[i].length > 0 ? (
+                byMonth[i].map(ev => (
+                  <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} />
                 ))
+              ) : (
+                <div className="cc-month-empty">No major events</div>
               )}
             </div>
           </div>
@@ -243,149 +444,85 @@ function TimelineView({ monthMap, expanded, toggle, microEvents }) {
   );
 }
 
-/* ─── Stat pill ─── */
-function Stat({ n, label, color }) {
-  return (
-    <div className="cc-stat">
-      <div className="cc-stat-number" style={{ color }}>{n}</div>
-      <div className="cc-stat-label">{label}</div>
-    </div>
-  );
-}
+/* ═══════════════════════════════════════════════════════════════════════
+   HIERARCHY VIEW — Celebrity & Creator 6-Tier System
+   ═══════════════════════════════════════════════════════════════════════ */
 
-/* ─── Event card ─── */
-function EventCard({ ev, expanded, onToggle }) {
-  const cat   = CAT_COLORS[ev.cultural_category] || { c: T.inkDim, bg: '#f0edf8' };
-  const sev   = SEVERITY_LABEL[ev.severity_level];
-  const acts  = Array.isArray(ev.activities) ? ev.activities : [];
-  const phr   = Array.isArray(ev.phrases) ? ev.phrases : [];
-
-  return (
-    <div
-      className="cc-event-card"
-      style={{ background: cat.bg, borderLeftColor: cat.c }}
-      onClick={onToggle}
-    >
-      <div className="cc-event-top">
-        <span className="cc-event-title">{ev.title}</span>
-        {sev && <span className="cc-event-severity">{sev}</span>}
-      </div>
-
-      {ev.cultural_category && (
-        <span className="cc-event-cat" style={{ color: cat.c, background: `${cat.c}18` }}>
-          {ev.cultural_category.replace(/_/g, ' ')}
-        </span>
-      )}
-
-      <div className="cc-event-desc">{ev.what_world_knows}</div>
-
-      {expanded && (
-        <div className="cc-event-expanded">
-          {ev.what_only_we_know && (
-            <div className="cc-event-secret">🔒 {ev.what_only_we_know}</div>
-          )}
-
-          {acts.length > 0 && (
-            <div className="cc-event-tags">
-              {acts.map((a, i) => <span key={i} className="cc-event-tag">{a}</span>)}
-            </div>
-          )}
-
-          {phr.length > 0 && (
-            <div className="cc-event-phrases">
-              {phr.map((p, i) => <span key={i} className="cc-phrase">{p}</span>)}
-            </div>
-          )}
-
-          {ev.district && (
-            <div style={{ fontSize: 11, color: T.inkDim, marginTop: 6 }}>
-              📍 {ev.district}
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/* ═══════════════════════════════════════════════════════════
-   INDUSTRIES VIEW — Fashion + Beauty tier pyramids
-   ═══════════════════════════════════════════════════════════ */
-function IndustriesView() {
+function HierarchyView() {
   return (
     <>
-      <h2 className="cc-section-title">Industry Hierarchies</h2>
+      <h2 className="cc-section-title">Celebrity & Creator Hierarchy</h2>
       <p className="cc-section-desc">
-        The LalaVerse operates on a strict but fluid social hierarchy.
-        Characters rise, fall, and collide across these tiers — creating natural story tension.
+        The social ecosystem operates in six status tiers based on follower count.
+        Where a character sits determines what they can access, who notices them, and what cultural events mean for their arc.
       </p>
-
-      <div className="cc-industries">
-        <TierPanel
-          title="Fashion Industry"
-          icon="👗"
-          tiers={FASHION_TIERS}
-          color={T.rose}
-        />
-        <TierPanel
-          title="Beauty Ecosystem"
-          icon="💄"
-          tiers={BEAUTY_TIERS}
-          color={T.orchid}
-        />
+      <div className="cc-hierarchy-grid">
+        {CELEBRITY_HIERARCHY.map(h => (
+          <div className="cc-hierarchy-card" key={h.tier} style={{ borderTopColor: h.color }}>
+            <div className="cc-hierarchy-header">
+              <span className="cc-hierarchy-badge" style={{ background: h.color }}>
+                Tier {h.tier}
+              </span>
+              <span className="cc-hierarchy-followers" style={{ color: h.color }}>
+                {h.followers}
+              </span>
+            </div>
+            <h3 className="cc-hierarchy-name">{h.name}</h3>
+            <p className="cc-hierarchy-desc">{h.desc}</p>
+          </div>
+        ))}
       </div>
     </>
   );
 }
 
-function TierPanel({ title, icon, tiers, color }) {
+/* ═══════════════════════════════════════════════════════════════════════
+   INDUSTRIES VIEW — Fashion + Beauty Tier Panels
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function IndustriesView() {
   return (
-    <div className="cc-industry-panel">
-      <div className="cc-industry-title" style={{ color }}>
-        <span>{icon}</span> {title}
+    <>
+      <h2 className="cc-section-title">Industry Hierarchies</h2>
+      <p className="cc-section-desc">
+        Power structures within Fashion and Beauty industries. Where a character sits determines access, visibility, and arc.
+      </p>
+      <div className="cc-industries">
+        <TierPanel title="Fashion Industry" icon="👗" tiers={FASHION_TIERS} />
+        <TierPanel title="Beauty Industry" icon="💄" tiers={BEAUTY_TIERS} />
       </div>
-      {tiers.map(t => (
-        <div className="cc-tier" key={t.tier}>
-          <div className="cc-tier-badge" style={{ background: color, opacity: 1 - (t.tier - 1) * 0.12 }}>
-            {t.tier}
-          </div>
-          <div className="cc-tier-info">
-            <h4>{t.title}</h4>
-            <p>{t.desc}</p>
-            <span className="cc-tier-examples">{t.ex}</span>
-          </div>
-        </div>
-      ))}
-    </div>
+    </>
   );
 }
 
-/* ═══════════════════════════════════════════════════════════
-   AWARDS VIEW
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   AWARDS VIEW — Four Major Shows
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function AwardsView() {
   return (
     <>
       <h2 className="cc-section-title">Award Systems</h2>
       <p className="cc-section-desc">
-        Four major award shows define cultural validation in the LalaVerse.
-        Winners gain momentum. Snubs fuel rivalries. Speeches go viral.
+        Four major award shows, each with its own culture, politics, and snubs the Feed argues about for weeks.
       </p>
-
       <div className="cc-awards-grid">
-        {AWARD_SHOWS.map(aw => (
-          <div className="cc-award-card" key={aw.name}>
-            <div className="cc-award-header" style={aw.peak ? { background: 'linear-gradient(135deg, #fdf7e6, #fdf2f6)' } : undefined}>
-              <h3 style={aw.peak ? { color: T.gold } : undefined}>{aw.name}</h3>
+        {AWARD_SHOWS.map(show => (
+          <div className="cc-award-card" key={show.name}>
+            <div className="cc-award-header">
+              <h3 style={{ color: show.color }}>{show.icon} {show.name}</h3>
               <div className="cc-award-meta">
-                <span className="cc-award-month">{aw.month}</span>
-                {aw.peak && <span style={{ fontSize: 11, color: T.gold }}>★★★ PEAK EVENT</span>}
+                <span className="cc-award-month">{show.month}</span>
+                <span>·</span>
+                <span>{show.categories.length} categories</span>
               </div>
-              <div className="cc-award-desc">{aw.desc}</div>
+              <p className="cc-award-desc">{show.desc}</p>
             </div>
             <div className="cc-award-categories">
-              {aw.categories.map((cat, i) => (
-                <div className="cc-award-category" key={i}>{cat}</div>
+              {show.categories.map(c => (
+                <div className="cc-award-category" key={c} style={{ borderLeftColor: show.color }}>
+                  {c}
+                </div>
               ))}
             </div>
           </div>
@@ -395,29 +532,33 @@ function AwardsView() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════
-   MEDIA VIEW
-   ═══════════════════════════════════════════════════════════ */
+/* ═══════════════════════════════════════════════════════════════════════
+   MEDIA VIEW — Gossip Outlets with Power Column
+   ═══════════════════════════════════════════════════════════════════════ */
+
 function MediaView() {
   return (
     <>
       <h2 className="cc-section-title">Gossip Media Networks</h2>
       <p className="cc-section-desc">
-        Five outlets shape public perception across the LalaVerse.
-        Every event is filtered through their lens — each with a distinct voice and agenda.
+        Five outlets cover all major events and drama. Every character has a relationship to these outlets.
       </p>
-
       <div className="cc-media-grid">
         {GOSSIP_MEDIA.map(m => {
-          const sc = MEDIA_STYLE_COLORS[m.style] || { c: T.inkDim, bg: '#f0edf8' };
+          const styleColor = MEDIA_STYLE_COLORS[m.style] || {};
           return (
             <div className="cc-media-card" key={m.name}>
-              <h3>{m.name}</h3>
-              <span className="cc-media-style" style={{ color: sc.c, background: sc.bg }}>
+              <h3 style={{ color: m.color.text }}>{m.name}</h3>
+              <span className="cc-media-style" style={{ background: styleColor.bg, color: styleColor.text }}>
                 {m.style}
               </span>
-              <div className="cc-media-desc">{m.desc}</div>
-              <div className="cc-media-focus">{m.focus}</div>
+              <p className="cc-media-desc"><strong>Focus:</strong> {m.focus}</p>
+              <div className="cc-media-focus">
+                <strong>Covers:</strong> {m.covers}
+              </div>
+              <div className="cc-media-power">
+                <em>{m.power}</em>
+              </div>
             </div>
           );
         })}
@@ -426,64 +567,143 @@ function MediaView() {
   );
 }
 
-/* ═══════════════════════════════════════════════════════════
-   MICRO EVENTS + BIRTHDAYS VIEW
-   ═══════════════════════════════════════════════════════════ */
-function MicroView({ microEvents, expanded, toggle }) {
+/* ═══════════════════════════════════════════════════════════════════════
+   ALGORITHM VIEW — Social Algorithm Forces + Drama Mechanics
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function AlgorithmView() {
+  return (
+    <>
+      {/* ── ALGORITHM FORCES ── */}
+      <h2 className="cc-section-title">Social Algorithm System</h2>
+      <p className="cc-section-desc">
+        Content visibility is shaped by four forces. The story engine reads these when determining what characters see, what goes viral, and what gets buried.
+      </p>
+      <div className="cc-algo-grid">
+        {ALGORITHM_FORCES.map(f => (
+          <div className="cc-algo-card" key={f.name} style={{ borderTopColor: f.color }}>
+            <div className="cc-algo-icon" style={{ color: f.color }}>{f.icon}</div>
+            <h3 className="cc-algo-name">{f.name}</h3>
+            <div className="cc-algo-row">
+              <span className="cc-algo-label">Measured by</span>
+              <span className="cc-algo-value">{f.measuredBy}</span>
+            </div>
+            <div className="cc-algo-row">
+              <span className="cc-algo-label">Effect</span>
+              <span className="cc-algo-value">{f.effect}</span>
+            </div>
+            <div className="cc-algo-hook">{f.storyHook}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ── DRAMA MECHANICS ── */}
+      <h2 className="cc-section-title" style={{ marginTop: 40 }}>Social Drama Mechanics</h2>
+      <p className="cc-section-desc">
+        Drama drives viral engagement. These situations consistently generate feed spikes — the algorithm amplifies them because engagement is extreme.
+      </p>
+      <div className="cc-drama-grid">
+        {DRAMA_MECHANICS.map(d => (
+          <div className="cc-drama-card" key={d.type} style={{ borderLeftColor: d.color }}>
+            <div className="cc-drama-header">
+              <span className="cc-drama-icon">{d.icon}</span>
+              <h4 className="cc-drama-type">{d.type}</h4>
+            </div>
+            <div className="cc-drama-row">
+              <span className="cc-drama-label">Trigger</span>
+              <span className="cc-drama-value">{d.trigger}</span>
+            </div>
+            <div className="cc-drama-row">
+              <span className="cc-drama-label">Feed Effect</span>
+              <span className="cc-drama-value">{d.feedEffect}</span>
+            </div>
+            <div className="cc-drama-thread">
+              <span className="cc-drama-label">Story Thread</span>
+              <em>{d.storyThread}</em>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   MICRO VIEW — Floating Events + Birthdays
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function MicroView({ events: microEvents, toggle, expandedId }) {
   return (
     <>
       <h2 className="cc-section-title">Micro Events</h2>
       <p className="cc-micro-intro">
-        Floating cultural moments with no fixed date. They can fire at any time —
-        triggered by character actions, audience energy, or story momentum.
-        Use these to break routine and inject chaos.
+        13 micro events happen frequently throughout the year. They are not anchored to a specific month — they fire when the cultural moment is right. They create viral Feed moments and short-duration story pressure.
       </p>
 
       {microEvents.length > 0 ? (
         <div className="cc-micro-grid">
-          {microEvents.map(ev => {
-            const cat = CAT_COLORS[ev.cultural_category] || { c: T.inkDim, bg: '#f0edf8' };
-            const isOpen = expanded === ev.id;
-            return (
-              <div
-                className="cc-micro-card"
-                key={ev.id}
-                style={{ borderTop: `3px solid ${cat.c}` }}
-                onClick={() => toggle(ev.id)}
-              >
-                <h4>{ev.title}</h4>
-                <p>{ev.what_world_knows}</p>
-                {isOpen && ev.what_only_we_know && (
-                  <div className="cc-event-secret"  style={{ marginTop: 8 }}>🔒 {ev.what_only_we_know}</div>
-                )}
-                {isOpen && Array.isArray(ev.activities) && ev.activities.length > 0 && (
-                  <div className="cc-event-tags" style={{ marginTop: 8 }}>
-                    {ev.activities.map((a, i) => <span key={i} className="cc-event-tag">{a}</span>)}
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {microEvents.map(ev => (
+            <EventCard key={ev.id} ev={ev} expanded={expandedId === ev.id} toggle={toggle} />
+          ))}
         </div>
       ) : (
-        <div className="cc-empty">No micro events found. Run the cultural calendar seeder first.</div>
+        <div className="cc-micro-grid">
+          {['Beauty Battles','Creator Roast Night','Street Style Marathon',
+            'Creator Speed Dating','Fashion Mystery Box','Midnight Music Festival',
+            'The Great Glow-Up Challenge','Creator Charity Week','Creator Talent Show',
+            'Community Build Week','Virtual Travel Festival','Artist Residency Month',
+            'Design Lab Week',
+          ].map(name => (
+            <div className="cc-micro-card" key={name}>
+              <h4>{name}</h4>
+              <p>Floating event — fires when the cultural moment is right.</p>
+            </div>
+          ))}
+        </div>
       )}
 
-      {/* Birthdays */}
+      {/* ── BIRTHDAYS ── */}
       <div className="cc-birthdays-section">
-        <h3 className="cc-birthdays-title">Icon Birthday Templates</h3>
+        <h3 className="cc-birthdays-title">🎂 Major Icon Birthdays</h3>
         <p className="cc-birthdays-desc">
-          Major birthday events for cultural icons. Dates assigned when the icon characters are generated.
+          Certain characters become cultural icons. Their birthdays become mini-events that organize the Feed for days.
+          Dates assigned when icon characters are generated.
         </p>
         <div className="cc-birthday-grid">
           {BIRTHDAY_TEMPLATES.map(b => (
-            <div className="cc-birthday-card" key={b.title}>
+            <div className="cc-birthday-card" key={b.name}>
               <div className="cc-birthday-icon">{b.icon}</div>
-              <h4>{b.title}</h4>
+              <h4>{b.name}</h4>
+              <p><strong>{b.community}</strong></p>
               <p>{b.desc}</p>
             </div>
           ))}
         </div>
+      </div>
+    </>
+  );
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+   FAMOUS 25 VIEW — Character Placeholder Grid
+   ═══════════════════════════════════════════════════════════════════════ */
+
+function FamousView() {
+  return (
+    <>
+      <h2 className="cc-section-title">The 25 Most Famous Characters</h2>
+      <p className="cc-section-desc">
+        These figures shape the culture of LalaVerse. All placeholders — names assigned when characters are generated through the Character Registry.
+      </p>
+      <div className="cc-famous-grid">
+        {FAMOUS_CHARACTERS.map(c => (
+          <div className="cc-famous-card" key={c.rank} style={{ borderTopColor: c.color }}>
+            <div className="cc-famous-rank" style={{ color: c.color }}>#{c.rank}</div>
+            <div className="cc-famous-icon">{c.icon}</div>
+            <h4 className="cc-famous-title">{c.title}</h4>
+            <p className="cc-famous-role">{c.role}</p>
+          </div>
+        ))}
       </div>
     </>
   );

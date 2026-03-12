@@ -5,9 +5,9 @@
  * ─────────────────────────────────────────────────────────────────────────
  * franchise_law · always_inject
  *
- * 35 major world-rhythm events across 12 months
- * + 9 floating micro events (no fixed month)
- * + 4 icon birthday templates
+ * 24 major world-rhythm events across 12 months
+ * + 13 floating micro events (no fixed month)
+ * + 5 icon birthday templates (including Founder Day)
  *
  * Run after story_calendar_events table + cultural-calendar-fields migration.
  * Idempotent: deletes previous system cultural events before re-seeding.
@@ -565,43 +565,16 @@ module.exports = {
       }),
 
       // ═══════════════════════════════════════════════════════════════════
-      // MICRO EVENTS — floating, no fixed month
+      // MICRO EVENTS — floating, no fixed month (13 events)
       // ═══════════════════════════════════════════════════════════════════
-
-      ev('The Outfit Games (Micro)', {
-        start: storyDate(1, 1), end: null,
-        recurring: false, micro: true,
-        category: 'fashion',
-        world: 'Fashion competition moments — anyone can enter, anyone can win, anyone can be humiliated. Careers start and end here.',
-        secret: 'The micro Outfit Games fire whenever the Feed needs a fashion pressure event. They preview the annual May event.',
-        activities: ['Head-to-head outfit battles', 'Audience voting on best looks', 'Careers start and end in a single post'],
-      }),
 
       ev('Beauty Battles', {
         start: storyDate(1, 1), end: null,
         recurring: false, micro: true,
         category: 'beauty',
-        world: 'Head-to-head beauty creator challenges. The audience votes. The loser loses followers. The winner gains a story.',
+        world: 'Head-to-head beauty challenges. The audience votes. The loser loses followers publicly.',
         secret: 'Beauty Battles are often staged by brands as guerrilla marketing. The makeup used in the duel conveniently becomes available the next day.',
         activities: ['Head-to-head beauty challenges', 'Audience voting decides outcomes', 'Follower counts visibly shift'],
-      }),
-
-      ev('Pet Parade (Micro)', {
-        start: storyDate(1, 1), end: null,
-        recurring: false, micro: true,
-        category: 'lifestyle',
-        world: 'Recurring animal creator moments. Lower stakes, high warmth, unexpected visibility for otherwise serious characters.',
-        secret: 'A well-timed pet moment can break a cold streak. The algorithm rewards the unexpected warmth.',
-        activities: ['Pet content goes viral', 'Serious characters get humanized', 'Low stakes, high warmth'],
-      }),
-
-      ev('Design Duels (Micro)', {
-        start: storyDate(1, 1), end: null,
-        recurring: false, micro: true,
-        category: 'creative',
-        world: 'Smaller design competitions that preview the October Design Duel. Testing ground for emerging talent.',
-        secret: 'Scouts from major houses attend the micro Design Duels anonymously. Performance here directly affects Atelier Circuit invitations.',
-        activities: ['Quick design challenges', 'Emerging talent testing ground', 'Preview of annual Design Duel'],
       }),
 
       ev('Creator Roast Night', {
@@ -613,40 +586,103 @@ module.exports = {
         activities: ['Creators publicly roast each other', 'Audience engagement peaks', 'When jokes go too far, feuds begin'],
       }),
 
-      ev('Style Switch Challenge', {
+      ev('Street Style Marathon', {
         start: storyDate(1, 1), end: null,
         recurring: false, micro: true,
         category: 'fashion',
-        world: 'Creators swap aesthetics for a day. Reveals who is a persona and who is actually themselves.',
-        secret: 'The Style Switch is a character-truth test. Those who can\'t perform someone else\'s aesthetic reveal how narrow their own identity is.',
-        activities: ['Aesthetic swaps between creators', 'Identity revealed through adaptation', 'Persona vs authenticity exposed'],
+        world: 'Extended street style documentation — the week\'s best looks ranked publicly.',
+        secret: 'Street Style Marathon rankings are watched by fashion houses scouting for next season\'s campaign faces.',
+        activities: ['Week-long street style documentation', 'Public ranking of best looks', 'New style icons discovered'],
       }),
 
-      ev('Makeover Marathon', {
-        start: storyDate(1, 1), end: null,
-        recurring: false, micro: true,
-        category: 'beauty',
-        world: 'Extended transformation content — not just beauty, but identity. Before/after over days or weeks.',
-        secret: 'Makeover Marathon arcs are the highest-engagement content in LalaVerse when done right. Brands sponsor specific transformation segments.',
-        activities: ['Multi-day transformation arcs', 'Identity-level before/after', 'Beauty, style, and life changes documented'],
-      }),
-
-      ev('Influencer Speed Dating', {
+      ev('Creator Speed Dating', {
         start: storyDate(1, 1), end: null,
         recurring: false, micro: true,
         category: 'creator_economy',
-        world: 'Creator networking event with a twist — rapid-fire collab pitches. Alliances form fast.',
+        world: 'Rapid-fire collab pitches. Alliances form fast. Some are regretted faster.',
         secret: 'Speed Dating pairs are not random. Organizers curate matches to maximize drama and content potential.',
         activities: ['Rapid-fire collab pitches', 'New alliances form instantly', 'The audience watches connections form in real time'],
       }),
 
-      ev('Fashion Mystery Box Challenge', {
+      ev('Fashion Mystery Box', {
         start: storyDate(1, 1), end: null,
         recurring: false, micro: true,
         category: 'fashion',
-        world: 'Creators style looks from a mystery selection. Constraint reveals true taste.',
+        world: 'Style looks from a mystery selection. Constraint reveals true taste — or lack of it.',
         secret: 'The mystery boxes are not random. Curators design them to expose specific weaknesses in specific creators.',
         activities: ['Random garment selections', 'Styling under constraint', 'True taste revealed when choice is limited'],
+      }),
+
+      ev('Midnight Music Festival', {
+        start: storyDate(1, 1), end: null,
+        recurring: false, micro: true,
+        category: 'music',
+        world: 'Late-night music culture moment. A different side of LalaVerse emerges after midnight.',
+        secret: 'Who shows up after midnight reveals the real social map. Daytime alliances dissolve and the true connections surface.',
+        activities: ['Late-night live performances', 'After-hours social dynamics', 'Music and nightlife culture merge'],
+      }),
+
+      ev('The Great Glow-Up Challenge', {
+        start: storyDate(1, 1), end: null,
+        recurring: false, micro: true,
+        category: 'beauty',
+        world: 'Extended transformation content — identity, not just beauty.',
+        secret: 'The Glow-Up Challenge reveals who has genuinely changed vs. who just changed their aesthetic. The audience always knows.',
+        activities: ['Multi-day transformation arcs', 'Identity-level before/after', 'Goes beyond beauty into personal reinvention'],
+      }),
+
+      ev('Creator Charity Week', {
+        start: storyDate(1, 1), end: null,
+        recurring: false, micro: true,
+        category: 'creator_economy',
+        world: 'Vulnerability and values exposed. Who shows up and who performatively shows up.',
+        secret: 'Charity Week is the ultimate authenticity test. Performative charity content gets ratio\'d. Real generosity gets remembered.',
+        activities: ['Charity content and fundraising', 'Values and vulnerability on display', 'Performative vs genuine exposed'],
+      }),
+
+      ev('Creator Talent Show', {
+        start: storyDate(1, 1), end: null,
+        recurring: false, micro: true,
+        category: 'creative',
+        world: 'Skills outside the usual content lane. Surprises change how audiences see creators.',
+        secret: 'Hidden talents revealed at the Talent Show redefine creator brands overnight. The fashion creator who can sing becomes a different story.',
+        activities: ['Hidden talents revealed', 'Cross-lane performances', 'Audience perception shifts dramatically'],
+      }),
+
+      ev('Community Build Week', {
+        start: storyDate(1, 1), end: null,
+        recurring: false, micro: true,
+        category: 'creator_economy',
+        world: 'Collaborative content between otherwise competing creators. Forced proximity events.',
+        secret: 'Community Build Week is designed to create alliances that wouldn\'t form naturally. Some collaborations become genuine. Most don\'t.',
+        activities: ['Competitor collaborations', 'Forced proximity content', 'Alliances that stick vs ones that fracture'],
+      }),
+
+      ev('Virtual Travel Festival', {
+        start: storyDate(1, 1), end: null,
+        recurring: false, micro: true,
+        category: 'lifestyle',
+        world: 'Digital travel content — who can make home feel like elsewhere.',
+        secret: 'Virtual Travel content is the literacy test for creators — can you make someone feel transported without a plane ticket?',
+        activities: ['Digital travel and escapist content', 'Location-independent storytelling', 'Aspirational world-building'],
+      }),
+
+      ev('Artist Residency Month', {
+        start: storyDate(1, 1), end: null,
+        recurring: false, micro: true,
+        category: 'creative',
+        world: 'Creators slow down and make something intentional. The antidote to the content grind.',
+        secret: 'Artist Residency Month separates artists from content machines. Some creators can\'t slow down — and that reveals the dependency.',
+        activities: ['Intentional creative projects', 'Slower-paced content', 'The antidote to algorithm-driven creation'],
+      }),
+
+      ev('Design Lab Week', {
+        start: storyDate(1, 1), end: null,
+        recurring: false, micro: true,
+        category: 'creative',
+        world: 'Experimental design projects and innovation challenges. Where new ideas are tested publicly.',
+        secret: 'Design Lab prototypes that fail publicly often get acquired privately. The audience thinks it flopped; the industry knows it worked.',
+        activities: ['Experimental design challenges', 'Innovation prototyping', 'New ideas tested in public'],
       }),
 
       // ═══════════════════════════════════════════════════════════════════
@@ -687,6 +723,15 @@ module.exports = {
         world: 'Two legendary influencers born the same day. Fan edits, nostalgic posts, and the annual debate: which one is greater?',
         secret: 'The Icon Twins debate is the safest form of fandom warfare. It generates engagement without real consequences — usually.',
         activities: ['Fan edits and nostalgic posts', 'The annual "who is greater" debate', 'Fandom alignment content'],
+      }),
+
+      ev('The Founder Day', {
+        start: storyDate(1, 1), end: null,
+        recurring: true, pattern: 'annual:TBD',
+        category: 'lifestyle',
+        world: 'Celebrates LalaVerse\'s creation. Every creator participates. The platform\'s origin story retold annually.',
+        secret: 'Founder Day is mandatory participation. Creators who ignore it are noticed — and the algorithm notices too.',
+        activities: ['Platform origin story retold', 'Every creator participates', 'Annual renewal of community identity'],
       }),
     ];
 
