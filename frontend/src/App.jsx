@@ -109,6 +109,7 @@ const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
 const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
 const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
 const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
+const ShowBrain = lazy(() => import('./pages/ShowBrain'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -399,6 +400,9 @@ function AppContent() {
 
           {/* Character Depth Engine — Body, money, time, cosmology, blind spot, joy, change capacity */}
           <Route path="/character-depth-engine" element={<CharacterDepthEngine />} />
+
+          {/* Show Brain — Master Intelligence Document: identity, world rules, stats, economy, beats, 5 brains, canon */}
+          <Route path="/show-brain" element={<ShowBrain />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />
