@@ -104,6 +104,11 @@ const FeedRelationshipMap = lazy(() => import('./pages/FeedRelationshipMap'));
 const CulturalCalendar = lazy(() => import('./pages/CulturalCalendar'));
 const InfluencerSystems = lazy(() => import('./pages/InfluencerSystems'));
 const WorldInfrastructure = lazy(() => import('./pages/WorldInfrastructure'));
+const SocialTimeline = lazy(() => import('./pages/SocialTimeline'));
+const SocialPersonality = lazy(() => import('./pages/SocialPersonality'));
+const CharacterLifeSimulation = lazy(() => import('./pages/CharacterLifeSimulation'));
+const CulturalMemory = lazy(() => import('./pages/CulturalMemory'));
+const CharacterDepthEngine = lazy(() => import('./pages/CharacterDepthEngine'));
 // WorldView merged into CharacterRegistryPage
 
 // Heavy components — lazy loaded
@@ -379,6 +384,21 @@ function AppContent() {
 
           {/* World Infrastructure — Cities, Universities, Corporations, 50 Legends, The Loop */}
           <Route path="/world-infrastructure" element={<WorldInfrastructure />} />
+
+          {/* Social Timeline Engine — Feed layers, viral spread, engagement, drama, cultural memory */}
+          <Route path="/social-timeline" element={<SocialTimeline />} />
+
+          {/* Social Personality Engine — Traits, archetypes, motivations, reputation, arcs, algorithm */}
+          <Route path="/social-personality" element={<SocialPersonality />} />
+
+          {/* Character Life Simulation — Career stages, paths, relationships, rivalries, migration, persona */}
+          <Route path="/character-life-simulation" element={<CharacterLifeSimulation />} />
+
+          {/* Cultural Memory System — Archives, legends, feuds, nostalgia, time capsules, influence rankings */}
+          <Route path="/cultural-memory" element={<CulturalMemory />} />
+
+          {/* Character Depth Engine — Body, money, time, cosmology, blind spot, joy, change capacity */}
+          <Route path="/character-depth-engine" element={<CharacterDepthEngine />} />
           
           {/* Narrative Control Center — Continuity, Arcs, Timeline, Pipeline, Threads */}
           <Route path="/narrative-control" element={<NarrativeControlCenter />} />

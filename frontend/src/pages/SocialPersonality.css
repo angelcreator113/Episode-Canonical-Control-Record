@@ -1,0 +1,331 @@
+/* ═══════════════════════════════════════════════
+   SocialPersonality.css  — .sp-* prefix
+   Doc 06 · Social Personality Engine · v1.0
+   Palette: Rose · Steel · Orchid · Gold · Mint · Amber
+   ═══════════════════════════════════════════════ */
+
+/* ── Page ── */
+.sp-page {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding: 2rem 1.5rem 3rem;
+  font-family: 'DM Sans', sans-serif;
+  color: #2e2e3a;
+  background: #faf9fc;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+.sp-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.sp-title {
+  font-family: 'Syne', sans-serif;
+  font-size: 2rem;
+  font-weight: 700;
+  color: #d4789a;
+  margin: 0 0 0.35rem;
+}
+
+.sp-subtitle {
+  font-size: 0.92rem;
+  color: #999;
+  margin: 0;
+}
+
+/* ── Tabs ── */
+.sp-tabs {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1.5rem;
+  border-bottom: 2px solid #eee;
+  scrollbar-width: thin;
+}
+
+.sp-tab {
+  flex-shrink: 0;
+  padding: 0.5rem 1rem;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  background: transparent;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #777;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.2s, color 0.2s;
+}
+
+.sp-tab:hover {
+  background: #fbeaf0;
+  color: #d4789a;
+}
+
+.sp-tab-active {
+  background: #d4789a;
+  color: #fff;
+  font-weight: 600;
+}
+
+.sp-tab-active:hover {
+  background: #c46a8b;
+  color: #fff;
+}
+
+/* ── Panel ── */
+.sp-panel {
+  animation: spFadeIn 0.25s ease;
+}
+
+@keyframes spFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ── Tab content ── */
+.sp-tab-content {
+  padding: 0;
+}
+
+.sp-intro {
+  font-size: 0.95rem;
+  color: #555;
+  margin: 0 0 1.5rem;
+  line-height: 1.6;
+}
+
+/* ── Card grid ── */
+.sp-card-grid {
+  display: grid;
+  gap: 1rem;
+}
+
+.sp-cols-1 { grid-template-columns: 1fr; }
+.sp-cols-2 { grid-template-columns: repeat(2, 1fr); }
+
+@media (max-width: 720px) {
+  .sp-cols-2 { grid-template-columns: 1fr; }
+}
+
+/* ── Cards ── */
+.sp-card {
+  background: #fff;
+  border-radius: 12px;
+  padding: 1.25rem;
+  border: 1px solid #ece8f1;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+  transition: box-shadow 0.2s, transform 0.15s;
+}
+
+.sp-card:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
+  transform: translateY(-2px);
+}
+
+.sp-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.sp-card-body {
+  font-size: 0.88rem;
+  line-height: 1.55;
+  margin: 0.35rem 0;
+}
+
+/* ── Trait row (high / low side-by-side) ── */
+.sp-trait-row {
+  display: flex;
+  gap: 1rem;
+  margin: 0.75rem 0;
+}
+
+.sp-trait-half {
+  flex: 1;
+  background: #fafafa;
+  border-radius: 8px;
+  padding: 0.75rem;
+}
+
+@media (max-width: 640px) {
+  .sp-trait-row { flex-direction: column; }
+}
+
+/* ── Conflict callout ── */
+.sp-conflict {
+  background: linear-gradient(135deg, #fbeaf0 0%, #f3eef7 100%);
+  border-left: 3px solid #d4789a;
+  border-radius: 6px;
+  padding: 0.65rem 0.85rem;
+  margin-top: 0.6rem;
+  font-style: italic;
+  color: #555;
+}
+
+/* ── Badges ── */
+.sp-badge {
+  display: inline-block;
+  padding: 0.2rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sp-badge-rose   { background: #fbeaf0; color: #d4789a; }
+.sp-badge-steel  { background: #e8f2fa; color: #5a9ac2; }
+.sp-badge-orchid { background: #f3eef7; color: #9678b6; }
+.sp-badge-gold   { background: #faf3e3; color: #b89060; }
+.sp-badge-mint   { background: #e6f6f0; color: #4ea07e; }
+.sp-badge-amber  { background: #faf0e0; color: #b89060; }
+.sp-badge-muted  { background: #f0f0f0; color: #999; }
+
+/* ── Muted text ── */
+.sp-muted {
+  color: #888;
+  font-style: italic;
+}
+
+/* ── Tables ── */
+.sp-table-wrap {
+  overflow-x: auto;
+}
+
+.sp-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+}
+
+.sp-table th {
+  text-align: left;
+  padding: 0.65rem 0.75rem;
+  border-bottom: 2px solid #ece8f1;
+  font-family: 'Syne', sans-serif;
+  font-weight: 600;
+  font-size: 0.82rem;
+  color: #d4789a;
+  white-space: nowrap;
+}
+
+.sp-table td {
+  padding: 0.6rem 0.75rem;
+  border-bottom: 1px solid #f3f0f6;
+  vertical-align: top;
+  line-height: 1.5;
+}
+
+.sp-table tbody tr:hover {
+  background: #fef7fa;
+}
+
+.sp-cell-label {
+  font-weight: 600;
+  color: #2e2e3a;
+  white-space: nowrap;
+}
+
+/* ── JustAWoman Profile Card ── */
+.sp-jaw-card {
+  margin-top: 2rem;
+  background: linear-gradient(135deg, #fbeaf0 0%, #f3eef7 50%, #e8f2fa 100%);
+  border: 2px solid #d4789a;
+  border-radius: 14px;
+  padding: 1.5rem;
+}
+
+.sp-jaw-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.sp-jaw-name {
+  font-family: 'Syne', sans-serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: #d4789a;
+}
+
+.sp-jaw-scores {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.sp-jaw-score {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.sp-jaw-label {
+  width: 140px;
+  flex-shrink: 0;
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #555;
+}
+
+.sp-jaw-bar-track {
+  flex: 1;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.6);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.sp-jaw-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #d4789a, #a889c8);
+  border-radius: 5px;
+  transition: width 0.6s ease;
+}
+
+.sp-jaw-val {
+  width: 28px;
+  text-align: right;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #d4789a;
+}
+
+.sp-jaw-notes {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.sp-jaw-notes li {
+  font-size: 0.88rem;
+  line-height: 1.6;
+  color: #444;
+  padding: 0.2rem 0;
+  padding-left: 1rem;
+  position: relative;
+}
+
+.sp-jaw-notes li::before {
+  content: '✦';
+  position: absolute;
+  left: 0;
+  color: #d4789a;
+}
+
+/* ── Footer ── */
+.sp-footer {
+  text-align: center;
+  margin-top: 2.5rem;
+  font-size: 0.8rem;
+  color: #bbb;
+}
