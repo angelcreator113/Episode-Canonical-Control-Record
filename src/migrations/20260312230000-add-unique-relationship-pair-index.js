@@ -9,6 +9,13 @@
  */
 module.exports = {
   async up(queryInterface) {
+    // Verify columns exist before proceeding
+    const cols = await queryInterface.describeTable('character_relationships');
+    if (!cols.character_id_a || !cols.character_id_b) {
+      console.log('⏭️  character_id_a/character_id_b columns not found, skipping unique index');
+      return;
+    }
+
     // Remove duplicates first — keep the earliest created row per (a, b, type)
     await queryInterface.sequelize.query(`
       DELETE FROM character_relationships
